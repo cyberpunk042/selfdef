@@ -1,0 +1,9 @@
+# Profile: bridge-tap — inline tap on the L2 bridge. Cleartext fed
+# into a dummy `polarproxytls` netdev so Suricata can read it via
+# AF_PACKET. Requires bridge-l2; apply.sh fails closed if absent.
+
+profile           = "bridge-tap"
+listen_port       = 10443
+pcap_over_ip_port = 4430
+cert_http_port    = 0          # disabled by default for inline tap
+bridge_name       = "br0"

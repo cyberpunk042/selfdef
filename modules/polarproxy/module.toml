@@ -1,0 +1,32 @@
+name        = "polarproxy"
+version     = "0.1.0"
+summary     = "Transparent TLS termination → PCAP-over-IP for content visibility"
+category    = "network"
+
+# bridge-l2 is only strictly required by the `bridge-tap` profile;
+# `host-tls-mitm` works on its own. We declare a soft dependency by
+# leaving depends_on empty and checking inside `apply.sh` — the
+# `bridge-tap` profile fails closed there if bridge-l2 isn't loaded.
+depends_on  = []
+conflicts   = []
+
+# `tls-mitm`   — clear-side feed of decrypted TCP/443 flows.
+# `pcap-over-ip` — TCP/4430 listener; suricata/zeek/etc. can consume.
+provides    = ["tls-mitm", "pcap-over-ip"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "PolarProxy" },
+    { kind = "binary", value = "nft" },
+    { kind = "binary", value = "systemctl" },
+]
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "host-tls-mitm"
+available = ["host-tls-mitm", "bridge-tap"]

@@ -1,0 +1,10 @@
+# polarproxy defaults — overlaid by profile, then host config, then env vars.
+
+profile           = "host-tls-mitm"
+listen_port       = 10443
+pcap_over_ip_port = 4430
+cert_http_port    = 10080
+log_dir           = "/var/log/polarproxy"
+ca_pfx_path       = "/etc/polarproxy/ca.pfx"
+ca_pfx_password   = ""
+bridge_name       = "br0"      # used by bridge-tap profile only

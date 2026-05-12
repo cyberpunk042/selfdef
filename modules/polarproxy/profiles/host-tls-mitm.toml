@@ -1,0 +1,7 @@
+# Profile: host-tls-mitm — redirect this host's TCP/443 to local
+# PolarProxy listener. Cleartext exposed on tcp/4430.
+
+profile           = "host-tls-mitm"
+listen_port       = 10443
+pcap_over_ip_port = 4430
+cert_http_port    = 10080
