@@ -163,6 +163,26 @@ async fn main() -> Result<()> {
         None
     };
 
+    // ---- nats bridge ----
+    let nats_task = if cfg.bus.nats.enabled && !cfg.bus.nats.url.trim().is_empty() {
+        let nats_cfg = selfdef_nats::NatsConfig {
+            url: cfg.bus.nats.url.clone(),
+            subject_prefix: cfg.bus.nats.subject_prefix.clone(),
+        };
+        let sub = bus.subscribe();
+        let pub_ = publisher.clone();
+        let ht = host_tag.clone();
+        let sd = shutdown.clone();
+        info!(url = %nats_cfg.url, "nats bridge: starting");
+        Some(tokio::spawn(async move {
+            if let Err(e) = selfdef_nats::run_bridge(nats_cfg, ht, pub_, sub, sd).await {
+                error!(error = %e, "nats bridge failed");
+            }
+        }))
+    } else {
+        None
+    };
+
     // ---- collectors ----
     let mut collector_handles: Vec<(&str, tokio::task::JoinHandle<()>)> = Vec::new();
     if cfg.collectors.auditd.enabled {
@@ -341,6 +361,10 @@ async fn main() -> Result<()> {
     if let Some(h) = api_task {
         let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
         info!("api stopped");
+    }
+    if let Some(h) = nats_task {
+        let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
+        info!("nats bridge stopped");
     }
 
     drop(publisher);

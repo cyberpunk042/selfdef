@@ -1,0 +1,27 @@
+[package]
+name = "selfdef-nats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "NATS bridge: forwards selfdef events between hosts via NATS JetStream/Core."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-bus = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+async-nats = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

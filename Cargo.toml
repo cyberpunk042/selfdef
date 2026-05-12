@@ -61,6 +61,7 @@ hyper-util = { version = "0.1", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "ring"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["tls12"] }
 rustls-pki-types = { version = "1.9", features = ["std"] }
+async-nats = { version = "0.48", default-features = false, features = ["ring"] }
 
 # linux primitives
 inotify = "0.11"
@@ -94,6 +95,7 @@ selfdef-collector-ebpf = { path = "crates/selfdef-collector-ebpf" }
 selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
 selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
 selfdef-api = { path = "crates/selfdef-api" }
+selfdef-nats = { path = "crates/selfdef-nats" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)

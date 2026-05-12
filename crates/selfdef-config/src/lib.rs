@@ -85,9 +85,13 @@ impl Default for DaemonConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BusConfig {
-    /// `"inproc"` for now. `"nats"` arrives in a later milestone.
+    /// `"inproc"` is the always-on local broadcast (source of truth for
+    /// subscribers). The `nats` block below adds a bridge that pumps
+    /// events between hosts via NATS — it never replaces the local
+    /// bus, it complements it.
     pub backend: String,
     pub inproc_capacity: usize,
+    pub nats: NatsBridgeConfig,
 }
 
 impl Default for BusConfig {
@@ -95,6 +99,32 @@ impl Default for BusConfig {
         Self {
             backend: "inproc".into(),
             inproc_capacity: 4096,
+            nats: NatsBridgeConfig::default(),
+        }
+    }
+}
+
+/// NATS bridge configuration. When `enabled = true` and `url` is
+/// non-empty, the daemon spawns a bridge task that:
+///   - Publishes locally-originated events to `<subject_prefix>.<host_tag>`.
+///   - Subscribes to `<subject_prefix>.>` and republishes inbound
+///     events (with non-local host_tags) onto the local bus.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct NatsBridgeConfig {
+    pub enabled: bool,
+    /// `nats://host:port`. Multiple servers may be comma-separated.
+    pub url: String,
+    /// Subject prefix. Default `selfdef.events`.
+    pub subject_prefix: String,
+}
+
+impl Default for NatsBridgeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: String::new(),
+            subject_prefix: "selfdef.events".into(),
         }
     }
 }
