@@ -1,0 +1,19 @@
+# Local audit certifications.
+#
+# Each `[[audits.<crate>]]` entry attests that a human reviewed the
+# specified version (or version range) and judged it to meet the criteria
+# listed. The entries below are added by `cargo vet certify`, not by
+# hand — running it walks the reviewer through the diff and writes the
+# entry on success.
+#
+# Empty at bootstrap. The CI `vet` job is informational until this file
+# (plus `imports.lock`) covers the dependency graph.
+
+[criteria]
+# No custom criteria yet. `safe-to-deploy` and `safe-to-run` come from
+# the cargo-vet built-ins.
+
+# [[audits.example-crate]]
+# version = "1.2.3"
+# criteria = "safe-to-deploy"
+# notes = "Reviewed by @alice on 2026-05-12 — no unsafe, no network, deterministic."

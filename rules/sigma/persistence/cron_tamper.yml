@@ -1,0 +1,30 @@
+title: Cron Tampering
+id: 4a3b2c1d-9876-4f01-a23b-5566778899aa
+status: experimental
+description: |
+  Any write to system cron paths (`/etc/cron.d/`, `/etc/cron.daily/`,
+  `/etc/cron.hourly/`, `/etc/cron.weekly/`, `/etc/cron.monthly/`,
+  `/etc/crontab`, `/var/spool/cron/`). Cron-based persistence is a classic
+  Linux foothold and is rarely modified outside of package install / admin
+  maintenance.
+references:
+  - https://attack.mitre.org/techniques/T1053/003/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1053.003
+logsource:
+  service: auditd
+detection:
+  cron_write:
+    class_uid: 1001
+    file.path|contains:
+      - "/etc/cron"
+      - "/var/spool/cron/"
+  condition: cron_write
+level: high
+falsepositives:
+  - Package installs that ship cron fragments (apt, dpkg activity).
+  - Authorized admin scheduling a one-off job via `crontab -e`.

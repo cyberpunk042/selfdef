@@ -12,6 +12,11 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # Reproducible-build knobs. SOURCE_DATE_EPOCH is set per-run from the
+  # tagged commit. RUSTFLAGS strips workspace and cargo-registry absolute
+  # paths from emitted debuginfo/metadata so the same source produces the
+  # same bytes regardless of the runner's $PWD / $HOME.
+  CARGO_BUILD_INCREMENTAL: "false"
 
 jobs:
   release:
@@ -30,6 +35,20 @@ jobs:
           cargo install --locked cargo-deb
           cargo install --locked cargo-sbom
 
+      - name: Configure reproducible build env
+        run: |
+          # Pin file mtimes / build-stamped dates to the tagged commit.
+          SDE=$(git log -1 --format=%ct "${GITHUB_SHA}")
+          echo "SOURCE_DATE_EPOCH=${SDE}" >> "$GITHUB_ENV"
+          # Strip absolute paths from emitted artifacts.
+          CARGO_HOME_PATH="${CARGO_HOME:-$HOME/.cargo}"
+          {
+            echo "RUSTFLAGS=-C link-arg=-Wl,--as-needed \
+          -C link-arg=-Wl,-z,relro,-z,now \
+          --remap-path-prefix=${GITHUB_WORKSPACE}=/build \
+          --remap-path-prefix=${CARGO_HOME_PATH}=/cargo"
+          } >> "$GITHUB_ENV"
+
       - name: Build release
         run: cargo build --release --locked --workspace
 
@@ -44,11 +63,28 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Sign artifacts (keyless)
+      - name: Sign individual artifacts (keyless)
         run: |
           for f in target/debian/*.deb selfdef-*.sbom.json; do
             cosign sign-blob --yes "$f" --output-signature "$f.sig"
           done
+
+      - name: Generate SHA256SUMS manifest
+        run: |
+          # Single manifest listing every release artifact's sha256 digest.
+          # Downstream consumers can verify the whole release with one cosign
+          # call instead of one-per-file.
+          {
+            sha256sum target/debian/*.deb | sed 's| .*/| |'
+            sha256sum selfdef-*.sbom.json
+          } > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Sign SHA256SUMS (keyless)
+        run: |
+          cosign sign-blob --yes SHA256SUMS \
+            --output-signature SHA256SUMS.sig \
+            --output-certificate SHA256SUMS.pem
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
@@ -58,4 +94,7 @@ jobs:
             target/debian/*.deb.sig
             selfdef-*.sbom.json
             selfdef-*.sbom.json.sig
+            SHA256SUMS
+            SHA256SUMS.sig
+            SHA256SUMS.pem
           generate_release_notes: true

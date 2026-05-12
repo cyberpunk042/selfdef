@@ -1,0 +1,42 @@
+# cargo-vet config — supply-chain audit policy.
+#
+# This file is the entry point for `cargo vet`. It declares:
+#   - which upstream audit lists we trust to short-circuit local review
+#   - which criteria each first-party crate must satisfy
+#
+# Bootstrapping: until the team has certified the dependency graph, the
+# `vet` CI job is allowed to fail. See `.github/workflows/audit.yml`.
+#
+# To add a local audit:   cargo vet certify <crate> <version>
+# To inspect the diff:    cargo vet diff <crate> <old> <new>
+# To regenerate imports:  cargo vet --locked
+
+[cargo-vet]
+version = "0.10"
+
+# Upstream audit lists we trust. cargo-vet copies the relevant slice of
+# each into `supply-chain/imports.lock` so builds are deterministic even
+# if the upstream files change.
+[imports.bytecode-alliance]
+url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
+
+[imports.embark-studios]
+url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
+
+[imports.google]
+url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+
+[imports.isrg]
+url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
+
+[imports.mozilla]
+url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
+
+# All first-party crates must clear `safe-to-deploy`. We're shipping
+# system-level software; weaker criteria like `safe-to-run` are not
+# enough for code that ends up in a production daemon.
+[policy."selfdef-*"]
+criteria = "safe-to-deploy"
+
+[policy.xtask]
+criteria = "safe-to-run"
