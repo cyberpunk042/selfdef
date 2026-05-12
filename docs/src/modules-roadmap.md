@@ -45,7 +45,7 @@ Every module the roadmap originally named is now in the catalog. Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
 - `selfdefctl modules uninstall`: destructive op, deferred until after the operator-confirmation UX is wired (probably alongside `panic mode`'s confirm pattern).
-- A manifest `phase: "pre" | "main" | "post"` field would let `integrity-sentinel` formally gate the apply order; today operators run it first via `--only integrity-sentinel`. Documented in the module's README.
+- Notifier wiring for `integrity-sentinel` drift: today the module's structured-status surfaces drift to `selfdefctl modules check`; emitting an OCSF event onto the daemon's bus so the existing notifier chain (ntfy / Signal) fires is a separate cross-crate PR.
 
 ## Lifecycle surface
 
@@ -79,5 +79,13 @@ config = "/etc/selfdef/modules/vpn-bridge.publish.toml"
 Per-module config files default to `/etc/selfdef/modules/<slug>.toml` for single-instance, or `/etc/selfdef/modules/<slug>.<instance>.toml` when an instance is set. Both forms are exposed to the install scripts via `SELFDEF_<SLUG>_CONFIG`. Each script ends with one JSON line `{"module":"<slug>","status":"ok|skipped|failed","message":"..."}` which the runner aggregates. Defence-in-depth: a script that emits `ok` but exits non-zero is treated as failed; a script that emits status under the wrong slug is rejected outright.
 
 Dependency / conflict declarations in manifests are **slug-level** — depending on `bridge-l2` is satisfied by any active instance. Within one slug, instances run alphabetically.
+
+### Apply phases
+
+A manifest can declare `phase = "pre" | "main" | "post"` (default `"main"`). The runner applies all `pre` modules first, then all `main`, then all `post`. Within each phase, the existing `depends_on` topo sort applies and ties break alphabetically.
+
+`integrity-sentinel` ships in `pre`: a drift detection in `strict` mode halts the apply before any `main`-phase module mutates host state.
+
+Cross-phase dependencies are validated: a module can depend on another module in the same phase or an earlier phase, but **not** a later phase (that would force the resolver to run a later phase first). The resolver rejects this with a clear error.
 
 Each remaining item is one PR. The contract is fixed; modules don't reopen it.

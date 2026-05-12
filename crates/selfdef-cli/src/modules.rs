@@ -31,6 +31,34 @@ const SYSTEM_MODULES_DIR: &str = "/usr/share/selfdef/modules";
 const DEFAULT_HOST_CONFIG: &str = "/etc/selfdef/modules.toml";
 const DEFAULT_PER_MODULE_DIR: &str = "/etc/selfdef/modules";
 
+/// Apply-order bucket. Modules in `pre` run before any `main` module;
+/// `post` runs after all `main` modules. Within a bucket the existing
+/// `depends_on` topo sort applies. Default is `main` so existing
+/// manifests carry over unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Phase {
+    Pre,
+    Main,
+    Post,
+}
+
+impl Default for Phase {
+    fn default() -> Self {
+        Self::Main
+    }
+}
+
+impl Phase {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pre => "pre",
+            Self::Main => "main",
+            Self::Post => "post",
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct ModuleManifest {
     pub(crate) name: String,
@@ -57,6 +85,10 @@ pub(crate) struct ModuleManifest {
     /// `[modules.<slug>]` block per host.
     #[serde(default)]
     pub(crate) instanced: bool,
+    /// Apply-order bucket: `pre` runs before `main`, `post` runs
+    /// after. Default `main` so existing manifests carry over.
+    #[serde(default)]
+    pub(crate) phase: Phase,
 }
 
 #[derive(Debug, Deserialize)]
@@ -203,6 +235,11 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     }
     if m.instanced {
         println!("instanced: true (multiple host entries allowed via slug#instance)");
+    }
+    // Only mention `phase` when it diverges from the default; saying
+    // "phase: main" for every module would just be noise.
+    if m.phase != Phase::default() {
+        println!("phase:    {}", m.phase.as_str());
     }
     Ok(())
 }
@@ -411,61 +448,92 @@ pub(crate) fn resolve_active(
 
     // 5. Missing deps: each declared dep slug must have ≥1 active
     //    instance. Manifest deps are slug-level, not instance-level.
+    //    Cross-phase deps are forbidden in the backward direction: a
+    //    `pre` module cannot depend on a `main`/`post` module, etc.
     for slug in grouped.keys() {
         let m = &by_slug[slug];
         for d in &m.depends_on {
+            let dep_m = match by_slug.get(d) {
+                Some(x) => x,
+                None => anyhow::bail!("module `{slug}` depends on `{d}` which is not in catalog"),
+            };
             if !grouped.contains_key(d) {
                 anyhow::bail!("module `{slug}` depends on `{d}` which is not active");
+            }
+            if dep_m.phase > m.phase {
+                anyhow::bail!(
+                    "module `{slug}` (phase {}) depends on `{d}` (phase {}) — \
+                     a dependency cannot run in a later phase",
+                    m.phase.as_str(),
+                    dep_m.phase.as_str(),
+                );
             }
         }
     }
 
-    // 6. Topo sort at the slug level (deps are slug-level).
-    let active_slugs: BTreeSet<&str> = grouped.keys().map(String::as_str).collect();
-    let mut indeg: HashMap<&str, usize> = active_slugs.iter().map(|s| (*s, 0)).collect();
-    for slug in &active_slugs {
-        let m = &by_slug[*slug];
-        for d in &m.depends_on {
-            if active_slugs.contains(d.as_str()) {
-                *indeg.get_mut(*slug).unwrap() += 1;
-            }
+    // 6. Topo sort at the slug level, bucketed by phase. Pre → Main →
+    //    Post. Within each phase, deps within that phase determine
+    //    order; ties break alphabetically. Cross-phase deps are
+    //    already validated above (must go backward only).
+    let mut slug_order: Vec<String> = Vec::new();
+    for phase in [Phase::Pre, Phase::Main, Phase::Post] {
+        let phase_slugs: BTreeSet<&str> = grouped
+            .keys()
+            .filter(|s| by_slug[*s].phase == phase)
+            .map(String::as_str)
+            .collect();
+        if phase_slugs.is_empty() {
+            continue;
         }
-    }
-    let mut ready: Vec<&str> = indeg
-        .iter()
-        .filter(|(_, n)| **n == 0)
-        .map(|(s, _)| *s)
-        .collect();
-    ready.sort_unstable_by(|a, b| b.cmp(a)); // pop yields alphabetical
-    let mut slug_order: Vec<String> = Vec::with_capacity(active_slugs.len());
-    while let Some(next) = ready.pop() {
-        slug_order.push(next.to_string());
-        let mut newly_ready: Vec<&str> = Vec::new();
-        for slug in &active_slugs {
+        let mut indeg: HashMap<&str, usize> = phase_slugs.iter().map(|s| (*s, 0)).collect();
+        for slug in &phase_slugs {
             let m = &by_slug[*slug];
-            if m.depends_on.iter().any(|d| d == next) {
-                let e = indeg.get_mut(*slug).unwrap();
-                *e -= 1;
-                if *e == 0 {
-                    newly_ready.push(*slug);
+            for d in &m.depends_on {
+                // Only count edges within the same phase — cross-phase
+                // deps go backward and are already implicitly ordered.
+                if phase_slugs.contains(d.as_str()) {
+                    *indeg.get_mut(*slug).unwrap() += 1;
                 }
             }
         }
-        for s in newly_ready {
-            ready.push(s);
-        }
-        ready.sort_unstable_by(|a, b| b.cmp(a));
-    }
-    if slug_order.len() != active_slugs.len() {
-        let leftover: Vec<String> = active_slugs
+        let mut ready: Vec<&str> = indeg
             .iter()
-            .filter(|s| !slug_order.contains(&(*s).to_string()))
-            .map(|s| (*s).to_string())
+            .filter(|(_, n)| **n == 0)
+            .map(|(s, _)| *s)
             .collect();
-        anyhow::bail!(
-            "dependency cycle among active modules: {}",
-            leftover.join(", ")
-        );
+        ready.sort_unstable_by(|a, b| b.cmp(a)); // pop yields alphabetical
+        let mut phase_order: Vec<String> = Vec::with_capacity(phase_slugs.len());
+        while let Some(next) = ready.pop() {
+            phase_order.push(next.to_string());
+            let mut newly_ready: Vec<&str> = Vec::new();
+            for slug in &phase_slugs {
+                let m = &by_slug[*slug];
+                if m.depends_on.iter().any(|d| d == next) {
+                    let e = indeg.get_mut(*slug).unwrap();
+                    *e -= 1;
+                    if *e == 0 {
+                        newly_ready.push(*slug);
+                    }
+                }
+            }
+            for s in newly_ready {
+                ready.push(s);
+            }
+            ready.sort_unstable_by(|a, b| b.cmp(a));
+        }
+        if phase_order.len() != phase_slugs.len() {
+            let leftover: Vec<String> = phase_slugs
+                .iter()
+                .filter(|s| !phase_order.contains(&(*s).to_string()))
+                .map(|s| (*s).to_string())
+                .collect();
+            anyhow::bail!(
+                "dependency cycle in phase {} among: {}",
+                phase.as_str(),
+                leftover.join(", ")
+            );
+        }
+        slug_order.extend(phase_order);
     }
 
     // 7. Materialise: walk slug_order, expand each slug's instance
@@ -535,6 +603,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
             available: p.available.clone(),
         }),
         instanced: m.instanced,
+        phase: m.phase,
     }
 }
 
@@ -931,7 +1000,7 @@ mod tests {
     // -- helpers for resolver / runner tests -------------------------
 
     fn make_manifest(name: &str, deps: &[&str], conflicts: &[&str]) -> ModuleManifest {
-        make_manifest_full(name, deps, conflicts, /*instanced*/ false)
+        make_manifest_full(name, deps, conflicts, /*instanced*/ false, Phase::Main)
     }
 
     fn make_manifest_full(
@@ -939,6 +1008,7 @@ mod tests {
         deps: &[&str],
         conflicts: &[&str],
         instanced: bool,
+        phase: Phase,
     ) -> ModuleManifest {
         ModuleManifest {
             name: name.to_string(),
@@ -953,6 +1023,7 @@ mod tests {
             install: None,
             profiles: None,
             instanced,
+            phase,
         }
     }
 
@@ -1041,6 +1112,123 @@ mod tests {
         assert!(err.contains("active module `ghost`"), "got: {err}");
     }
 
+    // -- phase ------------------------------------------------------
+
+    #[test]
+    fn phase_default_is_main() {
+        // A manifest without `phase = "..."` parses as Phase::Main.
+        let toml_body = "name = \"x\"\nversion = \"1\"\nsummary = \"y\"\n";
+        let m: ModuleManifest = toml::from_str(toml_body).unwrap();
+        assert_eq!(m.phase, Phase::Main);
+    }
+
+    #[test]
+    fn phase_parses_pre_main_post() {
+        for s in ["pre", "main", "post"] {
+            let body = format!("name = \"x\"\nversion = \"1\"\nsummary = \"y\"\nphase = \"{s}\"\n");
+            let m: ModuleManifest = toml::from_str(&body).unwrap();
+            assert_eq!(m.phase.as_str(), s);
+        }
+    }
+
+    #[test]
+    fn phase_rejects_unknown_value() {
+        let body = "name = \"x\"\nversion = \"1\"\nsummary = \"y\"\nphase = \"midway\"\n";
+        let err = toml::from_str::<ModuleManifest>(body)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("phase"), "got: {err}");
+    }
+
+    #[test]
+    fn resolver_pre_runs_before_main_runs_before_post() {
+        let catalog = vec![
+            (
+                "alpha".into(),
+                make_manifest_full("alpha", &[], &[], false, Phase::Main),
+            ),
+            (
+                "guard".into(),
+                make_manifest_full("guard", &[], &[], false, Phase::Pre),
+            ),
+            (
+                "audit".into(),
+                make_manifest_full("audit", &[], &[], false, Phase::Post),
+            ),
+            (
+                "beta".into(),
+                make_manifest_full("beta", &[], &[], false, Phase::Main),
+            ),
+        ];
+        let host = host_with(&["alpha", "audit", "beta", "guard"]);
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        let order: Vec<_> = active.iter().map(|a| a.slug.as_str()).collect();
+        // pre (guard) → main (alpha, beta alphabetical) → post (audit).
+        assert_eq!(order, vec!["guard", "alpha", "beta", "audit"]);
+    }
+
+    #[test]
+    fn resolver_rejects_dep_pointing_to_later_phase() {
+        // A `pre` module depending on a `main` module would force the
+        // `main` module to run first — violating the phase order.
+        let catalog = vec![
+            (
+                "guard".into(),
+                make_manifest_full("guard", &["alpha"], &[], false, Phase::Pre),
+            ),
+            (
+                "alpha".into(),
+                make_manifest_full("alpha", &[], &[], false, Phase::Main),
+            ),
+        ];
+        let host = host_with(&["guard", "alpha"]);
+        let err = resolve_active(&host, Path::new("/tmp"), catalog)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("phase pre") && err.contains("phase main"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolver_allows_dep_pointing_to_earlier_phase() {
+        // `main` → `pre` is fine: pre runs first anyway.
+        let catalog = vec![
+            (
+                "alpha".into(),
+                make_manifest_full("alpha", &["guard"], &[], false, Phase::Main),
+            ),
+            (
+                "guard".into(),
+                make_manifest_full("guard", &[], &[], false, Phase::Pre),
+            ),
+        ];
+        let host = host_with(&["alpha", "guard"]);
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        let order: Vec<_> = active.iter().map(|a| a.slug.as_str()).collect();
+        assert_eq!(order, vec!["guard", "alpha"]);
+    }
+
+    #[test]
+    fn resolver_cycle_within_phase_is_caught() {
+        let catalog = vec![
+            (
+                "a".into(),
+                make_manifest_full("a", &["b"], &[], false, Phase::Pre),
+            ),
+            (
+                "b".into(),
+                make_manifest_full("b", &["a"], &[], false, Phase::Pre),
+            ),
+        ];
+        let host = host_with(&["a", "b"]);
+        let err = resolve_active(&host, Path::new("/tmp"), catalog)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("cycle in phase pre"), "got: {err}");
+    }
+
     // -- multi-instance --------------------------------------------
 
     fn host_from_toml(body: &str) -> HostConfig {
@@ -1054,7 +1242,7 @@ mod tests {
     fn resolver_supports_multi_instance_for_instanced_modules() {
         let catalog = vec![(
             "vpn-bridge".into(),
-            make_manifest_full("vpn-bridge", &[], &[], /*instanced*/ true),
+            make_manifest_full("vpn-bridge", &[], &[], /*instanced*/ true, Phase::Main),
         )];
         let host =
             host_from_toml("[modules.\"vpn-bridge#tunnel\"]\n[modules.\"vpn-bridge#publish\"]\n");
@@ -1083,7 +1271,13 @@ mod tests {
     fn resolver_rejects_instance_for_non_instanced_module() {
         let catalog = vec![(
             "detect-host".into(),
-            make_manifest_full("detect-host", &[], &[], /*instanced*/ false),
+            make_manifest_full(
+                "detect-host",
+                &[],
+                &[],
+                /*instanced*/ false,
+                Phase::Main,
+            ),
         )];
         let host = host_from_toml("[modules.\"detect-host#a\"]\n");
         let err = resolve_active(&host, Path::new("/tmp"), catalog)
@@ -1099,7 +1293,7 @@ mod tests {
     fn resolver_rejects_mixed_flat_and_instance_keys_for_same_slug() {
         let catalog = vec![(
             "vpn-bridge".into(),
-            make_manifest_full("vpn-bridge", &[], &[], true),
+            make_manifest_full("vpn-bridge", &[], &[], true, Phase::Main),
         )];
         let host = host_from_toml("[modules.\"vpn-bridge\"]\n[modules.\"vpn-bridge#tunnel\"]\n");
         let err = resolve_active(&host, Path::new("/tmp"), catalog)
@@ -1114,11 +1308,11 @@ mod tests {
         let catalog = vec![
             (
                 "bridge-l2".into(),
-                make_manifest_full("bridge-l2", &[], &[], false),
+                make_manifest_full("bridge-l2", &[], &[], false, Phase::Main),
             ),
             (
                 "suricata".into(),
-                make_manifest_full("suricata", &["bridge-l2"], &[], true),
+                make_manifest_full("suricata", &["bridge-l2"], &[], true, Phase::Main),
             ),
         ];
         let host = host_from_toml(
@@ -1137,7 +1331,7 @@ mod tests {
     fn resolver_per_instance_config_override_wins() {
         let catalog = vec![(
             "vpn-bridge".into(),
-            make_manifest_full("vpn-bridge", &[], &[], true),
+            make_manifest_full("vpn-bridge", &[], &[], true, Phase::Main),
         )];
         let host =
             host_from_toml("[modules.\"vpn-bridge#tunnel\"]\nconfig = \"/custom/path.toml\"\n");
