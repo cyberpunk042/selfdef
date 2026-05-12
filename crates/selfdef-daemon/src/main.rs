@@ -259,11 +259,17 @@ async fn main() -> Result<()> {
     }
 
     if cfg.collectors.ebpf.enabled {
-        use selfdef_collector_ebpf::EbpfCollector;
-        let collector = EbpfCollector::new(
+        use selfdef_collector_ebpf::{EbpfCollector, EbpfProbes};
+        let probes = EbpfProbes {
+            execve: cfg.collectors.ebpf.enable_execve,
+            lsm_file_open: cfg.collectors.ebpf.enable_lsm_open,
+            kprobe_unlinkat: cfg.collectors.ebpf.enable_kprobe_unlink,
+        };
+        let collector = EbpfCollector::with_probes(
             cfg.collectors.ebpf.program_path.clone(),
             publisher.clone(),
             host_tag.clone(),
+            probes,
         );
         let sd = shutdown.clone();
         let h = tokio::spawn(async move {

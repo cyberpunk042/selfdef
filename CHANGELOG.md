@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M10 polish (eBPF: argv capture, LSM file_open, do_unlinkat kprobe)
+- **argv capture** in the `execve_enter` tracepoint program. Walks the
+  userspace `argv` pointer array with `bpf_probe_read_user` plus
+  `bpf_probe_read_user_str_bytes`, bounded at 16 entries and 256 bytes
+  total. Sets `argv_truncated` when the buffer fills or the entry cap
+  is reached without seeing the NULL terminator. The OCSF
+  `process.cmdline` now reflects the captured argv (joined by spaces);
+  the `raw` payload carries the structured `argv` array and the
+  `argv_truncated` flag for rule matching.
+- **LSM `file_open` BPF program**. Observe-only (always returns 0, never
+  vetoes). Reports pid/uid/comm/flags. Path capture is deferred until
+  the project gains generated `vmlinux.rs` bindings — the ring-buffer
+  schema already has `path` and `path_len` fields so the path can be
+  layered on without touching userspace.
+- **`do_unlinkat` kprobe BPF program**. Reports pid/uid/comm. Same
+  path-deferral rationale as the LSM hook.
+- New userspace API `selfdef_collector_ebpf::EbpfProbes` carries the
+  three opt-in flags (`execve`, `lsm_file_open`, `kprobe_unlinkat`)
+  from config into the collector. `EbpfCollector::with_probes()`
+  selects what to attach; the existing `EbpfCollector::new()` keeps
+  the conservative default (execve only).
+- Each probe attach is independent and **fail-soft**: missing program
+  in the `.bpf.o`, missing kernel BTF, missing `CONFIG_BPF_LSM=y`, or
+  a kprobe that points at an inlined symbol all log a warning and
+  leave the other probes running. The daemon never aborts on a
+  partial attach.
+- Daemon wires the three `[collectors.ebpf]` `enable_*` config bits
+  into `EbpfProbes`. Example config + `docs/ebpf.md` updated to drop
+  the "reserved" / "not yet implemented" notes and describe the
+  current capabilities and limitations.
+- Unit-test coverage extended in `selfdef-collector-ebpf`:
+  `argv_truncated` propagates into the OCSF `raw` payload;
+  `FileOpenEvent` and `UnlinkEvent` round-trip into properly classed
+  `FILE_SYSTEM_ACTIVITY` events; `EbpfProbes::default()` matches the
+  conservative shipping config.
+
 ### Added — Milestone 11 (Forensics + Velociraptor integration)
 - New responder action `forensics_bundle`: on Critical findings, writes an
   evidence bundle to `forensics_dir/<event-uuid>/` containing the

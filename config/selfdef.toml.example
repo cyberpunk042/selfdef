@@ -89,22 +89,14 @@ paths = []
 [collectors.ebpf]
 # Native in-kernel collection via aya. Requires the BPF object compiled
 # and installed (see docs/ebpf.md) and the systemd ebpf.conf drop-in.
-# The daemon degrades gracefully if program_path doesn't exist.
+# The daemon degrades gracefully if program_path doesn't exist or if a
+# given probe fails to attach (e.g. LSM on a kernel without BPF LSM).
+# Leave off if you have Tetragon running — there's overlap.
 enabled = false
 program_path = "/usr/lib/selfdef/selfdef.bpf.o"
-enable_execve = true
-enable_lsm_open = false        # reserved; LSM program not yet shipped
-enable_kprobe_unlink = false   # reserved; kprobe program not yet shipped
-
-[collectors.ebpf]
-# selfdef's own in-kernel eyes. Requires the BPF object compiled via
-# `cargo xtask install-bpf`. See docs/ebpf.md for kernel + capability
-# prerequisites. Leave off if you have Tetragon running — there's overlap.
-enabled = false
-program_path = "/usr/lib/selfdef/ebpf-progs.bpf.o"
-enable_execve = true            # tracepoint:syscalls:sys_enter_execve
-enable_lsm_open = false         # lsm/file_open — needs CONFIG_BPF_LSM
-enable_kprobe_unlink = true     # kprobe:do_unlinkat
+enable_execve = true            # tracepoint:syscalls:sys_enter_execve + argv capture
+enable_lsm_open = false         # lsm/file_open — needs CONFIG_BPF_LSM=y + `bpf` in CONFIG_LSM
+enable_kprobe_unlink = false    # kprobe:do_unlinkat — noisy on busy hosts
 
 [correlator]
 rules_dir = "/etc/selfdef/rules"

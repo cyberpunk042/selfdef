@@ -6,19 +6,35 @@ Tetragon *is* installed and configured, both sources publish to the same
 bus; rules can match either (Sigma's `logsource: tetragon` vs
 `logsource: selfdef.ebpf` discriminates).
 
-## What M10 ships
+## What ships
 
 | Probe | Hook | Status |
 |---|---|---|
-| `execve_enter` | `tracepoint:syscalls:sys_enter_execve` | **shipping** — pid/tgid/ppid/uid/gid/comm |
-| LSM `file_open` | `lsm/file_open` | reserved type only; program not implemented yet |
-| `do_unlinkat` kprobe | `kprobe:do_unlinkat` | reserved type only; program not implemented yet |
+| `execve_enter` | `tracepoint:syscalls:sys_enter_execve` | **shipping** — pid/tgid/ppid/uid/gid/comm + argv (up to 16 entries / 256 bytes) |
+| LSM `file_open` | `lsm/file_open` | **shipping** — pid/uid/comm/flags. Path capture deferred (needs CO-RE `bpf_d_path` over `file->f_path`). |
+| `do_unlinkat` kprobe | `kprobe:do_unlinkat` | **shipping** — pid/uid/comm. Path capture deferred (same rationale). |
 
-The userspace loader, ring buffer plumbing, OCSF conversion, and config
-plumbing for all three are in place — adding the next two probes is
-incremental work. argv capture from the tracepoint is also deferred
-(requires `bpf_probe_read_user` over a user pointer array with a bounded
-loop).
+argv capture in the execve program walks the userspace argv array with
+`bpf_probe_read_user` plus `bpf_probe_read_user_str_bytes`, bounded at
+16 entries and 256 total bytes. The `argv_truncated` flag is set when
+the buffer fills or when 16 entries are captured without seeing the
+NULL terminator — detection rules can match on it to catch obfuscated
+long-argv attacks.
+
+The LSM hook and unlinkat kprobe ship without path capture because
+rendering a kernel `dentry` into a string from BPF needs either
+generated `vmlinux.rs` bindings or hardcoded field offsets. The records
+are still useful — pid/uid/comm tell you *who* — and a follow-up patch
+can layer `bpf_d_path` on top without changing the ring-buffer schema
+(the `path` and `path_len` fields are already in place; the userspace
+decoder treats `path_len == 0` as "path not captured").
+
+The LSM probe needs `CONFIG_BPF_LSM=y` *and* `bpf` listed in the
+kernel's `CONFIG_LSM=...` set. Debian and Ubuntu have shipped this
+since kernel 5.7+. The loader checks `/sys/kernel/btf/vmlinux` is
+present before attempting to attach the LSM program; if not available,
+or if the attach fails for any other reason, it logs a warning and
+keeps the other probes running.
 
 ## Prerequisites (one-time)
 
@@ -77,8 +93,8 @@ In `/etc/selfdef/selfdef.toml`:
 enabled = true
 program_path = "/usr/lib/selfdef/selfdef.bpf.o"
 enable_execve = true
-enable_lsm_open = false        # reserved; not yet implemented
-enable_kprobe_unlink = false   # reserved; not yet implemented
+enable_lsm_open = false        # opt-in: needs CONFIG_BPF_LSM=y kernel
+enable_kprobe_unlink = false   # opt-in: noisy by default
 ```
 
 Then `systemctl restart selfdefd`. Verify with:
