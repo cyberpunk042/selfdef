@@ -22,8 +22,8 @@ inproc_capacity = 4096
 
 [bus.nats]
 # Optional NATS bridge — when enabled and `url` is set, selfdef spawns
-# a task that pumps events to/from NATS Core so detection can span
-# multiple hosts. The in-proc bus stays the source of truth for local
+# a task that pumps events to/from NATS so detection can span multiple
+# hosts. The in-proc bus stays the source of truth for local
 # subscribers; NATS is glue between daemons.
 #
 # Each daemon publishes its locally-originated events to
@@ -33,6 +33,20 @@ inproc_capacity = 4096
 enabled = false
 url = ""                                   # e.g. "nats://nats.lan:4222"
 subject_prefix = "selfdef.events"
+
+# Optional JetStream durability. With this off, the bridge uses plain
+# NATS Core pub/sub — events that pass while a daemon is offline are
+# lost. With it on, publishes go to a JetStream stream, inbound reads
+# from a per-host durable consumer, and a restarting daemon resumes
+# from its last acked message. Requires a NATS server with JetStream
+# enabled.
+[bus.nats.jetstream]
+enabled = false
+stream_name = "selfdef-events"
+durable_consumer_prefix = "selfdef-bridge"
+max_age_secs = 604800                       # 7 days; 0 = unlimited
+max_bytes = -1                              # unlimited
+max_msgs = -1                               # unlimited
 
 [store]
 # Hot store path. Daemon must have rw on this directory.

@@ -60,20 +60,69 @@ subject_prefix = "selfdef.events"
 
 Multiple servers can be comma-separated per the async-nats URL
 grammar. TLS is supported via the `tls://` scheme. Authentication is
-out of scope for this milestone — operators put the cluster behind
+out of scope for selfdef itself — operators put the cluster behind
 mTLS / firewalls / NATS auth callouts as needed.
+
+## Modes: Core vs JetStream
+
+The bridge runs in one of two modes, picked by config:
+
+### Core (default)
+
+Fire-and-forget pub/sub. Lowest latency, no durability. A daemon that
+drops off the network misses messages that pass while it's away.
+Good for live multi-host correlation on a stable LAN.
+
+```toml
+[bus.nats]
+enabled = true
+url = "nats://nats.internal:4222"
+```
+
+### JetStream (durable)
+
+Outbound publishes go to a JetStream stream; inbound reads from a
+per-host durable pull consumer with explicit acks. A daemon that
+restarts resumes from its last acked message rather than starting
+from "now".
+
+```toml
+[bus.nats]
+enabled = true
+url = "nats://nats.internal:4222"
+
+[bus.nats.jetstream]
+enabled = true
+stream_name = "selfdef-events"
+durable_consumer_prefix = "selfdef-bridge"
+max_age_secs = 604800     # 7 days; 0 = unlimited
+max_bytes = -1            # unlimited
+max_msgs = -1             # unlimited
+```
+
+The bridge calls `get_or_create_stream` on startup, so the first
+daemon to come up creates the stream; subsequent daemons reuse it.
+The durable consumer is `<durable_consumer_prefix>-<host_tag>` so
+each host tracks its own progress independently. Operators who want
+to change retention later run `nats stream edit selfdef-events` —
+the bridge doesn't reconcile config drift.
+
+The outbound publish awaits the server ack, so an outage stalls
+publishes rather than silently dropping them. Inbound acks every
+message after it's been republished onto the local bus (or
+identified as a self-echo). Redeliveries are safe — events carry a
+UUIDv7 and the store sink dedupes by id.
 
 ## What it isn't
 
 - **Not** a replacement for the local in-proc bus. Every subscriber
   inside the daemon (correlator, responder, store sink, API SSE
   stream) still reads from the local broadcast.
-- **Not** durable. The bridge uses NATS Core publish/subscribe — a
-  daemon that drops off the network misses messages that pass while
-  it's away. JetStream durability is the obvious next step but
-  hasn't shipped.
 - **Not** authenticated by selfdef itself. Bring your own NATS
   cluster auth (mTLS, NKey, JWT, …).
+- **Not** a transaction system. JetStream gives you "at-least-once"
+  delivery, not "exactly-once" — that's why the dedupe story on the
+  consumer side matters.
 
 ## Manual smoke test
 

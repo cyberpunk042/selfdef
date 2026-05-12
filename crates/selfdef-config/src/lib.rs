@@ -117,6 +117,7 @@ pub struct NatsBridgeConfig {
     pub url: String,
     /// Subject prefix. Default `selfdef.events`.
     pub subject_prefix: String,
+    pub jetstream: NatsJetStreamConfig,
 }
 
 impl Default for NatsBridgeConfig {
@@ -125,6 +126,41 @@ impl Default for NatsBridgeConfig {
             enabled: false,
             url: String::new(),
             subject_prefix: "selfdef.events".into(),
+            jetstream: NatsJetStreamConfig::default(),
+        }
+    }
+}
+
+/// JetStream durability options for the NATS bridge.
+///
+/// When `enabled = true`, the bridge ensures a stream capturing
+/// `<subject_prefix>.>` and a per-host durable consumer named
+/// `<durable_consumer_prefix>-<host_tag>`. A daemon that restarts
+/// resumes from its last acked message rather than starting from
+/// "now".
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct NatsJetStreamConfig {
+    pub enabled: bool,
+    pub stream_name: String,
+    pub durable_consumer_prefix: String,
+    /// Retain messages no older than this many seconds. `0` = unlimited.
+    pub max_age_secs: u64,
+    /// Cap on stream bytes. `-1` = unlimited.
+    pub max_bytes: i64,
+    /// Cap on stream message count. `-1` = unlimited.
+    pub max_msgs: i64,
+}
+
+impl Default for NatsJetStreamConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            stream_name: "selfdef-events".into(),
+            durable_consumer_prefix: "selfdef-bridge".into(),
+            max_age_secs: 7 * 24 * 3600,
+            max_bytes: -1,
+            max_msgs: -1,
         }
     }
 }
