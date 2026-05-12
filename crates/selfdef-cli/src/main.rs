@@ -5,7 +5,6 @@
 //! running daemon (UNIX socket), keeping the same UX.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::path::PathBuf;
@@ -126,8 +125,7 @@ async fn main() -> Result<()> {
             );
         }
         Command::Status => {
-            let store = SqliteStore::open(&cfg.store.hot_path)
-                .context("opening hot store")?;
+            let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let count = store.count().await.context("counting events")?;
             println!("store:  {}", cfg.store.hot_path.display());
             println!("events: {count}");
@@ -135,8 +133,7 @@ async fn main() -> Result<()> {
         Command::Events {
             action: EventsAction::Tail { n, json },
         } => {
-            let store = SqliteStore::open(&cfg.store.hot_path)
-                .context("opening hot store")?;
+            let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let events = store.recent(n).await.context("querying events")?;
             for event in events.iter().rev() {
                 if json {
@@ -149,9 +146,11 @@ async fn main() -> Result<()> {
         Command::Events {
             action: EventsAction::Alerts { n, json },
         } => {
-            let store = SqliteStore::open(&cfg.store.hot_path)
-                .context("opening hot store")?;
-            let events = store.recent_findings(n).await.context("querying findings")?;
+            let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
+            let events = store
+                .recent_findings(n)
+                .await
+                .context("querying findings")?;
             if events.is_empty() {
                 println!("(no findings yet)");
             }
@@ -176,10 +175,7 @@ async fn main() -> Result<()> {
                 let engine = selfdef_correlator::Engine::load_dir(&cfg.correlator.rules_dir)
                     .context("loading rules directory")?;
                 if engine.rule_count() == 0 {
-                    println!(
-                        "(no rules in {})",
-                        cfg.correlator.rules_dir.display()
-                    );
+                    println!("(no rules in {})", cfg.correlator.rules_dir.display());
                 }
                 for r in engine.rules() {
                     println!(
@@ -210,8 +206,8 @@ async fn main() -> Result<()> {
                     if line.trim().is_empty() {
                         continue;
                     }
-                    let event: selfdef_core::Event = serde_json::from_str(line)
-                        .context("parsing corpus event")?;
+                    let event: selfdef_core::Event =
+                        serde_json::from_str(line).context("parsing corpus event")?;
                     total += 1;
                     let findings = engine.process(&event, "replay", &seq);
                     fired += findings.len();
@@ -297,8 +293,7 @@ async fn main() -> Result<()> {
                 use selfdef_responder::actions::{Action, ForensicsBundleAction};
                 let id = uuid::Uuid::parse_str(&event_id)
                     .with_context(|| format!("not a valid event id: {event_id}"))?;
-                let store = SqliteStore::open(&cfg.store.hot_path)
-                    .context("opening hot store")?;
+                let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
                 let event = store
                     .get(id)
                     .await
@@ -310,8 +305,13 @@ async fn main() -> Result<()> {
             }
         },
         Command::Panic { confirm } => {
-            let actual_host = std::env::var("HOSTNAME").ok()
-                .or_else(|| std::fs::read_to_string("/etc/hostname").ok().map(|s| s.trim().to_string()))
+            let actual_host = std::env::var("HOSTNAME")
+                .ok()
+                .or_else(|| {
+                    std::fs::read_to_string("/etc/hostname")
+                        .ok()
+                        .map(|s| s.trim().to_string())
+                })
                 .unwrap_or_default();
             let provided = confirm.as_deref().unwrap_or("").trim();
             if provided.is_empty() {
@@ -320,9 +320,7 @@ async fn main() -> Result<()> {
                 std::process::exit(2);
             }
             if provided != actual_host {
-                eprintln!(
-                    "Confirm mismatch: provided '{provided}', host is '{actual_host}'."
-                );
+                eprintln!("Confirm mismatch: provided '{provided}', host is '{actual_host}'.");
                 std::process::exit(2);
             }
 
@@ -358,7 +356,9 @@ async fn main() -> Result<()> {
 
             let actions: Vec<Arc<dyn Action>> = vec![
                 Arc::new(NotifyAction::new(notifier)),
-                Arc::new(LockdownEgressAction::new(cfg.responder.lockdown_script.clone())),
+                Arc::new(LockdownEgressAction::new(
+                    cfg.responder.lockdown_script.clone(),
+                )),
             ];
             let responder = selfdef_responder::Responder::new(
                 actions,

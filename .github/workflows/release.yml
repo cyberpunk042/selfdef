@@ -22,7 +22,7 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.83.0
+          toolchain: 1.88.0
       - uses: Swatinem/rust-cache@v2
 
       - name: Install packaging tools

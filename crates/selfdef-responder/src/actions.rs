@@ -42,13 +42,22 @@ pub enum Status {
 
 impl ActionOutcome {
     pub fn ok(notes: impl Into<String>) -> Self {
-        Self { status: Status::Success, notes: notes.into() }
+        Self {
+            status: Status::Success,
+            notes: notes.into(),
+        }
     }
     pub fn dry_run(notes: impl Into<String>) -> Self {
-        Self { status: Status::DryRun, notes: notes.into() }
+        Self {
+            status: Status::DryRun,
+            notes: notes.into(),
+        }
     }
     pub fn skipped(notes: impl Into<String>) -> Self {
-        Self { status: Status::Skipped, notes: notes.into() }
+        Self {
+            status: Status::Skipped,
+            notes: notes.into(),
+        }
     }
 }
 
@@ -82,7 +91,9 @@ impl NotifyAction {
 
 #[async_trait]
 impl Action for NotifyAction {
-    fn name(&self) -> &'static str { "notify" }
+    fn name(&self) -> &'static str {
+        "notify"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         if dry_run {
@@ -109,7 +120,9 @@ impl SnapshotProcAction {
 
 #[async_trait]
 impl Action for SnapshotProcAction {
-    fn name(&self) -> &'static str { "snapshot_proc" }
+    fn name(&self) -> &'static str {
+        "snapshot_proc"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         let Some(pid) = pid_from_event(event) else {
@@ -138,19 +151,13 @@ impl Action for SnapshotProcAction {
         }
         // exe symlink — record its target as text.
         if let Ok(target) = tokio::fs::read_link(format!("{proc_root}/exe")).await {
-            let _ = tokio::fs::write(
-                dir.join("exe_link"),
-                target.to_string_lossy().as_bytes(),
-            )
-            .await;
+            let _ =
+                tokio::fs::write(dir.join("exe_link"), target.to_string_lossy().as_bytes()).await;
         }
         // cwd symlink — same treatment.
         if let Ok(target) = tokio::fs::read_link(format!("{proc_root}/cwd")).await {
-            let _ = tokio::fs::write(
-                dir.join("cwd_link"),
-                target.to_string_lossy().as_bytes(),
-            )
-            .await;
+            let _ =
+                tokio::fs::write(dir.join("cwd_link"), target.to_string_lossy().as_bytes()).await;
         }
 
         Ok(ActionOutcome::ok(format!(
@@ -165,16 +172,22 @@ impl Action for SnapshotProcAction {
 pub struct KillPidAction;
 
 impl KillPidAction {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl Default for KillPidAction {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
 impl Action for KillPidAction {
-    fn name(&self) -> &'static str { "kill_pid" }
+    fn name(&self) -> &'static str {
+        "kill_pid"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         let Some(pid) = pid_from_event(event) else {
@@ -216,7 +229,9 @@ impl LockdownEgressAction {
 
 #[async_trait]
 impl Action for LockdownEgressAction {
-    fn name(&self) -> &'static str { "lockdown_egress" }
+    fn name(&self) -> &'static str {
+        "lockdown_egress"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         if dry_run {
@@ -253,7 +268,9 @@ impl RevokeSessionAction {
 
 #[async_trait]
 impl Action for RevokeSessionAction {
-    fn name(&self) -> &'static str { "revoke_session" }
+    fn name(&self) -> &'static str {
+        "revoke_session"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         let user = event
@@ -314,7 +331,9 @@ impl ForensicsBundleAction {
 
 #[async_trait]
 impl Action for ForensicsBundleAction {
-    fn name(&self) -> &'static str { "forensics_bundle" }
+    fn name(&self) -> &'static str {
+        "forensics_bundle"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         let dir = self.forensics_dir.join(event.id.to_string());
@@ -507,14 +526,19 @@ impl VelociraptorEscalateAction {
         let host = event.host_tag.as_str();
         self.args
             .iter()
-            .map(|a| a.replace("{event_id}", &event_id).replace("{host_tag}", host))
+            .map(|a| {
+                a.replace("{event_id}", &event_id)
+                    .replace("{host_tag}", host)
+            })
             .collect()
     }
 }
 
 #[async_trait]
 impl Action for VelociraptorEscalateAction {
-    fn name(&self) -> &'static str { "velociraptor_escalate" }
+    fn name(&self) -> &'static str {
+        "velociraptor_escalate"
+    }
 
     async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
         let rendered = self.render_args(event);
@@ -564,7 +588,10 @@ mod tests {
             0,
         )
         .with_actor(Actor {
-            process: Some(Process { pid, ..Process::default() }),
+            process: Some(Process {
+                pid,
+                ..Process::default()
+            }),
             ..Actor::default()
         })
     }
@@ -598,7 +625,10 @@ mod tests {
     #[tokio::test]
     async fn kill_pid_dry_run() {
         let action = KillPidAction::new();
-        let outcome = action.execute(&finding_with_pid(99999), true).await.unwrap();
+        let outcome = action
+            .execute(&finding_with_pid(99999), true)
+            .await
+            .unwrap();
         assert_eq!(outcome.status, Status::DryRun);
     }
 

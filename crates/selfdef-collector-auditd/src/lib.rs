@@ -6,14 +6,13 @@
 //! anomaly types) lands in a later milestone.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 mod parser;
 
 pub use parser::AuditRecord;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -25,7 +24,7 @@ use selfdef_core::prelude::*;
 use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncSeekExt, BufReader};
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 

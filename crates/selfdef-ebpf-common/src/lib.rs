@@ -113,7 +113,9 @@ mod userspace_impls {
     }
 
     impl FileOpenEvent {
-        pub fn comm_str(&self) -> String { decode_cstr(&self.comm) }
+        pub fn comm_str(&self) -> String {
+            decode_cstr(&self.comm)
+        }
         pub fn path_str(&self) -> String {
             let n = (self.path_len as usize).min(self.path.len());
             String::from_utf8_lossy(&self.path[..n]).into_owned()
@@ -121,7 +123,9 @@ mod userspace_impls {
     }
 
     impl UnlinkEvent {
-        pub fn comm_str(&self) -> String { decode_cstr(&self.comm) }
+        pub fn comm_str(&self) -> String {
+            decode_cstr(&self.comm)
+        }
         pub fn path_str(&self) -> String {
             let n = (self.path_len as usize).min(self.path.len());
             String::from_utf8_lossy(&self.path[..n]).into_owned()

@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 const EBPF_CRATE_DIR: &str = "bpf/selfdef-bpf";
 const BPF_TARGET: &str = "bpfel-unknown-none";
@@ -97,7 +97,8 @@ fn install_bpf(args: &[String]) -> Result<()> {
         .join(BIN_NAME);
 
     if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("mkdir -p {}", parent.display()))?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("mkdir -p {}", parent.display()))?;
     }
     std::fs::copy(&source, &dest)
         .with_context(|| format!("cp {} -> {}", source.display(), dest.display()))?;

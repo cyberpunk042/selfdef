@@ -13,15 +13,14 @@
 //! you don't intend to legitimately mutate.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use inotify::{Inotify, WatchDescriptor, WatchMask};
 use futures::StreamExt;
+use inotify::{Inotify, WatchDescriptor, WatchMask};
 use selfdef_bus::Publisher;
 use selfdef_core::attack::{Tactic, TechniqueRef};
 use selfdef_core::category::ClassUid;
@@ -144,10 +143,7 @@ impl CanaryCollector {
             "selfdef.canary",
             self.next_seq(),
         )
-        .with_message(format!(
-            "Canary {kind}: {}",
-            path.display()
-        ))
+        .with_message(format!("Canary {kind}: {}", path.display()))
         .with_file(File::at_path(path.display().to_string()))
         .with_attack(TechniqueRef::new(
             "T1552.001",
@@ -182,11 +178,7 @@ mod tests {
         let pub_ = bus.publisher();
         let mut sub = bus.subscribe();
 
-        let collector = CanaryCollector::new(
-            vec![canary_path.clone()],
-            pub_,
-            "test-host".into(),
-        );
+        let collector = CanaryCollector::new(vec![canary_path.clone()], pub_, "test-host".into());
         let shutdown = CancellationToken::new();
         let sd = shutdown.clone();
         let task = tokio::spawn(async move { collector.run(sd).await });

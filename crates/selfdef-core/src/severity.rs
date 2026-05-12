@@ -7,7 +7,9 @@
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
 /// OCSF-aligned severity. Serializes as integer on the wire.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr)]
+#[derive(
+    Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize_repr, Deserialize_repr,
+)]
 #[repr(u32)]
 pub enum SeverityId {
     Unknown = 0,

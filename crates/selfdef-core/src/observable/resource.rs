@@ -41,9 +41,17 @@ pub struct File {
     /// POSIX mode, e.g. `0o600`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mode: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none", with = "crate::envelope::opt_rfc3339", default)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "crate::envelope::opt_rfc3339",
+        default
+    )]
     pub created_time_dt: Option<OffsetDateTime>,
-    #[serde(skip_serializing_if = "Option::is_none", with = "crate::envelope::opt_rfc3339", default)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "crate::envelope::opt_rfc3339",
+        default
+    )]
     pub modified_time_dt: Option<OffsetDateTime>,
 }
 

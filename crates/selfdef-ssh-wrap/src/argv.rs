@@ -8,8 +8,8 @@
 /// Single-letter ssh options that consume the next argv element as a value.
 /// Taken from ssh(1). Conservative: anything we're not sure about goes here.
 const VALUE_OPTIONS: &[char] = &[
-    'B', 'b', 'c', 'D', 'E', 'e', 'F', 'I', 'i', 'J', 'L', 'l', 'm', 'O', 'o',
-    'p', 'Q', 'R', 'S', 'W', 'w',
+    'B', 'b', 'c', 'D', 'E', 'e', 'F', 'I', 'i', 'J', 'L', 'l', 'm', 'O', 'o', 'p', 'Q', 'R', 'S',
+    'W', 'w',
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,11 +101,7 @@ pub fn extract_target<'a>(tokens: &[Token<'a>]) -> Option<&'a str> {
 /// Filter user-supplied flags. Returns a new argv (excluding argv[0]) with
 /// `denied_flags` removed and `-o` overrides matching `denied_o_keys` (case-
 /// insensitive on the key) removed.
-pub fn filter(
-    tokens: &[Token<'_>],
-    denied_flags: &[char],
-    denied_o_keys: &[&str],
-) -> Vec<String> {
+pub fn filter(tokens: &[Token<'_>], denied_flags: &[char], denied_o_keys: &[&str]) -> Vec<String> {
     let mut out = Vec::new();
     for tok in tokens {
         match tok {
@@ -117,10 +113,7 @@ pub fn filter(
             }
             Token::Option('o', val) => {
                 let key = val.split('=').next().unwrap_or("").trim();
-                if denied_o_keys
-                    .iter()
-                    .any(|k| key.eq_ignore_ascii_case(k))
-                {
+                if denied_o_keys.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     continue;
                 }
                 out.push("-o".into());
@@ -132,10 +125,7 @@ pub fn filter(
             }
             Token::AttachedOption('o', val) => {
                 let key = val.split('=').next().unwrap_or("").trim();
-                if denied_o_keys
-                    .iter()
-                    .any(|k| key.eq_ignore_ascii_case(k))
-                {
+                if denied_o_keys.iter().any(|k| key.eq_ignore_ascii_case(k)) {
                     continue;
                 }
                 out.push(format!("-o{val}"));
@@ -157,9 +147,7 @@ pub fn parse_target(spec: &str) -> (Option<String>, String, Option<u16>) {
         None => (None, spec),
     };
     let (host, port) = match rest.rsplit_once(':') {
-        Some((h, p)) if p.parse::<u16>().is_ok() => {
-            (h.to_string(), p.parse::<u16>().ok())
-        }
+        Some((h, p)) if p.parse::<u16>().is_ok() => (h.to_string(), p.parse::<u16>().ok()),
         _ => (rest.to_string(), None),
     };
     (user, host, port)
@@ -192,9 +180,16 @@ mod tests {
         let argv = s(&["-Aq", "user@host"]);
         let toks = classify(&argv);
         // -Aq should split into Flag(A), Flag(q)
-        let flags: Vec<_> = toks.iter().filter_map(|t| {
-            if let Token::Flag(c) = t { Some(*c) } else { None }
-        }).collect();
+        let flags: Vec<_> = toks
+            .iter()
+            .filter_map(|t| {
+                if let Token::Flag(c) = t {
+                    Some(*c)
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert!(flags.contains(&'A'));
         assert!(flags.contains(&'q'));
     }

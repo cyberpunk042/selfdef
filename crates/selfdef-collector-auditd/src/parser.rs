@@ -34,7 +34,7 @@ impl AuditRecord {
 /// Parse one audit log line. Returns `None` for lines that don't look like
 /// audit records (blank, comments, malformed); callers can warn or ignore.
 #[allow(clippy::manual_map)] // explicit None branch is clearer here
-pub fn parse_line(line: &str) -> Option<AuditRecord> {
+pub(crate) fn parse_line(line: &str) -> Option<AuditRecord> {
     let line = line.trim();
     if line.is_empty() || !line.starts_with("type=") {
         return None;
@@ -122,7 +122,9 @@ fn tokenize_kv(input: &str) -> Vec<(String, String)> {
             // Stray token; skip.
             continue;
         }
-        let key = std::str::from_utf8(&bytes[key_start..i]).unwrap_or("").to_string();
+        let key = std::str::from_utf8(&bytes[key_start..i])
+            .unwrap_or("")
+            .to_string();
         i += 1; // past '='
 
         // Read value: quoted or until whitespace.
@@ -136,13 +138,17 @@ fn tokenize_kv(input: &str) -> Vec<(String, String)> {
             if i < bytes.len() {
                 i += 1; // include closing quote
             }
-            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+            std::str::from_utf8(&bytes[val_start..i])
+                .unwrap_or("")
+                .to_string()
         } else {
             let val_start = i;
             while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
                 i += 1;
             }
-            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+            std::str::from_utf8(&bytes[val_start..i])
+                .unwrap_or("")
+                .to_string()
         };
 
         // Strip outer quotes for plain key=value cases; keep them where

@@ -78,12 +78,20 @@ impl TechniqueRef {
 
     #[must_use]
     pub fn unsecured_credentials_files() -> Self {
-        Self::new("T1552.001", "Unsecured Credentials: Credentials In Files", Tactic::CredentialAccess)
+        Self::new(
+            "T1552.001",
+            "Unsecured Credentials: Credentials In Files",
+            Tactic::CredentialAccess,
+        )
     }
 
     #[must_use]
     pub fn valid_accounts_local() -> Self {
-        Self::new("T1078.003", "Valid Accounts: Local Accounts", Tactic::DefenseEvasion)
+        Self::new(
+            "T1078.003",
+            "Valid Accounts: Local Accounts",
+            Tactic::DefenseEvasion,
+        )
     }
 }
 

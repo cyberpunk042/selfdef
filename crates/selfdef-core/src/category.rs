@@ -163,8 +163,14 @@ mod tests {
     #[test]
     fn category_derivation() {
         assert_eq!(ClassUid::AUTHENTICATION.category(), CategoryUid::Iam);
-        assert_eq!(ClassUid::PROCESS_ACTIVITY.category(), CategoryUid::SystemActivity);
-        assert_eq!(ClassUid::NETWORK_ACTIVITY.category(), CategoryUid::NetworkActivity);
+        assert_eq!(
+            ClassUid::PROCESS_ACTIVITY.category(),
+            CategoryUid::SystemActivity
+        );
+        assert_eq!(
+            ClassUid::NETWORK_ACTIVITY.category(),
+            CategoryUid::NetworkActivity
+        );
     }
 
     #[test]

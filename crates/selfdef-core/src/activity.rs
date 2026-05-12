@@ -113,8 +113,17 @@ mod tests {
 
     #[test]
     fn activities_serialize_as_int() {
-        assert_eq!(serde_json::to_string(&AuthenticationActivity::Logon).unwrap(), "1");
-        assert_eq!(serde_json::to_string(&ProcessActivity::Launch).unwrap(), "1");
-        assert_eq!(serde_json::to_string(&NetworkActivity::Refuse).unwrap(), "5");
+        assert_eq!(
+            serde_json::to_string(&AuthenticationActivity::Logon).unwrap(),
+            "1"
+        );
+        assert_eq!(
+            serde_json::to_string(&ProcessActivity::Launch).unwrap(),
+            "1"
+        );
+        assert_eq!(
+            serde_json::to_string(&NetworkActivity::Refuse).unwrap(),
+            "5"
+        );
     }
 }

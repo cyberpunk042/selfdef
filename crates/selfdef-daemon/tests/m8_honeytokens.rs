@@ -19,7 +19,7 @@ use selfdef_responder::actions::{
     SnapshotProcAction,
 };
 use selfdef_store::SqliteStore;
-use tempfile::{tempdir, NamedTempFile};
+use tempfile::{NamedTempFile, tempdir};
 use tokio_util::sync::CancellationToken;
 
 /// A no-op notifier we plug into NotifyAction so dry_run is honored without
@@ -31,11 +31,16 @@ struct NullNotifier {
 
 #[async_trait::async_trait]
 impl selfdef_notifier::Notifier for NullNotifier {
-    async fn notify(&self, _event: &selfdef_core::Event) -> Result<(), selfdef_notifier::NotifierError> {
+    async fn notify(
+        &self,
+        _event: &selfdef_core::Event,
+    ) -> Result<(), selfdef_notifier::NotifierError> {
         self.sent.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
-    fn name(&self) -> &'static str { "null" }
+    fn name(&self) -> &'static str {
+        "null"
+    }
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -101,11 +106,7 @@ async fn canary_touch_dispatches_actions_in_dry_run() {
     });
 
     // ---- canary collector ----
-    let collector = CanaryCollector::new(
-        vec![canary_path.clone()],
-        publisher,
-        "test-host".into(),
-    );
+    let collector = CanaryCollector::new(vec![canary_path.clone()], publisher, "test-host".into());
     let coll_shutdown = shutdown.clone();
     let coll_task = tokio::spawn(async move { collector.run(coll_shutdown).await });
 

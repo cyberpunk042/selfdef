@@ -30,7 +30,9 @@ impl selfdef_notifier::Notifier for NullNotifier {
     ) -> Result<(), selfdef_notifier::NotifierError> {
         Ok(())
     }
-    fn name(&self) -> &'static str { "null" }
+    fn name(&self) -> &'static str {
+        "null"
+    }
 }
 
 fn make_finding(host: &str) -> selfdef_core::Event {
@@ -61,7 +63,11 @@ async fn forensics_bundle_runs_on_critical_finding() {
         // velociraptor stays in dry-run via the responder's global flag below.
         Arc::new(VelociraptorEscalateAction::new(
             PathBuf::from("/nonexistent/velociraptor"),
-            vec!["collect".into(), "--label={host_tag}".into(), "--tag={event_id}".into()],
+            vec![
+                "collect".into(),
+                "--label={host_tag}".into(),
+                "--tag={event_id}".into(),
+            ],
         )),
     ];
 
@@ -82,8 +88,7 @@ async fn forensics_bundle_runs_on_critical_finding() {
 
     let resp_shutdown = shutdown.clone();
     let resp_clone = responder.clone();
-    let resp_task =
-        tokio::spawn(async move { resp_clone.run(sub, resp_shutdown).await });
+    let resp_task = tokio::spawn(async move { resp_clone.run(sub, resp_shutdown).await });
 
     // Publish a synthetic Critical finding onto the bus. The responder
     // subscribes to Findings-class events and dispatches actions.
@@ -99,10 +104,7 @@ async fn forensics_bundle_runs_on_critical_finding() {
             break;
         }
         if tokio::time::Instant::now() > deadline {
-            panic!(
-                "forensics bundle never appeared at {}",
-                bundle.display()
-            );
+            panic!("forensics bundle never appeared at {}", bundle.display());
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }

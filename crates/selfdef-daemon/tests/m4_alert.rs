@@ -117,11 +117,8 @@ level: high
     });
 
     // Notifier pointing at the wiremock server.
-    let notifier: Box<dyn Notifier> = Box::new(NtfyNotifier::new(
-        server.uri(),
-        "selfdef-alerts",
-        None,
-    ));
+    let notifier: Box<dyn Notifier> =
+        Box::new(NtfyNotifier::new(server.uri(), "selfdef-alerts", None));
     let chain = NotifierChain::new(vec![notifier]);
 
     // Responder — dry_run = false so it actually notifies.
@@ -150,7 +147,12 @@ level: high
     // Wait until we see a finding in the store, with timeout.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
-        if store.recent_findings(10).await.unwrap_or_default().len() >= 1 {
+        if !store
+            .recent_findings(10)
+            .await
+            .unwrap_or_default()
+            .is_empty()
+        {
             break;
         }
         if tokio::time::Instant::now() >= deadline {
@@ -169,10 +171,7 @@ level: high
     assert_eq!(f.category_uid, CategoryUid::Findings);
     assert_eq!(f.severity_id, SeverityId::High);
     assert!(
-        f.message
-            .as_deref()
-            .unwrap_or("")
-            .contains(SRC_IP),
+        f.message.as_deref().unwrap_or("").contains(SRC_IP),
         "finding message should mention source IP, got: {:?}",
         f.message
     );

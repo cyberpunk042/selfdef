@@ -11,8 +11,8 @@ use std::time::Duration;
 
 use selfdef_bus::Bus;
 use selfdef_core::Event;
-use selfdef_correlator::sigma::Engine;
 use selfdef_correlator::Correlator;
+use selfdef_correlator::sigma::Engine;
 use tempfile::tempdir;
 use tokio_util::sync::CancellationToken;
 
@@ -103,15 +103,25 @@ fn replay_corpus_produces_expected_findings() {
         let findings = engine.process(&event, "replay", &seq);
         for f in findings {
             total_findings += 1;
-            if f.message.as_deref().unwrap_or("").contains("SSH Brute Force") {
+            if f.message
+                .as_deref()
+                .unwrap_or("")
+                .contains("SSH Brute Force")
+            {
                 ssh_brute_findings += 1;
             }
         }
     }
 
     // Expectations from tests/replay/auditd/ssh_bruteforce.expected.yaml
-    assert_eq!(ssh_brute_findings, 1, "exactly one SSH brute force finding expected");
-    assert_eq!(total_findings, 1, "no other rules should fire on this corpus");
+    assert_eq!(
+        ssh_brute_findings, 1,
+        "exactly one SSH brute force finding expected"
+    );
+    assert_eq!(
+        total_findings, 1,
+        "no other rules should fire on this corpus"
+    );
 }
 
 #[tokio::test(flavor = "current_thread")]

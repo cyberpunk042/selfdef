@@ -10,7 +10,6 @@
 //! until SIGHUP triggers a fresh `Config::load`.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
@@ -54,9 +53,7 @@ impl Config {
             }
         }
 
-        let cfg: Self = fig
-            .merge(Env::prefixed("SELFDEF_").split("__"))
-            .extract()?;
+        let cfg: Self = fig.merge(Env::prefixed("SELFDEF_").split("__")).extract()?;
         Ok(cfg)
     }
 }

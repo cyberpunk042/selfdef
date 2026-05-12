@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::SCHEMA_VERSION;
 use crate::attack::TechniqueRef;
 use crate::category::{CategoryUid, ClassUid};
 use crate::metadata::Metadata;
 use crate::observable::{Actor, Endpoint, File, NetworkConnection, Process};
 use crate::severity::SeverityId;
 use crate::status::StatusId;
-use crate::SCHEMA_VERSION;
 
 /// A single observation in the selfdef event bus.
 ///
@@ -211,7 +211,7 @@ pub(crate) mod opt_rfc3339 {
     use time::OffsetDateTime;
     use time::format_description::well_known::Rfc3339;
 
-    pub fn serialize<S: Serializer>(
+    pub(crate) fn serialize<S: Serializer>(
         value: &Option<OffsetDateTime>,
         s: S,
     ) -> Result<S::Ok, S::Error> {
@@ -224,7 +224,7 @@ pub(crate) mod opt_rfc3339 {
         }
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
         d: D,
     ) -> Result<Option<OffsetDateTime>, D::Error> {
         let opt: Option<String> = Option::deserialize(d)?;
@@ -260,8 +260,14 @@ mod tests {
             user: Some(User::local(1000, "alice")),
             ..Actor::default()
         })
-        .with_src_endpoint(Endpoint::ip_port(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 5)), 51234))
-        .with_dst_endpoint(Endpoint::ip_port(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 22))
+        .with_src_endpoint(Endpoint::ip_port(
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 5)),
+            51234,
+        ))
+        .with_dst_endpoint(Endpoint::ip_port(
+            IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+            22,
+        ))
         .with_attack(TechniqueRef::brute_force())
     }
 

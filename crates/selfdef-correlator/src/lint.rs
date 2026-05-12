@@ -64,18 +64,21 @@ pub fn lint_rule(rule: &CompiledRule) -> Vec<Issue> {
         out.push(warn(rule, "missing or empty `description`"));
     }
     if rule.tags.is_empty() {
-        out.push(warn(rule, "no tags; rules should carry at least one `attack.*` tag"));
+        out.push(warn(
+            rule,
+            "no tags; rules should carry at least one `attack.*` tag",
+        ));
     } else {
         let has_attack = rule.tags.iter().any(|t| t.starts_with("attack."));
         if !has_attack {
-            out.push(warn(rule, "no `attack.*` tag; ATT&CK coverage will not increase"));
+            out.push(warn(
+                rule,
+                "no `attack.*` tag; ATT&CK coverage will not increase",
+            ));
         }
         let has_technique = rule.tags.iter().any(|t| {
-            t.strip_prefix("attack.t").is_some_and(|rest| {
-                rest.chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_digit())
-            })
+            t.strip_prefix("attack.t")
+                .is_some_and(|rest| rest.chars().next().is_some_and(|c| c.is_ascii_digit()))
         });
         if !has_technique {
             out.push(warn(rule, "no `attack.tNNNN[.NNN]` technique tag"));

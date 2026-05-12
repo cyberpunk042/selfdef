@@ -88,10 +88,17 @@ impl HostPolicy {
             forward_agent: self.forward_agent.or(base.forward_agent),
             forward_x11: self.forward_x11.or(base.forward_x11),
             port_forwarding: self.port_forwarding.or(base.port_forwarding),
-            strict_host_key: self.strict_host_key.clone().or_else(|| base.strict_host_key.clone()),
-            exit_on_forward_failure: self.exit_on_forward_failure.or(base.exit_on_forward_failure),
+            strict_host_key: self
+                .strict_host_key
+                .clone()
+                .or_else(|| base.strict_host_key.clone()),
+            exit_on_forward_failure: self
+                .exit_on_forward_failure
+                .or(base.exit_on_forward_failure),
             connect_timeout_secs: self.connect_timeout_secs.or(base.connect_timeout_secs),
-            server_alive_interval_secs: self.server_alive_interval_secs.or(base.server_alive_interval_secs),
+            server_alive_interval_secs: self
+                .server_alive_interval_secs
+                .or(base.server_alive_interval_secs),
         }
     }
 }
@@ -119,10 +126,18 @@ impl ResolvedPolicy {
         // Anywhere a value somehow still None, fall back to secure defaults.
         let fb = HostPolicy::secure_defaults();
         Self {
-            forward_agent: merged.forward_agent.unwrap_or_else(|| fb.forward_agent.unwrap()),
-            forward_x11: merged.forward_x11.unwrap_or_else(|| fb.forward_x11.unwrap()),
-            port_forwarding: merged.port_forwarding.unwrap_or_else(|| fb.port_forwarding.unwrap()),
-            strict_host_key: merged.strict_host_key.unwrap_or_else(|| fb.strict_host_key.unwrap()),
+            forward_agent: merged
+                .forward_agent
+                .unwrap_or_else(|| fb.forward_agent.unwrap()),
+            forward_x11: merged
+                .forward_x11
+                .unwrap_or_else(|| fb.forward_x11.unwrap()),
+            port_forwarding: merged
+                .port_forwarding
+                .unwrap_or_else(|| fb.port_forwarding.unwrap()),
+            strict_host_key: merged
+                .strict_host_key
+                .unwrap_or_else(|| fb.strict_host_key.unwrap()),
             exit_on_forward_failure: merged
                 .exit_on_forward_failure
                 .unwrap_or_else(|| fb.exit_on_forward_failure.unwrap()),
@@ -142,13 +157,34 @@ impl ResolvedPolicy {
             out.push("-o".into());
             out.push(kv);
         };
-        push(&mut out, format!("ForwardAgent={}", yesno(self.forward_agent)));
+        push(
+            &mut out,
+            format!("ForwardAgent={}", yesno(self.forward_agent)),
+        );
         push(&mut out, format!("ForwardX11={}", yesno(self.forward_x11)));
-        push(&mut out, format!("ForwardX11Trusted={}", yesno(self.forward_x11)));
-        push(&mut out, format!("ClearAllForwardings={}", yesno(!self.port_forwarding)));
-        push(&mut out, format!("ExitOnForwardFailure={}", yesno(self.exit_on_forward_failure)));
-        push(&mut out, format!("StrictHostKeyChecking={}", self.strict_host_key));
-        push(&mut out, format!("ConnectTimeout={}", self.connect_timeout_secs));
+        push(
+            &mut out,
+            format!("ForwardX11Trusted={}", yesno(self.forward_x11)),
+        );
+        push(
+            &mut out,
+            format!("ClearAllForwardings={}", yesno(!self.port_forwarding)),
+        );
+        push(
+            &mut out,
+            format!(
+                "ExitOnForwardFailure={}",
+                yesno(self.exit_on_forward_failure)
+            ),
+        );
+        push(
+            &mut out,
+            format!("StrictHostKeyChecking={}", self.strict_host_key),
+        );
+        push(
+            &mut out,
+            format!("ConnectTimeout={}", self.connect_timeout_secs),
+        );
         push(
             &mut out,
             format!("ServerAliveInterval={}", self.server_alive_interval_secs),
@@ -234,9 +270,7 @@ pub fn load(path: Option<&Path>) -> anyhow::Result<PolicyFile> {
 fn default_path() -> anyhow::Result<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config"))
-        })
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
         .ok_or_else(|| anyhow::anyhow!("can't determine config dir"))?;
     Ok(base.join("selfdef").join("ssh-wrap.toml"))
 }

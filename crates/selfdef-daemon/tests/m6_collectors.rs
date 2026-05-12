@@ -5,9 +5,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use selfdef_bus::Bus;
-use selfdef_collector_journald::{
-    InputMode as JInput, JournaldCollector, ReadFrom as JReadFrom,
-};
+use selfdef_collector_journald::{InputMode as JInput, JournaldCollector, ReadFrom as JReadFrom};
 use selfdef_collector_suricata::{ReadFrom as SReadFrom, SuricataCollector};
 use selfdef_collector_tetragon::{ReadFrom as TReadFrom, TetragonCollector};
 use selfdef_core::category::ClassUid;

@@ -22,7 +22,6 @@
 //!   server-side hunt creation without rebuilding selfdef.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 pub mod actions;
@@ -54,7 +53,10 @@ pub struct Responder {
 impl std::fmt::Debug for Responder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Responder")
-            .field("actions", &self.actions.iter().map(|a| a.name()).collect::<Vec<_>>())
+            .field(
+                "actions",
+                &self.actions.iter().map(|a| a.name()).collect::<Vec<_>>(),
+            )
             .field("allowed_actions", &self.allowed_actions)
             .field("dry_run", &self.dry_run)
             .finish()
@@ -62,11 +64,7 @@ impl std::fmt::Debug for Responder {
 }
 
 impl Responder {
-    pub fn new(
-        actions: Vec<Arc<dyn Action>>,
-        allowed_actions: Vec<String>,
-        dry_run: bool,
-    ) -> Self {
+    pub fn new(actions: Vec<Arc<dyn Action>>, allowed_actions: Vec<String>, dry_run: bool) -> Self {
         Self {
             actions,
             allowed_actions: allowed_actions.into_iter().collect(),

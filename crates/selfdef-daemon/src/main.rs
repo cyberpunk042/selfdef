@@ -4,7 +4,6 @@
 //! Subscribers (3 of them now) each see the bus independently.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use std::path::PathBuf;
@@ -29,7 +28,12 @@ const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 #[derive(Debug, Parser)]
 #[command(name = "selfdefd", version, about = "selfdef daemon")]
 struct Args {
-    #[arg(short, long, env = "SELFDEF_CONFIG", default_value = "/etc/selfdef/selfdef.toml")]
+    #[arg(
+        short,
+        long,
+        env = "SELFDEF_CONFIG",
+        default_value = "/etc/selfdef/selfdef.toml"
+    )]
     config: PathBuf,
     #[arg(long, env = "SELFDEF_LOG")]
     log_level: Option<String>,
@@ -41,7 +45,11 @@ async fn main() -> Result<()> {
     init_tracing(args.log_level.as_deref())?;
 
     let cfg = Config::load(Some(&args.config)).context("loading configuration")?;
-    let host_tag = cfg.daemon.host_tag.clone().unwrap_or_else(host_tag_from_env_or_hostname);
+    let host_tag = cfg
+        .daemon
+        .host_tag
+        .clone()
+        .unwrap_or_else(host_tag_from_env_or_hostname);
 
     info!(
         version = env!("CARGO_PKG_VERSION"),

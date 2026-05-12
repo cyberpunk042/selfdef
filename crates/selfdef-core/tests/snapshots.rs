@@ -16,7 +16,14 @@ use uuid::Uuid;
 
 /// Build a deterministic event so snapshot diffs are stable.
 fn deterministic<F: FnOnce(Event) -> Event>(class: ClassUid, activity: u32, modify: F) -> Event {
-    let mut e = Event::new(class, activity, SeverityId::Medium, "test-host", "test-source", 0);
+    let mut e = Event::new(
+        class,
+        activity,
+        SeverityId::Medium,
+        "test-host",
+        "test-source",
+        0,
+    );
     // Pin id, time, metadata.logged_time so snapshots don't churn.
     e.id = Uuid::nil();
     e.time_dt = datetime!(2026-01-15 12:00:00 UTC);
