@@ -65,9 +65,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
+      - uses: dtolnay/rust-toolchain@master
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@v2
+      # rustsec/audit-check@v2 has been observed to crash with exit code 101
+      # when running its bundled cargo-audit against newer Cargo.lock files.
+      # Pinning cargo-audit ourselves and running it explicitly gives us
+      # deterministic behavior and matches what developers run locally.
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - run: cargo audit
 
   build:
     name: release build
