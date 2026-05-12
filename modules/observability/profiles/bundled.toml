@@ -1,0 +1,28 @@
+# Profile: bundled (default).
+#
+# Assumes Prometheus and Grafana run on this host under systemd.
+# Drops the scrape config into Prometheus's drop-in dir, the
+# dashboard JSON into Grafana's auto-load dir, and reloads
+# Prometheus so the new scrape picks up immediately. Grafana auto-
+# discovers the dashboard JSON.
+#
+# If your distro packages put these dirs elsewhere, override below.
+
+profile = "bundled"
+
+# Prometheus
+prometheus_conf_dir = "/etc/prometheus/conf.d"
+prometheus_service  = "prometheus.service"
+
+# Grafana
+grafana_dashboards_dir = "/var/lib/grafana/dashboards/selfdef"
+
+# Comma-separated list of targets Prometheus should scrape. The
+# default is the Tetragon metrics endpoint from the `tetragon`
+# module's default profile.
+scrape_targets = "localhost:2112"
+
+# Dashboard metadata. The UID is what Grafana exposes in the
+# dashboard URL; the title appears in its dashboard list.
+dashboard_uid   = "selfdef"
+dashboard_title = "selfdef — Host Self-Defense"

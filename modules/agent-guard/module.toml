@@ -1,0 +1,32 @@
+name        = "agent-guard"
+version     = "0.1.0"
+summary     = "Tetragon TracingPolicies for AI agents in containers — etc-write / shell-exec / egress / SecureMessage"
+category    = "hardening"
+
+depends_on  = ["tetragon"]
+conflicts   = []
+provides    = []
+consumes    = ["tetragon-tracing", "tetragon-policies"]
+
+requires    = [
+    { kind = "binary", value = "tetragon" },
+]
+
+# Single bundle per host. Per-policy enable/disable + action
+# override happens via the module config, not by spawning instances.
+instanced = false
+
+# `main`: runs after the tetragon substrate (which ships in `pre`)
+# is configured and the daemon is live, but before any `post`
+# module (observability) builds a metrics scrape.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "audit"
+available = ["audit", "enforce"]

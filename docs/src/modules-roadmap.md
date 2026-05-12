@@ -22,7 +22,10 @@ Statuses:
 | `polarproxy`  | network       | shipping   | root-ghostproxy        | TLS termination → PCAP-over-IP on tcp/4430. Two profiles: `host-tls-mitm` (NAT-redirects host's TCP/443 to a local PolarProxy listener) and `bridge-tap` (runtime-checked soft dependency on `bridge-l2`). Manages the systemd unit + nftables redirect; does **not** own the PolarProxy binary or the CA. |
 | `bridge-l2`   | network       | shipping   | root-ghostproxy        | Transparent L2 bridge (`br0`) + nftables FORWARD policy + management-wifi INPUT-drop. Foundation for the inline modules. Two profiles: `passthrough`, `opnsense-edge`. Install/check/uninstall scripts pass dry-run smoke tests. |
 | `vpn-bridge`  | network       | shipping (v0.2.0) | new             | Three profiles for the double-NAT case: **`relay-via-server`** (your own public WireGuard relay), **`tailscale`** (Tailscale-hosted or self-hosted Headscale), **`cloudflare-tunnel`** (outbound L7 service publishing — different paradigm, not an overlay). Per-profile script files under `install/profiles/<name>.sh` with a documented extension hook for future transports. Decision matrix in the module's README. v0.3.0 may add a STUN hole-punch profile if there's demand beyond what tailscale already solves. |
-| `integrity-sentinel` | hardening | shipping (v0.1.0) | new | SHA256 baseline of operator-defined policy paths (rules, configs, module manifests, install scripts), with `strict` (fail-closed) and `warn-only` profiles. Baseline format is plain `sha256sum -c`-compatible, so the file is verifiable out-of-band without `selfdefctl`. The paths-to-track file is operator-owned at `/etc/selfdef/integrity-sentinel/paths.txt`. |
+| `integrity-sentinel` | hardening | shipping (v0.1.1) | new | SHA256 baseline of operator-defined policy paths (rules, configs, module manifests, install scripts), with `strict` (fail-closed) and `warn-only` profiles. Baseline format is plain `sha256sum -c`-compatible, so the file is verifiable out-of-band without `selfdefctl`. Drift optionally emits an OCSF Detection Finding via `selfdefctl events emit` when `event_stream_path` is set, routing through the existing notifier chain. |
+| `tetragon`    | hardening     | shipping (v0.1.0) | new                    | Substrate for Tetragon (Cilium eBPF). Owns Tetragon's main config, the TracingPolicy drop directory, and the Prometheus metrics endpoint. Single mode — the policies live in peer modules. Ships in `phase = "pre"` so policy modules in `main` see it live. Does **not** install the Tetragon binary (operator does, out-of-band). |
+| `agent-guard` | hardening     | shipping (v0.1.0) | new                    | Tetragon TracingPolicies for AI agents in Docker/Podman/containerd containers: `etc-write-guard`, `container-shell-guard`, `egress-guard` (with operator-defined CIDR allowlist), and a forward-looking `securemessage-guard` stub. Two profiles: `audit` (Post-only) and `enforce` (Sigkill). Per-policy action overrides + per-policy enable/disable so operators ramp up gradually. Container scope = `Pid != host_ns` (works on every container runtime; pod-label variants for k8s are a follow-up). |
+| `observability` | observability | shipping (v0.1.0) | new                  | Prometheus scrape config (targeting Tetragon's metrics endpoint plus any future selfdef-managed endpoints) + a Grafana dashboard JSON rendering Tetragon event rate, kills-by-policy, process-cache utilization, and BPF map errors. Two profiles: `bundled` (Prometheus + Grafana run on this host under systemd; module drops files into their conf.d / dashboards dirs and reloads Prometheus) and `external` (renders the same files into a staging dir for the operator to sync out). |
 
 ## Out of scope
 
@@ -41,9 +44,12 @@ The cleanest absorption order was:
 3. `polarproxy` — small, mostly install logic. ✅ shipped.
 4. `vpn-bridge` — design + implementation in one go; no prior code to absorb. ✅ shipped (v0.1.0, relay-via-server only).
 
-Every module the roadmap originally named is now in the catalog. Remaining work:
+Every module the roadmap originally named is now in the catalog. The catalog gained an AI-machine track: `tetragon` (substrate) + `agent-guard` (policy bundle) + `observability` (Prometheus + Grafana). Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
+- `agent-guard` pod-label variants: ship Kubernetes-aware policies gated on `matchPodSelector` instead of `matchNamespaces`. Useful for k8s hosts where the cluster's container scoping already exists.
+- `agent-guard` GPU device guards: kprobes on `nvidia_open` / device-node ioctls for processes outside an allowlist. Worth landing once the first real AI-machine deployment shakes out the right allowlist shape.
+- `selfdef-daemon` Prometheus endpoint: a `/metrics` surface on the API so `observability` has a second target beyond Tetragon's. Cross-crate change, separate PR.
 
 ## Lifecycle surface
 

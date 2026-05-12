@@ -1,0 +1,29 @@
+# Profile: default.
+#
+# Single-mode module — Tetragon's substrate has one shape: configure
+# it, point its event JSONL at the daemon's eventstream collector
+# input path, expose its built-in Prometheus exporter, own the
+# TracingPolicy drop directory.
+#
+# Policy modules (`agent-guard` etc.) write into `policy_dir`.
+# Observability scrapes `metrics_address`.
+
+profile = "default"
+
+# Where Tetragon writes its event JSON. The selfdef daemon's
+# `[collectors.eventstream]` block should include this path so events
+# flow onto the bus.
+event_log_path = "/var/log/tetragon/events.json"
+
+# Drop directory for TracingPolicy YAMLs. The `agent-guard` module
+# (and any future Tetragon-based policy module) writes here.
+policy_dir = "/etc/tetragon/tetragon.tp.d"
+
+# Prometheus metrics endpoint. Bind to localhost by default — flip
+# to `0.0.0.0:2112` if Prometheus runs on another host.
+metrics_address = "localhost:2112"
+
+# Service / config paths. Override only if your distro packages
+# Tetragon differently from the upstream Debian package.
+config_path  = "/etc/tetragon/tetragon.yaml"
+service_unit = "tetragon.service"

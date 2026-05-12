@@ -1,0 +1,299 @@
+//! Dry-run smoke tests for the `agent-guard` module.
+//!
+//! Hermetic: each test builds a scratch tempdir with a writable
+//! tetragon policy_dir + a host config, then runs apply.sh and
+//! verifies the rendered TracingPolicy YAMLs land with the right
+//! action (`Post` in audit, `Sigkill` in enforce) and that
+//! per-policy overrides + the egress allowlist splice correctly.
+
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+fn module_dir() -> PathBuf {
+    workspace_root().join("modules/agent-guard")
+}
+
+fn write_file(path: &Path, body: &str) {
+    if let Some(p) = path.parent() {
+        std::fs::create_dir_all(p).unwrap();
+    }
+    let mut f = std::fs::File::create(path).unwrap();
+    f.write_all(body.as_bytes()).unwrap();
+}
+
+struct Fixture {
+    _root: tempfile::TempDir,
+    config_path: PathBuf,
+    tetragon_config: PathBuf,
+    policy_dir: PathBuf,
+}
+
+fn fixture(host_config: &str) -> Fixture {
+    let root_holder = tempfile::tempdir().unwrap();
+    let root = root_holder.path().to_path_buf();
+    let policy_dir = root.join("tetragon.tp.d");
+    std::fs::create_dir_all(&policy_dir).unwrap();
+
+    let tetragon_config = root.join("tetragon.toml");
+    write_file(
+        &tetragon_config,
+        &format!("policy_dir = \"{}\"\n", policy_dir.display()),
+    );
+
+    let config_path = root.join("agent-guard.toml");
+    write_file(&config_path, host_config);
+
+    Fixture {
+        _root: root_holder,
+        config_path,
+        tetragon_config,
+        policy_dir,
+    }
+}
+
+fn run_apply(fx: &Fixture) -> Output {
+    Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .output()
+        .expect("spawn apply.sh")
+}
+
+fn last_stdout_line(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .last()
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+fn read_policy(fx: &Fixture, name: &str) -> String {
+    let p = fx.policy_dir.join(format!("selfdef-agent-{name}.yaml"));
+    std::fs::read_to_string(p).unwrap_or_default()
+}
+
+#[test]
+fn audit_profile_renders_post_action_for_every_enabled_policy() {
+    let fx = fixture("profile = \"audit\"\n");
+    let out = run_apply(&fx);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    for name in [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+    ] {
+        let body = read_policy(&fx, name);
+        assert!(!body.is_empty(), "policy {name} was not rendered",);
+        assert!(
+            body.contains("- action: Post"),
+            "policy {name} did not get Post action in audit:\n{body}",
+        );
+        assert!(
+            !body.contains("- action: Sigkill"),
+            "policy {name} unexpectedly has Sigkill in audit:\n{body}",
+        );
+    }
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("profile=audit") && line.contains("installed=4"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn enforce_profile_renders_sigkill_for_default_actions() {
+    let fx = fixture("profile = \"enforce\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success());
+    // etc-write, shell-exec, egress all flip to Sigkill.
+    for name in ["etc-write-guard", "container-shell-guard", "egress-guard"] {
+        let body = read_policy(&fx, name);
+        assert!(
+            body.contains("- action: Sigkill"),
+            "policy {name} did not get Sigkill in enforce:\n{body}",
+        );
+    }
+    // securemessage stays Post (stub, dormant until endpoint is configured).
+    let sm = read_policy(&fx, "securemessage-guard");
+    assert!(
+        sm.contains("- action: Post"),
+        "securemessage stub should stay Post:\n{sm}",
+    );
+}
+
+#[test]
+fn per_policy_action_override_wins_over_profile() {
+    // enforce profile globally, but pin etc-write to post.
+    let fx = fixture("profile = \"enforce\"\netc_write_action = \"post\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success());
+    let etc = read_policy(&fx, "etc-write-guard");
+    assert!(
+        etc.contains("- action: Post"),
+        "per-policy override ignored:\n{etc}",
+    );
+    let sh = read_policy(&fx, "container-shell-guard");
+    assert!(
+        sh.contains("- action: Sigkill"),
+        "shell-exec should still get enforce default:\n{sh}",
+    );
+}
+
+#[test]
+fn disabled_policy_is_not_rendered_and_stale_render_is_cleaned_up() {
+    let fx = fixture("profile = \"audit\"\nshell_exec_enabled = false\n");
+    // Pre-seed a stale file for shell-exec to make sure apply removes it.
+    let stale = fx
+        .policy_dir
+        .join("selfdef-agent-container-shell-guard.yaml");
+    write_file(&stale, "stale: true\n");
+
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    assert!(
+        !stale.exists(),
+        "stale policy file must be removed when disabled",
+    );
+    // Other policies still rendered.
+    assert!(!read_policy(&fx, "etc-write-guard").is_empty());
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("installed=3") && line.contains("disabled=1"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn egress_allowlist_is_spliced_into_the_rendered_policy() {
+    let fx = fixture("profile = \"audit\"\negress_allowlist = \"10.0.0.0/24, 198.51.100.10/32\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success());
+    let body = read_policy(&fx, "egress-guard");
+    assert!(
+        body.contains("10.0.0.0/24"),
+        "first allowlisted CIDR missing:\n{body}",
+    );
+    assert!(
+        body.contains("198.51.100.10/32"),
+        "second allowlisted CIDR missing:\n{body}",
+    );
+    assert!(
+        !body.contains("0.0.0.0/0"),
+        "placeholder CIDR must be replaced:\n{body}",
+    );
+}
+
+#[test]
+fn securemessage_endpoint_substitution_when_set() {
+    let fx =
+        fixture("profile = \"audit\"\nsecuremessage_endpoint = \"/run/selfdef/securemsg.sock\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success());
+    let body = read_policy(&fx, "securemessage-guard");
+    assert!(
+        body.contains("/run/selfdef/securemsg.sock"),
+        "endpoint not spliced:\n{body}",
+    );
+    assert!(
+        !body.contains("__SELFDEF_SECUREMESSAGE_DISABLED__"),
+        "placeholder must be replaced:\n{body}",
+    );
+}
+
+#[test]
+fn rejects_invalid_profile() {
+    let fx = fixture("profile = \"spicy\"\n");
+    let out = run_apply(&fx);
+    assert!(!out.status.success(), "should refuse invalid profile");
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"status\":\"failed\"") && line.contains("audit|enforce"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn check_passes_after_apply_and_fails_when_action_drifts() {
+    let fx = fixture("profile = \"audit\"\n");
+    run_apply(&fx);
+
+    let check_ok = Command::new("bash")
+        .arg(module_dir().join("install/check.sh"))
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .output()
+        .expect("spawn check.sh");
+    assert!(
+        check_ok.status.success(),
+        "check should pass after apply: stdout={} stderr={}",
+        String::from_utf8_lossy(&check_ok.stdout),
+        String::from_utf8_lossy(&check_ok.stderr),
+    );
+
+    // Tamper: rewrite a policy to Sigkill, then check should fail.
+    let etc = fx.policy_dir.join("selfdef-agent-etc-write-guard.yaml");
+    let body = std::fs::read_to_string(&etc).unwrap();
+    let drifted = body.replace("- action: Post", "- action: Sigkill");
+    std::fs::write(&etc, drifted).unwrap();
+
+    let check_bad = Command::new("bash")
+        .arg(module_dir().join("install/check.sh"))
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .output()
+        .expect("spawn check.sh");
+    assert!(!check_bad.status.success(), "drifted check should fail");
+    let line = last_stdout_line(&check_bad);
+    assert!(line.contains("drift"), "got: {line}");
+}
+
+#[test]
+fn uninstall_removes_every_module_policy() {
+    let fx = fixture("profile = \"audit\"\n");
+    run_apply(&fx);
+    let names = [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+    ];
+    for n in names {
+        assert!(
+            fx.policy_dir
+                .join(format!("selfdef-agent-{n}.yaml"))
+                .exists(),
+            "missing pre-uninstall: {n}",
+        );
+    }
+
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/uninstall.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .output()
+        .expect("spawn uninstall.sh");
+    assert!(out.status.success(), "uninstall failed");
+    for n in names {
+        assert!(
+            !fx.policy_dir
+                .join(format!("selfdef-agent-{n}.yaml"))
+                .exists(),
+            "policy still present after uninstall: {n}",
+        );
+    }
+    // policy_dir itself must remain — that's tetragon's, not ours.
+    assert!(fx.policy_dir.is_dir());
+}

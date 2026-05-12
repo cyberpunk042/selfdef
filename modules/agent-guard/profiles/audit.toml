@@ -1,0 +1,35 @@
+# Profile: audit (default).
+#
+# All policies installed with `action: Post`. Tetragon emits events
+# for every match; nothing is killed. This is the right starting
+# point — flip to `enforce` once the baseline is quiet and you've
+# tuned the egress allowlist.
+
+profile = "audit"
+
+# Each policy in the bundle can be independently enabled and have
+# its own action override. The default action (Post in `audit`,
+# Sigkill in `enforce`) is used when the per-policy override is
+# absent or "default".
+
+# Block writes anywhere under /etc/ from inside containers.
+etc_write_enabled = true
+etc_write_action  = "default"
+
+# Block execve of bash/sh/dash/zsh/ash from inside containers.
+shell_exec_enabled = true
+shell_exec_action  = "default"
+
+# Block egress to non-allowlisted CIDRs from inside containers.
+# `egress_allowlist` is comma-separated CIDRs. An empty allowlist
+# in `audit` mode still emits events but never kills.
+egress_enabled   = true
+egress_action    = "default"
+egress_allowlist = ""
+
+# Forward-looking SecureMessage endpoint guard. Leave the endpoint
+# unset until the host actually has one — the policy stub stays
+# dormant.
+securemessage_enabled  = true
+securemessage_action   = "default"
+securemessage_endpoint = ""
