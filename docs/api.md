@@ -143,6 +143,26 @@ talk to a local-only API, or set `?api=https://your-host` to point at a
 reverse-proxied deployment. The bearer token can be passed in the URL
 once (`?token=...`); it's persisted to `sessionStorage` for that tab.
 
+The dashboard surfaces the read endpoints (status, findings, events,
+live stream) and a **Control** panel that wires up the write
+endpoints:
+
+- **Reload rules** — `POST /rules/reload`.
+- **Panic** — `POST /panic`. Requires typing the host tag into the
+  confirm box and clicking through a browser confirm dialog. Same
+  safety belt as `selfdefctl panic --confirm <host>`.
+- **Run action** — `POST /actions/{name}/run`. The action dropdown is
+  populated from `GET /actions`. The event-id box defaults to the
+  most-recent finding when left blank.
+
+The result of every control call lands in a status bar at the bottom
+of the panel — success in green, errors in red. If the token in
+`sessionStorage` is the read-only token, calling a control verb shows
+`403 control verb requires the control token` inline. Set the
+session's token to the control token (via `?token=` in the URL) to
+unlock the section.
+
 Service-worker shell caching is enabled when the dashboard is served
 over HTTP(S). API responses are never cached — operators need the
-freshest data they can get.
+freshest data they can get. The worker also passes every non-`GET`
+request straight through so control verbs never get intercepted.

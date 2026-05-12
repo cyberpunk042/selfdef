@@ -58,6 +58,85 @@ section h2 small { font-weight: normal; font-size: 0.75rem; }
 .event-list .src { color: var(--fg-dim); }
 .event-list .msg { color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* ---------------- Control section ---------------- */
+
+#control-section h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  color: var(--fg);
+}
+#control-section p {
+  margin: 0 0 0.5rem;
+  color: var(--fg-dim);
+  font-size: 0.8rem;
+}
+#control-section label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--fg-dim);
+  margin: 0.25rem 0;
+}
+#control-section input,
+#control-section select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 0.8rem;
+  margin-top: 2px;
+}
+#control-section input:focus,
+#control-section select:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
+.control-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.control-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+.control-btn {
+  margin-top: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  font-family: var(--font);
+  font-size: 0.8rem;
+  cursor: pointer;
+  width: 100%;
+}
+.control-btn:hover { background: var(--accent); color: var(--bg); }
+.control-btn.danger { color: var(--critical); border-color: var(--critical); }
+.control-btn.danger:hover { background: var(--critical); color: var(--bg); }
+.control-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.control-result {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 1.5rem;
+}
+.control-result[data-kind="error"] { color: var(--critical); border-color: var(--critical); }
+.control-result[data-kind="ok"]    { color: var(--low); border-color: var(--low); }
+
 footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.75rem; border-top: 1px solid var(--border); }
 
 @media (max-width: 600px) {

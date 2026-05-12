@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Dashboard control surface
+- The bundled PWA in `dashboard/` gains a **Control** panel that wires
+  up the M13/M14 write endpoints:
+  - **Reload rules** — `POST /rules/reload`. Shows the resulting
+    `rules_loaded` count.
+  - **Panic** — `POST /panic`. Confirmation requires typing the host
+    tag (matches `selfdefctl panic --confirm`) and clicking through a
+    second browser-level confirm dialog.
+  - **Run action** — `POST /actions/{name}/run`. The action dropdown
+    is populated from `GET /actions`. Leaving the event-id field
+    blank runs the action against the most-recent finding.
+- New `post()` helper in `dashboard/app.js` that parses the JSON body
+  from both 2xx and error responses so the dashboard can surface what
+  actually went wrong (`{"error": "..."}`).
+- Result indicator (`#control-result`) renders ok / error states with
+  green / red coloring and the API's own status text.
+- Service worker now bypasses every non-`GET` request — control verbs
+  pass straight through, no chance of an offline-cached fallback
+  swallowing a panic dispatch. `/actions` is also added to the
+  always-network list so the action list stays fresh.
+- Docs: `docs/api.md`'s Dashboard section describes the new control
+  surface and how the read-vs-control token gate is reflected in the
+  UI.
+
 ### Added — M15 (NATS bridge for multi-host correlation)
 - New crate `selfdef-nats` — pumps events between selfdef daemons over
   NATS Core. The local in-proc broadcast stays the source of truth for
