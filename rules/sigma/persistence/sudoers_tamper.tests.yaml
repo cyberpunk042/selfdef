@@ -1,0 +1,20 @@
+tests:
+  - name: write to /etc/sudoers fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/etc/sudoers" } }
+    expected_findings: 1
+
+  - name: write to /etc/sudoers.d fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/etc/sudoers.d/00_admin" } }
+    expected_findings: 1
+
+  - name: unrelated path does not fire
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 2, source: auditd, file: { path: "/var/log/messages" } }
+    expected_findings: 0
+
+  - name: non-auditd source does not fire (logsource gate)
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: tetragon, file: { path: "/etc/sudoers" } }
+    expected_findings: 0

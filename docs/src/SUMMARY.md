@@ -1,0 +1,15 @@
+# Summary
+
+- [Introduction](./intro.md)
+- [Architecture](./architecture.md)
+- [Threat Model](./security.md)
+- [Operations]()
+  - [Installation](./ops/install.md)
+  - [Configuration](./ops/config.md)
+  - [Notifications](./ops/notifications.md)
+- [Detection]()
+  - [Writing rules](./detect/rules.md)
+  - [Testing rules](./detect/testing.md)
+- [Development]()
+  - [Building from source](./dev/build.md)
+  - [Adding a collector](./dev/collector.md)

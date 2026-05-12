@@ -1,0 +1,202 @@
+//! Auditd record line parser.
+//!
+//! Handles the most common single-line record types selfdef cares about for
+//! M3: `USER_AUTH`, `USER_LOGIN`, `USER_ACCT`. Other types are emitted as
+//! generic events with the raw payload preserved, so nothing is silently
+//! dropped. Multi-line records (SYSCALL+EXECVE pairs) are a later milestone.
+//!
+//! A line looks like:
+//! ```text
+//! type=USER_AUTH msg=audit(1736944496.789:1234567): pid=1234 uid=0 \
+//!   msg='op=PAM:authentication acct="alice" addr=192.0.2.5 res=failed'
+//! ```
+
+use std::collections::HashMap;
+
+/// Parsed auditd line, normalized.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditRecord {
+    pub kind: String,
+    /// Audit timestamp (seconds since epoch, fractional part lost — fine for M3).
+    pub timestamp_secs: u64,
+    /// Audit serial.
+    pub serial: u64,
+    pub fields: HashMap<String, String>,
+}
+
+impl AuditRecord {
+    /// Pull a field; case-sensitive.
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.fields.get(key).map(String::as_str)
+    }
+}
+
+/// Parse one audit log line. Returns `None` for lines that don't look like
+/// audit records (blank, comments, malformed); callers can warn or ignore.
+#[allow(clippy::manual_map)] // explicit None branch is clearer here
+pub fn parse_line(line: &str) -> Option<AuditRecord> {
+    let line = line.trim();
+    if line.is_empty() || !line.starts_with("type=") {
+        return None;
+    }
+
+    // Split into tokens, but respect single- and double-quoted strings.
+    let tokens = tokenize_kv(line);
+
+    // Pull out type and audit(...) ts:serial first.
+    let mut kind = None;
+    let mut timestamp_secs = None;
+    let mut serial = None;
+    let mut fields = HashMap::new();
+
+    for (k, v) in &tokens {
+        match k.as_str() {
+            "type" => kind = Some(v.clone()),
+            "msg" if v.starts_with("audit(") => {
+                // audit(1736944496.789:1234567)
+                let inner = v
+                    .strip_prefix("audit(")
+                    .and_then(|s| s.strip_suffix(')'))?;
+                let (ts, ser) = inner.split_once(':')?;
+                let secs: f64 = ts.parse().ok()?;
+                timestamp_secs = Some(secs.trunc() as u64);
+                serial = ser.parse().ok();
+            }
+            "msg" => {
+                // Inline nested key=value style: msg='op=... acct="..." ...'
+                let stripped = strip_outer_quotes(v);
+                for (nk, nv) in tokenize_kv(stripped) {
+                    fields.insert(nk, nv);
+                }
+            }
+            _ => {
+                fields.insert(k.clone(), v.clone());
+            }
+        }
+    }
+
+    Some(AuditRecord {
+        kind: kind?,
+        timestamp_secs: timestamp_secs?,
+        serial: serial?,
+        fields,
+    })
+}
+
+fn strip_outer_quotes(s: &str) -> &str {
+    let bytes = s.as_bytes();
+    if bytes.len() >= 2 {
+        let first = bytes[0];
+        let last = bytes[bytes.len() - 1];
+        if (first == b'\'' && last == b'\'') || (first == b'"' && last == b'"') {
+            return &s[1..s.len() - 1];
+        }
+    }
+    s
+}
+
+/// Split a key=value-ish string into a Vec of (key, value), respecting
+/// single- and double-quotes around values. Whitespace separates tokens.
+fn tokenize_kv(input: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let bytes = input.as_bytes();
+    let mut i = 0usize;
+
+    while i < bytes.len() {
+        // Skip whitespace.
+        while i < bytes.len() && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() {
+            break;
+        }
+
+        // Read key up to '='.
+        let key_start = i;
+        while i < bytes.len() && bytes[i] != b'=' && !bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= bytes.len() || bytes[i] != b'=' {
+            // Stray token; skip.
+            continue;
+        }
+        let key = std::str::from_utf8(&bytes[key_start..i]).unwrap_or("").to_string();
+        i += 1; // past '='
+
+        // Read value: quoted or until whitespace.
+        let value = if i < bytes.len() && (bytes[i] == b'\'' || bytes[i] == b'"') {
+            let quote = bytes[i];
+            let val_start = i; // include opening quote
+            i += 1;
+            while i < bytes.len() && bytes[i] != quote {
+                i += 1;
+            }
+            if i < bytes.len() {
+                i += 1; // include closing quote
+            }
+            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+        } else {
+            let val_start = i;
+            while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+        };
+
+        // Strip outer quotes for plain key=value cases; keep them where
+        // the next stage will re-parse (msg='...').
+        let value = if key == "msg" {
+            value
+        } else {
+            strip_outer_quotes(&value).to_string()
+        };
+
+        out.push((key, value));
+    }
+
+    out
+}
+
+// ---------------------------------------------------------------- tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_user_auth_failure() {
+        let line = r#"type=USER_AUTH msg=audit(1736944496.789:1234567): pid=1234 uid=0 msg='op=PAM:authentication acct="alice" addr=192.0.2.5 res=failed'"#;
+        let r = parse_line(line).unwrap();
+        assert_eq!(r.kind, "USER_AUTH");
+        assert_eq!(r.timestamp_secs, 1_736_944_496);
+        assert_eq!(r.serial, 1_234_567);
+        assert_eq!(r.get("acct"), Some("alice"));
+        assert_eq!(r.get("addr"), Some("192.0.2.5"));
+        assert_eq!(r.get("res"), Some("failed"));
+        assert_eq!(r.get("op"), Some("PAM:authentication"));
+    }
+
+    #[test]
+    fn parses_user_login_success() {
+        let line = r#"type=USER_LOGIN msg=audit(1736944500.123:1234568): pid=4567 uid=0 acct="alice" exe="/usr/sbin/sshd" hostname=192.0.2.5 res=success"#;
+        let r = parse_line(line).unwrap();
+        assert_eq!(r.kind, "USER_LOGIN");
+        assert_eq!(r.get("acct"), Some("alice"));
+        assert_eq!(r.get("res"), Some("success"));
+    }
+
+    #[test]
+    fn rejects_non_audit_lines() {
+        assert!(parse_line("").is_none());
+        assert!(parse_line("# comment").is_none());
+        assert!(parse_line("random text").is_none());
+    }
+
+    #[test]
+    fn unknown_record_type_still_parses() {
+        let line = r#"type=ANOM_PROMISCUOUS msg=audit(1736944600.000:1234569): dev=eth0 prom=256 old_prom=0"#;
+        let r = parse_line(line).unwrap();
+        assert_eq!(r.kind, "ANOM_PROMISCUOUS");
+        assert_eq!(r.get("dev"), Some("eth0"));
+    }
+}

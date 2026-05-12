@@ -1,0 +1,13 @@
+[book]
+authors = ["You"]
+language = "en"
+multilingual = false
+src = "src"
+title = "selfdef"
+description = "Self-defense service for Linux hosts."
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://example.org/you/selfdef"
+edit-url-template = "https://example.org/you/selfdef/edit/main/docs/{path}"

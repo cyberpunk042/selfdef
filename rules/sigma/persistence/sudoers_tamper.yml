@@ -1,0 +1,27 @@
+title: Sudoers File Tampering
+id: 7e8d9c0b-1a2b-43cd-8901-aabbccddeeff
+status: experimental
+description: |
+  Any modification to `/etc/sudoers` or files under `/etc/sudoers.d/`.
+  Legitimate changes happen via `visudo` during maintenance; unexpected
+  writes are a strong persistence signal.
+references:
+  - https://attack.mitre.org/techniques/T1548/003/
+  - https://attack.mitre.org/techniques/T1098/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1098
+logsource:
+  service: auditd
+detection:
+  sudoers_write:
+    class_uid: 1001
+    file.path|contains: "/etc/sudoers"
+  condition: sudoers_write
+level: high
+falsepositives:
+  - Legitimate `visudo` runs during admin maintenance.
+  - Package manager (apt) writing sudoers fragments on package install.

@@ -1,0 +1,61 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write   # cosign keyless signing via OIDC
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.83.0
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install packaging tools
+        run: |
+          cargo install --locked cargo-deb
+          cargo install --locked cargo-sbom
+
+      - name: Build release
+        run: cargo build --release --locked --workspace
+
+      - name: Build .deb
+        run: cargo deb -p selfdef-daemon --no-build
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          cargo sbom --output-format cyclone_dx_json_1_5 \
+            > selfdef-${{ github.ref_name }}.sbom.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign artifacts (keyless)
+        run: |
+          for f in target/debian/*.deb selfdef-*.sbom.json; do
+            cosign sign-blob --yes "$f" --output-signature "$f.sig"
+          done
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/debian/*.deb
+            target/debian/*.deb.sig
+            selfdef-*.sbom.json
+            selfdef-*.sbom.json.sig
+          generate_release_notes: true

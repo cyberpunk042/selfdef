@@ -1,0 +1,28 @@
+title: SSH Wrapper Stripped Forbidden Flag
+id: 7b8c9d0e-1f2a-4567-8901-23456789abcd
+status: experimental
+description: |
+  The client-side ssh wrapper removed one or more user-supplied flags
+  because they violated policy (typically agent-forwarding or port-
+  forwarding to a host where those aren't allowed). Not in itself a
+  compromise — it usually means a human typed `-A` reflexively against a
+  host the policy doesn't trust. Worth surfacing as a tactical signal:
+  intent to expand credential exposure was present.
+references:
+  - https://attack.mitre.org/techniques/T1098/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.defense_evasion
+  - attack.t1098
+logsource:
+  service: selfdef.ssh-wrap
+detection:
+  policy_event:
+    source: selfdef.ssh-wrap
+    class_uid: 2004
+  condition: policy_event
+level: medium
+falsepositives:
+  - Operator habit (-A always on the command line). Tune the policy
+    instead of suppressing the rule.

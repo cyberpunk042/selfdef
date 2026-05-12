@@ -1,0 +1,118 @@
+[workspace]
+resolver = "2"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.83"
+license = "AGPL-3.0-or-later"
+repository = "https://example.org/you/selfdef"
+authors = ["You <you@example.org>"]
+publish = false
+
+[workspace.dependencies]
+# async
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+futures = "0.3"
+async-trait = "0.1"
+
+# errors
+thiserror = "2"
+anyhow = "1"
+
+# logging & tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+tracing-journald = "0.3"
+
+# config & cli
+figment = { version = "0.10", features = ["toml", "env"] }
+clap = { version = "4", features = ["derive", "env"] }
+
+# serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_with = "3"
+serde_repr = "0.1"
+serde_yml = "0.0.12"
+toml = "0.8"
+regex = "1"
+
+# time & ids
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+
+# storage
+rusqlite = { version = "0.32", features = ["bundled", "time", "uuid"] }
+
+# systemd integration
+sd-notify = "0.4"
+
+# http
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# linux primitives
+inotify = "0.11"
+aya = "0.13"
+aya-log = "0.2"
+bytemuck = { version = "1.16", features = ["derive"] }
+
+# eBPF (userspace half — the BPF programs live in a separate workspace)
+aya = "0.13"
+aya-log = "0.2"
+
+# testing
+insta = { version = "1", features = ["yaml", "json"] }
+proptest = "1"
+tempfile = "3"
+wiremock = "0.6"
+
+# internal crates
+selfdef-core = { path = "crates/selfdef-core" }
+selfdef-config = { path = "crates/selfdef-config" }
+selfdef-bus = { path = "crates/selfdef-bus" }
+selfdef-store = { path = "crates/selfdef-store" }
+selfdef-correlator = { path = "crates/selfdef-correlator" }
+selfdef-notifier = { path = "crates/selfdef-notifier" }
+selfdef-responder = { path = "crates/selfdef-responder" }
+selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
+selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }
+selfdef-collector-tetragon = { path = "crates/selfdef-collector-tetragon" }
+selfdef-collector-suricata = { path = "crates/selfdef-collector-suricata" }
+selfdef-collector-canary = { path = "crates/selfdef-collector-canary" }
+selfdef-collector-eventstream = { path = "crates/selfdef-collector-eventstream" }
+selfdef-collector-ebpf = { path = "crates/selfdef-collector-ebpf" }
+selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
+selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+todo = "warn"
+unimplemented = "warn"
+dbg_macro = "warn"
+# pedantic carve-outs
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+debug = false
+
+[profile.release-debug]
+inherits = "release"
+debug = true
+strip = "none"

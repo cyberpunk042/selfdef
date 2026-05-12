@@ -1,0 +1,37 @@
+title: Shell Spawned From Web-Server-like Parent
+id: 4a5b6c7d-8e9f-4012-3456-789012345678
+status: experimental
+description: |
+  A shell process was launched by a parent matching a web-server binary
+  pattern (nginx, apache2, httpd, php-fpm). Classic webshell signal.
+references:
+  - https://attack.mitre.org/techniques/T1059/004/
+  - https://attack.mitre.org/techniques/T1505/003/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.execution
+  - attack.persistence
+  - attack.t1059.004
+  - attack.t1505.003
+logsource:
+  service: tetragon
+detection:
+  shell_from_web:
+    class_uid: 1007
+    activity_id: 1
+    process.path|endswith:
+      - /bash
+      - /sh
+      - /dash
+      - /zsh
+    raw.process_exec.parent.binary|contains:
+      - nginx
+      - apache
+      - httpd
+      - php-fpm
+  condition: shell_from_web
+level: high
+falsepositives:
+  - CI runners legitimately spawning shells from worker processes.
+  - Hosting control panels that exec user scripts from web context.

@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-collector-auditd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "auditd → bus collector."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-bus = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }

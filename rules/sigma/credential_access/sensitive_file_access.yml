@@ -1,0 +1,31 @@
+title: Sensitive Credential File Accessed
+id: 9d8e7f6a-5432-4abc-89de-fcba01234567
+status: experimental
+description: |
+  A process opened a known credential / secret file (`/etc/shadow`,
+  `/root/.ssh/`, `/etc/selfdef/secrets/`). The daemon itself is excluded;
+  legitimate operational access (e.g. PAM, ssh-agent) should be modeled
+  out as a denylist on `actor.process.path` once the tetragon collector
+  arrives.
+references:
+  - https://attack.mitre.org/techniques/T1552/001/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.credential_access
+  - attack.t1552.001
+logsource:
+  service: tetragon
+detection:
+  read:
+    class_uid: 1001
+    file.path|startswith:
+      - "/etc/shadow"
+      - "/etc/gshadow"
+      - "/root/.ssh/"
+      - "/etc/selfdef/secrets/"
+  condition: read
+level: critical
+falsepositives:
+  - PAM, sshd-session, ssh-agent during legitimate user activity.
+  - Configuration management tools (Ansible, Puppet) during runs.

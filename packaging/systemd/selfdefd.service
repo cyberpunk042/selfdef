@@ -1,0 +1,75 @@
+[Unit]
+Description=selfdef daemon
+Documentation=https://example.org/you/selfdef
+After=network-online.target auditd.service systemd-journald.service
+Wants=network-online.target
+RequiresMountsFor=/var/lib/selfdef /var/log/selfdef
+
+[Service]
+Type=notify
+NotifyAccess=main
+ExecStart=/usr/bin/selfdefd --config /etc/selfdef/selfdef.toml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+# --- identity ---
+User=selfdef
+Group=selfdef
+
+# --- capabilities ---
+# Minimal default set. Individual collectors may need elevations granted
+# via drop-in files in /etc/systemd/system/selfdefd.service.d/
+CapabilityBoundingSet=CAP_AUDIT_READ CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_BPF CAP_PERFMON CAP_SYS_RESOURCE
+AmbientCapabilities=CAP_AUDIT_READ
+# Note: CAP_BPF + CAP_PERFMON only need ambient when collectors.ebpf is enabled.
+# Add them via a drop-in (/etc/systemd/system/selfdefd.service.d/ebpf.conf)
+# rather than here so the default install retains least-privilege ambient set:
+#   [Service]
+#   AmbientCapabilities=CAP_AUDIT_READ CAP_BPF CAP_PERFMON
+# CAP_SYS_RESOURCE is needed on kernels that account locked memory for BPF maps.
+NoNewPrivileges=true
+
+# --- filesystem ---
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/selfdef /var/log/selfdef
+ReadOnlyPaths=/etc/selfdef
+PrivateTmp=true
+PrivateDevices=true
+
+# --- kernel & namespaces ---
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+
+# --- syscalls ---
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+
+# --- network ---
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+IPAddressDeny=any
+IPAddressAllow=localhost
+# Add IPAddressAllow= entries for ntfy/signal-cli endpoints in a drop-in.
+
+# --- logging ---
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=selfdefd
+
+[Install]
+WantedBy=multi-user.target

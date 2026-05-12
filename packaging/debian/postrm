@@ -1,0 +1,22 @@
+#!/bin/sh
+# postrm script for selfdef-daemon
+set -e
+
+case "$1" in
+    purge)
+        # On purge, remove state and user. Config is removed by dpkg.
+        rm -rf /var/lib/selfdef /var/log/selfdef
+        if getent passwd selfdef >/dev/null; then
+            deluser --system selfdef >/dev/null 2>&1 || true
+        fi
+        if getent group selfdef >/dev/null; then
+            delgroup --system selfdef >/dev/null 2>&1 || true
+        fi
+        ;;
+    remove|upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)
+        # nothing to do
+        ;;
+esac
+
+#DEBHELPER#
+exit 0

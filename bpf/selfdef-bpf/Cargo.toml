@@ -1,0 +1,46 @@
+# IMPORTANT: this crate has its own [workspace] block so it does NOT inherit
+# the main workspace's dependency table — those entries reference paths that
+# wouldn't resolve from here. Build this crate explicitly:
+#
+#   cargo +nightly build \
+#       --manifest-path bpf/selfdef-bpf/Cargo.toml \
+#       --target bpfel-unknown-none \
+#       --release -Z build-std=core
+#
+# See ../../docs/ebpf-build.md for prerequisites and a packaging helper.
+
+[workspace]
+
+[package]
+name = "selfdef-bpf"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.81"
+license = "Apache-2.0 OR MIT"
+publish = false
+description = "selfdef BPF kernel-space programs."
+
+[[bin]]
+name = "selfdef-bpf"
+path = "src/main.rs"
+
+[dependencies]
+aya-ebpf = "0.1"
+aya-log-ebpf = "0.1"
+selfdef-ebpf-common = { path = "../../crates/selfdef-ebpf-common", default-features = false, features = ["ebpf"] }
+
+[profile.dev]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = true
+panic = "abort"
+incremental = false
+codegen-units = 1
+rpath = false
+
+[profile.release]
+lto = true
+panic = "abort"
+codegen-units = 1

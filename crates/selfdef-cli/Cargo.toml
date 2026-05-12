@@ -1,0 +1,32 @@
+[package]
+name = "selfdef-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "selfdef admin CLI."
+
+[[bin]]
+name = "selfdefctl"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-config = { workspace = true }
+selfdef-store = { workspace = true }
+selfdef-correlator = { workspace = true }
+selfdef-notifier = { workspace = true }
+selfdef-responder = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+time = { workspace = true }

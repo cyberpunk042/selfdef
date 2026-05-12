@@ -1,0 +1,15 @@
+tests:
+  - name: failed sudo invocation fires
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, raw: { exe: "/usr/bin/sudo" } }
+    expected_findings: 1
+
+  - name: successful sudo does not fire
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 1, status_id: 1, source: auditd, raw: { exe: "/usr/bin/sudo" } }
+    expected_findings: 0
+
+  - name: failed auth with non-sudo exe does not fire
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, raw: { exe: "/usr/sbin/sshd" } }
+    expected_findings: 0

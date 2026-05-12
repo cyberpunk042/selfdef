@@ -1,0 +1,13 @@
+# Expected detections when atomic.yaml runs against a selfdefd host.
+
+technique: T1110.001
+tactic: credential_access
+
+expectations:
+  - rule_id: 8a7f3e2c-1234-4abc-9def-fedcba654321
+    rule_name: SSH Brute Force
+    min_fires: 1
+    max_latency_secs: 65   # threshold window + ~5s slack
+
+# Optional negative — rules that should NOT fire on this technique:
+must_not_fire: []

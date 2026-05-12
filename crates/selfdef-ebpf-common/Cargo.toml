@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-ebpf-common"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Shared types between selfdef's BPF programs and userspace loader."
+
+[lints]
+workspace = true
+
+[features]
+default = ["userspace"]
+# Enable when compiling for the BPF target (no std, no derives that need it).
+ebpf = []
+# Enable when compiling for the userspace target (regular std + bytemuck).
+userspace = ["dep:bytemuck"]
+
+[dependencies]
+bytemuck = { workspace = true, optional = true }

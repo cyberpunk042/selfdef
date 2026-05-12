@@ -1,0 +1,36 @@
+tests:
+  - name: unlink of state.sqlite fires
+    events:
+      - class_uid: 1001
+        activity_id: 4
+        severity_id: 2
+        source: selfdef.ebpf
+        file: { path: "/var/lib/selfdef/state.sqlite" }
+    expected_findings: 1
+
+  - name: unlink of selfdefd binary fires
+    events:
+      - class_uid: 1001
+        activity_id: 4
+        severity_id: 2
+        source: selfdef.ebpf
+        file: { path: "/usr/local/bin/selfdefd" }
+    expected_findings: 1
+
+  - name: unlink of an unrelated file does not fire
+    events:
+      - class_uid: 1001
+        activity_id: 4
+        severity_id: 1
+        source: selfdef.ebpf
+        file: { path: "/tmp/scratch" }
+    expected_findings: 0
+
+  - name: unlink event from another source does not fire (logsource gate)
+    events:
+      - class_uid: 1001
+        activity_id: 4
+        severity_id: 2
+        source: tetragon
+        file: { path: "/var/lib/selfdef/state.sqlite" }
+    expected_findings: 0

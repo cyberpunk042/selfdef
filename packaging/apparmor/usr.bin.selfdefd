@@ -1,0 +1,62 @@
+# AppArmor profile for selfdefd
+# Install: copy to /etc/apparmor.d/usr.bin.selfdefd
+# Reload:  sudo apparmor_parser -r /etc/apparmor.d/usr.bin.selfdefd
+
+#include <tunables/global>
+
+/usr/bin/selfdefd {
+  #include <abstractions/base>
+  #include <abstractions/nameservice>
+
+  # binary
+  /usr/bin/selfdefd                              mr,
+
+  # config (read-only)
+  /etc/selfdef/                                  r,
+  /etc/selfdef/**                                r,
+
+  # state (read/write)
+  /var/lib/selfdef/                              rw,
+  /var/lib/selfdef/**                            rwk,
+  /var/log/selfdef/                              rw,
+  /var/log/selfdef/**                            rw,
+
+  # auditd socket (for the auditd collector)
+  /var/run/audispd_events                        rw,
+  /var/run/auditd.socket                         rw,
+
+  # journald (for the journald collector)
+  /run/systemd/journal/socket                    rw,
+  /run/systemd/journal/stdout                    rw,
+  /var/log/journal/**                            r,
+
+  # network: only the explicit endpoints we need
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+  network unix stream,
+  network netlink raw,
+
+  # /proc reads we need for self-watchdog and basic introspection
+  @{PROC}/                                       r,
+  @{PROC}/sys/kernel/random/boot_id              r,
+  @{PROC}/[0-9]*/                                r,
+  @{PROC}/[0-9]*/stat                            r,
+  @{PROC}/[0-9]*/status                          r,
+  @{PROC}/[0-9]*/cmdline                         r,
+
+  # systemd sd_notify
+  /run/systemd/notify                            w,
+
+  # deny everything else loudly
+  deny /home/** rwx,
+  deny /root/** rwx,
+  deny /etc/shadow rwx,
+  deny /etc/gshadow rwx,
+  deny /etc/sudoers* rwx,
+  deny /boot/** rwx,
+  deny @{PROC}/[0-9]*/mem rwx,
+  deny @{PROC}/kcore rwx,
+  deny @{PROC}/kmem rwx,
+}

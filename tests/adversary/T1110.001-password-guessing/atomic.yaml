@@ -1,0 +1,36 @@
+# Atomic Red Team — T1110.001 Password Guessing (SSH)
+# Adapted to selfdef's emulation harness. Run only against a host you own.
+
+attack_technique: T1110.001
+display_name: Password Guessing
+
+atomic_tests:
+  - name: SSH password spraying (4 attempts)
+    description: |
+      Attempts four failed SSH password logins against the target. Expected
+      to trigger `selfdef.correlator.ssh_bruteforce` (threshold 3 within 60s).
+    supported_platforms: [linux]
+    input_arguments:
+      target_host:
+        description: Host running selfdefd with auditd + ssh_bruteforce.yml enabled.
+        type: string
+        default: 127.0.0.1
+      victim_user:
+        description: A username that exists on the target.
+        type: string
+        default: testuser
+    executor:
+      name: bash
+      command: |
+        for i in 1 2 3 4; do
+          sshpass -p "wrong-pass-#{i}" ssh -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=3 \
+            #{victim_user}@#{target_host} 'whoami' || true
+        done
+      cleanup_command: |
+        # No state to clean — the failures are the artifact.
+        true
+    dependencies:
+      - description: sshpass installed
+        prereq_command: command -v sshpass
+        get_prereq_command: sudo apt-get install -y sshpass

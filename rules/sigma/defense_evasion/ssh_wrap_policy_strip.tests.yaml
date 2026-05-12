@@ -1,0 +1,15 @@
+tests:
+  - name: ssh-wrap detection event fires
+    events:
+      - { class_uid: 2004, activity_id: 1, severity_id: 2, source: selfdef.ssh-wrap }
+    expected_findings: 1
+
+  - name: ssh-wrap session events do not fire
+    events:
+      - { class_uid: 4007, activity_id: 1, severity_id: 1, source: selfdef.ssh-wrap }
+    expected_findings: 0
+
+  - name: detection events from other sources do not fire
+    events:
+      - { class_uid: 2004, activity_id: 1, severity_id: 5, source: selfdef.canary }
+    expected_findings: 0

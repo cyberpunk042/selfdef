@@ -1,0 +1,30 @@
+title: Canary Honeytoken Accessed
+id: 5e7f8a9b-0c1d-4234-9567-abcdef012345
+status: stable
+description: |
+  Any access to a configured honeytoken file. Findings produced by the
+  canary collector are already class 2004 / Critical; this rule is a
+  no-op pass-through that exists to ensure these findings are explicitly
+  documented in the rule set (for ATT&CK coverage reporting and ops
+  visibility).
+
+  In practice the canary collector already emits the Detection Finding;
+  this rule re-asserts it via the Sigma engine. If both ever fire on the
+  same event, the second is dropped by the correlator's Findings-loop guard.
+references:
+  - https://attack.mitre.org/techniques/T1552/001/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.credential_access
+  - attack.t1552.001
+logsource:
+  service: selfdef.canary
+detection:
+  any:
+    source: selfdef.canary
+  condition: any
+level: critical
+falsepositives:
+  - Operator-initiated reads (e.g. cat'ing the canary to verify it exists).
+  - Backup software that includes the canary path in its scan set.

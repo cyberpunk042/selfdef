@@ -1,0 +1,154 @@
+# selfdef.toml — example configuration.
+# Copied by postinst to /etc/selfdef/selfdef.toml if none exists.
+#
+# Every value below is a default; uncomment and edit to override.
+
+[daemon]
+# Hostname tag attached to every event. Defaults to system hostname.
+# host_tag = "workstation-01"
+
+# Log level: trace, debug, info, warn, error.
+log_level = "info"
+
+# Log format: "text" for journald-friendly, "json" for structured ingest.
+log_format = "text"
+
+[bus]
+# "inproc" (default) or "nats". inproc is fine for single-host deployments.
+backend = "inproc"
+
+# Per-topic channel capacity for the in-proc broadcast.
+inproc_capacity = 4096
+
+# [bus.nats]
+# url = "nats://127.0.0.1:4222"
+# stream = "selfdef-events"
+
+[store]
+# Hot store path. Daemon must have rw on this directory.
+hot_path = "/var/lib/selfdef/state.sqlite"
+
+# Retention in hot store (days). After this, events age out to warm.
+hot_retention_days = 30
+
+# Warm store directory (DuckDB + Parquet).
+# warm_path = "/var/lib/selfdef/warm"
+# warm_retention_days = 365
+
+[collectors]
+# Each collector has its own table; all default to disabled.
+
+[collectors.auditd]
+enabled = false
+input_path = "/var/log/audit/audit.log"
+read_from = "end"
+
+[collectors.journald]
+enabled = false
+# "journalctl" (spawn journalctl --follow) or "file" (tail a JSONL file).
+mode = "journalctl"
+journalctl_path = "/usr/bin/journalctl"
+units = []  # optional unit filters, e.g. ["sshd.service", "sudo.service"]
+# input_path = "/var/log/journal.jsonl"  # used in "file" mode
+
+[collectors.tetragon]
+enabled = false
+input_path = "/var/log/tetragon/events.json"
+read_from = "end"
+
+[collectors.suricata]
+enabled = false
+input_path = "/var/log/suricata/eve.json"
+read_from = "end"
+
+[collectors.canary]
+# Honeytoken (decoy file) watcher. Lists paths that, if accessed, should
+# raise a Critical Detection Finding. Pre-seed each path with realistic-
+# looking bait (a fake AWS key, a fake SSH private key, a fake .env) so
+# any attempt to exfiltrate them is loud.
+enabled = false
+paths = []
+# Example:
+# paths = [
+#   "/root/.aws/credentials",
+#   "/root/.ssh/id_ed25519_backup",
+#   "/etc/secrets/.env",
+#   "/home/operator/Documents/passwords.txt",
+# ]
+
+[collectors.eventstream]
+# Tails JSONL files containing pre-formed selfdef events. Used by the
+# client-side ssh wrapper (`selfdef-ssh-wrap`) and any other tool that
+# wants to inject events. Each path is an independent producer.
+enabled = false
+read_from = "end"
+paths = []
+# Example:
+# paths = ["/home/operator/.local/share/selfdef/ssh-wrap.jsonl"]
+
+[collectors.ebpf]
+# Native in-kernel collection via aya. Requires the BPF object compiled
+# and installed (see docs/ebpf.md) and the systemd ebpf.conf drop-in.
+# The daemon degrades gracefully if program_path doesn't exist.
+enabled = false
+program_path = "/usr/lib/selfdef/selfdef.bpf.o"
+enable_execve = true
+enable_lsm_open = false        # reserved; LSM program not yet shipped
+enable_kprobe_unlink = false   # reserved; kprobe program not yet shipped
+
+[collectors.ebpf]
+# selfdef's own in-kernel eyes. Requires the BPF object compiled via
+# `cargo xtask install-bpf`. See docs/ebpf.md for kernel + capability
+# prerequisites. Leave off if you have Tetragon running — there's overlap.
+enabled = false
+program_path = "/usr/lib/selfdef/ebpf-progs.bpf.o"
+enable_execve = true            # tracepoint:syscalls:sys_enter_execve
+enable_lsm_open = false         # lsm/file_open — needs CONFIG_BPF_LSM
+enable_kprobe_unlink = true     # kprobe:do_unlinkat
+
+[correlator]
+rules_dir = "/etc/selfdef/rules"
+# Reload rules on SIGHUP without restarting the daemon.
+hot_reload = true
+# Built-in SSH brute-force rule:
+window_secs = 60
+threshold = 3
+
+[notifier]
+# Order matters: first channel that succeeds wins.
+channels = ["ntfy"]
+
+[notifier.ntfy]
+# url = "https://ntfy.example.org"
+# topic = "selfdef-alerts"
+# token_file = "/etc/selfdef/secrets/ntfy.token"
+url = ""
+topic = ""
+
+[notifier.signal]
+binary = "/usr/bin/signal-cli"
+account = ""
+recipient = ""
+
+[responder]
+# Dry-run prints what would be done without executing. Flip to false once
+# you trust your action allowlist and have verified the scripts behave.
+dry_run = true
+
+# Actions allowed in this deployment. The five built-ins are:
+#   notify           — send to the configured notifier chain
+#   snapshot_proc    — dump /proc/<pid>/{cmdline,exe,maps,environ,…} to disk
+#   kill_pid         — SIGTERM the actor pid
+#   lockdown_egress  — invoke the lockdown script (egress isolation)
+#   revoke_session   — invoke the revoke-session script (loginctl wrapper)
+allowed_actions = ["notify"]
+# Powerful actions, opt-in only after you've tested:
+# allowed_actions = ["notify", "snapshot_proc", "lockdown_egress", "kill_pid", "revoke_session"]
+
+# Where snapshot_proc writes per-event directories.
+snapshot_dir = "/var/lib/selfdef/snapshots"
+
+# Operator-owned scripts. Install with mode 0750 root:root. Example
+# implementations live in packaging/scripts/ in the source tree.
+lockdown_script = "/usr/local/sbin/selfdef-lockdown.sh"
+revoke_session_script = "/usr/local/sbin/selfdef-revoke-session.sh"

@@ -1,0 +1,85 @@
+[package]
+name = "selfdef-daemon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "selfdef daemon — host detection and response service."
+
+[[bin]]
+name = "selfdefd"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-config = { workspace = true }
+selfdef-bus = { workspace = true }
+selfdef-store = { workspace = true }
+selfdef-correlator = { workspace = true }
+selfdef-notifier = { workspace = true }
+selfdef-responder = { workspace = true }
+selfdef-collector-auditd = { workspace = true }
+selfdef-collector-journald = { workspace = true }
+selfdef-collector-tetragon = { workspace = true }
+selfdef-collector-suricata = { workspace = true }
+selfdef-collector-canary = { workspace = true }
+selfdef-collector-eventstream = { workspace = true }
+selfdef-collector-ebpf = { workspace = true }
+
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-journald = { workspace = true }
+sd-notify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+wiremock = { workspace = true }
+async-trait = { workspace = true }
+selfdef-collector-canary = { workspace = true }
+selfdef-collector-eventstream = { workspace = true }
+selfdef-collector-ebpf = { workspace = true }
+selfdef-ebpf-common = { workspace = true, features = ["userspace"] }
+
+# -------------------------------------------------- cargo-deb packaging
+[package.metadata.deb]
+name = "selfdef-daemon"
+maintainer = "You <you@example.org>"
+copyright = "You"
+license-file = ["../../LICENSE", "0"]
+extended-description = """
+selfdef is a multi-layered host detection and response service for Debian and
+Ubuntu systems. It correlates events from auditd, journald, Tetragon, and
+Suricata, raises notifications, and runs configured response actions.
+"""
+section = "admin"
+priority = "optional"
+depends = "$auto, adduser, systemd"
+recommends = "auditd, suricata-light"
+suggests = "tetragon"
+maintainer-scripts = "../../packaging/debian"
+assets = [
+    ["target/release/selfdefd",                          "/usr/bin/",                              "755"],
+    ["target/release/selfdefctl",                        "/usr/bin/",                              "755"],
+    ["../../packaging/systemd/selfdefd.service",         "/lib/systemd/system/",                   "644"],
+    ["../../packaging/apparmor/usr.bin.selfdefd",        "/etc/apparmor.d/",                       "644"],
+    ["../../config/selfdef.toml.example",                "/usr/share/selfdef/",                    "644"],
+    ["../../README.md",                                  "/usr/share/doc/selfdef-daemon/",         "644"],
+    ["../../ARCHITECTURE.md",                            "/usr/share/doc/selfdef-daemon/",         "644"],
+    ["../../SECURITY.md",                                "/usr/share/doc/selfdef-daemon/",         "644"],
+]
+conf-files = ["/etc/selfdef/selfdef.toml"]
+
+[package.metadata.deb.systemd-units]
+unit-scripts = "../../packaging/systemd"
+enable = false
+start = false

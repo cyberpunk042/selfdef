@@ -1,0 +1,25 @@
+title: Sudo Authentication Failure
+id: f1c2a3b4-5d6e-47f8-9011-22334455a000
+status: experimental
+description: |
+  A user attempted to elevate via sudo and failed the PAM authentication
+  step. Single failures are normal (typos); chains of them suggest
+  reconnaissance.
+references:
+  - https://attack.mitre.org/techniques/T1548/003/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.privilege_escalation
+  - attack.t1548.003
+logsource:
+  service: auditd
+detection:
+  failed_sudo:
+    class_uid: 3002
+    status_id: 2
+    raw.exe|contains: "sudo"
+  condition: failed_sudo
+level: low
+falsepositives:
+  - Users mistyping passwords; very common.

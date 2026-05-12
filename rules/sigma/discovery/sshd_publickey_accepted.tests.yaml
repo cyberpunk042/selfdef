@@ -1,0 +1,33 @@
+tests:
+  - name: sshd accepted publickey message fires
+    events:
+      - class_uid: 4007
+        activity_id: 1
+        severity_id: 1
+        source: journald
+        raw:
+          SYSLOG_IDENTIFIER: sshd
+          MESSAGE: "Accepted publickey for alice from 192.0.2.5 port 51234 ssh2"
+    expected_findings: 1
+
+  - name: sshd password failure does not fire
+    events:
+      - class_uid: 4007
+        activity_id: 1
+        severity_id: 3
+        source: journald
+        raw:
+          SYSLOG_IDENTIFIER: sshd
+          MESSAGE: "Failed password for alice from 192.0.2.5 port 51234 ssh2"
+    expected_findings: 0
+
+  - name: non-sshd identifier does not fire
+    events:
+      - class_uid: 4007
+        activity_id: 1
+        severity_id: 1
+        source: journald
+        raw:
+          SYSLOG_IDENTIFIER: sudo
+          MESSAGE: "Accepted publickey for alice"
+    expected_findings: 0

@@ -1,0 +1,41 @@
+# Build artifacts
+/target
+**/*.rs.bk
+
+# Packaging artifacts
+/dist
+*.deb
+*.deb.sig
+*.sig
+*.sbom.json
+
+# Local state
+/state
+*.sqlite
+*.sqlite-*
+
+# Logs
+*.log
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets, env, local overrides
+.env
+.env.*
+secrets/
+local.toml
+*.local.toml
+
+# Documentation build
+docs/book/
+
+# Snapshots (insta)
+**/snapshots/*.new

@@ -1,0 +1,20 @@
+tests:
+  - name: cat /etc/shadow fires
+    events:
+      - { class_uid: 1001, activity_id: 14, severity_id: 5, source: tetragon, file: { path: "/etc/shadow" } }
+    expected_findings: 1
+
+  - name: read of /root/.ssh/id_ed25519 fires
+    events:
+      - { class_uid: 1001, activity_id: 14, severity_id: 5, source: tetragon, file: { path: "/root/.ssh/id_ed25519" } }
+    expected_findings: 1
+
+  - name: read of /etc/selfdef/secrets/ntfy.token fires
+    events:
+      - { class_uid: 1001, activity_id: 14, severity_id: 5, source: tetragon, file: { path: "/etc/selfdef/secrets/ntfy.token" } }
+    expected_findings: 1
+
+  - name: read of unrelated file does not fire
+    events:
+      - { class_uid: 1001, activity_id: 14, severity_id: 1, source: tetragon, file: { path: "/etc/hosts" } }
+    expected_findings: 0

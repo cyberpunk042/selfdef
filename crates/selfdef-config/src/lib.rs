@@ -1,0 +1,393 @@
+//! Layered configuration for selfdef.
+//!
+//! Sources, in priority order (later overrides earlier):
+//! 1. Defaults baked into [`Config::default`].
+//! 2. The TOML file at the path given to [`Config::load`].
+//! 3. Environment variables prefixed `SELFDEF_` (`__` for nested keys,
+//!    e.g. `SELFDEF_DAEMON__LOG_LEVEL=debug`).
+//!
+//! The loaded config is owned: nothing in the runtime reads from disk again
+//! until SIGHUP triggers a fresh `Config::load`.
+
+#![forbid(unsafe_code)]
+#![warn(clippy::pedantic)]
+#![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
+
+use std::path::{Path, PathBuf};
+
+use figment::{
+    Figment,
+    providers::{Env, Format, Serialized, Toml},
+};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("failed to load configuration: {0}")]
+    Figment(#[from] figment::Error),
+}
+
+// ---------------------------------------------------------------- top level
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct Config {
+    pub daemon: DaemonConfig,
+    pub bus: BusConfig,
+    pub store: StoreConfig,
+    pub collectors: CollectorsConfig,
+    pub correlator: CorrelatorConfig,
+    pub notifier: NotifierConfig,
+    pub responder: ResponderConfig,
+}
+
+impl Config {
+    /// Load configuration from `path` (if it exists), overlaying environment
+    /// variables on top of the file and built-in defaults.
+    pub fn load(path: Option<&Path>) -> Result<Self, ConfigError> {
+        let mut fig = Figment::from(Serialized::defaults(Self::default()));
+
+        if let Some(p) = path {
+            if p.exists() {
+                fig = fig.merge(Toml::file(p));
+            }
+        }
+
+        let cfg: Self = fig
+            .merge(Env::prefixed("SELFDEF_").split("__"))
+            .extract()?;
+        Ok(cfg)
+    }
+}
+
+// ---------------------------------------------------------------- daemon
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DaemonConfig {
+    pub host_tag: Option<String>,
+    pub log_level: String,
+    /// `"text"` or `"json"`.
+    pub log_format: String,
+}
+
+impl Default for DaemonConfig {
+    fn default() -> Self {
+        Self {
+            host_tag: None,
+            log_level: "info".into(),
+            log_format: "text".into(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- bus
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct BusConfig {
+    /// `"inproc"` for now. `"nats"` arrives in a later milestone.
+    pub backend: String,
+    pub inproc_capacity: usize,
+}
+
+impl Default for BusConfig {
+    fn default() -> Self {
+        Self {
+            backend: "inproc".into(),
+            inproc_capacity: 4096,
+        }
+    }
+}
+
+// ---------------------------------------------------------------- store
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct StoreConfig {
+    pub hot_path: PathBuf,
+    pub hot_retention_days: u32,
+}
+
+impl Default for StoreConfig {
+    fn default() -> Self {
+        Self {
+            hot_path: PathBuf::from("/var/lib/selfdef/state.sqlite"),
+            hot_retention_days: 30,
+        }
+    }
+}
+
+// ---------------------------------------------------------------- collectors
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CollectorsConfig {
+    pub auditd: AuditdConfig,
+    pub journald: JournaldConfig,
+    pub tetragon: TetragonConfig,
+    pub suricata: SuricataConfig,
+    pub canary: CanaryConfig,
+    pub eventstream: EventstreamConfig,
+    pub ebpf: EbpfCollectorConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct AuditdConfig {
+    pub enabled: bool,
+    pub input_path: PathBuf,
+    pub read_from: String,
+}
+
+impl Default for AuditdConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            input_path: PathBuf::from("/var/log/audit/audit.log"),
+            read_from: "end".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct JournaldConfig {
+    pub enabled: bool,
+    /// `"journalctl"` (spawn `journalctl --follow`) or `"file"` (tail a path).
+    pub mode: String,
+    /// Used in `file` mode.
+    pub input_path: Option<PathBuf>,
+    /// Used in `file` mode.
+    pub read_from: String,
+    /// `journalctl` binary path (subprocess mode).
+    pub journalctl_path: PathBuf,
+    /// Optional list of systemd units to filter to.
+    pub units: Vec<String>,
+}
+
+impl Default for JournaldConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            mode: "journalctl".into(),
+            input_path: None,
+            read_from: "end".into(),
+            journalctl_path: PathBuf::from("/usr/bin/journalctl"),
+            units: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TetragonConfig {
+    pub enabled: bool,
+    pub input_path: PathBuf,
+    pub read_from: String,
+}
+
+impl Default for TetragonConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            input_path: PathBuf::from("/var/log/tetragon/events.json"),
+            read_from: "end".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SuricataConfig {
+    pub enabled: bool,
+    pub input_path: PathBuf,
+    pub read_from: String,
+}
+
+impl Default for SuricataConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            input_path: PathBuf::from("/var/log/suricata/eve.json"),
+            read_from: "end".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CanaryConfig {
+    pub enabled: bool,
+    pub paths: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct EventstreamConfig {
+    pub enabled: bool,
+    /// Paths to JSONL event files this collector tails. Each producer (e.g.
+    /// selfdef-ssh-wrap) writes its own file.
+    pub paths: Vec<PathBuf>,
+    pub read_from: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct EbpfCollectorConfig {
+    pub enabled: bool,
+    /// Path to the compiled BPF object. Default matches `xtask install-bpf`.
+    pub program_path: PathBuf,
+    pub enable_execve: bool,
+    pub enable_lsm_open: bool,
+    pub enable_kprobe_unlink: bool,
+}
+
+impl Default for EbpfCollectorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            program_path: PathBuf::from("/usr/lib/selfdef/selfdef.bpf.o"),
+            enable_execve: true,
+            enable_lsm_open: false,
+            enable_kprobe_unlink: true,
+        }
+    }
+}
+
+// ---------------------------------------------------------------- correlator
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct CorrelatorConfig {
+    pub enabled: bool,
+    pub rules_dir: PathBuf,
+    /// Default time window for built-in rules, in seconds.
+    pub window_secs: u64,
+    /// Default trigger threshold for built-in rules.
+    pub threshold: u32,
+}
+
+impl Default for CorrelatorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            rules_dir: PathBuf::from("/etc/selfdef/rules"),
+            window_secs: 60,
+            threshold: 3,
+        }
+    }
+}
+
+// ---------------------------------------------------------------- notifier
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct NotifierConfig {
+    /// Ordered channel preferences; first that succeeds wins.
+    pub channels: Vec<String>,
+    pub ntfy: NtfyConfig,
+    pub signal: SignalConfig,
+}
+
+impl Default for NotifierConfig {
+    fn default() -> Self {
+        Self {
+            channels: vec![],
+            ntfy: NtfyConfig::default(),
+            signal: SignalConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct NtfyConfig {
+    /// Base URL of the ntfy server. e.g. `https://ntfy.example.org`.
+    pub url: String,
+    /// Topic name. e.g. `selfdef-alerts`.
+    pub topic: String,
+    /// Optional file containing the bearer token.
+    pub token_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SignalConfig {
+    pub binary: PathBuf,
+    pub account: String,
+    pub recipient: String,
+}
+
+impl Default for SignalConfig {
+    fn default() -> Self {
+        Self {
+            binary: PathBuf::from("/usr/bin/signal-cli"),
+            account: String::new(),
+            recipient: String::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- responder
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ResponderConfig {
+    pub dry_run: bool,
+    pub allowed_actions: Vec<String>,
+    /// Directory under which `snapshot_proc` writes per-event dumps.
+    pub snapshot_dir: PathBuf,
+    /// Script invoked by `lockdown_egress` action.
+    pub lockdown_script: PathBuf,
+    /// Script invoked by `revoke_session` action.
+    pub revoke_session_script: PathBuf,
+}
+
+impl Default for ResponderConfig {
+    fn default() -> Self {
+        Self {
+            dry_run: true,
+            allowed_actions: vec!["notify".into()],
+            snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
+            lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
+            revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- tests
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_load_when_no_file() {
+        let cfg = Config::load(None).unwrap();
+        assert_eq!(cfg.bus.backend, "inproc");
+        assert_eq!(cfg.daemon.log_level, "info");
+        assert!(!cfg.collectors.auditd.enabled);
+    }
+
+    #[test]
+    fn toml_overrides_defaults() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [daemon]
+            log_level = "trace"
+
+            [collectors.auditd]
+            enabled = true
+            "#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.daemon.log_level, "trace");
+        assert!(cfg.collectors.auditd.enabled);
+    }
+}

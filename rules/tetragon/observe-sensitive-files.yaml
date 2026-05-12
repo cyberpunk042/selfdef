@@ -1,0 +1,30 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "observe-sensitive-files"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/attack: "T1552.001"   # Unsecured Credentials: Files
+spec:
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      return: true
+      args:
+        - index: 0
+          type: "file"
+      returnArg:
+        index: 0
+        type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/etc/shadow"
+                - "/etc/gshadow"
+                - "/etc/sudoers"
+                - "/root/.ssh/"
+                - "/etc/selfdef/secrets/"
+          matchActions:
+            - action: Post     # observe only — never Sigkill in M1

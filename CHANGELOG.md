@@ -1,0 +1,373 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added — Milestone 10 (Custom eBPF programs via aya)
+- New crate `selfdef-ebpf-common`: shared `#[repr(C)]` POD types between
+  kernel-space BPF programs and the userspace loader. Ships
+  `ProcessExecEvent`, `FileOpenEvent`, `UnlinkEvent` with an
+  `EventKind` discriminator byte for ring-buffer record dispatch.
+  `userspace` feature exposes `bytemuck::Pod` impls and decode helpers
+  (`comm_str`, `argv_strings`); `ebpf` feature is `no_std`-compatible
+  for the BPF target.
+- New crate `selfdef-collector-ebpf`: userspace loader built on aya
+  0.13. Loads a precompiled BPF object via `aya::Ebpf::load_file`,
+  attaches the `execve_enter` tracepoint to `syscalls/sys_enter_execve`,
+  takes ownership of the `EVENTS` ring buffer, wraps it in
+  `tokio::io::unix::AsyncFd`, and drains records into OCSF events
+  published on the bus.
+- **Graceful degradation**: if the BPF object isn't installed at the
+  configured `program_path`, the collector logs a warning at startup
+  and runs idle. Daemon stays up; other collectors keep working. Same
+  daemon binary can ship to hosts with and without eBPF support — config
+  drives the difference.
+- Kernel-space crate at `bpf/selfdef-bpf/` (intentionally **outside the
+  main workspace** with its own `[workspace]` block so
+  `cargo build --workspace` never tries to compile it). Ships one
+  tracepoint program: `execve_enter`. Captures pid/tgid/ppid/uid/gid/comm
+  and emits to a 256 KB ring buffer.
+- Build orchestration via `xtask`:
+  - `cargo xtask build-bpf [--release]` — compile with nightly
+    toolchain, `-Z build-std=core`, target `bpfel-unknown-none`.
+  - `cargo xtask install-bpf [<dest>]` — build release + install to
+    `/usr/lib/selfdef/selfdef.bpf.o` (or custom path).
+- Systemd drop-in `packaging/systemd/selfdefd.service.d/ebpf.conf`:
+  grants `CAP_BPF` + `CAP_PERFMON` ambient (no full root needed on
+  Linux >= 5.8), raises `LimitMEMLOCK=infinity` for older kernels that
+  still account BPF map pages there. Default install keeps the
+  capability-light ambient set; you opt-in by installing the drop-in.
+- New `[collectors.ebpf]` config section with `enabled`,
+  `program_path`, `enable_execve`, `enable_lsm_open` (reserved),
+  `enable_kprobe_unlink` (reserved). Daemon wires the collector as a
+  task with the same shutdown semantics as the other collectors.
+- Documentation `docs/ebpf.md` covering prerequisites (`bpf-linker`,
+  nightly toolchain, rust-src), kernel requirements (BTF, ring buffer
+  support), capabilities drop-in, troubleshooting, and a clear ledger
+  of what's actually shipped versus reserved-for-future-work.
+- Integration test `crates/selfdef-daemon/tests/m10_ebpf.rs`:
+  - **graceful degradation**: collector runs idle when no BPF object
+    exists; shutdown is clean.
+  - **event conversion**: `ProcessExecEvent` → OCSF `Event` round-trips
+    through the bus into SQLite with correct class/activity/process
+    fields. Three synthetic execs (`ls`, `curl`, `sshd`) are decoded,
+    published, and asserted. Loading a real BPF program needs CAP_BPF
+    + a real kernel + the BPF toolchain — out of scope for `cargo test`
+    but documented for manual smoke tests.
+
+### Honest deferrals
+- **argv capture from the execve tracepoint.** Reading the user-pointer
+  array requires bounded looped `bpf_probe_read_user` calls. The
+  infrastructure (buffer in `ProcessExecEvent`, `argv_truncated` flag,
+  decode helper, OCSF mapping) is in place; the BPF-side capture lands
+  in a follow-up.
+- **LSM `file_open` program.** Type reserved in `EventKind::FileOpen`,
+  userspace decode path implemented, kernel-side program not yet
+  shipped. Requires `CONFIG_BPF_LSM=y` and `bpf` in `CONFIG_LSM`.
+- **`kprobe:do_unlinkat` program.** Type reserved as
+  `EventKind::Unlink`, userspace decode implemented, kernel-side
+  program not yet shipped.
+- Stale M1 stub crates (`selfdef-ebpf-types`, `selfdef-ebpf-progs`)
+  removed in favor of the M10 layout.
+
+### Added — Milestone 9 (Client-side SSH wrapper)
+- New binary crate `selfdef-ssh-wrap` (`selfdef-ssh-wrap`): a drop-in
+  replacement for `ssh` that enforces per-host policy and emits OCSF
+  events for every session. Designed for fast cold-start (no async
+  runtime, no heavy deps).
+- argv classifier (`crates/selfdef-ssh-wrap/src/argv.rs`) that
+  distinguishes flags, value-taking options (`-o`, `-i`, `-p`, ...),
+  attached-value options (`-pPORT`), `--` markers, and positional
+  arguments. Extracts the target spec and supports filtering of
+  policy-denied flags.
+- Policy file (`~/.config/selfdef/ssh-wrap.toml`, override via
+  `$SELFDEF_SSH_POLICY`):
+  - `[defaults]` with secure baseline: no agent fwd, no X11, no port
+    forwarding, `StrictHostKeyChecking=accept-new`,
+    `ExitOnForwardFailure=true`, conservative timeouts.
+  - `[hosts."<pattern>"]` per-host overrides. Patterns support exact
+    match, `*.suffix`, `prefix*`. No regex.
+  - Resolved policy is rendered as `-o key=value` ssh args prepended to
+    the user's invocation; user-supplied flags conflicting with policy
+    are stripped.
+- Event emission (`crates/selfdef-ssh-wrap/src/events.rs`): writes OCSF
+  events to `~/.local/share/selfdef/ssh-wrap.jsonl` (override via
+  `$SELFDEF_SSH_EVENT_LOG`). Three event kinds:
+  - **session start** — `SSH_ACTIVITY` / Open, with target, host, port,
+    user, and `first_seen` flag (computed via `ssh-keygen -F`).
+  - **policy strip** — `DETECTION_FINDING` / Low, lists the args removed
+    from the user's invocation.
+  - **session end** — `SSH_ACTIVITY` / Close, with duration and exit
+    code; status_id reflects success/failure.
+- New collector `selfdef-collector-eventstream`: tails a JSONL file of
+  pre-formed selfdef events and republishes onto the bus. Used by the
+  ssh wrapper and any other producer. Each event must already be a
+  well-formed `Event`; malformed lines are logged and skipped.
+- `[collectors.eventstream]` config section with `enabled`, `paths`,
+  `read_from`.
+- Daemon wires N independent eventstream collector tasks (one per path).
+- New rule `rules/sigma/defense_evasion/ssh_wrap_policy_strip.yml` +
+  tests: catches the wrapper's policy-strip findings as Medium-severity.
+  Maps to `attack.defense_evasion`.
+- Example policy file `packaging/ssh-wrap-policy.toml.example` with
+  annotated defaults and per-host examples.
+- Install guide `docs/ssh-wrap-install.md`: PATH-shadowing pattern,
+  daemon wiring, caveats (host-key change detection delegated to ssh
+  itself, in-session forwarding invisible to the wrapper).
+- Integration test `crates/selfdef-daemon/tests/m9_ssh_wrap.rs`
+  exercises the JSONL-to-bus-to-SQLite path with three event kinds.
+
+### Added — Milestone 8 (Honeytokens + responder actions)
+- New collector `selfdef-collector-canary`: inotify-based watcher that
+  emits a `DETECTION_FINDING` with `Severity::Critical` and ATT&CK tag
+  `T1552.001` whenever any configured path is read, opened, modified,
+  has attributes changed, is deleted, or is moved. Watches are installed
+  once at startup; recreating a watched file requires a daemon restart
+  (documented limitation).
+- Responder rewritten around an [`Action`] trait. Five built-in actions:
+  - `notify` — sends through the existing `Notifier` chain.
+  - `snapshot_proc` — writes `/proc/<pid>/{cmdline,environ,status,maps,stat,io}`
+    plus `exe_link` and `cwd_link` symlink targets to
+    `snapshot_dir/<event-uuid>/`. Best-effort: per-file read errors are
+    swallowed.
+  - `kill_pid` — runs `kill -TERM <pid>`. Pid extracted from
+    `event.actor.process.pid` or `event.process.pid`.
+  - `lockdown_egress` — invokes a configurable shell script with
+    `activate`. Default path `/usr/local/sbin/selfdef-lockdown.sh`. Operator
+    owns the nftables logic.
+  - `revoke_session` — invokes a configurable script with the user's
+    name. Default path `/usr/local/sbin/selfdef-revoke-session.sh`.
+- All actions support `dry_run=true` and produce structured `ActionOutcome`
+  values (`Success` / `DryRun` / `Skipped`). Failing actions log a warning
+  without stopping siblings.
+- Responder allowlist: each action's `name()` must appear in
+  `responder.allowed_actions` to fire. Default config ships only `notify`
+  enabled.
+- `selfdefctl panic --confirm <hostname>` is now real:
+  - Validates hostname match (prevents accidental fire on the wrong box).
+  - Builds a synthetic Critical Finding with `source = "selfdef.panic"`.
+  - Dispatches via `Responder::fire` with a 2-action set: `notify` +
+    `lockdown_egress`.
+  - Respects `responder.dry_run` from config.
+- New rule `rules/sigma/credential_access/canary_access.yml` documents
+  the canary path in the rule set (and surfaces in ATT&CK coverage).
+- New config sections:
+  - `[collectors.canary]` with `enabled` and `paths`.
+  - `[responder]` extended with `snapshot_dir`, `lockdown_script`,
+    `revoke_session_script`.
+- Example operator script `packaging/scripts/selfdef-lockdown.sh`
+  (annotated nftables-based egress lockdown with lifeline allowlist via
+  `$SELFDEF_LIFELINES` env var).
+- Integration test `crates/selfdef-daemon/tests/m8_honeytokens.rs`
+  exercises the full path: real inotify, real bus, real responder, all
+  five actions in dry-run mode. Verifies the canary finding lands in
+  SQLite with the expected ATT&CK tag.
+
+### Added — Milestone 7 (Detection-as-code CI)
+- Per-rule test files: every rule may have a sibling `<rule>.tests.yaml`
+  declaring partial input events and an `expected_findings` count. The
+  test runner builds full events from minimal specs, runs each test
+  against a single-rule engine, asserts firing counts.
+- New crate APIs:
+  - `selfdef_correlator::Engine::with_rules(Vec<CompiledRule>)`
+    constructor for test isolation.
+  - `selfdef_correlator::sigma::AttackCoverage` and
+    `Engine::attack_coverage()` — walks loaded rules, returns techniques,
+    tactics, and per-tactic rule counts.
+  - `selfdef_correlator::lint` module: `lint_rule`, `lint_rules`, `Issue`,
+    `Severity`. Checks for missing metadata (description, attack tags,
+    technique tag, falsepositives, author), undefined selections in
+    conditions, count-by fields that don't look like known event paths,
+    duplicate rule IDs across files.
+- `Engine::load_dir` now skips `*.tests.yaml` and `*.tests.yml` files
+  during rule discovery (those are fixtures, not rules).
+- 7 per-rule test files covering the 7 starter rules with 25+ test cases
+  total — positive matches, negative matches, logsource gating,
+  aggregation thresholds.
+- New integration test `crates/selfdef-correlator/tests/rule_tests.rs`
+  with three test functions:
+  - `every_rule_with_tests_passes` — discovers and runs all per-rule
+    fixtures, fails the build on any mismatch.
+  - `rule_set_passes_lint` — fails on lint errors, surfaces warnings.
+  - `attack_coverage_report` — prints the coverage matrix; fails if zero
+    techniques covered.
+- `selfdefctl rules lint` — runs lint with exit code 1 on errors.
+- `selfdefctl rules coverage` — prints the ATT&CK coverage matrix.
+- Adversary emulation directory at `tests/adversary/` with documented
+  layout and `T1110.001-password-guessing/` as the first technique
+  (atomic.yaml in ART format + expected.yaml contract). Full ART runner
+  integration deferred to a future milestone (needs a VM/container
+  sandbox to be safe in CI).
+
+### Added — Milestone 6 (Collector fan-out)
+- `selfdef-collector-journald`: real implementation. Two input modes
+  selected by config (`mode = "journalctl"` or `"file"`):
+  - **subprocess** spawns `journalctl --output=json --follow --no-pager`,
+    optionally with `-u <unit>` filters from `collectors.journald.units`.
+  - **file** tails a JSON-lines file (for tests / external pipelines).
+  Maps `sshd` to `SSH_ACTIVITY`, `sudo` to `AUTHENTICATION`,
+  `systemd-logind` to `AUTHORIZE_SESSION`; everything else generic.
+  Priority → severity mapping (`PRIORITY=3` → High, `=4` → Medium, etc.).
+- `selfdef-collector-tetragon`: real implementation. Tails Tetragon JSON
+  output. Recognizes `process_exec` (→ `PROCESS_ACTIVITY`/Launch),
+  `process_kprobe` with `security_file_open`-style functions
+  (→ `FILE_SYSTEM_ACTIVITY`/Open with `file.path` extracted from kprobe
+  args), `process_exit` (→ Terminate). Other event kinds preserve their
+  raw payload.
+- `selfdef-collector-suricata`: real implementation. Tails Suricata EVE
+  JSON. **Alerts become `DETECTION_FINDING` directly** — Suricata is itself
+  detection, so its alerts go straight to the responder. Suricata severity
+  inverted to OCSF (1→High, 2→Medium, 3→Low). DNS/HTTP/TLS/flow records
+  emit as informational network-class events that Sigma rules can match.
+- `selfdef-config`: new `[collectors.journald]`, `[collectors.tetragon]`,
+  `[collectors.suricata]` sections with typed config.
+- `selfdef-daemon`: wires all three new collectors. Each enabled via its
+  `enabled` flag in config; each runs as its own task with shared
+  `CancellationToken` for graceful shutdown.
+- New rules:
+  - `rules/sigma/discovery/sshd_publickey_accepted.yml` — uses the journald
+    collector; informational baseline for SSH key logins.
+  - `rules/sigma/execution/webshell_pattern.yml` — uses the tetragon
+    collector; detects shells spawned from nginx/apache/php-fpm parents.
+- New replay corpora:
+  - `tests/replay/journald/sshd_login.jsonl`
+  - `tests/replay/tetragon/sensitive_file.jsonl`
+  - `tests/replay/suricata/scan_alert.jsonl`
+- Integration test `crates/selfdef-daemon/tests/m6_collectors.rs`:
+  - journald file-mode emits classified events
+  - tetragon replay emits typed events with the right class_uid
+  - suricata alert lands in SQLite as a DETECTION_FINDING
+
+### Deferred to a polish milestone
+- Multi-line auditd record grouping (SYSCALL + PATH + EXECVE + EOE). The
+  current M3 parser handles each line standalone, which covers the
+  user-auth records selfdef cares most about today. Multi-line grouping
+  is real parser work that deserves its own milestone.
+
+### Added — Milestone 5 (Sigma engine + hot reload)
+- `selfdef-correlator::sigma`: Sigma-subset rule engine. Parses YAML rules
+  with metadata (`id`, `title`, `description`, `level`, `tags`, `references`,
+  `falsepositives`, `author`, `date`), `logsource`, named `selection_*`
+  blocks, optional `timeframe`, and `condition` strings of the form
+  `<sel>` or `<sel> | count() by <field> > <N>`.
+- Field matchers: equality, `|contains`, `|startswith`, `|endswith`, `|re`
+  (regex). List of values within a field = OR. Dot-notation for nested
+  fields (`src_endpoint.ip`, `actor.user.name`).
+- `Aggregator` for time-windowed counting; clears window on fire to
+  prevent re-firing on the same burst.
+- ATT&CK overlay: `attack.t1234[.567]` tags → technique IDs;
+  `attack.<tactic>` tags → tactic enum; both flow into the emitted finding's
+  `attack` array.
+- `Correlator` now loads rules from a directory; `load_rules()` is
+  idempotent and atomically swaps the engine on success (failure preserves
+  the previous ruleset). Backed by `Arc<RwLock<Arc<Engine>>>` so reads
+  don't block reloads.
+- `selfdef-daemon`: SIGHUP triggers `correlator.load_rules()`. `selfdefd`
+  keeps running across reloads; `systemctl reload selfdefd` works (the unit
+  already had `ExecReload=/bin/kill -HUP $MAINPID`).
+- 5 initial rules in `rules/sigma/`:
+  - `credential_access/ssh_bruteforce.yml` — replaces the M4 hardcoded rule.
+  - `credential_access/sensitive_file_access.yml` — `/etc/shadow`, `/root/.ssh/`,
+    etc. (logsource: tetragon; waits for the tetragon collector).
+  - `privilege_escalation/sudo_failure.yml` — failed sudo PAM auth.
+  - `persistence/sudoers_tamper.yml` — writes to `/etc/sudoers*`.
+  - `persistence/setuid_binary.yml` — new files with setuid/setgid bits.
+- Replay corpus: `tests/replay/auditd/ssh_bruteforce.jsonl` (4 events) +
+  `ssh_bruteforce.expected.yaml` (expected firings).
+- `selfdefctl` implements `rules list`, `rules validate <path>`,
+  `rules test --corpus <jsonl>`.
+- New integration test `crates/selfdef-daemon/tests/m5_sigma.rs`:
+  - engine loads N rules from a directory
+  - engine ignores non-YAML files
+  - replay corpus produces the expected firing count
+  - hot reload picks up new rules in-place
+- M4 test updated to use the YAML rule via a tempdir rules directory
+  instead of the now-removed `Correlator::new(window, threshold)` API.
+- New workspace deps: `serde_yml` (maintained fork of `serde_yaml`), `regex`.
+
+### Added — Milestone 4 (Alert path)
+- `selfdef-notifier`: `Notifier` trait, `NtfyNotifier` (HTTP POST to a
+  self-hosted ntfy server with optional bearer token, 3-attempt backoff),
+  `SignalCliNotifier` (subprocess to `signal-cli`), `NotifierChain` that
+  tries channels in order. Severity → ntfy priority mapping. Title/body
+  rendering helpers `render_title`/`render_body`. Tags include ATT&CK
+  technique IDs.
+- `selfdef-correlator`: subscribes to the bus, processes events through a
+  built-in `SshBruteforceRule` (≥ N failed auths from the same source IP
+  within W seconds → emit a Detection Finding). Configurable window and
+  threshold. Loop guard: Findings-class events are never reprocessed.
+- `selfdef-responder`: subscribes to the bus, watches for Findings-class
+  events, executes the `notify` action through the configured notifier
+  chain. Allowlist enforcement (`allowed_actions`) and `dry_run` mode.
+- `selfdef-core`: added `ClassUid::SECURITY_FINDING` (2001),
+  `DETECTION_FINDING` (2004), `INCIDENT_FINDING` (2005) constants.
+- `selfdef-config`: added `[correlator]`, `[notifier]` (with `[notifier.ntfy]`,
+  `[notifier.signal]` subsections), and `[responder]` config sections.
+- `selfdef-store`: `recent_findings(limit)` helper for the CLI alerts view.
+- `selfdef-daemon`: M4 wiring — correlator + responder spawned alongside
+  the store sink, each as an independent bus subscriber.
+- `selfdef-cli`: `events alerts -n N [--json]` subcommand for tailing
+  findings.
+- Integration test `crates/selfdef-daemon/tests/m4_alert.rs` proves the
+  full path: 3 failed-auth lines → wiremock-mocked ntfy server receives
+  exactly one POST with `Priority: 5`.
+- Workspace lints: dropped `unwrap_used`, `expect_used`, `panic` from the
+  default warn set — too noisy in test code; `clippy::pedantic` still
+  catches real issues.
+
+### Added — Milestone 3 (First spine)
+- `selfdef-config`: Figment-based layered config loader (defaults → TOML →
+  `SELFDEF_*` env vars). Typed `Config`, `DaemonConfig`, `BusConfig`,
+  `StoreConfig`, `CollectorsConfig`, `AuditdConfig`.
+- `selfdef-bus`: in-proc broadcast bus over `tokio::sync::broadcast`.
+  `Bus`, `Publisher` (Clone), `Subscriber`, `BusError`. Tests for
+  publish/subscribe ordering, fan-out, and lagged subscriber detection.
+- `selfdef-store`: `SqliteStore` with WAL mode, `synchronous=NORMAL`,
+  hand-rolled migrations driven by `user_version`. Async API via
+  `spawn_blocking`. Operations: `open`, `insert`, `count`, `recent`, `get`.
+  Migration `0001_initial.sql` defines the indexed `events` table.
+- `selfdef-collector-auditd`: line parser for `USER_AUTH`, `USER_LOGIN`,
+  `USER_ACCT` (mapped to `ClassUid::AUTHENTICATION` with correct
+  `status_id`, ATT&CK technique tagging on failure). Unknown record types
+  emitted as generic events with raw payload preserved. File tailer with
+  `ReadFrom::{Start, End}` modes and graceful shutdown via `CancellationToken`.
+- `selfdef-daemon`: real entry point — loads config, opens store, builds bus,
+  spawns the auditd collector + a store sink task, waits for SIGTERM/SIGINT,
+  drains the bus, reports counts on exit.
+- `selfdef-cli`: `status` (event count + store path), `events tail [-n N] [--json]`
+  reading the SQLite store directly.
+- Integration test `crates/selfdef-daemon/tests/m3_pipeline.rs` proves the
+  end-to-end loop: 4 canned audit lines → collector → bus → sink → SQLite,
+  with assertions on classification, severity, and ATT&CK tagging.
+
+### Added — Milestone 2 (Event envelope)
+- `selfdef-core` restructured into focused modules: `envelope`, `category`,
+  `activity`, `severity`, `status`, `attack`, `metadata`, `observable/*`,
+  `error`, `prelude`.
+- OCSF-aligned `Event` envelope with: `schema`, `id` (UUIDv7), `time_dt`
+  (RFC3339), `category_uid`, `class_uid`, `activity_id`, `type_uid`,
+  `severity_id`, `status_id`, `host_tag`, `source`, `message`, `metadata`,
+  `raw`, plus optional typed observables.
+- Typed observables: `Actor`, `User`, `Process`, `Session`, `File`,
+  `FileType`, `Hash`, `HashAlgorithm`, `Endpoint`, `NetworkConnection`,
+  `Direction`.
+- MITRE ATT&CK overlay: `Tactic` enum with stable `TA*` IDs,
+  `TechniqueRef` with convenience constructors.
+- `Metadata` block with `Product`, `logged_time_dt`, `sequence`, `profiles`.
+- Builder methods on `Event` (`with_status`, `with_actor`, ...).
+- `Event::validate()` invariant check.
+- 6 inline unit tests + insta snapshot tests for 4 canonical event shapes
+  + proptest properties for round-trip, type_uid, category, validation.
+- `SCHEMA_VERSION` bumped from 0 (placeholder) to 1 (first real schema).
+- Daemon logs schema version on startup; `selfdefctl version` displays it.
+
+### Added — Milestone 1 (Foundation)
+- Cargo workspace with 13 crates.
+- Pinned Rust toolchain, lint policy, `cargo-deny` config.
+- Hardened systemd unit, AppArmor profile, Debian packaging metadata.
+- CI workflow skeleton (fmt, clippy, test, deny, audit, build).
+- Documentation skeleton (mdbook), architecture and security threat model.
+- Example configuration.

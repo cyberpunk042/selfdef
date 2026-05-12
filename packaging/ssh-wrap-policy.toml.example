@@ -1,0 +1,33 @@
+# selfdef-ssh-wrap policy.
+#
+# Copy to ~/.config/selfdef/ssh-wrap.toml (or set $SELFDEF_SSH_POLICY).
+# Built-in secure defaults already deny agent forwarding, X11 forwarding,
+# and port forwarding for every host. This file lets you opt specific
+# hosts back in.
+
+[defaults]
+# Set to true if you want to relax the defaults globally. Recommended: leave
+# them off, opt hosts in below.
+forward_agent = false
+forward_x11 = false
+port_forwarding = false
+# StrictHostKeyChecking: "yes" (refuse new hosts), "accept-new" (auto-add new,
+# refuse changed), or "no" (dangerous; never use).
+strict_host_key = "accept-new"
+exit_on_forward_failure = true
+connect_timeout_secs = 20
+server_alive_interval_secs = 30
+
+# Per-host overrides. Patterns supported: exact host, "*.suffix", "prefix*".
+
+# Example: a trusted dev box where you want agent forwarding for git push.
+# [hosts."git.internal.example.com"]
+# forward_agent = true
+
+# Example: all *.internal hosts can use port forwarding.
+# [hosts."*.internal"]
+# port_forwarding = true
+
+# Example: a host you connect to from a CI runner that needs X11 for a GUI test.
+# [hosts."ci.example.com"]
+# forward_x11 = true

@@ -1,0 +1,52 @@
+tests:
+  - name: bash spawned by nginx fires
+    events:
+      - class_uid: 1007
+        activity_id: 1
+        severity_id: 1
+        source: tetragon
+        process: { pid: 100, path: "/bin/bash" }
+        raw:
+          process_exec:
+            parent:
+              binary: "/usr/sbin/nginx"
+    expected_findings: 1
+
+  - name: sh spawned by apache fires
+    events:
+      - class_uid: 1007
+        activity_id: 1
+        severity_id: 1
+        source: tetragon
+        process: { pid: 101, path: "/bin/sh" }
+        raw:
+          process_exec:
+            parent:
+              binary: "/usr/sbin/apache2"
+    expected_findings: 1
+
+  - name: bash spawned by user shell does not fire
+    events:
+      - class_uid: 1007
+        activity_id: 1
+        severity_id: 1
+        source: tetragon
+        process: { pid: 102, path: "/bin/bash" }
+        raw:
+          process_exec:
+            parent:
+              binary: "/usr/bin/sshd"
+    expected_findings: 0
+
+  - name: non-shell binary spawned by nginx does not fire
+    events:
+      - class_uid: 1007
+        activity_id: 1
+        severity_id: 1
+        source: tetragon
+        process: { pid: 103, path: "/usr/bin/git" }
+        raw:
+          process_exec:
+            parent:
+              binary: "/usr/sbin/nginx"
+    expected_findings: 0

@@ -1,0 +1,27 @@
+title: SSH Brute Force
+id: 8a7f3e2c-1234-4abc-9def-fedcba654321
+status: experimental
+description: |
+  Detects three or more failed SSH/PAM authentication attempts from the same
+  source IP within a 60-second window. Suggests an active brute-force attack
+  against the host's SSH service.
+references:
+  - https://attack.mitre.org/techniques/T1110/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.credential_access
+  - attack.t1110
+logsource:
+  product: linux
+  service: auditd
+detection:
+  failed_auth:
+    class_uid: 3002
+    status_id: 2
+  timeframe: 60s
+  condition: failed_auth | count() by src_endpoint.ip > 2
+level: high
+falsepositives:
+  - Distributed brute-force tools spreading attempts across many IPs.
+  - Legitimate users repeatedly mistyping passwords.

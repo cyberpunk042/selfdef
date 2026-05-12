@@ -1,0 +1,37 @@
+# Test fixtures for ssh_bruteforce.yml — same directory.
+# Each test runs the rule against the given events and asserts the count.
+
+tests:
+  - name: three failures from one IP fires once
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5", port: 51234 } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5", port: 51235 } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5", port: 51236 } }
+    expected_findings: 1
+
+  - name: two failures alone do not fire
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+    expected_findings: 0
+
+  - name: three failures from three different IPs do not aggregate
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.6" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: auditd, src_endpoint: { ip: "192.0.2.7" } }
+    expected_findings: 0
+
+  - name: successful auths do not count
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 1, status_id: 1, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 1, status_id: 1, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 1, status_id: 1, source: auditd, src_endpoint: { ip: "192.0.2.5" } }
+    expected_findings: 0
+
+  - name: tetragon-source auths are ignored (logsource gate)
+    events:
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: tetragon, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: tetragon, src_endpoint: { ip: "192.0.2.5" } }
+      - { class_uid: 3002, activity_id: 1, severity_id: 3, status_id: 2, source: tetragon, src_endpoint: { ip: "192.0.2.5" } }
+    expected_findings: 0

@@ -1,0 +1,30 @@
+tests:
+  - name: file created with setuid bit (4755) fires
+    events:
+      - class_uid: 1001
+        activity_id: 1
+        severity_id: 4
+        source: auditd
+        file: { path: "/tmp/evil" }
+        raw: { mode: "40755" }
+    expected_findings: 1
+
+  - name: file created with setgid bit (2755) fires
+    events:
+      - class_uid: 1001
+        activity_id: 1
+        severity_id: 4
+        source: auditd
+        file: { path: "/tmp/evil" }
+        raw: { mode: "20755" }
+    expected_findings: 1
+
+  - name: regular file (755) does not fire
+    events:
+      - class_uid: 1001
+        activity_id: 1
+        severity_id: 1
+        source: auditd
+        file: { path: "/tmp/normal" }
+        raw: { mode: "00755" }
+    expected_findings: 0

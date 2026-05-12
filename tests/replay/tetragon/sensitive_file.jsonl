@@ -1,0 +1,4 @@
+{"process_exec":{"process":{"pid":12345,"binary":"/usr/bin/cat","arguments":"/etc/shadow","uid":1000,"start_time":"2026-01-15T12:00:00Z"},"parent":{"pid":12000,"binary":"/usr/bin/bash"}},"node_name":"test-host","time":"2026-01-15T12:00:00Z"}
+{"process_kprobe":{"function_name":"security_file_open","process":{"pid":12345,"binary":"/usr/bin/cat"},"args":[{"file_arg":{"path":"/etc/shadow"}}]},"node_name":"test-host","time":"2026-01-15T12:00:00.1Z"}
+{"process_exec":{"process":{"pid":12400,"binary":"/bin/bash","arguments":"-c id","uid":33,"start_time":"2026-01-15T12:00:01Z"},"parent":{"pid":12000,"binary":"/usr/sbin/nginx"}},"node_name":"test-host","time":"2026-01-15T12:00:01Z"}
+{"process_exit":{"process":{"pid":12345,"binary":"/usr/bin/cat"}},"node_name":"test-host","time":"2026-01-15T12:00:00.2Z"}

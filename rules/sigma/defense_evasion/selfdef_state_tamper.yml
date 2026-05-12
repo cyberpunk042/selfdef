@@ -1,0 +1,33 @@
+title: Self-Defense State Tampering Attempt
+id: 9a8b7c6d-5432-4101-9876-543210fedcba
+status: experimental
+description: |
+  An unlink of a file selfdef itself relies on — its binary, its config,
+  its state.sqlite, or its rule directory. Caught by the in-kernel
+  `do_unlinkat` kprobe (the ebpf collector). Attackers who reach this
+  point are deliberately blinding the defender; treat as Critical.
+references:
+  - https://attack.mitre.org/techniques/T1070/004/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.defense_evasion
+  - attack.t1070.004
+logsource:
+  service: selfdef.ebpf
+detection:
+  unlink_of_state:
+    class_uid: 1001
+    activity_id: 4
+    file.path|contains:
+      - /var/lib/selfdef/
+      - /etc/selfdef/
+      - /usr/lib/selfdef/
+      - /usr/local/bin/selfdef
+      - /usr/local/bin/selfdefctl
+  condition: unlink_of_state
+level: critical
+falsepositives:
+  - Operator uninstalling selfdef. Use `systemctl stop` first; this rule
+    will still fire on the cleanup step but that's expected.
+  - Package upgrade replacing files.

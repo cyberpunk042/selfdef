@@ -1,0 +1,10 @@
+tests:
+  - name: any selfdef.canary source fires
+    events:
+      - { class_uid: 0, activity_id: 0, severity_id: 5, source: selfdef.canary }
+    expected_findings: 1
+
+  - name: events from other sources do not fire
+    events:
+      - { class_uid: 1001, activity_id: 14, severity_id: 1, source: tetragon, file: { path: "/etc/shadow" } }
+    expected_findings: 0

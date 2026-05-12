@@ -1,0 +1,26 @@
+title: New Setuid or Setgid Binary
+id: c5b6a7d8-9e01-4234-8901-deadbeefcafe
+status: experimental
+description: |
+  A file was created or modified that has the setuid or setgid bit set.
+  Legitimate setuid creation is rare outside of package installs; an
+  attacker-planted setuid binary is a classic persistence + privilege
+  escalation primitive.
+references:
+  - https://attack.mitre.org/techniques/T1548/001/
+author: selfdef
+date: 2026-01-01
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1548.001
+logsource:
+  service: auditd
+detection:
+  setuid_create:
+    class_uid: 1001
+    raw.mode|re: "^[24][0-7]{4}$"
+  condition: setuid_create
+level: high
+falsepositives:
+  - Package installs that ship new setuid binaries (apt, dpkg activity).

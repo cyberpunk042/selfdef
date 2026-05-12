@@ -1,0 +1,28 @@
+[package]
+name = "selfdef-ssh-wrap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Client-side SSH wrapper: policy enforcement + session events."
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "selfdef-ssh-wrap"
+path = "src/main.rs"
+
+[dependencies]
+selfdef-core = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

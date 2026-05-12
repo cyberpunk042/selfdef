@@ -1,0 +1,15 @@
+# Expected firings when the ssh_bruteforce.jsonl corpus is replayed
+# through the engine with the rules in rules/sigma/.
+
+expected_findings:
+  - rule_id: 8a7f3e2c-1234-4abc-9def-fedcba654321
+    rule_title: SSH Brute Force
+    expected_count: 1
+    notes: |
+      Three failures from 192.0.2.5 within 60s should fire once.
+      The trailing bob/10.0.0.4 success should not affect the count.
+
+# Events that should NOT trigger any rule (negative assertions):
+negative:
+  - rule_id: 7e8d9c0b-1a2b-43cd-8901-aabbccddeeff   # sudoers tamper
+  - rule_id: c5b6a7d8-9e01-4234-8901-deadbeefcafe   # setuid binary

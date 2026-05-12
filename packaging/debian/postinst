@@ -1,0 +1,57 @@
+#!/bin/sh
+# postinst script for selfdef-daemon
+# https://www.debian.org/doc/debian-policy/ch-maintainerscripts.html
+set -e
+
+case "$1" in
+    configure)
+        # System user
+        if ! getent passwd selfdef >/dev/null; then
+            adduser --system --group --no-create-home \
+                    --home /var/lib/selfdef \
+                    --shell /usr/sbin/nologin \
+                    --gecos "selfdef daemon" \
+                    selfdef
+        fi
+
+        # State and log dirs
+        for d in /var/lib/selfdef /var/log/selfdef; do
+            mkdir -p "$d"
+            chown selfdef:selfdef "$d"
+            chmod 0750 "$d"
+        done
+
+        # Config dir
+        mkdir -p /etc/selfdef
+        chown root:selfdef /etc/selfdef
+        chmod 0750 /etc/selfdef
+
+        # Secrets dir (notification tokens etc.)
+        mkdir -p /etc/selfdef/secrets
+        chown root:selfdef /etc/selfdef/secrets
+        chmod 0750 /etc/selfdef/secrets
+
+        # If no config exists yet, drop the example
+        if [ ! -f /etc/selfdef/selfdef.toml ] \
+           && [ -f /usr/share/selfdef/selfdef.toml.example ]; then
+            cp /usr/share/selfdef/selfdef.toml.example /etc/selfdef/selfdef.toml
+            chown root:selfdef /etc/selfdef/selfdef.toml
+            chmod 0640 /etc/selfdef/selfdef.toml
+        fi
+
+        # AppArmor profile reload (if installed)
+        if [ -x /sbin/apparmor_parser ] \
+           && [ -f /etc/apparmor.d/usr.bin.selfdefd ]; then
+            apparmor_parser -r /etc/apparmor.d/usr.bin.selfdefd || true
+        fi
+
+        # systemd
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            # do NOT auto-start; let the operator enable when ready
+        fi
+        ;;
+esac
+
+#DEBHELPER#
+exit 0
