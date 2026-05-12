@@ -1,0 +1,23 @@
+# Profile: tailscale.
+#
+# Defer NAT-traversal to Tailscale's control plane (or a self-hosted
+# Headscale via control_url). Easiest to make work for the
+# double-NAT case; trades direct trust for Tailscale's (or your own
+# Headscale's) control plane.
+
+profile          = "tailscale"
+
+# Required. The auth key file is OPERATOR-managed at 0600. Generate
+# from https://login.tailscale.com/admin/settings/keys (Tailscale)
+# or your Headscale's preauth-key endpoint.
+auth_key_path    = "/etc/tailscale/auth.key"
+
+# Empty = use Tailscale's hosted control plane. Set to your
+# Headscale URL (e.g. "https://headscale.example.com") to self-host.
+control_url      = ""
+
+# Optional tailscale-up flags.
+hostname         = ""        # leave empty for the system hostname
+advertise_routes = ""        # comma-sep CIDRs, e.g. "192.168.50.0/24"
+accept_routes    = "false"   # true | false
+tags             = ""        # comma-sep, e.g. "tag:home,tag:lab"

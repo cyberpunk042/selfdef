@@ -1,24 +1,25 @@
 name        = "vpn-bridge"
-version     = "0.1.0"
-summary     = "WireGuard overlay survivable through double-NAT (relay-via-server profile)"
+version     = "0.2.0"
+summary     = "Remote-network connectivity: WireGuard relay, Tailscale, or Cloudflare Tunnel"
 category    = "network"
 
 depends_on  = []
 conflicts   = []
 
-# `overlay-network` is the capability this module offers. A future
-# module that wants to ship traffic to a peer host (e.g. remote
-# event-bus replication) declares `consumes = ["overlay-network"]`.
-provides    = ["overlay-network"]
+# `overlay-network` is what the peer-to-peer profiles provide.
+# `published-tunnel` is what cloudflare-tunnel offers — outbound-only
+# L7 publishing. A future module that needs to *reach* peer hosts
+# declares `consumes = ["overlay-network"]`; one that needs to
+# publish a single service can use either.
+provides    = ["overlay-network", "published-tunnel"]
 consumes    = []
 
+# Each profile has its own per-profile requirements checked at
+# apply-time (so installing the `tailscale` profile doesn't require
+# wireguard-tools, and vice versa). The manifest-level requires lists
+# only what the dispatcher itself needs.
 requires    = [
-    { kind = "binary",  value = "wg" },
-    { kind = "binary",  value = "wg-quick" },
-    { kind = "binary",  value = "ip" },
-    { kind = "binary",  value = "nft" },
     { kind = "binary",  value = "systemctl" },
-    { kind = "package", value = "wireguard-tools" },
 ]
 
 [install]
@@ -29,4 +30,4 @@ uninstall = "install/uninstall.sh"
 
 [profiles]
 default = "relay-via-server"
-available = ["relay-via-server"]
+available = ["relay-via-server", "tailscale", "cloudflare-tunnel"]
