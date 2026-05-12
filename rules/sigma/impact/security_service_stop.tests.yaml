@@ -1,0 +1,35 @@
+tests:
+  - name: systemctl stop selfdefd fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "systemctl", path: "/usr/bin/systemctl", cmdline: "systemctl stop selfdefd" } }
+    expected_findings: 1
+
+  - name: systemctl disable auditd fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "systemctl", path: "/usr/bin/systemctl", cmdline: "systemctl disable auditd" } }
+    expected_findings: 1
+
+  - name: systemctl mask journald fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "systemctl", path: "/usr/bin/systemctl", cmdline: "systemctl mask journald" } }
+    expected_findings: 1
+
+  - name: service auditd stop fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "service", path: "/usr/sbin/service", cmdline: "service auditd stop" } }
+    expected_findings: 1
+
+  - name: stopping an unrelated service does not fire
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "systemctl", path: "/usr/bin/systemctl", cmdline: "systemctl stop apache2" } }
+    expected_findings: 0
+
+  - name: systemctl status (read-only) does not fire
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "systemctl", path: "/usr/bin/systemctl", cmdline: "systemctl status selfdefd" } }
+    expected_findings: 0
+
+  - name: non-tetragon source does not fire (logsource gate)
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: auditd, process: { pid: 0, name: "systemctl", cmdline: "systemctl stop selfdefd" } }
+    expected_findings: 0
