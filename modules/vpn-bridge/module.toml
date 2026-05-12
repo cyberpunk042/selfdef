@@ -1,0 +1,32 @@
+name        = "vpn-bridge"
+version     = "0.1.0"
+summary     = "WireGuard overlay survivable through double-NAT (relay-via-server profile)"
+category    = "network"
+
+depends_on  = []
+conflicts   = []
+
+# `overlay-network` is the capability this module offers. A future
+# module that wants to ship traffic to a peer host (e.g. remote
+# event-bus replication) declares `consumes = ["overlay-network"]`.
+provides    = ["overlay-network"]
+consumes    = []
+
+requires    = [
+    { kind = "binary",  value = "wg" },
+    { kind = "binary",  value = "wg-quick" },
+    { kind = "binary",  value = "ip" },
+    { kind = "binary",  value = "nft" },
+    { kind = "binary",  value = "systemctl" },
+    { kind = "package", value = "wireguard-tools" },
+]
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "relay-via-server"
+available = ["relay-via-server"]

@@ -1,0 +1,8 @@
+# Profile: relay-via-server — both endpoints WireGuard to a public
+# relay; relay forwards. Works through any NAT type.
+
+profile        = "relay-via-server"
+role           = "endpoint"
+interface      = "wg0"
+listen_port    = 51820
+forward_to_lan = ""

@@ -1,0 +1,11 @@
+# vpn-bridge defaults — overlaid by profile, then host config, then env vars.
+
+profile        = "relay-via-server"
+role           = "endpoint"   # endpoint | relay
+interface      = "wg0"
+listen_port    = 51820
+
+# Empty = the wg interface is only reachable from this host. Set to
+# the name of a LAN-side iface (e.g. "br0", "eno1") to enable
+# bidirectional routing between the overlay and the local LAN.
+forward_to_lan = ""
