@@ -1,0 +1,7 @@
+# selfdef suricata-nfqueue jump — managed by `selfdefctl modules apply`.
+# Added into bridge-l2's `forward_hook` chain. Do not hand-edit.
+#
+# Substituted at render time:
+#   @@QUEUE_NUM@@   — NFQUEUE number Suricata is listening on
+
+add rule inet selfdef_bridge forward_hook queue num @@QUEUE_NUM@@ bypass comment "selfdef-suricata"
