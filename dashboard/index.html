@@ -36,10 +36,49 @@
       </h2>
       <ul id="events" class="event-list"><li class="empty">loading…</li></ul>
     </section>
+
+    <section id="control-section">
+      <h2>Control
+        <small>
+          requires the control token (or UNIX socket access)
+        </small>
+      </h2>
+
+      <div class="control-grid">
+        <div class="control-card">
+          <h3>Reload rules</h3>
+          <p>Re-reads <code>correlator.rules_dir</code> without restarting the daemon.</p>
+          <button id="btn-reload" class="control-btn">POST /rules/reload</button>
+        </div>
+
+        <div class="control-card">
+          <h3>Panic</h3>
+          <p>Fires the panic action set (typically <code>notify</code> + <code>lockdown_egress</code>). You must type the host tag to confirm.</p>
+          <input id="panic-confirm" type="text" placeholder="hostname" autocomplete="off" />
+          <button id="btn-panic" class="control-btn danger">POST /panic</button>
+        </div>
+
+        <div class="control-card">
+          <h3>Run action</h3>
+          <p>Run a single named action against the most recent finding. Useful for re-triggering a snapshot or forensics bundle.</p>
+          <label>
+            Action:
+            <select id="action-name"></select>
+          </label>
+          <label>
+            Event id:
+            <input id="action-event-id" type="text" placeholder="latest finding" autocomplete="off" />
+          </label>
+          <button id="btn-action" class="control-btn">POST /actions/{name}/run</button>
+        </div>
+      </div>
+
+      <pre id="control-result" class="control-result" aria-live="polite"></pre>
+    </section>
   </main>
 
   <footer>
-    <p>read-only · UNIX socket auth or bearer token</p>
+    <p>UNIX socket auth · read token · control token (for the Control section)</p>
   </footer>
 
   <script src="app.js"></script>

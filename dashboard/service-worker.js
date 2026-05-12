@@ -27,12 +27,19 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  // API calls and the SSE stream must always hit the network — never
-  // serve a cached event list to an operator chasing an alert.
+  // Never intercept non-GET requests — caches.match won't return a
+  // sensible response for a POST anyway, and we definitely don't want
+  // to swallow a control verb (rules/reload, panic, actions/run).
+  if (e.request.method !== "GET") {
+    return;
+  }
+  // Read API calls and the SSE stream must always hit the network —
+  // never serve a cached event list to an operator chasing an alert.
   if (
     url.pathname.startsWith("/events") ||
     url.pathname.startsWith("/findings") ||
-    url.pathname.startsWith("/status")
+    url.pathname.startsWith("/status") ||
+    url.pathname.startsWith("/actions")
   ) {
     return;
   }

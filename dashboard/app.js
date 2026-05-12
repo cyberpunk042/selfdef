@@ -43,6 +43,39 @@
     return res.json();
   }
 
+  /// POST helper for control endpoints. Returns the parsed body even on
+  /// non-2xx — the API responds with JSON for both success and error so
+  /// the dashboard can surface what happened. The thrown Error carries
+  /// the status + the API's error message.
+  async function post(path, body) {
+    const url = `${apiBase}${path}`;
+    const init = {
+      method: "POST",
+      headers: { ...headers() },
+      cache: "no-store",
+    };
+    if (body !== undefined) {
+      init.headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(url, init);
+    const text = await res.text();
+    let parsed = null;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      // Non-JSON response; surface raw text in the error path.
+    }
+    if (!res.ok) {
+      const detail = parsed?.error || text || res.statusText;
+      const err = new Error(`${res.status} ${detail}`);
+      err.status = res.status;
+      err.body = parsed;
+      throw err;
+    }
+    return parsed;
+  }
+
   function severityClass(id) {
     return (SEVERITY_LABELS[id] || "info").toLowerCase();
   }
@@ -165,6 +198,118 @@
     document.getElementById("toggle-stream").textContent = "start live stream";
   }
 
+  // -------------------- Control section
+
+  function setResult(text, kind = "info") {
+    const el = document.getElementById("control-result");
+    if (!el) return;
+    el.textContent = text;
+    el.dataset.kind = kind;
+  }
+
+  async function refreshActionList() {
+    const select = document.getElementById("action-name");
+    if (!select) return;
+    try {
+      const res = await get("/actions");
+      const actions = Array.isArray(res?.actions) ? res.actions : [];
+      // Preserve any currently-selected value across refreshes.
+      const prev = select.value;
+      select.innerHTML = "";
+      if (actions.length === 0) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "(none registered)";
+        opt.disabled = true;
+        select.appendChild(opt);
+        return;
+      }
+      for (const name of actions) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+      }
+      if (actions.includes(prev)) select.value = prev;
+    } catch (e) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = `error: ${e.message}`;
+      opt.disabled = true;
+      select.innerHTML = "";
+      select.appendChild(opt);
+    }
+  }
+
+  async function reloadRules() {
+    setResult("calling /rules/reload …");
+    try {
+      const r = await post("/rules/reload");
+      setResult(`rules reloaded: ${r.rules_loaded}`, "ok");
+    } catch (e) {
+      setResult(e.message, "error");
+    }
+  }
+
+  async function firePanic() {
+    const confirmEl = document.getElementById("panic-confirm");
+    const confirm = (confirmEl?.value || "").trim();
+    if (!confirm) {
+      setResult("panic requires the host tag in the confirm box", "error");
+      return;
+    }
+    if (!window.confirm(`Engage panic mode on '${confirm}'?`)) {
+      return;
+    }
+    setResult("calling /panic …");
+    try {
+      const r = await post("/panic", { confirm });
+      setResult(
+        `panic dispatched on ${r.host_tag} (dispatched=${r.dispatched})`,
+        "ok",
+      );
+    } catch (e) {
+      setResult(e.message, "error");
+    }
+  }
+
+  async function runAction() {
+    const select = document.getElementById("action-name");
+    const idEl = document.getElementById("action-event-id");
+    const name = select?.value || "";
+    if (!name) {
+      setResult("pick an action first", "error");
+      return;
+    }
+
+    let eventId = (idEl?.value || "").trim();
+    // Convenience: when the operator doesn't type an id, run against
+    // the most recent finding from /findings.
+    if (!eventId) {
+      try {
+        const recent = await get("/findings?n=1");
+        if (!Array.isArray(recent) || recent.length === 0) {
+          setResult("no recent finding to run against; specify an event id", "error");
+          return;
+        }
+        eventId = recent[0].id;
+        if (idEl) idEl.value = eventId;
+      } catch (e) {
+        setResult(`could not look up latest finding: ${e.message}`, "error");
+        return;
+      }
+    }
+    setResult(`calling /actions/${name}/run for ${eventId} …`);
+    try {
+      const r = await post(`/actions/${encodeURIComponent(name)}/run`, {
+        event_id: eventId,
+      });
+      setResult(`${r.action}: ${r.status} — ${r.notes}`, "ok");
+    } catch (e) {
+      setResult(e.message, "error");
+    }
+  }
+
   document.addEventListener("click", (e) => {
     const r = e.target.closest("[data-refresh]");
     if (r) {
@@ -172,10 +317,26 @@
       refresh(r.dataset.refresh);
       return;
     }
-    if (e.target.id === "toggle-stream") {
-      e.preventDefault();
-      if (stream) stopStream();
-      else startStream();
+    switch (e.target.id) {
+      case "toggle-stream":
+        e.preventDefault();
+        if (stream) stopStream();
+        else startStream();
+        break;
+      case "btn-reload":
+        e.preventDefault();
+        reloadRules();
+        break;
+      case "btn-panic":
+        e.preventDefault();
+        firePanic();
+        break;
+      case "btn-action":
+        e.preventDefault();
+        runAction();
+        break;
+      default:
+        break;
     }
   });
 
@@ -183,6 +344,7 @@
   refreshStatus();
   refresh("findings");
   refresh("events");
+  refreshActionList();
   setInterval(refreshStatus, 5000);
 
   // Offline-shell registration. Best effort — skipped over file://.
