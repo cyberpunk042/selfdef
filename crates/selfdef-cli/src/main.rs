@@ -7,6 +7,8 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod modules;
+
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -57,8 +59,30 @@ enum Command {
         #[command(subcommand)]
         action: ForensicsAction,
     },
+    /// Inspect the module catalog (list / info). Read-only.
+    Modules {
+        #[command(subcommand)]
+        action: ModulesAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum ModulesAction {
+    /// List every module manifest found in the modules directory.
+    List {
+        /// Override the modules directory (default: /usr/share/selfdef/modules,
+        /// falling back to the workspace `modules/` in dev runs).
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// Show the full manifest for one module by slug.
+    Info {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -302,6 +326,16 @@ async fn main() -> Result<()> {
                 let action = ForensicsBundleAction::new(cfg.responder.forensics_dir.clone());
                 let outcome = action.execute(&event, /* dry_run */ false).await?;
                 println!("{}", outcome.notes);
+            }
+        },
+        Command::Modules { action } => match action {
+            ModulesAction::List { dir } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                modules::cmd_list(&resolved)?;
+            }
+            ModulesAction::Info { slug, dir } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                modules::cmd_info(&resolved, &slug)?;
             }
         },
         Command::Panic { confirm } => {
