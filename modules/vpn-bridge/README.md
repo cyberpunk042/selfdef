@@ -27,10 +27,21 @@ It's normal to run more than one of these. A common shape:
 - `cloudflare-tunnel` to expose the AI machine's web UI to a non-VPN'd
   device (your phone, a guest, etc.) with Cloudflare Access in front.
 
-Each module can only have one active profile per host. To run two,
-mark each as its own module instance — coming in a future PR via the
-selector's per-host `[modules.vpn-bridge#tunnel]` syntax. For now,
-operate one profile per host.
+A single `vpn-bridge` instance can only run one profile, but the
+module is declared `instanced = true` so you can run two instances on
+the same host — one per profile — by giving each its own
+`#instance` suffix in `/etc/selfdef/modules.toml`:
+
+```toml
+[modules."vpn-bridge#overlay"]
+config = "/etc/selfdef/modules/vpn-bridge.overlay.toml"   # profile = "relay-via-server" (or "tailscale")
+[modules."vpn-bridge#publish"]
+config = "/etc/selfdef/modules/vpn-bridge.publish.toml"   # profile = "cloudflare-tunnel"
+```
+
+Each instance gets its own config file, its own structured-status
+line, and (where applicable) its own service unit. Instances run in
+alphabetical order under `selfdefctl modules apply`.
 
 ## Profiles
 

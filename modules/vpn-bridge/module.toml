@@ -22,6 +22,12 @@ requires    = [
     { kind = "binary",  value = "systemctl" },
 ]
 
+# Multi-instance is on: a host can run e.g. `relay-via-server` and
+# `cloudflare-tunnel` profiles simultaneously by declaring two host
+# entries — `[modules."vpn-bridge#overlay"]` and
+# `[modules."vpn-bridge#publish"]` — each pointing at its own config.
+instanced = true
+
 [install]
 kind = "script"
 apply = "install/apply.sh"
