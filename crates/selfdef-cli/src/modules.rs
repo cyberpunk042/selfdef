@@ -1490,8 +1490,7 @@ mod tests {
         // Manifest declares `apply` but not `uninstall` → only apply
         // is considered present.
         let catalog = tempfile::tempdir().unwrap();
-        let body =
-            "#!/usr/bin/env bash\necho '{\"module\":\"only-apply\",\"status\":\"ok\",\"message\":\"\"}'\n";
+        let body = "#!/usr/bin/env bash\necho '{\"module\":\"only-apply\",\"status\":\"ok\",\"message\":\"\"}'\n";
         let active = write_stub_module(catalog.path(), "only-apply", body);
         assert!(module_has_script(&active, Action::Apply));
         assert!(!module_has_script(&active, Action::Uninstall));

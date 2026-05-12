@@ -464,9 +464,7 @@ async fn main() -> Result<()> {
                         .unwrap_or_default();
                     let provided = confirm.as_deref().unwrap_or("").trim();
                     if provided.is_empty() {
-                        eprintln!(
-                            "Refusing to uninstall modules without --confirm <hostname>."
-                        );
+                        eprintln!("Refusing to uninstall modules without --confirm <hostname>.");
                         eprintln!(
                             "Provide --confirm with this host's name, or pass --dry-run to preview."
                         );

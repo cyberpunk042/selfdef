@@ -90,12 +90,10 @@ fn uninstall_runs_modules_in_reverse_dependency_order() {
 
     let apply_alpha =
         "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"a\"}'\n";
-    let unins_alpha =
-        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"alpha down\"}'\n";
+    let unins_alpha = "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"alpha down\"}'\n";
     let apply_beta =
         "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"b\"}'\n";
-    let unins_beta =
-        "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"beta down\"}'\n";
+    let unins_beta = "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"beta down\"}'\n";
     write_module_with_uninstall(&catalog, "alpha", &[], apply_alpha, unins_alpha);
     write_module_with_uninstall(&catalog, "beta", &["alpha"], apply_beta, unins_beta);
 
@@ -181,8 +179,7 @@ fn uninstall_refuses_without_confirm() {
     std::fs::create_dir_all(&catalog).unwrap();
     let apply_body =
         "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"a\"}'\n";
-    let unins_body =
-        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"down\"}'\n";
+    let unins_body = "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"down\"}'\n";
     write_module_with_uninstall(&catalog, "alpha", &[], apply_body, unins_body);
 
     let host_config = root.path().join("modules.toml");
@@ -202,10 +199,7 @@ fn uninstall_refuses_without_confirm() {
     assert!(!out.status.success(), "expected refusal");
     assert_eq!(out.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        stderr.contains("--confirm <hostname>"),
-        "stderr: {stderr}",
-    );
+    assert!(stderr.contains("--confirm <hostname>"), "stderr: {stderr}",);
 }
 
 #[test]
@@ -215,8 +209,7 @@ fn uninstall_refuses_when_confirm_does_not_match_host() {
     std::fs::create_dir_all(&catalog).unwrap();
     let apply_body =
         "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"a\"}'\n";
-    let unins_body =
-        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"down\"}'\n";
+    let unins_body = "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"down\"}'\n";
     write_module_with_uninstall(&catalog, "alpha", &[], apply_body, unins_body);
 
     let host_config = root.path().join("modules.toml");
@@ -294,12 +287,10 @@ fn uninstall_only_filter_restricts_modules() {
     std::fs::create_dir_all(&catalog).unwrap();
     let apply_a =
         "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
-    let unins_a =
-        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"a-down\"}'\n";
+    let unins_a = "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"a-down\"}'\n";
     let apply_b =
         "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"\"}'\n";
-    let unins_b =
-        "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"b-down\"}'\n";
+    let unins_b = "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"b-down\"}'\n";
     write_module_with_uninstall(&catalog, "alpha", &[], apply_a, unins_a);
     write_module_with_uninstall(&catalog, "beta", &[], apply_b, unins_b);
 
