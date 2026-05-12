@@ -1,0 +1,25 @@
+tests:
+  - name: wipefs invocation fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "wipefs", path: "/usr/sbin/wipefs", cmdline: "/usr/sbin/wipefs -a /dev/sda" } }
+    expected_findings: 1
+
+  - name: shred invocation fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "shred", path: "/usr/bin/shred", cmdline: "shred -z /dev/sda1" } }
+    expected_findings: 1
+
+  - name: mkfs.ext4 fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "mkfs.ext4", path: "/usr/sbin/mkfs.ext4", cmdline: "mkfs.ext4 /dev/sdb1" } }
+    expected_findings: 1
+
+  - name: unrelated binary does not fire
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "ls", path: "/usr/bin/ls" } }
+    expected_findings: 0
+
+  - name: same name from non-tetragon source does not fire (logsource gate)
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: auditd, process: { pid: 0, name: "wipefs", path: "/usr/sbin/wipefs" } }
+    expected_findings: 0

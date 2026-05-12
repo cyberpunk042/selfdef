@@ -1,0 +1,35 @@
+title: dd Targeting a Block Device
+id: b2c3d4e5-2222-4333-9444-impact1485ddd
+status: experimental
+description: |
+  `dd` with `of=` pointing at a real block device (`/dev/sd*`,
+  `/dev/nvme*`, `/dev/vd*`, `/dev/xvd*`, `/dev/mapper/*`). Outside of
+  imaging / provisioning workflows this is overwhelmingly destructive —
+  T1485 (Data Destruction) territory. Note: we look at the **cmdline**,
+  not just the binary, because `dd` against a regular file or `/dev/null`
+  is benign.
+references:
+  - https://attack.mitre.org/techniques/T1485/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.impact
+  - attack.t1485
+logsource:
+  service: tetragon
+detection:
+  dd_to_blockdev:
+    class_uid: 1007
+    activity_id: 1
+    process.name: dd
+    process.cmdline|contains:
+      - "of=/dev/sd"
+      - "of=/dev/nvme"
+      - "of=/dev/vd"
+      - "of=/dev/xvd"
+      - "of=/dev/mapper/"
+  condition: dd_to_blockdev
+level: high
+falsepositives:
+  - Authorised disk imaging or partition cloning.
+  - Provisioning automation writing bootloaders.

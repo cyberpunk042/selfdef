@@ -1,0 +1,30 @@
+tests:
+  - name: dd of=/dev/sda fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "dd", path: "/usr/bin/dd", cmdline: "dd if=/dev/zero of=/dev/sda bs=1M" } }
+    expected_findings: 1
+
+  - name: dd of=/dev/nvme0n1 fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "dd", path: "/usr/bin/dd", cmdline: "dd if=/dev/urandom of=/dev/nvme0n1" } }
+    expected_findings: 1
+
+  - name: dd of=/dev/mapper/data fires
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "dd", path: "/usr/bin/dd", cmdline: "dd if=/dev/zero of=/dev/mapper/vg0-data" } }
+    expected_findings: 1
+
+  - name: dd writing to a regular file does not fire
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "dd", path: "/usr/bin/dd", cmdline: "dd if=img.bin of=/tmp/copy.bin" } }
+    expected_findings: 0
+
+  - name: dd to /dev/null does not fire
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: tetragon, process: { pid: 0, name: "dd", path: "/usr/bin/dd", cmdline: "dd if=/dev/sda of=/dev/null" } }
+    expected_findings: 0
+
+  - name: non-tetragon source does not fire (logsource gate)
+    events:
+      - { class_uid: 1007, activity_id: 1, severity_id: 1, source: auditd, process: { pid: 0, name: "dd", cmdline: "dd of=/dev/sda" } }
+    expected_findings: 0

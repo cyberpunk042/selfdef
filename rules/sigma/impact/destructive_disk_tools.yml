@@ -1,0 +1,38 @@
+title: Destructive Disk Utility Invoked
+id: a1b2c3d4-1111-4222-9333-impact1561001
+status: experimental
+description: |
+  Execution of a tool whose job is to overwrite or invalidate the
+  contents or structure of a block device (`wipefs`, `blkdiscard`,
+  `shred`, `mkfs.*`). Legitimate use is essentially limited to
+  reformatting / decommissioning, both of which are deliberate admin
+  operations; an unexpected invocation, especially against a mounted
+  data volume, is a ransomware / wiper signal.
+references:
+  - https://attack.mitre.org/techniques/T1561/001/
+  - https://attack.mitre.org/techniques/T1561/002/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.impact
+  - attack.t1561.001
+  - attack.t1561.002
+logsource:
+  service: tetragon
+detection:
+  destructive_exec:
+    class_uid: 1007
+    activity_id: 1
+    process.name:
+      - wipefs
+      - blkdiscard
+      - shred
+      - "mkfs.ext4"
+      - "mkfs.xfs"
+      - "mkfs.btrfs"
+      - "mkfs.vfat"
+  condition: destructive_exec
+level: high
+falsepositives:
+  - Authorised disk reprovisioning runs (cloud-init, anaconda, MAAS).
+  - Operator manually reformatting a known-empty device.
