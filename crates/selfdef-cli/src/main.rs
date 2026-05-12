@@ -119,6 +119,28 @@ enum ModulesAction {
         #[arg(long)]
         dir: Option<PathBuf>,
     },
+    /// Run uninstall.sh for every active module in reverse dependency order.
+    ///
+    /// Destructive: requires `--confirm <hostname>` matching this host
+    /// unless `--dry-run` is set. Modules without an uninstall script
+    /// are reported as `skipped` rather than failing the run.
+    Uninstall {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Skip mutations — set SELFDEF_DRY_RUN=1 for each script.
+        /// When set, `--confirm` is not required.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        except: Vec<String>,
+        /// Required for non-dry-run runs: must match this host's hostname.
+        #[arg(long)]
+        confirm: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -419,6 +441,50 @@ async fn main() -> Result<()> {
                     dry_run: false,
                 };
                 let code = modules::cmd_status(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Uninstall {
+                host_config,
+                dir,
+                dry_run,
+                only,
+                except,
+                confirm,
+            } => {
+                if !dry_run {
+                    let actual_host = std::env::var("HOSTNAME")
+                        .ok()
+                        .or_else(|| {
+                            std::fs::read_to_string("/etc/hostname")
+                                .ok()
+                                .map(|s| s.trim().to_string())
+                        })
+                        .unwrap_or_default();
+                    let provided = confirm.as_deref().unwrap_or("").trim();
+                    if provided.is_empty() {
+                        eprintln!("Refusing to uninstall modules without --confirm <hostname>.");
+                        eprintln!(
+                            "Provide --confirm with this host's name, or pass --dry-run to preview."
+                        );
+                        std::process::exit(2);
+                    }
+                    if provided != actual_host {
+                        eprintln!(
+                            "Confirm mismatch: provided '{provided}', host is '{actual_host}'."
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    only,
+                    except,
+                    dry_run,
+                };
+                let code = modules::cmd_uninstall(&opts)?;
                 if code != 0 {
                     std::process::exit(code);
                 }

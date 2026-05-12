@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdefctl modules uninstall`
+- New subcommand drives each active module's `uninstall.sh` in the
+  inverse of apply order: dependents come down before the modules
+  they depended on, and phases unwind `post → main → pre`.
+- Destructive by design — non-dry-run runs require
+  `--confirm <hostname>` matching this host (mirrors the `panic`
+  subcommand's confirmation pattern). Mismatched or absent
+  `--confirm` exits 2 with a clear message.
+- `--dry-run` previews the run without `--confirm`, propagating
+  `SELFDEF_DRY_RUN=1` so module scripts can short-circuit.
+- Standard `--only` / `--except` filters apply, accepting either a
+  bare slug or a `slug#instance` form.
+- Modules whose manifest never declared an uninstall script (or use
+  `kind = "debian-package"`) are reported as `skipped: no uninstall
+  script declared` so a host-wide uninstall still produces a useful
+  aggregate.
+- Refactored the internal lifecycle runner around a small
+  `LifecyclePolicy` (reverse order + tolerate-missing-script) to
+  share the apply / check / uninstall machinery without forking.
+- 3 new unit tests (reverse apply order, reverse phase order,
+  missing-script detection) and 6 integration tests in
+  `tests/cli_modules_uninstall.rs` cover ordering, the skipped path,
+  both confirmation refusals, the matching-confirm happy path, and
+  `--only` filtering.
+
 ### Added — JetStream durability for the NATS bridge
 - New `[bus.nats.jetstream]` config block. When `enabled = true`, the
   bridge:
