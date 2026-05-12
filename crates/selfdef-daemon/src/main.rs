@@ -104,43 +104,53 @@ async fn main() -> Result<()> {
     }
 
     // ---- responder ----
+    let notifier_arc: Arc<dyn selfdef_notifier::Notifier> = Arc::new(notifier);
+    let actions: Vec<Arc<dyn selfdef_responder::actions::Action>> = vec![
+        Arc::new(selfdef_responder::actions::NotifyAction::new(notifier_arc)),
+        Arc::new(selfdef_responder::actions::SnapshotProcAction::new(
+            cfg.responder.snapshot_dir.clone(),
+        )),
+        Arc::new(selfdef_responder::actions::KillPidAction::new()),
+        Arc::new(selfdef_responder::actions::LockdownEgressAction::new(
+            cfg.responder.lockdown_script.clone(),
+        )),
+        Arc::new(selfdef_responder::actions::RevokeSessionAction::new(
+            cfg.responder.revoke_session_script.clone(),
+        )),
+        Arc::new(selfdef_responder::actions::ForensicsBundleAction::new(
+            cfg.responder.forensics_dir.clone(),
+        )),
+        Arc::new(selfdef_responder::actions::VelociraptorEscalateAction::new(
+            cfg.responder.velociraptor_binary.clone(),
+            cfg.responder.velociraptor_args.clone(),
+        )),
+    ];
+    let responder = Arc::new(Responder::new(
+        actions,
+        cfg.responder.allowed_actions.clone(),
+        cfg.responder.dry_run,
+    ));
+
     let responder_task = {
         let sub = bus.subscribe();
-        let notifier_arc: Arc<dyn selfdef_notifier::Notifier> = Arc::new(notifier);
-        let actions: Vec<Arc<dyn selfdef_responder::actions::Action>> = vec![
-            Arc::new(selfdef_responder::actions::NotifyAction::new(notifier_arc)),
-            Arc::new(selfdef_responder::actions::SnapshotProcAction::new(
-                cfg.responder.snapshot_dir.clone(),
-            )),
-            Arc::new(selfdef_responder::actions::KillPidAction::new()),
-            Arc::new(selfdef_responder::actions::LockdownEgressAction::new(
-                cfg.responder.lockdown_script.clone(),
-            )),
-            Arc::new(selfdef_responder::actions::RevokeSessionAction::new(
-                cfg.responder.revoke_session_script.clone(),
-            )),
-            Arc::new(selfdef_responder::actions::ForensicsBundleAction::new(
-                cfg.responder.forensics_dir.clone(),
-            )),
-            Arc::new(selfdef_responder::actions::VelociraptorEscalateAction::new(
-                cfg.responder.velociraptor_binary.clone(),
-                cfg.responder.velociraptor_args.clone(),
-            )),
-        ];
-        let resp = Arc::new(Responder::new(
-            actions,
-            cfg.responder.allowed_actions.clone(),
-            cfg.responder.dry_run,
-        ));
+        let resp = Arc::clone(&responder);
         let sd = shutdown.clone();
         tokio::spawn(async move { resp.run(sub, sd).await })
     };
 
     // ---- api ----
+    // The API holds an Arc clone of the same responder so its
+    // `dispatch_single` / `fire` calls hit the same action set the bus
+    // task runs.
     let api_task = if cfg.api.enabled {
         use selfdef_api::{ApiServer, ApiState};
         let cfg_api = build_api_config(&cfg.api);
-        let state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone());
+        let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
+            .with_publisher(publisher.clone());
+        if let Some(c) = correlator.clone() {
+            state = state.with_correlator(c);
+        }
+        state = state.with_responder(Arc::clone(&responder));
         let server = ApiServer::new(state, cfg_api);
         let sd = shutdown.clone();
         info!("api: starting");
@@ -408,12 +418,26 @@ fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
     } else {
         Some(std::path::PathBuf::from(&cfg.token_file))
     };
+    let tls = if cfg.tls.cert_path.trim().is_empty() || cfg.tls.key_path.trim().is_empty() {
+        None
+    } else {
+        Some(selfdef_api::TlsConfig {
+            cert_path: std::path::PathBuf::from(&cfg.tls.cert_path),
+            key_path: std::path::PathBuf::from(&cfg.tls.key_path),
+            client_ca: if cfg.tls.client_ca.trim().is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(&cfg.tls.client_ca))
+            },
+        })
+    };
     Out {
         enabled: cfg.enabled,
         unix_socket,
         unix_socket_mode,
         tcp_addr,
         token_file,
+        tls,
     }
 }
 

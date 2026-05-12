@@ -166,6 +166,15 @@ unix_socket_mode = "0660"
 tcp_addr = ""                                # e.g. "127.0.0.1:8443"
 token_file = "/etc/selfdef/api.token"
 
+# Optional TLS for the TCP transport.
+#   - cert_path + key_path empty → plain HTTP over TCP (bearer-token only).
+#   - cert_path + key_path set   → TLS.
+#   - tls.client_ca also set     → mTLS (client cert required + verified).
+[api.tls]
+cert_path = ""                               # e.g. "/etc/selfdef/api-cert.pem"
+key_path = ""                                # e.g. "/etc/selfdef/api-key.pem"
+client_ca = ""                               # e.g. "/etc/selfdef/clients-ca.pem"
+
 # Operator-owned scripts. Install with mode 0750 root:root. Example
 # implementations live in packaging/scripts/ in the source tree.
 lockdown_script = "/usr/local/sbin/selfdef-lockdown.sh"

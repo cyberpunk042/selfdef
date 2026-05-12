@@ -40,6 +40,27 @@ pub struct ApiConfig {
     pub token_file: Option<PathBuf>,
     /// File mode for the UNIX socket after bind (octal). `0o660` by default.
     pub unix_socket_mode: u32,
+    /// Optional TLS configuration for the TCP transport. When set, the
+    /// TCP listener wraps each accepted connection in `tokio_rustls`.
+    /// When `tls.client_ca` is also set, client certificates are required
+    /// and validated against that CA — i.e. mTLS.
+    pub tls: Option<TlsConfig>,
+}
+
+/// Server-side TLS for the TCP transport. Bearer-token auth still
+/// applies — TLS adds confidentiality / integrity / (optionally) client
+/// authentication on top.
+#[derive(Debug, Clone)]
+pub struct TlsConfig {
+    /// PEM file containing the server certificate chain.
+    pub cert_path: PathBuf,
+    /// PEM file containing the matching private key.
+    pub key_path: PathBuf,
+    /// Optional PEM bundle of CA certificates used to validate client
+    /// certificates. When set, the listener requires client
+    /// authentication (mTLS); when None, the listener accepts anonymous
+    /// clients (regular TLS).
+    pub client_ca: Option<PathBuf>,
 }
 
 impl Default for ApiConfig {
@@ -50,6 +71,7 @@ impl Default for ApiConfig {
             tcp_addr: None,
             token_file: None,
             unix_socket_mode: 0o660,
+            tls: None,
         }
     }
 }
@@ -64,6 +86,8 @@ pub enum ServerError {
     MissingToken,
     #[error("no transport configured: set unix_socket or tcp_addr")]
     NoTransport,
+    #[error("tls config error: {0}")]
+    Tls(String),
 }
 
 /// API server. Holds the router and config; `run` blocks until shutdown.
@@ -129,8 +153,9 @@ impl ApiServer {
 
         if let (Some(addr), Some(r)) = (tcp, tcp_router) {
             let sd = shutdown.clone();
+            let tls = self.cfg.tls.clone();
             joins.push(tokio::spawn(async move {
-                if let Err(e) = serve_tcp(addr, r, sd).await {
+                if let Err(e) = serve_tcp(addr, r, sd, tls).await {
                     error!(error = %e, "api: tcp serve failed");
                 }
             }));
@@ -267,11 +292,140 @@ async fn serve_tcp(
     addr: SocketAddr,
     router: Router,
     shutdown: CancellationToken,
-) -> std::io::Result<()> {
+    tls: Option<TlsConfig>,
+) -> Result<(), ServerError> {
     let listener = TcpListener::bind(addr).await?;
-    info!(addr = %addr, "api: tcp socket bound");
-    axum::serve(listener, router.into_make_service())
-        .with_graceful_shutdown(async move { shutdown.cancelled().await })
-        .await?;
-    Ok(())
+    let tls_state = match tls {
+        Some(t) => Some(build_tls_acceptor(&t)?),
+        None => None,
+    };
+    info!(
+        addr = %addr,
+        tls = tls_state.is_some(),
+        mtls = matches!(&tls_state, Some((_, mtls)) if *mtls),
+        "api: tcp socket bound"
+    );
+
+    if let Some((acceptor, _mtls)) = tls_state {
+        // TLS-wrapped accept loop. Same shape as the UDS loop — drive
+        // hyper directly because axum::serve doesn't take TLS streams.
+        loop {
+            tokio::select! {
+                () = shutdown.cancelled() => break,
+                accept = listener.accept() => {
+                    let (sock, _peer) = match accept {
+                        Ok(p) => p,
+                        Err(e) => {
+                            warn!(error = %e, "api: tcp accept failed");
+                            continue;
+                        }
+                    };
+                    let svc = router.clone();
+                    let acceptor = acceptor.clone();
+                    tokio::spawn(async move {
+                        let tls_stream = match acceptor.accept(sock).await {
+                            Ok(s) => s,
+                            Err(e) => {
+                                debug!(error = %e, "api: tls handshake failed");
+                                return;
+                            }
+                        };
+                        let io = TokioIo::new(tls_stream);
+                        let hyper_svc = service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                            let mut svc = svc.clone();
+                            async move { svc.call(req).await }
+                        });
+                        if let Err(e) = HyperBuilder::new(TokioExecutor::new())
+                            .serve_connection(io, hyper_svc)
+                            .await
+                        {
+                            debug!(error = %e, "api: tls connection ended");
+                        }
+                    });
+                }
+            }
+        }
+        Ok(())
+    } else {
+        axum::serve(listener, router.into_make_service())
+            .with_graceful_shutdown(async move { shutdown.cancelled().await })
+            .await?;
+        Ok(())
+    }
+}
+
+/// Load certs, key, and (optionally) a client CA bundle. Returns a
+/// configured [`TlsAcceptor`] and a flag indicating whether mTLS
+/// (client-cert verification) is in effect.
+fn build_tls_acceptor(cfg: &TlsConfig) -> Result<(tokio_rustls::TlsAcceptor, bool), ServerError> {
+    let certs = load_certs(&cfg.cert_path)?;
+    let key = load_private_key(&cfg.key_path)?;
+
+    let provider = rustls::crypto::CryptoProvider::get_default()
+        .cloned()
+        .unwrap_or_else(|| {
+            // Install the ring-based provider as the process default if
+            // no provider has been installed yet. selfdef has no other
+            // rustls call sites today, so this is effectively a no-op
+            // outside the API.
+            let p = std::sync::Arc::new(rustls::crypto::ring::default_provider());
+            let _ = rustls::crypto::CryptoProvider::install_default((*p).clone());
+            p
+        });
+
+    let builder = rustls::ServerConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|e| ServerError::Tls(format!("default protocols: {e}")))?;
+
+    let server_cfg = match &cfg.client_ca {
+        Some(ca_path) => {
+            let roots = load_root_store(ca_path)?;
+            let verifier = rustls::server::WebPkiClientVerifier::builder(roots.into())
+                .build()
+                .map_err(|e| ServerError::Tls(format!("client verifier: {e}")))?;
+            builder
+                .with_client_cert_verifier(verifier)
+                .with_single_cert(certs, key)
+                .map_err(|e| ServerError::Tls(format!("single cert: {e}")))?
+        }
+        None => builder
+            .with_no_client_auth()
+            .with_single_cert(certs, key)
+            .map_err(|e| ServerError::Tls(format!("single cert: {e}")))?,
+    };
+
+    let acceptor = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(server_cfg));
+    Ok((acceptor, cfg.client_ca.is_some()))
+}
+
+fn load_certs(
+    path: &std::path::Path,
+) -> Result<Vec<rustls_pki_types::CertificateDer<'static>>, ServerError> {
+    use rustls_pki_types::pem::PemObject;
+    // Use rustls-pki-types' built-in PEM iterator. The standalone
+    // `rustls-pemfile` crate is archived as of 2025; its parsing has
+    // been folded into pki-types.
+    rustls_pki_types::CertificateDer::pem_file_iter(path)
+        .map_err(|e| ServerError::Tls(format!("open {}: {e}", path.display())))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ServerError::Tls(format!("parse certs {}: {e}", path.display())))
+}
+
+fn load_private_key(
+    path: &std::path::Path,
+) -> Result<rustls_pki_types::PrivateKeyDer<'static>, ServerError> {
+    use rustls_pki_types::pem::PemObject;
+    rustls_pki_types::PrivateKeyDer::from_pem_file(path)
+        .map_err(|e| ServerError::Tls(format!("parse key {}: {e}", path.display())))
+}
+
+fn load_root_store(path: &std::path::Path) -> Result<rustls::RootCertStore, ServerError> {
+    let certs = load_certs(path)?;
+    let mut roots = rustls::RootCertStore::empty();
+    for c in certs {
+        roots
+            .add(c)
+            .map_err(|e| ServerError::Tls(format!("add root: {e}")))?;
+    }
+    Ok(roots)
 }

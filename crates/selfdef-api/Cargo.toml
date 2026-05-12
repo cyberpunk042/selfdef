@@ -16,6 +16,9 @@ workspace = true
 selfdef-core = { workspace = true }
 selfdef-bus = { workspace = true }
 selfdef-store = { workspace = true }
+selfdef-correlator = { workspace = true }
+selfdef-responder = { workspace = true }
+uuid = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 tokio-stream = { workspace = true }
@@ -29,9 +32,15 @@ tower = { workspace = true }
 tower-http = { workspace = true, features = ["cors", "trace", "fs"] }
 hyper = { workspace = true, features = ["server", "http1"] }
 hyper-util = { workspace = true, features = ["server", "tokio"] }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
 futures = { workspace = true }
 time = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 tower = { workspace = true, features = ["util"] }
+selfdef-notifier = { workspace = true }
+selfdef-responder = { workspace = true }
+async-trait = { workspace = true }

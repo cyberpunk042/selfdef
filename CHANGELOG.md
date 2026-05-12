@@ -6,6 +6,51 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M13 (control-plane verbs + TLS/mTLS for the API)
+- **Control-plane endpoints** in `selfdef-api` (write side):
+  - `POST /rules/reload` — re-reads the rules directory, returns
+    `{rules_loaded: N}`. Returns `503` when the daemon hasn't wired a
+    correlator handle (e.g. correlator disabled in config).
+  - `POST /panic` — body `{confirm, message?}`. Validates `confirm`
+    against the daemon's `host_tag` (same safety belt as
+    `selfdefctl panic`) and direct-fires the panic action set.
+  - `POST /actions/{name}/run` — body `{event}` *or* `{event_id}`.
+    Runs a single named action against the supplied / stored event
+    via the responder's new `dispatch_single` method. Bypasses the
+    allowlist on purpose — the auth boundary is the API token / UNIX
+    socket permissions.
+  - `GET /actions` — discovery: returns registered action names in
+    order so dashboards / scripts can enumerate them.
+- **Audit trail.** Every control verb publishes a synthetic event on
+  the bus (`source = "selfdef.api"`, class `INCIDENT_FINDING`,
+  severity `Informational`) with the action, status, and details. The
+  store sink writes it to disk so `selfdefctl events tail` shows who
+  poked the daemon.
+- **`Responder` gains** `dispatch_single(name, event)` and
+  `action_names()`. The bus-driven responder and the API now share
+  one `Arc<Responder>` via clone rather than each having its own —
+  same action set, one allowlist, one dry-run flag.
+- **`ApiState` gains** an optional `ControlHandles` block (correlator,
+  responder, publisher). Builder methods (`with_correlator`,
+  `with_responder`, `with_publisher`) keep tests able to construct a
+  read-only state with no control handles, in which case control
+  endpoints return `503 Service Unavailable`.
+- **TLS / mTLS for the TCP transport.** New `[api.tls]` block:
+  `cert_path`, `key_path`, `client_ca`. With cert+key only: vanilla TLS
+  (bearer token still authenticates). Add `client_ca` → mTLS (client
+  certificate required and verified). Uses `tokio-rustls` 0.26 with the
+  ring provider; the TLS-wrapped accept loop drives hyper directly,
+  matching the existing UDS pattern. No CA bundle for client verification
+  shipped — operators bring their own.
+- New integration tests in `crates/selfdef-api/tests/m12_api.rs`
+  covering: `/actions` discovery, `/rules/reload` 503 when correlator
+  missing, `/panic` hostname mismatch returns 400, `/panic` happy path,
+  `/actions/{name}/run` dry-run, unknown action 404, missing
+  body 400. 13 cases total, up from 6.
+- Docs: `docs/api.md` extended with the control-endpoint table, the
+  auth-boundary note, and a TLS / mTLS section with a self-signed
+  recipe. Example config gains `[api.tls]`.
+
 ### Added — Milestone 12 (Mobile dashboard / read-only HTTP API)
 - New crate `selfdef-api`: axum-based read-only HTTP API. Endpoints:
   - `GET /status` — host_tag, schema_version, crate_version,
