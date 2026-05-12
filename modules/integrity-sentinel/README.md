@@ -105,7 +105,42 @@ profile       = "strict"                                           # strict | wa
 paths_file    = "/etc/selfdef/integrity-sentinel/paths.txt"
 baseline_path = "/var/lib/selfdef/integrity-sentinel/baseline.sha256"
 on_missing    = "create"                                           # create | fail
+
+# Optional notifier wiring — see "Notifying on drift" below.
+# event_stream_path     = "/var/lib/selfdef/eventstream/integrity-sentinel.jsonl"
+# event_severity_strict = "high"
+# event_severity_warn   = "low"
 ```
+
+## Notifying on drift
+
+Out of the box, drift only surfaces in the structured-status JSON
+that `selfdefctl modules apply` / `check` aggregates. To wire drift
+into the existing notifier chain (ntfy / Signal), set
+`event_stream_path` to a JSONL file the selfdef daemon's
+`eventstream` collector is configured to tail:
+
+```toml
+# /etc/selfdef/integrity-sentinel.toml
+event_stream_path     = "/var/lib/selfdef/eventstream/integrity-sentinel.jsonl"
+event_severity_strict = "high"   # default — strict drift is operator-actionable
+event_severity_warn   = "low"    # default — warn-only drift is informational
+
+# /etc/selfdef/selfdef.toml
+[collectors.eventstream]
+enabled  = true
+paths    = ["/var/lib/selfdef/eventstream/integrity-sentinel.jsonl"]
+read_from = "end"
+```
+
+When drift is detected, the module appends a Detection Finding
+(OCSF class 2004) to the JSONL via `selfdefctl events emit`. The
+daemon picks it up, the responder routes any `Findings`-category
+event through the notifier chain, and the operator gets a Signal /
+ntfy ping.
+
+Leave `event_stream_path` unset to suppress emission entirely — the
+structured-status surface is unaffected.
 
 `on_missing = "fail"` is the right answer once you've sealed the
 initial baseline through an out-of-band channel (e.g. a configuration

@@ -88,6 +88,11 @@ log "---- baseline diff ----"
 log "$DIFF_OUT"
 log "-----------------------"
 
+# Notify the daemon (if it's listening on an eventstream path).
+# Gated entirely on `event_stream_path` being set in the host config,
+# so deployments without a daemon stay quiet.
+emit_drift_event "$PROFILE" "$SUMMARY"
+
 if [[ "$PROFILE" == "strict" ]]; then
     emit_status "failed" "$SUMMARY"
     exit 1

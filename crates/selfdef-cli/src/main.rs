@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod emit;
 mod modules;
 
 use std::path::PathBuf;
@@ -173,6 +174,37 @@ enum EventsAction {
         #[arg(long)]
         json: bool,
     },
+    /// Append a single pre-formed event to a JSONL stream that the
+    /// daemon's `eventstream` collector tails. Lets modules and
+    /// helper scripts surface findings onto the bus without
+    /// hand-rolling the OCSF envelope.
+    Emit {
+        /// OCSF class UID (e.g. `2004` for Detection Finding).
+        #[arg(long)]
+        class_uid: u32,
+        /// OCSF activity_id within the class. Defaults to `1` ("the
+        /// thing happened") which matches what most class-specific
+        /// rules look for.
+        #[arg(long, default_value_t = 1)]
+        activity_id: u32,
+        /// One of: informational, low, medium, high, critical.
+        #[arg(long)]
+        severity: String,
+        /// `source` field on the event — typically
+        /// `selfdef.<module-slug>`.
+        #[arg(long)]
+        source: String,
+        /// Free-text message attached to the event.
+        #[arg(long)]
+        message: Option<String>,
+        /// Override the host_tag (defaults to $HOSTNAME / /etc/hostname).
+        #[arg(long)]
+        host_tag: Option<String>,
+        /// JSONL file to append to. The daemon's `eventstream` collector
+        /// should be configured to tail this path.
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -224,6 +256,28 @@ async fn main() -> Result<()> {
                     print_event_human(event);
                 }
             }
+        }
+        Command::Events {
+            action:
+                EventsAction::Emit {
+                    class_uid,
+                    activity_id,
+                    severity,
+                    source,
+                    message,
+                    host_tag,
+                    out,
+                },
+        } => {
+            emit::emit_event(emit::EmitArgs {
+                class_uid,
+                activity_id,
+                severity: &severity,
+                source: &source,
+                message: message.as_deref(),
+                host_tag: host_tag.as_deref(),
+                out: &out,
+            })?;
         }
         Command::Events {
             action: EventsAction::Alerts { n, json },
