@@ -1,0 +1,41 @@
+[Unit]
+Description=PolarProxy TLS interception (managed by selfdef)
+Documentation=https://www.netresec.com/?page=PolarProxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Substituted by selfdef:
+#   @@LISTEN_PORT@@         — local TLS listener
+#   @@PCAP_OVER_IP_PORT@@   — cleartext PCAP-over-IP listener
+#   @@CERT_HTTP_FLAG@@      — `--certhttp N` or empty
+#   @@LOG_DIR@@             — directory for rotating PCAPs
+#   @@CA_PFX_PATH@@         — PFX bundle PolarProxy signs with
+#   @@CA_PFX_PASSWORD_OPT@@ — `--password "<...>"` or empty
+ExecStart=/usr/bin/env PolarProxy \
+    -v \
+    -p @@LISTEN_PORT@@,@@PCAP_OVER_IP_PORT@@ \
+    --pcapoveripconnect 127.0.0.1:@@PCAP_OVER_IP_PORT@@ \
+    --cacert load @@CA_PFX_PATH@@ \
+    @@CA_PFX_PASSWORD_OPT@@ \
+    @@CERT_HTTP_FLAG@@ \
+    -o @@LOG_DIR@@
+
+Restart=on-failure
+RestartSec=5
+# PolarProxy needs CAP_NET_BIND if listen_port < 1024; we default to
+# 10443 so the unit runs unprivileged.
+DynamicUser=yes
+StateDirectory=polarproxy
+LogsDirectory=polarproxy
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=@@LOG_DIR@@
+
+[Install]
+WantedBy=multi-user.target

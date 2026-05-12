@@ -1,0 +1,15 @@
+# selfdef polarproxy-nat-redirect — managed by `selfdefctl modules apply`.
+# Adds a redirect for outbound TCP/443 → local PolarProxy listener.
+# Substituted at render time:
+#   @@LISTEN_PORT@@   — PolarProxy TLS listener (default 10443)
+#
+# Lives in its own table (`inet selfdef_polarproxy`) so we never touch
+# the operator's existing nat table. The table is replaced wholesale
+# on each apply.
+
+table inet selfdef_polarproxy {
+    chain output {
+        type nat hook output priority dstnat; policy accept;
+        meta l4proto tcp tcp dport 443 redirect to :@@LISTEN_PORT@@ comment "selfdef-polarproxy"
+    }
+}
