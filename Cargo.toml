@@ -15,6 +15,7 @@ publish = false
 # async
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
+tokio-stream = "0.1"
 futures = "0.3"
 async-trait = "0.1"
 
@@ -52,6 +53,11 @@ sd-notify = "0.4"
 
 # http
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "query"] }
+tower = { version = "0.5", default-features = false }
+tower-http = { version = "0.6", default-features = false }
+hyper = { version = "1", default-features = false }
+hyper-util = { version = "0.1", default-features = false }
 
 # linux primitives
 inotify = "0.11"
@@ -84,6 +90,7 @@ selfdef-collector-eventstream = { path = "crates/selfdef-collector-eventstream" 
 selfdef-collector-ebpf = { path = "crates/selfdef-collector-ebpf" }
 selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
 selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
+selfdef-api = { path = "crates/selfdef-api" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)

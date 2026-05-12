@@ -6,6 +6,47 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Milestone 12 (Mobile dashboard / read-only HTTP API)
+- New crate `selfdef-api`: axum-based read-only HTTP API. Endpoints:
+  - `GET /status` — host_tag, schema_version, crate_version,
+    event_count, uptime_secs.
+  - `GET /events?n=N` — last N events from the hot store (default 50,
+    capped at 1,000).
+  - `GET /findings?n=N` — last N events with `category_uid = 2`.
+  - `GET /events/stream` — Server-Sent Events live tail. Subscribes a
+    fresh bus subscriber per client and forwards each event as a `data:`
+    frame; lagged subscribers get a single `event: lagged` frame and
+    resume; clients disconnect → forwarder exits on next send.
+- Two transports, either or both at once via `[api]` config:
+  - **UNIX socket** (default `/run/selfdef.sock`, mode `0660`). Trusted
+    via filesystem permissions; no token. Driven via a custom hyper-util
+    accept loop because axum 0.7's `axum::serve` is TCP-only.
+  - **TCP** (off by default). Requires `Authorization: Bearer <token>`
+    matching the contents of `token_file`. CORS is permissive on the
+    response side; operators are expected to bind localhost and put a
+    reverse proxy in front for TLS termination.
+- Vanilla-JS PWA in `dashboard/`: single-file `app.js`, no bundler, no
+  `node_modules`. Renders findings + events lists, polls `/status`
+  every 5s, and exposes a "live stream" toggle that opens an
+  `EventSource` against `/events/stream`. Service-worker shell-caches
+  the static assets but never the API responses themselves. Manifest
+  JSON makes it installable on iOS/Android.
+- Daemon wiring: when `[api] enabled = true`, a new task spins up the
+  API alongside the collectors / correlator / responder. Store and bus
+  moved behind `Arc` so the API and the existing sink share ownership
+  cleanly. New `build_api_config` helper translates the
+  string-shaped `[api]` TOML into the typed `selfdef_api::ApiConfig` —
+  a malformed `tcp_addr` logs a warning and disables the TCP transport
+  rather than crashing the daemon.
+- Integration test `crates/selfdef-api/tests/m12_api.rs` exercises the
+  router via `tower::ServiceExt::oneshot`: status returns the host tag
+  and counters; `/findings` filters by `category_uid = 2`;
+  `/events?n=N` honors the page param; an unknown route 404s; the
+  event JSON round-trips back to `selfdef_core::Event` envelopes.
+- Documentation: new `docs/api.md` covers the transports, endpoints,
+  and dashboard wiring; example config gains a documented `[api]`
+  section.
+
 ### Added — M10 polish (eBPF: argv capture, LSM file_open, do_unlinkat kprobe)
 - **argv capture** in the `execve_enter` tracepoint program. Walks the
   userspace `argv` pointer array with `bpf_probe_read_user` plus

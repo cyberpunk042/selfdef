@@ -59,10 +59,10 @@ async fn main() -> Result<()> {
         "selfdefd starting"
     );
 
-    let bus = Bus::new(cfg.bus.inproc_capacity);
+    let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 
-    let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
+    let store = Arc::new(SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?);
     info!(path = %store.path().display(), "store ready");
     let count_at_start = store.count().await.unwrap_or(0);
 
@@ -72,7 +72,8 @@ async fn main() -> Result<()> {
     let store_sub = bus.subscribe();
     let sink_task = {
         let sd = shutdown.clone();
-        tokio::spawn(async move { run_store_sink(store, store_sub, sd).await })
+        let s = Arc::clone(&store);
+        tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
     };
 
     // ---- correlator ----
@@ -133,6 +134,23 @@ async fn main() -> Result<()> {
         ));
         let sd = shutdown.clone();
         tokio::spawn(async move { resp.run(sub, sd).await })
+    };
+
+    // ---- api ----
+    let api_task = if cfg.api.enabled {
+        use selfdef_api::{ApiServer, ApiState};
+        let cfg_api = build_api_config(&cfg.api);
+        let state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone());
+        let server = ApiServer::new(state, cfg_api);
+        let sd = shutdown.clone();
+        info!("api: starting");
+        Some(tokio::spawn(async move {
+            if let Err(e) = server.run(sd).await {
+                error!(error = %e, "api server failed");
+            }
+        }))
+    } else {
+        None
     };
 
     // ---- collectors ----
@@ -310,6 +328,10 @@ async fn main() -> Result<()> {
     }
     let _ = tokio::time::timeout(Duration::from_secs(5), responder_task).await;
     info!("responder stopped");
+    if let Some(h) = api_task {
+        let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
+        info!("api stopped");
+    }
 
     drop(publisher);
     match tokio::time::timeout(Duration::from_secs(5), sink_task).await {
@@ -323,7 +345,7 @@ async fn main() -> Result<()> {
 }
 
 async fn run_store_sink(
-    store: SqliteStore,
+    store: Arc<SqliteStore>,
     mut sub: selfdef_bus::Subscriber,
     shutdown: CancellationToken,
 ) -> (u64, u64) {
@@ -354,6 +376,44 @@ async fn run_store_sink(
                 Err(e) => error!(error = %e, "store sink: unexpected bus error"),
             }
         }
+    }
+}
+
+/// Translate the string-shaped `[api]` config into the typed `ApiConfig`
+/// the api crate consumes. Parse failures fall back to "transport not
+/// enabled" rather than crash the daemon — a typo in the TOML shouldn't
+/// take selfdef down.
+fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
+    use selfdef_api::ApiConfig as Out;
+    let unix_socket = if cfg.unix_socket.trim().is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(&cfg.unix_socket))
+    };
+    let unix_socket_mode =
+        u32::from_str_radix(cfg.unix_socket_mode.trim_start_matches('0'), 8).unwrap_or(0o660);
+    let tcp_addr = if cfg.tcp_addr.trim().is_empty() {
+        None
+    } else {
+        match cfg.tcp_addr.parse() {
+            Ok(addr) => Some(addr),
+            Err(e) => {
+                warn!(addr = %cfg.tcp_addr, error = %e, "api: tcp_addr parse failed; tcp transport disabled");
+                None
+            }
+        }
+    };
+    let token_file = if cfg.token_file.trim().is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(&cfg.token_file))
+    };
+    Out {
+        enabled: cfg.enabled,
+        unix_socket,
+        unix_socket_mode,
+        tcp_addr,
+        token_file,
     }
 }
 
