@@ -49,6 +49,10 @@ log "---- baseline diff ----"
 log "$DIFF_OUT"
 log "-----------------------"
 
+# Same notifier wiring as apply.sh — gated on event_stream_path so a
+# host with no daemon side stays silent.
+emit_drift_event "$PROFILE" "$SUMMARY"
+
 if [[ "$PROFILE" == "warn-only" ]]; then
     emit_status "ok" "$SUMMARY (warn-only: not blocking)"
     exit 0

@@ -44,8 +44,6 @@ The cleanest absorption order was:
 Every module the roadmap originally named is now in the catalog. Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
-- `selfdefctl modules uninstall`: destructive op, deferred until after the operator-confirmation UX is wired (probably alongside `panic mode`'s confirm pattern).
-- Notifier wiring for `integrity-sentinel` drift: today the module's structured-status surfaces drift to `selfdefctl modules check`; emitting an OCSF event onto the daemon's bus so the existing notifier chain (ntfy / Signal) fires is a separate cross-crate PR.
 
 ## Lifecycle surface
 
@@ -58,6 +56,7 @@ Every module the roadmap originally named is now in the catalog. Remaining work:
 | `apply` | yes (each script) | Run every active module's `install/apply.sh` in dependency order. Aggregates structured-status. `--dry-run` propagates `SELFDEF_DRY_RUN=1`. `--only` / `--except` filter the active set. Exit 1 if any module ends `failed`. |
 | `check` | no | Run every active module's `install/check.sh` and aggregate. |
 | `status` | no | Alias of `check`. |
+| `uninstall` | yes (each script) | Run every active module's `install/uninstall.sh` in the **inverse** of apply order (dependents come down first; phases unwind `post → main → pre`). Destructive: requires `--confirm <hostname>` matching this host unless `--dry-run`. Modules whose manifest didn't declare an uninstall script are reported as `skipped`. |
 
 Active modules are declared in `/etc/selfdef/modules.toml`:
 

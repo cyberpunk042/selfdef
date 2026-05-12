@@ -232,6 +232,108 @@ fn paths_file_rejects_non_absolute_path() {
 }
 
 #[test]
+fn drift_emits_finding_event_when_event_stream_path_is_set() {
+    // End-to-end: seal a baseline, tamper with a file, run apply with
+    // `event_stream_path` set, then assert the JSONL stream got a
+    // single line that parses back into a Findings-category Event
+    // with class_uid = 2004 (Detection Finding). This is the
+    // contract the daemon's eventstream collector relies on.
+    let fx = fixture("strict", "create");
+    let stream = fx.root.join("integrity-sentinel.jsonl");
+
+    // Append the optional notifier-wiring keys to the existing config.
+    let mut cfg = std::fs::read_to_string(&fx.config_path).unwrap();
+    cfg.push_str(&format!("event_stream_path = \"{}\"\n", stream.display()));
+    std::fs::write(&fx.config_path, cfg).unwrap();
+
+    // Seal the baseline (no drift yet → no event).
+    let seal = Command::new("bash")
+        .arg(module_dir().join("install").join("apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .output()
+        .expect("spawn seal");
+    assert!(
+        seal.status.success(),
+        "seal failed: {}",
+        String::from_utf8_lossy(&seal.stderr),
+    );
+    assert!(
+        !stream.exists(),
+        "no event should be emitted on a clean apply",
+    );
+
+    // Tamper, then re-apply.
+    write_file(&fx.root.join("tracked/a.toml"), "version = \"99.0\"\n");
+    let drift = Command::new("bash")
+        .arg(module_dir().join("install").join("apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .output()
+        .expect("spawn drift apply");
+    // strict profile → script exits non-zero on drift; that's fine.
+    assert!(!drift.status.success(), "drift apply should fail in strict");
+
+    let body =
+        std::fs::read_to_string(&stream).expect("event_stream_path file should have been created");
+    let lines: Vec<&str> = body.lines().filter(|l| !l.is_empty()).collect();
+    assert_eq!(
+        lines.len(),
+        1,
+        "expected exactly one event line; got:\n{body}"
+    );
+
+    // Parse via serde_json::Value — we don't link selfdef-core in this
+    // test crate, but we can assert the OCSF-shaped fields we care
+    // about. The selfdef-cli unit tests prove the line round-trips
+    // through a real `Event`.
+    let v: serde_json::Value = serde_json::from_str(lines[0]).expect("parses as JSON");
+    assert_eq!(v["class_uid"], 2004, "class must be Detection Finding");
+    assert_eq!(v["category_uid"], 2, "Findings category");
+    assert_eq!(v["activity_id"], 1);
+    assert_eq!(v["severity_id"], 4, "strict default severity = high");
+    assert_eq!(v["source"], "selfdef.integrity-sentinel");
+    assert!(
+        v["message"].as_str().unwrap_or("").contains("DRIFT"),
+        "expected drift message, got: {}",
+        v["message"]
+    );
+}
+
+#[test]
+fn drift_skips_emission_when_event_stream_path_unset() {
+    // Same scenario as above but with no `event_stream_path` configured:
+    // the JSONL file must never be created.
+    let fx = fixture("strict", "create");
+    let stream = fx.root.join("would-be-stream.jsonl");
+
+    let seal = Command::new("bash")
+        .arg(module_dir().join("install").join("apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .output()
+        .expect("spawn seal");
+    assert!(seal.status.success());
+
+    write_file(&fx.root.join("tracked/a.toml"), "version = \"99.0\"\n");
+    let drift = Command::new("bash")
+        .arg(module_dir().join("install").join("apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .output()
+        .expect("spawn drift");
+    assert!(!drift.status.success(), "drift in strict must fail");
+    assert!(
+        !stream.exists(),
+        "stream file must not be created when event_stream_path is unset",
+    );
+}
+
+#[test]
 fn uninstall_removes_baseline() {
     let fx = fixture("strict", "create");
     run_script("apply.sh", &fx);

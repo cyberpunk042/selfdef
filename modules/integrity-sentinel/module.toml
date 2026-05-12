@@ -1,5 +1,5 @@
 name        = "integrity-sentinel"
-version     = "0.1.0"
+version     = "0.1.1"
 summary     = "SHA256 baseline verification for policy artifacts. Fail-closed on drift."
 category    = "hardening"
 

@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdefctl events emit` + `integrity-sentinel` notifier wiring
+- New `selfdefctl events emit` subcommand appends a single OCSF
+  Event line to a JSONL stream the daemon's existing `eventstream`
+  collector tails. Modules and helper scripts can now surface
+  findings onto the bus without hand-rolling the envelope in bash:
+  the Rust side builds a real `selfdef_core::Event`, so taxonomy,
+  schema version, derived `type_uid`, and metadata are guaranteed
+  correct. Args: `--class-uid`, `--activity-id` (default 1),
+  `--severity` (informational|low|medium|high|critical|fatal),
+  `--source`, `--message`, `--host-tag` (defaults to
+  $HOSTNAME / /etc/hostname), `--out <path>` (required).
+- `integrity-sentinel` v0.1.1: when `event_stream_path` is set in
+  the module's host config, drift now emits a Detection Finding
+  (OCSF class 2004) to that JSONL stream. The daemon picks it up,
+  the responder routes Findings-category events through the
+  notifier chain, and ntfy / Signal fires. Severity defaults to
+  `high` for `strict` and `low` for `warn-only`; both are
+  overridable via `event_severity_strict` / `event_severity_warn`.
+  Leave `event_stream_path` unset to suppress emission — the
+  structured-status surface is unaffected. Best-effort: a
+  `selfdefctl` not on PATH or a failed emit logs a warning and
+  never fails the apply / check run.
+- 5 new unit tests for `selfdefctl events emit` (round-trips
+  through `Event`, atomic append doesn't clobber prior lines,
+  unknown severity / empty source rejected, parent dir is created
+  on demand) plus 1 integration test that exercises
+  `integrity-sentinel`'s apply path with `event_stream_path` set
+  and asserts the resulting JSONL line parses back into a valid
+  Findings-category Event.
+- Roadmap docs (`docs/src/modules-roadmap.md`) updated to remove
+  both shipped items (`modules uninstall`, integrity-sentinel
+  notifier wiring) from the remaining-work list and to include the
+  `uninstall` row in the lifecycle table.
+
 ### Added — `selfdefctl modules uninstall`
 - New subcommand drives each active module's `uninstall.sh` in the
   inverse of apply order: dependents come down before the modules

@@ -21,3 +21,13 @@ baseline_path = "/var/lib/selfdef/integrity-sentinel/baseline.sha256"
 #               initial baseline out-of-band and never want apply to
 #               silently re-baseline.
 on_missing = "create"
+
+# Optional: when drift is detected, append a Detection Finding (OCSF
+# class 2004) to this JSONL stream. The selfdef daemon's
+# `eventstream` collector tails it and republishes onto the bus so
+# the existing notifier chain (ntfy / Signal) fires. Leave the key
+# unset to suppress eventstream emission entirely (the structured
+# `modules check` status still surfaces the drift).
+#
+# event_stream_path     = "/var/lib/selfdef/eventstream/integrity-sentinel.jsonl"
+# event_severity_strict = "high"   # severity attached to strict drift events

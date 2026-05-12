@@ -101,3 +101,59 @@ compute_baseline() {
     # path afterwards for stable diffs.
     xargs -0 -r sha256sum 2>/dev/null | LC_ALL=C sort -k 2
 }
+
+# Optional: append a Detection Finding (OCSF class 2004) to the
+# `eventstream` JSONL the daemon tails so the existing notifier
+# chain (ntfy / Signal) fires. Gated on `event_stream_path` being
+# set in the host config — if it's absent or empty, this is a no-op
+# so deployments without a daemon side stay quiet.
+#
+# DRY-RUN: when `SELFDEF_DRY_RUN=1`, the helper logs what it would
+# do and returns without writing — the rest of the run remains
+# side-effect-free.
+#
+# Caller args:
+#   $1 — profile     ("strict" | "warn-only")
+#   $2 — summary     (human-readable message attached to the event)
+#
+# Requires the sourcing script to have already set CONFIG_FILE.
+emit_drift_event() {
+    local profile="$1" summary="$2"
+    local stream_path
+    stream_path=$(toml_get event_stream_path "$CONFIG_FILE" || echo "")
+    [[ -z "$stream_path" ]] && return 0
+
+    # Severity defaults: strict drift is High (operator action expected),
+    # warn-only drift is Low (informational alert). Operators can
+    # override per-profile via event_severity_* keys.
+    local severity
+    if [[ "$profile" == "strict" ]]; then
+        severity=$(toml_get event_severity_strict "$CONFIG_FILE" || echo "high")
+    else
+        severity=$(toml_get event_severity_warn "$CONFIG_FILE" || echo "low")
+    fi
+
+    local ctl="${SELFDEF_CTL_BIN:-selfdefctl}"
+    if ! command -v "$ctl" >/dev/null 2>&1; then
+        log "selfdefctl not on PATH; skipping eventstream emission"
+        return 0
+    fi
+
+    if [[ "${DRY_RUN:-0}" == "1" ]]; then
+        log "DRY-RUN: would emit drift event (severity=$severity) to $stream_path"
+        return 0
+    fi
+
+    # Best-effort. We never want a notifier hiccup to fail the
+    # selfdef-apply / selfdef-check pipeline — drift detection is the
+    # source of truth in the structured-status JSON line.
+    if ! "$ctl" --config /dev/null events emit \
+            --class-uid 2004 \
+            --activity-id 1 \
+            --severity "$severity" \
+            --source "selfdef.integrity-sentinel" \
+            --message "$summary" \
+            --out "$stream_path" 2>/dev/null; then
+        log "warning: selfdefctl events emit failed (path=$stream_path)"
+    fi
+}
