@@ -1,0 +1,179 @@
+//! Smoke-tests for the `suricata` module's install scripts.
+//!
+//! Same shape as `module_bridge_l2.rs`: stub the binaries the
+//! preflight checks for, run in `SELFDEF_DRY_RUN=1` mode, assert the
+//! structured-status JSON contract.
+
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+fn module_dir() -> PathBuf {
+    workspace_root().join("modules/suricata")
+}
+
+fn write_config(body: &str) -> tempfile::NamedTempFile {
+    let mut f = tempfile::NamedTempFile::new().expect("tempfile");
+    f.write_all(body.as_bytes()).expect("write");
+    f
+}
+
+/// Path dir with stub binaries that `apply.sh` / `check.sh` look up.
+/// `systemctl` is stubbed to always report inactive/disabled so the
+/// scripts take the "needs change" branch in apply, and the
+/// "service not active" branch in check.
+fn stub_path_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let stubs: &[(&str, &str)] = &[
+        ("suricata", "#!/usr/bin/env bash\nexit 0\n"),
+        ("nft", "#!/usr/bin/env bash\nexit 0\n"),
+        // is-active / is-enabled exit non-zero when the service isn't
+        // active/enabled. We always return non-zero so the apply path
+        // exercises the start/enable branches.
+        (
+            "systemctl",
+            "#!/usr/bin/env bash\ncase \"$1\" in is-active|is-enabled) exit 3 ;; *) exit 0 ;; esac\n",
+        ),
+    ];
+    for (name, body) in stubs {
+        let path = dir.path().join(name);
+        std::fs::write(&path, body).expect("write stub");
+        let mut perms = std::fs::metadata(&path).expect("meta").permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&path, perms).expect("chmod stub");
+    }
+    dir
+}
+
+fn prepended_path(extra: &Path) -> std::ffi::OsString {
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut out = std::ffi::OsString::from(extra);
+    out.push(":");
+    out.push(&existing);
+    out
+}
+
+fn run_apply(cfg: &Path, path_dir: &Path) -> std::process::Output {
+    let module = module_dir();
+    Command::new("bash")
+        .arg(module.join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_SURICATA_CONFIG", cfg)
+        .env("SELFDEF_SURICATA_TEMPLATES", module.join("templates"))
+        .env("PATH", prepended_path(path_dir))
+        .output()
+        .expect("spawn apply.sh")
+}
+
+fn last_stdout_line(out: &std::process::Output) -> String {
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    stdout.lines().last().unwrap_or("").trim().to_string()
+}
+
+#[test]
+fn nfqueue_apply_fails_without_bridge_table() {
+    // Stub nft exits 0, so `nft list table inet selfdef_bridge` "succeeds"
+    // and the script proceeds. But the stub also makes the "rule already
+    // present" check (which greps the output) return no match, so the
+    // script tries to install. With our stub `nft -f <file>` succeeds.
+    // The whole pipeline should end with status "ok" in dry-run.
+    //
+    // To get the bridge-table-missing branch, override the nft stub.
+    let dir = tempfile::tempdir().expect("tempdir");
+    for name in &["suricata", "systemctl"] {
+        let p = dir.path().join(name);
+        std::fs::write(
+            &p,
+            "#!/usr/bin/env bash\ncase \"$1\" in is-active|is-enabled) exit 3 ;; *) exit 0 ;; esac\n",
+        )
+        .unwrap();
+        let mut perms = std::fs::metadata(&p).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&p, perms).unwrap();
+    }
+    // nft stub that fails `list table` (table absent), succeeds for everything else.
+    let nft = dir.path().join("nft");
+    std::fs::write(
+        &nft,
+        "#!/usr/bin/env bash\nif [[ \"$1\" == \"list\" && \"$2\" == \"table\" ]]; then exit 1; fi\nexit 0\n",
+    )
+    .unwrap();
+    let mut perms = std::fs::metadata(&nft).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&nft, perms).unwrap();
+
+    let cfg = write_config("mode = \"nfqueue\"\nqueue_num = 0\n");
+    let out = run_apply(cfg.path(), dir.path());
+    let line = last_stdout_line(&out);
+    assert!(!out.status.success(), "should have failed: {line}");
+    assert!(
+        line.contains("\"status\":\"failed\"")
+            && line.contains("bridge-l2 nftables table not loaded"),
+        "got: {line}"
+    );
+}
+
+#[test]
+fn nfqueue_apply_succeeds_in_dry_run() {
+    let stubs = stub_path_dir();
+    let cfg = write_config("mode = \"nfqueue\"\nqueue_num = 0\n");
+    let out = run_apply(cfg.path(), stubs.path());
+    let line = last_stdout_line(&out);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        line.contains("\"module\":\"suricata\"") && line.contains("\"status\":\"ok\""),
+        "got: {line}"
+    );
+}
+
+#[test]
+fn af_packet_apply_succeeds_without_bridge_table() {
+    // AF_PACKET mode should not touch nftables at all (except to clean
+    // up a stale NFQUEUE rule, which doesn't exist in this scenario).
+    let stubs = stub_path_dir();
+    let cfg = write_config("mode = \"af-packet\"\nqueue_num = 0\n");
+    let out = run_apply(cfg.path(), stubs.path());
+    let line = last_stdout_line(&out);
+    assert!(out.status.success());
+    assert!(line.contains("\"status\":\"ok\""), "got: {line}");
+}
+
+#[test]
+fn apply_rejects_invalid_mode() {
+    let stubs = stub_path_dir();
+    let cfg = write_config("mode = \"banana\"\n");
+    let out = run_apply(cfg.path(), stubs.path());
+    let line = last_stdout_line(&out);
+    assert!(!out.status.success());
+    assert!(
+        line.contains("mode must be nfqueue|af-packet"),
+        "got: {line}"
+    );
+}
+
+#[test]
+fn check_reports_inactive_service() {
+    let stubs = stub_path_dir();
+    let cfg = write_config("mode = \"nfqueue\"\n");
+    let module = module_dir();
+    let out = Command::new("bash")
+        .arg(module.join("install/check.sh"))
+        .env("SELFDEF_SURICATA_CONFIG", cfg.path())
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn check.sh");
+    let line = last_stdout_line(&out);
+    assert!(!out.status.success(), "got: {line}");
+    assert!(
+        line.contains("\"status\":\"failed\"") && line.contains("suricata.service not active"),
+        "got: {line}"
+    );
+}

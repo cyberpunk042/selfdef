@@ -1,0 +1,8 @@
+# suricata defaults — overlaid by profile, then host config, then env vars.
+
+mode             = "nfqueue"             # nfqueue | af-packet
+queue_num        = 0
+bridge_name      = "br0"                 # which bridge's forward_hook to attach to (host-ids profile)
+interfaces       = []                    # used by af-packet profile
+eve_json_path    = "/var/log/suricata/eve.json"
+enable_collector = true

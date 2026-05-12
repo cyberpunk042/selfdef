@@ -1,0 +1,6 @@
+# Profile: host-ids — NFQUEUE attachment. Filtering on the forward
+# path; fail-OPEN via `queue ... bypass`.
+
+mode             = "nfqueue"
+queue_num        = 0
+enable_collector = true

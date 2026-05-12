@@ -1,0 +1,31 @@
+name        = "suricata"
+version     = "0.1.0"
+summary     = "Inline IDS via Suricata (NFQUEUE or AF_PACKET copy-mode)"
+category    = "network"
+
+depends_on  = ["bridge-l2"]
+conflicts   = []
+
+# `eve-json` is the event stream selfdef-collector-suricata already
+# consumes. Any future module that wants raw IDS output can declare
+# `consumes = ["eve-json"]` and the selector will refuse to enable it
+# without suricata first.
+provides    = ["ids", "eve-json"]
+consumes    = ["l2-bridge", "forward-policy"]
+
+requires    = [
+    { kind = "binary",  value = "suricata" },
+    { kind = "binary",  value = "nft" },
+    { kind = "binary",  value = "systemctl" },
+    { kind = "package", value = "suricata" },
+]
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "host-ids"
+available = ["host-ids", "opnsense-bridge"]

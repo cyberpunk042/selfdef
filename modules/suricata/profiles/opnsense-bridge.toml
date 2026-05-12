@@ -1,0 +1,10 @@
+# Profile: opnsense-bridge — AF_PACKET copy-mode. Read-only; OPNsense
+# remains the policy enforcement point.
+
+mode             = "af-packet"
+enable_collector = true
+
+# `interfaces` is intentionally empty here — the operator names the
+# bridge member NICs in /etc/selfdef/host.toml (typically the same two
+# names that are bridge-l2.members).
+interfaces = []
