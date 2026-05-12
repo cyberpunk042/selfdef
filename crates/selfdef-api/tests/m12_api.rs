@@ -133,6 +133,191 @@ async fn unknown_route_returns_404() {
     assert_eq!(res.status(), StatusCode::NOT_FOUND);
 }
 
+// ---------------- control plane
+
+fn make_critical_finding() -> selfdef_core::Event {
+    selfdef_core::Event::new(
+        ClassUid::DETECTION_FINDING,
+        1,
+        SeverityId::Critical,
+        "test-host",
+        "m13.control.test",
+        0,
+    )
+    .with_message("synthetic critical for control test")
+}
+
+fn dummy_action_set() -> Vec<std::sync::Arc<dyn selfdef_responder::actions::Action>> {
+    use selfdef_responder::actions::{
+        ForensicsBundleAction, KillPidAction, NotifyAction, SnapshotProcAction,
+    };
+
+    #[derive(Default)]
+    struct NullNotifier;
+    #[async_trait::async_trait]
+    impl selfdef_notifier::Notifier for NullNotifier {
+        async fn notify(
+            &self,
+            _event: &selfdef_core::Event,
+        ) -> Result<(), selfdef_notifier::NotifierError> {
+            Ok(())
+        }
+        fn name(&self) -> &'static str {
+            "null"
+        }
+    }
+    let notifier: std::sync::Arc<dyn selfdef_notifier::Notifier> =
+        std::sync::Arc::new(NullNotifier);
+    let tmp = std::env::temp_dir().join("selfdef-api-test-snapshots");
+    let forensics = std::env::temp_dir().join("selfdef-api-test-forensics");
+    vec![
+        std::sync::Arc::new(NotifyAction::new(notifier)),
+        std::sync::Arc::new(KillPidAction::new()),
+        std::sync::Arc::new(SnapshotProcAction::new(tmp)),
+        std::sync::Arc::new(ForensicsBundleAction::new(forensics)),
+    ]
+}
+
+async fn state_with_control(dry_run: bool) -> ApiState {
+    let (state, bus, _store) = build_state().await;
+    let responder = std::sync::Arc::new(selfdef_responder::Responder::new(
+        dummy_action_set(),
+        vec![
+            "notify".into(),
+            "kill_pid".into(),
+            "snapshot_proc".into(),
+            "forensics_bundle".into(),
+        ],
+        dry_run,
+    ));
+    state
+        .with_responder(responder)
+        .with_publisher(bus.publisher())
+}
+
+#[tokio::test]
+async fn actions_list_returns_registered_action_names() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/actions")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1 << 16).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let actions = v["actions"].as_array().unwrap();
+    let names: Vec<&str> = actions.iter().map(|x| x.as_str().unwrap()).collect();
+    assert!(names.contains(&"notify"));
+    assert!(names.contains(&"forensics_bundle"));
+}
+
+#[tokio::test]
+async fn rules_reload_returns_503_when_correlator_not_wired() {
+    // build_state() returns an ApiState without a correlator handle.
+    let (state, _bus, _store) = build_state().await;
+    let app = router(state);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/rules/reload")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn panic_rejects_hostname_mismatch() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let body = serde_json::json!({"confirm": "wrong-host"}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/panic")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    let bytes = to_bytes(res.into_body(), 1 << 16).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let msg = v["error"].as_str().unwrap();
+    assert!(msg.contains("test-host"));
+}
+
+#[tokio::test]
+async fn panic_dispatches_when_hostname_matches() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let body = serde_json::json!({"confirm": "test-host"}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/panic")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1 << 16).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["dispatched"], true);
+    assert_eq!(v["host_tag"], "test-host");
+}
+
+#[tokio::test]
+async fn actions_run_dry_run_returns_outcome() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let event = make_critical_finding();
+    let body = serde_json::json!({"event": serde_json::to_value(&event).unwrap()}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/actions/notify/run")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1 << 16).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["action"], "notify");
+    assert_eq!(v["status"], "dry_run");
+}
+
+#[tokio::test]
+async fn actions_run_unknown_action_returns_404() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let event = make_critical_finding();
+    let body = serde_json::json!({"event": serde_json::to_value(&event).unwrap()}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/actions/no-such-action/run")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn actions_run_requires_event_or_event_id() {
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/actions/notify/run")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from("{}"))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+// ---------------- read plane (continued)
+
 #[tokio::test]
 async fn body_round_trips_as_real_event_envelopes() {
     // Catch regressions where /events returns something that doesn't

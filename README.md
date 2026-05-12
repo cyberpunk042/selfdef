@@ -97,6 +97,7 @@ cargo audit
 - [x] **M10** — Custom eBPF programs (aya).
 - [x] **M11** — Forensics + Velociraptor integration.
 - [x] **M12** — Mobile dashboard / read-only HTTP API.
+- [x] **M13** — Control-plane verbs + TLS/mTLS for the API.
 
 ## Threat model
 

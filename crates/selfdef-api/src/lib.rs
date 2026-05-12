@@ -33,15 +33,16 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
+mod control;
 mod handlers;
 mod state;
 mod transport;
 
-pub use state::ApiState;
-pub use transport::{ApiConfig, ApiServer, ServerError};
+pub use state::{ApiState, ControlHandles};
+pub use transport::{ApiConfig, ApiServer, ServerError, TlsConfig};
 
 use axum::Router;
-use axum::routing::get;
+use axum::routing::{get, post};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -49,10 +50,21 @@ use tower_http::trace::TraceLayer;
 /// directly via `tower::ServiceExt::oneshot` without spinning up a socket.
 pub fn router(state: ApiState) -> Router {
     Router::new()
+        // ---- read endpoints ----
         .route("/status", get(handlers::status))
         .route("/events", get(handlers::events))
         .route("/findings", get(handlers::findings))
         .route("/events/stream", get(handlers::events_stream))
+        // ---- control endpoints ----
+        // Each control verb checks for the relevant handle in ApiState
+        // and returns 503 Service Unavailable when missing — so the
+        // routes are always *present* (callers can rely on the route
+        // table) but only useful when the daemon has wired the handles
+        // in. Tests can construct an ApiState without them.
+        .route("/actions", get(control::actions_list))
+        .route("/actions/:name/run", post(control::actions_run))
+        .route("/rules/reload", post(control::rules_reload))
+        .route("/panic", post(control::panic_fire))
         // CORS: permissive by default since both transports already gate
         // access (UNIX socket via fs perms, TCP via bearer token). Operators
         // running the API on an exposed port should narrow this via a

@@ -125,27 +125,34 @@ pub(crate) async fn events_stream(
 // -------------------------------------------------- error type
 
 #[derive(Debug)]
-pub(crate) enum ApiError {
-    Internal(String),
+pub(crate) struct ApiError {
+    pub(crate) status: StatusCode,
+    pub(crate) message: String,
 }
 
 impl ApiError {
-    fn store(e: impl std::fmt::Display) -> Self {
-        Self::Internal(format!("store: {e}"))
+    pub(crate) fn with_status(status: StatusCode, msg: impl Into<String>) -> Self {
+        Self {
+            status,
+            message: msg.into(),
+        }
+    }
+
+    pub(crate) fn store(e: impl std::fmt::Display) -> Self {
+        Self::with_status(StatusCode::INTERNAL_SERVER_ERROR, format!("store: {e}"))
     }
 }
 
 impl axum::response::IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        match self {
-            Self::Internal(msg) => {
-                warn!(error = %msg, "api error");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": msg})),
-                )
-                    .into_response()
-            }
+        // Only log 5xx — 4xx are routine and would otherwise spam.
+        if self.status.is_server_error() {
+            warn!(error = %self.message, status = %self.status, "api error");
         }
+        (
+            self.status,
+            Json(serde_json::json!({"error": self.message})),
+        )
+            .into_response()
     }
 }

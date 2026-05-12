@@ -384,6 +384,22 @@ pub struct ApiConfig {
     pub tcp_addr: String,
     /// Path to a file containing the bearer token. Required for TCP.
     pub token_file: String,
+    pub tls: ApiTlsConfig,
+}
+
+/// Optional TLS / mTLS wrapping for the TCP transport.
+///
+/// - When `cert_path` is empty, TLS is off — TCP serves plain HTTP and
+///   only the bearer token gates access.
+/// - When `cert_path` + `key_path` are set, TLS is enabled.
+/// - When `client_ca` is *also* set, the listener requires client
+///   certificates and validates them against that CA bundle — mTLS.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ApiTlsConfig {
+    pub cert_path: String,
+    pub key_path: String,
+    pub client_ca: String,
 }
 
 impl Default for ApiConfig {
@@ -394,6 +410,7 @@ impl Default for ApiConfig {
             unix_socket_mode: String::from("0660"),
             tcp_addr: String::new(),
             token_file: String::from("/etc/selfdef/api.token"),
+            tls: ApiTlsConfig::default(),
         }
     }
 }

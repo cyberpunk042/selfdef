@@ -78,6 +78,31 @@ impl Responder {
         self.handle_finding(event).await;
     }
 
+    /// Run a single named action against the given event, bypassing the
+    /// allowlist. Returns `None` if no action with that name is
+    /// registered, or `Some(Err)` if the action errored. Used by the API
+    /// `/actions/{name}/run` endpoint where the caller has already
+    /// authenticated against the control token.
+    pub async fn dispatch_single(
+        &self,
+        name: &str,
+        event: &Event,
+    ) -> Option<Result<actions::ActionOutcome, actions::ActionError>> {
+        for action in &self.actions {
+            if action.name() == name {
+                return Some(action.execute(event, self.dry_run).await);
+            }
+        }
+        None
+    }
+
+    /// Names of all built-in actions, in registration order. Useful for
+    /// `/actions` discovery endpoints and audit logging.
+    #[must_use]
+    pub fn action_names(&self) -> Vec<&'static str> {
+        self.actions.iter().map(|a| a.name()).collect()
+    }
+
     /// Run until `shutdown` is cancelled.
     pub async fn run(&self, mut sub: Subscriber, shutdown: CancellationToken) {
         info!(
