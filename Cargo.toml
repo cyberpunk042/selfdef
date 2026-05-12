@@ -5,7 +5,7 @@ members = ["crates/*", "xtask"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.83"
+rust-version = "1.88"
 license = "AGPL-3.0-or-later"
 repository = "https://example.org/you/selfdef"
 authors = ["You <you@example.org>"]
@@ -55,8 +55,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 
 # linux primitives
 inotify = "0.11"
-aya = "0.13"
-aya-log = "0.2"
 bytemuck = { version = "1.16", features = ["derive"] }
 
 # eBPF (userspace half — the BPF programs live in a separate workspace)
@@ -88,7 +86,11 @@ selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
 selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)
+# need `unsafe impl bytemuck::Pod` for ring-buffer record decoding. Those
+# crates carry an explicit `#[allow(unsafe_code)]` on the impls so the
+# blanket policy still flags accidental unsafe.
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 unused_must_use = "deny"

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// ATT&CK Enterprise tactic. Wire form: snake_case string.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Tactic {

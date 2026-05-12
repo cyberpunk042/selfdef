@@ -15,7 +15,11 @@
 //! `~/.local/share/selfdef/ssh-wrap.jsonl` (override via
 //! `SELFDEF_SSH_EVENT_LOG`).
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
+// Rust 2024 marked `std::env::set_var` as unsafe. The test module in
+// `events.rs` localizes its single use behind an `unsafe` block; production
+// code stays unsafe-free.
+#![cfg_attr(test, allow(unsafe_code))]
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 

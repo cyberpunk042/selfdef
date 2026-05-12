@@ -154,7 +154,7 @@ async fn suricata_alert_becomes_detection_finding() {
     assert_eq!(alert.source, "suricata");
     assert_eq!(alert.severity_id, SeverityId::Medium); // suricata sev=2 → Medium
     assert!(
-        alert.message.as_deref().unwrap_or("").contains("nmap"),
+        alert.message.as_deref().unwrap_or("").contains("SCAN"),
         "unexpected message: {:?}",
         alert.message
     );

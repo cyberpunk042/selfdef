@@ -53,8 +53,24 @@ enum Command {
         #[arg(long)]
         confirm: Option<String>,
     },
+    /// Inspect or manually create forensic bundles.
+    Forensics {
+        #[command(subcommand)]
+        action: ForensicsAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum ForensicsAction {
+    /// List forensic bundles in the configured forensics directory.
+    List,
+    /// Collect a bundle now for an event by id (must exist in the hot store).
+    Collect {
+        /// Event UUID. Use `selfdefctl events alerts --json` to find ids.
+        event_id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -249,6 +265,50 @@ async fn main() -> Result<()> {
                 }
             }
         },
+        Command::Forensics { action } => match action {
+            ForensicsAction::List => {
+                let dir = &cfg.responder.forensics_dir;
+                if !dir.exists() {
+                    println!("(no bundles — {} does not exist)", dir.display());
+                } else {
+                    let mut entries: Vec<_> = std::fs::read_dir(dir)
+                        .with_context(|| format!("reading {}", dir.display()))?
+                        .filter_map(Result::ok)
+                        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+                        .collect();
+                    entries.sort_by_key(std::fs::DirEntry::file_name);
+                    if entries.is_empty() {
+                        println!("(no bundles in {})", dir.display());
+                    }
+                    for entry in entries {
+                        let name = entry.file_name();
+                        let path = entry.path();
+                        let size = dir_size_bytes(&path).unwrap_or(0);
+                        println!(
+                            "{:<40}  {:>10} bytes  {}",
+                            name.to_string_lossy(),
+                            size,
+                            path.display()
+                        );
+                    }
+                }
+            }
+            ForensicsAction::Collect { event_id } => {
+                use selfdef_responder::actions::{Action, ForensicsBundleAction};
+                let id = uuid::Uuid::parse_str(&event_id)
+                    .with_context(|| format!("not a valid event id: {event_id}"))?;
+                let store = SqliteStore::open(&cfg.store.hot_path)
+                    .context("opening hot store")?;
+                let event = store
+                    .get(id)
+                    .await
+                    .context("looking up event")?
+                    .with_context(|| format!("no event with id {event_id} in store"))?;
+                let action = ForensicsBundleAction::new(cfg.responder.forensics_dir.clone());
+                let outcome = action.execute(&event, /* dry_run */ false).await?;
+                println!("{}", outcome.notes);
+            }
+        },
         Command::Panic { confirm } => {
             let actual_host = std::env::var("HOSTNAME").ok()
                 .or_else(|| std::fs::read_to_string("/etc/hostname").ok().map(|s| s.trim().to_string()))
@@ -315,6 +375,20 @@ async fn main() -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn dir_size_bytes(path: &std::path::Path) -> std::io::Result<u64> {
+    let mut total: u64 = 0;
+    for entry in std::fs::read_dir(path)? {
+        let entry = entry?;
+        let ft = entry.file_type()?;
+        if ft.is_file() {
+            total = total.saturating_add(entry.metadata()?.len());
+        } else if ft.is_dir() {
+            total = total.saturating_add(dir_size_bytes(&entry.path()).unwrap_or(0));
+        }
+    }
+    Ok(total)
 }
 
 fn print_event_human(e: &Event) {

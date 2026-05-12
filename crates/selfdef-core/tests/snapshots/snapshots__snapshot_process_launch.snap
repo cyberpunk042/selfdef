@@ -1,0 +1,48 @@
+---
+source: crates/selfdef-core/tests/snapshots.rs
+assertion_line: 82
+expression: e
+---
+{
+  "schema": 1,
+  "id": "00000000-0000-0000-0000-000000000000",
+  "time_dt": "2026-01-15T12:00:00Z",
+  "category_uid": 1,
+  "class_uid": 1007,
+  "activity_id": 1,
+  "type_uid": 100701,
+  "severity_id": 3,
+  "host_tag": "test-host",
+  "source": "test-source",
+  "message": "Process launched: /usr/bin/sudo",
+  "actor": {
+    "user": {
+      "uid": 1000,
+      "name": "alice"
+    },
+    "process": {
+      "pid": 1000,
+      "name": "bash"
+    }
+  },
+  "process": {
+    "pid": 1042,
+    "parent_pid": 1000,
+    "name": "sudo",
+    "path": "/usr/bin/sudo",
+    "cmdline": "sudo apt update"
+  },
+  "metadata": {
+    "product": {
+      "name": "selfdef-daemon",
+      "vendor_name": "selfdef",
+      "version": "0.1.0-test"
+    },
+    "logged_time_dt": "2026-01-15T12:00:00Z",
+    "sequence": 0,
+    "profiles": [
+      "host",
+      "linux"
+    ]
+  }
+}

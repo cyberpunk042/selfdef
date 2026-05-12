@@ -53,10 +53,12 @@ pub fn parse_line(line: &str) -> Option<AuditRecord> {
         match k.as_str() {
             "type" => kind = Some(v.clone()),
             "msg" if v.starts_with("audit(") => {
-                // audit(1736944496.789:1234567)
+                // audit(1736944496.789:1234567)[:] — auditd writes the
+                // trailing colon as part of the header on most distros, so
+                // we accept both `)` and `):` as the close.
                 let inner = v
                     .strip_prefix("audit(")
-                    .and_then(|s| s.strip_suffix(')'))?;
+                    .and_then(|s| s.strip_suffix("):").or_else(|| s.strip_suffix(')')))?;
                 let (ts, ser) = inner.split_once(':')?;
                 let secs: f64 = ts.parse().ok()?;
                 timestamp_secs = Some(secs.trunc() as u64);

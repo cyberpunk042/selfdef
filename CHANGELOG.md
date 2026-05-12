@@ -6,6 +6,61 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Milestone 11 (Forensics + Velociraptor integration)
+- New responder action `forensics_bundle`: on Critical findings, writes an
+  evidence bundle to `forensics_dir/<event-uuid>/` containing the
+  triggering event JSON, host metadata (`uname`, `/etc/os-release`,
+  `/proc/version`, `/proc/cmdline`, `uptime`, `mounts`, `modules`,
+  `passwd`, `group`), network state (`/proc/net/tcp`, `/proc/net/udp`,
+  `ss -tnap`), kernel ring buffer tail (`dmesg`, bounded to 2,000
+  lines), recent journal (`journalctl -n 2000`), and a per-pid
+  snapshot of `/proc/<pid>/{cmdline,environ,status,maps,stat,io}` plus
+  `exe_link`, `cwd_link`, and `fd/` listing when the event carries an
+  actor pid. A `manifest.txt` records what was captured and what was
+  skipped (with the underlying error). Best-effort throughout — missing
+  files or unreadable subprocesses don't abort the bundle.
+- New responder action `velociraptor_escalate`: invokes a configured
+  Velociraptor binary with operator-defined argv. The placeholders
+  `{event_id}` and `{host_tag}` are substituted before invocation, so
+  the same selfdef config can drive client-side artifact collection,
+  server-side hunt creation, or any other Velociraptor workflow. Empty
+  args = action runs cleanly with no side effects (useful when the
+  action is allowlisted but a particular host has no Velociraptor
+  deployment).
+- New `[responder]` config fields: `forensics_dir`,
+  `velociraptor_binary`, `velociraptor_args`. Defaults are conservative
+  — `forensics_dir` lives under `/var/lib/selfdef/forensics`, the
+  Velociraptor binary path is set but `velociraptor_args` is empty so
+  the action is opt-in even after being added to `allowed_actions`.
+- `selfdefctl forensics list` — lists bundle directories in
+  `forensics_dir` with per-bundle size.
+- `selfdefctl forensics collect <event-id>` — manually triggers a
+  forensics bundle for any event already in the hot store. Useful for
+  retroactively building evidence on an event that was caught before
+  `forensics_bundle` was added to the allowlist.
+- Example `config/selfdef.toml.example` extended with both new fields
+  and two ready-to-use Velociraptor argv templates (client collect,
+  server hunt).
+- Integration test `crates/selfdef-daemon/tests/m11_forensics.rs`:
+  - **bus → responder → disk**: a synthetic Critical finding published
+    onto the bus produces a `forensics_dir/<uuid>/` directory with
+    `event.json` (round-trips back to the same event id) and a
+    `manifest.txt` that records the `proc/* SKIP` line for the pidless
+    event.
+  - **dry-run safety**: dry-run on `forensics_bundle` doesn't create
+    the target directory.
+  - **velociraptor placeholders**: dry-run rendering of
+    `velociraptor_escalate` substitutes `{event_id}` and `{host_tag}`
+    in every arg.
+- Toolchain pin moved from 1.83 to 1.88 to match the edition 2024
+  requirement and current dependency MSRVs (notably `time` and the
+  `icu_*` chain). The workspace `unsafe_code` lint moved from `forbid`
+  to `deny` with a documented carve-out so `selfdef-ebpf-common` can
+  still implement `bytemuck::Pod` for ring-buffer record types. The
+  ssh-wrap binary added `#![cfg_attr(test, allow(unsafe_code))]` to
+  accommodate the Rust 2024 unsafe-`set_var` for its test-only env
+  setup.
+
 ### Added — Milestone 10 (Custom eBPF programs via aya)
 - New crate `selfdef-ebpf-common`: shared `#[repr(C)]` POD types between
   kernel-space BPF programs and the userspace loader. Ships

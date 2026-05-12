@@ -343,6 +343,13 @@ pub struct ResponderConfig {
     pub lockdown_script: PathBuf,
     /// Script invoked by `revoke_session` action.
     pub revoke_session_script: PathBuf,
+    /// Directory under which `forensics_bundle` writes per-event bundles.
+    pub forensics_dir: PathBuf,
+    /// Velociraptor CLI binary invoked by `velociraptor_escalate`.
+    pub velociraptor_binary: PathBuf,
+    /// Argv passed to the Velociraptor CLI. The placeholders `{event_id}`
+    /// and `{host_tag}` are substituted before invocation.
+    pub velociraptor_args: Vec<String>,
 }
 
 impl Default for ResponderConfig {
@@ -353,6 +360,9 @@ impl Default for ResponderConfig {
             snapshot_dir: PathBuf::from("/var/lib/selfdef/snapshots"),
             lockdown_script: PathBuf::from("/usr/local/sbin/selfdef-lockdown.sh"),
             revoke_session_script: PathBuf::from("/usr/local/sbin/selfdef-revoke-session.sh"),
+            forensics_dir: PathBuf::from("/var/lib/selfdef/forensics"),
+            velociraptor_binary: PathBuf::from("/usr/local/bin/velociraptor"),
+            velociraptor_args: Vec::new(),
         }
     }
 }

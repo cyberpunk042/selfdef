@@ -64,7 +64,7 @@ impl CanaryCollector {
         }
 
         let inotify = Inotify::init()?;
-        let watches = inotify.watches();
+        let mut watches = inotify.watches();
         let mut wd_to_path: HashMap<WatchDescriptor, PathBuf> = HashMap::new();
         let mask = WatchMask::ACCESS
             | WatchMask::OPEN
@@ -118,7 +118,7 @@ impl CanaryCollector {
         self.sequence.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn emit_finding(&self, path: &std::path::Path, ev: &inotify::Event<&std::ffi::OsStr>) {
+    fn emit_finding(&self, path: &std::path::Path, ev: &inotify::Event<std::ffi::OsString>) {
         let mask = ev.mask;
         let kind = if mask.contains(inotify::EventMask::ACCESS) {
             "read"

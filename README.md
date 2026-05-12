@@ -95,7 +95,7 @@ cargo audit
 - [x] **M8** — Honeytokens + responder actions.
 - [x] **M9** — Client-side SSH wrapper.
 - [x] **M10** — Custom eBPF programs (aya).
-- [ ] **M11** — Forensics + Velociraptor integration.
+- [x] **M11** — Forensics + Velociraptor integration.
 - [ ] **M12** — Mobile dashboard / control plane.
 
 ## Threat model

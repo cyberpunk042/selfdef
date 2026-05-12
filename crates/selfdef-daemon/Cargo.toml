@@ -45,6 +45,7 @@ sd-notify = { workspace = true }
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 async-trait = { workspace = true }
+serde_json = { workspace = true }
 selfdef-collector-canary = { workspace = true }
 selfdef-collector-eventstream = { workspace = true }
 selfdef-collector-ebpf = { workspace = true }

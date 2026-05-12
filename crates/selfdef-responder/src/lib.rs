@@ -13,6 +13,13 @@
 //!   actual nftables logic.
 //! - [`actions::RevokeSessionAction`] — invokes a configured script
 //!   (typically wrapping `loginctl terminate-user`).
+//! - [`actions::ForensicsBundleAction`] — writes a forensic bundle
+//!   (event JSON, system metadata, dmesg, journalctl, /proc state) to a
+//!   per-event directory under `forensics_dir`.
+//! - [`actions::VelociraptorEscalateAction`] — invokes a configured
+//!   Velociraptor CLI with templated args (`{event_id}`, `{host_tag}`),
+//!   so an operator can plug in client-side artifact collection or
+//!   server-side hunt creation without rebuilding selfdef.
 
 #![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]

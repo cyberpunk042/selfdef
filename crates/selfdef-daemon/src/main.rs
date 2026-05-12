@@ -110,6 +110,13 @@ async fn main() -> Result<()> {
             Arc::new(selfdef_responder::actions::RevokeSessionAction::new(
                 cfg.responder.revoke_session_script.clone(),
             )),
+            Arc::new(selfdef_responder::actions::ForensicsBundleAction::new(
+                cfg.responder.forensics_dir.clone(),
+            )),
+            Arc::new(selfdef_responder::actions::VelociraptorEscalateAction::new(
+                cfg.responder.velociraptor_binary.clone(),
+                cfg.responder.velociraptor_args.clone(),
+            )),
         ];
         let resp = Arc::new(Responder::new(
             actions,
