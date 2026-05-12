@@ -1,0 +1,19 @@
+# selfdef vpn-bridge forward rules — managed by `selfdefctl modules apply`.
+# Allows bidirectional routing between the WireGuard overlay and a
+# named LAN-side interface. Lives in its own table so we never touch
+# the operator's existing filter table.
+#
+# Substituted at render time:
+#   @@WG_IFACE@@    — WireGuard interface name (e.g. wg0)
+#   @@LAN_IFACE@@   — LAN-side iface to bridge with (e.g. br0, eno1)
+
+table inet selfdef_vpn_bridge {
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+
+        # Overlay → LAN
+        iifname "@@WG_IFACE@@" oifname "@@LAN_IFACE@@" accept comment "selfdef-vpn-bridge-out"
+        # LAN → Overlay (return path; conntrack would also do this)
+        iifname "@@LAN_IFACE@@" oifname "@@WG_IFACE@@" ct state established,related accept comment "selfdef-vpn-bridge-in"
+    }
+}
