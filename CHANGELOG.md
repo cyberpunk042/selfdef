@@ -6,6 +6,41 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M15 (NATS bridge for multi-host correlation)
+- New crate `selfdef-nats` — pumps events between selfdef daemons over
+  NATS Core. The local in-proc broadcast stays the source of truth for
+  every in-process subscriber (collectors, correlator, responder,
+  store sink, API SSE stream); the bridge is a sidecar task with two
+  loops:
+  - **outbound**: subscribes to the local bus and publishes locally-
+    originated events to `<subject_prefix>.<host_tag>`.
+  - **inbound**: subscribes to `<subject_prefix>.>` and republishes
+    received events onto the local bus, dropping any whose
+    `host_tag` matches ours (self-echo loop guard).
+- Loop avoidance is two-layered on purpose: outbound filters by
+  `event.host_tag == local`, inbound drops the mirror. The host_tag
+  check is O(1) and doesn't need the deduper dance UUIDv7 enables.
+- `[bus.nats]` config block: `enabled`, `url`, `subject_prefix`.
+  Default prefix `selfdef.events`. Disabled by default. Multiple NATS
+  servers are comma-separated per the async-nats URL grammar; TLS via
+  the `tls://` scheme.
+- Daemon wires the bridge as another supervised task next to the API
+  and the store sink. SIGTERM/SIGINT cancel propagates through; the
+  bridge tears down both child tasks before exiting.
+- async-nats 0.48 (latest as of this PR). Picked deliberately over the
+  0.37 baseline because that pull also yanked the unmaintained
+  `rustls-pemfile` + old `rustls-webpki` transitive deps that fell out
+  of `cargo deny check advisories`.
+- Unit tests for the bridge cover the subject layout
+  (`outbound_subject` / `inbound_subject`), subject sanitization
+  (host_tags with `.`, `*`, `>`, whitespace), the local-origin check,
+  and JSON round-trip on the wire format.
+- Docs: new `docs/nats.md` describes the topology, subject layout,
+  loop avoidance, and a one-liner smoke test against `nats-server`.
+- Documented non-goals: this is NATS Core only (no JetStream
+  durability yet); no built-in auth (operators bring NATS mTLS / NKey
+  / JWT as needed).
+
 ### Added — M14 (per-token capabilities for the API)
 - `[api].control_token_file` — a second, optional bearer token. Read
   endpoints accept either the existing `token_file` or

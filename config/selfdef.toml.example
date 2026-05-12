@@ -20,9 +20,19 @@ backend = "inproc"
 # Per-topic channel capacity for the in-proc broadcast.
 inproc_capacity = 4096
 
-# [bus.nats]
-# url = "nats://127.0.0.1:4222"
-# stream = "selfdef-events"
+[bus.nats]
+# Optional NATS bridge — when enabled and `url` is set, selfdef spawns
+# a task that pumps events to/from NATS Core so detection can span
+# multiple hosts. The in-proc bus stays the source of truth for local
+# subscribers; NATS is glue between daemons.
+#
+# Each daemon publishes its locally-originated events to
+# `<subject_prefix>.<host_tag>` and subscribes to `<subject_prefix>.>`
+# (every host under the prefix, minus its own host_tag — those are
+# dropped to avoid the echo loop).
+enabled = false
+url = ""                                   # e.g. "nats://nats.lan:4222"
+subject_prefix = "selfdef.events"
 
 [store]
 # Hot store path. Daemon must have rw on this directory.

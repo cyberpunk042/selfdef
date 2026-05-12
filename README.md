@@ -99,6 +99,7 @@ cargo audit
 - [x] **M12** — Mobile dashboard / read-only HTTP API.
 - [x] **M13** — Control-plane verbs + TLS/mTLS for the API.
 - [x] **M14** — Per-token capabilities (read vs control) for the API.
+- [x] **M15** — NATS bridge for multi-host correlation.
 
 ## Threat model
 

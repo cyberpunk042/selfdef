@@ -32,6 +32,7 @@ selfdef-collector-canary = { workspace = true }
 selfdef-collector-eventstream = { workspace = true }
 selfdef-collector-ebpf = { workspace = true }
 selfdef-api = { workspace = true }
+selfdef-nats = { workspace = true }
 
 tokio = { workspace = true }
 tokio-util = { workspace = true }
