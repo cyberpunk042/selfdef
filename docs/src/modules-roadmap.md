@@ -20,7 +20,7 @@ Statuses:
 | `detect-host` | detection     | shipping   | this repo              | Wraps the existing daemon, collectors, correlator, responder, notifier, store, api. Example manifest, no install scripts (the `.deb` is the install). |
 | `suricata`    | network       | absorbing  | root-ghostproxy + existing `selfdef-collector-suricata` | Promote the collector to a full module that also installs Suricata. Two profiles: `host-ids` (NFQUEUE) and `opnsense-bridge` (AF_PACKET copy-mode). |
 | `polarproxy`  | network       | absorbing  | root-ghostproxy        | TLS termination → PCAP-over-IP on tcp/4430. Optional CA HTTP exposure. Depends-on: `bridge-l2` (in opnsense profile) or nothing (host profile). |
-| `bridge-l2`   | network       | absorbing  | root-ghostproxy        | Transparent L2 bridge (`br0`) + nftables FORWARD policy + management-wifi INPUT-drop. Foundation for the inline modules. |
+| `bridge-l2`   | network       | shipping   | root-ghostproxy        | Transparent L2 bridge (`br0`) + nftables FORWARD policy + management-wifi INPUT-drop. Foundation for the inline modules. Two profiles: `passthrough`, `opnsense-edge`. Install/check/uninstall scripts pass dry-run smoke tests. |
 | `vpn-bridge`  | network       | designing  | new                    | OPNsense-to-OPNsense (or host-to-host) WireGuard mesh that survives double-NAT. Either STUN-assisted hole-punching or a relay fallback; both ends behind their own NAT is the headline scenario. |
 | `integrity-sentinel` | hardening | planned | root-ghostproxy + new | SHA256 baseline verification for policy artifacts (rules, configs, module manifests themselves). Fail-closed on drift. |
 

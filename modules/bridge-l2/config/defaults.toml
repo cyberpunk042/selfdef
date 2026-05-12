@@ -1,0 +1,8 @@
+# bridge-l2 defaults — overlaid by profile, then host config, then env vars.
+# See docs/src/modules.md § Config layering.
+
+bridge_name      = "br0"
+members          = []
+management_iface = ""        # empty = no management-INPUT drop applied
+forward_policy   = "accept"  # accept | drop
+persist          = "boot-script"  # systemd-networkd | boot-script | none

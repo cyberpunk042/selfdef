@@ -1,0 +1,12 @@
+# Profile: opnsense-edge — bridge sits between an OPNsense edge firewall
+# and the first LAN switch. Assumes OPNsense is the actual policy
+# enforcement point; the bridge is an inspection vantage.
+
+bridge_name    = "br0"
+forward_policy = "accept"
+persist        = "systemd-networkd"
+
+# `members` is intentionally left empty — the operator names the two
+# physical NICs (WAN-facing + LAN-facing) in /etc/selfdef/host.toml.
+members          = []
+management_iface = ""

@@ -1,0 +1,34 @@
+name        = "bridge-l2"
+version     = "0.1.0"
+summary     = "Transparent L2 bridge + nftables policy (foundation for inline modules)"
+category    = "network"
+
+depends_on  = []
+conflicts   = []
+
+# What this module offers to other modules.
+#   l2-bridge  — a Linux bridge interface every inline module can hook
+#                (Suricata AF_PACKET, NFQUEUE attachment, etc.)
+#   forward-policy — nftables FORWARD chain owned by this module; other
+#                    modules add jumps into their own chains rather than
+#                    rewriting the policy.
+provides    = ["l2-bridge", "forward-policy"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "ip" },
+    { kind = "binary", value = "nft" },
+    { kind = "binary", value = "systemctl" },
+    { kind = "kernel-feature", value = "CONFIG_BRIDGE" },
+    { kind = "kernel-feature", value = "CONFIG_NF_TABLES" },
+]
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "passthrough"
+available = ["passthrough", "opnsense-edge"]
