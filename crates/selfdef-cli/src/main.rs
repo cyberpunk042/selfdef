@@ -83,6 +83,42 @@ enum ModulesAction {
         #[arg(long)]
         dir: Option<PathBuf>,
     },
+    /// Apply every active module's install/apply.sh in dependency order.
+    Apply {
+        /// Override the host modules config (default: /etc/selfdef/modules.toml).
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        /// Override the catalog directory.
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Skip mutations — set SELFDEF_DRY_RUN=1 for each script.
+        #[arg(long)]
+        dry_run: bool,
+        /// Only apply these modules (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
+        /// Skip these modules (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        except: Vec<String>,
+    },
+    /// Run check.sh for every active module (no mutations).
+    Check {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        except: Vec<String>,
+    },
+    /// Status summary of every active module (alias of `check`).
+    Status {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -336,6 +372,56 @@ async fn main() -> Result<()> {
             ModulesAction::Info { slug, dir } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 modules::cmd_info(&resolved, &slug)?;
+            }
+            ModulesAction::Apply {
+                host_config,
+                dir,
+                dry_run,
+                only,
+                except,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    only,
+                    except,
+                    dry_run,
+                };
+                let code = modules::cmd_apply(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Check {
+                host_config,
+                dir,
+                only,
+                except,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    only,
+                    except,
+                    dry_run: false,
+                };
+                let code = modules::cmd_check(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Status { host_config, dir } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    only: Vec::new(),
+                    except: Vec::new(),
+                    dry_run: false,
+                };
+                let code = modules::cmd_status(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
             }
         },
         Command::Panic { confirm } => {

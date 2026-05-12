@@ -44,8 +44,32 @@ The cleanest absorption order was:
 The four network modules are all in the catalog. Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
-- `vpn-bridge` future: multi-instance support (`[modules.vpn-bridge#tunnel]` host-config syntax) so a single host can run e.g. `relay-via-server` for overlay reachability and `cloudflare-tunnel` for service publishing simultaneously.
+- Multi-instance host-config syntax (`[modules."vpn-bridge#tunnel"]`) so a single host can run e.g. `relay-via-server` for overlay reachability and `cloudflare-tunnel` for service publishing simultaneously. The lifecycle runner already validates and refuses the `#` form with a clear error pointing at this work; the parser change is the next PR.
 - `integrity-sentinel`: still `planned`. SHA256 baseline verification for policy artifacts (rules, configs, module manifests).
-- `selfdefctl modules apply` / `enable` / `disable` / `status`: the write paths the read surface was designed for.
+- `selfdefctl modules uninstall`: destructive op, deferred until after the operator-confirmation UX is wired (probably alongside `panic mode`'s confirm pattern).
 
-Each is one PR. The contract is fixed; modules don't reopen it.
+## Lifecycle surface
+
+`selfdefctl modules` now covers both inspection and execution:
+
+| Subcommand | Mutates? | What it does |
+| --- | --- | --- |
+| `list` | no | Print the catalog (every `module.toml` on disk). |
+| `info <slug>` | no | Full manifest for one module. |
+| `apply` | yes (each script) | Run every active module's `install/apply.sh` in dependency order. Aggregates structured-status. `--dry-run` propagates `SELFDEF_DRY_RUN=1`. `--only` / `--except` filter the active set. Exit 1 if any module ends `failed`. |
+| `check` | no | Run every active module's `install/check.sh` and aggregate. |
+| `status` | no | Alias of `check`. |
+
+Active modules are declared in `/etc/selfdef/modules.toml`:
+
+```toml
+[modules.detect-host]
+[modules.bridge-l2]
+[modules.suricata]
+[modules.vpn-bridge]
+# config = "/etc/selfdef/modules/vpn-bridge.toml"   # default if omitted
+```
+
+Per-module config files default to `/etc/selfdef/modules/<slug>.toml` and are exposed to the install scripts via `SELFDEF_<SLUG>_CONFIG`. Each script ends with one JSON line `{"module":"<slug>","status":"ok|skipped|failed","message":"..."}` which the runner aggregates. Defence-in-depth: a script that emits `ok` but exits non-zero is treated as failed; a script that emits status under the wrong slug is rejected outright.
+
+Each remaining item is one PR. The contract is fixed; modules don't reopen it.
