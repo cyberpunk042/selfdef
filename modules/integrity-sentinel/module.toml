@@ -19,6 +19,11 @@ requires    = [
 # `paths_file` knob covers that by composing them into one list.
 instanced = false
 
+# Run before any `main` module so we gate the rest of the apply on
+# the baseline being intact. See docs/src/modules-roadmap.md
+# § Lifecycle surface.
+phase = "pre"
+
 [install]
 kind = "script"
 apply = "install/apply.sh"

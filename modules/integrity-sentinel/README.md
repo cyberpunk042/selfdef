@@ -147,12 +147,8 @@ Does NOT own:
   than failing).
 - **Directories and special files** are skipped — only regular files
   are hashed.
-- **Ordering vs the rest of `modules apply`**: the runner is alphabetical
-  by slug today, so `integrity-sentinel` runs after `bridge-l2` and
-  `detect-host`. For tighter ordering ("integrity gates everything
-  else"), run it explicitly first:
-  ```
-  sudo selfdefctl modules apply --only integrity-sentinel && \
-    sudo selfdefctl modules apply --except integrity-sentinel
-  ```
-  A future PR may add a manifest `phase` field to formalise this.
+- **Ordering vs the rest of `modules apply`**: this module's manifest
+  declares `phase = "pre"`, so `selfdefctl modules apply` runs it
+  before any `main`-phase module. A drift detection in `strict` mode
+  halts the apply before anything else mutates host state — the
+  intended security posture.
