@@ -418,6 +418,11 @@ fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
     } else {
         Some(std::path::PathBuf::from(&cfg.token_file))
     };
+    let control_token_file = if cfg.control_token_file.trim().is_empty() {
+        None
+    } else {
+        Some(std::path::PathBuf::from(&cfg.control_token_file))
+    };
     let tls = if cfg.tls.cert_path.trim().is_empty() || cfg.tls.key_path.trim().is_empty() {
         None
     } else {
@@ -437,6 +442,7 @@ fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
         unix_socket_mode,
         tcp_addr,
         token_file,
+        control_token_file,
         tls,
     }
 }

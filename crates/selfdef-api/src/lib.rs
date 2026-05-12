@@ -39,7 +39,14 @@ mod state;
 mod transport;
 
 pub use state::{ApiState, ControlHandles};
-pub use transport::{ApiConfig, ApiServer, ServerError, TlsConfig};
+pub use transport::{ApiConfig, ApiServer, Capability, ServerError, TlsConfig, with_capability};
+
+/// Test-only convenience that wraps the router in a layer granting
+/// every request `Capability::Full`. Re-exported here for code clarity;
+/// see [`transport::with_capability`] for the underlying primitive.
+pub fn with_full_capability(router: Router) -> Router {
+    with_capability(router, Capability::Full)
+}
 
 use axum::Router;
 use axum::routing::{get, post};
@@ -48,6 +55,12 @@ use tower_http::trace::TraceLayer;
 
 /// Build the API router. Exposed so integration tests can call routes
 /// directly via `tower::ServiceExt::oneshot` without spinning up a socket.
+///
+/// The returned router has *no* auth middleware applied — when serving
+/// it through `ApiServer`, the UNIX socket transport adds a Full-cap
+/// middleware and the TCP transport adds the bearer-token verifier.
+/// Integration tests that want to exercise control endpoints can apply
+/// [`with_full_capability`] to grant the test request the Full grant.
 pub fn router(state: ApiState) -> Router {
     Router::new()
         // ---- read endpoints ----

@@ -35,9 +35,15 @@ pub struct ApiConfig {
     pub unix_socket: Option<PathBuf>,
     /// TCP bind address (e.g. `127.0.0.1:8443` or `0.0.0.0:8443`). None to disable.
     pub tcp_addr: Option<SocketAddr>,
-    /// Path to a file containing the bearer token (single line, whitespace-trimmed).
-    /// Required when `tcp_addr` is set.
+    /// Path to a file containing the read-only bearer token.
+    /// Required when `tcp_addr` is set. Grants GET access only — control
+    /// verbs (rule reload, panic, action runs) reject this token.
     pub token_file: Option<PathBuf>,
+    /// Optional path to a file containing the control bearer token.
+    /// Grants the read-only API *and* the control endpoints. When
+    /// unset, the TCP transport refuses every control verb so the
+    /// daemon's "writes" surface only opens up by explicit configuration.
+    pub control_token_file: Option<PathBuf>,
     /// File mode for the UNIX socket after bind (octal). `0o660` by default.
     pub unix_socket_mode: u32,
     /// Optional TLS configuration for the TCP transport. When set, the
@@ -70,10 +76,25 @@ impl Default for ApiConfig {
             unix_socket: None,
             tcp_addr: None,
             token_file: None,
+            control_token_file: None,
             unix_socket_mode: 0o660,
             tls: None,
         }
     }
+}
+
+/// Capabilities a request has earned via authentication. Carried as a
+/// request extension; handlers can inspect it for fine-grained checks
+/// beyond the routing-level gate the auth layers already provide.
+///
+/// - `Full` — UNIX socket clients (trusted via fs permissions), TCP
+///   clients with the control token, mTLS clients with a verified cert.
+/// - `Read` — TCP clients with the read-only token. Control endpoints
+///   reject these requests at the layer below.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Capability {
+    Read,
+    Full,
 }
 
 #[derive(Debug, Error)]
@@ -120,17 +141,27 @@ impl ApiServer {
         }
 
         // Per-transport router. The UNIX socket transport gets the plain
-        // router (no auth middleware). The TCP transport wraps the same
-        // router in a bearer-token layer.
-        let unix_router = self.router.clone();
+        // router with every request marked Full-capability (filesystem
+        // permissions are the auth boundary). The TCP transport wraps
+        // the same router in a bearer-token layer that classifies the
+        // request as Read or Full based on which token was presented.
+        // A second layer wraps the control routes and rejects requests
+        // that lack Full capability.
+        let unix_router = with_capability(self.router.clone(), Capability::Full);
         let tcp_router = if let Some(addr) = tcp {
-            let token = load_token(&self.cfg)?;
-            info!(addr = %addr, "api: tcp transport enabled (bearer-token auth)");
+            let tokens = load_tokens(&self.cfg)?;
+            info!(
+                addr = %addr,
+                control_token = tokens.control.is_some(),
+                "api: tcp transport enabled (bearer-token auth)"
+            );
             Some(
                 self.router
                     .clone()
+                    // Outer layer (runs first) verifies the token and
+                    // tags the request with a Capability extension.
                     .layer(axum::middleware::from_fn_with_state(
-                        Arc::new(token),
+                        Arc::new(tokens),
                         bearer_auth,
                     )),
             )
@@ -171,49 +202,89 @@ impl ApiServer {
 
 // ---------------------------------------------------------------- helpers
 
-fn load_token(cfg: &ApiConfig) -> Result<String, ServerError> {
-    let path = cfg.token_file.clone().ok_or(ServerError::MissingToken)?;
-    let raw = std::fs::read_to_string(&path)?;
+/// Tokens loaded from disk for the TCP transport. The `read` token is
+/// mandatory; `control` is optional. When `control` is `None`, no
+/// presented token can earn the [`Capability::Full`] grant.
+struct LoadedTokens {
+    read: String,
+    control: Option<String>,
+}
+
+fn load_tokens(cfg: &ApiConfig) -> Result<LoadedTokens, ServerError> {
+    let read = read_token(cfg.token_file.as_deref().ok_or(ServerError::MissingToken)?)?;
+    let control = match cfg.control_token_file.as_deref() {
+        Some(p) => Some(read_token(p)?),
+        None => None,
+    };
+    Ok(LoadedTokens { read, control })
+}
+
+fn read_token(path: &std::path::Path) -> Result<String, ServerError> {
+    let raw = std::fs::read_to_string(path)?;
     let token = raw.trim().to_string();
     if token.is_empty() {
-        return Err(ServerError::EmptyToken { path });
+        return Err(ServerError::EmptyToken {
+            path: path.to_path_buf(),
+        });
     }
     Ok(token)
 }
 
+/// Constant-time-ish compare. The token is high-entropy and the API is
+/// local/LAN-scope, so we don't need a cryptographic CT comparator, but
+/// matching length first avoids the easy length oracle.
+fn token_eq(presented: &str, expected: &str) -> bool {
+    presented.len() == expected.len() && presented.bytes().eq(expected.bytes())
+}
+
 async fn bearer_auth(
-    state: axum::extract::State<Arc<String>>,
-    request: Request<Body>,
+    state: axum::extract::State<Arc<LoadedTokens>>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
-    let expected = state.0.as_str();
     let presented = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "));
 
-    match presented {
-        // Constant-time-ish compare. We don't need cryptographic CT here
-        // since the token is high-entropy and the API is local/LAN-scope,
-        // but matching length first avoids any easy length oracle.
-        Some(p) if p.len() == expected.len() && p.bytes().eq(expected.bytes()) => {
-            next.run(request).await
-        }
-        _ => {
-            let mut resp = Response::new(Body::from(r#"{"error":"unauthorized"}"#));
-            *resp.status_mut() = StatusCode::UNAUTHORIZED;
-            resp.headers_mut().insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("application/json"),
-            );
-            resp.headers_mut().insert(
-                header::WWW_AUTHENTICATE,
-                HeaderValue::from_static(r#"Bearer realm="selfdef-api""#),
-            );
-            resp
-        }
-    }
+    let cap = match (presented, state.control.as_deref()) {
+        (Some(p), Some(c)) if token_eq(p, c) => Some(Capability::Full),
+        (Some(p), _) if token_eq(p, state.read.as_str()) => Some(Capability::Read),
+        _ => None,
+    };
+
+    let Some(cap) = cap else {
+        return unauthorized();
+    };
+    request.extensions_mut().insert(cap);
+    next.run(request).await
+}
+
+/// Wrap a router so every request comes in pre-stamped with the given
+/// capability. The UNIX-socket transport uses this to grant Full; tests
+/// use it to skip the bearer-token auth path and exercise the routes
+/// directly.
+pub fn with_capability(router: Router, cap: Capability) -> Router {
+    let layer = axum::middleware::from_fn(move |mut req: Request<Body>, next: Next| async move {
+        req.extensions_mut().insert(cap);
+        next.run(req).await
+    });
+    router.layer(layer)
+}
+
+fn unauthorized() -> Response {
+    let mut resp = Response::new(Body::from(r#"{"error":"unauthorized"}"#));
+    *resp.status_mut() = StatusCode::UNAUTHORIZED;
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    resp.headers_mut().insert(
+        header::WWW_AUTHENTICATE,
+        HeaderValue::from_static(r#"Bearer realm="selfdef-api""#),
+    );
+    resp
 }
 
 async fn serve_unix(
