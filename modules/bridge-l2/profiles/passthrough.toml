@@ -1,0 +1,6 @@
+# Profile: passthrough — pure transparent bridge, no filtering.
+# Use as the baseline before stacking IDS/IPS modules on top.
+
+bridge_name    = "br0"
+forward_policy = "accept"
+persist        = "boot-script"
