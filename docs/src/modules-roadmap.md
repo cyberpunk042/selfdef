@@ -44,7 +44,6 @@ The cleanest absorption order was:
 The four network modules are all in the catalog. Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
-- Multi-instance host-config syntax (`[modules."vpn-bridge#tunnel"]`) so a single host can run e.g. `relay-via-server` for overlay reachability and `cloudflare-tunnel` for service publishing simultaneously. The lifecycle runner already validates and refuses the `#` form with a clear error pointing at this work; the parser change is the next PR.
 - `integrity-sentinel`: still `planned`. SHA256 baseline verification for policy artifacts (rules, configs, module manifests).
 - `selfdefctl modules uninstall`: destructive op, deferred until after the operator-confirmation UX is wired (probably alongside `panic mode`'s confirm pattern).
 
@@ -63,13 +62,22 @@ The four network modules are all in the catalog. Remaining work:
 Active modules are declared in `/etc/selfdef/modules.toml`:
 
 ```toml
+# Single-instance (the normal case):
 [modules.detect-host]
 [modules.bridge-l2]
 [modules.suricata]
-[modules.vpn-bridge]
-# config = "/etc/selfdef/modules/vpn-bridge.toml"   # default if omitted
+
+# Multi-instance: declare a module twice under different `#instance`
+# suffixes. Only allowed for modules that opt in via
+# `instanced = true` in their manifest (e.g. `vpn-bridge`).
+[modules."vpn-bridge#overlay"]
+config = "/etc/selfdef/modules/vpn-bridge.overlay.toml"
+[modules."vpn-bridge#publish"]
+config = "/etc/selfdef/modules/vpn-bridge.publish.toml"
 ```
 
-Per-module config files default to `/etc/selfdef/modules/<slug>.toml` and are exposed to the install scripts via `SELFDEF_<SLUG>_CONFIG`. Each script ends with one JSON line `{"module":"<slug>","status":"ok|skipped|failed","message":"..."}` which the runner aggregates. Defence-in-depth: a script that emits `ok` but exits non-zero is treated as failed; a script that emits status under the wrong slug is rejected outright.
+Per-module config files default to `/etc/selfdef/modules/<slug>.toml` for single-instance, or `/etc/selfdef/modules/<slug>.<instance>.toml` when an instance is set. Both forms are exposed to the install scripts via `SELFDEF_<SLUG>_CONFIG`. Each script ends with one JSON line `{"module":"<slug>","status":"ok|skipped|failed","message":"..."}` which the runner aggregates. Defence-in-depth: a script that emits `ok` but exits non-zero is treated as failed; a script that emits status under the wrong slug is rejected outright.
+
+Dependency / conflict declarations in manifests are **slug-level** — depending on `bridge-l2` is satisfied by any active instance. Within one slug, instances run alphabetically.
 
 Each remaining item is one PR. The contract is fixed; modules don't reopen it.

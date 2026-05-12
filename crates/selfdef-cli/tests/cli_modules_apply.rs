@@ -27,20 +27,23 @@ fn write_executable(path: &Path, body: &str) {
 }
 
 fn write_module(catalog: &Path, slug: &str, deps: &[&str], apply_body: &str) {
+    write_module_full(catalog, slug, deps, /*instanced*/ false, apply_body);
+}
+
+fn write_module_full(catalog: &Path, slug: &str, deps: &[&str], instanced: bool, apply_body: &str) {
     let depline = if deps.is_empty() {
         String::new()
     } else {
         let q: Vec<String> = deps.iter().map(|d| format!("\"{d}\"")).collect();
         format!("depends_on = [{}]\n", q.join(", "))
     };
+    let inst = if instanced { "instanced = true\n" } else { "" };
     let manifest = format!(
-        "name = \"{slug}\"\nversion = \"0.0.0\"\nsummary = \"stub\"\ncategory = \"test\"\n{depline}\n[install]\nkind = \"script\"\napply = \"install/apply.sh\"\ncheck = \"install/check.sh\"\n"
+        "name = \"{slug}\"\nversion = \"0.0.0\"\nsummary = \"stub\"\ncategory = \"test\"\n{inst}{depline}\n[install]\nkind = \"script\"\napply = \"install/apply.sh\"\ncheck = \"install/check.sh\"\n"
     );
     std::fs::create_dir_all(catalog.join(slug)).unwrap();
     std::fs::write(catalog.join(slug).join("module.toml"), manifest).unwrap();
     write_executable(&catalog.join(slug).join("install/apply.sh"), apply_body);
-    // A trivial check.sh that always reports ok — exercised by
-    // `selfdefctl modules check`.
     let check = format!(
         "#!/usr/bin/env bash\necho '{{\"module\":\"{slug}\",\"status\":\"ok\",\"message\":\"check ok\"}}'\n"
     );
@@ -204,4 +207,105 @@ fn empty_host_config_is_a_noop() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("Applying 0 module(s)"), "stdout: {stdout}");
+}
+
+#[test]
+fn apply_runs_multiple_instances_of_a_multi_instance_module() {
+    // Two instances of the same `multi` module run in alphabetical
+    // order. Each instance gets its own SELFDEF_MULTI_CONFIG path
+    // (defaulting to /etc/selfdef/modules/multi.<instance>.toml,
+    // overridable per host entry).
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+
+    // The stub echoes whichever config path it received, so we can
+    // assert each instance is invoked with the expected env var.
+    let body = "#!/usr/bin/env bash\necho \"{\\\"module\\\":\\\"multi\\\",\\\"status\\\":\\\"ok\\\",\\\"message\\\":\\\"$SELFDEF_MULTI_CONFIG\\\"}\"\n";
+    write_module_full(&catalog, "multi", &[], /*instanced*/ true, body);
+
+    let host_config = root.path().join("modules.toml");
+    let tunnel_cfg = root.path().join("tunnel.toml");
+    let publish_cfg = root.path().join("publish.toml");
+    std::fs::write(&tunnel_cfg, "x = 1\n").unwrap();
+    std::fs::write(&publish_cfg, "x = 2\n").unwrap();
+    std::fs::write(
+        &host_config,
+        format!(
+            "[modules.\"multi#tunnel\"]\nconfig = \"{}\"\n[modules.\"multi#publish\"]\nconfig = \"{}\"\n",
+            tunnel_cfg.display(),
+            publish_cfg.display(),
+        ),
+    )
+    .unwrap();
+
+    let out = Command::new(env!("CARGO_BIN_EXE_selfdefctl"))
+        .args([
+            "--config",
+            "/dev/null",
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ])
+        .output()
+        .expect("spawn selfdefctl");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "stdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Both instances show in alphabetical order — publish before tunnel.
+    let i_pub = stdout.find("multi#publish").expect("publish line");
+    let i_tun = stdout.find("multi#tunnel").expect("tunnel line");
+    assert!(
+        i_pub < i_tun,
+        "expected multi#publish before multi#tunnel:\n{stdout}"
+    );
+    // Each instance got its instance-specific config path on stdout.
+    assert!(
+        stdout.contains(publish_cfg.to_str().unwrap()),
+        "stdout did not mention publish cfg: {stdout}"
+    );
+    assert!(
+        stdout.contains(tunnel_cfg.to_str().unwrap()),
+        "stdout did not mention tunnel cfg: {stdout}"
+    );
+    assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
+}
+
+#[test]
+fn apply_rejects_instance_keys_against_non_instanced_module() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"single\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module_full(&catalog, "single", &[], /*instanced*/ false, body);
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.\"single#a\"]\n").unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_selfdefctl"))
+        .args([
+            "--config",
+            "/dev/null",
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn selfdefctl");
+    assert!(!out.status.success(), "should refuse non-instanced module");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("not declared `instanced = true`"),
+        "stderr: {stderr}"
+    );
 }

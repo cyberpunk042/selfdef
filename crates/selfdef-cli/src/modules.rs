@@ -9,11 +9,16 @@
 //!
 //! Active modules are declared in a host config at
 //! `/etc/selfdef/modules.toml` (or `--host-config <path>`). Per-module
-//! config files default to `/etc/selfdef/modules/<slug>.toml` and are
+//! config files default to `/etc/selfdef/modules/<slug>.toml` (or
+//! `<slug>.<instance>.toml` for multi-instance modules) and are
 //! passed to scripts via the existing `SELFDEF_<SLUG>_CONFIG` env
-//! convention. Multi-instance syntax (`[modules."vpn-bridge#tunnel"]`)
-//! is reserved for a follow-up PR; this file accepts only flat
-//! one-instance-per-module configs.
+//! convention.
+//!
+//! Multi-instance: a module's manifest opts in with
+//! `instanced = true`. A host can then declare it multiple times
+//! under different `[modules."<slug>#<instance>"]` keys. Manifest
+//! `depends_on` / `conflicts` are slug-level — any active instance of
+//! the depended-on slug satisfies the dependency.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -47,6 +52,11 @@ pub(crate) struct ModuleManifest {
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
     pub(crate) profiles: Option<ProfileSpec>,
+    /// If true, multiple host-config entries may activate this module
+    /// under different `slug#instance` keys. Default false: only one
+    /// `[modules.<slug>]` block per host.
+    #[serde(default)]
+    pub(crate) instanced: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -191,6 +201,9 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
         let def = p.default.as_deref().unwrap_or("-");
         println!("profiles: default={def} ({})", p.available.join(", "));
     }
+    if m.instanced {
+        println!("instanced: true (multiple host entries allowed via slug#instance)");
+    }
     Ok(())
 }
 
@@ -199,13 +212,15 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
 // /etc/selfdef/modules.toml — declares which modules are active on
 // this host and (optionally) overrides per-module config paths.
 //
+//   # Single-instance (the normal case):
 //   [modules.detect-host]
-//   [modules.vpn-bridge]
-//   config = "/etc/selfdef/modules/vpn-bridge.toml"   # optional
+//   [modules.bridge-l2]
 //
-// A module slug appears here with at most one block. Multi-instance
-// support (e.g. "vpn-bridge#tunnel") is reserved; the parser refuses
-// keys containing '#' for now, with a clear error.
+//   # Multi-instance (manifest must declare `instanced = true`):
+//   [modules."vpn-bridge#overlay"]
+//   config = "/etc/selfdef/modules/vpn-bridge.overlay.toml"
+//   [modules."vpn-bridge#publish"]
+//   config = "/etc/selfdef/modules/vpn-bridge.publish.toml"
 
 #[derive(Debug, Default, Deserialize)]
 pub(crate) struct HostConfig {
@@ -241,32 +256,79 @@ pub(crate) fn load_host_config(path: &Path) -> Result<HostConfig> {
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let cfg: HostConfig =
         toml::from_str(&body).with_context(|| format!("parsing {}", path.display()))?;
-    for slug in cfg.modules.keys() {
-        if slug.contains('#') {
-            anyhow::bail!(
-                "instance-suffix module keys (`{slug}`) are reserved for a future PR — \
-                 use the flat slug for now"
-            );
-        }
-        if slug.is_empty() || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            anyhow::bail!("invalid module slug in {}: `{slug}`", path.display());
-        }
+    // Validate each key parses into (slug, instance?) cleanly. Whether
+    // a given module accepts instance suffixes at all is the resolver's
+    // concern (it needs the manifest); here we only check syntax.
+    for key in cfg.modules.keys() {
+        parse_host_key(key)
+            .with_context(|| format!("invalid module key in {}: `{key}`", path.display()))?;
     }
     Ok(cfg)
+}
+
+/// Split a host-config key into (slug, optional instance).
+///
+/// Grammar:
+///   key      ::= slug ("#" instance)?
+///   slug     ::= [a-zA-Z0-9][a-zA-Z0-9-]*
+///   instance ::= [a-zA-Z0-9][a-zA-Z0-9-]*
+///
+/// Single-instance: "vpn-bridge"           → ("vpn-bridge", None)
+/// Multi-instance:  "vpn-bridge#tunnel"    → ("vpn-bridge", Some("tunnel"))
+pub(crate) fn parse_host_key(key: &str) -> Result<(String, Option<String>)> {
+    fn valid_part(s: &str) -> bool {
+        !s.is_empty()
+            && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+            && s.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+    }
+    if let Some((slug, instance)) = key.split_once('#') {
+        if !valid_part(slug) {
+            anyhow::bail!("slug part `{slug}` has invalid characters");
+        }
+        if !valid_part(instance) {
+            anyhow::bail!("instance part `{instance}` has invalid characters");
+        }
+        if key.matches('#').count() > 1 {
+            anyhow::bail!("more than one `#` in key");
+        }
+        Ok((slug.to_string(), Some(instance.to_string())))
+    } else {
+        if !valid_part(key) {
+            anyhow::bail!("invalid characters");
+        }
+        Ok((key.to_string(), None))
+    }
 }
 
 /// An active module after resolving against the catalog: ready to run.
 #[derive(Debug)]
 pub(crate) struct ActiveModule {
     pub(crate) slug: String,
+    /// `None` for single-instance modules, `Some("tunnel")` for the
+    /// `[modules."vpn-bridge#tunnel"]` host entry.
+    pub(crate) instance: Option<String>,
     pub(crate) module_root: PathBuf,
     pub(crate) config_path: PathBuf,
     pub(crate) manifest: ModuleManifest,
 }
 
+impl ActiveModule {
+    /// Display name for logs / output. `slug` for single-instance,
+    /// `slug#instance` for multi-instance.
+    pub(crate) fn display_name(&self) -> String {
+        match &self.instance {
+            Some(i) => format!("{}#{i}", self.slug),
+            None => self.slug.clone(),
+        }
+    }
+}
+
 /// Resolve the host's active modules against a catalog. Returns the
-/// list in **dependency-applied order** (depends_on first). Errors on
-/// missing deps, conflicts, or cycles.
+/// list in **dependency-applied order** at the slug level; instances
+/// of the same slug are expanded alphabetically by instance name.
+/// Errors on: missing deps, conflicts, dependency cycles, unknown
+/// slugs, illegal use of multi-instance suffixes against modules not
+/// marked `instanced`, or mixed single/multi blocks for one slug.
 pub(crate) fn resolve_active(
     host: &HostConfig,
     catalog_dir: &Path,
@@ -274,8 +336,23 @@ pub(crate) fn resolve_active(
 ) -> Result<Vec<ActiveModule>> {
     let mut by_slug: HashMap<String, ModuleManifest> = catalog.into_iter().collect();
 
-    // 1. Make sure every active slug exists in the catalog.
-    for slug in host.modules.keys() {
+    // 1. Parse every host key into (slug, instance?). Group by slug.
+    //    `BTreeMap` + alphabetical Vec keeps everything deterministic.
+    let mut grouped: BTreeMap<String, Vec<(Option<String>, HostModuleEntry)>> = BTreeMap::new();
+    for (key, entry) in &host.modules {
+        let (slug, instance) =
+            parse_host_key(key).with_context(|| format!("parsing host key `{key}`"))?;
+        grouped
+            .entry(slug)
+            .or_default()
+            .push((instance, entry.clone()));
+    }
+    for v in grouped.values_mut() {
+        v.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    // 2. Each active slug must exist in the catalog.
+    for slug in grouped.keys() {
         if !by_slug.contains_key(slug) {
             anyhow::bail!(
                 "active module `{slug}` not found in catalog {}",
@@ -284,53 +361,87 @@ pub(crate) fn resolve_active(
         }
     }
 
-    // 2. Refuse `conflicts` collisions among the active set.
-    let active_set: BTreeSet<&str> = host.modules.keys().map(String::as_str).collect();
-    for slug in &active_set {
-        let m = &by_slug[*slug];
+    // 3. Enforce instancing rules. A slug is either single-instance
+    //    (exactly one entry with `instance == None`) or multi-instance
+    //    (every entry has an instance, and the manifest opted in via
+    //    `instanced = true`). Mixing is an error in either direction.
+    for (slug, entries) in &grouped {
+        let manifest = &by_slug[slug];
+        let any_instanced = entries.iter().any(|(i, _)| i.is_some());
+        let any_flat = entries.iter().any(|(i, _)| i.is_none());
+
+        if any_instanced && any_flat {
+            anyhow::bail!(
+                "module `{slug}` is configured with both flat and `#instance` keys — pick one"
+            );
+        }
+        if any_instanced && !manifest.instanced {
+            anyhow::bail!(
+                "module `{slug}` is not declared `instanced = true` in its manifest — \
+                 `#instance` keys are not allowed"
+            );
+        }
+        if any_flat && entries.len() > 1 {
+            // Should be impossible (BTreeMap dedupes identical keys),
+            // but guard against any future structural change.
+            anyhow::bail!("module `{slug}` has duplicate single-instance entries");
+        }
+        if any_instanced {
+            // Refuse duplicate instance names.
+            let mut seen = std::collections::HashSet::new();
+            for (i, _) in entries {
+                let name = i.as_deref().unwrap();
+                if !seen.insert(name) {
+                    anyhow::bail!("module `{slug}` has duplicate instance `{name}`");
+                }
+            }
+        }
+    }
+
+    // 4. Conflicts: any active instance of A whose manifest lists B as
+    //    a conflict refuses any active instance of B.
+    for slug in grouped.keys() {
+        let m = &by_slug[slug];
         for c in &m.conflicts {
-            if active_set.contains(c.as_str()) {
+            if grouped.contains_key(c) {
                 anyhow::bail!("module `{slug}` conflicts with active module `{c}`");
             }
         }
     }
 
-    // 3. Refuse missing depends_on. Deps must themselves be active.
-    for slug in &active_set {
-        let m = &by_slug[*slug];
+    // 5. Missing deps: each declared dep slug must have ≥1 active
+    //    instance. Manifest deps are slug-level, not instance-level.
+    for slug in grouped.keys() {
+        let m = &by_slug[slug];
         for d in &m.depends_on {
-            if !active_set.contains(d.as_str()) {
+            if !grouped.contains_key(d) {
                 anyhow::bail!("module `{slug}` depends on `{d}` which is not active");
             }
         }
     }
 
-    // 4. Kahn-style topological sort across active modules by depends_on.
-    let mut indeg: HashMap<&str, usize> = active_set.iter().map(|s| (*s, 0)).collect();
-    for slug in &active_set {
+    // 6. Topo sort at the slug level (deps are slug-level).
+    let active_slugs: BTreeSet<&str> = grouped.keys().map(String::as_str).collect();
+    let mut indeg: HashMap<&str, usize> = active_slugs.iter().map(|s| (*s, 0)).collect();
+    for slug in &active_slugs {
         let m = &by_slug[*slug];
         for d in &m.depends_on {
-            // edge: d -> slug (apply d before slug)
-            if active_set.contains(d.as_str()) {
+            if active_slugs.contains(d.as_str()) {
                 *indeg.get_mut(*slug).unwrap() += 1;
             }
         }
     }
-    // Sort descending so that `Vec::pop` (which pops from the back)
-    // yields modules in alphabetical order — deterministic apply
-    // sequence for the operator.
     let mut ready: Vec<&str> = indeg
         .iter()
         .filter(|(_, n)| **n == 0)
         .map(|(s, _)| *s)
         .collect();
-    ready.sort_unstable_by(|a, b| b.cmp(a));
-    let mut order: Vec<String> = Vec::with_capacity(active_set.len());
+    ready.sort_unstable_by(|a, b| b.cmp(a)); // pop yields alphabetical
+    let mut slug_order: Vec<String> = Vec::with_capacity(active_slugs.len());
     while let Some(next) = ready.pop() {
-        order.push(next.to_string());
-        // Decrement indegree of every module that has `next` in depends_on.
+        slug_order.push(next.to_string());
         let mut newly_ready: Vec<&str> = Vec::new();
-        for slug in &active_set {
+        for slug in &active_slugs {
             let m = &by_slug[*slug];
             if m.depends_on.iter().any(|d| d == next) {
                 let e = indeg.get_mut(*slug).unwrap();
@@ -340,17 +451,15 @@ pub(crate) fn resolve_active(
                 }
             }
         }
-        // Insert keeping `ready` sorted descending so the smallest
-        // alphabetically still pops first on the next iteration.
         for s in newly_ready {
             ready.push(s);
         }
         ready.sort_unstable_by(|a, b| b.cmp(a));
     }
-    if order.len() != active_set.len() {
-        let leftover: Vec<String> = active_set
+    if slug_order.len() != active_slugs.len() {
+        let leftover: Vec<String> = active_slugs
             .iter()
-            .filter(|s| !order.contains(&s.to_string()))
+            .filter(|s| !slug_order.contains(&(*s).to_string()))
             .map(|s| (*s).to_string())
             .collect();
         anyhow::bail!(
@@ -359,23 +468,74 @@ pub(crate) fn resolve_active(
         );
     }
 
-    // 5. Materialise.
-    let mut out = Vec::with_capacity(order.len());
-    for slug in order {
-        let entry = host.modules.get(&slug).cloned().unwrap_or_default();
-        let manifest = by_slug.remove(&slug).expect("present in catalog");
+    // 7. Materialise: walk slug_order, expand each slug's instance
+    //    list alphabetically. The manifest is identical across
+    //    instances of the same slug, so we clone it per ActiveModule.
+    let mut out = Vec::new();
+    for slug in slug_order {
+        let entries = grouped.remove(&slug).expect("present in grouped");
+        let manifest_template = by_slug.remove(&slug).expect("present in catalog");
         let module_root = catalog_dir.join(&slug);
-        let config_path = entry
-            .config
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_PER_MODULE_DIR).join(format!("{slug}.toml")));
-        out.push(ActiveModule {
-            slug,
-            module_root,
-            config_path,
-            manifest,
-        });
+        for (instance, entry) in entries {
+            let config_path = entry
+                .config
+                .clone()
+                .unwrap_or_else(|| default_config_path(&slug, instance.as_deref()));
+            out.push(ActiveModule {
+                slug: slug.clone(),
+                instance,
+                module_root: module_root.clone(),
+                config_path,
+                manifest: clone_manifest(&manifest_template),
+            });
+        }
     }
     Ok(out)
+}
+
+fn default_config_path(slug: &str, instance: Option<&str>) -> PathBuf {
+    let fname = match instance {
+        Some(i) => format!("{slug}.{i}.toml"),
+        None => format!("{slug}.toml"),
+    };
+    PathBuf::from(DEFAULT_PER_MODULE_DIR).join(fname)
+}
+
+/// `ModuleManifest` isn't `Clone` because the upstream `Deserialize`
+/// derivation didn't need it. For the multi-instance fanout we need
+/// one owned manifest per `ActiveModule`; do a field-by-field copy
+/// rather than touching the public derive.
+fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
+    ModuleManifest {
+        name: m.name.clone(),
+        version: m.version.clone(),
+        summary: m.summary.clone(),
+        category: m.category.clone(),
+        depends_on: m.depends_on.clone(),
+        conflicts: m.conflicts.clone(),
+        provides: m.provides.clone(),
+        consumes: m.consumes.clone(),
+        requires: m
+            .requires
+            .iter()
+            .map(|r| Requirement {
+                kind: r.kind.clone(),
+                value: r.value.clone(),
+            })
+            .collect(),
+        install: m.install.as_ref().map(|i| InstallSpec {
+            kind: i.kind.clone(),
+            package: i.package.clone(),
+            apply: i.apply.clone(),
+            check: i.check.clone(),
+            uninstall: i.uninstall.clone(),
+        }),
+        profiles: m.profiles.as_ref().map(|p| ProfileSpec {
+            default: p.default.clone(),
+            available: p.available.clone(),
+        }),
+        instanced: m.instanced,
+    }
 }
 
 // ---------------------------------------------------------------- runner
@@ -412,9 +572,19 @@ impl OutcomeStatus {
 #[derive(Debug, Clone)]
 pub(crate) struct Outcome {
     pub(crate) slug: String,
+    pub(crate) instance: Option<String>,
     pub(crate) status: OutcomeStatus,
     pub(crate) message: String,
     pub(crate) raw_stderr: String,
+}
+
+impl Outcome {
+    pub(crate) fn display_name(&self) -> String {
+        match &self.instance {
+            Some(i) => format!("{}#{i}", self.slug),
+            None => self.slug.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,6 +710,7 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
 
     Ok(Outcome {
         slug: active.slug.clone(),
+        instance: active.instance.clone(),
         status,
         message,
         raw_stderr: stderr,
@@ -571,15 +742,21 @@ fn filter_active(
     only: &[String],
     except: &[String],
 ) -> Vec<ActiveModule> {
+    // `--only vpn-bridge` matches every active instance of vpn-bridge;
+    // `--only vpn-bridge#tunnel` matches only that one. Same for
+    // `--except`. So we check both forms.
+    let matches = |a: &ActiveModule, set: &HashSet<&str>| -> bool {
+        set.contains(a.slug.as_str()) || set.contains(a.display_name().as_str())
+    };
     let only: HashSet<&str> = only.iter().map(String::as_str).collect();
     let except: HashSet<&str> = except.iter().map(String::as_str).collect();
     active
         .into_iter()
         .filter(|a| {
-            if !only.is_empty() && !only.contains(a.slug.as_str()) {
+            if !only.is_empty() && !matches(a, &only) {
                 return false;
             }
-            if except.contains(a.slug.as_str()) {
+            if matches(a, &except) {
                 return false;
             }
             true
@@ -635,7 +812,7 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action) -> Result<i32> {
 
     let mut outcomes = Vec::with_capacity(active.len());
     for a in &active {
-        let label = format!("{} [{}]", a.slug, action.name());
+        let label = format!("{} [{}]", a.display_name(), action.name());
         print!("  {label} ... ");
         let outcome = run_one(a, action, opts.dry_run)?;
         println!("{}: {}", outcome.status.as_str(), outcome.message);
@@ -662,7 +839,7 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action) -> Result<i32> {
     if !failed.is_empty() {
         for f in &failed {
             eprintln!();
-            eprintln!("--- {} stderr ---", f.slug);
+            eprintln!("--- {} stderr ---", f.display_name());
             eprint!("{}", f.raw_stderr);
         }
         return Ok(1);
@@ -702,12 +879,15 @@ mod tests {
     }
 
     #[test]
-    fn host_config_rejects_instance_suffix() {
+    fn host_config_accepts_instance_suffix_syntax() {
+        // Parse-time: `slug#instance` keys are syntactically valid.
+        // Whether the slug's manifest allows them is checked at
+        // resolve-time, not here.
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("modules.toml");
         std::fs::write(&p, "[modules.\"vpn-bridge#tunnel\"]\n").unwrap();
-        let err = load_host_config(&p).unwrap_err().to_string();
-        assert!(err.contains("instance-suffix"), "got: {err}");
+        let cfg = load_host_config(&p).unwrap();
+        assert!(cfg.modules.contains_key("vpn-bridge#tunnel"));
     }
 
     #[test]
@@ -716,12 +896,50 @@ mod tests {
         let p = dir.path().join("modules.toml");
         std::fs::write(&p, "[modules.\"weird name\"]\n").unwrap();
         let err = load_host_config(&p).unwrap_err().to_string();
-        assert!(err.contains("invalid module slug"), "got: {err}");
+        // Wrapped through parse_host_key's "invalid characters" error.
+        assert!(
+            err.contains("invalid module key") || err.contains("invalid characters"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_host_key_round_trips() {
+        let (s, i) = parse_host_key("vpn-bridge").unwrap();
+        assert_eq!(s, "vpn-bridge");
+        assert_eq!(i, None);
+        let (s, i) = parse_host_key("vpn-bridge#tunnel").unwrap();
+        assert_eq!(s, "vpn-bridge");
+        assert_eq!(i.as_deref(), Some("tunnel"));
+    }
+
+    #[test]
+    fn parse_host_key_rejects_double_hash() {
+        let err = parse_host_key("a#b#c").unwrap_err().to_string();
+        assert!(
+            err.contains("invalid characters") || err.contains("more than one"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_host_key_rejects_empty_instance() {
+        let err = parse_host_key("vpn-bridge#").unwrap_err().to_string();
+        assert!(err.contains("instance part"), "got: {err}");
     }
 
     // -- helpers for resolver / runner tests -------------------------
 
     fn make_manifest(name: &str, deps: &[&str], conflicts: &[&str]) -> ModuleManifest {
+        make_manifest_full(name, deps, conflicts, /*instanced*/ false)
+    }
+
+    fn make_manifest_full(
+        name: &str,
+        deps: &[&str],
+        conflicts: &[&str],
+        instanced: bool,
+    ) -> ModuleManifest {
         ModuleManifest {
             name: name.to_string(),
             version: "0.0.0".into(),
@@ -734,6 +952,7 @@ mod tests {
             requires: Vec::new(),
             install: None,
             profiles: None,
+            instanced,
         }
     }
 
@@ -822,6 +1041,111 @@ mod tests {
         assert!(err.contains("active module `ghost`"), "got: {err}");
     }
 
+    // -- multi-instance --------------------------------------------
+
+    fn host_from_toml(body: &str) -> HostConfig {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("h.toml");
+        std::fs::write(&p, body).unwrap();
+        load_host_config(&p).unwrap()
+    }
+
+    #[test]
+    fn resolver_supports_multi_instance_for_instanced_modules() {
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            make_manifest_full("vpn-bridge", &[], &[], /*instanced*/ true),
+        )];
+        let host =
+            host_from_toml("[modules.\"vpn-bridge#tunnel\"]\n[modules.\"vpn-bridge#publish\"]\n");
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        let names: Vec<_> = active.iter().map(ActiveModule::display_name).collect();
+        // Alphabetical within the slug.
+        assert_eq!(names, vec!["vpn-bridge#publish", "vpn-bridge#tunnel"]);
+        // Default config paths include the instance suffix.
+        assert!(
+            active[0]
+                .config_path
+                .display()
+                .to_string()
+                .ends_with("vpn-bridge.publish.toml")
+        );
+        assert!(
+            active[1]
+                .config_path
+                .display()
+                .to_string()
+                .ends_with("vpn-bridge.tunnel.toml")
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_instance_for_non_instanced_module() {
+        let catalog = vec![(
+            "detect-host".into(),
+            make_manifest_full("detect-host", &[], &[], /*instanced*/ false),
+        )];
+        let host = host_from_toml("[modules.\"detect-host#a\"]\n");
+        let err = resolve_active(&host, Path::new("/tmp"), catalog)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("not declared `instanced = true`"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolver_rejects_mixed_flat_and_instance_keys_for_same_slug() {
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            make_manifest_full("vpn-bridge", &[], &[], true),
+        )];
+        let host = host_from_toml("[modules.\"vpn-bridge\"]\n[modules.\"vpn-bridge#tunnel\"]\n");
+        let err = resolve_active(&host, Path::new("/tmp"), catalog)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("both flat and `#instance` keys"), "got: {err}");
+    }
+
+    #[test]
+    fn resolver_depends_on_is_slug_level_and_satisfied_by_any_instance() {
+        // bridge-l2 (single) → suricata (multi-instance with two instances).
+        let catalog = vec![
+            (
+                "bridge-l2".into(),
+                make_manifest_full("bridge-l2", &[], &[], false),
+            ),
+            (
+                "suricata".into(),
+                make_manifest_full("suricata", &["bridge-l2"], &[], true),
+            ),
+        ];
+        let host = host_from_toml(
+            "[modules.\"bridge-l2\"]\n\
+             [modules.\"suricata#wan\"]\n\
+             [modules.\"suricata#lan\"]\n",
+        );
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        let names: Vec<_> = active.iter().map(ActiveModule::display_name).collect();
+        // bridge-l2 first (depends_on), then suricata's two instances
+        // alphabetically.
+        assert_eq!(names, vec!["bridge-l2", "suricata#lan", "suricata#wan"]);
+    }
+
+    #[test]
+    fn resolver_per_instance_config_override_wins() {
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            make_manifest_full("vpn-bridge", &[], &[], true),
+        )];
+        let host =
+            host_from_toml("[modules.\"vpn-bridge#tunnel\"]\nconfig = \"/custom/path.toml\"\n");
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].config_path, PathBuf::from("/custom/path.toml"));
+    }
+
     // -- runner ------------------------------------------------------
 
     fn write_stub_module(catalog: &Path, slug: &str, apply_body: &str) -> ActiveModule {
@@ -842,6 +1166,7 @@ mod tests {
             toml::from_str(&std::fs::read_to_string(mdir.join("module.toml")).unwrap()).unwrap();
         ActiveModule {
             slug: slug.to_string(),
+            instance: None,
             module_root: mdir.clone(),
             config_path: mdir.join("config.toml"),
             manifest,
