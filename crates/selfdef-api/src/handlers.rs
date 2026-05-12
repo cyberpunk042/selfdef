@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use axum::Json;
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use axum::response::{IntoResponse, Response};
 use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt as _;
@@ -73,6 +74,25 @@ pub(crate) async fn findings(
 /// SSE live tail. Subscribes to the bus and forwards every event as a
 /// JSON-serialized SSE data frame. The forwarding task exits when the
 /// client disconnects (the mpsc tx fails to send).
+/// Prometheus exposition endpoint. Renders the daemon's counters in
+/// `text/plain; version=0.0.4` so any vanilla Prometheus scrape can
+/// ingest them. The store size is read live (one SQL `COUNT` query)
+/// so the `selfdef_store_events` gauge tracks the hot store
+/// without mirroring its writes in an atomic.
+pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
+    let store_count = s.store.count().await.unwrap_or(0);
+    let body = s.metrics.render(store_count);
+    (
+        StatusCode::OK,
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        body,
+    )
+        .into_response()
+}
+
 pub(crate) async fn events_stream(
     State(s): State<ApiState>,
 ) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {

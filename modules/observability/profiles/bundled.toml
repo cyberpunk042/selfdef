@@ -18,9 +18,14 @@ prometheus_service  = "prometheus.service"
 grafana_dashboards_dir = "/var/lib/grafana/dashboards/selfdef"
 
 # Comma-separated list of targets Prometheus should scrape. The
-# default is the Tetragon metrics endpoint from the `tetragon`
-# module's default profile.
-scrape_targets = "localhost:2112"
+# defaults pick up:
+#   - Tetragon's metrics endpoint (from the `tetragon` module's
+#     default profile, `metrics_address`).
+#   - selfdef-daemon's `/metrics` endpoint on the API's TCP bind
+#     address (`[api].tcp_address` in selfdef.toml). Adjust if your
+#     deployment binds elsewhere, or drop the second entry when the
+#     API is UNIX-socket-only.
+scrape_targets = "localhost:2112, localhost:8443"
 
 # Dashboard metadata. The UID is what Grafana exposes in the
 # dashboard URL; the title appears in its dashboard list.

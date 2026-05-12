@@ -59,6 +59,45 @@
           "legendFormat": "{{map}} {{op}}"
         }
       ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "selfdef events / second by class",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (class_uid) (rate(selfdef_events_by_class_total[5m]))",
+          "legendFormat": "class {{class_uid}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "selfdef findings / second by severity",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by (severity_id) (rate(selfdef_findings_by_severity_total[5m]))",
+          "legendFormat": "severity {{severity_id}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "selfdef hot-store size",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "selfdef_store_events",
+          "legendFormat": "events"
+        }
+      ]
     }
   ]
 }

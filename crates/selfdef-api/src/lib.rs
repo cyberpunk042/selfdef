@@ -12,6 +12,8 @@
 //! - `GET /events?n=N` — last N events (newest first), as JSON array.
 //! - `GET /findings?n=N` — last N detection findings.
 //! - `GET /events/stream` — Server-Sent Events stream of live events from the bus.
+//! - `GET /metrics` — Prometheus exposition (counters + gauges for
+//!   events, findings, store size, uptime, build info).
 //!
 //! ## Transports
 //!
@@ -35,9 +37,11 @@
 
 mod control;
 mod handlers;
+pub mod metrics;
 mod state;
 mod transport;
 
+pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
 pub use state::{ApiState, ControlHandles};
 pub use transport::{ApiConfig, ApiServer, Capability, ServerError, TlsConfig, with_capability};
 
@@ -68,6 +72,7 @@ pub fn router(state: ApiState) -> Router {
         .route("/events", get(handlers::events))
         .route("/findings", get(handlers::findings))
         .route("/events/stream", get(handlers::events_stream))
+        .route("/metrics", get(handlers::metrics))
         // ---- control endpoints ----
         // Each control verb checks for the relevant handle in ApiState
         // and returns 503 Service Unavailable when missing — so the

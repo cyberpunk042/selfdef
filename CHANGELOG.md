@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — selfdef-daemon `/metrics` endpoint (Prometheus exposition)
+- New `GET /metrics` route on the existing API surface (UNIX socket
+  + TCP), rendering Prometheus exposition format
+  (`text/plain; version=0.0.4`). Operators point Prometheus at the
+  same address that already serves `/status` and `/events`. The
+  observability module's default `scrape_targets` now includes
+  `localhost:8443` alongside Tetragon's `localhost:2112`.
+- Counters: `selfdef_events_total`, `selfdef_events_by_class_total{class_uid}`,
+  `selfdef_findings_total`, `selfdef_findings_by_severity_total{severity_id}`,
+  `selfdef_ingest_lag_events_total`. Gauges: `selfdef_uptime_seconds`,
+  `selfdef_store_events`, `selfdef_build_info{version,schema,host_tag}`.
+  Label cardinality is bounded — high-cardinality fields (host_tag,
+  source string) are kept out of per-series labels so a busy host
+  doesn't blow up Prometheus's TSDB.
+- A `selfdef-api::Metrics` Arc is shared between the API state
+  (which serves the endpoint) and a new ingest task the daemon
+  spawns (`run_metrics_ingest`) that subscribes to the bus and
+  bumps counters per event. Lag from a slow subscriber is surfaced
+  as `selfdef_ingest_lag_events_total` rather than swallowed.
+- 5 unit tests (`record_event`, findings-bucket gating, exposition
+  format validity, label escaping, lag accumulation) plus 3
+  integration tests (Content-Type + headers, in-process counter
+  ingest end-to-end via the spawned task, store gauge alignment).
+- Observability module: dashboard JSON gains three new panels —
+  "selfdef events / second by class", "selfdef findings / second
+  by severity", "selfdef hot-store size". Default `scrape_targets`
+  now picks up both Tetragon and the daemon.
+
 ### Added — AI-machine track: `tetragon` + `agent-guard` + `observability` modules
 - New `tetragon` module (v0.1.0, hardening, `phase = "pre"`):
   substrate for everything Tetragon-based. Renders

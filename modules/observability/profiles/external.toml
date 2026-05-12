@@ -11,6 +11,6 @@ profile = "external"
 
 staging_dir = "/var/lib/selfdef/observability/staging"
 
-scrape_targets  = "localhost:2112"
+scrape_targets  = "localhost:2112, localhost:8443"
 dashboard_uid   = "selfdef"
 dashboard_title = "selfdef — Host Self-Defense"

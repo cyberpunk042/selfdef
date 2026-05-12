@@ -442,3 +442,173 @@ async fn control_endpoint_rejects_anonymous_with_401() {
     let res = app.oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 }
+
+// --------------------------------------------------------------- /metrics
+//
+// Prometheus exposition coverage: that the endpoint responds, carries
+// the right Content-Type, reflects counter ingest from the bus, and
+// reports a live store size.
+
+#[tokio::test]
+async fn metrics_endpoint_returns_prometheus_exposition() {
+    let (state, _bus, _store) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ct = res
+        .headers()
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        ct.starts_with("text/plain"),
+        "expected Prometheus content-type, got: {ct}",
+    );
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    for line in [
+        "# TYPE selfdef_build_info gauge",
+        "# TYPE selfdef_uptime_seconds counter",
+        "# TYPE selfdef_store_events gauge",
+        "# TYPE selfdef_events_total counter",
+        "# TYPE selfdef_findings_total counter",
+    ] {
+        assert!(body.contains(line), "missing `{line}`:\n{body}");
+    }
+    // build_state seeded 2 events in the store.
+    assert!(
+        body.contains("selfdef_store_events 2"),
+        "expected store gauge = 2:\n{body}",
+    );
+}
+
+#[tokio::test]
+async fn metrics_reflect_ingest_counters_via_record_event() {
+    // Directly drive the ingest path that the daemon's task uses, then
+    // scrape and assert the counters show up. Avoids racing on a
+    // background subscriber.
+    use selfdef_core::category::ClassUid;
+    use selfdef_core::prelude::*;
+    let (state, _bus, _store) = build_state().await;
+
+    let m = state.metrics.clone();
+    for _ in 0..3 {
+        m.record_event(&selfdef_core::Event::new(
+            ClassUid::SSH_ACTIVITY,
+            1,
+            SeverityId::Informational,
+            "test-host",
+            "ingest.test",
+            0,
+        ));
+    }
+    m.record_event(&selfdef_core::Event::new(
+        ClassUid::DETECTION_FINDING,
+        1,
+        SeverityId::High,
+        "test-host",
+        "ingest.test",
+        0,
+    ));
+
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(
+        body.contains("selfdef_events_total 4"),
+        "expected events_total = 4:\n{body}",
+    );
+    assert!(
+        body.contains(&format!(
+            "selfdef_events_by_class_total{{class_uid=\"{}\"}} 3",
+            ClassUid::SSH_ACTIVITY.0,
+        )),
+        "expected SSH class counter = 3:\n{body}",
+    );
+    assert!(
+        body.contains("selfdef_findings_total 1"),
+        "expected findings_total = 1:\n{body}",
+    );
+    assert!(
+        body.contains(&format!(
+            "selfdef_findings_by_severity_total{{severity_id=\"{}\"}} 1",
+            SeverityId::High as u32,
+        )),
+        "expected high-severity finding counter:\n{body}",
+    );
+}
+
+#[tokio::test]
+async fn metrics_ingest_task_subscribes_to_bus() {
+    // End-to-end: spawn the real ingest task, publish an event, and
+    // assert the counter is incremented within a short timeout.
+    use selfdef_bus::Publisher;
+    use selfdef_core::category::ClassUid;
+    use selfdef_core::prelude::*;
+    use tokio_util::sync::CancellationToken;
+
+    let (state, bus, _store) = build_state().await;
+    let metrics = state.metrics.clone();
+    let shutdown = CancellationToken::new();
+    let task_metrics = metrics.clone();
+    let task_bus = bus.clone();
+    let task_sd = shutdown.clone();
+    let task = tokio::spawn(async move {
+        selfdef_api::run_metrics_ingest(task_metrics, task_bus, task_sd).await;
+    });
+
+    // Wait for the ingest task to call bus.subscribe() before we
+    // publish — otherwise on a current_thread runtime the publish
+    // would race ahead of the subscriber and the event would be lost.
+    for _ in 0..100 {
+        tokio::task::yield_now().await;
+        if bus.receiver_count() > 0 {
+            break;
+        }
+    }
+    assert!(
+        bus.receiver_count() > 0,
+        "ingest task did not subscribe within 100 yields",
+    );
+
+    // Publish a finding.
+    let pub_: Publisher = bus.publisher();
+    let evt = selfdef_core::Event::new(
+        ClassUid::DETECTION_FINDING,
+        1,
+        SeverityId::Critical,
+        "test-host",
+        "ingest.test",
+        0,
+    );
+    pub_.publish_lossy(evt);
+
+    // Poll until the counter shows up (or time out).
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        let rendered = metrics.render(0);
+        if rendered.contains("selfdef_findings_total 1") {
+            break;
+        }
+        if std::time::Instant::now() > deadline {
+            panic!("metrics ingest did not record event in 2s:\n{rendered}");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    shutdown.cancel();
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(2), task).await;
+}
