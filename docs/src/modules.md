@@ -138,6 +138,16 @@ If a module is in `enabled` but its `depends_on` is not, `selfdefctl
 modules apply` fails closed with a clear error. The same applies to
 `conflicts` and to unmet `requires`.
 
+### Uninstalling
+
+`selfdefctl modules uninstall` walks active modules in the **inverse**
+of apply order — dependents come down before the modules they
+depended on, and phases unwind `post → main → pre`. It's destructive
+and therefore requires `--confirm <hostname>` matching this host
+(same pattern as `selfdefctl panic`); `--dry-run` previews without
+the confirm gate. Modules that didn't declare an `install.uninstall`
+script are reported as `skipped` rather than failing the run.
+
 ---
 
 ## Install hooks

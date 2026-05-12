@@ -669,10 +669,6 @@ struct StatusLine {
 pub(crate) enum Action {
     Apply,
     Check,
-    // `Uninstall` is plumbed but not yet exposed as a subcommand —
-    // destructive op needs operator-confirmation UX, deferred to its
-    // own PR. Keeping the variant so the runner stays complete.
-    #[allow(dead_code)]
     Uninstall,
 }
 
@@ -845,7 +841,7 @@ fn prepare(opts: &LifecycleOpts) -> Result<(PathBuf, Vec<ActiveModule>)> {
 }
 
 pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
-    run_lifecycle(opts, Action::Apply)
+    run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
 }
 
 pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
@@ -853,18 +849,59 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
     // check scripts but keeps the env consistent).
     let mut o = opts.clone();
     o.dry_run = false;
-    run_lifecycle(&o, Action::Check)
+    run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();
     o.dry_run = false;
-    run_lifecycle(&o, Action::Check)
+    run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
-fn run_lifecycle(opts: &LifecycleOpts, action: Action) -> Result<i32> {
-    let (host_path, active) = prepare(opts)?;
+pub(crate) fn cmd_uninstall(opts: &LifecycleOpts) -> Result<i32> {
+    // Tear-down order is the inverse of apply order: any module that
+    // depended on `X` must come down before `X` does. Modules that
+    // never declared an uninstall script (or are package-installed) are
+    // surfaced as `skipped` so an op-wide uninstall is still useful
+    // even when some manifests didn't bother with rollback.
+    run_lifecycle(
+        opts,
+        Action::Uninstall,
+        LifecyclePolicy {
+            reverse_order: true,
+            tolerate_missing_script: true,
+        },
+    )
+}
+
+/// Knobs that distinguish `apply` / `check` from `uninstall` without
+/// duplicating the runner body.
+#[derive(Debug, Default, Clone, Copy)]
+struct LifecyclePolicy {
+    /// Walk modules in reverse dependency-applied order. Used for
+    /// `uninstall` so dependents come down before the things they
+    /// depended on.
+    reverse_order: bool,
+    /// When the manifest doesn't declare a script for the chosen
+    /// action, treat it as `skipped` rather than a hard error.
+    tolerate_missing_script: bool,
+}
+
+fn module_has_script(active: &ActiveModule, action: Action) -> bool {
+    active
+        .manifest
+        .install
+        .as_ref()
+        .and_then(|i| action.script_relpath(i))
+        .is_some()
+}
+
+fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) -> Result<i32> {
+    let (host_path, mut active) = prepare(opts)?;
+    if policy.reverse_order {
+        active.reverse();
+    }
     println!(
         "{} {} module(s) (host config: {})",
         match action {
@@ -883,7 +920,17 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action) -> Result<i32> {
     for a in &active {
         let label = format!("{} [{}]", a.display_name(), action.name());
         print!("  {label} ... ");
-        let outcome = run_one(a, action, opts.dry_run)?;
+        let outcome = if policy.tolerate_missing_script && !module_has_script(a, action) {
+            Outcome {
+                slug: a.slug.clone(),
+                instance: a.instance.clone(),
+                status: OutcomeStatus::Skipped,
+                message: format!("no {} script declared", action.name()),
+                raw_stderr: String::new(),
+            }
+        } else {
+            run_one(a, action, opts.dry_run)?
+        };
         println!("{}: {}", outcome.status.as_str(), outcome.message);
         outcomes.push(outcome);
     }
@@ -1434,5 +1481,62 @@ mod tests {
             "got: {}",
             outcome.message
         );
+    }
+
+    // -- uninstall --------------------------------------------------
+
+    #[test]
+    fn module_has_script_reflects_manifest() {
+        // Manifest declares `apply` but not `uninstall` → only apply
+        // is considered present.
+        let catalog = tempfile::tempdir().unwrap();
+        let body =
+            "#!/usr/bin/env bash\necho '{\"module\":\"only-apply\",\"status\":\"ok\",\"message\":\"\"}'\n";
+        let active = write_stub_module(catalog.path(), "only-apply", body);
+        assert!(module_has_script(&active, Action::Apply));
+        assert!(!module_has_script(&active, Action::Uninstall));
+    }
+
+    #[test]
+    fn uninstall_runs_in_reverse_apply_order() {
+        // alpha → beta dep chain: apply order is alpha, beta;
+        // uninstall must walk beta first so dependents come down
+        // before what they depended on.
+        let catalog = vec![
+            ("alpha".into(), make_manifest("alpha", &[], &[])),
+            ("beta".into(), make_manifest("beta", &["alpha"], &[])),
+        ];
+        let host = host_with(&["alpha", "beta"]);
+        let mut active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        let apply_order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(apply_order, vec!["alpha", "beta"]);
+        active.reverse();
+        let uninstall_order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(uninstall_order, vec!["beta", "alpha"]);
+    }
+
+    #[test]
+    fn uninstall_reverses_phase_order() {
+        // Apply walks pre → main → post; uninstall must walk
+        // post → main → pre.
+        let catalog = vec![
+            (
+                "guard".into(),
+                make_manifest_full("guard", &[], &[], false, Phase::Pre),
+            ),
+            (
+                "alpha".into(),
+                make_manifest_full("alpha", &[], &[], false, Phase::Main),
+            ),
+            (
+                "audit".into(),
+                make_manifest_full("audit", &[], &[], false, Phase::Post),
+            ),
+        ];
+        let host = host_with(&["guard", "alpha", "audit"]);
+        let mut active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        active.reverse();
+        let order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(order, vec!["audit", "alpha", "guard"]);
     }
 }
