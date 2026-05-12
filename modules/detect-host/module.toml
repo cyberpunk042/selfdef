@@ -1,0 +1,33 @@
+# Example module manifest: the existing selfdef daemon as a first-class
+# module. This file is the reference implementation of the contract
+# defined in docs/src/modules.md.
+
+name        = "detect-host"
+version     = "0.1.0"
+summary     = "Host self-defense daemon (collectors, correlator, responder, notifier)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+
+# What this module offers to other modules. Anything that wants a
+# place to publish events can declare `consumes = ["event-bus"]`.
+provides    = ["event-bus", "finding-store", "sigma-correlator"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+# The install of this module is the install of the selfdef-daemon
+# Debian package — no shell scripts to run.
+[install]
+kind = "debian-package"
+package = "selfdef-daemon"
+
+# No profiles yet — the daemon's behaviour is driven by /etc/selfdef/
+# selfdef.toml, which is its own config file outside the module layer
+# until M-modules ph.2 folds it in.
+[profiles]
+default = "default"
+available = ["default"]
