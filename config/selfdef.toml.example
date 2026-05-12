@@ -89,22 +89,14 @@ paths = []
 [collectors.ebpf]
 # Native in-kernel collection via aya. Requires the BPF object compiled
 # and installed (see docs/ebpf.md) and the systemd ebpf.conf drop-in.
-# The daemon degrades gracefully if program_path doesn't exist.
+# The daemon degrades gracefully if program_path doesn't exist or if a
+# given probe fails to attach (e.g. LSM on a kernel without BPF LSM).
+# Leave off if you have Tetragon running — there's overlap.
 enabled = false
 program_path = "/usr/lib/selfdef/selfdef.bpf.o"
-enable_execve = true
-enable_lsm_open = false        # reserved; LSM program not yet shipped
-enable_kprobe_unlink = false   # reserved; kprobe program not yet shipped
-
-[collectors.ebpf]
-# selfdef's own in-kernel eyes. Requires the BPF object compiled via
-# `cargo xtask install-bpf`. See docs/ebpf.md for kernel + capability
-# prerequisites. Leave off if you have Tetragon running — there's overlap.
-enabled = false
-program_path = "/usr/lib/selfdef/ebpf-progs.bpf.o"
-enable_execve = true            # tracepoint:syscalls:sys_enter_execve
-enable_lsm_open = false         # lsm/file_open — needs CONFIG_BPF_LSM
-enable_kprobe_unlink = true     # kprobe:do_unlinkat
+enable_execve = true            # tracepoint:syscalls:sys_enter_execve + argv capture
+enable_lsm_open = false         # lsm/file_open — needs CONFIG_BPF_LSM=y + `bpf` in CONFIG_LSM
+enable_kprobe_unlink = false    # kprobe:do_unlinkat — noisy on busy hosts
 
 [correlator]
 rules_dir = "/etc/selfdef/rules"
@@ -153,6 +145,26 @@ allowed_actions = ["notify"]
 
 # Where snapshot_proc writes per-event directories.
 snapshot_dir = "/var/lib/selfdef/snapshots"
+
+[api]
+# Read-only HTTP API for the dashboard and selfdefctl's future IPC
+# channel. Two transports, either or both:
+#
+#   - UNIX socket: trusted via filesystem permissions. No bearer token.
+#     The default mode (0660) lets root + group `adm` read/write — add
+#     your operator user to `adm` (or change `unix_socket_mode`) for
+#     unprivileged access via selfdefctl.
+#
+#   - TCP: requires `Authorization: Bearer <token>` matching the
+#     contents of `token_file`. Bind to 127.0.0.1 unless you're putting
+#     a real reverse proxy in front.
+#
+# When `enabled = false`, no API task runs and neither socket is created.
+enabled = false
+unix_socket = "/run/selfdef.sock"
+unix_socket_mode = "0660"
+tcp_addr = ""                                # e.g. "127.0.0.1:8443"
+token_file = "/etc/selfdef/api.token"
 
 # Operator-owned scripts. Install with mode 0750 root:root. Example
 # implementations live in packaging/scripts/ in the source tree.

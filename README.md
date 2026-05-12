@@ -96,7 +96,7 @@ cargo audit
 - [x] **M9** — Client-side SSH wrapper.
 - [x] **M10** — Custom eBPF programs (aya).
 - [x] **M11** — Forensics + Velociraptor integration.
-- [ ] **M12** — Mobile dashboard / control plane.
+- [x] **M12** — Mobile dashboard / read-only HTTP API.
 
 ## Threat model
 

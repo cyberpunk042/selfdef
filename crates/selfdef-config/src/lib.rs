@@ -39,6 +39,7 @@ pub struct Config {
     pub correlator: CorrelatorConfig,
     pub notifier: NotifierConfig,
     pub responder: ResponderConfig,
+    pub api: ApiConfig,
 }
 
 impl Config {
@@ -360,6 +361,39 @@ impl Default for ResponderConfig {
             forensics_dir: PathBuf::from("/var/lib/selfdef/forensics"),
             velociraptor_binary: PathBuf::from("/usr/local/bin/velociraptor"),
             velociraptor_args: Vec::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- api
+
+/// HTTP API for the dashboard and (eventually) selfdefctl IPC.
+///
+/// Either transport (or both) can be enabled. UNIX socket transport is
+/// trusted via filesystem permissions; TCP transport requires a bearer
+/// token whose contents are loaded from `token_file`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ApiConfig {
+    pub enabled: bool,
+    /// UNIX socket path. Empty disables this transport.
+    pub unix_socket: String,
+    /// File mode (octal as decimal string, e.g. `"0660"`).
+    pub unix_socket_mode: String,
+    /// TCP bind address, e.g. `127.0.0.1:8443`. Empty disables this transport.
+    pub tcp_addr: String,
+    /// Path to a file containing the bearer token. Required for TCP.
+    pub token_file: String,
+}
+
+impl Default for ApiConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            unix_socket: String::from("/run/selfdef.sock"),
+            unix_socket_mode: String::from("0660"),
+            tcp_addr: String::new(),
+            token_file: String::from("/etc/selfdef/api.token"),
         }
     }
 }

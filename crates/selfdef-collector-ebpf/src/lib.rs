@@ -22,7 +22,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use aya::maps::RingBuf;
-use aya::programs::TracePoint;
+use aya::programs::{KProbe, Lsm, TracePoint};
+use aya::{Btf, EbpfError as AyaEbpfError};
 use selfdef_bus::Publisher;
 use selfdef_core::Event;
 use selfdef_core::category::ClassUid;
@@ -38,7 +39,7 @@ pub enum EbpfError {
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
     #[error("aya: {0}")]
-    Aya(#[from] aya::EbpfError),
+    Aya(#[from] AyaEbpfError),
     #[error("aya-program: {0}")]
     Program(#[from] aya::programs::ProgramError),
     #[error("aya-map: {0}")]
@@ -47,21 +48,56 @@ pub enum EbpfError {
     NotFound(PathBuf),
 }
 
+/// Which optional probes the loader should try to attach. Each flag
+/// degrades gracefully — if the corresponding program is missing from
+/// the BPF object, or the kernel doesn't support the hook, we log a
+/// warning and keep going.
+#[derive(Debug, Clone, Copy)]
+pub struct EbpfProbes {
+    pub execve: bool,
+    pub lsm_file_open: bool,
+    pub kprobe_unlinkat: bool,
+}
+
+impl Default for EbpfProbes {
+    fn default() -> Self {
+        // Mirrors the conservative defaults in `[collectors.ebpf]`: execve
+        // is the only probe enabled out of the box.
+        Self {
+            execve: true,
+            lsm_file_open: false,
+            kprobe_unlinkat: false,
+        }
+    }
+}
+
 pub struct EbpfCollector {
     bpf_object_path: PathBuf,
     publisher: Publisher,
     host_tag: String,
     sequence: AtomicU64,
+    probes: EbpfProbes,
 }
 
 impl EbpfCollector {
     #[must_use]
     pub fn new(bpf_object_path: PathBuf, publisher: Publisher, host_tag: String) -> Self {
+        Self::with_probes(bpf_object_path, publisher, host_tag, EbpfProbes::default())
+    }
+
+    #[must_use]
+    pub fn with_probes(
+        bpf_object_path: PathBuf,
+        publisher: Publisher,
+        host_tag: String,
+        probes: EbpfProbes,
+    ) -> Self {
         Self {
             bpf_object_path,
             publisher,
             host_tag,
             sequence: AtomicU64::new(0),
+            probes,
         }
     }
 
@@ -86,15 +122,18 @@ impl EbpfCollector {
             debug!(error = %e, "aya log not initialized (BPF programs may not use aya-log)");
         }
 
-        // Attach the execve tracepoint. We tolerate missing programs so the
-        // operator can ship a slimmer .bpf.o without breaking the loader.
-        if let Some(prog) = bpf.program_mut("execve_enter") {
-            let prog: &mut TracePoint = prog.try_into()?;
-            prog.load()?;
-            prog.attach("syscalls", "sys_enter_execve")?;
-            info!("attached tracepoint: syscalls/sys_enter_execve");
-        } else {
-            warn!("BPF object missing `execve_enter` program");
+        // Attach probes. Each one is opt-in via config and degrades
+        // gracefully if absent from the BPF object or unsupported by the
+        // kernel — a slimmer `.bpf.o` or a non-BTF-LSM kernel shouldn't
+        // break the loader, just narrow what the collector sees.
+        if self.probes.execve {
+            attach_execve(&mut bpf);
+        }
+        if self.probes.lsm_file_open {
+            attach_lsm_file_open(&mut bpf);
+        }
+        if self.probes.kprobe_unlinkat {
+            attach_kprobe_unlinkat(&mut bpf);
         }
 
         // Take ownership of the ring buffer for async polling.
@@ -279,6 +318,106 @@ pub fn default_object_path() -> &'static Path {
     Path::new("/usr/lib/selfdef/selfdef.bpf.o")
 }
 
+// --------- attach helpers ----------------------------------------------------
+//
+// Each helper logs a warning on any failure and never propagates — a kernel
+// without BPF LSM support, or a BPF object that was built without one of the
+// optional programs, shouldn't abort the daemon.
+
+fn attach_execve(bpf: &mut aya::Ebpf) {
+    let Some(prog) = bpf.program_mut("execve_enter") else {
+        warn!("BPF object missing `execve_enter` program");
+        return;
+    };
+    let prog: &mut TracePoint = match prog.try_into() {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(error = %e, "execve_enter is not a TracePoint program");
+            return;
+        }
+    };
+    if let Err(e) = prog.load() {
+        warn!(error = %e, "execve_enter load failed");
+        return;
+    }
+    match prog.attach("syscalls", "sys_enter_execve") {
+        Ok(_) => info!("attached tracepoint: syscalls/sys_enter_execve"),
+        Err(e) => warn!(error = %e, "execve_enter attach failed"),
+    }
+}
+
+fn attach_lsm_file_open(bpf: &mut aya::Ebpf) {
+    let Some(prog) = bpf.program_mut("file_open") else {
+        warn!(
+            "BPF object missing `file_open` LSM program; \
+             rebuild the BPF object to enable lsm_file_open"
+        );
+        return;
+    };
+    let prog: &mut Lsm = match prog.try_into() {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(error = %e, "file_open is not an LSM program");
+            return;
+        }
+    };
+
+    // LSM programs need a BTF reference to find the hook by name. On
+    // kernels without `CONFIG_BPF_LSM=y` or without `bpf` in
+    // `CONFIG_LSM=...`, loading will fail loudly — log it and move on.
+    let btf = match Btf::from_sys_fs() {
+        Ok(b) => b,
+        Err(e) => {
+            warn!(
+                error = %e,
+                "kernel BTF not available; cannot attach LSM probe. \
+                 Check /sys/kernel/btf/vmlinux exists."
+            );
+            return;
+        }
+    };
+    if let Err(e) = prog.load("file_open", &btf) {
+        warn!(
+            error = %e,
+            "file_open LSM load failed. Kernel may lack CONFIG_BPF_LSM=y \
+             or `bpf` is not in CONFIG_LSM."
+        );
+        return;
+    }
+    match prog.attach() {
+        Ok(_) => info!("attached LSM probe: file_open"),
+        Err(e) => warn!(error = %e, "file_open LSM attach failed"),
+    }
+}
+
+fn attach_kprobe_unlinkat(bpf: &mut aya::Ebpf) {
+    let Some(prog) = bpf.program_mut("do_unlinkat") else {
+        warn!(
+            "BPF object missing `do_unlinkat` kprobe program; \
+             rebuild the BPF object to enable kprobe_unlinkat"
+        );
+        return;
+    };
+    let prog: &mut KProbe = match prog.try_into() {
+        Ok(p) => p,
+        Err(e) => {
+            warn!(error = %e, "do_unlinkat is not a KProbe program");
+            return;
+        }
+    };
+    if let Err(e) = prog.load() {
+        warn!(error = %e, "do_unlinkat load failed");
+        return;
+    }
+    match prog.attach("do_unlinkat", 0) {
+        Ok(_) => info!("attached kprobe: do_unlinkat"),
+        Err(e) => warn!(
+            error = %e,
+            "do_unlinkat attach failed (kernel may have inlined the symbol)"
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +482,74 @@ mod tests {
         assert_eq!(p.pid, 1234);
         assert_eq!(p.parent_pid, Some(1));
         assert_eq!(p.cmdline.as_deref(), Some("ls -la /etc"));
+    }
+
+    #[test]
+    fn exec_event_marks_argv_truncated() {
+        let bus = Bus::new(4);
+        let coll = EbpfCollector::new(PathBuf::from("/unused"), bus.publisher(), "h".into());
+        let mut ev = make_exec_event();
+        ev.argv_truncated = 1;
+        let event = coll.process_exec_to_event(&ev);
+        let raw = event.raw.expect("raw payload");
+        assert_eq!(raw["argv_truncated"], serde_json::Value::Bool(true));
+    }
+
+    #[test]
+    fn file_open_event_converts_to_ocsf() {
+        let bus = Bus::new(4);
+        let coll = EbpfCollector::new(PathBuf::from("/unused"), bus.publisher(), "h".into());
+        let mut ev = FileOpenEvent {
+            kind: EventKind::FileOpen as u8,
+            _pad0: [0; 3],
+            pid: 4242,
+            uid: 0,
+            comm: [0; COMM_LEN],
+            path: [0; selfdef_ebpf_common::PATH_BUF_LEN],
+            path_len: 0,
+            flags: 0,
+        };
+        ev.comm[..4].copy_from_slice(b"cat\0");
+        let event = coll.file_open_to_event(&ev);
+        assert_eq!(event.class_uid, ClassUid::FILE_SYSTEM_ACTIVITY);
+        assert_eq!(event.activity_id, 14);
+        assert_eq!(event.source, "selfdef.ebpf");
+        // Path is currently always empty from the LSM hook — the conversion
+        // path should still produce a valid OCSF event rather than fail.
+        let f = event.file.expect("file observable");
+        assert_eq!(f.path.as_deref(), Some(""));
+        let p = event.process.expect("process observable");
+        assert_eq!(p.pid, 4242);
+        assert_eq!(p.name.as_deref(), Some("cat"));
+    }
+
+    #[test]
+    fn unlink_event_converts_to_ocsf() {
+        let bus = Bus::new(4);
+        let coll = EbpfCollector::new(PathBuf::from("/unused"), bus.publisher(), "h".into());
+        let mut ev = UnlinkEvent {
+            kind: EventKind::Unlink as u8,
+            _pad0: [0; 3],
+            pid: 9999,
+            uid: 1000,
+            comm: [0; COMM_LEN],
+            path: [0; selfdef_ebpf_common::PATH_BUF_LEN],
+            path_len: 0,
+        };
+        ev.comm[..2].copy_from_slice(b"rm");
+        let event = coll.unlink_to_event(&ev);
+        assert_eq!(event.class_uid, ClassUid::FILE_SYSTEM_ACTIVITY);
+        assert_eq!(event.activity_id, 4); // Delete
+        assert_eq!(event.severity_id, SeverityId::Low);
+        let p = event.process.expect("process observable");
+        assert_eq!(p.pid, 9999);
+    }
+
+    #[test]
+    fn default_probes_match_conservative_config() {
+        let probes = EbpfProbes::default();
+        assert!(probes.execve);
+        assert!(!probes.lsm_file_open);
+        assert!(!probes.kprobe_unlinkat);
     }
 }
