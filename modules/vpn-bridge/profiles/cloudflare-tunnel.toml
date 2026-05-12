@@ -1,0 +1,23 @@
+# Profile: cloudflare-tunnel.
+#
+# Outbound L7 tunnel via Cloudflare `cloudflared`. NOTE: this is a
+# different paradigm from the overlay profiles — it exposes services
+# (HTTP/SSH/TCP) to a Cloudflare-fronted hostname rather than building
+# a peer-to-peer overlay you can route arbitrary IP traffic over. Pick
+# this when "I want to reach the web UI from anywhere with Cloudflare
+# Access in front" matters more than "I want full L3 reachability".
+
+profile = "cloudflare-tunnel"
+
+# Token mode (simplest): paste a tunnel token from the Cloudflare
+# Zero Trust dashboard into a 0600 file and point at it here.
+tunnel_token_path = "/etc/cloudflared/token"
+
+# Config-file mode (alternative). Leave the above empty if you set
+# these three:
+#   tunnel_id        = "<uuid>"
+#   credentials_path = "/etc/cloudflared/<uuid>.json"
+#   config_path      = "/etc/cloudflared/config.yml"
+tunnel_id        = ""
+credentials_path = ""
+config_path      = ""

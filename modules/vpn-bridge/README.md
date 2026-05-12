@@ -1,68 +1,55 @@
 # vpn-bridge
 
-WireGuard overlay between two or more hosts that **both sit behind
-their own NAT** (the classic "OPNsense at home + OPNsense at the
-office, neither has a public IP" case). The headline scenario this
-module exists for: you want to reach a private LAN — say, an AI
-machine — from a router that's behind a carrier-NAT too.
+Remote-network connectivity for hosts that **sit behind their own
+NAT** (the classic "OPNsense at home + OPNsense at the office, neither
+has a public IP, I want to reach my AI machine on the other LAN"
+case). The module ships **three profiles**, each with a different
+trust + paradigm tradeoff, plus a documented extension hook so future
+overlay tech can slot in without forking.
 
-## Why this exists / what's hard
+## Decision matrix
 
-Vanilla WireGuard expects one peer to be reachable on a known
-`Endpoint = ip:port`. When **both** ends are behind NAT and neither
-can port-forward, you can't peer them directly without help. The
-common workarounds:
+| Profile | Paradigm | Trust boundary | Setup cost | Best for |
+| --- | --- | --- | --- | --- |
+| `relay-via-server` | P2P overlay via your own WireGuard relay | You / the relay's operator | Stand up a $3/mo VPS (or any host with a public IP) | Maximum control, no SaaS dependency, full L3 reachability |
+| `tailscale` | P2P overlay via Tailscale's DERP/hole-punching | Tailscale (or your self-hosted Headscale) | Sign up (or run Headscale), drop an auth key on disk | Easy mode. Works through any NAT in minutes, including symmetric. Best when "it just works" matters |
+| `cloudflare-tunnel` | **Outbound L7 publishing** (not an overlay!) | Cloudflare | Create a tunnel in Zero Trust, paste the token | "I want to reach the AI machine's web UI from anywhere, behind Cloudflare Access" — single-direction service publishing |
 
-| Approach | Reliability | Setup cost | Notes |
-| --- | --- | --- | --- |
-| Public relay (this module's profile) | Excellent | ~$3/mo VPS or any host with a public IP | Both ends WireGuard to the relay. Relay forwards. Works through any NAT type. |
-| STUN-assisted hole punching | Good on cone NATs, fails on symmetric | Low | Out-of-band signalling needed. Not shipped in v0.1.0. |
-| Tailscale / Headscale | Excellent (DERP fallback) | Requires Tailscale auth or self-hosted Headscale | Not shipped in v0.1.0. |
+The three are **not interchangeable**. The first two give you bidirectional
+L3 reachability (ping, SSH, NFS, arbitrary IP traffic). `cloudflare-tunnel`
+only publishes specific services to a Cloudflare-fronted hostname — you
+can't ping across it.
 
-For v0.1.0 we ship only **`relay-via-server`** because it's the
-profile that just works for the headline scenario, with no SaaS or
-out-of-band signalling. The other approaches can land as additional
-profiles once the relay one is proven.
+It's normal to run more than one of these. A common shape:
 
-## Scope of this module
+- `relay-via-server` (or `tailscale`) for full overlay reachability between
+  your hosts and OPNsense routers.
+- `cloudflare-tunnel` to expose the AI machine's web UI to a non-VPN'd
+  device (your phone, a guest, etc.) with Cloudflare Access in front.
 
-Owns:
+Each module can only have one active profile per host. To run two,
+mark each as its own module instance — coming in a future PR via the
+selector's per-host `[modules.vpn-bridge#tunnel]` syntax. For now,
+operate one profile per host.
 
-1. **Service state**: `wg-quick@<interface>` is enabled and started.
-2. **nftables forwarding** between the wg interface and the LAN
-   bridge / NIC (so traffic can actually move between the overlay
-   and the local network — disabled by default; opt-in per host).
-3. **`keygen.sh` helper** (not auto-run) that generates a private +
-   public key pair into `/etc/wireguard/` with `0600` perms.
+## Profiles
 
-Does **not** own:
-
-- **`/etc/wireguard/<interface>.conf`**. The operator writes that.
-  The wg-quick format is the standard; rendering it from bash with a
-  `[[peers]]` array of unknown length is hostile. The README shows
-  exactly what to put in it for both the relay and endpoint roles.
-- **WireGuard package install.** `requires.package = "wireguard-tools"`
-  fails closed if the package isn't present.
-- **Key distribution.** You generate keys, you copy the public ones to
-  the operators of the other peers, via whatever channel you trust.
-
-## Topology — `relay-via-server`
+### `relay-via-server` — operator-run public WireGuard relay
 
 ```
   ┌──────────────┐                ┌─────────────────┐                ┌──────────────┐
-  │ Endpoint A   │                │ Relay (public)  │                │ Endpoint B   │
-  │ 10.99.0.2/24 │ ────wg/udp───► │ 10.99.0.1/24    │ ◄───wg/udp──── │ 10.99.0.3/24 │
-  │  behind NAT  │                │  public IP      │                │  behind NAT  │
+  │ Endpoint A   │ ────wg/udp───► │ Relay (public)  │ ◄───wg/udp──── │ Endpoint B   │
+  │  behind NAT  │   (keepalive)  │  public IP      │  (keepalive)   │  behind NAT  │
   └──────────────┘                │  ip-forwarding  │                └──────────────┘
-                                  │  enabled        │
                                   └─────────────────┘
 ```
 
-The relay has a publicly reachable WireGuard `Endpoint`; both
-endpoints connect to it and use `PersistentKeepalive = 25` to keep
-the NAT pinhole open on their side.
+Pure WireGuard. You generate keys, write the `wg-quick` config
+yourself; the module owns the service state and (optionally) the
+forwarding nftables rule between the wg interface and a LAN-side
+interface.
 
-## Config
+**Config:**
 
 ```toml
 [modules.vpn-bridge]
@@ -70,33 +57,28 @@ profile        = "relay-via-server"
 role           = "endpoint"          # endpoint | relay
 interface      = "wg0"
 listen_port    = 51820
-
-# Set `forward_to_lan` to a LAN-side iface name to enable
-# bidirectional routing between the overlay and the local LAN. Empty
-# = wg interface is reachable from the host only.
-forward_to_lan = ""
+forward_to_lan = ""                  # e.g. "br0" or "eno1" to expose LAN
 ```
 
-The wg-quick config itself lives at `/etc/wireguard/<interface>.conf`
-and is owned by the operator. For the relay-via-server topology:
+The wg-quick config itself (which is **operator-owned**) for a typical
+relay-and-two-endpoints topology:
 
-**`/etc/wireguard/wg0.conf` on Endpoint A** (10.99.0.2):
+**`/etc/wireguard/wg0.conf` on each endpoint:**
 
 ```ini
 [Interface]
-PrivateKey = <A's privkey>
-Address    = 10.99.0.2/24
+PrivateKey = <endpoint's privkey>
+Address    = 10.99.0.2/24    # 10.99.0.3 on the other endpoint
 ListenPort = 51820
 
 [Peer]
-# The relay.
 PublicKey            = <relay's pubkey>
 Endpoint             = relay.example.com:51820
-AllowedIPs           = 10.99.0.0/24      # whole overlay through the relay
+AllowedIPs           = 10.99.0.0/24
 PersistentKeepalive  = 25
 ```
 
-**`/etc/wireguard/wg0.conf` on the relay** (10.99.0.1):
+**`/etc/wireguard/wg0.conf` on the relay:**
 
 ```ini
 [Interface]
@@ -107,68 +89,180 @@ PostUp     = sysctl -w net.ipv4.ip_forward=1
 PostDown   = sysctl -w net.ipv4.ip_forward=0
 
 [Peer]
-# Endpoint A
 PublicKey  = <A's pubkey>
 AllowedIPs = 10.99.0.2/32
 
 [Peer]
-# Endpoint B
 PublicKey  = <B's pubkey>
 AllowedIPs = 10.99.0.3/32
 ```
 
-**Endpoint B is symmetric to A**, with its own keys and address.
+**Reaching a remote LAN** (e.g. AI machine at `192.168.50.42` on
+Endpoint B's LAN): add `192.168.50.0/24` to the relay's peer-B
+`AllowedIPs` *and* to Endpoint A's peer-relay `AllowedIPs`; on
+Endpoint B set `forward_to_lan = "<lan-iface>"` so the kernel
+forwards overlay traffic onto the LAN.
 
-## First-time setup
-
+**One-time keygen:**
 ```bash
-# On each host:
 sudo /usr/share/selfdef/modules/vpn-bridge/install/keygen.sh wg0
-# → writes /etc/wireguard/wg0.privkey (0600) + wg0.pubkey
-
-# Edit /etc/wireguard/wg0.conf per the templates above.
-# Then:
-sudo selfdefctl modules apply vpn-bridge
 ```
 
-`apply.sh` enables and starts the service, brings the interface up,
-and applies the optional nftables forward rules.
+### `tailscale` — defer NAT traversal to Tailscale / Headscale
 
-## Reaching a remote LAN (e.g. your AI machine)
+```
+  Endpoint A ────► tailscaled ────► Tailscale control plane (or your Headscale)
+  Endpoint B ────► tailscaled ─────────────┘ + DERP relays for fallback
+```
 
-If your AI machine lives at `192.168.50.42` on Endpoint B's LAN, on
-Endpoint A you can route to it by:
+Tailscale handles hole-punching, DERP relay fallback, key
+distribution, and ACLs. You install the package, drop an auth key,
+the module runs `tailscale up` with your parameters.
 
-1. Add `192.168.50.0/24` to the relay's peer-B `AllowedIPs`.
-2. Add `192.168.50.0/24` to Endpoint A's peer-relay `AllowedIPs`.
-3. Set `forward_to_lan = "ens0"` (or whichever iface) on Endpoint B
-   to let the kernel forward overlay traffic onto its LAN.
+**Config:**
 
-The module renders the nftables FORWARD rules; the wg-quick config
-itself is still the operator's.
+```toml
+[modules.vpn-bridge]
+profile          = "tailscale"
+auth_key_path    = "/etc/tailscale/auth.key"   # 0600, operator-managed
+control_url      = ""                          # empty = Tailscale-hosted; set = self-hosted Headscale URL
+hostname         = ""                          # default: system hostname
+advertise_routes = ""                          # comma-sep CIDRs (subnet router)
+accept_routes    = "false"                     # accept routes advertised by other nodes
+tags             = ""                          # comma-sep ACL tags
+```
+
+The module runs `tailscale up --reset --auth-key=file:<path>` plus
+whatever optional flags you set. Re-applies are safe — `tailscale up`
+is itself idempotent.
+
+**Trust note**: in hosted mode, Tailscale's control plane sees node
+identities, routes, and ACL decisions (but not packet payloads — those
+are WireGuard-encrypted end-to-end). Run Headscale yourself if that
+trust boundary bothers you.
+
+### `cloudflare-tunnel` — outbound L7 tunnel for service publishing
+
+```
+                        ┌──────────────────────┐
+  Host with             │ Cloudflare edge      │  ◄────────  Your phone / guest /
+  cloudflared ────►     │   (Access policy)    │             non-VPN'd device
+  (outbound only)       └──────────────────────┘             (HTTPS to your hostname)
+```
+
+`cloudflared` makes an outbound persistent connection to Cloudflare's
+edge; service requests for the configured hostname are routed back
+through the tunnel to local addresses (HTTP origins, SSH, raw TCP).
+Pair with Cloudflare Access for SSO / device-posture / IP allow-list
+auth in front of internal services.
+
+**Config (token mode, simplest):**
+
+```toml
+[modules.vpn-bridge]
+profile           = "cloudflare-tunnel"
+tunnel_token_path = "/etc/cloudflared/token"     # 0600, paste the token from Zero Trust → Tunnels
+```
+
+**Config (config-file mode, more flexible):**
+
+```toml
+[modules.vpn-bridge]
+profile          = "cloudflare-tunnel"
+tunnel_id        = "<uuid from cloudflared tunnel create>"
+credentials_path = "/etc/cloudflared/<uuid>.json"
+config_path      = "/etc/cloudflared/config.yml"
+```
+
+The module runs `cloudflared service install`; the unit it writes
+auto-starts on boot. The actual tunnel routing (which hostname →
+which local service) is owned by your Cloudflare dashboard or your
+`config.yml`, not by selfdef.
+
+**This is not a substitute for `relay-via-server` or `tailscale`.**
+It cannot move arbitrary IP traffic between hosts. Use it for
+exposing services *outward*, with Cloudflare in front for auth.
+
+## Scope of this module
+
+Owns:
+
+1. The systemd service state for the chosen profile (`wg-quick@<iface>`,
+   `tailscaled`, or `cloudflared`).
+2. The optional bridging nftables rule between the wg interface and a
+   LAN iface (relay-via-server only).
+3. `keygen.sh` one-time helper for WireGuard keypairs.
+
+Does **not** own:
+
+- The package install (`wireguard-tools`, `tailscale`, `cloudflared` —
+  each profile's preflight fails closed if its binary is missing).
+- The wg-quick config file, the Tailscale auth key, or the Cloudflare
+  tunnel credentials — all operator-managed at `0600`.
+- Cross-profile coexistence on the same host (one active profile at a
+  time per module instance — multi-instance support is future work).
+
+## Extending — adding a new profile
+
+The module is intentionally extensible. To add e.g. a `nebula`
+or `zerotier` profile:
+
+1. Create `install/profiles/<name>.sh`. Define three functions:
+   `profile_apply`, `profile_check`, `profile_uninstall`. Each should
+   end with one `emit_status` call. Use `die "<reason>"` to fail
+   closed.
+2. Create `profiles/<name>.toml` with the default config values your
+   profile needs.
+3. Add `<name>` to `[profiles].available` in `module.toml`. Update
+   the manifest's `provides` if your profile offers a new capability
+   (e.g. a profile that does both publishing and overlay would
+   declare both `overlay-network` and `published-tunnel`).
+4. Add a section to this README's [Decision matrix](#decision-matrix)
+   explaining when to pick it.
+5. Add smoke tests in `crates/selfdef-cli/tests/module_vpn_bridge_<name>.rs`.
+
+The dispatcher in `install/{apply,check,uninstall}.sh` will pick up
+the new profile automatically — there is no central registry to
+update.
 
 ## Idempotency
 
-Same contract as every module — re-running is a no-op,
-`SELFDEF_DRY_RUN=1` prints intended actions only, the script emits
-a structured-status JSON line at the end.
+Same contract as every module — re-applying is a no-op,
+`SELFDEF_DRY_RUN=1` prints intended actions only, every action ends
+with a structured-status JSON line.
 
 ## Uninstall
 
-`uninstall.sh` stops and disables `wg-quick@<interface>`, removes the
-nftables forward table. It does **not** delete `/etc/wireguard/`
-config or keys — operator responsibility.
+`uninstall.sh` cleanly tears down whichever profile is active. It
+**does not** delete operator-owned data: WireGuard keys + wg.conf,
+Tailscale auth keys, Cloudflare tunnel credentials, or the underlying
+packages all survive.
+
+## OPNsense integration
+
+selfdef owns Linux host state directly. OPNsense state is **operator-
+driven** via OPNsense's own UI / API:
+
+- For `relay-via-server`: configure WireGuard on OPNsense via the
+  `os-wireguard` plugin (Settings → WireGuard → Local) using the
+  same key + peer values you'd put in `wg-quick` on a Linux host.
+- For `tailscale`: enable the FreeBSD tailscale plugin on OPNsense
+  (`os-tailscale`). Auth key handling is identical.
+- For `cloudflare-tunnel`: not currently supported on OPNsense via
+  the GUI; run cloudflared on a Linux host on the same LAN if you
+  need the publishing pattern.
+
+In all cases the *topology* (who is the relay, what's the overlay
+subnet, what CIDRs each side advertises) is the same on OPNsense as
+on Linux; only the install mechanism differs.
 
 ## Caveats
 
-- **Trust model**: the relay sees all traffic between endpoints. Use
-  it like you'd use any VPN hub: TLS the things you care about,
-  consider the relay's operator part of your trust boundary.
-- **Bandwidth**: relay-via-server doubles the traffic on the relay's
-  link. For a personal-scale overlay this is fine; for high-rate
-  flows consider hole-punching once that profile ships.
-- **OPNsense** runs WireGuard via the `os-wireguard` plugin or
-  built-in 24.x kernel WireGuard. This module assumes a Linux host
-  with `wg-quick` from `wireguard-tools`. OPNsense end-hosts are
-  configured via the GUI/CLI directly — but the topology + the
-  relay's own `wg0.conf` are still what's documented above.
+- **Trust models differ across profiles.** Read the per-profile
+  section before picking.
+- **Bandwidth**: `relay-via-server` doubles traffic on the relay's
+  link. For personal scale this is fine. `tailscale` falls back to
+  DERP relays only when direct hole-punching fails — most flows go
+  point-to-point.
+- **OPNsense**'s built-in WireGuard (24.x kernel WG) is the
+  preferred path; `os-wireguard` plugin works on older versions.
