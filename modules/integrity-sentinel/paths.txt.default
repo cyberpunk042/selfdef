@@ -1,0 +1,22 @@
+# Default set of paths to include in selfdef's integrity baseline.
+# Copy this file to /etc/selfdef/integrity-sentinel/paths.txt and edit
+# to taste. One absolute path per line. `*` is a shell glob; `**`
+# recurses (globstar is enabled when this file is expanded).
+# Blank lines and lines starting with `#` are ignored.
+
+# Daemon + host configs
+/etc/selfdef/selfdef.toml
+/etc/selfdef/modules.toml
+/etc/selfdef/modules/*.toml
+
+# Correlator rules
+/etc/selfdef/rules.d/**/*.yml
+/etc/selfdef/rules.d/**/*.yaml
+
+# Module manifests (read by selfdefctl modules apply)
+/usr/share/selfdef/modules/*/module.toml
+
+# Module install scripts — tampering here would let an attacker
+# substitute their own apply.sh and have selfdef execute it.
+/usr/share/selfdef/modules/*/install/*.sh
+/usr/share/selfdef/modules/*/install/profiles/*.sh

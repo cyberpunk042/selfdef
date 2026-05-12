@@ -1,0 +1,13 @@
+# Profile: warn-only.
+#
+# Same paths_file / baseline_path semantics as `strict`, but drift is
+# reported as `ok` with a "DRIFT" prefix in the status message — apply
+# and check stay green so other modules continue to run. Use during
+# bring-up while you stabilize what's in the baseline; flip to
+# `strict` once the noise is gone.
+
+profile = "warn-only"
+
+paths_file    = "/etc/selfdef/integrity-sentinel/paths.txt"
+baseline_path = "/var/lib/selfdef/integrity-sentinel/baseline.sha256"
+on_missing    = "create"

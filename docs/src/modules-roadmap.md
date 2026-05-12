@@ -22,7 +22,7 @@ Statuses:
 | `polarproxy`  | network       | shipping   | root-ghostproxy        | TLS termination → PCAP-over-IP on tcp/4430. Two profiles: `host-tls-mitm` (NAT-redirects host's TCP/443 to a local PolarProxy listener) and `bridge-tap` (runtime-checked soft dependency on `bridge-l2`). Manages the systemd unit + nftables redirect; does **not** own the PolarProxy binary or the CA. |
 | `bridge-l2`   | network       | shipping   | root-ghostproxy        | Transparent L2 bridge (`br0`) + nftables FORWARD policy + management-wifi INPUT-drop. Foundation for the inline modules. Two profiles: `passthrough`, `opnsense-edge`. Install/check/uninstall scripts pass dry-run smoke tests. |
 | `vpn-bridge`  | network       | shipping (v0.2.0) | new             | Three profiles for the double-NAT case: **`relay-via-server`** (your own public WireGuard relay), **`tailscale`** (Tailscale-hosted or self-hosted Headscale), **`cloudflare-tunnel`** (outbound L7 service publishing — different paradigm, not an overlay). Per-profile script files under `install/profiles/<name>.sh` with a documented extension hook for future transports. Decision matrix in the module's README. v0.3.0 may add a STUN hole-punch profile if there's demand beyond what tailscale already solves. |
-| `integrity-sentinel` | hardening | planned | root-ghostproxy + new | SHA256 baseline verification for policy artifacts (rules, configs, module manifests themselves). Fail-closed on drift. |
+| `integrity-sentinel` | hardening | shipping (v0.1.0) | new | SHA256 baseline of operator-defined policy paths (rules, configs, module manifests, install scripts), with `strict` (fail-closed) and `warn-only` profiles. Baseline format is plain `sha256sum -c`-compatible, so the file is verifiable out-of-band without `selfdefctl`. The paths-to-track file is operator-owned at `/etc/selfdef/integrity-sentinel/paths.txt`. |
 
 ## Out of scope
 
@@ -41,11 +41,11 @@ The cleanest absorption order was:
 3. `polarproxy` — small, mostly install logic. ✅ shipped.
 4. `vpn-bridge` — design + implementation in one go; no prior code to absorb. ✅ shipped (v0.1.0, relay-via-server only).
 
-The four network modules are all in the catalog. Remaining work:
+Every module the roadmap originally named is now in the catalog. Remaining work:
 
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
-- `integrity-sentinel`: still `planned`. SHA256 baseline verification for policy artifacts (rules, configs, module manifests).
 - `selfdefctl modules uninstall`: destructive op, deferred until after the operator-confirmation UX is wired (probably alongside `panic mode`'s confirm pattern).
+- A manifest `phase: "pre" | "main" | "post"` field would let `integrity-sentinel` formally gate the apply order; today operators run it first via `--only integrity-sentinel`. Documented in the module's README.
 
 ## Lifecycle surface
 

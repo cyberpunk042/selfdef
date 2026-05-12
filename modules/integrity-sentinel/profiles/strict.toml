@@ -1,0 +1,23 @@
+# Profile: strict (default).
+#
+# Drift is fatal — `selfdefctl modules apply` and `check` both exit
+# non-zero when any baselined file has changed, is missing, or when a
+# previously-unseen file matches the configured globs.
+
+profile = "strict"
+
+# File listing the absolute paths (or globs) to baseline. One per
+# line; blank lines and `#`-comments allowed.
+paths_file = "/etc/selfdef/integrity-sentinel/paths.txt"
+
+# Where the recorded SHA256 baseline lives. Operator-managed at 0600
+# (selfdef does not chmod it). `sha256sum`-format so the file is
+# directly verifiable with `sha256sum -c <baseline_path>`.
+baseline_path = "/var/lib/selfdef/integrity-sentinel/baseline.sha256"
+
+# What to do on the first apply, when no baseline exists yet:
+#   "create"  — create one (first-run friendly; the operator just runs apply).
+#   "fail"    — refuse to run. Use this once you've sealed an
+#               initial baseline out-of-band and never want apply to
+#               silently re-baseline.
+on_missing = "create"
