@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — M14 (per-token capabilities for the API)
+- `[api].control_token_file` — a second, optional bearer token. Read
+  endpoints accept either the existing `token_file` or
+  `control_token_file`; control endpoints (`/rules/reload`, `/panic`,
+  `/actions/{name}/run`) require the control token specifically.
+- New `selfdef_api::Capability` (`Read` | `Full`) request extension
+  set by the auth layer based on which token matched (or
+  unconditionally `Full` for UNIX-socket clients). Control handlers
+  pull a `RequireControl` extractor that returns `403 Forbidden` for
+  `Read` requests and `401 Unauthorized` for unauthenticated.
+- New `selfdef_api::with_full_capability` / `with_capability` helpers.
+  Tests use them to stamp a capability onto the request without going
+  through bearer auth. The UNIX-socket transport uses `with_capability(_, Full)`
+  internally — same primitive, no special cases.
+- 6 new integration tests in `crates/selfdef-api/tests/m12_api.rs`
+  covering: read-only token on read endpoints (200), read-only token on
+  `/actions` discovery (200), read-only token on each control verb
+  (403), and the anonymous control-verb path (401). 19 cases total.
+- Docs: `docs/api.md` gains a fleshed-out auth-boundary section with
+  token mint + rotate recipes. Example config gains the new
+  `control_token_file` field with annotated semantics. README adds the
+  M14 checkbox.
+
 ### Added — M13 (control-plane verbs + TLS/mTLS for the API)
 - **Control-plane endpoints** in `selfdef-api` (write side):
   - `POST /rules/reload` — re-reads the rules directory, returns

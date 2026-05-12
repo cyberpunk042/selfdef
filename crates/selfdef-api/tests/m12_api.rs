@@ -6,13 +6,21 @@ use std::sync::Arc;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
-use selfdef_api::{ApiState, router};
+use selfdef_api::{ApiState, router, with_full_capability};
 use selfdef_bus::Bus;
 use selfdef_core::category::ClassUid;
 use selfdef_core::prelude::*;
 use selfdef_store::SqliteStore;
 use tempfile::tempdir;
 use tower::ServiceExt;
+
+/// Tests construct the router and then wrap it the same way the
+/// UNIX-socket transport does — every test request is treated as
+/// Full-capability. Per-token-gating tests below assemble their own
+/// router with a custom layer instead.
+fn app(state: ApiState) -> axum::Router {
+    with_full_capability(router(state))
+}
 
 async fn build_state() -> (ApiState, Arc<Bus>, Arc<SqliteStore>) {
     let dir = tempdir().unwrap();
@@ -52,7 +60,7 @@ async fn build_state() -> (ApiState, Arc<Bus>, Arc<SqliteStore>) {
 #[tokio::test]
 async fn status_returns_host_and_counters() {
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
 
     let req = Request::builder()
         .method(Method::GET)
@@ -73,7 +81,7 @@ async fn status_returns_host_and_counters() {
 #[tokio::test]
 async fn findings_returns_only_findings_category() {
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
 
     let req = Request::builder()
         .method(Method::GET)
@@ -94,7 +102,7 @@ async fn findings_returns_only_findings_category() {
 #[tokio::test]
 async fn events_paginates_with_n_query_param() {
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
         .uri("/events?n=1")
@@ -110,7 +118,7 @@ async fn events_paginates_with_n_query_param() {
 #[tokio::test]
 async fn events_returns_default_page_size_when_n_missing() {
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
         .uri("/events")
@@ -123,7 +131,7 @@ async fn events_returns_default_page_size_when_n_missing() {
 #[tokio::test]
 async fn unknown_route_returns_404() {
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
         .uri("/does-not-exist")
@@ -198,7 +206,7 @@ async fn state_with_control(dry_run: bool) -> ApiState {
 #[tokio::test]
 async fn actions_list_returns_registered_action_names() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
         .uri("/actions")
@@ -218,7 +226,7 @@ async fn actions_list_returns_registered_action_names() {
 async fn rules_reload_returns_503_when_correlator_not_wired() {
     // build_state() returns an ApiState without a correlator handle.
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::POST)
         .uri("/rules/reload")
@@ -231,7 +239,7 @@ async fn rules_reload_returns_503_when_correlator_not_wired() {
 #[tokio::test]
 async fn panic_rejects_hostname_mismatch() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let body = serde_json::json!({"confirm": "wrong-host"}).to_string();
     let req = Request::builder()
         .method(Method::POST)
@@ -250,7 +258,7 @@ async fn panic_rejects_hostname_mismatch() {
 #[tokio::test]
 async fn panic_dispatches_when_hostname_matches() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let body = serde_json::json!({"confirm": "test-host"}).to_string();
     let req = Request::builder()
         .method(Method::POST)
@@ -269,7 +277,7 @@ async fn panic_dispatches_when_hostname_matches() {
 #[tokio::test]
 async fn actions_run_dry_run_returns_outcome() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let event = make_critical_finding();
     let body = serde_json::json!({"event": serde_json::to_value(&event).unwrap()}).to_string();
     let req = Request::builder()
@@ -289,7 +297,7 @@ async fn actions_run_dry_run_returns_outcome() {
 #[tokio::test]
 async fn actions_run_unknown_action_returns_404() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let event = make_critical_finding();
     let body = serde_json::json!({"event": serde_json::to_value(&event).unwrap()}).to_string();
     let req = Request::builder()
@@ -305,7 +313,7 @@ async fn actions_run_unknown_action_returns_404() {
 #[tokio::test]
 async fn actions_run_requires_event_or_event_id() {
     let state = state_with_control(true).await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::POST)
         .uri("/actions/notify/run")
@@ -324,7 +332,7 @@ async fn body_round_trips_as_real_event_envelopes() {
     // deserialize as selfdef_core::Event (e.g. if we ever switched to a
     // slimmed projection).
     let (state, _bus, _store) = build_state().await;
-    let app = router(state);
+    let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
         .uri("/events?n=10")
@@ -338,4 +346,99 @@ async fn body_round_trips_as_real_event_envelopes() {
     // CORS layer should be permissive on the response, but we don't bind
     // that contract in tests — the middleware is unit-tested by axum.
     let _ = header::CONTENT_TYPE;
+}
+
+// ---------------- per-token capability gating
+
+use selfdef_api::{Capability, with_capability};
+
+/// Build a router that simulates the TCP transport with only the
+/// read-only token presented: every request gets stamped with
+/// `Capability::Read` before hitting the handlers.
+async fn read_only_app() -> axum::Router {
+    let state = state_with_control(true).await;
+    with_capability(router(state), Capability::Read)
+}
+
+#[tokio::test]
+async fn read_endpoints_allow_read_capability() {
+    let app = read_only_app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/status")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn actions_list_allows_read_capability() {
+    // GET /actions is discovery — useful from a read-only dashboard,
+    // so it intentionally accepts the read token.
+    let app = read_only_app().await;
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/actions")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn rules_reload_rejects_read_capability_with_403() {
+    let app = read_only_app().await;
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/rules/reload")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn panic_rejects_read_capability_with_403() {
+    let app = read_only_app().await;
+    let body = serde_json::json!({"confirm": "test-host"}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/panic")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn actions_run_rejects_read_capability_with_403() {
+    let app = read_only_app().await;
+    let event = make_critical_finding();
+    let body = serde_json::json!({"event": serde_json::to_value(&event).unwrap()}).to_string();
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/actions/notify/run")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn control_endpoint_rejects_anonymous_with_401() {
+    // No capability layer at all — simulates a request that bypassed
+    // the auth middleware (shouldn't happen with the live transport,
+    // but the extractor still handles the case).
+    let state = state_with_control(true).await;
+    let app = router(state);
+    let req = Request::builder()
+        .method(Method::POST)
+        .uri("/rules/reload")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 }

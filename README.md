@@ -98,6 +98,7 @@ cargo audit
 - [x] **M11** — Forensics + Velociraptor integration.
 - [x] **M12** — Mobile dashboard / read-only HTTP API.
 - [x] **M13** — Control-plane verbs + TLS/mTLS for the API.
+- [x] **M14** — Per-token capabilities (read vs control) for the API.
 
 ## Threat model
 

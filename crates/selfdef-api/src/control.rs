@@ -25,13 +25,48 @@
 //! later without changing the route layout.
 
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{FromRequestParts, Path, State};
 use axum::http::StatusCode;
+use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::handlers::ApiError;
 use crate::state::ApiState;
+use crate::transport::Capability;
+
+/// Extractor for the `Full` capability. Use it as the first argument
+/// of any handler that should reject Read-only callers.
+///
+/// Returns `403 Forbidden` (not `401`) when the request is authenticated
+/// but the presented credentials don't carry the Full grant — the
+/// caller has identity, just not authority.
+pub(crate) struct RequireControl;
+
+// axum-core 0.4 uses `#[async_trait]` for FromRequestParts; matching
+// the attribute keeps the trait impl's lifetimes consistent with the
+// declaration. async-trait is already a workspace dep via tower.
+#[async_trait::async_trait]
+impl<S> FromRequestParts<S> for RequireControl
+where
+    S: Send + Sync,
+{
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        match parts.extensions.get::<Capability>().copied() {
+            Some(Capability::Full) => Ok(Self),
+            Some(Capability::Read) => Err(ApiError::with_status(
+                StatusCode::FORBIDDEN,
+                "control verb requires the control token",
+            )),
+            None => Err(ApiError::with_status(
+                StatusCode::UNAUTHORIZED,
+                "unauthenticated",
+            )),
+        }
+    }
+}
 
 // -------------------- audit helper
 
@@ -64,6 +99,7 @@ pub(crate) struct RulesReloadResponse {
 }
 
 pub(crate) async fn rules_reload(
+    _cap: RequireControl,
     State(s): State<ApiState>,
 ) -> Result<Json<RulesReloadResponse>, ApiError> {
     let Some(corr) = s.control.correlator.clone() else {
@@ -112,6 +148,7 @@ pub(crate) struct PanicResponse {
 }
 
 pub(crate) async fn panic_fire(
+    _cap: RequireControl,
     State(s): State<ApiState>,
     Json(req): Json<PanicRequest>,
 ) -> Result<Json<PanicResponse>, ApiError> {
@@ -179,6 +216,7 @@ pub(crate) struct ActionRunResponse {
 }
 
 pub(crate) async fn actions_run(
+    _cap: RequireControl,
     State(s): State<ApiState>,
     Path(name): Path<String>,
     Json(req): Json<ActionRunRequest>,

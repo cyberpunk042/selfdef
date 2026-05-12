@@ -164,7 +164,18 @@ enabled = false
 unix_socket = "/run/selfdef.sock"
 unix_socket_mode = "0660"
 tcp_addr = ""                                # e.g. "127.0.0.1:8443"
+
+# Bearer tokens for the TCP transport. UNIX socket clients bypass both
+# (filesystem permissions on the socket are the auth boundary).
+#
+# - token_file: required when tcp_addr is set. Grants the read-only API
+#   (status / events / findings / events/stream / actions discovery).
+# - control_token_file: optional. Grants the read-only API *plus* the
+#   control verbs (rules/reload, panic, actions/{name}/run). Leave
+#   empty to refuse every control verb over TCP — the daemon's "writes"
+#   surface only opens up when an operator explicitly populates this.
 token_file = "/etc/selfdef/api.token"
+control_token_file = ""                      # e.g. "/etc/selfdef/api-control.token"
 
 # Optional TLS for the TCP transport.
 #   - cert_path + key_path empty → plain HTTP over TCP (bearer-token only).

@@ -382,8 +382,12 @@ pub struct ApiConfig {
     pub unix_socket_mode: String,
     /// TCP bind address, e.g. `127.0.0.1:8443`. Empty disables this transport.
     pub tcp_addr: String,
-    /// Path to a file containing the bearer token. Required for TCP.
+    /// Path to a file containing the read-only bearer token. Required for TCP.
     pub token_file: String,
+    /// Optional path to a file with the control token. Without it, the
+    /// TCP transport refuses every control verb regardless of which
+    /// token is presented — opting in is explicit.
+    pub control_token_file: String,
     pub tls: ApiTlsConfig,
 }
 
@@ -410,6 +414,7 @@ impl Default for ApiConfig {
             unix_socket_mode: String::from("0660"),
             tcp_addr: String::new(),
             token_file: String::from("/etc/selfdef/api.token"),
+            control_token_file: String::new(),
             tls: ApiTlsConfig::default(),
         }
     }

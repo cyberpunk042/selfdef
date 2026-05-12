@@ -94,18 +94,35 @@ Each control verb emits an audit event onto the bus with
 `Informational`. The bus subscribers (store sink in particular) record
 it, so `selfdefctl events tail` shows the audit trail.
 
-**Auth boundary for control verbs.** This milestone treats *any*
-authenticated request as eligible to call control verbs:
+**Auth boundary for control verbs.**
 
-- UNIX socket transport: trusted via filesystem permissions. Anyone
-  who can write to the socket can already `systemctl reload selfdefd`
-  via the unit file, so `/rules/reload` doesn't widen the attack
-  surface.
-- TCP transport: gated by the bearer token in `[api].token_file` and
-  (optionally) by the TLS layer below.
+- **UNIX socket transport**: trusted via filesystem permissions. Every
+  request gets the `Full` capability — anyone who can write to the
+  socket can already `systemctl reload selfdefd` via the unit file, so
+  `/rules/reload` doesn't widen the attack surface.
+- **TCP transport**: two-tier bearer tokens.
+  - `[api].token_file` is the *read* token. Grants the read-only API
+    (`/status`, `/events`, `/findings`, `/events/stream`, `/actions`).
+    Required when `tcp_addr` is set.
+  - `[api].control_token_file` is the *control* token. Grants the
+    read-only API *plus* the control verbs. Optional. When unset, the
+    TCP transport refuses every control verb regardless of which token
+    is presented — opting in is explicit.
 
-Per-token capabilities (separate `read` / `control` tokens) are a
-follow-up — the route layout is stable; only the middleware grows.
+Requests that authenticate as the read token but hit a control verb
+get `403 Forbidden` (identity established, authority insufficient).
+Unauthenticated requests on TCP get `401 Unauthorized`. The
+`WWW-Authenticate: Bearer realm="selfdef-api"` header is set on 401s.
+
+Mint the tokens with:
+
+```bash
+openssl rand -hex 32 | sudo tee /etc/selfdef/api.token
+openssl rand -hex 32 | sudo tee /etc/selfdef/api-control.token
+sudo chmod 0600 /etc/selfdef/api*.token
+```
+
+Rotate either token by replacing its file and `systemctl reload selfdefd`.
 
 Every response is content-typed `application/json` (except the SSE
 stream). The event body shape is the [OCSF-aligned envelope](../crates/selfdef-core/src/envelope.rs).
