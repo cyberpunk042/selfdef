@@ -1,0 +1,29 @@
+# Profile: enforce.
+#
+# All policies installed with `action: Sigkill` by default. Tetragon
+# kills the offending process the moment a match fires. Use only
+# after a stable run in `audit` mode — false positives become SIGKILLs.
+#
+# The SecureMessage policy stays at `Post` even in `enforce` until
+# `securemessage_endpoint` is set; the stub default would otherwise
+# be a confusing nop-killer.
+
+profile = "enforce"
+
+etc_write_enabled = true
+etc_write_action  = "default"   # → Sigkill
+
+shell_exec_enabled = true
+shell_exec_action  = "default"  # → Sigkill
+
+egress_enabled   = true
+egress_action    = "default"    # → Sigkill
+# Comma-separated CIDRs. Typical: your model API + an internal
+# SecureMessage endpoint. Empty list with enforce = nothing escapes
+# the container, which will be loud — start in audit, populate this,
+# then flip to enforce.
+egress_allowlist = ""
+
+securemessage_enabled  = true
+securemessage_action   = "post"  # stays Post until endpoint is set
+securemessage_endpoint = ""

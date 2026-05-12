@@ -1,0 +1,64 @@
+{
+  "uid": "__SELFDEF_DASHBOARD_UID__",
+  "title": "__SELFDEF_DASHBOARD_TITLE__",
+  "schemaVersion": 38,
+  "version": 1,
+  "timezone": "browser",
+  "tags": ["selfdef", "tetragon"],
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tetragon events / second",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(tetragon_events_total[5m]))",
+          "legendFormat": "events/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Tetragon kills by policy",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (policy) (rate(tetragon_msg_sigkill_total[5m]))",
+          "legendFormat": "{{policy}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Process cache utilization",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "tetragon_process_cache_size",
+          "legendFormat": "entries"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Map operation errors",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (map, op) (rate(tetragon_map_errors_total[5m]))",
+          "legendFormat": "{{map}} {{op}}"
+        }
+      ]
+    }
+  ]
+}

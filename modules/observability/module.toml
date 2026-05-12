@@ -1,0 +1,30 @@
+name        = "observability"
+version     = "0.1.0"
+summary     = "Prometheus scrape config + Grafana dashboards for the selfdef stack (Tetragon metrics, module health)"
+category    = "observability"
+
+depends_on  = ["tetragon"]
+conflicts   = []
+provides    = ["selfdef-dashboards"]
+consumes    = ["metrics-endpoint"]
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+
+# `post`: runs after every other module is configured and any metrics
+# endpoints they expose are up. Prometheus picks up the new scrape
+# config on reload; Grafana auto-loads the dashboard JSON.
+phase = "post"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "bundled"
+available = ["bundled", "external"]

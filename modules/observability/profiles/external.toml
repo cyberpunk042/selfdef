@@ -1,0 +1,16 @@
+# Profile: external.
+#
+# Prometheus and Grafana run elsewhere (a central monitoring host,
+# a managed service, k8s). This module renders the same scrape
+# config + dashboard JSON but drops them into a staging directory
+# the operator (or a config-management tool) syncs out.
+#
+# No services are touched. No reloads are signalled.
+
+profile = "external"
+
+staging_dir = "/var/lib/selfdef/observability/staging"
+
+scrape_targets  = "localhost:2112"
+dashboard_uid   = "selfdef"
+dashboard_title = "selfdef — Host Self-Defense"

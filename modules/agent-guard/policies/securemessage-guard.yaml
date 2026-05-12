@@ -1,0 +1,42 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-agent-securemessage-guard"
+  annotations:
+    selfdef.io/severity: "critical"
+    selfdef.io/owner: "agent-guard"
+    selfdef.io/stub: "true"
+    selfdef.io/attack: "T1041"   # Exfiltration Over C2 Channel
+spec:
+  # Forward-looking: when the host gains a SecureMessage endpoint
+  # (out-of-band channel for operator-to-agent confirmations), any
+  # write to it from a container that isn't on the allowlist is a
+  # red-flag exfiltration vector. The endpoint path is unset by
+  # default — set `securemessage_endpoint` in the host config to
+  # activate the policy. Until then this file is dormant and the
+  # selector below never matches anything.
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              # apply.sh rewrites this to `securemessage_endpoint`
+              # when it's set in the host config. Until then the
+              # literal below matches nothing.
+              values:
+                - "__SELFDEF_SECUREMESSAGE_DISABLED__"
+          matchNamespaces:
+            - namespace: Pid
+              operator: NotIn
+              values:
+                - "host_ns"
+          matchActions:
+            # Default action stays Post even in `enforce` until the
+            # endpoint is real — kill on a placeholder match would
+            # be deeply confusing if it ever triggered.
+            - action: Post

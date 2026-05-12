@@ -1,0 +1,42 @@
+name        = "tetragon"
+version     = "0.1.0"
+summary     = "Tetragon (Cilium eBPF) substrate: config, event JSONL, Prometheus endpoint, policy dir"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+
+# Other modules consume these to build on top of Tetragon without
+# re-doing substrate setup:
+#   tetragon-tracing  — Tetragon's event stream is wired to the daemon's
+#                       eventstream collector input path.
+#   tetragon-policies — `/etc/tetragon/tetragon.tp.d/` is the drop-dir;
+#                       policy modules (e.g. `agent-guard`) write here.
+#   metrics-endpoint  — Tetragon's built-in Prometheus exporter is
+#                       enabled and reachable on `metrics_address`.
+provides    = ["tetragon-tracing", "tetragon-policies", "metrics-endpoint"]
+consumes    = []
+
+requires    = [
+    { kind = "binary",         value = "tetragon" },
+    { kind = "binary",         value = "systemctl" },
+    { kind = "kernel-feature", value = "CONFIG_BPF" },
+]
+
+# Single-instance — a host runs one Tetragon daemon.
+instanced = false
+
+# Run in `pre`: policy modules (agent-guard) and observability (which
+# scrapes the metrics endpoint) both expect the substrate to be live
+# before they apply. See docs/src/modules-roadmap.md § Lifecycle.
+phase = "pre"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "default"
+available = ["default"]

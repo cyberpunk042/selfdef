@@ -1,0 +1,37 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-agent-container-shell-guard"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "agent-guard"
+    selfdef.io/attack: "T1059.004"   # Unix Shell
+spec:
+  kprobes:
+    # do_execveat_common is the kernel's single entrypoint for both
+    # execve(2) and execveat(2), so one kprobe covers both. Tetragon
+    # exposes the resolved binary path via the `string` arg at
+    # index 1 on this hook.
+    - call: "__x64_sys_execve"
+      syscall: true
+      args:
+        - index: 0
+          type: "string"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Postfix"
+              values:
+                - "/bash"
+                - "/sh"
+                - "/dash"
+                - "/zsh"
+                - "/ash"
+          matchNamespaces:
+            - namespace: Pid
+              operator: NotIn
+              values:
+                - "host_ns"
+          matchActions:
+            # Rendered to Sigkill in `enforce`. See agent-guard apply.sh.
+            - action: Post

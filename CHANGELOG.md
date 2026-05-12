@@ -6,6 +6,55 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — AI-machine track: `tetragon` + `agent-guard` + `observability` modules
+- New `tetragon` module (v0.1.0, hardening, `phase = "pre"`):
+  substrate for everything Tetragon-based. Renders
+  `/etc/tetragon/tetragon.yaml` byte-stably from the host config,
+  owns the TracingPolicy drop directory, exposes the built-in
+  Prometheus metrics endpoint, points Tetragon's event JSONL at a
+  path the daemon's `eventstream` collector can tail. Refuses to
+  apply if `tetragon` / `systemctl` aren't on `PATH`. Restarts the
+  service only when the rendered config actually changes bytes —
+  re-running apply on a converged host is a true no-op. Provides
+  `tetragon-tracing` / `tetragon-policies` / `metrics-endpoint`.
+- New `agent-guard` module (v0.1.0, hardening, `depends_on =
+  ["tetragon"]`): four TracingPolicies tuned for AI agents running
+  in Docker / Podman / containerd containers:
+  - `etc-write-guard` — `security_file_open` with write intent
+    under `/etc/`.
+  - `container-shell-guard` — `execve` of `bash` / `sh` / `dash`
+    / `zsh` / `ash`.
+  - `egress-guard` — `tcp_connect` to non-allowlisted destinations
+    (CSV CIDR allowlist via `egress_allowlist`).
+  - `securemessage-guard` — forward-looking stub for a SecureMessage
+    endpoint; auto-downgrades to `Post` action whenever the
+    endpoint is unset so the placeholder never SIGKILLs anything.
+  Two profiles: `audit` (Post-only, the bring-up default) and
+  `enforce` (Sigkill). Per-policy `*_action = default | post |
+  sigkill` overrides let operators ramp up policies individually.
+  Container scope uses Tetragon's `matchNamespaces` to skip the
+  host PID namespace — works on every container runtime without
+  needing k8s labels.
+- New `observability` module (v0.1.0, observability, `phase =
+  "post"`, `depends_on = ["tetragon"]`): Prometheus scrape config
+  + Grafana dashboard JSON for the selfdef stack. Two profiles:
+  `bundled` (drops files under `/etc/prometheus/conf.d/` and
+  `/var/lib/grafana/dashboards/selfdef/`, reloads Prometheus) and
+  `external` (renders into a staging dir for the operator to sync
+  out). Dashboard: four panels — Tetragon events/sec, kills by
+  policy, process-cache utilization, BPF map errors.
+- 23 new hermetic dry-run smoke tests cover the three modules:
+  byte-stable config rendering + idempotent reapply (tetragon),
+  per-policy action resolution + egress allowlist splicing +
+  SecureMessage stub behaviour + check drift detection +
+  uninstall cleanup (agent-guard), bundled vs external rendering +
+  scrape target splicing + dashboard JSON validity + idempotent
+  reapply + empty-target refusal (observability).
+- Roadmap (`docs/src/modules-roadmap.md`) gains rows for the three
+  new modules and the "AI-machine track" callout in remaining
+  work, with pod-label / GPU device-guard variants + a
+  selfdef-daemon `/metrics` endpoint flagged as follow-ups.
+
 ### Added — `selfdefctl events emit` + `integrity-sentinel` notifier wiring
 - New `selfdefctl events emit` subcommand appends a single OCSF
   Event line to a JSONL stream the daemon's existing `eventstream`

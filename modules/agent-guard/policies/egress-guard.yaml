@@ -1,0 +1,38 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-agent-egress-guard"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "agent-guard"
+    selfdef.io/attack: "T1071"   # Application Layer Protocol
+spec:
+  kprobes:
+    - call: "tcp_connect"
+      syscall: false
+      args:
+        - index: 0
+          type: "sock"
+      selectors:
+        # Selector body is rewritten by agent-guard's apply.sh to
+        # splice in the operator's `egress_allowlist` CIDRs from the
+        # host config — Tetragon expects literal CIDR strings, not
+        # variables. The ship-in-tree default below blocks nothing
+        # so an unconfigured deployment never breaks egress; the
+        # rendered version inverts to "block everything except
+        # allowlisted CIDRs".
+        - matchArgs:
+            - index: 0
+              operator: "NotDAddr"
+              values:
+                - "0.0.0.0/0"
+          matchNamespaces:
+            - namespace: Pid
+              operator: NotIn
+              values:
+                - "host_ns"
+          matchActions:
+            # Rendered to Sigkill in `enforce`. The egress allowlist
+            # is operator-defined — start with nothing, expand to
+            # your model API + internal SecureMessage endpoint.
+            - action: Post

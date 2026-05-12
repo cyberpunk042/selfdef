@@ -1,0 +1,42 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-agent-etc-write-guard"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "agent-guard"
+    selfdef.io/attack: "T1565.001"   # Stored Data Manipulation
+spec:
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      return: false
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                - "/etc/"
+            - index: 1
+              # O_WRONLY (1) or O_RDWR (2). We don't care about O_RDONLY.
+              operator: "Mask"
+              values:
+                - "3"
+          # Container scope: skip the host PID namespace. Anything
+          # in a non-host PID ns is by definition inside a Docker /
+          # Podman / containerd container.
+          matchNamespaces:
+            - namespace: Pid
+              operator: NotIn
+              values:
+                - "host_ns"
+          matchActions:
+            # Rendered to Sigkill in the `enforce` profile by
+            # agent-guard's apply.sh. The source default is Post so
+            # operators can inspect the policy without templating.
+            - action: Post

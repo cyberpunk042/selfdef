@@ -1,0 +1,295 @@
+//! Dry-run smoke tests for the `tetragon` module.
+//!
+//! Hermetic: each test builds a scratch tempdir holding fake
+//! tetragon + systemctl binaries on PATH, a host config, and a
+//! writable target tree. Then it runs apply.sh / check.sh /
+//! uninstall.sh in dry-run mode.
+//!
+//! The apply path is the interesting one — it renders Tetragon's
+//! main config from the lib helper. We assert the render is
+//! byte-stable across two consecutive applies (so a no-op re-apply
+//! reports "already at desired state" and never restarts the
+//! service).
+
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+fn module_dir() -> PathBuf {
+    workspace_root().join("modules/tetragon")
+}
+
+fn write_executable(path: &Path, body: &str) {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    let mut f = std::fs::File::create(path).unwrap();
+    f.write_all(body.as_bytes()).unwrap();
+    let mut perms = std::fs::metadata(path).unwrap().permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(path, perms).unwrap();
+}
+
+/// Stub bin dir with `tetragon` (no-op) and `systemctl` (accepts
+/// every verb). Suitable for dry-run apply where we never actually
+/// expect the binary to be invoked.
+fn stub_bin_dir() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    write_executable(
+        &dir.path().join("tetragon"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    );
+    write_executable(
+        &dir.path().join("systemctl"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    );
+    dir
+}
+
+fn prepended_path(extra: &Path) -> std::ffi::OsString {
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut out = std::ffi::OsString::from(extra);
+    out.push(":");
+    out.push(&existing);
+    out
+}
+
+struct Fixture {
+    _root: tempfile::TempDir,
+    _bins: tempfile::TempDir,
+    config_path: PathBuf,
+    config_render_path: PathBuf,
+    policy_dir: PathBuf,
+    event_log: PathBuf,
+    bins: PathBuf,
+}
+
+fn fixture() -> Fixture {
+    let root_holder = tempfile::tempdir().unwrap();
+    let root = root_holder.path().to_path_buf();
+
+    let event_log = root.join("tetragon-events.json");
+    let policy_dir = root.join("tetragon.tp.d");
+    let config_render_path = root.join("tetragon.yaml");
+
+    let host_cfg = root.join("tetragon.toml");
+    std::fs::write(
+        &host_cfg,
+        format!(
+            "profile = \"default\"\n\
+             event_log_path  = \"{}\"\n\
+             policy_dir      = \"{}\"\n\
+             metrics_address = \"127.0.0.1:2112\"\n\
+             config_path     = \"{}\"\n\
+             service_unit    = \"tetragon-test.service\"\n",
+            event_log.display(),
+            policy_dir.display(),
+            config_render_path.display(),
+        ),
+    )
+    .unwrap();
+
+    let bins_holder = stub_bin_dir();
+    let bins = bins_holder.path().to_path_buf();
+
+    Fixture {
+        _root: root_holder,
+        _bins: bins_holder,
+        config_path: host_cfg,
+        config_render_path,
+        policy_dir,
+        event_log,
+        bins,
+    }
+}
+
+fn run_dry_apply(fx: &Fixture) -> Output {
+    Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn apply.sh")
+}
+
+fn run_live_apply(fx: &Fixture) -> Output {
+    Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn apply.sh")
+}
+
+fn last_stdout_line(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .last()
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
+#[test]
+fn dry_run_apply_succeeds_and_emits_status() {
+    let fx = fixture();
+    let out = run_dry_apply(&fx);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"module\":\"tetragon\"") && line.contains("\"status\":\"ok\""),
+        "got: {line}",
+    );
+    // Dry-run must not have actually created anything.
+    assert!(!fx.config_render_path.exists());
+    assert!(!fx.policy_dir.exists());
+}
+
+#[test]
+fn live_apply_renders_byte_stable_config_and_reapply_is_noop() {
+    let fx = fixture();
+    let first = run_live_apply(&fx);
+    assert!(first.status.success(), "first apply failed");
+    assert!(
+        fx.config_render_path.exists(),
+        "expected config to be rendered",
+    );
+    assert!(fx.policy_dir.is_dir(), "policy dir was not created");
+    assert!(
+        fx.event_log.parent().unwrap().is_dir(),
+        "event log dir was not created",
+    );
+
+    let rendered_first = std::fs::read(&fx.config_render_path).unwrap();
+    // Touch nothing; reapply.
+    let second = run_live_apply(&fx);
+    assert!(second.status.success(), "reapply failed");
+    let rendered_second = std::fs::read(&fx.config_render_path).unwrap();
+    assert_eq!(
+        rendered_first, rendered_second,
+        "config render is not byte-stable",
+    );
+    let line = last_stdout_line(&second);
+    assert!(
+        line.contains("already at desired state"),
+        "expected no-op re-apply, got: {line}",
+    );
+}
+
+#[test]
+fn rendered_config_contains_operator_values() {
+    let fx = fixture();
+    run_live_apply(&fx);
+    let rendered = std::fs::read_to_string(&fx.config_render_path).unwrap();
+    assert!(
+        rendered.contains(&format!("export-filename: \"{}\"", fx.event_log.display())),
+        "render missing event_log_path:\n{rendered}",
+    );
+    assert!(
+        rendered.contains(&format!(
+            "tracing-policy-dir: \"{}\"",
+            fx.policy_dir.display()
+        )),
+        "render missing policy_dir:\n{rendered}",
+    );
+    assert!(
+        rendered.contains("metrics-server: \"127.0.0.1:2112\""),
+        "render missing metrics_address:\n{rendered}",
+    );
+}
+
+#[test]
+fn check_fails_before_apply() {
+    let fx = fixture();
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/check.sh"))
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn check.sh");
+    assert!(!out.status.success(), "check must fail before apply");
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"status\":\"failed\"") && line.contains("config not found"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn check_succeeds_after_apply() {
+    let fx = fixture();
+    run_live_apply(&fx);
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/check.sh"))
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn check.sh");
+    let line = last_stdout_line(&out);
+    assert!(
+        out.status.success(),
+        "check should pass: {line}\nstderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(line.contains("substrate healthy"), "got: {line}");
+}
+
+#[test]
+fn uninstall_removes_config_and_empty_policy_dir() {
+    let fx = fixture();
+    run_live_apply(&fx);
+    assert!(fx.config_render_path.exists());
+    assert!(fx.policy_dir.is_dir());
+
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/uninstall.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn uninstall.sh");
+    assert!(out.status.success(), "uninstall failed");
+    assert!(
+        !fx.config_render_path.exists(),
+        "config still present after uninstall",
+    );
+    assert!(
+        !fx.policy_dir.exists(),
+        "empty policy dir should have been removed",
+    );
+}
+
+#[test]
+fn uninstall_preserves_policy_dir_when_non_empty() {
+    let fx = fixture();
+    run_live_apply(&fx);
+    // Pretend a peer module dropped a policy file in there.
+    std::fs::write(fx.policy_dir.join("foreign.yaml"), "x: 1\n").unwrap();
+
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/uninstall.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
+        .env("PATH", prepended_path(&fx.bins))
+        .output()
+        .expect("spawn uninstall.sh");
+    assert!(out.status.success(), "uninstall failed");
+    assert!(
+        fx.policy_dir.is_dir(),
+        "policy dir must be preserved when non-empty",
+    );
+    assert!(
+        fx.policy_dir.join("foreign.yaml").exists(),
+        "foreign policy must not be removed",
+    );
+}
