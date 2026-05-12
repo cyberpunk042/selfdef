@@ -1,0 +1,30 @@
+name        = "integrity-sentinel"
+version     = "0.1.0"
+summary     = "SHA256 baseline verification for policy artifacts. Fail-closed on drift."
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["baseline-attestation"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "diff" },
+]
+
+# Single-instance: a host has exactly one integrity baseline.
+# Multi-instance would only make sense if you wanted separate
+# baselines for separate path sets, which is unusual — the existing
+# `paths_file` knob covers that by composing them into one list.
+instanced = false
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "strict"
+available = ["strict", "warn-only"]
