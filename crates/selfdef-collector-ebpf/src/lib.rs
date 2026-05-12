@@ -16,7 +16,6 @@
 //! (`/sys/kernel/btf/vmlinux` present). Debian 13 / Ubuntu 24 ship this.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
@@ -28,9 +27,7 @@ use selfdef_bus::Publisher;
 use selfdef_core::Event;
 use selfdef_core::category::ClassUid;
 use selfdef_core::prelude::*;
-use selfdef_ebpf_common::{
-    EventKind, FileOpenEvent, ProcessExecEvent, UnlinkEvent,
-};
+use selfdef_ebpf_common::{EventKind, FileOpenEvent, ProcessExecEvent, UnlinkEvent};
 use thiserror::Error;
 use tokio::io::unix::AsyncFd;
 use tokio_util::sync::CancellationToken;
@@ -141,8 +138,7 @@ impl EbpfCollector {
         match bytes[0] {
             x if x == EventKind::ProcessExec as u8 => {
                 if let Ok(ev) = bytemuck::try_from_bytes::<ProcessExecEvent>(bytes) {
-                    self.publisher
-                        .publish_lossy(self.process_exec_to_event(ev));
+                    self.publisher.publish_lossy(self.process_exec_to_event(ev));
                 } else {
                     debug!(len = bytes.len(), "ignored short ProcessExecEvent");
                 }
@@ -175,7 +171,11 @@ impl EbpfCollector {
         };
         let process = Process {
             pid: raw.pid as i32,
-            parent_pid: if raw.ppid > 0 { Some(raw.ppid as i32) } else { None },
+            parent_pid: if raw.ppid > 0 {
+                Some(raw.ppid as i32)
+            } else {
+                None
+            },
             name: Some(comm.clone()),
             cmdline: Some(cmdline.clone()),
             user: Some(User {
@@ -229,7 +229,10 @@ impl EbpfCollector {
             event = event.with_process(Process {
                 pid: raw.pid as i32,
                 name: Some(comm),
-                user: Some(User { uid: Some(raw.uid), ..User::default() }),
+                user: Some(User {
+                    uid: Some(raw.uid),
+                    ..User::default()
+                }),
                 ..Process::default()
             });
         }
@@ -258,7 +261,10 @@ impl EbpfCollector {
             event = event.with_process(Process {
                 pid: raw.pid as i32,
                 name: Some(comm),
-                user: Some(User { uid: Some(raw.uid), ..User::default() }),
+                user: Some(User {
+                    uid: Some(raw.uid),
+                    ..User::default()
+                }),
                 ..Process::default()
             });
         }
@@ -327,11 +333,7 @@ mod tests {
     #[test]
     fn exec_event_converts_to_ocsf_with_full_argv() {
         let bus = Bus::new(4);
-        let coll = EbpfCollector::new(
-            PathBuf::from("/unused"),
-            bus.publisher(),
-            "h".into(),
-        );
+        let coll = EbpfCollector::new(PathBuf::from("/unused"), bus.publisher(), "h".into());
         let ev = make_exec_event();
         let event = coll.process_exec_to_event(&ev);
         assert_eq!(event.class_uid, ClassUid::PROCESS_ACTIVITY);

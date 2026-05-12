@@ -5,7 +5,6 @@
 //! migrations are baked into the binary and applied on `open`.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 mod sqlite;

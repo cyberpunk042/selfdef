@@ -1,0 +1,53 @@
+---
+source: crates/selfdef-core/tests/snapshots.rs
+assertion_line: 52
+expression: e
+---
+{
+  "schema": 1,
+  "id": "00000000-0000-0000-0000-000000000000",
+  "time_dt": "2026-01-15T12:00:00Z",
+  "category_uid": 3,
+  "class_uid": 3002,
+  "activity_id": 1,
+  "type_uid": 300201,
+  "severity_id": 3,
+  "host_tag": "test-host",
+  "source": "test-source",
+  "status_id": 2,
+  "message": "Failed SSH password for alice from 192.0.2.5",
+  "actor": {
+    "user": {
+      "uid": 1000,
+      "name": "alice"
+    }
+  },
+  "src_endpoint": {
+    "ip": "192.0.2.5",
+    "port": 51234
+  },
+  "dst_endpoint": {
+    "ip": "203.0.113.10",
+    "port": 22
+  },
+  "attack": [
+    {
+      "id": "T1110",
+      "name": "Brute Force",
+      "tactic": "credential_access"
+    }
+  ],
+  "metadata": {
+    "product": {
+      "name": "selfdef-daemon",
+      "vendor_name": "selfdef",
+      "version": "0.1.0-test"
+    },
+    "logged_time_dt": "2026-01-15T12:00:00Z",
+    "sequence": 0,
+    "profiles": [
+      "host",
+      "linux"
+    ]
+  }
+}

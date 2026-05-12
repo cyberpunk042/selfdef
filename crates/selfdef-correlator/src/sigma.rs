@@ -44,7 +44,7 @@ pub enum SigmaError {
     Yaml {
         path: PathBuf,
         #[source]
-        source: serde_yml::Error,
+        source: serde_yaml_ng::Error,
     },
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -121,7 +121,7 @@ impl SigmaLevel {
 #[derive(Debug, Deserialize)]
 pub struct RawDetection {
     #[serde(flatten)]
-    pub selections: HashMap<String, serde_yml::Value>,
+    pub selections: HashMap<String, serde_yaml_ng::Value>,
     #[serde(default)]
     pub timeframe: Option<String>,
     pub condition: String,
@@ -327,7 +327,7 @@ pub fn compile_rule(raw: RawRule, source_path: PathBuf) -> Result<CompiledRule, 
     })
 }
 
-fn compile_selection(name: &str, value: serde_yml::Value) -> Result<SelectionMatcher, String> {
+fn compile_selection(name: &str, value: serde_yaml_ng::Value) -> Result<SelectionMatcher, String> {
     let map = value
         .as_mapping()
         .ok_or_else(|| format!("selection '{name}' must be a mapping"))?;
@@ -364,7 +364,7 @@ fn parse_field_spec(spec: &str) -> (&str, FieldOp) {
     }
 }
 
-fn compile_values(v: &serde_yml::Value, op: FieldOp) -> Result<Vec<MatchValue>, String> {
+fn compile_values(v: &serde_yaml_ng::Value, op: FieldOp) -> Result<Vec<MatchValue>, String> {
     if let Some(seq) = v.as_sequence() {
         seq.iter().map(|item| compile_value(item, op)).collect()
     } else {
@@ -372,7 +372,7 @@ fn compile_values(v: &serde_yml::Value, op: FieldOp) -> Result<Vec<MatchValue>, 
     }
 }
 
-fn compile_value(v: &serde_yml::Value, op: FieldOp) -> Result<MatchValue, String> {
+fn compile_value(v: &serde_yaml_ng::Value, op: FieldOp) -> Result<MatchValue, String> {
     if let Some(s) = v.as_str() {
         if matches!(op, FieldOp::Regex) {
             let r = Regex::new(s).map_err(|e| format!("bad regex: {e}"))?;
@@ -461,7 +461,10 @@ impl SelectionMatcher {
                 None => return false,
             };
             // At least one value must match (OR).
-            let any = clause.values.iter().any(|val| val.matches_json(v, clause.op));
+            let any = clause
+                .values
+                .iter()
+                .any(|val| val.matches_json(v, clause.op));
             if !any {
                 return false;
             }
@@ -510,8 +513,8 @@ impl Engine {
                 continue;
             }
             let yaml_bytes = std::fs::read(&entry)?;
-            let raw: RawRule = serde_yml::from_slice(&yaml_bytes)
-                .map_err(|source| SigmaError::Yaml {
+            let raw: RawRule =
+                serde_yaml_ng::from_slice(&yaml_bytes).map_err(|source| SigmaError::Yaml {
                     path: entry.clone(),
                     source,
                 })?;
@@ -554,12 +557,7 @@ impl Engine {
     }
 
     /// Evaluate one event against all rules. Returns 0+ Finding events.
-    pub fn process(
-        &self,
-        event: &Event,
-        host_tag: &str,
-        sequence: &AtomicU64,
-    ) -> Vec<Event> {
+    pub fn process(&self, event: &Event, host_tag: &str, sequence: &AtomicU64) -> Vec<Event> {
         let event_json = match serde_json::to_value(event) {
             Ok(v) => v,
             Err(e) => {
@@ -590,12 +588,13 @@ impl Engine {
                 (Condition::Single(_), _) => {
                     findings.push(build_finding(rule, event, host_tag, sequence, None));
                 }
-                (
-                    Condition::Count { group_by_field, .. },
-                    Some(agg),
-                ) => {
+                (Condition::Count { group_by_field, .. }, Some(agg)) => {
                     let key = extract(&event_json, group_by_field)
-                        .and_then(|v| v.as_str().map(str::to_owned).or_else(|| Some(v.to_string())))
+                        .and_then(|v| {
+                            v.as_str()
+                                .map(str::to_owned)
+                                .or_else(|| Some(v.to_string()))
+                        })
                         .unwrap_or_default();
                     if let Some(k) = agg.observe(key) {
                         findings.push(build_finding(rule, event, host_tag, sequence, Some(k)));
@@ -625,7 +624,11 @@ fn walk_yaml_inner(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
         let path = entry.path();
         if path.is_dir() {
             walk_yaml_inner(&path, out)?;
-        } else if path.extension().and_then(|s| s.to_str()).is_some_and(|s| s == "yml" || s == "yaml") {
+        } else if path
+            .extension()
+            .and_then(|s| s.to_str())
+            .is_some_and(|s| s == "yml" || s == "yaml")
+        {
             out.push(path);
         }
     }
@@ -772,10 +775,13 @@ mod tests {
 
     #[test]
     fn parse_count_condition() {
-        let (c, by) =
-            parse_condition("failed_auth | count() by src_endpoint.ip > 2").unwrap();
+        let (c, by) = parse_condition("failed_auth | count() by src_endpoint.ip > 2").unwrap();
         match c {
-            Condition::Count { selection, group_by_field, threshold } => {
+            Condition::Count {
+                selection,
+                group_by_field,
+                threshold,
+            } => {
                 assert_eq!(selection, "failed_auth");
                 assert_eq!(group_by_field, "src_endpoint.ip");
                 assert_eq!(threshold, 2);
@@ -817,7 +823,7 @@ detection:
   condition: failed
 level: medium
 "#;
-        let raw: RawRule = serde_yml::from_str(yaml).unwrap();
+        let raw: RawRule = serde_yaml_ng::from_str(yaml).unwrap();
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);
@@ -841,7 +847,7 @@ detection:
   condition: failed_auth | count() by src_endpoint.ip > 2
 level: high
 "#;
-        let raw: RawRule = serde_yml::from_str(yaml).unwrap();
+        let raw: RawRule = serde_yaml_ng::from_str(yaml).unwrap();
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);
@@ -868,7 +874,7 @@ detection:
   condition: sel
 level: high
 "#;
-        let raw: RawRule = serde_yml::from_str(yaml).unwrap();
+        let raw: RawRule = serde_yaml_ng::from_str(yaml).unwrap();
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);
@@ -899,7 +905,7 @@ detection:
   condition: sel
 level: low
 "#;
-        let raw: RawRule = serde_yml::from_str(yaml).unwrap();
+        let raw: RawRule = serde_yaml_ng::from_str(yaml).unwrap();
         let rule = compile_rule(raw, PathBuf::from("inline.yml")).unwrap();
         let engine = Engine { rules: vec![rule] };
         let seq = AtomicU64::new(0);

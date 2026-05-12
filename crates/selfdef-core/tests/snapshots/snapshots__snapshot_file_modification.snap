@@ -1,0 +1,47 @@
+---
+source: crates/selfdef-core/tests/snapshots.rs
+assertion_line: 105
+expression: e
+---
+{
+  "schema": 1,
+  "id": "00000000-0000-0000-0000-000000000000",
+  "time_dt": "2026-01-15T12:00:00Z",
+  "category_uid": 1,
+  "class_uid": 1001,
+  "activity_id": 3,
+  "type_uid": 100103,
+  "severity_id": 3,
+  "host_tag": "test-host",
+  "source": "test-source",
+  "message": "File modified: /etc/passwd",
+  "actor": {
+    "user": {
+      "uid": 0,
+      "name": "root"
+    }
+  },
+  "file": {
+    "path": "/etc/passwd"
+  },
+  "attack": [
+    {
+      "id": "T1136.001",
+      "name": "Create Account: Local Account",
+      "tactic": "persistence"
+    }
+  ],
+  "metadata": {
+    "product": {
+      "name": "selfdef-daemon",
+      "vendor_name": "selfdef",
+      "version": "0.1.0-test"
+    },
+    "logged_time_dt": "2026-01-15T12:00:00Z",
+    "sequence": 0,
+    "profiles": [
+      "host",
+      "linux"
+    ]
+  }
+}

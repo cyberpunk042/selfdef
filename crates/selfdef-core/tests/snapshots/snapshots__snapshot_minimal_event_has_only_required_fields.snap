@@ -1,0 +1,30 @@
+---
+source: crates/selfdef-core/tests/snapshots.rs
+assertion_line: 111
+expression: e
+---
+{
+  "schema": 1,
+  "id": "00000000-0000-0000-0000-000000000000",
+  "time_dt": "2026-01-15T12:00:00Z",
+  "category_uid": 1,
+  "class_uid": 1007,
+  "activity_id": 0,
+  "type_uid": 100700,
+  "severity_id": 3,
+  "host_tag": "test-host",
+  "source": "test-source",
+  "metadata": {
+    "product": {
+      "name": "selfdef-daemon",
+      "vendor_name": "selfdef",
+      "version": "0.1.0-test"
+    },
+    "logged_time_dt": "2026-01-15T12:00:00Z",
+    "sequence": 0,
+    "profiles": [
+      "host",
+      "linux"
+    ]
+  }
+}

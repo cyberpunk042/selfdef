@@ -26,8 +26,10 @@
 //! - [`error`] — crate-level error type.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic, clippy::nursery)]
-#![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
+// Lint levels are configured workspace-wide in /Cargo.toml under
+// `[workspace.lints]`. Re-declaring them here would re-enable lints that
+// the workspace carve-outs explicitly allow, causing CI churn on every
+// toolchain bump.
 
 pub mod activity;
 pub mod attack;

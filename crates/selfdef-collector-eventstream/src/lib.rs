@@ -11,7 +11,6 @@
 //! lines are logged and skipped, never crash the collector.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
@@ -140,11 +139,7 @@ mod tests {
         let pub_ = bus.publisher();
         let mut sub = bus.subscribe();
 
-        let collector = EventstreamCollector::new(
-            file.path().to_path_buf(),
-            ReadFrom::Start,
-            pub_,
-        );
+        let collector = EventstreamCollector::new(file.path().to_path_buf(), ReadFrom::Start, pub_);
         let shutdown = CancellationToken::new();
         let sd = shutdown.clone();
         let task = tokio::spawn(async move { collector.run(sd).await });

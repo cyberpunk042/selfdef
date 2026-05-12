@@ -56,8 +56,7 @@ impl SqliteStore {
     }
 
     fn migrate(conn: &Connection) -> Result<(), StoreError> {
-        let mut current: u32 = conn
-            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+        let mut current: u32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
         if current > SCHEMA_VERSION {
             return Err(StoreError::BadMigration {
@@ -179,16 +178,17 @@ impl SqliteStore {
     pub async fn get(&self, id: Uuid) -> Result<Option<Event>, StoreError> {
         let conn = Arc::clone(&self.conn);
         let bytes = id.as_bytes().to_vec();
-        let row = tokio::task::spawn_blocking(move || -> Result<Option<String>, rusqlite::Error> {
-            let conn = conn.lock().unwrap_or_else(|p| p.into_inner());
-            conn.query_row(
-                "SELECT payload FROM events WHERE id = ?1",
-                params![bytes],
-                |r| r.get::<_, String>(0),
-            )
-            .optional()
-        })
-        .await??;
+        let row =
+            tokio::task::spawn_blocking(move || -> Result<Option<String>, rusqlite::Error> {
+                let conn = conn.lock().unwrap_or_else(|p| p.into_inner());
+                conn.query_row(
+                    "SELECT payload FROM events WHERE id = ?1",
+                    params![bytes],
+                    |r| r.get::<_, String>(0),
+                )
+                .optional()
+            })
+            .await??;
         match row {
             None => Ok(None),
             Some(s) => Ok(Some(serde_json::from_str(&s)?)),
@@ -230,7 +230,10 @@ mod tests {
         let store = SqliteStore::open(dir.path().join("state.sqlite")).unwrap();
 
         for i in 0..5 {
-            store.insert(&make_event(i, SeverityId::Medium)).await.unwrap();
+            store
+                .insert(&make_event(i, SeverityId::Medium))
+                .await
+                .unwrap();
         }
         assert_eq!(store.count().await.unwrap(), 5);
 

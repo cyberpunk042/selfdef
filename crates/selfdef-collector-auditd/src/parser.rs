@@ -34,7 +34,7 @@ impl AuditRecord {
 /// Parse one audit log line. Returns `None` for lines that don't look like
 /// audit records (blank, comments, malformed); callers can warn or ignore.
 #[allow(clippy::manual_map)] // explicit None branch is clearer here
-pub fn parse_line(line: &str) -> Option<AuditRecord> {
+pub(crate) fn parse_line(line: &str) -> Option<AuditRecord> {
     let line = line.trim();
     if line.is_empty() || !line.starts_with("type=") {
         return None;
@@ -53,10 +53,12 @@ pub fn parse_line(line: &str) -> Option<AuditRecord> {
         match k.as_str() {
             "type" => kind = Some(v.clone()),
             "msg" if v.starts_with("audit(") => {
-                // audit(1736944496.789:1234567)
+                // audit(1736944496.789:1234567)[:] — auditd writes the
+                // trailing colon as part of the header on most distros, so
+                // we accept both `)` and `):` as the close.
                 let inner = v
                     .strip_prefix("audit(")
-                    .and_then(|s| s.strip_suffix(')'))?;
+                    .and_then(|s| s.strip_suffix("):").or_else(|| s.strip_suffix(')')))?;
                 let (ts, ser) = inner.split_once(':')?;
                 let secs: f64 = ts.parse().ok()?;
                 timestamp_secs = Some(secs.trunc() as u64);
@@ -120,7 +122,9 @@ fn tokenize_kv(input: &str) -> Vec<(String, String)> {
             // Stray token; skip.
             continue;
         }
-        let key = std::str::from_utf8(&bytes[key_start..i]).unwrap_or("").to_string();
+        let key = std::str::from_utf8(&bytes[key_start..i])
+            .unwrap_or("")
+            .to_string();
         i += 1; // past '='
 
         // Read value: quoted or until whitespace.
@@ -134,13 +138,17 @@ fn tokenize_kv(input: &str) -> Vec<(String, String)> {
             if i < bytes.len() {
                 i += 1; // include closing quote
             }
-            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+            std::str::from_utf8(&bytes[val_start..i])
+                .unwrap_or("")
+                .to_string()
         } else {
             let val_start = i;
             while i < bytes.len() && !bytes[i].is_ascii_whitespace() {
                 i += 1;
             }
-            std::str::from_utf8(&bytes[val_start..i]).unwrap_or("").to_string()
+            std::str::from_utf8(&bytes[val_start..i])
+                .unwrap_or("")
+                .to_string()
         };
 
         // Strip outer quotes for plain key=value cases; keep them where

@@ -18,15 +18,19 @@ use std::time::Duration;
 use selfdef_bus::Bus;
 use selfdef_collector_ebpf::EbpfCollector;
 use selfdef_core::category::ClassUid;
-use selfdef_core::prelude::*;
-use selfdef_ebpf_common::{
-    EventKind, ProcessExecEvent, ARGV_BUF_LEN, COMM_LEN,
-};
+use selfdef_ebpf_common::{ARGV_BUF_LEN, COMM_LEN, EventKind, ProcessExecEvent};
 use selfdef_store::SqliteStore;
 use tempfile::tempdir;
 use tokio_util::sync::CancellationToken;
 
-fn make_exec(pid: u32, ppid: u32, uid: u32, comm: &[u8], argv: &[u8], argc: u8) -> ProcessExecEvent {
+fn make_exec(
+    pid: u32,
+    ppid: u32,
+    uid: u32,
+    comm: &[u8],
+    argv: &[u8],
+    argc: u8,
+) -> ProcessExecEvent {
     let mut ev = ProcessExecEvent {
         kind: EventKind::ProcessExec as u8,
         _pad0: [0; 3],

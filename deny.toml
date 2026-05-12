@@ -24,12 +24,15 @@ allow = [
     "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
     "Unicode-3.0",
     "Zlib",
     "MPL-2.0",
-    "AGPL-3.0",
+    "AGPL-3.0-or-later",
     "CC0-1.0",
+    # webpki-roots (transitive via hyper-rustls/reqwest) ships under
+    # CDLA-Permissive-2.0; it bundles Mozilla's CA list, not code we
+    # incorporate into the binary as ordinary source.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.93
 exceptions = []
@@ -38,6 +41,10 @@ exceptions = []
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Internal workspace crates are referenced by path without a version, which
+# cargo-deny otherwise flags as wildcards. Workspace path deps are first-
+# party; the wildcard check only matters for external registry deps.
+allow-wildcard-paths = true
 highlight = "all"
 deny = [
     # Add unmaintained or known-bad crates here as you encounter them

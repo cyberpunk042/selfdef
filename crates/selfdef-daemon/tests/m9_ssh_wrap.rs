@@ -53,11 +53,7 @@ async fn ssh_wrap_events_reach_sqlite_through_eventstream_collector() {
         }
     });
 
-    let collector = EventstreamCollector::new(
-        events_path.clone(),
-        ReadFrom::Start,
-        publisher,
-    );
+    let collector = EventstreamCollector::new(events_path.clone(), ReadFrom::Start, publisher);
     let coll_sd = shutdown.clone();
     let coll = tokio::spawn(async move { collector.run(coll_sd).await });
 

@@ -8,7 +8,6 @@
 //! [`Bus`]/[`Publisher`]/[`Subscriber`] interface.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use selfdef_core::Event;

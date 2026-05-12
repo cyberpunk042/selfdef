@@ -15,8 +15,15 @@
 //! `~/.local/share/selfdef/ssh-wrap.jsonl` (override via
 //! `SELFDEF_SSH_EVENT_LOG`).
 
-#![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
+#![deny(unsafe_code)]
+// Rust 2024 marked `std::env::set_var` as unsafe. The test module in
+// `events.rs` localizes its single use behind an `unsafe` block; production
+// code stays unsafe-free.
+#![cfg_attr(test, allow(unsafe_code))]
+// This is a binary crate organized into internal modules; the `pub`
+// markers on items in those modules don't escape the binary boundary.
+// The lint is meaningful for libraries; for this bin it's noise.
+#![allow(unreachable_pub, dead_code)]
 #![allow(clippy::missing_errors_doc)]
 
 mod argv;
@@ -42,12 +49,14 @@ fn run() -> Result<()> {
     let raw_args: Vec<String> = std::env::args().skip(1).collect();
 
     // Help/version pass-through without policy or event logging.
-    if raw_args.iter().any(|a| matches!(a.as_str(), "-V" | "--version" | "-h" | "--help")) {
+    if raw_args
+        .iter()
+        .any(|a| matches!(a.as_str(), "-V" | "--version" | "-h" | "--help"))
+    {
         return exec_passthrough(&raw_args);
     }
 
-    let policy_file = policy::load(policy_path().as_deref())
-        .context("loading ssh-wrap policy")?;
+    let policy_file = policy::load(policy_path().as_deref()).context("loading ssh-wrap policy")?;
     let tokens = argv::classify(&raw_args);
     let target = argv::extract_target(&tokens);
 

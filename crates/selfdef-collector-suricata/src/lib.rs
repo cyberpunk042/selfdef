@@ -9,7 +9,6 @@
 //! can match Sigma rules against.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
@@ -218,10 +217,15 @@ async fn wait_for_file(path: &Path, shutdown: &CancellationToken) {
     }
 }
 
-fn build_endpoint(ip: Option<&serde_json::Value>, port: Option<&serde_json::Value>) -> Option<Endpoint> {
+fn build_endpoint(
+    ip: Option<&serde_json::Value>,
+    port: Option<&serde_json::Value>,
+) -> Option<Endpoint> {
     let ip_str = ip.and_then(|v| v.as_str())?;
     let parsed = ip_str.parse::<std::net::IpAddr>().ok()?;
-    let port = port.and_then(|v| v.as_u64()).and_then(|p| u16::try_from(p).ok());
+    let port = port
+        .and_then(|v| v.as_u64())
+        .and_then(|p| u16::try_from(p).ok());
     Some(Endpoint {
         ip: Some(parsed),
         port,

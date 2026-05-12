@@ -11,7 +11,6 @@
 //! drops into anywhere a single notifier fits.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::PathBuf;
@@ -175,9 +174,7 @@ impl Notifier for NtfyNotifier {
                 }
                 Ok(resp) => {
                     let status = resp.status();
-                    last_err = Some(NotifierError::Http(format!(
-                        "non-success status: {status}"
-                    )));
+                    last_err = Some(NotifierError::Http(format!("non-success status: {status}")));
                     warn!(attempt, %status, "ntfy non-success response");
                 }
                 Err(e) => {
@@ -205,7 +202,11 @@ pub struct SignalCliNotifier {
 
 impl SignalCliNotifier {
     pub fn new(binary: PathBuf, account: String, recipient: String) -> Self {
-        Self { binary, account, recipient }
+        Self {
+            binary,
+            account,
+            recipient,
+        }
     }
 }
 
@@ -295,7 +296,7 @@ impl Notifier for NotifierChain {
 mod tests {
     use super::*;
     use selfdef_core::category::ClassUid;
-    use selfdef_core::prelude::*;
+    use selfdef_core::prelude::SeverityId;
 
     fn finding_event() -> Event {
         Event::new(

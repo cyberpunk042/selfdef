@@ -8,7 +8,7 @@ use std::sync::atomic::AtomicU64;
 use selfdef_core::Event;
 use selfdef_core::category::ClassUid;
 use selfdef_core::prelude::*;
-use selfdef_correlator::sigma::{compile_rule, Engine, RawRule};
+use selfdef_correlator::sigma::{Engine, RawRule, compile_rule};
 use serde::Deserialize;
 
 fn workspace_root() -> PathBuf {
@@ -149,7 +149,7 @@ fn walk_rule_yaml(dir: &Path) -> Vec<PathBuf> {
 
 fn load_single_rule(path: &Path) -> Result<selfdef_correlator::sigma::CompiledRule, String> {
     let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let raw: RawRule = serde_yml::from_str(&content).map_err(|e| e.to_string())?;
+    let raw: RawRule = serde_yaml_ng::from_str(&content).map_err(|e| e.to_string())?;
     compile_rule(raw, path.to_path_buf()).map_err(|e| e.to_string())
 }
 
@@ -178,7 +178,11 @@ fn every_rule_with_tests_passes() {
     let rules_dir = workspace_root().join("rules/sigma");
     let rules = walk_rule_yaml(&rules_dir);
 
-    assert!(!rules.is_empty(), "no rules discovered in {}", rules_dir.display());
+    assert!(
+        !rules.is_empty(),
+        "no rules discovered in {}",
+        rules_dir.display()
+    );
 
     let mut tested_rules = HashSet::new();
     let mut total = 0;
@@ -193,9 +197,8 @@ fn every_rule_with_tests_passes() {
 
         let content = std::fs::read_to_string(&test_path)
             .unwrap_or_else(|e| panic!("read {}: {}", test_path.display(), e));
-        let tf: TestFile = serde_yml::from_str(&content).unwrap_or_else(|e| {
-            panic!("parse {}: {}", test_path.display(), e)
-        });
+        let tf: TestFile = serde_yaml_ng::from_str(&content)
+            .unwrap_or_else(|e| panic!("parse {}: {}", test_path.display(), e));
 
         for case in &tf.tests {
             total += 1;
@@ -225,10 +228,7 @@ fn every_rule_with_tests_passes() {
         .filter(|p| !tested_rules.contains(*p))
         .collect();
     if !untested.is_empty() {
-        eprintln!(
-            "WARN: {} rule(s) have no tests yet:",
-            untested.len()
-        );
+        eprintln!("WARN: {} rule(s) have no tests yet:", untested.len());
         for p in untested {
             eprintln!("  {}", p.display());
         }
@@ -237,10 +237,7 @@ fn every_rule_with_tests_passes() {
 
 fn sibling_tests_path(rule_path: &Path) -> PathBuf {
     // foo.yml → foo.tests.yaml in the same directory.
-    let stem = rule_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
+    let stem = rule_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
     rule_path.with_file_name(format!("{stem}.tests.yaml"))
 }
 
@@ -294,5 +291,8 @@ fn attack_coverage_report() {
     }
 
     // Coverage gate: a non-trivial rule set should cover something.
-    assert!(!coverage.techniques.is_empty(), "no ATT&CK techniques covered");
+    assert!(
+        !coverage.techniques.is_empty(),
+        "no ATT&CK techniques covered"
+    );
 }

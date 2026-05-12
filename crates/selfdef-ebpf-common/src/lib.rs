@@ -80,11 +80,17 @@ mod userspace_impls {
 
     // SAFETY: all fields are POD (primitives + fixed arrays), `#[repr(C)]`,
     // and explicit padding bytes are present so there are no uninit gaps.
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Zeroable for ProcessExecEvent {}
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Pod for ProcessExecEvent {}
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Zeroable for FileOpenEvent {}
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Pod for FileOpenEvent {}
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Zeroable for UnlinkEvent {}
+    #[allow(unsafe_code)]
     unsafe impl bytemuck::Pod for UnlinkEvent {}
 
     impl ProcessExecEvent {
@@ -107,7 +113,9 @@ mod userspace_impls {
     }
 
     impl FileOpenEvent {
-        pub fn comm_str(&self) -> String { decode_cstr(&self.comm) }
+        pub fn comm_str(&self) -> String {
+            decode_cstr(&self.comm)
+        }
         pub fn path_str(&self) -> String {
             let n = (self.path_len as usize).min(self.path.len());
             String::from_utf8_lossy(&self.path[..n]).into_owned()
@@ -115,7 +123,9 @@ mod userspace_impls {
     }
 
     impl UnlinkEvent {
-        pub fn comm_str(&self) -> String { decode_cstr(&self.comm) }
+        pub fn comm_str(&self) -> String {
+            decode_cstr(&self.comm)
+        }
         pub fn path_str(&self) -> String {
             let n = (self.path_len as usize).min(self.path.len());
             String::from_utf8_lossy(&self.path[..n]).into_owned()

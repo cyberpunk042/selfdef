@@ -99,24 +99,29 @@ async fn auditd_to_sqlite_pipeline() {
     // The failed auth should be Medium severity and class AUTHENTICATION.
     let failed = events
         .iter()
-        .find(|e| {
-            e.class_uid == ClassUid::AUTHENTICATION && e.status_id == Some(StatusId::Failure)
-        })
+        .find(|e| e.class_uid == ClassUid::AUTHENTICATION && e.status_id == Some(StatusId::Failure))
         .expect("a failed-auth event");
     assert_eq!(failed.severity_id, SeverityId::Medium);
-    assert!(!failed.attack.is_empty(), "failed auth should be tagged with ATT&CK technique");
+    assert!(
+        !failed.attack.is_empty(),
+        "failed auth should be tagged with ATT&CK technique"
+    );
     assert_eq!(failed.attack[0].id, "T1110");
 
     // The unknown record type should still land, with raw payload.
-    let other = events.iter().find(|e| e.class_uid == ClassUid::new(0)).expect("other event");
-    assert!(other.raw.is_some(), "unknown record types must preserve raw payload");
+    let other = events
+        .iter()
+        .find(|e| e.class_uid == ClassUid::new(0))
+        .expect("other event");
+    assert!(
+        other.raw.is_some(),
+        "unknown record types must preserve raw payload"
+    );
 
     // The successful login should be Informational + Success.
     let success = events
         .iter()
-        .find(|e| {
-            e.class_uid == ClassUid::AUTHENTICATION && e.status_id == Some(StatusId::Success)
-        })
+        .find(|e| e.class_uid == ClassUid::AUTHENTICATION && e.status_id == Some(StatusId::Success))
         .expect("a successful auth");
     assert_eq!(success.severity_id, SeverityId::Informational);
 }

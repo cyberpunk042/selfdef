@@ -11,7 +11,6 @@
 //! mapped to a more specific class for ergonomic rule writing.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::PathBuf;
@@ -48,15 +47,9 @@ impl ReadFrom {
 #[derive(Debug, Clone)]
 pub enum InputMode {
     /// Spawn `journalctl --output=json --follow --no-pager [-u UNIT...]`
-    Journalctl {
-        binary: PathBuf,
-        units: Vec<String>,
-    },
+    Journalctl { binary: PathBuf, units: Vec<String> },
     /// Tail a JSON-lines file (for tests / external pipelines).
-    File {
-        path: PathBuf,
-        read_from: ReadFrom,
-    },
+    File { path: PathBuf, read_from: ReadFrom },
 }
 
 #[derive(Debug, Error)]

@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish.workspace = true
-description = "Action runner: notify, lockdown_egress, snapshot_proc, kill_pid."
+description = "Action runner: notify, lockdown_egress, snapshot_proc, kill_pid, forensics_bundle, velociraptor_escalate."
 
 [lints]
 workspace = true
@@ -22,3 +22,7 @@ async-trait = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

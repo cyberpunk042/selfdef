@@ -52,7 +52,11 @@ pub struct Process {
     /// Full command line as observed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cmdline: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", with = "crate::envelope::opt_rfc3339", default)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "crate::envelope::opt_rfc3339",
+        default
+    )]
     pub created_time_dt: Option<OffsetDateTime>,
     /// User the process runs as.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -77,7 +81,11 @@ impl Process {
 pub struct Session {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", with = "crate::envelope::opt_rfc3339", default)]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        with = "crate::envelope::opt_rfc3339",
+        default
+    )]
     pub created_time_dt: Option<OffsetDateTime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_remote: Option<bool>,

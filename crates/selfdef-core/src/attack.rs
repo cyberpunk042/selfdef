@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// ATT&CK Enterprise tactic. Wire form: snake_case string.
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Tactic {
@@ -78,12 +78,20 @@ impl TechniqueRef {
 
     #[must_use]
     pub fn unsecured_credentials_files() -> Self {
-        Self::new("T1552.001", "Unsecured Credentials: Credentials In Files", Tactic::CredentialAccess)
+        Self::new(
+            "T1552.001",
+            "Unsecured Credentials: Credentials In Files",
+            Tactic::CredentialAccess,
+        )
     }
 
     #[must_use]
     pub fn valid_accounts_local() -> Self {
-        Self::new("T1078.003", "Valid Accounts: Local Accounts", Tactic::DefenseEvasion)
+        Self::new(
+            "T1078.003",
+            "Valid Accounts: Local Accounts",
+            Tactic::DefenseEvasion,
+        )
     }
 }
 

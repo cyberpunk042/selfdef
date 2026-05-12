@@ -56,7 +56,11 @@ impl EventSink {
         user: Option<&str>,
         first_seen: bool,
     ) -> anyhow::Result<()> {
-        let severity = if first_seen { SeverityId::Low } else { SeverityId::Informational };
+        let severity = if first_seen {
+            SeverityId::Low
+        } else {
+            SeverityId::Informational
+        };
         let mut event = Event::new(
             ClassUid::SSH_ACTIVITY,
             1, // Open
@@ -67,13 +71,17 @@ impl EventSink {
         )
         .with_message(format!(
             "ssh session opening: {target}{}",
-            if first_seen { " (first connection — host key learned)" } else { "" }
+            if first_seen {
+                " (first connection — host key learned)"
+            } else {
+                ""
+            }
         ));
-        let mut dst = Endpoint::default();
-        dst.hostname = Some(host.to_string());
-        if let Some(p) = port {
-            dst.port = Some(p);
-        }
+        let dst = Endpoint {
+            hostname: Some(host.to_string()),
+            port,
+            ..Endpoint::default()
+        };
         event = event.with_dst_endpoint(dst);
         if let Some(u) = user {
             event = event.with_actor(Actor {
@@ -121,9 +129,11 @@ impl EventSink {
             "exit_code": exit_code,
         }));
         if let Some(c) = exit_code {
-            event = event.with_status(
-                if c == 0 { StatusId::Success } else { StatusId::Failure },
-            );
+            event = event.with_status(if c == 0 {
+                StatusId::Success
+            } else {
+                StatusId::Failure
+            });
         }
         self.emit(event)
     }

@@ -14,7 +14,6 @@
 //! preserved — Sigma rules can match against `raw.*` if interested.
 
 #![forbid(unsafe_code)]
-#![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::{Path, PathBuf};
@@ -133,24 +132,24 @@ impl TetragonCollector {
     }
 
     fn build_process_exec(&self, exec: &serde_json::Value, full: &serde_json::Value) -> Event {
-        let proc = exec.get("process").cloned().unwrap_or(serde_json::Value::Null);
+        let proc = exec
+            .get("process")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
         let parent = exec.get("parent");
         let pid = proc.get("pid").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
         let binary = proc.get("binary").and_then(|v| v.as_str()).unwrap_or("");
         let arguments = proc.get("arguments").and_then(|v| v.as_str()).unwrap_or("");
         let uid = proc.get("uid").and_then(|v| v.as_u64()).map(|n| n as u32);
-        let parent_pid = parent.and_then(|p| p.get("pid")).and_then(|v| v.as_i64()).map(|n| n as i32);
+        let parent_pid = parent
+            .and_then(|p| p.get("pid"))
+            .and_then(|v| v.as_i64())
+            .map(|n| n as i32);
 
         let process = Process {
             pid,
             parent_pid,
-            name: Some(
-                binary
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(binary)
-                    .to_string(),
-            ),
+            name: Some(binary.rsplit('/').next().unwrap_or(binary).to_string()),
             path: if binary.is_empty() {
                 None
             } else {
@@ -187,21 +186,24 @@ impl TetragonCollector {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let proc = kp.get("process");
-        let pid = proc.and_then(|p| p.get("pid")).and_then(|v| v.as_i64()).unwrap_or(0) as i32;
-        let binary = proc.and_then(|p| p.get("binary")).and_then(|v| v.as_str()).unwrap_or("");
+        let pid = proc
+            .and_then(|p| p.get("pid"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        let binary = proc
+            .and_then(|p| p.get("binary"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
         // Extract file path from args (typical kprobe shape for security_file_open).
-        let file_path = kp
-            .get("args")
-            .and_then(|a| a.as_array())
-            .and_then(|arr| {
-                arr.iter().find_map(|item| {
-                    item.get("file_arg")
-                        .and_then(|f| f.get("path"))
-                        .and_then(|p| p.as_str())
-                        .map(str::to_owned)
-                })
-            });
+        let file_path = kp.get("args").and_then(|a| a.as_array()).and_then(|arr| {
+            arr.iter().find_map(|item| {
+                item.get("file_arg")
+                    .and_then(|f| f.get("path"))
+                    .and_then(|p| p.as_str())
+                    .map(str::to_owned)
+            })
+        });
 
         // Choose class by function name.
         let (class, activity) = if function.contains("file_open") || function.contains("inode") {
@@ -229,7 +231,11 @@ impl TetragonCollector {
         if pid != 0 {
             ev = ev.with_process(Process {
                 pid,
-                path: if binary.is_empty() { None } else { Some(binary.to_string()) },
+                path: if binary.is_empty() {
+                    None
+                } else {
+                    Some(binary.to_string())
+                },
                 ..Process::default()
             });
         }
