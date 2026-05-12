@@ -168,6 +168,14 @@ async fn main() -> Result<()> {
         let nats_cfg = selfdef_nats::NatsConfig {
             url: cfg.bus.nats.url.clone(),
             subject_prefix: cfg.bus.nats.subject_prefix.clone(),
+            jetstream: selfdef_nats::JetStreamConfig {
+                enabled: cfg.bus.nats.jetstream.enabled,
+                stream_name: cfg.bus.nats.jetstream.stream_name.clone(),
+                durable_consumer_prefix: cfg.bus.nats.jetstream.durable_consumer_prefix.clone(),
+                max_age_secs: cfg.bus.nats.jetstream.max_age_secs,
+                max_bytes: cfg.bus.nats.jetstream.max_bytes,
+                max_msgs: cfg.bus.nats.jetstream.max_msgs,
+            },
         };
         let sub = bus.subscribe();
         let pub_ = publisher.clone();

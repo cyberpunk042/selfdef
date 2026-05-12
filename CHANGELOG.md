@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — JetStream durability for the NATS bridge
+- New `[bus.nats.jetstream]` config block. When `enabled = true`, the
+  bridge:
+  - Ensures a JetStream stream (`stream_name`, default
+    `selfdef-events`) capturing `<subject_prefix>.>` with operator-
+    tunable retention (`max_age_secs` / `max_bytes` / `max_msgs`).
+  - Creates a per-host durable pull consumer named
+    `<durable_consumer_prefix>-<host_tag>` so each daemon tracks its
+    own ack progress and a restart resumes mid-stream.
+  - Publishes locally-originated events via `js.publish(...).await`
+    and waits for the server ack — outages stall publishes rather
+    than silently dropping them.
+  - Acks each inbound message after republishing it onto the local
+    bus (or recognizing it as a self-echo).
+- Same loop-avoidance machinery as Core mode (host_tag check on both
+  sides). At-least-once redeliveries are safe because each event
+  carries a UUIDv7 and the store sink dedupes by id.
+- Public API additions in `selfdef-nats`:
+  - `JetStreamConfig` struct + nested in `NatsConfig`.
+  - `durable_consumer_name(prefix, host_tag)` helper that sanitizes
+    host_tags to the JetStream durable-name grammar (alphanumeric +
+    `-` + `_`).
+- 3 new unit tests: `durable_consumer_name` builds the expected
+  string, sanitizes disallowed chars, and the `JetStreamConfig`
+  defaults are conservative (disabled, 7-day retention, unlimited
+  size).
+- async-nats `jetstream` feature added to the workspace dep flags.
+- Docs: `docs/nats.md` gains a "Modes: Core vs JetStream" section
+  with a runnable config snippet, retention semantics, and explicit
+  notes on at-least-once delivery + the dedupe contract. Example
+  config gains the `[bus.nats.jetstream]` block.
+
 ### Added — Dashboard control surface
 - The bundled PWA in `dashboard/` gains a **Control** panel that wires
   up the M13/M14 write endpoints:
