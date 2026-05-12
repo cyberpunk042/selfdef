@@ -1,0 +1,33 @@
+title: Systemd Service Unit Installed or Modified
+id: 6b5c4d3e-8765-4012-b34c-66778899aabb
+status: experimental
+description: |
+  Writes to systemd unit directories used for persistent services
+  (`/etc/systemd/system/`, `/usr/lib/systemd/system/`,
+  `/usr/local/lib/systemd/system/`, `/run/systemd/system/`,
+  per-user `~/.config/systemd/user/`). Attackers commonly drop a unit
+  here to gain reboot-persistent execution.
+references:
+  - https://attack.mitre.org/techniques/T1543/002/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1543.002
+logsource:
+  service: auditd
+detection:
+  unit_write:
+    class_uid: 1001
+    file.path|contains:
+      - "/etc/systemd/system/"
+      - "/usr/lib/systemd/system/"
+      - "/usr/local/lib/systemd/system/"
+      - "/run/systemd/system/"
+      - "/.config/systemd/user/"
+  condition: unit_write
+level: high
+falsepositives:
+  - Package installs that ship systemd units (apt, dpkg).
+  - Configuration management runs (Ansible, Puppet, Chef) deploying units.

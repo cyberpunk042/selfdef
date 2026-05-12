@@ -1,0 +1,32 @@
+title: Local Account Database Tampering
+id: 1f2e3d4c-4321-4789-f78a-aabbccddeeff
+status: experimental
+description: |
+  Writes to `/etc/passwd`, `/etc/shadow`, `/etc/group`, or `/etc/gshadow`.
+  Creating a new local account (or modifying credential records) is a
+  common follow-on to a successful exploit and a classic T1136.001
+  primitive. Distinct from sudoers tampering and from sensitive-file
+  *reads* (T1552.001) — this rule fires on *writes* to the account DB.
+references:
+  - https://attack.mitre.org/techniques/T1136/001/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1136.001
+logsource:
+  service: auditd
+detection:
+  account_db_write:
+    class_uid: 1001
+    file.path|endswith:
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "/etc/group"
+      - "/etc/gshadow"
+  condition: account_db_write
+level: high
+falsepositives:
+  - "`useradd` / `usermod` invocations run by package post-install scripts."
+  - Authorized provisioning runs (Ansible, cloud-init) creating service accounts.

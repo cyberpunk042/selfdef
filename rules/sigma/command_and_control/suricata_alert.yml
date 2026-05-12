@@ -1,0 +1,28 @@
+title: Suricata IDS Alert Promoted to Finding
+id: 9e8f7a6b-5432-489a-e67f-99aabbccddee
+status: experimental
+description: |
+  Lift any Suricata `alert` event into the selfdef pipeline as a finding.
+  Suricata already fires only on a signature match; surfacing those events
+  in the same correlator as auditd / eBPF / tetragon lets responders
+  correlate IDS hits with on-host activity (e.g. inbound exploit followed
+  by /tmp dropper).
+references:
+  - https://attack.mitre.org/techniques/T1071/001/
+  - https://docs.suricata.io/en/latest/output/eve/eve-json-format.html
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.command_and_control
+  - attack.t1071.001
+logsource:
+  service: suricata
+detection:
+  ids_alert:
+    class_uid: 2004
+    source: suricata
+  condition: ids_alert
+level: medium
+falsepositives:
+  - Noisy or low-quality Suricata rules. Tune at the IDS layer; this rule
+    deliberately forwards everything Suricata classified as an alert.

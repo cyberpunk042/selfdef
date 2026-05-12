@@ -1,0 +1,25 @@
+tests:
+  - name: write to /etc/cron.d fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/etc/cron.d/backdoor" } }
+    expected_findings: 1
+
+  - name: write to /etc/crontab fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/etc/crontab" } }
+    expected_findings: 1
+
+  - name: write to user spool fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/var/spool/cron/root" } }
+    expected_findings: 1
+
+  - name: unrelated path does not fire
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 2, source: auditd, file: { path: "/etc/hostname" } }
+    expected_findings: 0
+
+  - name: non-auditd source does not fire (logsource gate)
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: tetragon, file: { path: "/etc/cron.d/x" } }
+    expected_findings: 0

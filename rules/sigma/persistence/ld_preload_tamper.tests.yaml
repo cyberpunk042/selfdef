@@ -1,0 +1,20 @@
+tests:
+  - name: write to /etc/ld.so.preload fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 5, source: auditd, file: { path: "/etc/ld.so.preload" } }
+    expected_findings: 1
+
+  - name: write to a vendored preload path fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 5, source: auditd, file: { path: "/opt/foo/ld.so.preload" } }
+    expected_findings: 1
+
+  - name: unrelated /etc path does not fire
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 2, source: auditd, file: { path: "/etc/ld.so.conf" } }
+    expected_findings: 0
+
+  - name: non-auditd source does not fire (logsource gate)
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 5, source: tetragon, file: { path: "/etc/ld.so.preload" } }
+    expected_findings: 0

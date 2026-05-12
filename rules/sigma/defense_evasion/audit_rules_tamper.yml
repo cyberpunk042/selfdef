@@ -1,0 +1,32 @@
+title: Audit Subsystem Tampering
+id: 8d7e6f5a-6543-49ab-d56e-8899aabbccdd
+status: experimental
+description: |
+  Writes under `/etc/audit/`, `/etc/audisp/`, or modifications to the
+  audit daemon's binary. An attacker disabling or rewriting auditd rules
+  is attempting to blind the very pipeline this detection set depends on.
+  Treat as defense-evasion regardless of who initiated the change.
+references:
+  - https://attack.mitre.org/techniques/T1562/001/
+  - https://attack.mitre.org/techniques/T1562/006/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.defense_evasion
+  - attack.t1562.001
+  - attack.t1562.006
+logsource:
+  service: auditd
+detection:
+  audit_write:
+    class_uid: 1001
+    file.path|contains:
+      - "/etc/audit/"
+      - "/etc/audisp/"
+      - "/sbin/auditd"
+      - "/usr/sbin/auditd"
+  condition: audit_write
+level: high
+falsepositives:
+  - Authorized config-management runs deploying new audit rulesets.
+  - Package upgrade of the `auditd` binary.

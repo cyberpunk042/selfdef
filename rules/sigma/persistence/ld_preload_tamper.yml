@@ -1,0 +1,30 @@
+title: LD_PRELOAD or ld.so.preload Tampering
+id: 7c6d5e4f-7654-4abc-c45d-778899aabbcc
+status: experimental
+description: |
+  Any modification to `/etc/ld.so.preload` or the per-user equivalent.
+  Writing this file forces a shared library to be injected into every
+  dynamically-linked process — a textbook userland rootkit / persistence
+  trick. Legitimate writes are essentially never seen outside of a small
+  number of debugging or profiling workflows.
+references:
+  - https://attack.mitre.org/techniques/T1574/006/
+author: selfdef
+date: 2026-05-12
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.defense_evasion
+  - attack.t1574.006
+logsource:
+  service: auditd
+detection:
+  preload_write:
+    class_uid: 1001
+    file.path|endswith:
+      - "/etc/ld.so.preload"
+      - "/ld.so.preload"
+  condition: preload_write
+level: critical
+falsepositives:
+  - Deliberate operator use of preload-based instrumentation (e.g. perf, jemalloc rollout).

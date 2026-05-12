@@ -1,0 +1,15 @@
+tests:
+  - name: suricata alert fires
+    events:
+      - { class_uid: 2004, activity_id: 1, severity_id: 3, source: suricata, message: "Suricata: ET MALWARE foo [trojan-activity]" }
+    expected_findings: 1
+
+  - name: suricata flow (non-alert) does not fire (class gate)
+    events:
+      - { class_uid: 4001, activity_id: 6, severity_id: 1, source: suricata }
+    expected_findings: 0
+
+  - name: detection finding from other source does not fire (source gate)
+    events:
+      - { class_uid: 2004, activity_id: 1, severity_id: 3, source: selfdef.canary }
+    expected_findings: 0

@@ -1,0 +1,25 @@
+tests:
+  - name: write under /etc/systemd/system fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/etc/systemd/system/backdoor.service" } }
+    expected_findings: 1
+
+  - name: write under /usr/lib/systemd/system fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/usr/lib/systemd/system/x.service" } }
+    expected_findings: 1
+
+  - name: per-user unit dir fires
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: auditd, file: { path: "/home/alice/.config/systemd/user/foo.service" } }
+    expected_findings: 1
+
+  - name: unrelated /etc path does not fire
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 2, source: auditd, file: { path: "/etc/hosts" } }
+    expected_findings: 0
+
+  - name: non-auditd source does not fire (logsource gate)
+    events:
+      - { class_uid: 1001, activity_id: 3, severity_id: 4, source: tetragon, file: { path: "/etc/systemd/system/x.service" } }
+    expected_findings: 0

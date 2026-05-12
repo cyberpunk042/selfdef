@@ -29,3 +29,20 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check advisories bans sources licenses
+
+  vet:
+    # Supply-chain review via cargo-vet. Allowed to fail until the
+    # dependency graph is fully certified — see `supply-chain/config.toml`.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-vet
+        run: cargo install --locked cargo-vet
+      - name: Run cargo vet
+        run: cargo vet --locked
+
