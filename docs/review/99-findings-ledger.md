@@ -77,8 +77,8 @@
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
-| F-2026-050 | nice | `modules/agent-guard/install/uninstall.sh` | Hand-enumerated policy list; will drift if a sixth policy is added. *(was M-001)* | implement |
-| F-2026-051 | nice | `modules/agent-guard/install/lib.sh render_pod_scope` | Awk state machine fragile against future policy selectors. *(was M-003)* | implement |
+| F-2026-050 | nice | `modules/agent-guard/install/uninstall.sh` | Hand-enumerated policy list; will drift if a sixth policy is added. *(was M-001)* | implement — **deferred** by SDD-006 implementation PR (scope kept to v1 shared-lib surface; a `module_render_files` helper is reserved for a follow-up) |
+| F-2026-051 | nice | `modules/agent-guard/install/lib.sh render_pod_scope` | Awk state machine fragile against future policy selectors. *(was M-003)* | implement — **partial close** by SDD-006 implementation PR (shared lib v1 doesn't ship YAML-aware editing; a v2 with `yq`/python helpers would close fully) |
 | F-2026-052 | nice | `modules/observability/assets/dashboards/` | Hardcoded Tetragon metric name `tetragon_msg_sigkill_total` without an upstream-version pin. *(was M-007)* | investigate — **partial close** by nice-cluster PR (added "Tetragon metric-name pin" section to observability README documenting the v1.x assumption; full pin via `requires` block is a Phase-2 follow-up) |
 | F-2026-053 | nice | `selfdef-config/src/lib.rs BusConfig::backend` | Dead knob — always "inproc", daemon doesn't branch on it. *(was C-001)* | implement — **closed** by dead-knob cleanup PR (rustdoc-marked vestigial; commented out in `selfdef.toml.example`) |
 | F-2026-054 | nice | `selfdef-daemon/src/main.rs build_notifier_chain` | A `[notifier.ntfy]` block with no matching `"ntfy"` in `channels` silently disables ntfy without a startup warning. *(was C-004)* | implement — **closed** by follow-ups cleanup PR (warns at startup for either `ntfy` or `signal` orphan block) |
@@ -102,7 +102,7 @@
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
 | F-2026-080 | SDD-debt | `modules/observability/assets/dashboards/` | Dashboard implicitly depends on agent-guard policies firing — no manifest-level coupling captured. *(was M-010)* | design |
-| F-2026-081 | SDD-debt | `modules/*/install/lib.sh` | Duplicated helpers (`toml_get`, `run`, `log`, `emit_status`) across every module. *(was M-011)* | design |
+| F-2026-081 | SDD-debt | `modules/*/install/lib.sh` | Duplicated helpers (`toml_get`, `run`, `log`, `emit_status`) across every module. *(was M-011)* | design — **closed** by SDD-006 implementation PR (shared `packaging/lib/module-lib.sh`; eight modules migrated byte-stably; dispatcher exports `SELFDEF_MODULE_LIB` with workspace+system fallback; version-pinned at `SELFDEF_MODULE_LIB_VERSION=1` with mismatch refused at source time) |
 | F-2026-082 | SDD-debt | PR-author discipline | Tests verify the unit, not the flow. Need a design doc on what "integration-tested" means at the daemon ↔ module seam. *(was R-002)* | design |
 | F-2026-083 | SDD-debt | development cadence | Module PRs introducing new event sources should be preceded by collector/correlator prep PRs. *(was R-004)* | design |
 

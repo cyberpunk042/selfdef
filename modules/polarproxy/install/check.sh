@@ -7,20 +7,8 @@ MODULE="polarproxy"
 CONFIG_FILE="${SELFDEF_POLARPROXY_CONFIG:-/etc/selfdef/modules/polarproxy.toml}"
 UNIT_PATH="${SELFDEF_POLARPROXY_UNIT_PATH:-/etc/systemd/system/polarproxy.service}"
 
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
 
 problems=()
 

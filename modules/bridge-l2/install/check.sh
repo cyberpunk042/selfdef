@@ -11,36 +11,9 @@ MODULE="bridge-l2"
 CONFIG_FILE="${SELFDEF_BRIDGE_L2_CONFIG:-/etc/selfdef/modules/bridge-l2.toml}"
 NFT_RULESET_PATH="/etc/nftables.d/selfdef-bridge.conf"
 
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
-
-toml_get_list() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 0
-    line="${line#*=}"; line="${line## }"
-    line="${line#\[}"; line="${line%\]}"
-    local IFS=','
-    for tok in $line; do
-        tok="${tok## }"; tok="${tok%% }"
-        tok="${tok%\"}"; tok="${tok#\"}"
-        [[ -n "$tok" ]] && printf '%s\n' "$tok"
-    done
-}
+# Shared (emit_status / toml_get) + module-specific (toml_get_list).
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
 
 problems=()
 

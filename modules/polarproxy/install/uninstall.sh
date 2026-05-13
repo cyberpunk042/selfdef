@@ -12,12 +12,12 @@ DRY_RUN="${SELFDEF_DRY_RUN:-0}"
 UNIT_PATH="${SELFDEF_POLARPROXY_UNIT_PATH:-/etc/systemd/system/polarproxy.service}"
 NFT_RULESET_PATH="${SELFDEF_POLARPROXY_NFT_PATH:-/etc/nftables.d/selfdef-polarproxy.conf}"
 
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
+
+# Uninstall overrides: annotated log prefix + lenient run() that
+# tolerates per-step failures (partial uninstalls are acceptable).
 log() { echo "[polarproxy:uninstall] $*" >&2; }
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
 run() {
     local desc="$1"; shift
     [[ "$1" == "--" ]] && shift

@@ -18,60 +18,10 @@ TEMPLATE_DIR="${SELFDEF_BRIDGE_L2_TEMPLATES:-/usr/share/selfdef/modules/bridge-l
 NFT_RULESET_PATH="/etc/nftables.d/selfdef-bridge.conf"
 
 # ---------------------------------------------------------------- helpers
-log()  { echo "[bridge-l2] $*" >&2; }
-die()  { emit_status "failed" "$*"; exit 1; }
-run()  {
-    # run <description> -- <command...>
-    local desc="$1"; shift
-    [[ "$1" == "--" ]] && shift
-    if [[ "$DRY_RUN" == "1" ]]; then
-        log "DRY-RUN: $desc"
-        log "    \$ $*"
-    else
-        log "$desc"
-        "$@"
-    fi
-}
-
-emit_status() {
-    # Final line on stdout — read by the selector.
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-
-# Very small TOML reader. Only handles `key = "value"` and
-# `key = ["a","b"]` because that's all this module's config uses.
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    if [[ -z "$line" ]]; then return 1; fi
-    # Strip "key =", whitespace, surrounding quotes.
-    line="${line#*=}"
-    line="${line## }"
-    line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
-
-toml_get_list() {
-    # Returns space-separated tokens from a TOML inline array of strings.
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    if [[ -z "$line" ]]; then return 0; fi
-    line="${line#*=}"
-    line="${line## }"
-    line="${line#\[}"; line="${line%\]}"
-    # Split on commas, strip quotes + whitespace per token.
-    local IFS=','
-    for tok in $line; do
-        tok="${tok## }"; tok="${tok%% }"
-        tok="${tok%\"}"; tok="${tok#\"}"
-        [[ -n "$tok" ]] && printf '%s\n' "$tok"
-    done
-}
+# Shared (log/emit_status/die/run/toml_get) + module-specific
+# (toml_get_list).
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
 
 # ---------------------------------------------------------------- preflight
 [[ -r "$CONFIG_FILE" ]] || die "config file not readable: $CONFIG_FILE"

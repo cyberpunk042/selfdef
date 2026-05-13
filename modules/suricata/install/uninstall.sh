@@ -10,12 +10,12 @@ set -euo pipefail
 MODULE="suricata"
 DRY_RUN="${SELFDEF_DRY_RUN:-0}"
 
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
+
+# Uninstall overrides: annotated log prefix + lenient run() that
+# tolerates per-step failures.
 log() { echo "[suricata:uninstall] $*" >&2; }
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
 run() {
     local desc="$1"; shift
     [[ "$1" == "--" ]] && shift

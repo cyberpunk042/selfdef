@@ -15,12 +15,16 @@ DRY_RUN="${SELFDEF_DRY_RUN:-0}"
 CONFIG_FILE="${SELFDEF_BRIDGE_L2_CONFIG:-/etc/selfdef/modules/bridge-l2.toml}"
 NFT_RULESET_PATH="/etc/nftables.d/selfdef-bridge.conf"
 
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
+
+# Uninstall overrides:
+#  - log()  annotates the prefix with `:uninstall` so debug logs
+#    distinguish teardown traces from apply traces (this module's
+#    convention pre-SDD-006; preserved).
+#  - run()  keeps going past per-step failures rather than
+#    exiting — partial uninstalls are tolerable.
 log() { echo "[bridge-l2:uninstall] $*" >&2; }
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
 run() {
     local desc="$1"; shift
     [[ "$1" == "--" ]] && shift
@@ -31,16 +35,6 @@ run() {
         log "$desc"
         "$@" || log "(continuing past failure)"
     fi
-}
-
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
 }
 
 BRIDGE_NAME="br0"

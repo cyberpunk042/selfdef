@@ -14,34 +14,8 @@ CONFIG_FILE="${SELFDEF_SURICATA_CONFIG:-/etc/selfdef/modules/suricata.toml}"
 TEMPLATE_DIR="${SELFDEF_SURICATA_TEMPLATES:-/usr/share/selfdef/modules/suricata/templates}"
 
 # ---------------------------------------------------------------- helpers
-log() { echo "[suricata] $*" >&2; }
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-die() { emit_status "failed" "$*"; exit 1; }
-run() {
-    local desc="$1"; shift
-    [[ "$1" == "--" ]] && shift
-    if [[ "$DRY_RUN" == "1" ]]; then
-        log "DRY-RUN: $desc"
-        log "    \$ $*"
-    else
-        log "$desc"
-        "$@"
-    fi
-}
-
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
+# shellcheck source=lib.sh
+source "${BASH_SOURCE[0]%/*}/lib.sh"
 
 # ---------------------------------------------------------------- preflight
 [[ -r "$CONFIG_FILE" ]] || die "config file not readable: $CONFIG_FILE"
