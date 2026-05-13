@@ -447,3 +447,46 @@ This is a doc rewrite, so "tests" are review-style:
   manifest's `[daemon_requires]` block.
 - **SDD-003** (vpn-bridge multi-instance) is unrelated to
   the security rewrite.
+
+## Follow-up findings (F-2027-045)
+
+Phase 2 raised eight findings against this SDD's surface (six
+nice, two important; all closed). Listed here so future SDD
+readers can trace the lineage from this design doc to the
+post-Phase-1 iterations.
+
+### Important
+
+- **F-2027-003** — `selfdef-collector-eventstream`'s
+  `read_euid()` returned 0 silently on `/proc/self/status`
+  read failure, making the integrity check accidentally
+  permissive. Phase 2 first-fixes PR (#56) flipped it to
+  `Option<u32>` and falls back strict-safe.
+- **F-2027-035** — `check_path_integrity` used
+  `std::fs::metadata` (stat, follows symlinks) and then
+  `tokio::fs::File::open` (also follows). Phase 2 PR (#67)
+  rewrote as `O_NOFOLLOW`-open + fstat-on-FD, closing the
+  TOCTOU window and refusing symlinks with a typed
+  `IntegritySymlink` variant.
+
+### Nice
+
+- **F-2027-005** — rule-signing verifier hot-rotation via
+  SIGUSR2 (PR #58). Pre-fix needed a full daemon restart.
+- **F-2027-006** — `selfdefctl keys verify-dir <dir>` batch
+  verb replaces the N-spawn `for p in $(find …); do
+  selfdefctl keys verify $p` loop in
+  `modules/tetragon/install/{apply,check}.sh` (PR #57).
+- **F-2027-007** — `selfdefctl rbac check --probe` expanded
+  the built-in probe set from 2 to 4 subjects (PR #57).
+- **F-2027-014** — `selfdef_api::with_full_capability` was
+  documented as test-only but `pub fn` and reachable from
+  any caller. Now gated behind the `test-helpers` Cargo
+  feature; absent from release builds (PR #61).
+- **F-2027-031** — `TokenReloader::reload` didn't validate
+  the mode-0600 invariant. Now refuses with a typed
+  `LooseTokenMode` variant on `chmod 0644` (PR #69).
+- **F-2027-036** — eventstream integrity check runs once at
+  startup against the FD; post-startup `logrotate` requires
+  a daemon restart. Documented in `docs/dev/first-run.md`
+  (PR #67).

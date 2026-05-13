@@ -614,3 +614,23 @@ future profile needs daemon-side state (e.g. a relay
 heartbeat collector), it would declare `[daemon_requires]`
 under that profile via the same per-profile-details table
 sketched in D-1. The schema is forward-compatible.
+
+## Follow-up findings (F-2027-045)
+
+Phase 2 raised two `nice` findings against this SDD's surface;
+both are closed in tree. Listed here so future SDD readers can
+trace the lineage without bouncing through the ledger.
+
+- **F-2027-001** — the original SDD-003 refusal message
+  (`module 'vpn-bridge' profile '<x>' does not support
+  multi-instance`) was prose-only. Phase 2 nice-cluster PR
+  (#57) replaced it with a copy-pasteable
+  `[profiles.details.<profile>]\ninstanced = true\n` TOML
+  stanza embedded directly in the diagnostic.
+- **F-2027-025** — `_relay_inst_defaults` in
+  `modules/vpn-bridge/install/profiles/relay-via-server.sh`
+  interpolated `$SELFDEF_INSTANCE_ID` into nftables table
+  names without the `safe_name` validator that lives in
+  `install/lib.sh`. Phase 2 module-cleanup PR (#64) added a
+  `safe_name "$INST" || die …` guard. Operator-controlled
+  string today, so this was defense-in-depth.
