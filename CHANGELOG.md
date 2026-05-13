@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — ARCHITECTURE.md refresh
+
+Sibling refresh to the README rewrite (just shipped). Brings the architecture doc current with everything shipped since M16:
+
+- **Layered view diagram** now shows the operator-side verbs (`init`, `doctor`, `keys verify`, `rbac check`, `api rotate-token`), the SIGUSR2 hot token reload, the opt-in eventstream integrity gate at the collector boundary, and the opt-in signed-rule gate inside the correlator.
+- **Modules section** annotates `tetragon` (signed-policy gate), `agent-guard` (pod-label scope + RBAC), and `vpn-bridge` (per-profile instanced) with their post-audit details. Notes that every module script sources `packaging/lib/module-lib.sh` (SDD-006 v2) for the shared helpers + manifest helpers.
+- **Core principles** gains a sixth principle: *Security features are opt-in*. Every audit-shipped security feature defaults off; the operator turns each on via the `init checklist` flow; `doctor` verifies the opt-ins they turned on.
+- **Data lifecycle** diagram threads the opt-in integrity gate at the collector boundary and the opt-in signed-rule gate at the rule-load boundary.
+- **New Operator lifecycle section** with a Day-0 → Day-N diagram showing `init config/modules/checklist` → `systemctl enable` → `modules apply` → `doctor`.
+- **Self-protection of the daemon** refreshed: rule signing is now a shipped opt-in (no longer "future"); API token hot-rotation via SIGUSR2 is documented; eventstream integrity gate is documented; dm-verity remains a Known gap.
+- **New SDDs section** indexes the six Phase-1 SDDs with one-line summaries and the explicit "all six are `implemented`" statement, plus pointers to the findings ledger.
+
+Pure doc; no code touched. `cargo fmt --all -- --check` clean.
+
 ### Documentation — README refresh
 
 Comprehensive README rewrite reflecting everything shipped in the post-M16 audit cycle + the new operator lifecycle verbs (`init`, `doctor`, `keys verify`, `api rotate-token`, `rbac check`). The previous README still referenced "design work tracked in the SDD pipeline" — that pipeline shipped (6 SDDs implemented + every deferred follow-up closed). Drift items addressed:
