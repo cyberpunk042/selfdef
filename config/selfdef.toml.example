@@ -80,6 +80,15 @@ units = []  # optional unit filters, e.g. ["sshd.service", "sudo.service"]
 # input_path = "/var/log/journal.jsonl"  # used in "file" mode
 
 [collectors.tetragon]
+# Ingests Tetragon's *native* JSON event stream (the file Tetragon
+# writes via `export-filename` in /etc/tetragon/tetragon.yaml).
+# The `tetragon` module manages that config; selfdefctl modules
+# apply will refuse to proceed when this block isn't enabled and
+# the tetragon module is active (per the manifest's
+# [daemon_requires]). NOTE: do NOT add this path to
+# [collectors.eventstream] below — that collector expects
+# pre-formed selfdef Event JSON and silently drops Tetragon's
+# native shape.
 enabled = false
 input_path = "/var/log/tetragon/events.json"
 read_from = "end"
@@ -105,14 +114,25 @@ paths = []
 # ]
 
 [collectors.eventstream]
-# Tails JSONL files containing pre-formed selfdef events. Used by the
-# client-side ssh wrapper (`selfdef-ssh-wrap`) and any other tool that
-# wants to inject events. Each path is an independent producer.
+# Tails JSONL files containing pre-formed selfdef events. Used by
+# the client-side ssh wrapper (`selfdef-ssh-wrap`), the
+# `integrity-sentinel` module's drift emitter, and any other tool
+# invoking `selfdefctl events emit`. Each path is an independent
+# producer.
+# `selfdefctl modules apply` refuses to proceed when a module's
+# [daemon_requires] points at a path missing from this list (the
+# integrity-sentinel module declares its
+# /var/lib/selfdef/eventstream/integrity-sentinel.jsonl emission
+# path via [daemon_requires], so add that line below when you
+# activate the module).
 enabled = false
 read_from = "end"
 paths = []
-# Example:
-# paths = ["/home/operator/.local/share/selfdef/ssh-wrap.jsonl"]
+# Examples (uncomment as you activate the relevant producer):
+# paths = [
+#   "/home/operator/.local/share/selfdef/ssh-wrap.jsonl",
+#   "/var/lib/selfdef/eventstream/integrity-sentinel.jsonl",
+# ]
 
 [collectors.ebpf]
 # Native in-kernel collection via aya. Requires the BPF object compiled

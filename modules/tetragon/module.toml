@@ -40,3 +40,12 @@ uninstall = "install/uninstall.sh"
 [profiles]
 default = "default"
 available = ["default"]
+
+# SDD-002 D-1: daemon-side knobs this module needs in
+# /etc/selfdef/selfdef.toml. selfdefctl modules apply refuses to
+# proceed unless they're set (or --ignore-daemon-requires is
+# passed). Substitutions of the form `${key}` resolve against this
+# module's host config (/etc/selfdef/modules/tetragon.toml).
+[daemon_requires]
+"collectors.tetragon.enabled" = true
+"collectors.tetragon.input_path" = "${event_log_path}"

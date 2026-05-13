@@ -33,3 +33,12 @@ uninstall = "install/uninstall.sh"
 [profiles]
 default = "strict"
 available = ["strict", "warn-only"]
+
+# SDD-002 D-1: when emission is on (the default per F-2026-018),
+# the daemon must tail the JSONL stream we write to. The
+# substitution `${event_stream_path}` resolves against this
+# module's host config (one of the profile files unless the
+# operator overrode).
+[daemon_requires]
+"collectors.eventstream.enabled" = true
+"collectors.eventstream.paths" = ["${event_stream_path}"]
