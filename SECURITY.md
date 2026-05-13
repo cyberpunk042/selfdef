@@ -240,11 +240,17 @@ This block is intentionally short — copy it into your deployment runbook.
   a structured warning and keep the previously-loaded tokens in
   place — the daemon stays up; existing valid tokens keep
   working.
-- **k8s label-RBAC posture (F-2026-025 follow-up).** The `pod-label` scope
-  assumes the cluster's RBAC posture is documented (Pod-label `PATCH`
-  restricted). A `selfdefctl modules check` integration that reads the
-  cluster's RBAC and warns on overly-permissive `PATCH` rights is desirable
-  but not designed.
+- **k8s label-RBAC posture (F-2026-025 follow-up — shipped).**
+  `selfdefctl rbac check` ships. Without `--probe` it prints the
+  recommended posture + the exact `kubectl auth can-i` commands
+  the operator should run. With `--probe` it shells out to those
+  commands for a built-in set of subjects
+  (`system:authenticated`, `system:unauthenticated`) plus any
+  operator-supplied `--as` and exits non-zero if any subject can
+  PATCH pod labels. See `docs/dev/rbac-posture.md` for the full
+  runbook. The check is documentation + spot-checking on a
+  fixed subject set, not a cluster-wide enumeration — use
+  `rbac-tool` or `kubectl-who-can` for that.
 
 ## Reporting
 
