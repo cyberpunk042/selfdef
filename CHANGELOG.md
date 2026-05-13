@@ -6,6 +6,47 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — security threat-model rewrite (SDD-004 implementation)
+
+Closes Phase-1 audit findings F-2026-023, F-2026-024, F-2026-025,
+F-2026-026. SDD-004 status flips from `draft` to `implemented`.
+With this PR, **every Phase-1 SDD has shipped its implementation
+PR** and every important / blocker finding the audit raised is
+now closed or has a tracked follow-up.
+
+`SECURITY.md` is rewritten in place; `docs/src/security.md` is
+now a symlink to `../../SECURITY.md` (was a duplicated copy)
+to eliminate the drift surface.
+
+- **Assets table**: three new rows. `/metrics` endpoint, Tetragon
+  TracingPolicy directory (`/etc/tetragon/tetragon.tp.d/`), and
+  eventstream JSONL paths. Total: 10 rows.
+- **Adversaries table**: new class 6 *Cluster-tenant attacker* —
+  has Pod-label `PATCH` rights on the k8s cluster.
+- **Trust assumptions**: cluster control plane added as a
+  trusted entity for k8s deployments.
+- **Mitigations**: two new layers added — *API surface* (UNIX
+  vs TCP transports, bearer-token model, `/metrics` read-cap
+  parity, uptime side channel) and *Policy surface*
+  (TracingPolicy directory ownership, agent-guard pod-label
+  scope dependency on cluster RBAC, eventstream JSONL trust
+  boundary).
+- **Known gaps**: extended with three new follow-up entries —
+  TracingPolicy signing (F-2026-024 follow-up), metrics-token
+  rotation (F-2026-023 follow-up), k8s label-RBAC posture
+  (F-2026-025 follow-up). Eventstream JSONL integrity
+  (F-2026-026 follow-up) was already enumerated by PR #36 and
+  stays.
+- **Hardening checklist**: short copy-paste-able sidebar at the
+  end of the Mitigations section enumerating the recommended
+  posture for an AI-machine deployment.
+
+The rewrite is documentation-only — no code, no defaults change.
+Operators reading `SECURITY.md` see new asset rows + a new
+adversary class + new mitigation guidance. Recommended action
+for AI-machine deployments is the new Hardening checklist
+sidebar.
+
 ### Added — test contract + 6 test-gap closures (SDD-005 implementation)
 
 Closes SDD-debt finding F-2026-082 and the six implementation
