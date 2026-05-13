@@ -4,6 +4,8 @@
 set -euo pipefail
 
 MODULE="polarproxy"
+# F-2027-027: see bridge-l2/check.sh for rationale.
+DRY_RUN=0
 CONFIG_FILE="${SELFDEF_POLARPROXY_CONFIG:-/etc/selfdef/modules/polarproxy.toml}"
 UNIT_PATH="${SELFDEF_POLARPROXY_UNIT_PATH:-/etc/systemd/system/polarproxy.service}"
 

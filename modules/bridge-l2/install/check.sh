@@ -8,6 +8,12 @@
 set -euo pipefail
 
 MODULE="bridge-l2"
+# F-2027-027: check.sh is read-only by contract, but the v2
+# module-script library expects DRY_RUN to be set before it's
+# sourced (the `run` helper consults it). Set to 0 so the
+# contract holds even if a future helper grows a DRY_RUN-aware
+# code path.
+DRY_RUN=0
 CONFIG_FILE="${SELFDEF_BRIDGE_L2_CONFIG:-/etc/selfdef/modules/bridge-l2.toml}"
 NFT_RULESET_PATH="/etc/nftables.d/selfdef-bridge.conf"
 

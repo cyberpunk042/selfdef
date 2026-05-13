@@ -4,6 +4,8 @@
 set -euo pipefail
 
 MODULE="suricata"
+# F-2027-027: see bridge-l2/check.sh for rationale.
+DRY_RUN=0
 CONFIG_FILE="${SELFDEF_SURICATA_CONFIG:-/etc/selfdef/modules/suricata.toml}"
 
 # shellcheck source=lib.sh

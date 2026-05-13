@@ -79,6 +79,23 @@ kind = "script"                     # script | debian-package | rust-binary
 apply = "install/apply.sh"
 check = "install/check.sh"
 uninstall = "install/uninstall.sh"
+# `kind` is one of:
+#   • "script"          — apply/check/uninstall are bash scripts in
+#                         install/ (the default; every shipped
+#                         module except `detect-host` uses this).
+#   • "debian-package"  — F-2027-022: the install of this module is
+#                         the install of an underlying .deb. The
+#                         apply/check/uninstall keys are omitted;
+#                         add `package = "<name>"`. The dispatcher
+#                         verifies the package is installed via
+#                         `dpkg -l <name>` and treats that as both
+#                         the apply and the check outcome. Used by
+#                         `modules/detect-host` to represent the
+#                         selfdef-daemon Debian package itself as
+#                         a first-class module.
+#   • "rust-binary"     — reserved for a future shipping shape
+#                         where the install is a single Rust
+#                         binary drop-in. Not used yet.
 
 # Profiles — named preset bundles the operator can pick.
 [profiles]
