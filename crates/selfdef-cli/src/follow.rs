@@ -68,13 +68,13 @@ pub(crate) async fn events_follow(
 
     // Body is `Transfer-Encoding: chunked`. Each chunk: a
     // hex-length line, then the body, then `\r\n`. Within the
-    // body, SSE frames are `data: <json>\n\n`. We need to:
-    //   1. Read a chunk-size line, parse the hex prefix.
-    //   2. Read that many bytes of body.
-    //   3. Feed bytes into a line-based SSE parser.
-    //   4. Print every assembled `data:` line as Event JSON.
+    // body, SSE frames are `event: <type>\ndata: <payload>\n\n`.
+    // The current_event_type accumulator resets on each blank
+    // line (frame terminator) so a `data:` line is paired with
+    // the most-recent `event:` line in the same frame.
     let mut sse_buf = String::new();
     let mut printed = 0usize;
+    let mut current_event_type = String::new();
     loop {
         // chunk size line
         let mut size_line = String::new();
@@ -107,48 +107,97 @@ pub(crate) async fn events_follow(
 
         sse_buf.push_str(&String::from_utf8_lossy(&body));
 
-        // Parse out `data:` lines. SSE frames are separated by
-        // a blank line; within a frame, `data:` lines are
-        // concatenated. The daemon emits one event per frame
-        // so the simpler shape suffices.
+        // Parse SSE frames line-by-line. Each frame is a
+        // run of `field: value` lines terminated by a blank
+        // line. The current_event_type accumulator tracks the
+        // last-seen `event:` line within the current frame.
         loop {
             let Some(idx) = sse_buf.find('\n') else {
                 break;
             };
             let line = sse_buf[..idx].trim_end_matches('\r').to_string();
             sse_buf.drain(..=idx);
+
+            // Blank line → frame terminator. Reset the
+            // event-type accumulator for the next frame.
+            if line.is_empty() {
+                current_event_type.clear();
+                continue;
+            }
+
+            // F-2027-029: `event: shutdown` from the writer
+            // means the daemon's stream task is exiting (bus
+            // closed = clean shutdown OR bus error). Exit Ok
+            // so the CLI returns 0; a torn TCP connection
+            // hits the chunk-size `n == 0` branch above and
+            // also returns Ok, but the daemon-driven case is
+            // distinguishable in logs by the printed line.
+            // Future enhancement: distinguish exit codes once
+            // operators ask for it.
+            if let Some(payload) = line.strip_prefix("event:") {
+                current_event_type = payload.trim().to_string();
+                continue;
+            }
+
+            // F-2027-028: SSE comments start with `:`. The
+            // daemon emits `:ping` keep-alives every 15s; we
+            // silently ignore those. Any other comment is
+            // unexpected and we surface it to operators on
+            // stderr so a future protocol change isn't a
+            // silent no-op.
+            if let Some(comment) = line.strip_prefix(':') {
+                let trimmed = comment.trim();
+                if !trimmed.is_empty() && trimmed != "ping" {
+                    eprintln!("# sse-comment: {trimmed}");
+                }
+                continue;
+            }
+
             let Some(payload) = line.strip_prefix("data:") else {
-                // Could be `event: lagged`, `:keepalive`, or a
-                // blank frame terminator. Ignore.
+                // Unknown SSE field (`id:`, `retry:`, etc.)
+                // — silently ignored per the SSE spec.
                 continue;
             };
             let payload = payload.trim_start();
             if payload.is_empty() {
                 continue;
             }
-            // Try to decode as a typed Event so we can apply
-            // `--alerts-only` filtering on the structured field
-            // rather than substring-matching JSON.
-            match serde_json::from_str::<Event>(payload) {
-                Ok(event) => {
-                    if alerts_only && event.category_uid != CategoryUid::Findings {
-                        continue;
-                    }
-                    println!("{payload}");
+
+            // Dispatch on the current event type.
+            match current_event_type.as_str() {
+                "shutdown" => {
+                    eprintln!("# daemon stream shutdown: {payload}");
+                    return Ok(());
                 }
-                Err(_) => {
-                    // The daemon's `event: lagged` frames have a
-                    // non-JSON `data: missed N events` payload.
-                    // Surface them as comments so operators see
-                    // the gap.
+                "lagged" => {
                     eprintln!("# lagged: {payload}");
                     continue;
                 }
-            }
-            printed += 1;
-            if let Some(target) = limit {
-                if printed >= target {
-                    return Ok(());
+                "" => {
+                    // Default event type: JSON-encoded Event.
+                    match serde_json::from_str::<Event>(payload) {
+                        Ok(event) => {
+                            if alerts_only && event.category_uid != CategoryUid::Findings {
+                                continue;
+                            }
+                            println!("{payload}");
+                        }
+                        Err(e) => {
+                            eprintln!("# malformed event frame: {e}");
+                            continue;
+                        }
+                    }
+                    printed += 1;
+                    if let Some(target) = limit {
+                        if printed >= target {
+                            return Ok(());
+                        }
+                    }
+                }
+                other => {
+                    // Unknown event type — surface it but
+                    // don't try to decode as Event.
+                    eprintln!("# unknown event-type {other:?}: {payload}");
                 }
             }
         }
