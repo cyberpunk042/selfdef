@@ -1,12 +1,12 @@
 # Phase 2 findings ledger
 
-> Status: in progress. Two of the seven explorers run so far —
-> recent-PRs (10 findings, all closed except 1 SDD-debt) and
-> crate (11 findings, all open `nice`). Five explorers remain
-> (module, integration, docs, tests, security).
-> Last updated: 2026-05-13 (Phase 2 v2-helpers migration PR —
-> closes F-2027-024; module-explorer backlog fully drained at
-> the actionable tiers).
+> Status: in progress. Four of the seven explorers run so far —
+> recent-PRs (10 findings, all closed except 1 SDD-debt), crate
+> (11 findings, all closed), module (6 findings, all closed), and
+> integration (8 findings, all fresh and open: 1 important + 7
+> nice). Three explorers remain (docs, tests, security).
+> Last updated: 2026-05-13 (Phase 2 integration explorer — adds
+> F-2027-028 through F-2027-036).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -27,14 +27,15 @@ phase regardless of year.
 
 None.
 
-## Important findings (2)
+## Important findings (3 — 2 closed, 1 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
 | F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
+| F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — rewrite as lstat → O_NOFOLLOW-open → fstat. |
 
-## Nice findings (24 — 24 closed, 0 open)
+## Nice findings (32 — 24 closed, 8 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -62,6 +63,14 @@ None.
 | F-2027-025 | nice | `modules/vpn-bridge/install/profiles/relay-via-server.sh:20-23` | `$SELFDEF_INSTANCE_ID` is interpolated into nftables table names and per-instance config paths without going through the `safe_name` validator. Operator-controlled, so defense-in-depth — but tightening costs nothing. | implement — **closed** by Phase 2 module-cleanup PR (`_relay_inst_defaults` now `safe_name "$INST" \|\| die "..."` before any interpolation). |
 | F-2027-026 | nice | per-module READMEs | All 9 are silent on `SELFDEF_MODULE_LIB_VERSION_REQUIRED` and the v2 helpers. New contributors won't discover the v2 surface. | doc — **closed** by Phase 2 module-cleanup PR (`docs/dev/module-helpers.md` gains a "Per-module adoption" table — single source of truth — plus a 4-step bumping recipe). |
 | F-2027-027 | nice | `modules/{bridge-l2,suricata,polarproxy}/install/check.sh` | Missing the conventional `DRY_RUN=0` initialization that every other module's `check.sh` sets. Cosmetic but inconsistent with the v2 lib's caller contract. | implement — **closed** by Phase 2 module-cleanup PR (all three check.sh now set `DRY_RUN=0` before sourcing the lib). |
+| F-2027-028 | nice | SSE reader `crates/selfdef-cli/src/follow.rs:120-124` | Silently ignores non-`data:` lines including `:ping` keep-alives, but also a hypothetical malformed `:error …` comment. No way to surface protocol anomalies. | implement |
+| F-2027-029 | nice | SSE seam end-of-stream marker | The writer task at `crates/selfdef-api/src/handlers.rs:110-112` exits silently on client disconnect or shutdown; the reader can't distinguish "daemon shut down" from "daemon crashed mid-stream". An `event: shutdown` frame would close the gap. | implement |
+| F-2027-030 | nice | SSE lagged-event seam test gap | `crates/selfdef-cli/tests/cli_events_follow.rs:162-197` exercises the lagged-event path with hand-crafted bytes; no end-to-end test against a real bus overflow. | implement |
+| F-2027-031 | nice | `selfdef-api::TokenReloader::reload` | Re-reads the token file but doesn't validate the mode-0600 invariant the writer asserts at rotate-token time. A `chmod 0644` after a successful rotate silently weakens the bearer-token surface. | implement |
+| F-2027-032 | nice | `selfdef-daemon` SIGUSR2 handler | Runs three reload paths (tokens, verifier, rules) independently and logs each result separately. Operator has to correlate multiple log lines to know the overall reload outcome. A summary line at the end would close the gap. | implement |
+| F-2027-033 | nice | `selfdef-correlator::walk_yaml` rule enumeration | `std::fs::read_dir` order is undefined; rules with the same priority fire in fs-dependent order. Add a `paths.sort()`. | implement |
+| F-2027-034 | nice | `SigmaError::Signature` ordering | Signature check runs before the YAML parse; a malformed-but-signed rule yields `Signature` error instead of `Yaml`. Counter-intuitive when the signature actually was valid (over malformed bytes). | implement |
+| F-2027-036 | nice | eventstream collector long-lived FD | After the initial integrity check, the `BufReader::new(file)` FD is held for the daemon's lifetime; nothing re-validates ownership or mode if `logrotate` replaces the file. Operator-facing doc warning needed. | doc |
 
 ## SDD-debt findings (1)
 
@@ -71,16 +80,18 @@ None.
 
 ## Status
 
-- **27 findings raised** across three explorers (recent-PRs: 10;
-  crate: 11; module: 6).
-- **0 blockers**, **2 important (both closed)**, **24 nice (all
-  closed)**, **1 SDD-debt (F-2027-010 open)**.
-- **All three run explorers are fully drained at the actionable
-  tiers.** The only remaining open Phase 2 finding is F-2027-010
-  (SDD-debt — `events follow` TCP transport), waiting on a
-  design decision.
-- Four explorers remain (integration, docs, tests, security).
-  Each will add more findings in follow-up PRs.
+- **36 findings raised** across four explorers (recent-PRs: 10;
+  crate: 11; module: 6; integration: 9).
+- **0 blockers**, **3 important (2 closed, 1 open — F-2027-035
+  eventstream TOCTOU)**, **32 nice (24 closed, 8 open)**,
+  **1 SDD-debt (F-2027-010 open)**.
+- The integration explorer's nine entries cluster into four
+  follow-up PRs (one per seam). F-2027-035 is the only
+  important finding open after this audit.
+- Three explorers remain (docs, tests, security). Each will
+  add more findings in follow-up PRs. The only remaining open
+  Phase 2 SDD-debt is F-2027-010 (`events follow` TCP transport),
+  waiting on a design decision.
 
 ## Phase 1 references
 

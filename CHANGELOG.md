@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 integration explorer (raises F-2027-028 through F-2027-036)
+
+Fourth of Phase 2's seven explorers ships. Surveys the four post-Phase-1 seams called out in the charter: SSE writer ↔ CLI follow consumer, SIGUSR2 token-reload, minisign verify ↔ correlator load, and integrity check ↔ eventstream open.
+
+**9 new findings raised. 1 important (F-2027-035), 8 nice.** This is the first explorer in this cycle to surface an `important`-tier observation.
+
+#### New document
+
+`docs/review/phase-2/50-integration-audit.md` — seam-by-seam notes with concrete `file:line` observations + a triage table that clusters the findings into one PR per seam.
+
+#### Important finding
+
+- **F-2027-035** — `selfdef-collector-eventstream::check_path_integrity` uses `std::fs::metadata` (stat, follows symlinks); the follow-up `tokio::fs::File::open` also follows symlinks. A symlink at the configured path passes the check based on the target's metadata, and the collector reads from a target the operator may not control. Combined with the stat→open TOCTOU window, the opt-in `integrity_check = true` contract is defeatable. The fix shape is a single-syscall-sequence rewrite: lstat → O_NOFOLLOW-open → fstat. Important rather than blocker because the feature is opt-in (off by default) — but operators who turn it on are explicitly trusting the check.
+
+#### Nice findings (8 — all open)
+
+- **F-2027-028** — SSE reader silently ignores non-`data:` lines (including `:ping` keep-alives and hypothetical malformed comments).
+- **F-2027-029** — SSE seam has no end-of-stream marker; reader can't distinguish "daemon shut down" from "daemon crashed mid-stream".
+- **F-2027-030** — SSE lagged-event test corpus is hand-crafted; no end-to-end test under real bus overflow.
+- **F-2027-031** — `TokenReloader::reload` doesn't re-validate the mode-0600 invariant; `chmod 0644` after rotate silently weakens the bearer-token surface.
+- **F-2027-032** — SIGUSR2 handler runs three reload paths independently with three separate log lines; no summary at the end.
+- **F-2027-033** — `walk_yaml` uses unsorted `read_dir`; rules with the same priority fire in fs-dependent order.
+- **F-2027-034** — Signature check runs before YAML parse; malformed-but-signed rule yields `Signature` error instead of `Yaml`.
+- **F-2027-036** — Eventstream collector holds the FD for the daemon's lifetime; nothing re-validates ownership / mode if `logrotate` replaces the file post-startup. (Doc-only.)
+
+#### Closing-PR clustering
+
+One PR per seam:
+- **seam-1 (F-2027-028 + -029 + -030)** — SSE end-of-stream marker + comment-handling + real-bus lagged-event test.
+- **seam-2 (F-2027-031 + -032)** — TokenReloader mode-validation + SIGUSR2 summary log.
+- **seam-3 (F-2027-033 + -034)** — Deterministic rule load + error-priority swap.
+- **seam-4 (F-2027-035 + -036)** — lstat-O_NOFOLLOW-fstat rewrite + post-startup drift doc.
+
+#### Phase 2 backlog after this PR
+
+36 findings across 4 explorers. **3 important (2 closed, 1 open — F-2027-035)**, **32 nice (24 closed, 8 open)**, **1 SDD-debt open**, **0 blockers**. Three explorers remain (docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Fixed — SDD-006 v2 manifest-helpers migration (closes F-2027-024)
 
 Closes the last open `nice` finding in the Phase 2 backlog. Five script-based modules — `bridge-l2`, `integrity-sentinel`, `polarproxy`, `observability`, `tetragon` — opted into SDD-006 v2 manifest helpers. Each module's `apply.sh` now records every rendered file via `module_record_file`, and each module's `uninstall.sh` walks `module_render_files` instead of hand-curating the same paths. The drift risk that v2 was specifically designed to remove is now eliminated for these five.
