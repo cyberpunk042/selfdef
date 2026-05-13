@@ -7,6 +7,17 @@
 
 profile = "audit"
 
+# Container scope. `container` (default) uses Tetragon's
+# `matchNamespaces` selector to match any process whose PID
+# namespace differs from the host's — works on every container
+# runtime (Docker / Podman / containerd standalone / k8s). Switch
+# to `pod-label` on Kubernetes hosts to scope to a specific pod
+# label instead.
+scope = "container"
+# Only used when scope = "pod-label":
+pod_label_key   = "selfdef.io/agent"
+pod_label_value = "true"
+
 # Each policy in the bundle can be independently enabled and have
 # its own action override. The default action (Post in `audit`,
 # Sigkill in `enforce`) is used when the per-policy override is
