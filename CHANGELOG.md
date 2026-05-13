@@ -6,6 +6,43 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — SIGUSR2 seam-2: token-file mode validation + summary log (closes F-2027-031 + F-2027-032)
+
+Closes the seam-2 cluster from the Phase 2 integration explorer.
+
+#### F-2027-031 — refuse loose token-file modes on reload
+
+`read_token` (in `crates/selfdef-api/src/transport.rs`) now checks `mode & 0o077 == 0` before reading. `selfdefctl api rotate-token` writes the file 0600; if `chmod 0644` slips in after a rotation, the bearer-token surface is silently weakened — world-readable token == defeated auth. The pre-fix code happily re-read the bytes and applied them.
+
+The fix surfaces the misuse as a new typed `ServerError::LooseTokenMode { path, mode }` variant. Display message:
+
+```
+token file '/etc/selfdef/api.token' has loose mode 644 (must be 0600); chmod and SIGUSR2 again
+```
+
+Prior in-memory tokens stay in place — the bearer-token middleware keeps using the last-good value while the operator chmods and re-signals.
+
+#### F-2027-032 — SIGUSR2 reload summary line
+
+The daemon's SIGUSR2 handler runs three reload paths independently (api tokens, signing verifier, rule re-verify after verifier reload) with three separate log lines. Operators correlating "did SIGUSR2 overall succeed?" had to mentally stitch them together. Now the handler tracks per-branch outcome (`ok` / `failed` / `skipped`) and emits a single summary line at the end of the fan-out:
+
+```
+INFO tokens=ok verifier=ok rules=ok SIGUSR2 reload summary
+```
+
+The per-branch info/warn lines are unchanged — the summary is additive. `Skipped` covers "feature not configured" (signing disabled, api disabled, etc.). `Failed` covers any branch that errored. The summary always runs when *any* hot-reloadable surface is enabled; the all-skipped case still logs the existing debug "no hot-reloadable surface is enabled" message.
+
+#### Tests
+
+- `crates/selfdef-api/src/transport.rs` `token_reload_tests` — +1 case: `reload_refuses_world_readable_token_file` (10 total). Creates a 0600 file → reload OK → `chmod 0644` → reload fails with `LooseTokenMode { mode: 0o644, … }` → prior tokens still in place.
+- No new daemon-side test for F-2027-032 — the summary is just a log line; the existing token-reload test exercises the fan-out branches. Verified manually that the summary line appears in the right outcome combinations.
+
+#### Phase 2 status after this PR
+
+36 findings across 4 explorers. **3 important (all closed)**, **32 nice (29 closed, 3 open)**, **0 blockers**, **1 SDD-debt open**. The seam-1 SSE cluster (F-2027-028 + -029 + -030) is the only remaining open `nice` work; three explorers remain (docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Fixed — selfdef-correlator seam-3: deterministic load + error priority (closes F-2027-033 + F-2027-034)
 
 Closes the seam-3 cluster from the Phase 2 integration explorer.

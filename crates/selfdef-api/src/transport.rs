@@ -103,6 +103,14 @@ pub enum ServerError {
     Io(#[from] std::io::Error),
     #[error("token file '{path}' is empty or unreadable")]
     EmptyToken { path: PathBuf },
+    /// F-2027-031: the token file's mode lets non-owner read or
+    /// write access — refuse to load the token. `selfdefctl api
+    /// rotate-token` writes the file 0600; if `chmod 0644` slips
+    /// in afterward, the bearer-token surface is silently
+    /// weakened. A typed error here surfaces the misuse during
+    /// the next SIGUSR2 reload.
+    #[error("token file '{path}' has loose mode {mode:o} (must be 0600); chmod and SIGUSR2 again")]
+    LooseTokenMode { path: PathBuf, mode: u32 },
     #[error("tcp transport requires a token_file in [api]")]
     MissingToken,
     /// F-2027-016: only fires when the api is *enabled* but neither
@@ -290,6 +298,24 @@ fn load_tokens(cfg: &ApiConfig) -> Result<LoadedTokens, ServerError> {
 }
 
 fn read_token(path: &std::path::Path) -> Result<String, ServerError> {
+    // F-2027-031: validate the token file's mode before reading.
+    // `selfdefctl api rotate-token` writes the file with 0600;
+    // an operator who `chmod 0644 /etc/selfdef/api.token` after
+    // rotation would silently weaken the bearer-token surface
+    // (world-readable token == defeated auth). Refuse on
+    // any-other-bit set so SIGUSR2 reloads surface the loose
+    // permission as a typed error instead of accepting the
+    // weakened state.
+    use std::os::unix::fs::MetadataExt;
+    let md = std::fs::metadata(path)?;
+    let mode = md.mode() & 0o777;
+    if mode & 0o077 != 0 {
+        return Err(ServerError::LooseTokenMode {
+            path: path.to_path_buf(),
+            mode,
+        });
+    }
+
     let raw = std::fs::read_to_string(path)?;
     let token = raw.trim().to_string();
     if token.is_empty() {
@@ -692,5 +718,42 @@ mod token_reload_tests {
         assert!(!reloader.is_loaded());
         reloader.reload().unwrap();
         assert!(reloader.is_loaded());
+    }
+
+    #[test]
+    fn reload_refuses_world_readable_token_file() {
+        // F-2027-031: chmod 0644 on the token file after a
+        // successful rotate. Pre-fix code happily re-read the
+        // bytes and silently weakened the bearer-token surface
+        // (world-readable token == defeated auth). Now the
+        // reload fails with a typed `LooseTokenMode` variant,
+        // and the prior in-memory tokens stay in place.
+        use std::os::unix::fs::PermissionsExt;
+        let f = make_token_file("strict-token");
+        // First reload with default 0600 mode (NamedTempFile
+        // default on Linux) → succeeds.
+        let cfg = cfg_with_token_file(f.path());
+        let tokens: SharedTokens = Arc::new(std::sync::RwLock::new(None));
+        let reloader = TokenReloader {
+            cfg,
+            tokens: Arc::clone(&tokens),
+        };
+        reloader.reload().expect("initial load with 0600");
+
+        // Operator-mistake simulation: chmod 0644.
+        let mut perms = std::fs::metadata(f.path()).unwrap().permissions();
+        perms.set_mode(0o644);
+        std::fs::set_permissions(f.path(), perms).unwrap();
+        let err = reloader.reload().expect_err("loose mode must be refused");
+        match err {
+            ServerError::LooseTokenMode { mode, .. } => {
+                assert_eq!(mode, 0o644, "expected the actual loose mode in the error");
+            }
+            other => panic!("expected LooseTokenMode, got: {other:?}"),
+        }
+        // Prior tokens still in place — the bearer-token check
+        // keeps using the last good value.
+        let g = tokens.read().unwrap();
+        assert_eq!(g.as_ref().unwrap().read, "strict-token");
     }
 }

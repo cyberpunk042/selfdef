@@ -687,12 +687,30 @@ async fn wait_for_shutdown_or_reload(
                 // the daemon owns. Each branch logs at info/warn
                 // independently; one failure does not block the
                 // others.
+                //
+                // F-2027-032: track per-branch outcome so we can
+                // emit a single summary line at the end. Without
+                // it, operators reading journalctl after a
+                // SIGUSR2 have to mentally correlate two or three
+                // separate log lines to know "did the reload
+                // overall succeed?". The summary line answers
+                // that in one glance.
                 let mut did_anything = false;
+                let mut token_outcome: &'static str = "skipped";
+                let mut verifier_outcome: &'static str = "skipped";
+                let mut rules_outcome: &'static str = "skipped";
+
                 if let Some(rel) = api_token_reloader {
                     did_anything = true;
                     match rel.reload() {
-                        Ok(()) => info!("api tokens reloaded from disk"),
-                        Err(e) => warn!(error = %e, "api token reload failed; keeping previous tokens"),
+                        Ok(()) => {
+                            info!("api tokens reloaded from disk");
+                            token_outcome = "ok";
+                        }
+                        Err(e) => {
+                            warn!(error = %e, "api token reload failed; keeping previous tokens");
+                            token_outcome = "failed";
+                        }
                     }
                 }
                 // F-2027-005: rotate the rule-signing public key
@@ -707,9 +725,16 @@ async fn wait_for_shutdown_or_reload(
                     match corr.reload_verifier() {
                         Ok(path) => {
                             info!(key = %path.display(), "rule-signing verifier reloaded from disk");
+                            verifier_outcome = "ok";
                             match corr.load_rules() {
-                                Ok(n) => info!(rules = n, "rules re-verified after verifier reload"),
-                                Err(e) => warn!(error = %e, "rule re-verify after verifier reload failed; keeping previous ruleset"),
+                                Ok(n) => {
+                                    info!(rules = n, "rules re-verified after verifier reload");
+                                    rules_outcome = "ok";
+                                }
+                                Err(e) => {
+                                    warn!(error = %e, "rule re-verify after verifier reload failed; keeping previous ruleset");
+                                    rules_outcome = "failed";
+                                }
                             }
                         }
                         Err(ReloadVerifierError::NoVerifierConfigured) => {
@@ -720,11 +745,25 @@ async fn wait_for_shutdown_or_reload(
                         }
                         Err(e @ ReloadVerifierError::Load(..)) => {
                             warn!(error = %e, "verifier reload failed; keeping previous verifier");
+                            verifier_outcome = "failed";
+                            // Rules outcome stays "skipped" — we
+                            // don't run load_rules when the
+                            // verifier reload failed, by design.
                         }
                     }
                 }
                 if !did_anything {
                     debug!("SIGUSR2 received but no hot-reloadable surface is enabled; ignoring");
+                } else {
+                    // F-2027-032: single-glance summary. Logged at
+                    // info regardless of mix; operators correlate
+                    // the three outcomes in one line.
+                    info!(
+                        tokens = token_outcome,
+                        verifier = verifier_outcome,
+                        rules = rules_outcome,
+                        "SIGUSR2 reload summary",
+                    );
                 }
                 // continue the loop — don't exit on SIGUSR2
             }
