@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 crate explorer (raises F-2027-011 through F-2027-021)
+
+Second of Phase 2's seven explorers ships. The crate audit walks the new `selfdef-signing` crate and the extended surfaces on `selfdef-cli`, `selfdef-api`, `selfdef-correlator`, and `selfdef-collector-eventstream` (scope per Phase 2 charter). 11 new findings raised; all triaged **nice** — no blockers, no important.
+
+#### New document
+
+- **`docs/review/phase-2/30-crate-audit.md`** — per-crate notes with concrete `file:line` observations. Eleven findings split across three themes: API surface hygiene (public symbols with no external callers), doc-string drift (crate `//!` headers that stop at M5/PR-1 and don't advertise post-Phase-1 surfaces), and operator-facing observability (state the daemon knows but doesn't log).
+
+#### New findings (11 entries — all nice)
+
+- `F-2027-011` — `selfdef-signing::SIGNATURE_SUFFIX` + `signature_path_for` are `pub` but no external caller exists; tests build the `.minisig` path by hand.
+- `F-2027-012` — `SigningError::Io` uses `#[from] io::Error` and loses the path the io error was against; sibling variants carry full context.
+- `F-2027-013` — selfdef-signing crate header doesn't mention the public helpers.
+- `F-2027-014` — `selfdef_api::with_full_capability` is `pub fn` documented as "test-only" but reachable from any caller; rename or feature-gate to prevent silent auth-bypass.
+- `F-2027-015` — `metrics::run_ingest` + `Metrics::*` methods have zero rustdoc.
+- `F-2027-016` — `ApiServer::NoTransport` error doesn't distinguish "api disabled" from "api enabled but no transport set".
+- `F-2027-017` — `selfdef-cli` starter-config path constants are split across `init.rs` and `modules.rs`; drift risk.
+- `F-2027-018` — `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` test-only env var is documented only in a source comment.
+- `F-2027-019` — `selfdef-correlator` crate header stops at M5's "SshBruteforceRule gone" and doesn't advertise the post-PR-#58 hot-rotation surface.
+- `F-2027-020` — `Correlator::load_rules` logs `rules = N` but not the verifier source path; operators can't eye-ball "did the verifier swap" after SIGUSR2.
+- `F-2027-021` — no public `verifier_source()` getter on the correlator — tests, doctor, dashboards all want to inspect which `policy.pub` is loaded right now.
+
+#### Closing-PR clustering recommendation
+
+Three follow-up PRs cleanly subsume the new findings:
+
+- **selfdef-signing API surface** — F-2027-011 + F-2027-012 + F-2027-013 (re-scope public helpers, add path context to `SigningError::Io`, refresh crate header).
+- **selfdef-correlator observability** — F-2027-019 + F-2027-020 + F-2027-021 (crate header, key-path logging, public `verifier_source()` getter).
+- **CLI / api ergonomics bundle** — F-2027-014 through F-2027-018 (auth-bypass guardrail, rustdoc passes, error message clarity, path-constant consolidation, env-var docs).
+
+#### Phase 2 backlog after this PR
+
+21 findings across two explorers (recent-PRs: 10, all closed except F-2027-010 SDD-debt; crate: 11, all open). Five explorers remain (module, integration, docs, tests, security) — each will add more findings.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Added — SIGUSR2 hot-rotation of the rule-signing verifier (closes F-2027-005)
 
 Before this PR, rotating `/etc/selfdef/keys/policy.pub` required a full daemon restart — SIGHUP reloaded rules through the existing verifier but did not re-read the verifier itself. F-2027-005 (Phase 2 recent-PRs audit) called this out as friction in the operator-side key-rotation runbook.
