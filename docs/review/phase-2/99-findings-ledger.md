@@ -4,9 +4,8 @@
 > recent-PRs (10 findings, all closed except 1 SDD-debt) and
 > crate (11 findings, all open `nice`). Five explorers remain
 > (module, integration, docs, tests, security).
-> Last updated: 2026-05-13 (Phase 2 selfdef-signing API-surface
-> PR — closes F-2027-011 + F-2027-012 + F-2027-013; crate
-> explorer backlog fully drained).
+> Last updated: 2026-05-13 (Phase 2 module explorer — adds
+> F-2027-022 through F-2027-027).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -34,7 +33,7 @@ None.
 | F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 
-## Nice findings (18 — 18 closed, 0 open)
+## Nice findings (24 — 18 closed, 6 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -56,6 +55,12 @@ None.
 | F-2027-019 | nice | `selfdef-correlator` crate `//!` header | Stops at M5's "SshBruteforceRule gone"; doesn't advertise the post-PR-#58 surface (`reload_verifier`, `has_verifier`, SIGUSR2). | doc — **closed** by Phase 2 correlator-observability PR (crate header now documents both reload signals, `reload_verifier`, `verifier_source`, and the SDD-004 signing posture). |
 | F-2027-020 | nice | `selfdef-correlator::load_rules` | Logs `rules = N` but not the verifier source path it verified them against; post-SIGUSR2 operators can't eye-ball "did the verifier swap?". | implement — **closed** by Phase 2 correlator-observability PR (`load_rules` now emits `info!(rules, verifier_key)` when the verifier branch was taken). |
 | F-2027-021 | nice | `selfdef-correlator` verifier source getter | No public `verifier_source()` getter — tests, `selfdefctl doctor`, dashboards all want to answer "which `policy.pub` is the daemon trusting right now?". | implement — **closed** by Phase 2 correlator-observability PR (new `Correlator::verifier_source() -> Option<PathBuf>`; 3 tests cover the none/present/post-reload paths). |
+| F-2027-022 | nice | `modules/detect-host` — `[install] kind = "debian-package"` | Only module using this install kind; the contract isn't documented in `docs/dev/modules.md` or in the module's own README. | doc |
+| F-2027-023 | nice | `modules/tetragon/install/apply.sh:49` signing-failure recover-step | `selfdefctl keys verify-dir … \|\| true` prints the failing files but the subsequent `die` doesn't reference them — operator has to scroll back to find which file failed. | implement |
+| F-2027-024 | nice | seven script-based modules (bridge-l2, observability, tetragon, integrity-sentinel, polarproxy, suricata, vpn-bridge) | Don't opt into SDD-006 v2 manifest helpers; `uninstall.sh` hand-curates paths that `apply.sh` writes, recreating the drift risk v2 was designed to remove. | implement |
+| F-2027-025 | nice | `modules/vpn-bridge/install/profiles/relay-via-server.sh:20-23` | `$SELFDEF_INSTANCE_ID` is interpolated into nftables table names and per-instance config paths without going through the `safe_name` validator. Operator-controlled, so defense-in-depth — but tightening costs nothing. | implement |
+| F-2027-026 | nice | per-module READMEs | All 9 are silent on `SELFDEF_MODULE_LIB_VERSION_REQUIRED` and the v2 helpers. New contributors won't discover the v2 surface. | doc |
+| F-2027-027 | nice | `modules/{bridge-l2,suricata,polarproxy}/install/check.sh` | Missing the conventional `DRY_RUN=0` initialization that every other module's `check.sh` sets. Cosmetic but inconsistent with the v2 lib's caller contract. | implement |
 
 ## SDD-debt findings (1)
 
@@ -65,16 +70,16 @@ None.
 
 ## Status
 
-- **21 findings raised** across two explorers (recent-PRs: 10;
-  crate: 11).
-- **0 blockers**, **2 important (both closed)**, **18 nice (all
-  closed)**, **1 SDD-debt (F-2027-010 open)**.
-- **Both explorers run so far are fully drained** at the
-  blocker/important/nice tiers. The only remaining open Phase 2
-  finding is F-2027-010 (SDD-debt — `events follow` TCP
-  transport), waiting on a design decision.
-- Five explorers remain (module, integration, docs, tests,
-  security). Each will add more findings in follow-up PRs.
+- **27 findings raised** across three explorers (recent-PRs: 10;
+  crate: 11; module: 6).
+- **0 blockers**, **2 important (both closed)**, **24 nice (18
+  closed, 6 open)**, **1 SDD-debt (F-2027-010 open)**.
+- The 6 open module-explorer findings cluster into three
+  follow-up PRs: v2-helpers migration (F-2027-024 +
+  F-2027-027), vpn-bridge `safe_name` tightening (F-2027-025),
+  and a docs cluster (F-2027-022 + F-2027-023 + F-2027-026).
+- Four explorers remain (integration, docs, tests, security).
+  Each will add more findings in follow-up PRs.
 
 ## Phase 1 references
 
