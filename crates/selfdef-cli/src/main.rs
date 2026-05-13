@@ -9,6 +9,7 @@
 
 mod doctor;
 mod emit;
+mod init;
 mod modules;
 
 use std::path::PathBuf;
@@ -96,8 +97,49 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// First-run bootstrap. Writes starter config files +
+    /// prints the operator checklist. Non-destructive by
+    /// default (refuses to overwrite existing files).
+    Init {
+        #[command(subcommand)]
+        action: InitAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum InitAction {
+    /// Write a starter `selfdef.toml` daemon config. The
+    /// template ships with every audit-shipped opt-in
+    /// security feature OFF; the operator turns each on after
+    /// reading the matching `docs/dev/<feature>.md` runbook.
+    Config {
+        /// Where to write the starter config. Default:
+        /// `/etc/selfdef/selfdef.toml`.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite an existing file. By default, init
+        /// refuses to clobber on-disk state.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Write a starter `modules.toml` listing every shipped
+    /// module commented out with a short description.
+    /// Operator uncomments the modules they want activated.
+    Modules {
+        /// Where to write. Default: `/etc/selfdef/modules.toml`.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Overwrite an existing file.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Print the first-run operator checklist (config write,
+    /// systemctl enable, module apply, opt-in security
+    /// features, periodic doctor timer). Read-only — no
+    /// filesystem effects.
+    Checklist,
 }
 
 #[derive(Debug, Subcommand)]
@@ -427,6 +469,19 @@ async fn main() -> Result<()> {
             print!("{rendered}");
             std::process::exit(exit);
         }
+        Command::Init { action } => match action {
+            InitAction::Config { output, force } => {
+                let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_DAEMON_CONFIG));
+                init::write_starter_config(&path, force)?;
+            }
+            InitAction::Modules { output, force } => {
+                let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_MODULES_CONFIG));
+                init::write_starter_modules(&path, force)?;
+            }
+            InitAction::Checklist => {
+                init::print_checklist();
+            }
+        },
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let count = store.count().await.context("counting events")?;
