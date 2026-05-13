@@ -21,6 +21,7 @@ selfdef-core = { workspace = true }
 selfdef-config = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
+selfdef-signing = { workspace = true }
 selfdef-notifier = { workspace = true }
 selfdef-responder = { workspace = true }
 clap = { workspace = true }

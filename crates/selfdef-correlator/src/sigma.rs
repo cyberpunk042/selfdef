@@ -56,6 +56,15 @@ pub enum SigmaError {
     InvalidTimeframe(String),
     #[error("invalid condition: {0}")]
     InvalidCondition(String),
+    /// SDD-004: rule signature did not verify under the
+    /// configured public key (only emitted when
+    /// `[security].require_signed_rules = true`).
+    #[error("signature check failed for {path}: {source}")]
+    Signature {
+        path: PathBuf,
+        #[source]
+        source: selfdef_signing::SigningError,
+    },
 }
 
 // ============================================================ raw YAML
@@ -502,6 +511,27 @@ impl Engine {
     /// Load every `*.yml` / `*.yaml` file under `dir` (recursively).
     /// `*.tests.yaml` files are excluded — those are test fixtures, not rules.
     pub fn load_dir(dir: &Path) -> Result<Self, SigmaError> {
+        Self::load_dir_maybe_verified(dir, None)
+    }
+
+    /// SDD-004 / rule signing: like `load_dir`, but every loaded
+    /// rule must carry a valid detached minisign signature
+    /// (`<rule>.minisig`) under `verifier`. A missing or invalid
+    /// signature aborts the load with [`SigmaError::Signature`];
+    /// the correlator's existing "keep prior ruleset on failure"
+    /// semantics in `load_rules()` mean an unsigned drop never
+    /// affects the running rule set.
+    pub fn load_dir_verified(
+        dir: &Path,
+        verifier: &selfdef_signing::Verifier,
+    ) -> Result<Self, SigmaError> {
+        Self::load_dir_maybe_verified(dir, Some(verifier))
+    }
+
+    fn load_dir_maybe_verified(
+        dir: &Path,
+        verifier: Option<&selfdef_signing::Verifier>,
+    ) -> Result<Self, SigmaError> {
         let mut rules = Vec::new();
         for entry in walk_yaml(dir)? {
             // Skip test fixture files.
@@ -511,6 +541,13 @@ impl Engine {
                 .is_some_and(|s| s.ends_with(".tests.yaml") || s.ends_with(".tests.yml"))
             {
                 continue;
+            }
+            if let Some(v) = verifier {
+                v.verify_detached_file(&entry)
+                    .map_err(|source| SigmaError::Signature {
+                        path: entry.clone(),
+                        source,
+                    })?;
             }
             let yaml_bytes = std::fs::read(&entry)?;
             let raw: RawRule =

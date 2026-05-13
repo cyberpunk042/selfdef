@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 selfdef-core = { workspace = true }
 selfdef-bus = { workspace = true }
+selfdef-signing = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
@@ -27,3 +28,7 @@ regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# Dev-only sign-side (mirrors selfdef-signing's dev-dep). Tests
+# generate a real minisign keypair and sign rule YAMLs so the
+# verifier path is exercised end-to-end.
+minisign = "0.9"

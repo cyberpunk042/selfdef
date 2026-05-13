@@ -23,6 +23,11 @@ async-trait = "0.1"
 thiserror = "2"
 anyhow = "1"
 
+# cryptographic signature verification (verify-only). Selected for
+# its zero-dep surface and compatibility with the standalone
+# `minisign` CLI operators already use to sign rules + policies.
+minisign-verify = "0.2"
+
 # logging & tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
@@ -96,6 +101,7 @@ selfdef-ebpf-common = { path = "crates/selfdef-ebpf-common" }
 selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
 selfdef-api = { path = "crates/selfdef-api" }
 selfdef-nats = { path = "crates/selfdef-nats" }
+selfdef-signing = { path = "crates/selfdef-signing" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)

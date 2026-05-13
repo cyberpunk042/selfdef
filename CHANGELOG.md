@@ -6,6 +6,77 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — detection-rule signing (closes original "Rule signing" Known gap)
+
+Closes the original SECURITY.md "Rule signing not yet enforced"
+Known gap as **opt-in shipped**, and ships the verifier
+infrastructure that the SDD-004 F-2026-024 follow-up will reuse
+for Tetragon TracingPolicies.
+
+The daemon can now refuse to load detection rules that aren't
+accompanied by a valid detached minisign signature. Signing
+happens offline on the operator's signing machine (with the
+standalone `minisign` CLI); the daemon is verify-only.
+
+- **New crate `selfdef-signing`** wraps `minisign-verify`
+  (zero-deps, audited). Exposes `Verifier::load(pub_key)` and
+  `Verifier::verify_detached_file(<target>)` — looks for
+  `<target>.minisig` and verifies under the loaded key.
+- **`selfdef-correlator`**: `Correlator::with_verifier(v)`
+  builder + `Engine::load_dir_verified(dir, v)` rule loader.
+  `SigmaError::Signature { path, source }` is the new typed
+  failure mode; the existing "keep prior ruleset on failure"
+  semantics mean an unsigned drop never affects the running
+  rule set.
+- **`selfdef-config`**: new `[security]` block with
+  `require_signed_rules: bool` (default `false`) +
+  `signing_public_key_file: Option<PathBuf>`. The daemon
+  refuses to start when `require_signed_rules = true` but the
+  key path is missing or unreadable — failing loudly beats
+  silently running unsigned-trusted.
+- **`selfdefd`**: when `[security].require_signed_rules` is on,
+  the daemon loads the public key at startup and chains the
+  verifier onto the Correlator. Logged at `INFO` as
+  "correlator: rule-signing verification enabled".
+- **`selfdefctl keys verify <target>`**: new debug CLI verb.
+  Loads `[security].signing_public_key_file` (or `--public-key`)
+  and verifies the target's `.minisig` sidecar. Useful when an
+  operator is investigating signing without involving the
+  daemon.
+- **`docs/dev/signing.md`**: new operator runbook —
+  key generation, signing workflow, deployment, manual
+  verification, rotation, threat-model caveats.
+
+#### Behavioural notes
+
+- Default is `require_signed_rules = false`. Every existing
+  deployment behaves identically; rule signing is strictly
+  opt-in.
+- A SIGHUP rule reload picks up new signatures + new rules
+  but reuses the verifier loaded at startup; rotating the
+  public-key path itself requires a daemon restart.
+- Verification happens at rule-load time. A previously-loaded
+  malicious rule already in memory continues to fire until
+  the daemon restarts — `integrity-sentinel` watching the
+  rules directory remains the right mitigation for
+  in-memory tampering.
+
+#### Tests
+
+- **`selfdef-signing` unit** (9 tests): public-key parsing
+  from raw base64 + minisign `.pub` format, malformed-key
+  rejection, signed/unsigned/wrong-key/tampered/malformed-sig
+  paths, the `signature_path_for` helper.
+- **`selfdef-correlator` integration**
+  (`tests/signed_rules.rs`, 6 tests): full `load_rules` path
+  with a configured verifier — positive accept, unsigned
+  reject, tampered reject, wrong-key reject,
+  no-verifier-no-signature sanity, prior-ruleset-preserved on
+  signature failure.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — API token hot-rotation (SDD-004 F-2026-023 follow-up)
 
 Closes the SDD-004 F-2026-023 known-gap follow-up as **shipped**.

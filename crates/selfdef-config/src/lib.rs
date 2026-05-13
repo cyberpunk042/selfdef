@@ -40,6 +40,26 @@ pub struct Config {
     pub notifier: NotifierConfig,
     pub responder: ResponderConfig,
     pub api: ApiConfig,
+    /// SDD-004 follow-ups: opt-in cryptographic verification of
+    /// detection rules and (in future) Tetragon TracingPolicies.
+    /// Defaults are all "off" to preserve the existing
+    /// signature-less workflow; closing the original
+    /// rule-signing Known gap is opt-in.
+    pub security: SecurityConfig,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SecurityConfig {
+    /// When `true`, the correlator refuses to load any rule YAML
+    /// that doesn't carry a valid detached minisign signature
+    /// (`<rule>.minisig`) under [`signing_public_key_file`].
+    /// Default `false` to preserve the existing workflow.
+    pub require_signed_rules: bool,
+    /// Path to the minisign-format public key used to verify
+    /// rule signatures. Required when
+    /// [`require_signed_rules`] is `true`; ignored otherwise.
+    pub signing_public_key_file: Option<PathBuf>,
 }
 
 impl Config {
