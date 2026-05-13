@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — Phase 2 first-fixes (closes F-2027-003 + F-2027-008)
+
+Closes the two important findings raised by Phase 2's recent-PRs audit (PR #55). Both fixes are small, contained, and shipped together so the Phase 2 ledger's "important" tier is empty.
+
+#### F-2027-003 — eventstream euid reader silent degradation
+
+`selfdef-collector-eventstream::check_path_integrity` previously called `unsafe_geteuid()`, which returned `0` silently on any `/proc/self/status` read failure. That made the integrity check accidentally permissive — every root-owned file passed even when the daemon's effective UID wasn't actually root. Operators never noticed the check was degraded.
+
+Renamed to `read_euid() -> Option<u32>` so the failure path is explicit. The caller now emits a structured `tracing::warn!` line and falls back to "owner must be root" (strict-safe) instead of "owner must be 0 because we have no idea what our euid is" (accidentally-permissive).
+
+Test: new `read_euid_returns_some_on_linux_test_host` asserts the happy-path returns `Some(_)` on a Linux host.
+
+#### F-2027-008 — doctor rbac posture inflates the warn count
+
+`selfdefctl doctor`'s rbac category emitted `[warn]` for pod-label scope on every run — but the doctor *never* probes the cluster (probing is `selfdefctl rbac check --probe`'s job). The warn count appeared in the summary line, suggesting something was wrong when actually nothing was — just that the operator hadn't run rbac-check yet.
+
+`check_rbac_posture` now emits `Skipped` for pod-label scope with the detail string flipped from "run `selfdefctl rbac check`" to "posture not verified here; run `selfdefctl rbac check --probe`". The warn count stays at 0; the operator's eye is drawn to genuine warnings.
+
+Tests:
+- `doctor_rbac_pod_label_scope_is_skip_not_warn` — verifies the new behaviour with a tempdir-staged agent-guard config.
+- `doctor_rbac_container_scope_is_skip_with_not_gating_note` — sanity check that container scope still emits a `skip:` with "RBAC posture not gating" detail.
+
+The doctor module gained a `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` env override so the integration tests can stage a fake agent-guard.toml without polluting `/etc/selfdef/modules/`.
+
+#### Phase 2 ledger update
+
+`docs/review/phase-2/99-findings-ledger.md` marks F-2027-003 and F-2027-008 closed with back-references. The Phase 2 important-tier list is now empty; remaining backlog: 7 nice + 1 SDD-debt.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Documentation — Phase 2 audit kickoff
 
 The Phase-1 audit ran through PR #42; every blocker / important / SDD-debt closed during this session. Phase 2 picks up where Phase 1 left off: same methodology (seven explorers, F-NNNN findings, SDDs where the fix is design-shaped), audited against the new surface shipped post-Phase-1 (18 PRs, 1 new crate, 6 new operator-side CLI verbs, ~80 new tests).

@@ -177,3 +177,74 @@ fn doctor_json_emits_one_object_per_check() {
         assert!(categories.contains(must), "missing category {must}");
     }
 }
+
+/// Helper: run doctor with the
+/// `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` env override pointed at
+/// a tempdir-staged config. Lets us exercise the rbac code
+/// path without writing to /etc/selfdef/modules/.
+fn run_doctor_with_agent_guard(cfg_path: &Path, agent_guard_path: &Path) -> std::process::Output {
+    Command::new(binary())
+        .args(["--config", cfg_path.to_str().unwrap(), "doctor"])
+        .env(
+            "SELFDEF_DOCTOR_AGENT_GUARD_CONFIG",
+            agent_guard_path.to_str().unwrap(),
+        )
+        .output()
+        .expect("spawn selfdefctl")
+}
+
+#[test]
+fn doctor_rbac_pod_label_scope_is_skip_not_warn() {
+    // F-2027-008: pre-fix, doctor emitted `warn:` for pod-label
+    // scope even when nothing was actually wrong — just that
+    // the operator hadn't run rbac-check yet. The fix flips
+    // the emission to `skip:` with "posture not verified" so
+    // the doctor's summary line doesn't suggest failure.
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = write_config(tmp.path(), "");
+    let agent_guard = tmp.path().join("agent-guard.toml");
+    std::fs::write(
+        &agent_guard,
+        "scope = \"pod-label\"\npod_label_key = \"selfdef.io/agent\"\npod_label_value = \"true\"\n",
+    )
+    .unwrap();
+
+    let out = run_doctor_with_agent_guard(&cfg, &agent_guard);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // The rbac section should be skip (the new behaviour),
+    // not warn (the pre-fix behaviour).
+    assert!(
+        stdout.contains("[skip] agent-guard scope:") && stdout.contains("posture not verified"),
+        "expected skip + 'posture not verified'; stdout: {stdout}",
+    );
+    assert!(
+        !stdout.contains("[warn] agent-guard scope:"),
+        "rbac category must NOT emit warn for pod-label; stdout: {stdout}",
+    );
+    // Crucially: the summary line should report 0 warn.
+    assert!(
+        stdout.contains("0 warn"),
+        "doctor summary must report 0 warn; stdout: {stdout}",
+    );
+}
+
+#[test]
+fn doctor_rbac_container_scope_is_skip_with_not_gating_note() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = write_config(tmp.path(), "");
+    let agent_guard = tmp.path().join("agent-guard.toml");
+    std::fs::write(&agent_guard, "scope = \"container\"\n").unwrap();
+
+    let out = run_doctor_with_agent_guard(&cfg, &agent_guard);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("[skip] agent-guard scope:") && stdout.contains("RBAC posture not gating"),
+        "stdout: {stdout}",
+    );
+}
