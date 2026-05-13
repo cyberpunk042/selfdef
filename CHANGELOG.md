@@ -6,6 +6,75 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — API token hot-rotation (SDD-004 F-2026-023 follow-up)
+
+Closes the SDD-004 F-2026-023 known-gap follow-up as **shipped**.
+Operators can now rotate the API bearer token without restarting
+the daemon — in-flight scrapes continue against the new token
+once the daemon picks it up.
+
+- **`selfdefctl api rotate-token`** — new CLI verb.
+  - Generates a fresh 32-byte high-entropy token (read from
+    `/dev/urandom`, base64-url-safe encoded — no padding, no
+    pulled dep).
+  - Writes atomically to the configured `[api].token_file`:
+    tempfile → `write_all` → `fsync` → `rename` → `chmod 0600`.
+    Survives a crash mid-rotation; the previous token stays
+    valid.
+  - `--token-file <path>` overrides the config target (useful
+    when rotating the control token).
+  - `--bytes <N>` (default 32) sets the entropy length;
+    validates `1..=256`.
+  - `--pid <pid>` or `--pid auto` signals the daemon. `auto`
+    runs `systemctl show -p MainPID --value
+    selfdefd.service` and parses the pid; omit `--pid` and the
+    operator signals the daemon themselves
+    (`systemctl kill --signal=SIGUSR2 selfdefd`).
+  - `--print` echoes the new token to stdout (default: only the
+    on-disk path is logged).
+- **Daemon SIGUSR2 handler** — `selfdef-daemon/src/main.rs`'s
+  `wait_for_shutdown_or_reload` gains a SIGUSR2 arm that calls
+  the new `TokenReloader::reload`. SIGHUP (rules) and SIGUSR2
+  (api tokens) stay structurally identical.
+- **`selfdef-api::TokenReloader`** — the bearer-token
+  middleware now reads tokens through an
+  `Arc<RwLock<Option<LoadedTokens>>>` shared with the daemon's
+  signal handler. `TokenReloader::reload()` re-reads
+  `token_file` / `control_token_file` from disk and swaps the
+  inner value under the write lock; reload errors (empty
+  file, IO failure) keep the previously-loaded tokens in
+  place. New `pub` exports: `TokenReloader`.
+
+#### Behavioural notes
+
+- The middleware now holds a read lock for the duration of the
+  byte-compare (microseconds). Read contention is bounded by
+  scrape concurrency.
+- The previously-loaded tokens persist on reload failure — the
+  daemon stays up; existing valid tokens keep working. Operators
+  see a structured `warn!` line.
+- Pre-follow-up callers that constructed `Arc<LoadedTokens>` —
+  none in the public API — would now go through
+  `ApiServer::token_reloader()` instead. The function signature
+  for `ApiServer::new` is unchanged.
+
+#### Tests
+
+- **Unit** (`selfdef-api`): 4 tests in
+  `transport::token_reload_tests` covering atomic swap,
+  prior-tokens-preserved-on-empty-file, prior-tokens-preserved-on-io-error,
+  and the `is_loaded` accessor.
+- **CLI integration**
+  (`crates/selfdef-cli/tests/cli_api_rotate_token.rs`): 4
+  tests covering url-safe + 0600 output, `--token-file`
+  override, `--bytes` validation, and two rotations producing
+  different tokens.
+- **`base64_urlsafe` self-tests** (in main.rs): RFC 4648 §5
+  positive vectors + a property-style char-set check.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — eventstream parse-time integrity check (SDD-004 F-2026-026 follow-up)
 
 Closes the SDD-004 F-2026-026 follow-up known gap as

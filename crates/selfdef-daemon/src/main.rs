@@ -21,7 +21,7 @@ use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -161,7 +161,7 @@ async fn main() -> Result<()> {
         (None, None)
     };
 
-    let api_task = if cfg.api.enabled {
+    let (api_task, api_token_reloader) = if cfg.api.enabled {
         use selfdef_api::{ApiServer, ApiState};
         let cfg_api = build_api_config(&cfg.api);
         let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
@@ -174,15 +174,20 @@ async fn main() -> Result<()> {
         }
         state = state.with_responder(Arc::clone(&responder));
         let server = ApiServer::new(state, cfg_api);
+        // SDD-004 F-2026-023 follow-up: stash the reloader so SIGUSR2
+        // can hot-rotate tokens. The reloader's Arc<RwLock<>> is
+        // shared with the server's auth middleware.
+        let reloader = server.token_reloader();
         let sd = shutdown.clone();
         info!("api: starting");
-        Some(tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             if let Err(e) = server.run(sd).await {
                 error!(error = %e, "api server failed");
             }
-        }))
+        });
+        (Some(task), Some(reloader))
     } else {
-        None
+        (None, None)
     };
 
     // ---- nats bridge ----
@@ -382,7 +387,7 @@ async fn main() -> Result<()> {
     info!(events_at_start = count_at_start, "selfdefd ready");
 
     tokio::select! {
-        () = wait_for_shutdown_or_reload(correlator.as_ref()) => info!("shutdown signal received"),
+        () = wait_for_shutdown_or_reload(correlator.as_ref(), api_token_reloader.as_ref()) => info!("shutdown signal received"),
         () = run_heartbeat() => warn!("heartbeat task exited unexpectedly"),
     }
 
@@ -594,7 +599,10 @@ fn init_tracing(level_override: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-async fn wait_for_shutdown_or_reload(correlator: Option<&Arc<Correlator>>) {
+async fn wait_for_shutdown_or_reload(
+    correlator: Option<&Arc<Correlator>>,
+    api_token_reloader: Option<&selfdef_api::TokenReloader>,
+) {
     let mut term = match signal(SignalKind::terminate()) {
         Ok(s) => s,
         Err(e) => {
@@ -612,6 +620,11 @@ async fn wait_for_shutdown_or_reload(correlator: Option<&Arc<Correlator>>) {
         }
     };
     let mut hup = signal(SignalKind::hangup()).ok();
+    // SDD-004 F-2026-023 follow-up: SIGUSR2 triggers an api-token
+    // reload. Pairs with `selfdefctl api rotate-token`, which
+    // writes a new token to `api.token_file` then signals the
+    // daemon to pick it up.
+    let mut usr2 = signal(SignalKind::user_defined2()).ok();
 
     loop {
         tokio::select! {
@@ -638,6 +651,24 @@ async fn wait_for_shutdown_or_reload(correlator: Option<&Arc<Correlator>>) {
                     }
                 }
                 // continue the loop — don't exit on SIGHUP
+            }
+            _ = async {
+                if let Some(u) = usr2.as_mut() {
+                    u.recv().await;
+                } else {
+                    std::future::pending::<Option<()>>().await;
+                }
+            } => {
+                info!("SIGUSR2 received");
+                if let Some(rel) = api_token_reloader {
+                    match rel.reload() {
+                        Ok(()) => info!("api tokens reloaded from disk"),
+                        Err(e) => warn!(error = %e, "api token reload failed; keeping previous tokens"),
+                    }
+                } else {
+                    debug!("SIGUSR2 received but api is not enabled; ignoring");
+                }
+                // continue the loop — don't exit on SIGUSR2
             }
         }
     }

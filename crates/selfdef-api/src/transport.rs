@@ -111,10 +111,53 @@ pub enum ServerError {
     Tls(String),
 }
 
+/// Shared, hot-swappable token state for the TCP bearer-token
+/// middleware. SDD-004 F-2026-023 follow-up: the daemon holds an
+/// `Arc<RwLock<Option<LoadedTokens>>>` that the middleware reads
+/// on every request; a `TokenReloader` (returned by
+/// [`ApiServer::token_reloader`]) re-reads `token_file` /
+/// `control_token_file` and atomically replaces the inner value
+/// under the write lock. Used by the daemon's SIGUSR2 handler and
+/// `selfdefctl api rotate-token`.
+type SharedTokens = Arc<std::sync::RwLock<Option<LoadedTokens>>>;
+
+/// Handle for rotating the API tokens at runtime. Returned by
+/// [`ApiServer::token_reloader`]; the daemon's SIGUSR2 handler
+/// invokes [`TokenReloader::reload`] to pick up an updated
+/// `api.token_file` (or `api.control_token_file`) without
+/// restarting the server.
+#[derive(Clone)]
+pub struct TokenReloader {
+    cfg: ApiConfig,
+    tokens: SharedTokens,
+}
+
+impl TokenReloader {
+    /// Re-read the token files configured in `[api]` and swap them
+    /// in atomically. Returns an error if the file is unreadable
+    /// or empty; on error, the previously-loaded tokens stay in
+    /// place (the daemon stays up; existing valid tokens keep
+    /// working). The caller logs the error.
+    pub fn reload(&self) -> Result<(), ServerError> {
+        let new = load_tokens(&self.cfg)?;
+        let mut guard = self.tokens.write().unwrap_or_else(|p| p.into_inner());
+        *guard = Some(new);
+        Ok(())
+    }
+
+    /// True once the server has loaded the initial tokens. Used
+    /// by tests + daemon startup checks.
+    pub fn is_loaded(&self) -> bool {
+        let guard = self.tokens.read().unwrap_or_else(|p| p.into_inner());
+        guard.is_some()
+    }
+}
+
 /// API server. Holds the router and config; `run` blocks until shutdown.
 pub struct ApiServer {
     router: Router,
     cfg: ApiConfig,
+    tokens: SharedTokens,
 }
 
 impl ApiServer {
@@ -122,6 +165,16 @@ impl ApiServer {
         Self {
             router: crate::router(state),
             cfg,
+            tokens: Arc::new(std::sync::RwLock::new(None)),
+        }
+    }
+
+    /// Get a reloader for the running server. The daemon stashes
+    /// this in its SIGUSR2 handler.
+    pub fn token_reloader(&self) -> TokenReloader {
+        TokenReloader {
+            cfg: self.cfg.clone(),
+            tokens: Arc::clone(&self.tokens),
         }
     }
 
@@ -149,10 +202,15 @@ impl ApiServer {
         // that lack Full capability.
         let unix_router = with_capability(self.router.clone(), Capability::Full);
         let tcp_router = if let Some(addr) = tcp {
-            let tokens = load_tokens(&self.cfg)?;
+            let initial = load_tokens(&self.cfg)?;
+            let has_control = initial.control.is_some();
+            {
+                let mut guard = self.tokens.write().unwrap_or_else(|p| p.into_inner());
+                *guard = Some(initial);
+            }
             info!(
                 addr = %addr,
-                control_token = tokens.control.is_some(),
+                control_token = has_control,
                 "api: tcp transport enabled (bearer-token auth)"
             );
             Some(
@@ -160,8 +218,11 @@ impl ApiServer {
                     .clone()
                     // Outer layer (runs first) verifies the token and
                     // tags the request with a Capability extension.
+                    // The middleware reads the shared tokens via the
+                    // Arc<RwLock<>>; reload via TokenReloader swaps
+                    // them atomically (SDD-004 F-2026-023 follow-up).
                     .layer(axum::middleware::from_fn_with_state(
-                        Arc::new(tokens),
+                        Arc::clone(&self.tokens),
                         bearer_auth,
                     )),
             )
@@ -238,7 +299,7 @@ fn token_eq(presented: &str, expected: &str) -> bool {
 }
 
 async fn bearer_auth(
-    state: axum::extract::State<Arc<LoadedTokens>>,
+    state: axum::extract::State<SharedTokens>,
     mut request: Request<Body>,
     next: Next,
 ) -> Response {
@@ -248,10 +309,22 @@ async fn bearer_auth(
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.strip_prefix("Bearer "));
 
-    let cap = match (presented, state.control.as_deref()) {
-        (Some(p), Some(c)) if token_eq(p, c) => Some(Capability::Full),
-        (Some(p), _) if token_eq(p, state.read.as_str()) => Some(Capability::Read),
-        _ => None,
+    // SDD-004 F-2026-023 follow-up: read tokens through the shared
+    // RwLock so SIGUSR2 rotation picks up the new values without
+    // restarting the server. The lock is held only for the
+    // duration of the byte-compare — microseconds.
+    let cap = {
+        let guard = state.read().unwrap_or_else(|p| p.into_inner());
+        let Some(tokens) = guard.as_ref() else {
+            // Tokens never loaded (shouldn't happen post-startup,
+            // but a robust empty-state for tests + race windows).
+            return unauthorized();
+        };
+        match (presented, tokens.control.as_deref()) {
+            (Some(p), Some(c)) if token_eq(p, c) => Some(Capability::Full),
+            (Some(p), _) if token_eq(p, tokens.read.as_str()) => Some(Capability::Read),
+            _ => None,
+        }
     };
 
     let Some(cap) = cap else {
@@ -499,4 +572,116 @@ fn load_root_store(path: &std::path::Path) -> Result<rustls::RootCertStore, Serv
             .map_err(|e| ServerError::Tls(format!("add root: {e}")))?;
     }
     Ok(roots)
+}
+
+#[cfg(test)]
+mod token_reload_tests {
+    //! SDD-004 F-2026-023 follow-up: TokenReloader covers
+    //! atomic swap, error handling on bad files, and the
+    //! "no tokens loaded" race window the middleware can hit
+    //! before `run()` initialises them.
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    fn cfg_with_token_file(path: &std::path::Path) -> ApiConfig {
+        ApiConfig {
+            enabled: true,
+            unix_socket: None,
+            unix_socket_mode: 0o660,
+            tcp_addr: Some("127.0.0.1:0".parse().unwrap()),
+            token_file: Some(path.to_path_buf()),
+            control_token_file: None,
+            tls: None,
+        }
+    }
+
+    fn make_token_file(token: &str) -> NamedTempFile {
+        let mut f = NamedTempFile::new().unwrap();
+        f.write_all(token.as_bytes()).unwrap();
+        f.flush().unwrap();
+        f
+    }
+
+    #[test]
+    fn reload_swaps_in_new_token() {
+        let f = make_token_file("first-token");
+        let cfg = cfg_with_token_file(f.path());
+        let tokens: SharedTokens = Arc::new(std::sync::RwLock::new(None));
+        let reloader = TokenReloader {
+            cfg,
+            tokens: Arc::clone(&tokens),
+        };
+        // First reload populates from disk.
+        reloader.reload().expect("initial load");
+        {
+            let g = tokens.read().unwrap();
+            assert_eq!(g.as_ref().unwrap().read, "first-token");
+        }
+        // Rewrite the file; next reload picks up the new value.
+        std::fs::write(f.path(), "second-token").unwrap();
+        reloader.reload().expect("second load");
+        {
+            let g = tokens.read().unwrap();
+            assert_eq!(g.as_ref().unwrap().read, "second-token");
+        }
+    }
+
+    #[test]
+    fn reload_keeps_prior_tokens_on_empty_file() {
+        let f = make_token_file("valid-token");
+        let cfg = cfg_with_token_file(f.path());
+        let tokens: SharedTokens = Arc::new(std::sync::RwLock::new(None));
+        let reloader = TokenReloader {
+            cfg,
+            tokens: Arc::clone(&tokens),
+        };
+        reloader.reload().expect("initial load");
+
+        // Truncate the file.
+        std::fs::write(f.path(), "").unwrap();
+        let err = reloader.reload().expect_err("empty token must fail");
+        match err {
+            ServerError::EmptyToken { .. } => {}
+            other => panic!("expected EmptyToken, got: {other:?}"),
+        }
+        // The previously-loaded token must still be in place — the
+        // daemon stays up; existing valid tokens keep working.
+        let g = tokens.read().unwrap();
+        assert_eq!(g.as_ref().unwrap().read, "valid-token");
+    }
+
+    #[test]
+    fn reload_keeps_prior_tokens_on_io_error() {
+        let f = make_token_file("valid-token");
+        let cfg = cfg_with_token_file(f.path());
+        let tokens: SharedTokens = Arc::new(std::sync::RwLock::new(None));
+        let reloader = TokenReloader {
+            cfg,
+            tokens: Arc::clone(&tokens),
+        };
+        reloader.reload().expect("initial load");
+
+        // Delete the file → next reload should fail without
+        // disturbing the loaded tokens.
+        drop(f); // drops NamedTempFile → unlinks the path
+        let err = reloader.reload().expect_err("missing file must fail");
+        assert!(matches!(err, ServerError::Io(_)), "got: {err:?}");
+        let g = tokens.read().unwrap();
+        assert_eq!(g.as_ref().unwrap().read, "valid-token");
+    }
+
+    #[test]
+    fn is_loaded_reflects_internal_state() {
+        let f = make_token_file("token");
+        let cfg = cfg_with_token_file(f.path());
+        let tokens: SharedTokens = Arc::new(std::sync::RwLock::new(None));
+        let reloader = TokenReloader {
+            cfg,
+            tokens: Arc::clone(&tokens),
+        };
+        assert!(!reloader.is_loaded());
+        reloader.reload().unwrap();
+        assert!(reloader.is_loaded());
+    }
 }
