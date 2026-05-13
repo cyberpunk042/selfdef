@@ -6,6 +6,88 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — test contract + 6 test-gap closures (SDD-005 implementation)
+
+Closes SDD-debt finding F-2026-082 and the six implementation
+findings F-2026-030 through F-2026-036. SDD-005 status flips from
+`draft` to `implemented`. The six Test-N PRs the SDD breaks the
+work into collapse into a single PR per the "big chunks" steer.
+
+- **D-5 — Test-contract runbook**: `docs/dev/test-contract.md`
+  is the new contributor-facing doc — four test categories
+  (translation, pipeline, module-script, seam) with explicit
+  contracts, plus the three shared patterns (P-1 dry-run-noop,
+  P-2 Prometheus parser, P-3 real-broker NATS).
+- **Test-1 (D-2a) — Dry-run negative**:
+  `crates/selfdef-cli/tests/common/mod.rs` gains `snapshot_tree`
+  + `assert_tree_unchanged`. The reference adoption is
+  `module_vpn_bridge.rs::endpoint_dry_run_must_be_a_noop_on_disk`
+  — staging a relay-via-server fixture, running apply with
+  `SELFDEF_DRY_RUN=1`, snapshotting before/after, and asserting
+  byte equality. The fingerprint is length+first-32-bytes (hand
+  rolled) so we don't take a hash-crate dep. Closes F-2026-030
+  for the reference module; the other module test files migrate
+  when next touched.
+- **Test-2 (D-2b) — Prometheus parser + read-cap gate**:
+  `m12_api.rs` gains a `mod prom` exposition parser
+  (Sample(name, labels, value) tuples, dedup-key check, strict
+  comment shapes). New tests
+  `metrics_exposition_passes_format_strict_parse` and
+  `metrics_allows_read_capability` close F-2026-031 and
+  F-2026-032. The pre-existing substring assertions on the
+  /metrics body are kept alongside as a regression net.
+- **Test-3 (D-2c) — Real-broker NATS round-trip**:
+  `crates/selfdef-nats/tests/integration.rs` spawns a real
+  `nats-server` on a free port (discovered via `which`) and runs
+  the bridge against it. `core_bridge_round_trips_event_between_two_hosts`
+  asserts the wire format end-to-end; `jetstream_bridge_creates_stream_and_durable_consumer`
+  asserts the JetStream startup contract. Both are
+  `#[ignore]`-gated — CI without the binary stays green; the
+  runbook documents `cargo test -p selfdef-nats -- --include-ignored`
+  for local runs (and CI installing `nats-server`).
+  Closes F-2026-035.
+- **Test-4 — Correlator hot-reload**:
+  `crates/selfdef-correlator/tests/hot_reload.rs`.
+  `correlator_swaps_rules_atomically_under_live_traffic` runs a
+  driver task firing 5ms-cadence events while the test swaps
+  rule A→B mid-flight and verifies findings match exactly one
+  rule title (no half-state).
+  `correlator_load_rules_keeps_prior_set_on_parse_failure`
+  asserts the non-destructive failure path. Closes F-2026-033.
+- **Test-5 — Store concurrency + crash-recovery**:
+  `crates/selfdef-store/tests/concurrent.rs`.
+  `concurrent_inserts_do_not_lose_rows` hammers the store from
+  8 tasks × 200 inserts under a multi-thread runtime;
+  `crash_recovery_surfaces_every_committed_insert` opens, inserts
+  50, drops, reopens, asserts all 50 are durable;
+  `concurrent_inserts_then_reopen_preserves_count` composes
+  both. Closes F-2026-034.
+- **Test-6 — Tetragon collector isolation**:
+  `crates/selfdef-collector-tetragon/tests/translation.rs`.
+  10 tests covering every `process_exec` / `process_kprobe`
+  (file_open, socket, unknown function) / `process_exit` /
+  unknown-top-level branch + 3 tolerance branches (empty line,
+  malformed JSON, missing-fields). A new
+  `pub fn TetragonCollector::translate_line(&str) -> Option<Event>`
+  gives the external test surface; `process_line` now wraps it
+  (translate-then-publish). Closes F-2026-036.
+
+### Behavioural notes
+
+The translation-only `translate_line` API on `TetragonCollector`
+is additive — existing callers go through `process_line` and
+`run()` unchanged. The `mod prom` parser is contained in the
+m12_api integration test file; if a future test outside that
+file needs it, extract to a workspace test-only crate.
+
+### Tests
+
+The six new test files run as part of `cargo test --workspace`.
+NATS integration is gated; the runbook documents the
+`--include-ignored` invocation. Full workspace `cargo test`,
+`cargo clippy --workspace --tests -- -D warnings`, and
+`cargo fmt --all -- --check` are clean.
+
 ### Added — shared module-script library (SDD-006 implementation)
 
 Closes SDD-debt finding F-2026-081; partial close on F-2026-051.
