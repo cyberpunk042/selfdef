@@ -30,6 +30,12 @@ struct Fixture {
     config_path: PathBuf,
     tetragon_config: PathBuf,
     policy_dir: PathBuf,
+    /// SDD-006 v2 / F-2026-050: per-test manifest path. The
+    /// shared lib reads MODULE_INSTALLED_MANIFEST; the tests
+    /// set it to a tempdir path so apply.sh's
+    /// `module_record_file` calls don't pollute the host's
+    /// `/var/lib/selfdef/installed/`.
+    manifest_path: PathBuf,
 }
 
 fn fixture(host_config: &str) -> Fixture {
@@ -47,11 +53,14 @@ fn fixture(host_config: &str) -> Fixture {
     let config_path = root.join("agent-guard.toml");
     write_file(&config_path, host_config);
 
+    let manifest_path = root.join("agent-guard.manifest");
+
     Fixture {
         _root: root_holder,
         config_path,
         tetragon_config,
         policy_dir,
+        manifest_path,
     }
 }
 
@@ -61,6 +70,7 @@ fn run_apply(fx: &Fixture) -> Output {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
         .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn apply.sh")
 }
@@ -384,6 +394,7 @@ fn uninstall_removes_every_module_policy() {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
         .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn uninstall.sh");
     assert!(out.status.success(), "uninstall failed");
@@ -397,6 +408,101 @@ fn uninstall_removes_every_module_policy() {
     }
     // policy_dir itself must remain — that's tetragon's, not ours.
     assert!(fx.policy_dir.is_dir());
+    // SDD-006 v2 / F-2026-050: the manifest should have been
+    // cleared on uninstall.
+    assert!(
+        !fx.manifest_path.exists(),
+        "manifest must be cleared after uninstall",
+    );
+}
+
+#[test]
+fn manifest_records_every_rendered_policy() {
+    // SDD-006 v2 / F-2026-050: apply.sh records every rendered
+    // file into the manifest so uninstall.sh has a complete
+    // list. Verify the manifest contents match what we see on
+    // disk.
+    let fx = fixture("profile = \"audit\"\n");
+    let out = run_apply(&fx);
+    assert!(
+        out.status.success(),
+        "apply failed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let manifest_body =
+        std::fs::read_to_string(&fx.manifest_path).expect("manifest must exist after apply");
+    let recorded: std::collections::BTreeSet<&str> =
+        manifest_body.lines().filter(|l| !l.is_empty()).collect();
+    let on_disk: std::collections::BTreeSet<String> = std::fs::read_dir(&fx.policy_dir)
+        .unwrap()
+        .map(|e| e.unwrap().path().display().to_string())
+        .filter(|p| p.ends_with(".yaml"))
+        .collect();
+    let recorded_owned: std::collections::BTreeSet<String> =
+        recorded.iter().map(|s| (*s).to_string()).collect();
+    assert_eq!(
+        recorded_owned, on_disk,
+        "manifest does not match on-disk rendered policies",
+    );
+}
+
+#[test]
+fn manifest_deduplicates_across_reapply() {
+    // Two apply runs in a row must not duplicate manifest
+    // entries (the v2 helper's `grep -Fxq` guard).
+    let fx = fixture("profile = \"audit\"\n");
+    assert!(run_apply(&fx).status.success());
+    let after_first = std::fs::read_to_string(&fx.manifest_path).unwrap();
+    assert!(run_apply(&fx).status.success());
+    let after_second = std::fs::read_to_string(&fx.manifest_path).unwrap();
+    assert_eq!(
+        after_first, after_second,
+        "manifest must be byte-stable across re-apply",
+    );
+}
+
+#[test]
+fn uninstall_with_no_manifest_falls_back_to_legacy_enum() {
+    // Migration path: an operator who upgraded from pre-v2
+    // selfdef has rendered policies on disk but no manifest.
+    // uninstall.sh's fallback must still clean them up.
+    let fx = fixture("profile = \"audit\"\n");
+    run_apply(&fx);
+    // Wipe the manifest to simulate pre-v2 install state.
+    std::fs::remove_file(&fx.manifest_path).unwrap();
+    let names = [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+        "gpu-device-guard",
+    ];
+    for n in names {
+        assert!(
+            fx.policy_dir
+                .join(format!("selfdef-agent-{n}.yaml"))
+                .exists(),
+            "missing pre-uninstall: {n}",
+        );
+    }
+
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/uninstall.sh"))
+        .env("SELFDEF_DRY_RUN", "0")
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
+        .output()
+        .expect("spawn uninstall.sh");
+    assert!(out.status.success(), "uninstall failed");
+    for n in names {
+        assert!(
+            !fx.policy_dir
+                .join(format!("selfdef-agent-{n}.yaml"))
+                .exists(),
+            "policy still present after legacy-fallback uninstall: {n}",
+        );
+    }
 }
 
 // -------------------------------------------------- pod-label scope

@@ -8,7 +8,7 @@
 #   CONFIG_FILE — path to the rendered host config
 
 # shellcheck disable=SC1090,SC2034
-SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=2
 # Locate the shared module-lib. Precedence:
 #   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
 #      runs hit this).

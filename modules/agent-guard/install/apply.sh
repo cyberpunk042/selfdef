@@ -136,6 +136,10 @@ for entry in "${POLICIES[@]}"; do
         fi
         changes=$((changes + 1))
     fi
+    # SDD-006 v2 / F-2026-050: record every rendered file (even
+    # the no-change-since-last-apply case) so uninstall.sh has
+    # the complete list. Idempotent: module_record_file dedups.
+    module_record_file "$dst"
     rm -f "$tmp"
     installed=$((installed + 1))
 done

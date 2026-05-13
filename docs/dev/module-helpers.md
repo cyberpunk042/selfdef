@@ -43,18 +43,41 @@ default:
 ## Library version
 
 ```bash
-SELFDEF_MODULE_LIB_VERSION=1
+SELFDEF_MODULE_LIB_VERSION=2
 ```
 
-The version starts at `1`. Increment policy:
+The version starts at `1`; the F-2026-050 follow-up bumped it
+to `2` to add the manifest helpers (see v2 changes below).
+Increment policy:
 
 - **Bump on breaking change** to an existing helper signature
   (e.g. `run()` gains a required argument; `toml_get` changes
   return contract).
-- **Don't bump on additive** changes — new helpers don't break
-  existing modules. Modules that depend on the new helper set
-  `SELFDEF_MODULE_LIB_VERSION_REQUIRED` higher; older modules
-  keep working unchanged.
+- **Bump on a new helper set that modules MUST require to
+  function** (e.g. v2's `module_record_file` — agent-guard's
+  uninstall depends on it via the manifest contract).
+- **Don't bump on additive** changes that older modules
+  wouldn't even know to look for. Modules that depend on the
+  new helper set `SELFDEF_MODULE_LIB_VERSION_REQUIRED` higher;
+  older modules keep working unchanged.
+
+### v2 changes (SDD-006 F-2026-050 follow-up)
+
+Added the **manifest helpers** so modules that render files
+outside their own tree (TracingPolicies into
+`/etc/tetragon/tetragon.tp.d/`, systemd units into
+`/etc/systemd/system/`, …) don't have to hand-enumerate their
+rendered outputs in `uninstall.sh`. `apply.sh` calls
+`module_record_file <path>` for every file it writes;
+`uninstall.sh` iterates `module_render_files` to get the full
+list and removes each (then `module_clear_manifest` wipes the
+record).
+
+The manifest lives at
+`${MODULE_INSTALLED_MANIFEST:-/var/lib/selfdef/installed/<MODULE>.manifest}`
+(one absolute path per line). Tests override the env var to a
+tempdir per fixture so they don't pollute the host's
+`/var/lib/selfdef/installed/`.
 
 ## Exported helpers (v1)
 
@@ -125,6 +148,49 @@ For arrays, modules write their own helper (see
 `modules/bridge-l2/install/lib.sh:toml_get_list`). Adding a
 shared `toml_get_list` to the library is fine — bump the docs
 here and add tests.
+
+### `module_record_file "$path"` (v2)
+
+Append `$path` to the per-module install manifest. Idempotent
+(re-recording the same path is a no-op). Dry-run aware: when
+`DRY_RUN=1`, logs the intent and skips the write.
+
+Use it in `apply.sh` for every file you `install`/`cp`/`render`
+outside the module's own tree:
+
+```bash
+install -m 0644 "$tmp" "$dst"
+module_record_file "$dst"
+```
+
+The manifest lives at
+`${MODULE_INSTALLED_MANIFEST:-/var/lib/selfdef/installed/<MODULE>.manifest}`.
+Tests override `MODULE_INSTALLED_MANIFEST` per fixture for
+hermetic execution.
+
+### `module_render_files` (v2)
+
+Print every recorded path, one per line. Use in `uninstall.sh`
+to enumerate what needs cleaning up:
+
+```bash
+while IFS= read -r dst; do
+    [[ -z "$dst" ]] && continue
+    [[ -f "$dst" ]] && run "remove $dst" -- rm -f "$dst"
+done < <(module_render_files)
+module_clear_manifest
+```
+
+Empty output when no manifest exists (pre-first-apply or
+pre-v2 install). Callers that need a legacy-enum fallback
+check the call's output count and fall back when zero — see
+`modules/agent-guard/install/uninstall.sh` for the canonical
+migration shape.
+
+### `module_clear_manifest` (v2)
+
+Removes the per-module manifest. Call after iterating
+`module_render_files` in `uninstall.sh`. Dry-run aware.
 
 ## Adding a module-specific helper
 

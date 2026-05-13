@@ -214,7 +214,7 @@ source "{}"
     assert!(
         combined.contains("shared module-lib version mismatch")
             && combined.contains("require >=99")
-            && combined.contains("have 1"),
+            && combined.contains("have 2"),
         "expected version-mismatch diagnostic; got:\n{combined}",
     );
 }

@@ -6,6 +6,87 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — shared-lib v2: manifest helpers (SDD-006 F-2026-050 follow-up)
+
+Closes the SDD-006 F-2026-050 follow-up as **shipped**. Bumps
+the shared module-script library to v2 and adds three new
+helpers that let `apply.sh` record every rendered file into a
+per-module manifest; `uninstall.sh` enumerates the manifest
+instead of hand-listing expected paths.
+
+- **`packaging/lib/module-lib.sh`**: `SELFDEF_MODULE_LIB_VERSION`
+  bumped from `1` to `2`. New helpers:
+  - `module_record_file <path>` — append `<path>` to the
+    per-module manifest. Idempotent (dedups via `grep -Fxq`),
+    dry-run aware.
+  - `module_render_files` — print every recorded path (one per
+    line). Returns empty for pre-v2 installs / pre-first-apply.
+  - `module_clear_manifest` — remove the manifest. Dry-run
+    aware.
+  - `selfdef_manifest_path` — internal helper exposing the
+    manifest path (default `/var/lib/selfdef/installed/<MODULE>.manifest`,
+    override via `MODULE_INSTALLED_MANIFEST`).
+- **`modules/agent-guard/install/lib.sh`** bumps
+  `SELFDEF_MODULE_LIB_VERSION_REQUIRED` from `1` to `2` — agent-guard
+  now hard-requires v2 of the shared lib. Older selfdef installs
+  hit the existing version-mismatch refusal (exit 99 with a
+  structured error).
+- **`modules/agent-guard/install/apply.sh`** calls
+  `module_record_file "$dst"` for every rendered policy YAML.
+  Records both first-write and re-apply cases (idempotent).
+- **`modules/agent-guard/install/uninstall.sh`** iterates
+  `module_render_files` and removes each path, then
+  `module_clear_manifest` wipes the record. A legacy-enum
+  fallback handles pre-v2 installs (where the manifest is
+  empty) so the first post-upgrade uninstall still cleans up
+  the rendered policies.
+- **`docs/dev/module-helpers.md`**: new "v2 changes" section +
+  per-helper documentation following the same shape as the v1
+  helpers.
+
+#### Backwards compatibility
+
+- The shared lib's version-mismatch contract from SDD-006 still
+  fires: a v1 selfdef install with v2 modules exits 99 at source
+  time with a clear stderr message. The 7 modules that
+  required v1 (every module other than agent-guard) keep working
+  unchanged — they don't ask for v2 features.
+- agent-guard installations that upgrade across this PR
+  silently work: apply.sh starts recording, uninstall.sh's
+  legacy fallback handles the gap. A second apply post-upgrade
+  fully populates the manifest.
+
+#### Tests
+
+- **3 new agent-guard integration tests** in
+  `crates/selfdef-cli/tests/module_agent_guard.rs`:
+  - `manifest_records_every_rendered_policy` — the manifest's
+    contents match every `.yaml` file in `policy_dir`
+    post-apply.
+  - `manifest_deduplicates_across_reapply` — byte-stable
+    across two consecutive apply runs.
+  - `uninstall_with_no_manifest_falls_back_to_legacy_enum` —
+    migration path: a missing manifest still cleans up via
+    the hand-enumerated fallback.
+- The existing 19 agent-guard tests continue to pass — every
+  apply / check / pod-label / scope / gpu test verified
+  byte-stably under the new manifest-recording path.
+- **`cli_modules_shared_lib.rs`**: `module_requesting_newer_lib_version_is_refused`
+  updated to expect `"have 2"` in the version-mismatch
+  diagnostic.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
+#### Test isolation note
+
+The shared-lib helpers write to
+`/var/lib/selfdef/installed/<MODULE>.manifest` by default.
+The agent-guard integration test fixture now sets
+`MODULE_INSTALLED_MANIFEST` to a tempdir path per test so the
+test suite is hermetic and never touches the host's
+`/var/lib/selfdef/installed/`.
+
 ### Added — TracingPolicy signing (SDD-004 F-2026-024 follow-up)
 
 Closes the SDD-004 F-2026-024 known-gap follow-up as **shipped**.
