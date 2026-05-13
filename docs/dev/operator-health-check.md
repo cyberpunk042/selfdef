@@ -83,6 +83,17 @@ One JSON object per check, for CI / monitoring integration:
 
 Status values: `"ok"`, `"warn"`, `"FAIL"`, `"skip"`.
 
+## Environment overrides
+
+`selfdefctl doctor` reads a small set of env vars to support
+testing / reproduction:
+
+| Variable | Effect |
+| --- | --- |
+| `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` | When set to a path, the `rbac` category reads the agent-guard scope from `<path>` instead of `/etc/selfdef/modules/agent-guard.toml`. Use this to reproduce a doctor bug against a staged tempdir config without touching `/etc/`. **Test-only**; production callers leave this unset. F-2027-018. |
+
+The doctor's `--help` output references this table.
+
 ## Exit codes
 
 - `0` — no `FAIL` results.

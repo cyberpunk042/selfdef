@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — Phase 2 CLI / api ergonomics (closes F-2027-014..018)
+
+Second of three follow-up cluster PRs the Phase 2 crate explorer recommended. Five small fixes across `selfdef-api` and `selfdef-cli`; they didn't cluster on a single theme (auth guardrail, doc passes, error-message clarity, path-constant consolidation, env-var docs) but they did cluster on scope: each touches one or two files and ships in one PR.
+
+#### F-2027-014 — `selfdef_api::with_full_capability` feature-gated
+
+The "test-only convenience" helper that wraps the router in a blanket `Capability::Full` grant is now gated behind the new `test-helpers` Cargo feature. Release builds elide it entirely. The crate's own integration tests (`tests/m12_api.rs`) keep working because a new circular dev-dep on selfdef-api with `features = ["test-helpers"]` enables the feature for the integration-test build only.
+
+Risk model: before this PR, a downstream consumer (in tree: 0; future: unknown) could call `selfdef_api::with_full_capability` and silently bypass the bearer-token check on TCP transports. With the feature gate, the symbol simply isn't visible to any consumer that doesn't explicitly opt into `test-helpers`.
+
+#### F-2027-015 — `metrics::run_ingest` rustdoc + lag semantics
+
+`run_ingest` (re-exported as `run_metrics_ingest`) now documents:
+- the gating contract: only spawn this task when `[api].enabled = true` (without an HTTP scrape surface, the counters are dead weight; the daemon enforces this at startup);
+- the lag accounting semantics: `BusError::Lagged(n)` accumulates onto `selfdef_ingest_lag_events_total` so operators can see the undercount and resize the bus.
+
+#### F-2027-016 — `ApiServer::NoTransport` error spells out the fix
+
+The error message now says exactly which TOML keys to set:
+
+```
+[api].enabled = true but no transport is set:
+add `[api].unix_socket = "/path/to/sock"` or
+`[api].tcp_addr = "host:port"`, or set `[api].enabled = false`
+```
+
+A reader hitting this error knows the daemon detected the inconsistent config rather than a missing dependency or a permission error.
+
+#### F-2027-017 — new `selfdef_cli::paths` module consolidates the on-disk layout
+
+`crates/selfdef-cli/src/paths.rs` is the new single source of truth for the CLI's default paths (`/etc/selfdef/selfdef.toml`, `/etc/selfdef/modules.toml`, `/etc/selfdef/modules/`, `/etc/selfdef/modules/agent-guard.toml`). Before this PR, the same paths were redefined in `init.rs`, `modules.rs`, `doctor.rs`, and inline in `main.rs`'s clap `default_value`; drift would mean `selfdefctl init config` could write to one path while `selfdefctl modules apply` read from another. All four call sites now import from `crate::paths`.
+
+#### F-2027-018 — `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` documented
+
+`docs/dev/operator-health-check.md` has a new **Environment overrides** section listing the env var, what it does, and that it's test-only. The doctor verb's `--help` references it. Operators chasing a doctor bug can now reproduce against a staged tempdir config without grepping the source.
+
+#### Phase 2 status after this PR
+
+21 findings raised across 2 explorers. **18 nice (15 closed, 3 open — F-2027-011 + -012 + -013, the last selfdef-signing API-surface cluster)**, **1 SDD-debt open**, **2 important closed**, **0 blockers**.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` all clean. Release build of `selfdef-api` verified to elide `with_full_capability`.
+
 ### Added — selfdef-correlator verifier observability (closes F-2027-019 + F-2027-020 + F-2027-021)
 
 First of three follow-up cluster PRs the Phase 2 crate explorer recommended. The three findings all touched the correlator's post-PR-#58 verifier surface and share a theme: "make verifier state operator-visible". Shipped together as one cohesive bundle.

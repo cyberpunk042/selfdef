@@ -28,8 +28,12 @@ use anyhow::{Context, Result};
 use serde::Deserialize;
 
 const SYSTEM_MODULES_DIR: &str = "/usr/share/selfdef/modules";
-const DEFAULT_HOST_CONFIG: &str = "/etc/selfdef/modules.toml";
-const DEFAULT_PER_MODULE_DIR: &str = "/etc/selfdef/modules";
+// F-2027-017: import the canonical paths from `crate::paths`
+// instead of redefining `/etc/selfdef/...` locally. The two
+// constants below are kept as aliases for crate-internal call
+// sites (low-friction rename) but point at the same string.
+const DEFAULT_HOST_CONFIG: &str = crate::paths::MODULES_HOST_CONFIG;
+const DEFAULT_PER_MODULE_DIR: &str = crate::paths::MODULES_PER_MODULE_DIR;
 
 /// Apply-order bucket. Modules in `pre` run before any `main` module;
 /// `post` runs after all `main` modules. Within a bucket the existing

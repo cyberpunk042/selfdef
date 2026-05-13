@@ -26,11 +26,15 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-/// Default target for `init config` when no `--output` is given.
-pub(crate) const DEFAULT_DAEMON_CONFIG: &str = "/etc/selfdef/selfdef.toml";
+use crate::paths;
 
-/// Default target for `init modules`.
-pub(crate) const DEFAULT_MODULES_CONFIG: &str = "/etc/selfdef/modules.toml";
+/// Default target for `init config` when no `--output` is given.
+/// F-2027-017: re-export from `crate::paths` so the daemon-side
+/// expectation and the init-side default never drift.
+pub(crate) const DEFAULT_DAEMON_CONFIG: &str = paths::DAEMON_CONFIG;
+
+/// Default target for `init modules` — same source.
+pub(crate) const DEFAULT_MODULES_CONFIG: &str = paths::MODULES_HOST_CONFIG;
 
 /// SDD-NA: write a starter `selfdef.toml` to `output_path`.
 /// Refuses to overwrite an existing file unless `force` is set.

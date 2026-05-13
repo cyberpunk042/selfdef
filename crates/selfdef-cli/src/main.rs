@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod init;
 mod modules;
+mod paths;
 
 use std::path::PathBuf;
 
@@ -28,7 +29,7 @@ struct Cli {
         short,
         long,
         env = "SELFDEF_CONFIG",
-        default_value = "/etc/selfdef/selfdef.toml",
+        default_value = paths::DAEMON_CONFIG,
         global = true
     )]
     config: PathBuf,
@@ -92,6 +93,13 @@ enum Command {
     /// summary) in one go. Complementary to
     /// `selfdefctl modules check`, which covers per-module
     /// health via each module's `check.sh`.
+    ///
+    /// Env overrides (F-2027-018):
+    ///   - `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG=<path>` — when set,
+    ///     the rbac category reads the agent-guard scope from
+    ///     `<path>` instead of `/etc/selfdef/modules/agent-guard.toml`.
+    ///     Test-only — used by the integration suite to stage a
+    ///     fake config in a tempdir.
     Doctor {
         /// JSON-lines output instead of the human report —
         /// for CI / monitoring integration.

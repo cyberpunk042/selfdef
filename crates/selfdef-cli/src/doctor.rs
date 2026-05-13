@@ -347,13 +347,18 @@ fn check_eventstream(cfg: &Config) -> Vec<CheckResult> {
 /// `selfdefctl rbac check --probe`. Doctor just reports whether
 /// the rbac surface applies + points at the dedicated verb.
 fn check_rbac_posture(_cfg: &Config) -> Vec<CheckResult> {
-    // Test override: SELFDEF_DOCTOR_AGENT_GUARD_CONFIG lets the
-    // integration suite stage a fake agent-guard config in a
-    // tempdir without polluting /etc. Production callers (the
-    // real `selfdefctl doctor` invocation) leave this unset.
+    // F-2027-018: `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` is the
+    // test-only env override that lets the integration suite stage
+    // a fake agent-guard config in a tempdir without polluting
+    // /etc. Production callers leave this unset; the verb's
+    // `--help` and `docs/dev/operator-health-check.md` both
+    // document it explicitly so an operator chasing a doctor bug
+    // can reproduce against a staged config.
+    // F-2027-017: pull the default path from `crate::paths` so
+    // every CLI verb sees the same canonical layout.
     let ag_path = std::env::var_os("SELFDEF_DOCTOR_AGENT_GUARD_CONFIG")
         .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from("/etc/selfdef/modules/agent-guard.toml"));
+        .unwrap_or_else(|| std::path::PathBuf::from(crate::paths::AGENT_GUARD_CONFIG));
     if !ag_path.exists() {
         return vec![CheckResult {
             category: "rbac".into(),

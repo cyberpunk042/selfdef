@@ -212,6 +212,18 @@ fn escape(s: &str) -> String {
 
 /// Subscribe to the bus and bump counters until shutdown. The daemon
 /// spawns one of these next to the correlator / responder tasks.
+///
+/// **Gating contract** (F-2027-015): only spawn this task when the API
+/// is enabled — without an HTTP scrape surface the counters are dead
+/// weight. The daemon enforces this at
+/// `crates/selfdef-daemon/src/main.rs::main` (the metrics ingest task
+/// is built inside the `if cfg.api.enabled` branch).
+///
+/// **Lag semantics**: when the broadcast bus reports the subscriber
+/// fell behind (`BusError::Lagged(n)`), the lag is accounted on
+/// `selfdef_ingest_lag_events_total` so operators can see the
+/// undercount and resize the bus. Other bus errors log and continue;
+/// only `BusError::Closed` exits.
 pub async fn run_ingest(
     metrics: std::sync::Arc<Metrics>,
     bus: std::sync::Arc<Bus>,

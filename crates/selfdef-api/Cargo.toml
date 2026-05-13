@@ -12,6 +12,14 @@ description = "Read-only HTTP API used by selfdefctl and the mobile dashboard."
 [lints]
 workspace = true
 
+[features]
+# F-2027-014: test-only helpers (specifically `with_full_capability`)
+# that grant blanket auth to a router. Gated behind a feature so they
+# disappear from release builds and downstream consumers can't reach
+# them by accident. Tests in this crate enable it via the circular
+# dev-dep below.
+test-helpers = []
+
 [dependencies]
 selfdef-core = { workspace = true }
 selfdef-bus = { workspace = true }
@@ -43,3 +51,8 @@ tempfile = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 selfdef-notifier = { workspace = true }
 selfdef-responder = { workspace = true }
+# F-2027-014: circular dev-dep enables the `test-helpers` feature
+# for this crate's own integration tests (which compile as a
+# separate crate against this library). Cargo specifically supports
+# this pattern for dev-deps.
+selfdef-api = { path = ".", features = ["test-helpers"] }
