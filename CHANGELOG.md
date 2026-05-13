@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 module explorer (raises F-2027-022 through F-2027-027)
+
+Third of Phase 2's seven explorers ships. Walks the 9 shipped modules' install scripts + manifests + READMEs, the SDD-006 v2 module-script library, and the post-Phase-1 surfaces called out in the charter (tetragon's `require_signed_policies`, v2 manifest helpers, vpn-bridge per-profile instanced). 6 new findings raised; all triaged **nice** — no blockers, no important.
+
+#### New document
+
+`docs/review/phase-2/40-module-audit.md` — per-area notes with concrete `file:line` observations. Six findings clustered into three themes: v2 manifest-helper adoption gaps, per-module README doc gaps, and a small defense-in-depth tightening on vpn-bridge's `$SELFDEF_INSTANCE_ID` interpolation.
+
+#### New findings (6 entries — all nice)
+
+- `F-2027-022` — `modules/detect-host`: only module using `[install] kind = "debian-package"`; contract not documented in `docs/dev/modules.md` or the module's README.
+- `F-2027-023` — `modules/tetragon/install/apply.sh:49`: signing-failure recover-step pipes verifier output to stdout but the subsequent `die` message doesn't reference it; operator has to scroll back to find which file failed.
+- `F-2027-024` — seven script-based modules (bridge-l2, observability, tetragon, integrity-sentinel, polarproxy, suricata, vpn-bridge) don't opt into SDD-006 v2 manifest helpers; `uninstall.sh` hand-curates paths that `apply.sh` writes, recreating the drift risk v2 was designed to remove.
+- `F-2027-025` — `modules/vpn-bridge/install/profiles/relay-via-server.sh:20-23`: `$SELFDEF_INSTANCE_ID` interpolated into nftables table names without `safe_name` validation. Operator-controlled string, so defense-in-depth only.
+- `F-2027-026` — all 9 module READMEs silent on `SELFDEF_MODULE_LIB_VERSION_REQUIRED` and the v2 helpers.
+- `F-2027-027` — `modules/{bridge-l2,suricata,polarproxy}/install/check.sh` miss the conventional `DRY_RUN=0` initialization every other check.sh sets.
+
+#### Closing-PR clustering recommendation
+
+Three follow-up implementation PRs cleanly subsume the new findings:
+
+- **v2-helpers migration** — F-2027-024 + F-2027-027 (opt the seven script-based modules into v2; standardise `DRY_RUN=0` init).
+- **vpn-bridge safe_name** — F-2027-025 (one-line patch + test).
+- **Docs cluster** — F-2027-022 + F-2027-023 + F-2027-026 (per-module README v2-lib note + tetragon die message + `docs/dev/modules.md` `kind = "debian-package"` contract).
+
+#### Phase 2 backlog after this PR
+
+27 findings across three explorers (recent-PRs: 10, all closed except F-2027-010 SDD-debt; crate: 11, all closed; module: 6, all open). Four explorers remain (integration, docs, tests, security) — each will add more findings.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Fixed — selfdef-signing API surface (closes F-2027-011 + F-2027-012 + F-2027-013)
 
 Third and last of the follow-up cluster PRs the Phase 2 crate explorer recommended. Closes the three findings the explorer raised against `selfdef-signing`. After this PR, **the crate-explorer backlog is fully drained** — every blocker, important, and nice finding from Phase 2's first two explorers is closed.
