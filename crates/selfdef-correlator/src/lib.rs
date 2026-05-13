@@ -24,6 +24,18 @@ use selfdef_core::prelude::*;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
+/// F-2027-005: failure modes for `Correlator::reload_verifier`.
+/// The two cases need to be distinguishable so the daemon's
+/// SIGUSR2 handler can log "no verifier attached, ignoring"
+/// without scaring the operator with a malformed-key message.
+#[derive(Debug, thiserror::Error)]
+pub enum ReloadVerifierError {
+    #[error("no signing verifier is currently attached; verifier reload is a no-op")]
+    NoVerifierConfigured,
+    #[error("loading public key from {0}: {1}")]
+    Load(PathBuf, selfdef_signing::SigningError),
+}
+
 #[derive(Debug)]
 pub struct Correlator {
     publisher: Publisher,
@@ -35,7 +47,13 @@ pub struct Correlator {
     /// `load_rules` calls `Engine::load_dir_verified` and refuses
     /// to compile any rule lacking a valid sibling `.minisig`.
     /// Wired from `[security].require_signed_rules` in the daemon.
-    verifier: Option<selfdef_signing::Verifier>,
+    ///
+    /// F-2027-005: wrapped in `Arc<RwLock<>>` so SIGUSR2 can
+    /// re-load the public key off disk without restarting the
+    /// daemon. The path the verifier was loaded from is read
+    /// back from `Verifier::source()` to reload from the same
+    /// place.
+    verifier: Arc<RwLock<Option<selfdef_signing::Verifier>>>,
 }
 
 impl Correlator {
@@ -47,7 +65,7 @@ impl Correlator {
             engine: Arc::new(RwLock::new(Arc::new(Engine::empty()))),
             rules_dir,
             sequence: AtomicU64::new(0),
-            verifier: None,
+            verifier: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -56,17 +74,57 @@ impl Correlator {
     /// `<file>.minisig` under this verifier's public key.
     /// Chainable.
     #[must_use]
-    pub fn with_verifier(mut self, verifier: selfdef_signing::Verifier) -> Self {
-        self.verifier = Some(verifier);
+    pub fn with_verifier(self, verifier: selfdef_signing::Verifier) -> Self {
+        {
+            let mut guard = self.verifier.write().unwrap_or_else(|p| p.into_inner());
+            *guard = Some(verifier);
+        }
         self
+    }
+
+    /// F-2027-005: re-load the configured signing public key off
+    /// disk. Returns the absolute path the key was loaded from
+    /// (so the caller can log it) or an error if no verifier was
+    /// ever attached, or the on-disk file is now malformed.
+    ///
+    /// Re-loads from `Verifier::source()` — the same path the
+    /// initial load used. Atomic: on parse failure the previous
+    /// verifier stays in place, mirroring `load_rules`' failure
+    /// semantics.
+    pub fn reload_verifier(&self) -> Result<PathBuf, ReloadVerifierError> {
+        let path = {
+            let guard = self.verifier.read().unwrap_or_else(|p| p.into_inner());
+            guard
+                .as_ref()
+                .ok_or(ReloadVerifierError::NoVerifierConfigured)?
+                .source()
+                .to_path_buf()
+        };
+        let fresh = selfdef_signing::Verifier::load(&path)
+            .map_err(|e| ReloadVerifierError::Load(path.clone(), e))?;
+        let mut guard = self.verifier.write().unwrap_or_else(|p| p.into_inner());
+        *guard = Some(fresh);
+        Ok(path)
+    }
+
+    /// F-2027-005: whether a verifier is currently attached.
+    /// Used by the daemon's SIGUSR2 handler to decide whether to
+    /// reload it.
+    #[must_use]
+    pub fn has_verifier(&self) -> bool {
+        let guard = self.verifier.read().unwrap_or_else(|p| p.into_inner());
+        guard.is_some()
     }
 
     /// Load (or reload) rules from disk. Atomically swaps the engine on
     /// success; on failure leaves the previous rule set in place.
     pub fn load_rules(&self) -> Result<usize, SigmaError> {
-        let new_engine = Arc::new(match &self.verifier {
-            Some(v) => Engine::load_dir_verified(&self.rules_dir, v)?,
-            None => Engine::load_dir(&self.rules_dir)?,
+        let new_engine = Arc::new({
+            let guard = self.verifier.read().unwrap_or_else(|p| p.into_inner());
+            match guard.as_ref() {
+                Some(v) => Engine::load_dir_verified(&self.rules_dir, v)?,
+                None => Engine::load_dir(&self.rules_dir)?,
+            }
         });
         let count = new_engine.rule_count();
         let mut guard = self.engine.write().unwrap_or_else(|p| p.into_inner());

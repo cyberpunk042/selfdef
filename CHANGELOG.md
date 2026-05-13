@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — SIGUSR2 hot-rotation of the rule-signing verifier (closes F-2027-005)
+
+Before this PR, rotating `/etc/selfdef/keys/policy.pub` required a full daemon restart — SIGHUP reloaded rules through the existing verifier but did not re-read the verifier itself. F-2027-005 (Phase 2 recent-PRs audit) called this out as friction in the operator-side key-rotation runbook.
+
+Now: `pkill -USR2 selfdefd` re-loads the public-key file at the configured `[security].signing_public_key_file` path and immediately re-runs `Correlator::load_rules` against the fresh verifier. Both steps log at `info`. On reload failure (corrupt key file, missing path, malformed base64) the previous verifier stays in place and a `warn` line surfaces the cause — same atomic semantics as `load_rules` itself.
+
+#### Correlator side (`crates/selfdef-correlator/src/lib.rs`)
+
+`Correlator::verifier` is now `Arc<RwLock<Option<Verifier>>>` instead of `Option<Verifier>`. Three new public surfaces:
+- `Correlator::reload_verifier() -> Result<PathBuf, ReloadVerifierError>` — re-loads the previously-loaded path (read back from `Verifier::source()`) and atomically swaps it in. Returns the path the key was loaded from so the daemon can log it.
+- `Correlator::has_verifier() -> bool` — guards the SIGUSR2 fan-out branch in the daemon.
+- `ReloadVerifierError` — typed: `NoVerifierConfigured` (signing not opted in) vs `Load(PathBuf, SigningError)` (key file on disk is broken). The daemon distinguishes the two so a no-op SIGUSR2 doesn't look like a failure.
+
+`with_verifier` keeps the same chainable shape (`Self`) — the API is source-compatible for the daemon's startup wire-up.
+
+#### Daemon side (`crates/selfdef-daemon/src/main.rs::wait_for_shutdown_or_reload`)
+
+The SIGUSR2 handler now fans out to every hot-reloadable surface:
+1. API tokens (existing, F-2026-023).
+2. Rule-signing verifier + a follow-up `load_rules` pass (new, F-2027-005).
+
+Failures in one branch don't block the others. If neither feature is enabled, the handler logs a `debug:` line and continues — same as before, just with a more accurate message.
+
+#### Tests
+
+- `crates/selfdef-correlator/tests/signed_rules.rs`:
+  - `reload_verifier_swaps_in_a_rotated_pubkey` — keypair-A signs a rule; verifier loads A; operator rewrites `policy.pub` with keypair B + re-signs the rule; load fails; `reload_verifier()` succeeds; subsequent `load_rules()` succeeds.
+  - `reload_verifier_keeps_prior_on_load_failure` — operator clobbers `policy.pub` with garbage; `reload_verifier()` returns a typed `Load` error; the previously-loaded verifier still verifies rules signed by the original key.
+  - `reload_verifier_with_no_verifier_attached_is_typed_error` — `NoVerifierConfigured` distinguishes "signing not opted in" from "signing broken".
+
+#### Documentation
+
+`docs/dev/signing.md`:
+- "Turn on enforcement" section now lists both signals (SIGHUP for rules; SIGUSR2 for the verifier + rules together) with a one-liner each.
+- "Rotating the signing key" section's step 5 now reads `pkill -USR2 selfdefd` instead of "full daemon restart required".
+
+#### Phase 2 ledger update
+
+`docs/review/phase-2/99-findings-ledger.md` marks F-2027-005 closed. Phase 2 backlog after this PR: **0 nice**, 1 SDD-debt (F-2027-010 — `events follow` TCP transport). The recent-PRs explorer's full 10-finding backlog is now drained.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Fixed — Phase 2 nice-cluster cleanup (closes F-2027-001, -002, -004, -006, -007, -009)
 
 Six of the seven Phase 2 nice findings shipped as one bundle. Every change is small and contained; they share a PR because each is one-or-two-file diff and they have no inter-dependencies, just a common parent (post-Phase-1 surface auditing). The only nice finding still open is `F-2027-005` (rule-signing verifier reload via SIGUSR2 — needs a follow-up that touches the daemon's verifier wiring, deferred so it can land on its own).

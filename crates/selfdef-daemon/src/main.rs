@@ -625,6 +625,7 @@ async fn wait_for_shutdown_or_reload(
     correlator: Option<&Arc<Correlator>>,
     api_token_reloader: Option<&selfdef_api::TokenReloader>,
 ) {
+    use selfdef_correlator::ReloadVerifierError;
     let mut term = match signal(SignalKind::terminate()) {
         Ok(s) => s,
         Err(e) => {
@@ -682,13 +683,48 @@ async fn wait_for_shutdown_or_reload(
                 }
             } => {
                 info!("SIGUSR2 received");
+                // SIGUSR2 fans out to every hot-reloadable thing
+                // the daemon owns. Each branch logs at info/warn
+                // independently; one failure does not block the
+                // others.
+                let mut did_anything = false;
                 if let Some(rel) = api_token_reloader {
+                    did_anything = true;
                     match rel.reload() {
                         Ok(()) => info!("api tokens reloaded from disk"),
                         Err(e) => warn!(error = %e, "api token reload failed; keeping previous tokens"),
                     }
-                } else {
-                    debug!("SIGUSR2 received but api is not enabled; ignoring");
+                }
+                // F-2027-005: rotate the rule-signing public key
+                // without a restart. After re-loading, also
+                // re-run `load_rules` so any rules signed by a
+                // key version the previous Verifier didn't trust
+                // get picked up.
+                if let Some(corr) = correlator
+                    && corr.has_verifier()
+                {
+                    did_anything = true;
+                    match corr.reload_verifier() {
+                        Ok(path) => {
+                            info!(key = %path.display(), "rule-signing verifier reloaded from disk");
+                            match corr.load_rules() {
+                                Ok(n) => info!(rules = n, "rules re-verified after verifier reload"),
+                                Err(e) => warn!(error = %e, "rule re-verify after verifier reload failed; keeping previous ruleset"),
+                            }
+                        }
+                        Err(ReloadVerifierError::NoVerifierConfigured) => {
+                            // Should be unreachable given the
+                            // has_verifier guard above, but
+                            // handle defensively.
+                            debug!("verifier reload skipped — none attached");
+                        }
+                        Err(e @ ReloadVerifierError::Load(..)) => {
+                            warn!(error = %e, "verifier reload failed; keeping previous verifier");
+                        }
+                    }
+                }
+                if !did_anything {
+                    debug!("SIGUSR2 received but no hot-reloadable surface is enabled; ignoring");
                 }
                 // continue the loop — don't exit on SIGUSR2
             }
