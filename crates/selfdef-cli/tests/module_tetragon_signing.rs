@@ -104,6 +104,10 @@ struct Fixture {
     config_path: PathBuf,
     policy_dir: PathBuf,
     bins: PathBuf,
+    /// F-2027-024: per-test override of the shared module-lib's
+    /// install-manifest path so parallel tests don't trample
+    /// `/var/lib/selfdef/installed/tetragon.manifest`.
+    manifest_path: PathBuf,
 }
 
 fn fixture(require_signed: bool) -> Fixture {
@@ -140,12 +144,15 @@ fn fixture(require_signed: bool) -> Fixture {
     write_executable(&bins.join("systemctl"), "#!/usr/bin/env bash\nexit 0\n");
     write_executable(&bins.join("selfdefctl"), stub_selfdefctl());
 
+    let manifest_path = root.join("installed.manifest");
+
     Fixture {
         _root: root_holder,
         _bins: bins_holder,
         config_path: host_cfg,
         policy_dir,
         bins,
+        manifest_path,
     }
 }
 
@@ -155,6 +162,7 @@ fn run_apply(fx: &Fixture, dry_run: bool) -> Output {
         .env("SELFDEF_DRY_RUN", if dry_run { "1" } else { "0" })
         .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
         .env("PATH", prepended_path(&fx.bins))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn apply.sh")
 }
@@ -164,6 +172,7 @@ fn run_check(fx: &Fixture) -> Output {
         .arg(module_dir().join("install/check.sh"))
         .env("SELFDEF_TETRAGON_CONFIG", &fx.config_path)
         .env("PATH", prepended_path(&fx.bins))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn check.sh")
 }

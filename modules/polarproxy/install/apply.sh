@@ -76,6 +76,9 @@ else
     reload_systemd=1
     changes=$((changes + 1))
 fi
+# F-2027-024: record the systemd unit in the manifest so
+# uninstall walks the manifest. Idempotent.
+module_record_file "$UNIT_PATH"
 
 # ---------------------------------------------------------------- nftables redirect
 HAVE_NFT_TABLE=0
@@ -100,6 +103,10 @@ if [[ "$PROFILE" == "host-tls-mitm" ]]; then
         run "load nftables redirect" -- nft -f "$NFT_RULESET_PATH"
         changes=$((changes + 2))
     fi
+    # F-2027-024: record the NAT ruleset in the manifest. Only
+    # under host-tls-mitm; bridge-tap profile doesn't render
+    # this file (the else branch below cleans up any stale one).
+    module_record_file "$NFT_RULESET_PATH"
 else
     # bridge-tap profile: ensure any previous host-tls-mitm NAT table
     # is removed, otherwise we'd be double-redirecting on this host.

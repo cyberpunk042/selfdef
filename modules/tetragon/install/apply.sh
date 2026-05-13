@@ -106,6 +106,9 @@ if [[ ! -f "$CONFIG_PATH" ]] || ! cmp -s "$NEW_CONFIG" "$CONFIG_PATH"; then
     fi
     changes=$((changes + 1))
 fi
+# F-2027-024: record the rendered config in the manifest so
+# uninstall walks the manifest. Idempotent on re-apply.
+module_record_file "$CONFIG_PATH"
 
 # Service: ensure enabled. Restart only when something changed.
 if [[ "$DRY_RUN" == "1" ]]; then

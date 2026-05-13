@@ -13,6 +13,10 @@ set -euo pipefail
 MODULE="bridge-l2"
 DRY_RUN="${SELFDEF_DRY_RUN:-0}"
 CONFIG_FILE="${SELFDEF_BRIDGE_L2_CONFIG:-/etc/selfdef/modules/bridge-l2.toml}"
+# F-2027-024: post-v2 migration the manifest is the source of
+# truth for which files to remove. NFT_RULESET_PATH stays as a
+# fallback for pre-v2 installs that never recorded a manifest;
+# see "manifest_count == 0" branch below.
 NFT_RULESET_PATH="/etc/nftables.d/selfdef-bridge.conf"
 
 # shellcheck source=lib.sh
@@ -46,9 +50,27 @@ fi
 if command -v nft >/dev/null && nft list table inet selfdef_bridge >/dev/null 2>&1; then
     run "delete nftables table inet selfdef_bridge" -- nft delete table inet selfdef_bridge
 fi
-if [[ -f "$NFT_RULESET_PATH" ]]; then
-    run "remove $NFT_RULESET_PATH" -- rm -f "$NFT_RULESET_PATH"
+
+# F-2027-024: walk the rendered-file manifest. apply.sh records
+# every rendered file with module_record_file; we just iterate.
+manifest_count=0
+while IFS= read -r dst; do
+    [[ -z "$dst" ]] && continue
+    manifest_count=$((manifest_count + 1))
+    if [[ -f "$dst" ]]; then
+        run "remove $dst" -- rm -f "$dst"
+    fi
+done < <(module_render_files)
+
+# Migration path: the manifest is empty (pre-v2 install OR
+# uninstall-without-apply). Fall back to the legacy hand-coded
+# path one last time so existing deployments don't leave the
+# nftables ruleset orphaned.
+if [[ "$manifest_count" -eq 0 && -f "$NFT_RULESET_PATH" ]]; then
+    run "remove $NFT_RULESET_PATH (legacy enum)" -- rm -f "$NFT_RULESET_PATH"
 fi
+
+module_clear_manifest
 
 # Tear down the bridge if we own it.
 if ip link show dev "$BRIDGE_NAME" type bridge >/dev/null 2>&1; then

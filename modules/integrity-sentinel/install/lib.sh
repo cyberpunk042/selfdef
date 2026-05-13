@@ -8,8 +8,12 @@
 #   CONFIG_FILE   — path to the rendered host config (selfdef sets this
 #                   via SELFDEF_INTEGRITY_SENTINEL_CONFIG)
 
+# F-2027-024: opted into v2 to use module_record_file /
+# module_render_files / module_clear_manifest, replacing the
+# hand-curated BASELINE_PATH duplication between apply.sh and
+# uninstall.sh.
 # shellcheck disable=SC1090,SC2034
-SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=2
 # Locate the shared module-lib. Precedence:
 #   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
 #      runs hit this).

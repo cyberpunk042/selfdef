@@ -33,16 +33,22 @@ struct Fixture {
     _root: tempfile::TempDir,
     root: PathBuf,
     config_path: PathBuf,
+    /// F-2027-024: per-test override of the shared module-lib's
+    /// install-manifest path so parallel tests don't trample
+    /// `/var/lib/selfdef/installed/observability.manifest`.
+    manifest_path: PathBuf,
 }
 
 fn new_fixture() -> Fixture {
     let root_holder = tempfile::tempdir().unwrap();
     let root = root_holder.path().to_path_buf();
     let config_path = root.join("observability.toml");
+    let manifest_path = root.join("installed.manifest");
     Fixture {
         _root: root_holder,
         root,
         config_path,
+        manifest_path,
     }
 }
 
@@ -65,6 +71,7 @@ fn run_apply(fx: &Fixture) -> Output {
         .arg(module_dir().join("install/apply.sh"))
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         // Restricted PATH so systemctl reload is a no-op warning,
         // not a real call into the host's service manager.
         .env("PATH", "/usr/bin:/bin")
@@ -196,6 +203,7 @@ fn check_fails_before_apply_passes_after() {
     let pre = Command::new("bash")
         .arg(module_dir().join("install/check.sh"))
         .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .unwrap();
     assert!(!pre.status.success(), "check should fail before apply");
@@ -205,6 +213,7 @@ fn check_fails_before_apply_passes_after() {
     let post = Command::new("bash")
         .arg(module_dir().join("install/check.sh"))
         .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .unwrap();
     assert!(
@@ -229,6 +238,7 @@ fn uninstall_removes_rendered_files() {
         .arg(module_dir().join("install/uninstall.sh"))
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .env("PATH", "/usr/bin:/bin")
         .output()
         .unwrap();
@@ -252,6 +262,7 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
         .arg(module_dir().join("install/apply.sh"))
         .env("SELFDEF_DRY_RUN", "1")
         .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .env("PATH", "/usr/bin:/bin")
         .output()
         .expect("spawn apply.sh");
