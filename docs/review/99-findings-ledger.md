@@ -1,0 +1,146 @@
+# Findings ledger
+
+> Master index of every finding raised in Phase 1. Per-area
+> findings (`M-`, `C-`, `I-`, `D-`, `T-`, `R-`, `S-`) are
+> consolidated here as canonical `F-2026-NNN` ids.
+>
+> Each row carries the canonical id, the severity, the surface,
+> a one-line summary, and a recommended **next phase** label:
+>
+> - `investigate` — root cause not fully understood yet; Phase
+>   2 reads code / runs experiments.
+> - `design` — root cause is clear; Phase 2 produces an SDD.
+> - `implement` — root cause is clear and the fix is small;
+>   Phase 2 implements directly with a short rationale doc.
+> - `doc` — pure documentation drift; Phase 2 updates the
+>   relevant doc file.
+>
+> Severity:
+> - `blocker` — the artifact's central promise fails for the
+>   documented use case.
+> - `important` — works but a documented promise isn't honoured.
+> - `nice` — polish.
+> - `SDD-debt` — undocumented design decision with downstream
+>   consequences.
+
+---
+
+## Blocker findings (5)
+
+| id | severity | surface | summary | next phase |
+| --- | --- | --- | --- | --- |
+| F-2026-001 | blocker | `crates/selfdef-collector-tetragon/src/lib.rs` | Every Tetragon event hardcodes `SeverityId::Informational`. Policy `selfdef.io/severity` annotation is ignored. *(was I-007)* | design |
+| F-2026-002 | blocker | `rules/sigma/` | No correlator rule promotes Tetragon agent-guard events to `category_uid = Findings`. Responder never fires `NotifyAction`. *(was I-008)* | design |
+| F-2026-003 | blocker | `modules/tetragon/README.md` + default profile comment | README points at the wrong collector (`[collectors.eventstream]` instead of `[collectors.tetragon]`). Events silently dropped. *(was I-006)* | doc |
+| F-2026-004 | blocker | `selfdef-config EventstreamConfig::default` + `ApiConfig::default` | Default daemon config disables every collector and the API. Modules' "out of the box" promises (drift→notifier, Prometheus scrape) require manual bridging the documentation doesn't surface. *(was I-002, I-004)* | design |
+| F-2026-005 | blocker | `modules/vpn-bridge/install/profiles/*.sh` | `instanced = true` declared in manifest; profile scripts use hard-coded state paths. Multi-instance host silently corrupts state. *(was M-008, S-007)* | design |
+| F-2026-006 | blocker | daemon integration tests | No AI-machine end-to-end test (policy fires → operator alert). F-2026-001 + F-2026-002 would have been caught by such a test. *(was T-008)* | implement |
+
+---
+
+## Important findings (22)
+
+| id | severity | surface | summary | next phase |
+| --- | --- | --- | --- | --- |
+| F-2026-010 | important | `modules/agent-guard/install/apply.sh` | tetragon `policy_dir` discovery depends on `SELFDEF_TETRAGON_CONFIG`; silent fallback to hard-coded path. *(was M-002)* | design |
+| F-2026-011 | important | `modules/tetragon/install/apply.sh` | `event_log_path` alignment with daemon eventstream is operator-managed; no apply-time surface or check. *(was M-004)* | design |
+| F-2026-012 | important | `modules/observability/` | Three different defaults for `scrape_targets` across README, both profile files, apply.sh fallback. *(was M-005)* | doc |
+| F-2026-013 | important | `modules/observability/README.md` | Dashboard depends on selfdef-daemon `/metrics`; README only mentions Tetragon. *(was M-006)* | doc |
+| F-2026-014 | important | every module using the event bus | No `depends_on = ["detect-host"]` declared; consume-side of detect-host's `provides = ["event-bus"]` is silent. *(was M-009)* | design |
+| F-2026-015 | important | `selfdef-config CorrelatorConfig::window_secs / threshold` | Dead config knobs — exposed but never read. Sigma rules carry their own. *(was C-002)* | implement |
+| F-2026-016 | important | `selfdef-config StoreConfig::hot_retention_days` + `selfdef-store` | Dead knob — retention horizon exposed but no sweeper enforces it. *(was C-003)* | design |
+| F-2026-017 | important | `selfdef-store/src/sqlite.rs:106` | Duplicate `const SCHEMA_VERSION: u32 = 1` instead of referencing `selfdef_core::SCHEMA_VERSION`. *(was C-005)* | implement |
+| F-2026-018 | important | `modules/integrity-sentinel/profiles/*.toml` | `event_stream_path` commented out in shipped profiles. *(was I-001)* | implement |
+| F-2026-019 | important | `modules/observability/README.md` | Prometheus bearer-token auth on TCP `/metrics` is undocumented. Scrape will 401. *(was I-005)* | doc |
+| F-2026-020 | important | repo-wide (packaging + module READMEs) | No bundled `selfdef.toml` template for "three modules with sane defaults". *(was I-009)* | design |
+| F-2026-021 | important | `README.md` line 7 | "Milestone 1 — Scaffolding only" status banner is false. *(was D-001)* | doc |
+| F-2026-022 | important | `ARCHITECTURE.md` | `/metrics` endpoint and the module catalog (AI-machine track) missing from the architecture description. *(was D-003, D-004)* | doc |
+| F-2026-023 | important | `SECURITY.md` (and mirror) | `/metrics` endpoint not in threat model. Token rotation lifecycle unspecified. *(was D-005, S-002)* | design |
+| F-2026-024 | important | `SECURITY.md` | `/etc/tetragon/tetragon.tp.d/` writable directory not in threat model — eBPF policy injection vector. *(was D-006, S-001)* | design |
+| F-2026-025 | important | `SECURITY.md` | Pod-label scope reliance on k8s label RBAC not in threat model. *(was D-007, S-003)* | design |
+| F-2026-026 | important | `SECURITY.md` | Eventstream JSONL paths are a trust boundary; no documented ownership / mode requirements. *(was S-004)* | design |
+| F-2026-027 | important | `docs/src/{dev,ops}/*.md` | Five stub pages linked from `SUMMARY.md` are one-line TODOs. *(was D-009)* | doc |
+| F-2026-028 | important | `docs/api.md`, `docs/ebpf.md`, `docs/nats.md`, `docs/ssh-wrap-install.md` | Real operational guides orphaned from mdbook outline. *(was D-010)* | doc |
+| F-2026-029 | important | `docs/src/modules.md:202-207` | Stale claim that only `detect-host` ships. *(was D-011)* | doc |
+| F-2026-030 | important | every `module_*.rs` integration test | Dry-run mode not negatively asserted — a regression making `SELFDEF_DRY_RUN=1` mutate state would pass every existing test. *(was T-003)* | implement |
+| F-2026-031 | important | `m12_api.rs:469-482` | `/metrics` content-type and exposition body checks too loose. *(was T-005)* | implement |
+| F-2026-032 | important | `m12_api.rs` | No test that `/metrics` is accessible with a Read-only token. *(was T-006)* | implement |
+| F-2026-033 | important | `selfdef-correlator/tests/` | No SIGHUP-while-processing test. Hot-reload claim from ARCHITECTURE.md is unverified under traffic. *(was T-007)* | implement |
+| F-2026-034 | important | `selfdef-store` | No concurrent-insert or crash-recovery test. *(was T-009)* | implement |
+| F-2026-035 | important | `selfdef-nats` | No real-broker round-trip test. JetStream durability promises unverified. *(was T-010)* | implement |
+| F-2026-036 | important | `selfdef-collector-tetragon` | No isolation test; every translation goes through daemon tests only. *(was T-011)* | implement |
+| F-2026-037 | important | CHANGELOG + PR descriptions for #21, #22, #24 | Operator outcomes are described as if end-to-end; audit reveals they aren't. *(was R-003)* | doc |
+
+---
+
+## Nice findings (12)
+
+| id | severity | surface | summary | next phase |
+| --- | --- | --- | --- | --- |
+| F-2026-050 | nice | `modules/agent-guard/install/uninstall.sh` | Hand-enumerated policy list; will drift if a sixth policy is added. *(was M-001)* | implement |
+| F-2026-051 | nice | `modules/agent-guard/install/lib.sh render_pod_scope` | Awk state machine fragile against future policy selectors. *(was M-003)* | implement |
+| F-2026-052 | nice | `modules/observability/assets/dashboards/` | Hardcoded Tetragon metric name `tetragon_msg_sigkill_total` without an upstream-version pin. *(was M-007)* | investigate |
+| F-2026-053 | nice | `selfdef-config/src/lib.rs BusConfig::backend` | Dead knob — always "inproc", daemon doesn't branch on it. *(was C-001)* | implement |
+| F-2026-054 | nice | `selfdef-daemon/src/main.rs build_notifier_chain` | A `[notifier.ntfy]` block with no matching `"ntfy"` in `channels` silently disables ntfy without a startup warning. *(was C-004)* | implement |
+| F-2026-055 | nice | `selfdefctl events emit` | `--out` has no default. Callers must hard-code the path. *(was I-003)* | design |
+| F-2026-056 | nice | `README.md` | No catalog of shipped modules in the repo-root README. *(was D-002)* | doc |
+| F-2026-057 | nice | `CHANGELOG.md` PR #22 entry | Observability scope ("we configure, we don't install") implicit; should be explicit. *(was D-008)* | doc |
+| F-2026-058 | nice | `modules/vpn-bridge/README.md` | No mention of multi-instance corruption risk (F-2026-005). *(was D-012)* | doc |
+| F-2026-059 | nice | `panic` subcommand vs `modules uninstall` | Hostname-confirm validation duplicated; could share a helper. *(was R-001)* | implement |
+| F-2026-060 | nice | `crates/selfdef-cli/tests/*` | Helper functions duplicated across 9 test files; refactor to `tests/common/mod.rs`. *(was T-001)* | implement |
+| F-2026-061 | nice | `cli_modules_apply.rs:118` and similar | Substring assertions on `Summary:` lines brittle against cosmetic changes. *(was T-002)* | implement |
+| F-2026-062 | nice | per-module test suites | Idempotent-reapply coverage is tetragon-only. *(was T-004)* | implement |
+| F-2026-063 | nice | `selfdef-responder` | No isolation test for action dispatch / dry-run / unknown action. *(was T-012)* | implement |
+| F-2026-064 | nice | `rules/sigma/` + `tests/replay/` | No audit of rule ↔ corpus coverage. *(was T-013)* | implement |
+| F-2026-065 | nice | `selfdefctl events emit` (security view) | Event-injection primitive; sub-case of F-2026-026. *(was S-005)* | doc |
+| F-2026-066 | nice | `SECURITY.md` | `/metrics` daemon-uptime gauge enables credential-file timing chains. *(was S-006)* | doc |
+
+---
+
+## SDD-debt findings (4)
+
+| id | severity | surface | summary | next phase |
+| --- | --- | --- | --- | --- |
+| F-2026-080 | SDD-debt | `modules/observability/assets/dashboards/` | Dashboard implicitly depends on agent-guard policies firing — no manifest-level coupling captured. *(was M-010)* | design |
+| F-2026-081 | SDD-debt | `modules/*/install/lib.sh` | Duplicated helpers (`toml_get`, `run`, `log`, `emit_status`) across every module. *(was M-011)* | design |
+| F-2026-082 | SDD-debt | PR-author discipline | Tests verify the unit, not the flow. Need a design doc on what "integration-tested" means at the daemon ↔ module seam. *(was R-002)* | design |
+| F-2026-083 | SDD-debt | development cadence | Module PRs introducing new event sources should be preceded by collector/correlator prep PRs. *(was R-004)* | design |
+
+---
+
+## Triage suggestion (for Phase 2, not committed)
+
+The four central-promise blockers cluster into two coherent
+design tracks:
+
+1. **AI-machine track end-to-end**: F-2026-001, F-2026-002,
+   F-2026-003, F-2026-006. Together: make the agent-guard
+   policy → operator alert flow real. Phase-2 design SDD: how
+   does Tetragon event metadata map to selfdef Event fields, and
+   what's the contract between the collector and the rule set?
+2. **Defaults that work out of the box**: F-2026-004, F-2026-018,
+   F-2026-020. Together: ship a bundled `selfdef.toml` template
+   and align module defaults. Phase-2 design SDD: what does the
+   "out-of-the-box install with three modules" experience look
+   like, and which knobs are operator-required vs.
+   operator-optional?
+
+The vpn-bridge blocker (F-2026-005) is independent; small SDD
+on its own.
+
+The important findings split roughly:
+
+- **Documentation drift** (F-2026-012, F-2026-013, F-2026-019,
+  F-2026-021, F-2026-022, F-2026-027, F-2026-028, F-2026-029,
+  F-2026-037): one focused doc-sweep PR.
+- **Threat-model updates** (F-2026-023 through F-2026-026):
+  one SDD-style SECURITY.md rewrite.
+- **Dead config knobs** (F-2026-015, F-2026-016, F-2026-017,
+  F-2026-053): a small implementation PR; choose remove or
+  implement for each.
+- **Test coverage gaps** (F-2026-030 through F-2026-036): one
+  test-infrastructure PR establishing the helpers (common/mod.rs,
+  Prometheus parser, capability assertions) plus the missing
+  integration tests.
+
+All sequencing is Phase-2's call. This ledger is the menu.
