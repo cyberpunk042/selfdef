@@ -27,15 +27,15 @@ phase regardless of year.
 
 None.
 
-## Important findings (3 — 2 closed, 1 open)
+## Important findings (3 — all closed)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
 | F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
-| F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — rewrite as lstat → O_NOFOLLOW-open → fstat. |
+| F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (32 — 24 closed, 8 open)
+## Nice findings (32 — 25 closed, 7 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -70,7 +70,7 @@ None.
 | F-2027-032 | nice | `selfdef-daemon` SIGUSR2 handler | Runs three reload paths (tokens, verifier, rules) independently and logs each result separately. Operator has to correlate multiple log lines to know the overall reload outcome. A summary line at the end would close the gap. | implement |
 | F-2027-033 | nice | `selfdef-correlator::walk_yaml` rule enumeration | `std::fs::read_dir` order is undefined; rules with the same priority fire in fs-dependent order. Add a `paths.sort()`. | implement |
 | F-2027-034 | nice | `SigmaError::Signature` ordering | Signature check runs before the YAML parse; a malformed-but-signed rule yields `Signature` error instead of `Yaml`. Counter-intuitive when the signature actually was valid (over malformed bytes). | implement |
-| F-2027-036 | nice | eventstream collector long-lived FD | After the initial integrity check, the `BufReader::new(file)` FD is held for the daemon's lifetime; nothing re-validates ownership or mode if `logrotate` replaces the file. Operator-facing doc warning needed. | doc |
+| F-2027-036 | nice | eventstream collector long-lived FD | After the initial integrity check, the `BufReader::new(file)` FD is held for the daemon's lifetime; nothing re-validates ownership or mode if `logrotate` replaces the file. Operator-facing doc warning needed. | doc — **closed** by Phase 2 eventstream-integrity PR (`docs/dev/first-run.md` § "Optional: eventstream integrity" now warns that the check runs once at startup against the FD; operators who rotate the file post-startup must restart the daemon to re-assert on the new file). |
 
 ## SDD-debt findings (1)
 
@@ -82,12 +82,13 @@ None.
 
 - **36 findings raised** across four explorers (recent-PRs: 10;
   crate: 11; module: 6; integration: 9).
-- **0 blockers**, **3 important (2 closed, 1 open — F-2027-035
-  eventstream TOCTOU)**, **32 nice (24 closed, 8 open)**,
-  **1 SDD-debt (F-2027-010 open)**.
-- The integration explorer's nine entries cluster into four
-  follow-up PRs (one per seam). F-2027-035 is the only
-  important finding open after this audit.
+- **0 blockers**, **3 important (all closed)**, **32 nice (25
+  closed, 7 open)**, **1 SDD-debt (F-2027-010 open)**.
+- The integration explorer's seam-4 cluster (F-2027-035 +
+  F-2027-036) is now closed; three nice-tier seam clusters
+  remain (seam-1 SSE: F-2027-028 + -029 + -030; seam-2
+  SIGUSR2: F-2027-031 + -032; seam-3 signing: F-2027-033 +
+  -034).
 - Three explorers remain (docs, tests, security). Each will
   add more findings in follow-up PRs. The only remaining open
   Phase 2 SDD-debt is F-2027-010 (`events follow` TCP transport),
