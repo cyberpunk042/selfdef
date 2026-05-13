@@ -2,7 +2,8 @@
 
 Security tooling is a high-value target. An attacker who compromises the
 detector wins twice: they evade detection *and* they gain a privileged process
-on the host. This document is the threat model of the daemon itself.
+on the host. This document is the threat model of the daemon itself plus the
+surfaces the shipped modules introduce.
 
 ## Assets
 
@@ -15,6 +16,9 @@ on the host. This document is the threat model of the daemon itself.
 | Cold event archive | Off-host (logging VPS) | Tamper-resistant forensic record |
 | Notification credentials | `/etc/selfdef/secrets/` | ntfy tokens, signal-cli auth |
 | eBPF programs | embedded in binary | Tampering disables in-kernel detection |
+| `/metrics` endpoint | UNIX socket `/run/selfdef.sock` or TCP `<api.bind>` | Activity-fingerprint information; chained-attack timing of credential edits to daemon restart (see API surface mitigations + F-2026-066 known gap) |
+| Tetragon policy directory | `/etc/tetragon/tetragon.tp.d/` | Writable: malicious YAML loads as kernel-level eBPF policy (Sigkill / Override / NotifyKiller / mask). Owned by the `tetragon` module install |
+| Eventstream JSONL paths | Varies — see `[collectors.eventstream].paths`, default `/var/lib/selfdef/eventstream/` | Event-injection vector. Crafted Findings can fire the notifier chain or pollute the multi-host NATS bridge via `host_tag` spoofing |
 
 ## Adversaries
 
@@ -28,6 +32,12 @@ on the host. This document is the threat model of the daemon itself.
    features against your client. *Mitigated by the SSH wrapper.*
 5. **Supply-chain attacker** — compromises a dependency. *Mitigated by deny
    policy, reproducible builds, dependency review.*
+6. **Cluster-tenant attacker** — has Pod-label `PATCH` rights on the cluster
+   (Kubernetes deployments only). Trying to defeat `agent-guard`'s
+   `scope = "pod-label"` selector by either opting unrelated pods into
+   agent-guard's policies (denial-of-service-of-attention) or opting the
+   actual agent pod out (defeat). *Mitigated by cluster RBAC posture; see
+   Policy surface mitigations.*
 
 ## Trust assumptions
 
@@ -37,6 +47,9 @@ on the host. This document is the threat model of the daemon itself.
   notification credentials and SSH agent keys.
 - The off-host log bucket is in a different administrative domain than the
   host. (Practically: a $5 VPS with a different provider.)
+- For Kubernetes deployments: the cluster control plane is trusted to enforce
+  RBAC. `agent-guard`'s pod-label scope inherits the cluster's RBAC posture
+  on Pod-label `PATCH` — see Policy surface mitigations.
 
 ## Mitigations by layer
 
@@ -87,6 +100,72 @@ on the host. This document is the threat model of the daemon itself.
   `/etc/selfdef/`, `/var/lib/selfdef/` for modification by anything that
   is not the daemon's own update path.
 
+### API surface
+- **UNIX socket transport** (default): filesystem permissions are the auth
+  boundary. Default `0660 root:adm`; recommended for on-host scrapers
+  (Prometheus running on the same host).
+- **TCP transport**: bearer-token required on every request. The token is
+  read from `api.token_file` (mode `0600`, `root:selfdef` on the daemon
+  host or `prometheus:prometheus` on the scrape host) and is loaded once at
+  startup — rotation is a deliberate operator action via daemon restart, not
+  an automated watcher (see "Side channel" below).
+- **TLS / mTLS**: opt-in; required when binding outside `127.0.0.1`.
+- **`/metrics` is read-cap**: the same bearer token grants read access to
+  `/status`, `/events`, `/findings`, `/events/stream`, and `/metrics`. It
+  does NOT grant control-verb access (`/rules/reload`, `/panic`,
+  `/actions/*/run`) — those need the separate `control_token_file`.
+  Verified by the integration test
+  `crates/selfdef-api/tests/m12_api.rs::metrics_allows_read_capability`.
+- **Side channel**: `selfdef_uptime_seconds` lets a scraper observe daemon
+  restarts. Rotate notifier credentials via a deliberate operator action,
+  not through automated watchers that key on uptime resets. See known gap
+  F-2026-066.
+
+### Policy surface
+- **TracingPolicy directory** (`/etc/tetragon/tetragon.tp.d/`): the
+  `tetragon` module creates this directory at install time. Recommended
+  mode `0750 root:root`; only `agent-guard` and any other operator-approved
+  policy module should write to it. An `integrity-sentinel` paths file
+  should baseline this directory's contents so unexpected additions /
+  removals fire a Detection Finding.
+- **Pod-label scope** (`agent-guard` `scope = "pod-label"`, k8s only): the
+  policy boundary is the configured `pod_label_key=pod_label_value` pair.
+  Any cluster identity with `PATCH` rights on a Pod's labels can move the
+  boundary — opt unrelated pods in (DoS of attention) or opt the agent pod
+  out (defeat). Document the required RBAC posture in your cluster's
+  `Role` / `RoleBinding` for the namespace agent-guard watches; restrict
+  Pod-label `PATCH` to cluster-admin or a narrowly-scoped service account.
+  See Adversary class 6.
+- **Eventstream JSONL trust**: every line in every path listed in
+  `[collectors.eventstream].paths` is treated by the daemon as if a trusted
+  collector emitted it. The daemon-owned default
+  `/var/lib/selfdef/eventstream/` should be `0750 selfdef:selfdef`.
+  Operator-owned emitters (e.g. the user's own
+  `~/.local/share/selfdef/ssh-wrap.jsonl`) inherit the user's trust posture
+  — a compromise of that user's account is event-injection. See known gap
+  F-2026-026 / F-2026-065.
+
+### Hardening checklist (AI-machine deployment)
+
+For a typical AI-machine deployment (`tetragon` + `agent-guard` +
+`observability` + `integrity-sentinel`), the audit-recommended hardening
+posture is:
+
+- `/etc/tetragon/tetragon.tp.d/` — `0750 root:root`.
+- `/var/lib/selfdef/eventstream/` — `0750 selfdef:selfdef`.
+- `/etc/selfdef/api.token` — `0600 root:selfdef` on the daemon host
+  (or `0600 prometheus:prometheus` on the scraper host).
+- `agent-guard` pod-label scope (k8s only): cluster RBAC restricts
+  Pod-label `PATCH` to cluster-admin or a narrowly-scoped service account.
+- `integrity-sentinel` paths file includes `/etc/tetragon/`,
+  `/etc/selfdef/`, and `/var/lib/selfdef/eventstream/` so tamper attempts
+  surface as Detection Findings.
+- `/metrics` exposed via UNIX socket on hosts where the credential dir
+  is not exclusively root-writable; rotate the API token via a deliberate
+  daemon restart.
+
+This block is intentionally short — copy it into your deployment runbook.
+
 ## Known gaps (tracked, not yet closed)
 
 - No dm-verity layer for the daemon yet — root *can* still tamper.
@@ -117,6 +196,20 @@ on the host. This document is the threat model of the daemon itself.
   exclusively root-writable. Credential rotation should
   remain a deliberate operator action; an automated
   uptime-watcher rotator is the wrong shape.
+- **TracingPolicy signing (F-2026-024 follow-up).** Analogous to rule
+  signing. The daemon and the kernel trust every YAML in
+  `/etc/tetragon/tetragon.tp.d/` as if signed by the operator. Future SDD:
+  per-policy cosign + a startup-time verifier in the `tetragon` module's
+  `apply.sh` that refuses unsigned policies in production mode.
+- **Metrics-token rotation (F-2026-023 follow-up).** Today a daemon restart
+  is the only rotation point for `api.token_file`. Future SDD: a
+  `selfdefctl api rotate-token` verb plus daemon SIGUSR2 handling so the
+  token can rotate without dropping in-flight scrapes.
+- **k8s label-RBAC posture (F-2026-025 follow-up).** The `pod-label` scope
+  assumes the cluster's RBAC posture is documented (Pod-label `PATCH`
+  restricted). A `selfdefctl modules check` integration that reads the
+  cluster's RBAC and warns on overly-permissive `PATCH` rights is desirable
+  but not designed.
 
 ## Reporting
 

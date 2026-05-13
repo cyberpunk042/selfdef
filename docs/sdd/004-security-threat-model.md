@@ -1,9 +1,60 @@
 # SDD-004 — Security threat-model rewrite
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
 > Closes findings: F-2026-023, F-2026-024, F-2026-025, F-2026-026
+
+## Implementation status
+
+Shipped in the SDD-004 implementation PR. SECURITY.md and its
+mdbook mirror were rewritten in lockstep — `docs/src/security.md`
+is now a symlink to `../../SECURITY.md` per D-6, eliminating the
+drift surface.
+
+- **D-1 — Assets table**: three new rows. `/metrics` endpoint,
+  Tetragon TracingPolicy directory (`/etc/tetragon/tetragon.tp.d/`),
+  and eventstream JSONL paths (default
+  `/var/lib/selfdef/eventstream/`). Total: 10 rows. Closes
+  F-2026-023, F-2026-024, F-2026-026 at the inventory level.
+- **D-2 — Adversaries table**: new class 6, *Cluster-tenant
+  attacker* — has Pod-label `PATCH` rights on the cluster.
+  Closes F-2026-025 at the adversary level.
+- **D-3 — Mitigations**: two new layers added under
+  "Mitigations by layer". *API surface* covers UNIX vs TCP
+  transports, the bearer-token model, `/metrics` read-cap
+  parity, and the uptime side channel. *Policy surface*
+  covers TracingPolicy directory ownership, agent-guard
+  pod-label scope dependency on cluster RBAC, and the
+  eventstream JSONL trust boundary.
+- **D-4 — Known gaps**: extended with three new follow-up
+  entries — TracingPolicy signing (F-2026-024 follow-up),
+  metrics-token rotation (F-2026-023 follow-up), k8s
+  label-RBAC posture (F-2026-025 follow-up). Eventstream JSONL
+  integrity (F-2026-026 follow-up) was already enumerated by
+  PR #36 and stays.
+- **D-5 — Hardening checklist**: short copy-paste-able sidebar
+  at the end of the Mitigations section enumerating the
+  recommended posture for an AI-machine deployment (mode +
+  ownership for the four key paths, RBAC restriction for k8s,
+  binding posture for `/metrics`).
+- **D-6 — Doc mirror**: `docs/src/security.md` is now a
+  symlink to `../../SECURITY.md`. Single source of truth;
+  mdbook follows symlinks transparently on Linux (the only
+  platform the docs are built on).
+
+## Open questions resolution
+
+- **Q-A** (worked example block): not added in this PR. Per-module
+  READMEs already carry the concrete examples; SECURITY.md stays
+  declarative.
+- **Q-B** (cluster control plane in trust assumptions): added.
+  The Trust assumptions section now lists "the cluster control
+  plane is trusted to enforce RBAC" for k8s deployments.
+- **Q-C** (TracingPolicy signing shape): deferred. Tracked as
+  the F-2026-024 follow-up known gap; a future SDD scopes the
+  shared signing machinery between sigma rules and
+  TracingPolicies.
 
 ## Problem
 
