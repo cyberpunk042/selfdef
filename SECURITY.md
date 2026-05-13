@@ -208,10 +208,22 @@ This block is intentionally short — copy it into your deployment runbook.
   `/etc/tetragon/tetragon.tp.d/` as if signed by the operator. Future SDD:
   per-policy cosign + a startup-time verifier in the `tetragon` module's
   `apply.sh` that refuses unsigned policies in production mode.
-- **Metrics-token rotation (F-2026-023 follow-up).** Today a daemon restart
-  is the only rotation point for `api.token_file`. Future SDD: a
-  `selfdefctl api rotate-token` verb plus daemon SIGUSR2 handling so the
-  token can rotate without dropping in-flight scrapes.
+- **Metrics-token rotation (F-2026-023 follow-up — shipped).**
+  `selfdefctl api rotate-token` ships in selfdef ≥ this release.
+  The verb generates a fresh 32-byte high-entropy token, writes
+  it atomically to `[api].token_file` (tempfile + fsync + rename
+  + chmod 0600), then optionally signals the running daemon
+  (`--pid <pid>` or `--pid auto` to discover via `systemctl show
+  -p MainPID selfdefd.service`). On SIGUSR2 the daemon re-reads
+  the token file under the shared `Arc<RwLock<>>` that backs the
+  bearer-token middleware — in-flight requests authenticate
+  against the new token without dropping the existing
+  connection. The previous token continues to work until the
+  signal is delivered, so operators can stagger the rotation
+  on scraper hosts. Reload errors (empty file, IO failure) log
+  a structured warning and keep the previously-loaded tokens in
+  place — the daemon stays up; existing valid tokens keep
+  working.
 - **k8s label-RBAC posture (F-2026-025 follow-up).** The `pod-label` scope
   assumes the cluster's RBAC posture is documented (Pod-label `PATCH`
   restricted). A `selfdefctl modules check` integration that reads the

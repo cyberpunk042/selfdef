@@ -65,8 +65,48 @@ enum Command {
         #[command(subcommand)]
         action: ModulesAction,
     },
+    /// Manage the API surface (token rotation, etc).
+    Api {
+        #[command(subcommand)]
+        action: ApiAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum ApiAction {
+    /// SDD-004 F-2026-023 follow-up: rotate the API bearer token.
+    /// Generates a new high-entropy token, writes it atomically
+    /// to the path configured in `[api].token_file`, and
+    /// optionally signals the daemon (SIGUSR2) to reload from
+    /// disk. The previous token continues to work until the
+    /// signal is delivered.
+    RotateToken {
+        /// Override the token-file path (default: read from the
+        /// daemon config's `[api].token_file`). Useful when
+        /// rotating the control token instead of the read
+        /// token — pass the path to `control_token_file`.
+        #[arg(long)]
+        token_file: Option<PathBuf>,
+        /// Number of random bytes in the new token (base64-url
+        /// encoded). Default 32 → 43-char token.
+        #[arg(long, default_value_t = 32)]
+        bytes: usize,
+        /// PID of the running selfdefd to signal with SIGUSR2
+        /// after writing the new token. Defaults to no signal —
+        /// the operator runs `systemctl kill --signal=SIGUSR2
+        /// selfdefd` separately. Passing `--pid auto` looks for
+        /// the daemon via `systemctl show -p MainPID
+        /// selfdefd.service`.
+        #[arg(long)]
+        pid: Option<String>,
+        /// Print the new token to stdout instead of just the
+        /// path it was written to. Default: omit (the token is
+        /// only on disk, where the next scrape config reads it).
+        #[arg(long)]
+        print: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -257,6 +297,17 @@ async fn main() -> Result<()> {
                 selfdef_core::version(),
                 selfdef_core::SCHEMA_VERSION,
             );
+        }
+        Command::Api {
+            action:
+                ApiAction::RotateToken {
+                    token_file,
+                    bytes,
+                    pid,
+                    print,
+                },
+        } => {
+            api_rotate_token(&cfg, token_file, bytes, pid, print)?;
         }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
@@ -712,6 +763,211 @@ impl ConfirmRefusal {
             } => {
                 eprintln!("Confirm mismatch: provided '{provided}', host is '{actual_host}'.");
             }
+        }
+    }
+}
+
+/// SDD-004 F-2026-023 follow-up: rotate the API bearer token.
+/// Writes a fresh high-entropy token to the configured token
+/// file atomically (write tempfile → fsync → rename → chmod
+/// 0600), then optionally signals the daemon (SIGUSR2) to
+/// re-read it.
+fn api_rotate_token(
+    cfg: &selfdef_config::Config,
+    override_path: Option<PathBuf>,
+    bytes: usize,
+    pid: Option<String>,
+    print: bool,
+) -> Result<()> {
+    use std::io::Write as _;
+    use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
+
+    if bytes == 0 || bytes > 256 {
+        anyhow::bail!("--bytes must be in 1..=256 (got {bytes})");
+    }
+
+    let target = match override_path {
+        Some(p) => p,
+        None => PathBuf::from(cfg.api.token_file.as_str()),
+    };
+    if target.as_os_str().is_empty() {
+        anyhow::bail!(
+            "no token file configured: pass --token-file or set [api].token_file in selfdef.toml"
+        );
+    }
+
+    // High-entropy token via /dev/urandom + base64-url (no
+    // padding). Avoids pulling a `getrandom` workspace dep just
+    // for this CLI verb; /dev/urandom is always seeded on
+    // long-running Linux systems where the daemon runs.
+    let mut buf = vec![0u8; bytes];
+    {
+        use std::io::Read as _;
+        let mut f = std::fs::File::open("/dev/urandom").context("opening /dev/urandom")?;
+        f.read_exact(&mut buf).context("reading /dev/urandom")?;
+    }
+    let token = base64_urlsafe(&buf);
+
+    // Atomic write: tempfile in the same directory → fsync → rename → chmod.
+    let parent = target
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(std::path::Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    std::fs::create_dir_all(&parent).with_context(|| format!("creating {}", parent.display()))?;
+    let tmp = parent.join(format!(
+        ".{}.rotate.tmp",
+        target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("api.token")
+    ));
+    {
+        let mut f = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&tmp)
+            .with_context(|| format!("opening tempfile {}", tmp.display()))?;
+        f.write_all(token.as_bytes())
+            .with_context(|| format!("writing tempfile {}", tmp.display()))?;
+        f.sync_all()
+            .with_context(|| format!("fsync tempfile {}", tmp.display()))?;
+    }
+    std::fs::rename(&tmp, &target)
+        .with_context(|| format!("rename {} → {}", tmp.display(), target.display(),))?;
+    // Re-assert the mode in case the rename inherited umask
+    // permissions on some filesystems.
+    let mut perms = std::fs::metadata(&target)
+        .with_context(|| format!("stat {}", target.display()))?
+        .permissions();
+    perms.set_mode(0o600);
+    std::fs::set_permissions(&target, perms)
+        .with_context(|| format!("chmod 0600 {}", target.display()))?;
+
+    println!(
+        "wrote {} ({} bytes, mode 0600)",
+        target.display(),
+        token.len()
+    );
+    if print {
+        println!("{token}");
+    }
+
+    if let Some(pid_arg) = pid {
+        let pid_num: i32 = if pid_arg == "auto" {
+            discover_daemon_pid().context("--pid auto: discovering selfdefd via systemctl")?
+        } else {
+            pid_arg
+                .parse()
+                .context("--pid: expected an integer or `auto`")?
+        };
+        signal_sigusr2(pid_num).with_context(|| format!("sending SIGUSR2 to pid {pid_num}"))?;
+        println!("sent SIGUSR2 to pid {pid_num} (daemon will reload tokens)");
+    } else {
+        println!("next step: run `systemctl kill --signal=SIGUSR2 selfdefd` (or pass --pid <pid>)",);
+    }
+    Ok(())
+}
+
+/// Discover the running selfdefd pid via `systemctl show -p MainPID
+/// selfdefd.service`. Returns the parsed pid or an error if systemctl
+/// isn't available or the unit isn't running.
+fn discover_daemon_pid() -> Result<i32> {
+    let out = std::process::Command::new("systemctl")
+        .args(["show", "-p", "MainPID", "--value", "selfdefd.service"])
+        .output()
+        .context("spawn systemctl")?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "systemctl exited {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    let trimmed = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let pid: i32 = trimmed
+        .parse()
+        .with_context(|| format!("parsing MainPID '{trimmed}'"))?;
+    if pid <= 0 {
+        anyhow::bail!("selfdefd.service has no running MainPID (got {pid})");
+    }
+    Ok(pid)
+}
+
+/// Send SIGUSR2 to a pid. Uses /bin/kill (avoiding an unsafe libc
+/// call to stay within the workspace's `unsafe_code = "forbid"`
+/// lint).
+fn signal_sigusr2(pid: i32) -> Result<()> {
+    let out = std::process::Command::new("kill")
+        .args(["-s", "USR2", &pid.to_string()])
+        .output()
+        .context("spawn kill")?;
+    if !out.status.success() {
+        anyhow::bail!(
+            "kill exited {}: {}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr).trim()
+        );
+    }
+    Ok(())
+}
+
+/// Base64 URL-safe, no padding. Hand-rolled to avoid a base64
+/// dependency for ~30 lines of CLI code.
+fn base64_urlsafe(bytes: &[u8]) -> String {
+    const A: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity((bytes.len() * 4).div_ceil(3));
+    let mut i = 0;
+    while i + 3 <= bytes.len() {
+        let b =
+            (u32::from(bytes[i]) << 16) | (u32::from(bytes[i + 1]) << 8) | u32::from(bytes[i + 2]);
+        out.push(A[((b >> 18) & 0x3f) as usize] as char);
+        out.push(A[((b >> 12) & 0x3f) as usize] as char);
+        out.push(A[((b >> 6) & 0x3f) as usize] as char);
+        out.push(A[(b & 0x3f) as usize] as char);
+        i += 3;
+    }
+    let rem = bytes.len() - i;
+    if rem == 1 {
+        let b = u32::from(bytes[i]) << 16;
+        out.push(A[((b >> 18) & 0x3f) as usize] as char);
+        out.push(A[((b >> 12) & 0x3f) as usize] as char);
+    } else if rem == 2 {
+        let b = (u32::from(bytes[i]) << 16) | (u32::from(bytes[i + 1]) << 8);
+        out.push(A[((b >> 18) & 0x3f) as usize] as char);
+        out.push(A[((b >> 12) & 0x3f) as usize] as char);
+        out.push(A[((b >> 6) & 0x3f) as usize] as char);
+    }
+    out
+}
+
+#[cfg(test)]
+mod rotate_tests {
+    use super::base64_urlsafe;
+
+    #[test]
+    fn base64_urlsafe_matches_known_vectors() {
+        // Standard RFC 4648 §5 vectors, padding stripped.
+        assert_eq!(base64_urlsafe(b""), "");
+        assert_eq!(base64_urlsafe(b"f"), "Zg");
+        assert_eq!(base64_urlsafe(b"fo"), "Zm8");
+        assert_eq!(base64_urlsafe(b"foo"), "Zm9v");
+        assert_eq!(base64_urlsafe(b"foob"), "Zm9vYg");
+        assert_eq!(base64_urlsafe(b"fooba"), "Zm9vYmE");
+        assert_eq!(base64_urlsafe(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn base64_urlsafe_emits_only_url_safe_chars() {
+        let bytes: Vec<u8> = (0..=255).collect();
+        let s = base64_urlsafe(&bytes);
+        for c in s.chars() {
+            assert!(
+                c.is_ascii_alphanumeric() || c == '-' || c == '_',
+                "non-url-safe char {c:?} in output: {s}",
+            );
         }
     }
 }

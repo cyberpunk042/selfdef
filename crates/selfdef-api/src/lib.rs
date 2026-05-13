@@ -43,7 +43,9 @@ mod transport;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
 pub use state::{ApiState, ControlHandles};
-pub use transport::{ApiConfig, ApiServer, Capability, ServerError, TlsConfig, with_capability};
+pub use transport::{
+    ApiConfig, ApiServer, Capability, ServerError, TlsConfig, TokenReloader, with_capability,
+};
 
 /// Test-only convenience that wraps the router in a layer granting
 /// every request `Capability::Full`. Re-exported here for code clarity;
