@@ -87,6 +87,7 @@ Every operator-facing verb:
 | --- | --- |
 | `status` | Daemon status (event count, store path). |
 | `events {tail,alerts}` | Recent events / alerts from the hot store. |
+| `events follow` | Live SSE tail of the daemon's `/events/stream` over a UNIX socket. F-2027-029 + -030: surfaces `event: shutdown` and `event: lagged` frames as stderr `# …` comments. |
 | `events emit` | Inject a hand-crafted event onto the eventstream JSONL (testing). |
 | `forensics list` | List forensic bundles. |
 | `modules {list,info,check,status,show-requires}` | Inspect modules + their daemon_requires. |
@@ -109,9 +110,22 @@ Every operator-facing verb:
 | Verb | Closes | Purpose |
 | --- | --- | --- |
 | `keys verify <target>` | original "Rule signing" Known gap | Verify a detached minisign signature against a target file (rule, TracingPolicy). |
-| `api rotate-token` | SDD-004 F-2026-023 | Generate a fresh 32-byte API bearer token, write atomically to `[api].token_file` at mode 0600, optionally SIGUSR2 the daemon to reload. |
-| `rbac check [--probe]` | SDD-004 F-2026-025 | Verify k8s RBAC posture for agent-guard's `pod-label` scope. With `--probe`, shells out to `kubectl auth can-i`. |
+| `keys verify-dir <dir>` | F-2027-006 | Batch-verify every `*.yml`/`*.yaml` in a directory in one process. Replaces the N-spawn `for p in $(find …); do selfdefctl keys verify $p` loop in `modules/tetragon/install/{apply,check}.sh`. |
+| `api rotate-token` | SDD-004 F-2026-023; F-2027-031 enforces mode-0600 on reload | Generate a fresh 32-byte API bearer token, write atomically to `[api].token_file` at mode 0600, optionally SIGUSR2 the daemon to reload. |
+| `rbac check [--probe]` | SDD-004 F-2026-025; F-2027-007 expanded built-in subject set to 4 | Verify k8s RBAC posture for agent-guard's `pod-label` scope. With `--probe`, shells out to `kubectl auth can-i` against `system:authenticated` + `system:unauthenticated` + `system:masters` + `system:serviceaccount:default:default` + operator-supplied `--as`. |
 | `doctor [--json]` | post-audit synthesis | Cross-cutting health check: rule signing, API token mode, eventstream integrity, RBAC posture summary. |
+
+**Phase 2 hot-reload surfaces** (all via SIGUSR2; covered in
+`docs/dev/signing.md` § "Turn on enforcement"):
+- F-2027-005 — rule-signing verifier hot-rotation (no daemon restart).
+- F-2027-032 — one-line "tokens=ok verifier=ok rules=ok"
+  summary after the SIGUSR2 fan-out completes.
+- F-2027-035 — `[collectors.eventstream].integrity_check`
+  hardening: `O_NOFOLLOW` + fstat-on-FD; symlinks refused with
+  a typed `IntegritySymlink` variant.
+- F-2027-014 — `selfdef_api::with_full_capability` test-only
+  helper is feature-gated (`test-helpers`), absent from
+  release builds.
 
 ### Operator runbooks
 
@@ -168,12 +182,16 @@ ansible/                         Deployment playbooks.
 # Build
 cargo build --release --locked
 
-# Package
+# Package — F-2027-043: the daemon and the CLI are separate
+# Debian targets. Build both so `selfdefctl` lands on PATH
+# alongside the daemon.
 cargo install cargo-deb
 cargo deb -p selfdef-daemon
+cargo deb -p selfdef-cli
 
 # Install
 sudo dpkg -i target/debian/selfdef-daemon_*.deb
+sudo dpkg -i target/debian/selfdef-cli_*.deb
 sudo systemctl enable --now selfdefd
 selfdefctl status
 
