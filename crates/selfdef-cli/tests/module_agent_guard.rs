@@ -539,3 +539,45 @@ fn pod_label_scope_preserves_gpu_match_binaries_when_allowlist_set() {
         "matchNamespaces leaked through pod-label scope:\n{body}",
     );
 }
+
+#[test]
+fn reapply_is_byte_stable_for_every_rendered_policy() {
+    // F-2026-062: idempotent reapply was tested for the tetragon
+    // module only. Add the same coverage to agent-guard so a
+    // regression that made apply.sh non-deterministic on the same
+    // input would fail loudly.
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         egress_allowlist = \"10.0.0.0/24\"\n\
+         gpu_device_allowlist = \"/usr/local/bin/python3\"\n",
+    );
+    let first = run_apply(&fx);
+    assert!(first.status.success(), "first apply failed");
+
+    let names = [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+        "gpu-device-guard",
+    ];
+    let snapshot_first: Vec<(String, Vec<u8>)> = names
+        .iter()
+        .map(|n| {
+            let p = fx.policy_dir.join(format!("selfdef-agent-{n}.yaml"));
+            (n.to_string(), std::fs::read(&p).unwrap())
+        })
+        .collect();
+
+    let second = run_apply(&fx);
+    assert!(second.status.success(), "second apply failed");
+
+    for (name, before) in &snapshot_first {
+        let p = fx.policy_dir.join(format!("selfdef-agent-{name}.yaml"));
+        let after = std::fs::read(&p).unwrap();
+        assert_eq!(
+            before, &after,
+            "policy {name} render changed across reapply with identical config",
+        );
+    }
+}

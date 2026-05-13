@@ -6,6 +6,51 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — Phase 1 audit follow-ups (one bigger PR)
+Seven small fixes batched together. Each closes (or partially
+closes) a Phase-1 ledger row.
+
+- **F-2026-054** — `selfdef-daemon::build_notifier_chain` now
+  warns at startup when `[notifier.ntfy]` or `[notifier.signal]`
+  carries non-default config but the channel name isn't in the
+  active `[notifier].channels` list. The channel was silently
+  inert before; now the operator sees it on every restart.
+- **F-2026-059** — extracted `check_confirm_hostname` +
+  `ConfirmRefusal` helper in `selfdef-cli/src/main.rs`. Both
+  `panic` and `modules uninstall` now share the
+  hostname-confirmation gate; the duplicated bodies are gone.
+  Output text is preserved (test suite asserts the same
+  refusal strings).
+- **F-2026-060** — new `crates/selfdef-cli/tests/common/mod.rs`
+  carrying the `workspace_root` / `module_dir(slug)` /
+  `write_file` / `write_executable` / `last_stdout_line` /
+  `prepended_path` helpers that nine `module_*.rs` test files
+  duplicated. Per-test migration is incremental — adopting the
+  common module in each test file is a follow-up.
+- **F-2026-061** — `m12_api.rs metrics_endpoint_returns_prometheus_exposition`
+  now exact-matches the `Content-Type` against
+  `text/plain; version=0.0.4; charset=utf-8`, asserts each
+  `# TYPE` line is present **exactly once** (catches accidental
+  duplicates), and validates every body line follows the
+  Prometheus exposition shape. Substring matching is gone.
+- **F-2026-062** — `module_agent_guard.rs` gains a byte-stable
+  reapply test that exercises every rendered policy (with
+  egress allowlist + GPU allowlist set so the substitution
+  paths are exercised). Bridge-l2 / suricata / polarproxy /
+  vpn-bridge still need theirs (follow-up).
+- **F-2026-065 + F-2026-066** — SECURITY.md (and its mirror
+  `docs/src/security.md`) gain two Known-gaps entries: the
+  eventstream-JSONL injection primitive via
+  `selfdefctl events emit`, and the `selfdef_uptime_seconds`
+  side channel that lets a `/metrics` scraper time
+  credential-file edits to a daemon restart. Both name the
+  recommended mitigation.
+
+Verified: `cargo build --workspace`, `cargo test -p
+selfdef-cli -p selfdef-api`, `cargo fmt --all -- --check`,
+`cargo clippy -p selfdef-cli -p selfdef-daemon -p selfdef-api
+--tests` all clean.
+
 ### Docs — Phase 1 audit nice-cluster cleanup
 - `modules/vpn-bridge/README.md` — new "Multi-instance
   caveat" block at the top calling out F-2026-005 / SDD-003
