@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 docs-final-cluster (closes F-2027-039 + F-2027-040 + F-2027-045)
+
+Closes the last three open `nice` findings from the Phase 2 docs explorer. **All five Phase 2 explorers run so far (recent-PRs, crate, module, integration, docs) are now fully drained at the actionable tiers.** Only F-2027-010 (SDD-debt — `events follow` TCP transport, awaiting design) remains open across Phase 2.
+
+#### F-2027-039 — test-contract "Per-test isolation overrides" section
+
+`docs/dev/test-contract.md` gains a new "Per-test isolation overrides" section documenting the workspace pattern: host-global state paths (manifest, doctor agent-guard config) get a per-test `tempdir`-scoped env override so parallel CI runs don't trample each other. Includes a table of every override the workspace currently wires (`MODULE_INSTALLED_MANIFEST`, `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG`), plus a "when CI fails locally-passes…" diagnostic pointer at commit `d5d05da` (PR #65 fixup).
+
+#### F-2027-040 — `docs/dev/README.md` documents canonical runbook shape
+
+The six existing `docs/dev/<feature>.md` runbooks predate any shape convention and have 5–11 sections each. The audit's recommendation was "pick a canonical shape and apply uniformly" — aggressive reformatting of existing runbooks would be invasive and contentious, so this PR takes the lighter-touch fix instead: new `docs/dev/README.md` indexes every runbook AND documents the canonical 7-section shape (TL;DR / Config / Commands / Tests / Troubleshooting / Env overrides / Threat model) for new runbooks to follow. Existing runbooks aren't reformatted but they're now navigable from the index.
+
+#### F-2027-045 — SDD "Follow-up findings" tail sections
+
+SDD-003, SDD-004, and SDD-006 each gain a `## Follow-up findings (F-2027-045)` tail section listing the Phase 2 F-2027-NNN entries that iterated on each SDD's surface:
+
+- **SDD-003** — F-2027-001 (refusal-message TOML stanza), F-2027-025 (vpn-bridge `safe_name`).
+- **SDD-004** — F-2027-003 (eventstream `read_euid`), F-2027-005 (verifier reload), F-2027-006 (`keys verify-dir`), F-2027-007 (RBAC probes), F-2027-014 (`with_full_capability` feature-gate), F-2027-031 (mode-0600 enforcement), F-2027-035 (eventstream TOCTOU/symlink), F-2027-036 (post-startup-drift doc).
+- **SDD-006** — F-2027-024 (v2 migration of 5 modules), F-2027-026 (per-module adoption table), F-2027-027 (`DRY_RUN=0` standardisation).
+
+Future SDD readers can now trace the lineage from each design doc to the post-Phase-1 iterations without bouncing through the ledger.
+
+#### Phase 2 status after this PR
+
+**45 findings across 5 explorers. 41 nice (all closed)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open** (F-2027-010). Two Phase 2 explorers remain (tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 operator-facing docs refresh (closes F-2027-037 + -038 + -041 + -042 + -043 + -044)
 
 Closes the largest of the three docs-explorer follow-up clusters. Six findings, all docs-only, in a single coordinated pass across README + ARCHITECTURE.md + two runbooks.

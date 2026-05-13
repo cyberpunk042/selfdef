@@ -202,6 +202,31 @@ support tracks 2.10+ semantics; running the fixture against an older
 broker silently skips the JetStream test and surfaces only the core
 pub/sub one.
 
+## Per-test isolation overrides (F-2027-039)
+
+A handful of integration-test surfaces touch host-global state
+by default; tests must override the path so parallel test runs
+don't trample each other. The override pattern is the same in
+every case: set an env var to a `tempdir`-scoped path before
+invoking the script-under-test.
+
+| Env var | Default (host-global) | Set in tests because | Landed in |
+| --- | --- | --- | --- |
+| `MODULE_INSTALLED_MANIFEST` | `/var/lib/selfdef/installed/<MODULE>.manifest` | SDD-006 v2 manifest tracks files written by `apply.sh`; parallel module tests would race on it (CI failed PR #65 until this was wired). | F-2027-024 |
+| `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` | `/etc/selfdef/modules/agent-guard.toml` | `selfdefctl doctor`'s rbac category reads the agent-guard scope from this path; integration tests stage a fake config in a tempdir. | F-2027-008 / F-2027-018 |
+
+The pattern is also used implicitly by `tempfile::tempdir()` for
+the script's own `SELFDEF_<MODULE>_CONFIG` — each test fixture
+points the module's apply/check/uninstall at a per-test config
+file. Add a new override to this table whenever you wire a new
+host-global path through a script.
+
+When CI fails with permission errors on `/var/lib/selfdef/`,
+`/etc/selfdef/`, or similar — the test almost certainly missed
+an override. Local runs (as root in a dev container) pass; CI
+(as a non-root `runner` user) fails. See PR #65 commit
+`d5d05da` for an example fixup.
+
 ## What not to test
 
 - **Coverage %.** Not a contract. The contract is about *what*

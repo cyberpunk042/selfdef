@@ -549,3 +549,35 @@ without coordinating with other SDDs.
 - **SDD-005**: dry-run-negative tests (D-2a) become
   shared via the test-common library, which is the test-
   side analogue of this SDD. The two compose.
+
+## Follow-up findings (F-2027-045)
+
+Phase 2 raised three findings against this SDD's surface; all
+closed in tree. Listed here so future SDD readers can trace
+the lineage from this design doc to the post-Phase-1
+iterations. The authoritative per-module adoption table lives
+in [`docs/dev/module-helpers.md`](../dev/module-helpers.md) §
+"Per-module adoption" (F-2027-026).
+
+- **F-2027-024** — the original v2 library landed with
+  `agent-guard` as the only adopter. Phase 2 v2-helpers
+  migration PR (#65) opted in five more script-based
+  modules: `bridge-l2`, `integrity-sentinel`, `polarproxy`,
+  `observability`, `tetragon`. Each retains a legacy-
+  fallback branch in `uninstall.sh` so pre-v2 installs
+  still uninstall cleanly. `suricata` is N/A (no rendered
+  files outside its own dir); `vpn-bridge` is deferred (its
+  dispatcher pattern delegates rendering to per-profile
+  sourced scripts; migration needs to flow through each
+  profile independently).
+- **F-2027-026** — per-module READMEs were silent on
+  `SELFDEF_MODULE_LIB_VERSION_REQUIRED`. Phase 2 module-
+  cleanup PR (#64) added the central adoption table in
+  `docs/dev/module-helpers.md` instead of duplicating the
+  line across 8 READMEs.
+- **F-2027-027** — three modules' `check.sh` scripts
+  (`bridge-l2`, `suricata`, `polarproxy`) missed the
+  conventional `DRY_RUN=0` initialization that every other
+  module's `check.sh` sets. Cosmetic but inconsistent with
+  the v2 lib's caller contract. PR (#64) standardised all
+  three.
