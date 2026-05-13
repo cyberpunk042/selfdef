@@ -6,6 +6,93 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — vpn-bridge multi-instance honesty (SDD-003 implementation)
+Closes Phase-1 audit blocker F-2026-005. SDD-003 status flips
+from `draft` to `implemented`. With this PR, all six Phase-1
+blockers from the architect/PM sweep are closed.
+
+The vpn-bridge manifest's `instanced = true` is now honest about
+which profiles can actually run side-by-side, and the resolver +
+profile scripts enforce that boundary.
+
+- **`selfdef-cli` D-1**: `ProfileSpec` (in
+  `crates/selfdef-cli/src/modules.rs`) gains an optional
+  per-profile `[profiles.details.<name>]` block with an
+  `instanced: Option<bool>` field. Profiles not listed there
+  inherit the module-level `instanced` value.
+  `ProfileSpec::profile_instanced(profile, module_default)`
+  is the single accessor.
+- **`selfdef-cli` D-2**: `resolve_active` reads each instance's
+  per-module config (parsing just the `profile = ...` line),
+  looks up the profile's `instanced` capability, and refuses
+  any `slug#instance` host-config key whose profile is declared
+  `instanced = false`. Refusal happens before any apply.sh fires.
+- **`selfdef-cli` D-3**: `run_one` now passes
+  `SELFDEF_INSTANCE_ID=<inst>` into the spawned bash process
+  whenever the active module has an instance suffix. Absent for
+  the legacy single-instance shape — scripts that don't need it
+  can ignore it.
+- **`modules/vpn-bridge` D-4**: `relay-via-server.sh` derives
+  per-instance defaults from `${SELFDEF_INSTANCE_ID}`:
+  interface defaults to `selfdef-<inst>` (was `wg0`), nftables
+  table to `selfdef_vpn_bridge_<inst>` (was `selfdef_vpn_bridge`),
+  nftables state file to
+  `/etc/nftables.d/selfdef-vpn-bridge-<inst>.conf` (was
+  `/etc/nftables.d/selfdef-vpn-bridge.conf`). The forward-rule
+  template now substitutes `@@NFT_TABLE@@`. Override
+  environment variables (`SELFDEF_VPN_BRIDGE_NFT_TABLE`,
+  `SELFDEF_VPN_BRIDGE_NFT_PATH`) take precedence as before.
+  `tailscale.sh` and `cloudflare-tunnel.sh` `die`
+  defence-in-depth at the top of `profile_apply` /
+  `profile_uninstall` when `SELFDEF_INSTANCE_ID` is set — the
+  resolver should already have refused the apply, but the
+  scripts guard against bypass.
+- **`modules/vpn-bridge` D-5**: `module.toml` declares
+  `[profiles.details.relay-via-server] instanced = true`,
+  `[profiles.details.tailscale] instanced = false`,
+  `[profiles.details.cloudflare-tunnel] instanced = false`. The
+  README's pre-SDD-003 "Multi-instance caveat" block is
+  rewritten into a "Multi-instance support" section with the
+  capability table, per-instance naming convention
+  (`selfdef-<inst>` iface and friends), and migration notes for
+  pre-SDD-003 deployments.
+
+#### Backwards compatibility
+
+Single-instance `[modules.vpn-bridge]` deployments are
+**byte-stable**: when `SELFDEF_INSTANCE_ID` is unset, the
+relay-via-server defaults remain `wg0` / `selfdef_vpn_bridge`
+/ `/etc/nftables.d/selfdef-vpn-bridge.conf`. No migration is
+needed for the common shape.
+
+If you were running multiple instances of `tailscale` or
+`cloudflare-tunnel` (which silently corrupted state pre-SDD-003),
+the resolver will now refuse the `#suffix` host keys with a
+clear message. Pick one to keep, drop the `#suffix`, and
+re-apply.
+
+If you were running multiple instances of `relay-via-server`,
+each instance's apply will now install per-instance state files
+alongside any legacy `selfdef_vpn_bridge` table you had — see
+the vpn-bridge README's "Migrating from pre-SDD-003" section for
+the cleanup steps.
+
+#### Tests
+
+- Unit (`crates/selfdef-cli/src/modules.rs`):
+  `profile_instanced_falls_back_to_module_default_when_unset`,
+  `profile_instanced_per_profile_override_wins`,
+  `resolver_rejects_instance_for_singleton_profile`,
+  `resolver_accepts_instance_for_multi_instance_profile`,
+  `resolver_falls_back_to_default_profile_when_config_missing`.
+- Integration
+  (`crates/selfdef-cli/tests/module_vpn_bridge_multi_instance.rs`):
+  the relay profile uses per-instance iface when
+  `SELFDEF_INSTANCE_ID` is set and stays on `wg0` when it isn't;
+  the singleton profiles refuse to apply when the env var leaks
+  through; the CLI resolver refuses `vpn-bridge#extra` for the
+  tailscale profile before invoking apply.sh.
+
 ### Added — defaults that work out of the box (SDD-002 implementation)
 Closes Phase-1 audit blockers F-2026-004 / F-2026-018 / F-2026-020.
 SDD-002 status flips from `draft` to `implemented`.

@@ -7,18 +7,19 @@ case). The module ships **three profiles**, each with a different
 trust + paradigm tradeoff, plus a documented extension hook so future
 overlay tech can slot in without forking.
 
-> **Multi-instance caveat (F-2026-005, tracked in
-> [SDD-003](../../docs/sdd/003-vpn-bridge-multi-instance.md))**:
-> the manifest declares `instanced = true`, but every shipped
-> profile script writes to instance-shared state paths (one
-> `/etc/wireguard/selfdef0.conf`, one
-> `/etc/nftables.d/selfdef-vpn-bridge.conf`, one
-> `tailscaled.service`, one `cloudflared.service`). Running
-> `[modules."vpn-bridge#a"]` and `[modules."vpn-bridge#b"]`
-> against the same profile silently corrupts state — whichever
-> instance applied last wins. Until SDD-003 ships, treat this
-> module as **single-instance per profile** and keep one
-> `[modules.vpn-bridge]` block per host.
+> **Multi-instance support (SDD-003, closes F-2026-005)**:
+> the module is honest about which profiles can run side-by-side
+> on the same host. `relay-via-server` is multi-instance-capable
+> — each `[modules."vpn-bridge#<inst>"]` block gets its own
+> WireGuard interface (`selfdef-<inst>`), its own nftables table
+> (`selfdef_vpn_bridge_<inst>`), and its own
+> `wg-quick@selfdef-<inst>.service` unit. `tailscale` and
+> `cloudflare-tunnel` are **singleton-only** because each manages
+> a single host-wide systemd service (`tailscaled.service`,
+> `cloudflared.service`) with one control-plane registration; the
+> CLI refuses `vpn-bridge#<inst>` for those profiles. See the
+> "Multi-instance support" section below for the full capability
+> table and migration notes.
 
 ## Decision matrix
 
@@ -47,14 +48,76 @@ the same host — one per profile — by giving each its own
 
 ```toml
 [modules."vpn-bridge#overlay"]
-config = "/etc/selfdef/modules/vpn-bridge.overlay.toml"   # profile = "relay-via-server" (or "tailscale")
-[modules."vpn-bridge#publish"]
-config = "/etc/selfdef/modules/vpn-bridge.publish.toml"   # profile = "cloudflare-tunnel"
+config = "/etc/selfdef/modules/vpn-bridge.overlay.toml"   # profile = "relay-via-server"
+[modules.vpn-bridge]
+config = "/etc/selfdef/modules/vpn-bridge.toml"           # profile = "cloudflare-tunnel"  (singleton — no #suffix)
 ```
 
 Each instance gets its own config file, its own structured-status
 line, and (where applicable) its own service unit. Instances run in
 alphabetical order under `selfdefctl modules apply`.
+
+## Multi-instance support
+
+| Profile | `instanced` | Per-instance state | Why |
+| --- | --- | --- | --- |
+| `relay-via-server` | **yes** | `selfdef-<inst>` iface, `selfdef_vpn_bridge_<inst>` nftables table, `wg-quick@selfdef-<inst>.service` unit | Each instance is a separate WireGuard tunnel — kernel supports many at once. |
+| `tailscale` | **no** (singleton) | n/a | `tailscaled.service` is a single host-wide daemon with one control-plane registration. Two `tailscale up` calls would silently overwrite each other. |
+| `cloudflare-tunnel` | **no** (singleton) | n/a | `cloudflared service install` writes one `/etc/systemd/system/cloudflared.service` unit with the token baked in. Two instances would stomp on each other's token. |
+
+### What the CLI enforces
+
+`selfdefctl modules apply` reads each instance's per-module config to
+find its `profile = ...`, then checks the manifest's
+`[profiles.details.<profile>].instanced`. If the profile is
+declared `instanced = false`, the resolver refuses any
+`vpn-bridge#<inst>` host-config key and exits with a clear
+message before running any script. Defence-in-depth: the
+singleton profile scripts also `die` at the top of
+`profile_apply` / `profile_uninstall` if `SELFDEF_INSTANCE_ID` is
+set, in case the resolver is ever bypassed.
+
+### Per-instance naming convention
+
+When `SELFDEF_INSTANCE_ID` is set (i.e. the host-config key was
+`vpn-bridge#<inst>`), the `relay-via-server` profile derives:
+
+- **interface**: `interface` from the per-instance config, or
+  `selfdef-<inst>` as the default.
+- **wg-quick unit**: `wg-quick@<iface>.service` — distinct per
+  instance because the iface is distinct.
+- **nftables table**: `selfdef_vpn_bridge_<inst>` (override with
+  `SELFDEF_VPN_BRIDGE_NFT_TABLE`).
+- **nftables file**: `/etc/nftables.d/selfdef-vpn-bridge-<inst>.conf`
+  (override with `SELFDEF_VPN_BRIDGE_NFT_PATH`).
+
+When no instance is set (the legacy single-instance shape, i.e.
+`[modules.vpn-bridge]` with no `#suffix`), the defaults stay
+identical to the pre-SDD-003 layout: interface `wg0`, table
+`selfdef_vpn_bridge`, file
+`/etc/nftables.d/selfdef-vpn-bridge.conf`. Existing single-instance
+deployments need no migration.
+
+### Migrating from pre-SDD-003
+
+If you were running an `instanced` `relay-via-server` deployment
+with the pre-SDD-003 build, both instances were writing to the
+same `selfdef_vpn_bridge` nftables table and `/etc/nftables.d/selfdef-vpn-bridge.conf`.
+After upgrade:
+
+1. The single `[modules.vpn-bridge]` keeps writing the legacy
+   names — no change.
+2. Each `[modules."vpn-bridge#<inst>"]` block now writes to
+   per-instance paths. On the first apply post-upgrade,
+   `selfdefctl modules apply` will install the new
+   per-instance nft state file alongside the old one; the
+   first non-instanced uninstall (or a manual `nft delete
+   table inet selfdef_vpn_bridge`) cleans up the legacy
+   table.
+3. If you were running multiple instances of `tailscale` or
+   `cloudflare-tunnel`, the resolver will now refuse the
+   `#suffix` keys. Pick one to keep, drop the `#suffix` (or
+   remove the duplicate block), and re-apply.
 
 ## Profiles
 

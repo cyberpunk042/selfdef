@@ -6,6 +6,22 @@
 # does NOT manage the auth-key file beyond reading the path the
 # operator gives.
 #
+# SDD-003 defence-in-depth: tailscale manages the singleton
+# `tailscaled.service` and a single host-wide login. Running two
+# copies under different vpn-bridge instances would have them
+# stomp on each other (latest `tailscale up` wins; the other
+# instance's `up` is silently undone next apply). The CLI
+# resolver already refuses `vpn-bridge#instance` for this profile
+# via `[profiles.details.tailscale].instanced = false`, but if
+# something ever bypasses that, this guard fires first.
+_tailscale_guard_singleton() {
+    if [[ -n "${SELFDEF_INSTANCE_ID:-}" ]]; then
+        die "tailscale profile is singleton-only (manages tailscaled.service \
+host-wide); SELFDEF_INSTANCE_ID='${SELFDEF_INSTANCE_ID}' is set, which means \
+the resolver was bypassed. Refusing to apply."
+    fi
+}
+#
 # Required config keys:
 #   profile        = "tailscale"
 #   auth_key_path  = "/etc/tailscale/auth.key"    # 0600, operator-managed
@@ -25,6 +41,7 @@ _tailscale_read_config() {
 }
 
 profile_apply() {
+    _tailscale_guard_singleton
     command -v tailscale >/dev/null || die "tailscale(1) missing — install the tailscale package first"
     command -v systemctl >/dev/null || die "systemctl missing"
 
@@ -94,6 +111,7 @@ profile_check() {
 }
 
 profile_uninstall() {
+    _tailscale_guard_singleton
     if command -v tailscale >/dev/null; then
         run "tailscale logout" -- tailscale logout || log "(continuing)"
     fi

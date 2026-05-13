@@ -7,6 +7,21 @@
 # it; you can publish a service through it. See README §
 # "Decision matrix" for when to pick this over the overlay profiles.
 #
+# SDD-003 defence-in-depth: the `cloudflared service install`
+# subcommand writes /etc/systemd/system/cloudflared.service with
+# the token baked in. A second vpn-bridge instance running this
+# profile would overwrite the first one's token. The CLI resolver
+# already refuses `vpn-bridge#instance` for this profile via
+# `[profiles.details.cloudflare-tunnel].instanced = false`, but
+# if something ever bypasses that, this guard fires first.
+_cf_guard_singleton() {
+    if [[ -n "${SELFDEF_INSTANCE_ID:-}" ]]; then
+        die "cloudflare-tunnel profile is singleton-only (manages \
+cloudflared.service host-wide); SELFDEF_INSTANCE_ID='${SELFDEF_INSTANCE_ID}' \
+is set, which means the resolver was bypassed. Refusing to apply."
+    fi
+}
+#
 # Required config keys:
 #   profile           = "cloudflare-tunnel"
 #   tunnel_token_path = "/etc/cloudflared/token"    # 0600, operator-managed
@@ -23,6 +38,7 @@ _cf_read_config() {
 }
 
 profile_apply() {
+    _cf_guard_singleton
     command -v cloudflared >/dev/null || die "cloudflared(1) missing — install the cloudflared package first"
     command -v systemctl   >/dev/null || die "systemctl missing"
 
@@ -98,6 +114,7 @@ profile_check() {
 }
 
 profile_uninstall() {
+    _cf_guard_singleton
     if command -v systemctl >/dev/null; then
         if systemctl is-active --quiet cloudflared.service; then
             run "stop cloudflared.service" -- systemctl stop cloudflared.service || log "(continuing)"
