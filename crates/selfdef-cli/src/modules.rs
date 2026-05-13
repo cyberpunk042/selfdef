@@ -517,14 +517,13 @@ pub(crate) fn resolve_active(
                     .config
                     .clone()
                     .unwrap_or_else(|| default_config_path(slug, Some(inst_name)));
-                let profile_name = read_profile_from_config(&cfg_path)
-                    .unwrap_or_else(|| {
-                        manifest
-                            .profiles
-                            .as_ref()
-                            .and_then(|p| p.default.clone())
-                            .unwrap_or_default()
-                    });
+                let profile_name = read_profile_from_config(&cfg_path).unwrap_or_else(|| {
+                    manifest
+                        .profiles
+                        .as_ref()
+                        .and_then(|p| p.default.clone())
+                        .unwrap_or_default()
+                });
                 if profile_name.is_empty() {
                     continue;
                 }
@@ -880,9 +879,7 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     if let Some(inst) = &active.instance {
         cmd.env("SELFDEF_INSTANCE_ID", inst);
     }
-    cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let out = cmd
         .output()
