@@ -170,7 +170,16 @@ This block is intentionally short — copy it into your deployment runbook.
 
 - No dm-verity layer for the daemon yet — root *can* still tamper.
 - No remote attestation; assumes operator trusts the host at build time.
-- Rule signing not yet enforced.
+- Rule signing — **opt-in shipped**. Set
+  `[security].require_signed_rules = true` and
+  `[security].signing_public_key_file = "<path>"` in
+  `selfdef.toml`. The daemon refuses to load any rule lacking a
+  valid sibling `<rule>.yml.minisig` under the configured
+  minisign public key. Operators sign with the standalone
+  `minisign` CLI (`minisign -S -m <rule>.yml -s <secret-key>`).
+  See `docs/dev/signing.md` for the full runbook + threat-model
+  caveats. Default is off so the existing unsigned-rule
+  workflow keeps working.
 - Defense against kernel rootkits is delegated to "don't run a compromised
   kernel" — i.e. UEFI Secure Boot + signed kernels, out of band.
 - **Eventstream JSONL injection (F-2026-026 / F-2026-065).**
@@ -203,11 +212,14 @@ This block is intentionally short — copy it into your deployment runbook.
   exclusively root-writable. Credential rotation should
   remain a deliberate operator action; an automated
   uptime-watcher rotator is the wrong shape.
-- **TracingPolicy signing (F-2026-024 follow-up).** Analogous to rule
-  signing. The daemon and the kernel trust every YAML in
-  `/etc/tetragon/tetragon.tp.d/` as if signed by the operator. Future SDD:
-  per-policy cosign + a startup-time verifier in the `tetragon` module's
-  `apply.sh` that refuses unsigned policies in production mode.
+- **TracingPolicy signing (F-2026-024 follow-up — partial).**
+  The verifier infrastructure (`selfdef-signing` + minisign-format
+  detached signatures) now ships and is wired into the
+  correlator's rule loader. Re-using it for the
+  `tetragon` module's `apply.sh` to refuse unsigned policies
+  before they reach the kernel is the remaining work; the
+  `[security].signing_public_key_file` config knob will be
+  re-used so operators don't need a second key.
 - **Metrics-token rotation (F-2026-023 follow-up — shipped).**
   `selfdefctl api rotate-token` ships in selfdef ≥ this release.
   The verb generates a fresh 32-byte high-entropy token, writes

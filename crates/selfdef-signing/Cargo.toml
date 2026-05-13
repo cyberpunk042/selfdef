@@ -1,0 +1,27 @@
+[package]
+name = "selfdef-signing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Minisign-compatible signature verification for detection rules and Tetragon TracingPolicies."
+
+[lints]
+workspace = true
+
+[dependencies]
+minisign-verify = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# Dev-only sign-side. Production code is verify-only (via
+# minisign-verify above); operators sign with the standalone
+# `minisign` CLI. Tests use the matching Rust crate to generate
+# signed fixtures so we don't depend on an external binary at
+# test time.
+minisign = "0.9"

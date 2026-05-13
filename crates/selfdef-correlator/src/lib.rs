@@ -31,6 +31,11 @@ pub struct Correlator {
     engine: Arc<RwLock<Arc<Engine>>>,
     rules_dir: PathBuf,
     sequence: AtomicU64,
+    /// SDD-004: optional minisign verifier. When present,
+    /// `load_rules` calls `Engine::load_dir_verified` and refuses
+    /// to compile any rule lacking a valid sibling `.minisig`.
+    /// Wired from `[security].require_signed_rules` in the daemon.
+    verifier: Option<selfdef_signing::Verifier>,
 }
 
 impl Correlator {
@@ -42,13 +47,27 @@ impl Correlator {
             engine: Arc::new(RwLock::new(Arc::new(Engine::empty()))),
             rules_dir,
             sequence: AtomicU64::new(0),
+            verifier: None,
         }
+    }
+
+    /// Attach a minisign verifier — every subsequent `load_rules`
+    /// will refuse any rule file lacking a valid sibling
+    /// `<file>.minisig` under this verifier's public key.
+    /// Chainable.
+    #[must_use]
+    pub fn with_verifier(mut self, verifier: selfdef_signing::Verifier) -> Self {
+        self.verifier = Some(verifier);
+        self
     }
 
     /// Load (or reload) rules from disk. Atomically swaps the engine on
     /// success; on failure leaves the previous rule set in place.
     pub fn load_rules(&self) -> Result<usize, SigmaError> {
-        let new_engine = Arc::new(Engine::load_dir(&self.rules_dir)?);
+        let new_engine = Arc::new(match &self.verifier {
+            Some(v) => Engine::load_dir_verified(&self.rules_dir, v)?,
+            None => Engine::load_dir(&self.rules_dir)?,
+        });
         let count = new_engine.rule_count();
         let mut guard = self.engine.write().unwrap_or_else(|p| p.into_inner());
         *guard = new_engine;

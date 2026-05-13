@@ -70,8 +70,32 @@ enum Command {
         #[command(subcommand)]
         action: ApiAction,
     },
+    /// Detection-rule signing tools (operator-side).
+    Keys {
+        #[command(subcommand)]
+        action: KeysAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum KeysAction {
+    /// SDD-004 rule-signing follow-up: verify a detached
+    /// minisign signature against a target file. Useful for
+    /// operator debugging — "did this rule really get signed by
+    /// the key I think it did?" — without invoking the daemon's
+    /// load path. Uses `[security].signing_public_key_file` from
+    /// the daemon config unless `--public-key` is given.
+    Verify {
+        /// File to verify. The signature must live at
+        /// `<file>.minisig` (minisign's default sidecar layout).
+        target: PathBuf,
+        /// Override the public-key path (default: from
+        /// `[security].signing_public_key_file`).
+        #[arg(long)]
+        public_key: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -308,6 +332,11 @@ async fn main() -> Result<()> {
                 },
         } => {
             api_rotate_token(&cfg, token_file, bytes, pid, print)?;
+        }
+        Command::Keys {
+            action: KeysAction::Verify { target, public_key },
+        } => {
+            keys_verify(&cfg, &target, public_key)?;
         }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
@@ -941,6 +970,38 @@ fn base64_urlsafe(bytes: &[u8]) -> String {
         out.push(A[((b >> 6) & 0x3f) as usize] as char);
     }
     out
+}
+
+/// SDD-004 rule-signing follow-up: verify a detached minisign
+/// signature for a target file. Wraps `selfdef_signing::Verifier`
+/// with operator-friendly error messages.
+fn keys_verify(
+    cfg: &selfdef_config::Config,
+    target: &std::path::Path,
+    override_pubkey: Option<PathBuf>,
+) -> Result<()> {
+    let pubkey = match override_pubkey {
+        Some(p) => p,
+        None => cfg.security.signing_public_key_file.clone().context(
+            "no public key configured: pass --public-key or set \
+                 [security].signing_public_key_file in selfdef.toml",
+        )?,
+    };
+    let verifier = selfdef_signing::Verifier::load(&pubkey)
+        .with_context(|| format!("loading public key from {}", pubkey.display()))?;
+    verifier.verify_detached_file(target).with_context(|| {
+        format!(
+            "verifying {} against {}",
+            target.display(),
+            pubkey.display(),
+        )
+    })?;
+    println!(
+        "ok: {} verifies against {}",
+        target.display(),
+        pubkey.display(),
+    );
+    Ok(())
 }
 
 #[cfg(test)]

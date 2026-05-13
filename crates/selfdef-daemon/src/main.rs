@@ -79,11 +79,33 @@ async fn main() -> Result<()> {
     // ---- correlator ----
     let (correlator_task, correlator) = if cfg.correlator.enabled {
         let sub = bus.subscribe();
-        let corr = Arc::new(Correlator::new(
+        // SDD-004 rule-signing follow-up: if [security] turns it
+        // on, load the public key now. Refuse to start when the
+        // operator opted in but the key path is missing/broken —
+        // running unsigned-trusted is worse than failing loudly.
+        let mut corr = Correlator::new(
             publisher.clone(),
             host_tag.clone(),
             cfg.correlator.rules_dir.clone(),
-        ));
+        );
+        if cfg.security.require_signed_rules {
+            let key_path = cfg.security.signing_public_key_file.as_ref().context(
+                "[security].require_signed_rules = true but \
+                     [security].signing_public_key_file is unset",
+            )?;
+            let verifier = selfdef_signing::Verifier::load(key_path).with_context(|| {
+                format!(
+                    "loading rule-signing public key from {}",
+                    key_path.display()
+                )
+            })?;
+            info!(
+                key = %key_path.display(),
+                "correlator: rule-signing verification enabled"
+            );
+            corr = corr.with_verifier(verifier);
+        }
+        let corr = Arc::new(corr);
         match corr.load_rules() {
             Ok(n) => info!(rules = n, "correlator loaded rules"),
             Err(e) => warn!(error = %e, "initial rule load failed; running with empty ruleset"),
