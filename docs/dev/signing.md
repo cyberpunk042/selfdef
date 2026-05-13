@@ -97,10 +97,21 @@ require_signed_rules = true
 signing_public_key_file = "/etc/selfdef/keys/policy.pub"
 ```
 
-Restart the daemon (or SIGHUP — rule loads happen on every
-SIGHUP and the verifier is constructed at startup, so a SIGHUP
-picks up newly-signed rules but not a changed public-key
-configuration).
+Restart the daemon to apply the new configuration.
+
+After startup you have two hot-reload signals at your disposal:
+
+- **SIGHUP** — reload rules from disk. Re-uses the verifier that
+  was constructed at startup. Picks up newly-signed rules but
+  *not* a changed public-key file (path or contents).
+- **SIGUSR2** — reload the public-key file at the configured
+  `signing_public_key_file` path **and** re-run the rule load
+  with the fresh verifier. Use this when rotating the signing
+  key without bouncing the daemon (F-2027-005).
+
+Both signals are no-ops if the matching feature isn't enabled
+(SIGHUP without a correlator-enabled config; SIGUSR2 without a
+configured public key) — they log a `debug:` line and continue.
 
 When enforcement is on:
 
@@ -139,11 +150,15 @@ There's no automatic rotation — a key rotation is operator-driven:
 3. Atomically replace `/etc/selfdef/keys/policy.pub` on every
    host (`install -D -m 0644 new.pub /etc/selfdef/keys/policy.pub`).
 4. Replace every `.minisig` sidecar in the rules directory.
-5. SIGHUP the daemon (rules reload with the new verifier picked
-   up by the new key configuration on next daemon restart;
-   SIGHUP-only rotation requires the public key path to stay
-   the same and the SIGHUP code path to call `Verifier::load`
-   each time — TODO: a future enhancement).
+5. Hot-rotate the daemon's verifier without a restart:
+   `pkill -USR2 selfdefd`. The SIGUSR2 handler re-loads the
+   public-key file at the configured
+   `[security].signing_public_key_file` path and immediately
+   re-runs `load_rules` against the fresh verifier; both steps
+   log at `info`. On reload failure (corrupt key file) the
+   previous verifier stays in place and a `warn` line surfaces
+   the cause. (Before F-2027-005, this step required a full
+   daemon restart.)
 
 The signing key's compromise impact is "an attacker can have the
 daemon load malicious rules"; revoke by replacing the public key
