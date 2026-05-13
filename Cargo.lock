@@ -2036,6 +2036,7 @@ dependencies = [
  "hyper-util",
  "rustls",
  "rustls-pki-types",
+ "selfdef-api",
  "selfdef-bus",
  "selfdef-core",
  "selfdef-correlator",

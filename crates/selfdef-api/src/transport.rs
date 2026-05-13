@@ -105,7 +105,16 @@ pub enum ServerError {
     EmptyToken { path: PathBuf },
     #[error("tcp transport requires a token_file in [api]")]
     MissingToken,
-    #[error("no transport configured: set unix_socket or tcp_addr")]
+    /// F-2027-016: only fires when the api is *enabled* but neither
+    /// transport is configured. The disabled-api path returns
+    /// `Ok(())` early without ever constructing this variant, so a
+    /// reader hitting this error can be sure the config has
+    /// `[api].enabled = true` but is missing the transport binding.
+    #[error(
+        "[api].enabled = true but no transport is set: \
+         add `[api].unix_socket = \"/path/to/sock\"` or \
+         `[api].tcp_addr = \"host:port\"`, or set `[api].enabled = false`"
+    )]
     NoTransport,
     #[error("tls config error: {0}")]
     Tls(String),

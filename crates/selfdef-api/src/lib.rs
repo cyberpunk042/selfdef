@@ -47,9 +47,15 @@ pub use transport::{
     ApiConfig, ApiServer, Capability, ServerError, TlsConfig, TokenReloader, with_capability,
 };
 
-/// Test-only convenience that wraps the router in a layer granting
-/// every request `Capability::Full`. Re-exported here for code clarity;
-/// see [`transport::with_capability`] for the underlying primitive.
+/// **Test-only**: wraps the router in a layer granting every
+/// request `Capability::Full`. F-2027-014: gated behind the
+/// `test-helpers` Cargo feature so it disappears from release
+/// builds — calling it from production code would silently bypass
+/// the bearer-token check on TCP transports. The daemon itself
+/// uses [`transport::with_capability`] directly on the UNIX socket
+/// path (filesystem-permission gated); only integration tests
+/// need a blanket grant.
+#[cfg(feature = "test-helpers")]
 pub fn with_full_capability(router: Router) -> Router {
     with_capability(router, Capability::Full)
 }
