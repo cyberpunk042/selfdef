@@ -398,3 +398,144 @@ fn uninstall_removes_every_module_policy() {
     // policy_dir itself must remain — that's tetragon's, not ours.
     assert!(fx.policy_dir.is_dir());
 }
+
+// -------------------------------------------------- pod-label scope
+//
+// Verify that `scope = "pod-label"` rewrites every rendered policy
+// to use `matchPodSelector` instead of `matchNamespaces`. The
+// container-scope default is regression-tested by the
+// audit-profile test above (which still expects the
+// matchNamespaces / host_ns shape).
+
+#[test]
+fn pod_label_scope_swaps_match_namespaces_for_match_pod_selector() {
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         scope = \"pod-label\"\n\
+         pod_label_key = \"selfdef.io/agent\"\n\
+         pod_label_value = \"true\"\n",
+    );
+    let out = run_apply(&fx);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    for name in [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+        "gpu-device-guard",
+    ] {
+        let body = read_policy(&fx, name);
+        assert!(!body.is_empty(), "policy {name} not rendered");
+        assert!(
+            body.contains("matchPodSelector:"),
+            "policy {name} did not pick up matchPodSelector:\n{body}",
+        );
+        assert!(
+            body.contains("selfdef.io/agent: \"true\""),
+            "policy {name} missing operator label key/value:\n{body}",
+        );
+        assert!(
+            !body.contains("matchNamespaces:"),
+            "policy {name} still has matchNamespaces under pod-label scope:\n{body}",
+        );
+        assert!(
+            !body.contains("host_ns"),
+            "policy {name} still references host_ns:\n{body}",
+        );
+    }
+}
+
+#[test]
+fn container_scope_default_keeps_match_namespaces() {
+    // Sanity check: the default scope leaves matchNamespaces in place
+    // for every policy. Belt-and-braces alongside the audit / enforce
+    // profile tests, which test the same condition implicitly.
+    let fx = fixture("profile = \"audit\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success());
+    for name in [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "securemessage-guard",
+        "gpu-device-guard",
+    ] {
+        let body = read_policy(&fx, name);
+        assert!(
+            body.contains("matchNamespaces:"),
+            "policy {name} lost matchNamespaces under default scope:\n{body}",
+        );
+        assert!(
+            !body.contains("matchPodSelector:"),
+            "policy {name} picked up matchPodSelector under default scope:\n{body}",
+        );
+    }
+}
+
+#[test]
+fn pod_label_scope_refuses_without_required_keys() {
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         scope = \"pod-label\"\n",
+    );
+    let out = run_apply(&fx);
+    assert!(
+        !out.status.success(),
+        "should refuse: missing pod_label_key"
+    );
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"status\":\"failed\"") && line.contains("pod_label_key"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn rejects_invalid_scope_value() {
+    let fx = fixture("profile = \"audit\"\nscope = \"weird\"\n");
+    let out = run_apply(&fx);
+    assert!(!out.status.success(), "should refuse invalid scope");
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"status\":\"failed\"") && line.contains("container|pod-label"),
+        "got: {line}",
+    );
+}
+
+#[test]
+fn pod_label_scope_preserves_gpu_match_binaries_when_allowlist_set() {
+    // The gpu matchBinaries-drop awk anchors on the matchNamespaces
+    // line; render_pod_scope runs *after* it, so a non-empty
+    // allowlist must still produce a valid policy with both the
+    // allowlist and the pod-selector spliced in.
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         scope = \"pod-label\"\n\
+         pod_label_key = \"selfdef.io/agent\"\n\
+         pod_label_value = \"true\"\n\
+         gpu_device_allowlist = \"/usr/local/bin/python3\"\n",
+    );
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    let body = read_policy(&fx, "gpu-device-guard");
+    assert!(
+        body.contains("matchBinaries:"),
+        "matchBinaries kept under pod-label scope when allowlist is set:\n{body}",
+    );
+    assert!(
+        body.contains("/usr/local/bin/python3"),
+        "operator binary missing under pod-label scope:\n{body}",
+    );
+    assert!(
+        body.contains("matchPodSelector:"),
+        "pod selector missing:\n{body}",
+    );
+    assert!(
+        !body.contains("matchNamespaces:"),
+        "matchNamespaces leaked through pod-label scope:\n{body}",
+    );
+}

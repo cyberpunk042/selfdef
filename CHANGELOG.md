@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `agent-guard` v0.3.0: pod-label scope for Kubernetes
+- New `scope` config key in `agent-guard.toml` selects how the
+  shipped policies decide "what counts as inside an agent
+  container":
+  - `container` (default, unchanged from v0.2.0) — `matchNamespaces:
+    Pid NotIn [host_ns]`. Works on every container runtime.
+  - `pod-label` — `matchPodSelector: matchLabels.<key>=<value>`.
+    Kubernetes-only; narrower because only pods carrying the
+    operator-defined label fire the policy.
+- Two new keys back the pod-label scope: `pod_label_key` and
+  `pod_label_value` (defaults `selfdef.io/agent` / `true`). Both
+  are required when `scope = "pod-label"`; apply.sh refuses
+  without them with a clear error.
+- `lib.sh` gains `render_pod_scope()` which rewrites every
+  rendered policy's `matchNamespaces` block to `matchPodSelector`.
+  It runs *after* the policy-specific post-render hooks so the
+  gpu-device-guard's `matchNamespaces`-anchored awk stays valid.
+- 5 new integration tests cover: pod-selector splicing across all
+  five policies, the default `container` scope leaving
+  `matchNamespaces` intact, `pod-label` without required keys
+  refused, invalid scope value refused, and the gpu-device-guard's
+  `matchBinaries` block surviving the pod-scope swap when the
+  allowlist is set.
+- README documents the new scope table + the sample k8s Pod
+  manifest with `selfdef.io/agent: "true"`.
+- Module bumps to `0.3.0`. Roadmap drops the pod-label follow-up
+  from the remaining-work list.
+
 ### Added — `agent-guard` v0.2.0: GPU device guard
 - New `gpu-device-guard` TracingPolicy ships in the `agent-guard`
   bundle. Watches `security_file_open` against GPU device nodes

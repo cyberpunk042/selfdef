@@ -114,6 +114,36 @@ render_securemessage_endpoint() {
     sed -i "s|__SELFDEF_SECUREMESSAGE_DISABLED__|${esc}|" "$dst"
 }
 
+# Swap the shipped `matchNamespaces` container-scope block for a
+# `matchPodSelector` block that filters by Kubernetes pod labels.
+# Used on k8s hosts where the cluster's container scoping is
+# already labelled — narrower than the namespace-only default.
+#
+# Must run *after* render_gpu_policy() because that helper's
+# matchBinaries-drop awk anchors on the matchNamespaces line.
+#
+#   $1 — destination YAML (already action-rendered)
+#   $2 — pod label key   (e.g. "selfdef.io/agent")
+#   $3 — pod label value (e.g. "true")
+render_pod_scope() {
+    local dst="$1" key="$2" val="$3"
+    [[ -z "$key" || -z "$val" ]] && \
+        die "scope=pod-label requires pod_label_key and pod_label_value"
+    awk -v key="$key" -v val="$val" '
+        /^          matchNamespaces:/ { in_block = 1; next }
+        in_block && /^          matchActions:/ {
+            printf "          matchPodSelector:\n"
+            printf "            matchLabels:\n"
+            printf "              %s: \"%s\"\n", key, val
+            in_block = 0
+            print
+            next
+        }
+        in_block { next }
+        { print }
+    ' "$dst" > "${dst}.tmp" && mv "${dst}.tmp" "$dst"
+}
+
 # Rewrite the GPU device guard's device-prefix list and binary
 # allowlist. The source YAML ships with NVIDIA's prefix set inline
 # and a `__SELFDEF_GPU_ALLOWLIST_PLACEHOLDER__` sentinel in the

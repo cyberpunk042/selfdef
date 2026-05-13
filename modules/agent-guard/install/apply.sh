@@ -30,6 +30,22 @@ case "$PROFILE" in
     *) die "profile must be audit|enforce, got '$PROFILE'" ;;
 esac
 
+# Container-scope: `container` (default, uses matchNamespaces on
+# Pid != host_ns — works on any container runtime) vs `pod-label`
+# (uses matchPodSelector — k8s-only, narrower because it can match
+# specific agent pods).
+SCOPE=$(toml_get scope "$CONFIG_FILE" || echo "container")
+case "$SCOPE" in
+    container|pod-label) ;;
+    *) die "scope must be container|pod-label, got '$SCOPE'" ;;
+esac
+POD_LABEL_KEY=$(toml_get pod_label_key   "$CONFIG_FILE" || echo "")
+POD_LABEL_VALUE=$(toml_get pod_label_value "$CONFIG_FILE" || echo "")
+if [[ "$SCOPE" == "pod-label" ]]; then
+    [[ -n "$POD_LABEL_KEY"   ]] || die "scope=pod-label requires pod_label_key"
+    [[ -n "$POD_LABEL_VALUE" ]] || die "scope=pod-label requires pod_label_value"
+fi
+
 # Pull tetragon's policy_dir from *its* config so we never drift.
 TG_CFG="${SELFDEF_TETRAGON_CONFIG:-/etc/selfdef/modules/tetragon.toml}"
 POLICY_DIR="/etc/tetragon/tetragon.tp.d"
@@ -105,6 +121,12 @@ for entry in "${POLICIES[@]}"; do
         securemessage) render_securemessage_endpoint "$tmp" "$SM_ENDPOINT" ;;
         gpu)           render_gpu_policy "$tmp" "$GPU_PATHS" "$GPU_ALLOWLIST" ;;
     esac
+    # Container-scope swap runs last — it rewrites the
+    # matchNamespaces anchor that earlier renders (e.g. the
+    # gpu_policy matchBinaries-drop) depend on.
+    if [[ "$SCOPE" == "pod-label" ]]; then
+        render_pod_scope "$tmp" "$POD_LABEL_KEY" "$POD_LABEL_VALUE"
+    fi
 
     if [[ ! -f "$dst" ]] || ! cmp -s "$tmp" "$dst"; then
         if [[ "$DRY_RUN" == "1" ]]; then

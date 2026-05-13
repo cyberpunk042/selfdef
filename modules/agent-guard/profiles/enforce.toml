@@ -10,6 +10,12 @@
 
 profile = "enforce"
 
+# Container scope. See profiles/audit.toml for the explanation of
+# `container` vs `pod-label`.
+scope = "container"
+pod_label_key   = "selfdef.io/agent"
+pod_label_value = "true"
+
 etc_write_enabled = true
 etc_write_action  = "default"   # → Sigkill
 

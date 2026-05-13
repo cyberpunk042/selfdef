@@ -47,6 +47,11 @@ whole bundle at once.
 ```toml
 profile = "audit"   # or "enforce"
 
+# Container scope — see "Container scope" section below.
+scope = "container"        # or "pod-label"
+pod_label_key   = "selfdef.io/agent"   # only used when scope = "pod-label"
+pod_label_value = "true"
+
 etc_write_enabled = true
 etc_write_action  = "default"   # default | post | sigkill
 
@@ -79,17 +84,38 @@ gpu_device_paths     = ""    # empty = use shipped NVIDIA defaults
 gpu_device_allowlist = "/usr/local/bin/python3, /usr/bin/torchrun"
 ```
 
-## Container scope — why `Pid != host_ns` and not pod labels
+## Container scope
 
-Tetragon's `matchPodSelector` requires the Kubernetes data plane;
-Docker / Podman / containerd-standalone don't surface pod labels to
-Tetragon. The cleanest scope on a non-k8s host is "anything not in
-the host's PID namespace" — true for every container runtime worth
-the name. Operators who run multiple container workloads on one
-host and want narrower scoping should layer a second selector by
-binary path (e.g. only match if the originating process is
-`/usr/bin/python3` running inside the container) in a derivative
-policy.
+The shipped policies need to know "what counts as inside an agent
+container." Two strategies, picked via `scope` in the host config:
+
+| `scope` | Selector | When to use |
+| --- | --- | --- |
+| `container` (default) | `matchNamespaces: Pid NotIn [host_ns]` | Docker / Podman / containerd-standalone, or k8s when you don't want to label every agent pod. Matches every non-host PID namespace, which captures every container worth the name. |
+| `pod-label` | `matchPodSelector: matchLabels.<key>=<value>` | Kubernetes hosts. Narrower — only pods carrying the configured label fire the policy. Lets unrelated workloads on the same node run untouched. |
+
+`scope = "pod-label"` requires `pod_label_key` + `pod_label_value`
+in the config; apply.sh refuses without them.
+
+The shipped defaults are `selfdef.io/agent: "true"` — label your
+agent pods accordingly:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-agent
+  labels:
+    selfdef.io/agent: "true"
+spec:
+  containers: [...]
+```
+
+Operators who run multiple container workloads on one host and
+want narrower scoping under the `container` profile should layer
+a second selector by binary path (e.g. only match if the
+originating process is `/usr/bin/python3` running inside the
+container) in a derivative policy.
 
 ## Practical operator workflow
 
@@ -107,8 +133,14 @@ policy.
 
 ## Not-shipped extensions
 
-- **Pod-label-aware variants** of the same policies, gated on
-  `matchPodSelector` instead of `matchNamespaces`. Ship one of these
-  alongside if you run k8s.
+The four-policy bundle (etc-write, shell-exec, egress,
+SecureMessage stub) plus the GPU device guard covers the
+AI-machine threat model in this repo's roadmap. Future extension
+points worth flagging in `docs/src/modules-roadmap.md` before
+landing:
 
-Track those in `docs/src/modules-roadmap.md` if you want them later.
+- **Per-pod allowlists** under `pod-label` scope — today
+  `egress_allowlist` and `gpu_device_allowlist` apply to every
+  scoped pod uniformly. A follow-up could let those allowlists
+  vary by `pod_label_value` so different agent classes get
+  different permissions.
