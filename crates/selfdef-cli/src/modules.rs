@@ -89,6 +89,55 @@ pub(crate) struct ModuleManifest {
     /// after. Default `main` so existing manifests carry over.
     #[serde(default)]
     pub(crate) phase: Phase,
+    /// Daemon-side config expectations (SDD-002). Each entry is a
+    /// dotted key path under `/etc/selfdef/selfdef.toml` plus the
+    /// expected scalar or array value. Values may reference
+    /// same-module config keys via `${key}` substitution. The
+    /// validator runs before any apply.sh fires and refuses to
+    /// proceed on mismatch unless `--ignore-daemon-requires` is
+    /// passed.
+    #[serde(default)]
+    pub(crate) daemon_requires: BTreeMap<String, DaemonRequirement>,
+}
+
+/// Expected value for one daemon-config knob. Backed by an untagged
+/// enum so a manifest can write either a scalar
+/// (`"collectors.tetragon.enabled" = true`) or an array
+/// (`"collectors.eventstream.paths" = ["/path/a", "/path/b"]`) and
+/// the validator interprets array-typed entries as set-inclusion
+/// (the daemon's actual array must contain every element here).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum DaemonRequirement {
+    Bool(bool),
+    Int(i64),
+    String(String),
+    Array(Vec<String>),
+}
+
+impl DaemonRequirement {
+    /// Render this requirement as the right-hand-side of a TOML
+    /// assignment for the snippet shown to operators.
+    fn render_value(&self) -> String {
+        match self {
+            Self::Bool(b) => b.to_string(),
+            Self::Int(n) => n.to_string(),
+            Self::String(s) => format!("\"{}\"", s.replace('"', "\\\"")),
+            Self::Array(v) => {
+                let mut out = String::from("[");
+                for (i, item) in v.iter().enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    out.push('"');
+                    out.push_str(&item.replace('"', "\\\""));
+                    out.push('"');
+                }
+                out.push(']');
+                out
+            }
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -604,6 +653,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         }),
         instanced: m.instanced,
         phase: m.phase,
+        daemon_requires: m.daemon_requires.clone(),
     }
 }
 
@@ -800,6 +850,16 @@ pub(crate) struct LifecycleOpts {
     pub(crate) only: Vec<String>,
     pub(crate) except: Vec<String>,
     pub(crate) dry_run: bool,
+    /// Per SDD-002: bypass the daemon_requires pre-flight check.
+    /// `selfdefctl modules apply --ignore-daemon-requires` sets
+    /// this; otherwise a mismatch with the daemon's
+    /// `/etc/selfdef/selfdef.toml` halts the apply with exit 2
+    /// and a copy-pasteable snippet.
+    pub(crate) ignore_daemon_requires: bool,
+    /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
+    /// the validator reads. Tests use this; operators leave it
+    /// unset (defaults to `/etc/selfdef/selfdef.toml`).
+    pub(crate) daemon_config_path: Option<PathBuf>,
 }
 
 fn filter_active(
@@ -840,8 +900,214 @@ fn prepare(opts: &LifecycleOpts) -> Result<(PathBuf, Vec<ActiveModule>)> {
     Ok((host_path, active))
 }
 
+/// SDD-002 D-2: read `/etc/selfdef/selfdef.toml` (or whatever
+/// daemon_config_path points at) into a flat key→value map so the
+/// validator can answer "is this dotted key set to this value?"
+fn load_daemon_config(path: &Path) -> Result<toml::Value> {
+    if !path.exists() {
+        return Ok(toml::Value::Table(toml::map::Map::new()));
+    }
+    let body =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    toml::from_str::<toml::Value>(&body).with_context(|| format!("parsing {}", path.display()))
+}
+
+/// Walk a dotted path (`collectors.tetragon.enabled`) through a
+/// `toml::Value` tree, returning the leaf if present.
+fn lookup_dotted<'a>(root: &'a toml::Value, dotted: &str) -> Option<&'a toml::Value> {
+    let mut cur = root;
+    for segment in dotted.split('.') {
+        cur = cur.as_table().and_then(|t| t.get(segment))?;
+    }
+    Some(cur)
+}
+
+/// Compare an expected requirement against the actual daemon value
+/// (which may be `None` if the key isn't set). Returns `Ok(())` when
+/// satisfied, otherwise a one-line human description of the
+/// mismatch.
+fn check_requirement(
+    actual: Option<&toml::Value>,
+    expected: &DaemonRequirement,
+) -> Result<(), String> {
+    match (actual, expected) {
+        (None, _) => Err("key missing".to_string()),
+        (Some(toml::Value::Boolean(a)), DaemonRequirement::Bool(e)) if a == e => Ok(()),
+        (Some(toml::Value::Integer(a)), DaemonRequirement::Int(e)) if a == e => Ok(()),
+        (Some(toml::Value::String(a)), DaemonRequirement::String(e)) if a == e => Ok(()),
+        (Some(toml::Value::Array(arr)), DaemonRequirement::Array(expected_items)) => {
+            let actual_strs: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+            for item in expected_items {
+                if !actual_strs.iter().any(|a| a == item) {
+                    return Err(format!("array missing element {item:?}"));
+                }
+            }
+            Ok(())
+        }
+        (Some(actual), _) => Err(format!("value mismatch (got {})", actual_summary(actual))),
+    }
+}
+
+fn actual_summary(v: &toml::Value) -> String {
+    match v {
+        toml::Value::Boolean(b) => b.to_string(),
+        toml::Value::Integer(n) => n.to_string(),
+        toml::Value::String(s) => format!("\"{s}\""),
+        toml::Value::Array(a) => format!("[…{} item(s)]", a.len()),
+        other => other.to_string(),
+    }
+}
+
+/// Expand `${key}` references against the active module's host
+/// config. The substitution is intentionally minimal: only
+/// `${<flat-key>}` referencing a top-level scalar in the per-module
+/// config file (the one `SELFDEF_<SLUG>_CONFIG` points at). No
+/// nesting, no concatenation.
+fn expand_substitution(
+    expected: &DaemonRequirement,
+    host_config: &toml::Value,
+) -> Result<DaemonRequirement, String> {
+    let expand_one = |s: &str| -> Result<String, String> {
+        let mut out = String::new();
+        let mut rest = s;
+        while let Some(start) = rest.find("${") {
+            out.push_str(&rest[..start]);
+            let rest_after = &rest[start + 2..];
+            let end = rest_after
+                .find('}')
+                .ok_or_else(|| format!("unterminated `${{` in {s:?}"))?;
+            let key = &rest_after[..end];
+            let value = host_config
+                .as_table()
+                .and_then(|t| t.get(key))
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    format!("substitution `${{{key}}}` did not resolve to a string in the per-module config")
+                })?;
+            out.push_str(value);
+            rest = &rest_after[end + 1..];
+        }
+        out.push_str(rest);
+        Ok(out)
+    };
+    Ok(match expected {
+        DaemonRequirement::Bool(_) | DaemonRequirement::Int(_) => expected.clone(),
+        DaemonRequirement::String(s) => DaemonRequirement::String(expand_one(s)?),
+        DaemonRequirement::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(expand_one(item)?);
+            }
+            DaemonRequirement::Array(out)
+        }
+    })
+}
+
+/// One unmet daemon-config requirement: the dotted key, the
+/// (substitution-expanded) expected value, and a human-readable
+/// reason for the mismatch.
+type UnmetRequirement = (String, DaemonRequirement, String);
+
+/// Per-module list of unmet requirements.
+type UnmetByModule = (String, Vec<UnmetRequirement>);
+
+/// Validate every active module's `[daemon_requires]` against the
+/// loaded daemon config. Returns the list of unmet requirements per
+/// module — empty if everything's satisfied.
+fn check_daemon_requires(
+    active: &[ActiveModule],
+    daemon_cfg: &toml::Value,
+) -> Result<Vec<UnmetByModule>, String> {
+    let mut out = Vec::new();
+    for am in active {
+        let mut missing = Vec::new();
+        let host_cfg = load_daemon_config(&am.config_path).unwrap_or_else(|_| {
+            // A missing per-module config is normal for modules
+            // that only ship a profile. Treat it as an empty
+            // table for substitution purposes.
+            toml::Value::Table(toml::map::Map::new())
+        });
+        for (key, raw_req) in &am.manifest.daemon_requires {
+            let expected = expand_substitution(raw_req, &host_cfg).map_err(|e| {
+                format!("module `{}`: substitution failed for `{key}`: {e}", am.slug)
+            })?;
+            let actual = lookup_dotted(daemon_cfg, key);
+            if let Err(reason) = check_requirement(actual, &expected) {
+                missing.push((key.clone(), expected, reason));
+            }
+        }
+        if !missing.is_empty() {
+            out.push((am.display_name(), missing));
+        }
+    }
+    Ok(out)
+}
+
+/// Format the snippet shown to operators when the validator
+/// finds unmet requirements.
+fn render_requirements_snippet(unmet: &[UnmetByModule], daemon_config_path: &Path) -> String {
+    let mut out = String::new();
+    out.push_str("selfdefctl: daemon-side config in ");
+    out.push_str(&daemon_config_path.display().to_string());
+    out.push_str(" does not satisfy every active module's [daemon_requires].\n");
+    out.push_str("Add the following keys (or pass --ignore-daemon-requires to skip):\n");
+    for (module, items) in unmet {
+        out.push_str("\n# ── ");
+        out.push_str(module);
+        out.push_str(" ──\n");
+        for (key, expected, reason) in items {
+            out.push_str(&format!(
+                "{key} = {}    # {reason}\n",
+                expected.render_value()
+            ));
+        }
+    }
+    out
+}
+
 pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
+}
+
+/// SDD-002 D-5: `selfdefctl modules show-requires` reads every
+/// active module's `[daemon_requires]` (substitutions expanded
+/// against per-module config) and prints them as a copy-pasteable
+/// snippet — even when the daemon-config matches. Useful for
+/// previewing what a future module activation will demand.
+pub(crate) fn cmd_show_requires(opts: &LifecycleOpts) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    if active.is_empty() {
+        println!("(no active modules — host config empty)");
+        return Ok(0);
+    }
+    let mut wrote_any = false;
+    for am in &active {
+        if am.manifest.daemon_requires.is_empty() {
+            continue;
+        }
+        let host_cfg = load_daemon_config(&am.config_path)
+            .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()));
+        println!();
+        println!("# ── {} ──", am.display_name());
+        for (key, raw_req) in &am.manifest.daemon_requires {
+            let expanded = match expand_substitution(raw_req, &host_cfg) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!(
+                        "warning: substitution failed for {} {key}: {e}",
+                        am.display_name()
+                    );
+                    continue;
+                }
+            };
+            println!("{key} = {}", expanded.render_value());
+        }
+        wrote_any = true;
+    }
+    if !wrote_any {
+        println!("(no active module declares [daemon_requires])");
+    }
+    Ok(0)
 }
 
 pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
@@ -901,6 +1167,26 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     let (host_path, mut active) = prepare(opts)?;
     if policy.reverse_order {
         active.reverse();
+    }
+    // SDD-002 D-2: validate every active module's
+    // `[daemon_requires]` against the daemon-side config. Apply
+    // and Check both fire the check; Uninstall skips it (tearing
+    // a module down doesn't care whether the daemon config still
+    // matches).
+    if matches!(action, Action::Apply | Action::Check) && !opts.ignore_daemon_requires {
+        let daemon_cfg_path = opts
+            .daemon_config_path
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("/etc/selfdef/selfdef.toml"));
+        let daemon_cfg = load_daemon_config(&daemon_cfg_path)?;
+        match check_daemon_requires(&active, &daemon_cfg) {
+            Ok(unmet) if !unmet.is_empty() => {
+                eprintln!("{}", render_requirements_snippet(&unmet, &daemon_cfg_path),);
+                return Ok(2);
+            }
+            Ok(_) => {}
+            Err(e) => anyhow::bail!("daemon_requires validation failed: {e}"),
+        }
     }
     println!(
         "{} {} module(s) (host config: {})",
@@ -1071,6 +1357,7 @@ mod tests {
             profiles: None,
             instanced,
             phase,
+            daemon_requires: BTreeMap::new(),
         }
     }
 

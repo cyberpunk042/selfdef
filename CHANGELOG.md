@@ -6,6 +6,64 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — defaults that work out of the box (SDD-002 implementation)
+Closes Phase-1 audit blockers F-2026-004 / F-2026-018 / F-2026-020.
+SDD-002 status flips from `draft` to `implemented`.
+
+The bridge between module defaults and daemon defaults is now a
+**manifest-level contract**. Every active module's
+`[daemon_requires]` is validated against
+`/etc/selfdef/selfdef.toml` before any apply.sh fires; mismatch
+prints a copy-pasteable TOML snippet (with `${...}` substitutions
+expanded against the per-module config) and exits 2, unless the
+operator passes `--ignore-daemon-requires`.
+
+- **`selfdef-cli` D-1**: `ModuleManifest` gains an optional
+  `daemon_requires: BTreeMap<String, DaemonRequirement>`. The
+  untagged `DaemonRequirement` enum supports bool / int / string /
+  array-of-string values. Array entries are interpreted as
+  set-inclusion (the daemon's actual array must contain every
+  element listed in the manifest).
+- **`selfdef-cli` D-2**: `check_daemon_requires` runs in
+  `run_lifecycle` for `Apply` and `Check` actions (uninstall
+  skips — tearing a module down doesn't care). Substitution
+  rule is intentionally minimal: only `${<flat-key>}` referencing
+  a same-module top-level scalar. The snippet renderer groups
+  unmet requirements by module with `# ── <module> ──` headers.
+- **D-3**: `modules/integrity-sentinel/profiles/strict.toml` and
+  `profiles/warn-only.toml` now ship with `event_stream_path`
+  live by default (default
+  `/var/lib/selfdef/eventstream/integrity-sentinel.jsonl`). Set
+  the key to `""` to opt out. The module's `[daemon_requires]`
+  ensures the daemon's `[collectors.eventstream].paths` includes
+  this file before apply proceeds.
+- **D-4**: `config/selfdef.toml.example` gained operator-discovery
+  comments under `[collectors.tetragon]` (explicitly contrasting
+  it with `[collectors.eventstream]`) and under
+  `[collectors.eventstream]` (showing the integrity-sentinel
+  emission path as a commented example).
+- **D-5**: new `selfdefctl modules show-requires` subcommand
+  prints every active module's expanded `[daemon_requires]` as a
+  copy-pasteable snippet. Read-only; never touches the daemon
+  config.
+- **Manifests**: `tetragon` and `integrity-sentinel` now declare
+  their daemon-side knobs. Other modules can adopt the field
+  incrementally — manifests without the section skip the check.
+- **Operator-facing CLI surface**: `selfdefctl modules apply` and
+  `selfdefctl modules check` gain a `--ignore-daemon-requires`
+  flag; new `selfdefctl modules show-requires` subcommand.
+- 4 new integration tests in
+  `tests/cli_modules_daemon_requires.rs`: apply refuses on unmet,
+  apply succeeds on satisfied, `--ignore-daemon-requires`
+  bypasses, `show-requires` prints the expanded snippet.
+
+Operator-visible effect: a fresh `.deb` install with
+`integrity-sentinel`, `tetragon`, and `agent-guard` active in
+`/etc/selfdef/modules.toml` now refuses to silently proceed on a
+mismatched `selfdef.toml`. The operator sees exactly what to
+add. Once added, every promise the modules' READMEs make about
+the daemon picking up their output holds end-to-end.
+
 ### Added — AI-machine track is end-to-end (SDD-001 implementation)
 Closes the four Phase-1 audit blockers that surrounded the
 AI-machine track: F-2026-001, F-2026-002, F-2026-003,

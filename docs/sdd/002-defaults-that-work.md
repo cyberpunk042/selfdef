@@ -1,9 +1,23 @@
 # SDD-002 — Defaults that work out of the box
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
 > Closes findings: F-2026-004, F-2026-018, F-2026-020
+>
+> **Implementation status:** D-1..D-5 all shipped in the SDD-002
+> implementation PR. The manifest's `[daemon_requires]` field is
+> deserialized via the new `DaemonRequirement` untagged enum;
+> `check_daemon_requires` runs before any apply.sh fires;
+> `selfdefctl modules apply --ignore-daemon-requires` bypasses
+> the check; `selfdefctl modules show-requires` prints the
+> expanded snippet read-only. `integrity-sentinel`'s shipped
+> `event_stream_path` is uncommented in both profiles (D-3),
+> making drift emission live by default. `config/selfdef.toml.example`
+> gained the operator-discovery comments contrasting
+> `[collectors.tetragon]` vs `[collectors.eventstream]` (D-4).
+> Tetragon + integrity-sentinel manifests declare
+> `[daemon_requires]` accordingly.
 
 ## Problem
 

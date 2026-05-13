@@ -101,6 +101,12 @@ enum ModulesAction {
         /// Skip these modules (comma-separated).
         #[arg(long, value_delimiter = ',')]
         except: Vec<String>,
+        /// SDD-002: skip the pre-apply check that every active
+        /// module's `[daemon_requires]` is satisfied by the
+        /// daemon's `/etc/selfdef/selfdef.toml`. Use only when
+        /// you know what you're doing.
+        #[arg(long)]
+        ignore_daemon_requires: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -112,6 +118,10 @@ enum ModulesAction {
         only: Vec<String>,
         #[arg(long, value_delimiter = ',')]
         except: Vec<String>,
+        /// SDD-002: same flag as `apply` — skip the pre-check
+        /// against the daemon's selfdef.toml.
+        #[arg(long)]
+        ignore_daemon_requires: bool,
     },
     /// Status summary of every active module (alias of `check`).
     Status {
@@ -141,6 +151,15 @@ enum ModulesAction {
         /// Required for non-dry-run runs: must match this host's hostname.
         #[arg(long)]
         confirm: Option<String>,
+    },
+    /// SDD-002 D-5: print every active module's
+    /// `[daemon_requires]` block as a copy-pasteable TOML
+    /// snippet. Read-only; doesn't touch the daemon config.
+    ShowRequires {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
     },
 }
 
@@ -227,6 +246,7 @@ enum RulesAction {
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let daemon_config_path = cli.config.clone();
     let cfg = Config::load(Some(&cli.config)).context("loading configuration")?;
 
     match cli.command {
@@ -455,6 +475,7 @@ async fn main() -> Result<()> {
                 dry_run,
                 only,
                 except,
+                ignore_daemon_requires,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -462,6 +483,8 @@ async fn main() -> Result<()> {
                     only,
                     except,
                     dry_run,
+                    ignore_daemon_requires,
+                    daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
                 if code != 0 {
@@ -473,6 +496,7 @@ async fn main() -> Result<()> {
                 dir,
                 only,
                 except,
+                ignore_daemon_requires,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -480,6 +504,8 @@ async fn main() -> Result<()> {
                     only,
                     except,
                     dry_run: false,
+                    ignore_daemon_requires,
+                    daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;
                 if code != 0 {
@@ -493,8 +519,20 @@ async fn main() -> Result<()> {
                     only: Vec::new(),
                     except: Vec::new(),
                     dry_run: false,
+                    ..Default::default()
                 };
                 let code = modules::cmd_status(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ShowRequires { host_config, dir } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = modules::cmd_show_requires(&opts)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
@@ -523,6 +561,7 @@ async fn main() -> Result<()> {
                     only,
                     except,
                     dry_run,
+                    ..Default::default()
                 };
                 let code = modules::cmd_uninstall(&opts)?;
                 if code != 0 {
