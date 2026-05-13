@@ -1,9 +1,21 @@
 # SDD-001 — AI-machine track, end-to-end
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
 > Closes findings: F-2026-001, F-2026-002, F-2026-003, F-2026-006
+>
+> **Implementation status:** all four blockers shipped in the
+> AI-machine implementation PR. D-1 (collector `raw.tetragon`
+> subobject) and the new unit test live in
+> `crates/selfdef-collector-tetragon/src/lib.rs`. D-2 sigma rule
+> + corpus at `rules/sigma/hardening/agent_guard_violation.{yml,tests.yaml}`.
+> D-3 README fix in `modules/tetragon/README.md`. D-4 end-to-end
+> daemon integration test at
+> `crates/selfdef-daemon/tests/m_ai_machine.rs` exercises the
+> full pipeline (Tetragon JSON → collector → bus → correlator →
+> findings store) plus the negative-case assertion that
+> audit-mode `Post` does NOT promote.
 
 ## Problem
 

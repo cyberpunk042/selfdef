@@ -1,0 +1,78 @@
+tests:
+  - name: Sigkill on agent-guard etc-write policy fires
+    events:
+      - class_uid: 1001
+        activity_id: 14
+        severity_id: 1
+        source: tetragon
+        raw:
+          tetragon:
+            policy_name: "selfdef-agent-etc-write-guard"
+            policy_namespace: ""
+            action: "Sigkill"
+            function_name: "security_file_open"
+    expected_findings: 1
+
+  - name: Sigkill on agent-guard gpu-device policy fires
+    events:
+      - class_uid: 1001
+        activity_id: 14
+        severity_id: 1
+        source: tetragon
+        raw:
+          tetragon:
+            policy_name: "selfdef-agent-gpu-device-guard"
+            action: "Sigkill"
+            function_name: "security_file_open"
+    expected_findings: 1
+
+  - name: NotifyKiller on agent-guard egress fires
+    events:
+      - class_uid: 4001
+        activity_id: 1
+        severity_id: 1
+        source: tetragon
+        raw:
+          tetragon:
+            policy_name: "selfdef-agent-egress-guard"
+            action: "NotifyKiller"
+            function_name: "tcp_connect"
+    expected_findings: 1
+
+  - name: audit-mode Post does NOT fire
+    events:
+      - class_uid: 1001
+        activity_id: 14
+        severity_id: 1
+        source: tetragon
+        raw:
+          tetragon:
+            policy_name: "selfdef-agent-etc-write-guard"
+            action: "Post"
+            function_name: "security_file_open"
+    expected_findings: 0
+
+  - name: non-agent-guard Tetragon policy does NOT fire
+    events:
+      - class_uid: 1001
+        activity_id: 14
+        severity_id: 1
+        source: tetragon
+        raw:
+          tetragon:
+            policy_name: "observe-sensitive-files"
+            action: "Sigkill"
+            function_name: "security_file_open"
+    expected_findings: 0
+
+  - name: non-tetragon source does NOT fire
+    events:
+      - class_uid: 1001
+        activity_id: 14
+        severity_id: 1
+        source: auditd
+        raw:
+          tetragon:
+            policy_name: "selfdef-agent-etc-write-guard"
+            action: "Sigkill"
+    expected_findings: 0

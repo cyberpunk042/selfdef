@@ -1,0 +1,48 @@
+title: agent-guard policy violation
+id: 9d4a1f2e-3b5c-4d7a-8e9b-0011aabbccdd
+status: stable
+description: |
+  Promotes Tetragon TracingPolicy violations from the `agent-guard`
+  module bundle to Detection Findings so the responder's notifier
+  chain fires.
+
+  The agent-guard module ships five policies whose names match the
+  prefix `selfdef-agent-*`. When Tetragon takes a meaningful action
+  on a match (Sigkill, Override, NotifyKiller), the collector emits
+  a Process Activity / File System Activity / Network Activity
+  event with the policy name, namespace, action, and function name
+  preserved under `raw.tetragon`. This rule converts those into
+  high-severity findings.
+
+  Post-only actions (audit-mode profile) do NOT trip this rule —
+  audit-mode signal is for the operator's local triage, not the
+  pager.
+
+  Closes Phase-1 audit finding F-2026-002. Design context:
+  docs/sdd/001-ai-machine-end-to-end.md.
+references:
+  - https://tetragon.io/docs/concepts/tracing-policy/
+  - docs/sdd/001-ai-machine-end-to-end.md
+author: selfdef
+date: 2026-05-13
+tags:
+  - attack.execution
+  - attack.privilege_escalation
+  - attack.t1565.001
+logsource:
+  service: tetragon
+detection:
+  agent_guard_action:
+    source: tetragon
+    raw.tetragon.policy_name|startswith: "selfdef-agent-"
+    raw.tetragon.action|in:
+      - "Sigkill"
+      - "Override"
+      - "NotifyKiller"
+  condition: agent_guard_action
+level: high
+falsepositives:
+  - Operator testing agent-guard policies during bring-up. Use the
+    `audit` profile (which keeps the action set to Post) to suppress.
+  - A policy renamed away from the `selfdef-agent-` prefix; verify
+    the prefix is canonical before pushing the policy through CI.
