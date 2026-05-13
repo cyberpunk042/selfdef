@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 audit kickoff
+
+The Phase-1 audit ran through PR #42; every blocker / important / SDD-debt closed during this session. Phase 2 picks up where Phase 1 left off: same methodology (seven explorers, F-NNNN findings, SDDs where the fix is design-shaped), audited against the new surface shipped post-Phase-1 (18 PRs, 1 new crate, 6 new operator-side CLI verbs, ~80 new tests).
+
+#### New documents under `docs/review/phase-2/`
+
+- **`00-charter.md`** — why Phase 2 now, what changed since Phase 1 closeout, scope of this Phase (7 explorers' worth), out-of-scope items deferred to Phase 3, methodology, naming convention. Phase 2 findings use the `F-2027-NNN` prefix; the `2026` prefix is reserved for Phase 1 entries (all closed).
+
+- **`10-inventory.md`** — structured inventory of what's been added since Phase 1: the new `selfdef-signing` crate, 6 new CLI subcommands (`init`, `doctor`, `events follow`, `keys verify`, `api rotate-token`, `rbac check`), daemon-side machinery (SIGUSR2 token reload, opt-in signed-rule gate, eventstream integrity gate), module-side machinery (shared-lib v2, tetragon `require_signed_policies`, vpn-bridge per-profile instanced), six new operator runbooks under `docs/dev/`, ~80 new tests.
+
+- **`20-recent-prs-audit.md`** — companion to Phase 1's `70-recent-prs-audit.md`. Walks the 18 post-Phase-1 PRs, flags 10 observations (mostly ergonomic nits in the new code).
+
+- **`99-findings-ledger.md`** — Phase 2's findings ledger. Opens with the 10 observations from the recent-PRs explorer triaged into 0 blockers, 2 important, 7 nice, 1 SDD-debt. Numbering: `F-2027-NNN`.
+
+#### Initial findings (10 entries, recent-PRs explorer only)
+
+- **2 important**:
+  - `F-2027-003` — eventstream euid reader returns 0 silently on `/proc` failure (integrity check degrades without notice).
+  - `F-2027-008` — `selfdefctl doctor`'s rbac category emits a `warn:` pointer even when nothing is wrong (warn count inflates the summary).
+
+- **7 nice**: ergonomic improvements across the new operator-facing verbs (rbac probe subject list, init starter template, signing rotation, etc).
+
+- **1 SDD-debt**: `F-2027-010` — `events follow` UNIX-socket-only design needs a TCP transport design doc.
+
+#### What comes next
+
+The remaining six explorers (crate, module, integration, docs, tests, security) run in follow-up PRs. Phase 2 closes when every important / blocker has either a "closed by <PR>" back-reference or a tracked SDD.
+
+`cargo fmt --all -- --check` clean (no Rust touched).
+
 ### Added — `selfdefctl events follow` (live tail)
 
 Live-tails events from the daemon's `/events/stream` SSE endpoint over a UNIX socket. Pairs with `events tail` (which reads the SQLite store for historical context) — together they cover both "what's happening right now?" and "what just happened?".
