@@ -6,6 +6,51 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — selfdef-signing API surface (closes F-2027-011 + F-2027-012 + F-2027-013)
+
+Third and last of the follow-up cluster PRs the Phase 2 crate explorer recommended. Closes the three findings the explorer raised against `selfdef-signing`. After this PR, **the crate-explorer backlog is fully drained** — every blocker, important, and nice finding from Phase 2's first two explorers is closed.
+
+#### F-2027-012 — `SigningError::Io` split into typed variants per call site
+
+The unhelpful `Io(#[from] std::io::Error)` variant is gone. In its place, three typed variants — one per call site — each carrying `{ path: PathBuf, source: std::io::Error }`:
+
+- `ReadPublicKey { path, source }` — io failure reading the `.pub` file at `Verifier::load`.
+- `ReadTarget { path, source }` — io failure reading the signed target (`<rule>.yml`) at `Verifier::verify_detached_file`.
+- `ReadSignature { path, source }` — io failure reading the sidecar (`<rule>.yml.minisig`) at `Verifier::verify_detached_file`. Distinct from `MissingSignature` (sidecar doesn't exist) — `ReadSignature` fires for permission-denied / read-error cases, which are operator-actionable in a different way.
+
+Display impls surface the path directly so `tracing::warn!(error = %e, ...)` lines are self-describing:
+
+```
+reading public key /etc/selfdef/keys/policy.pub: No such file or directory (os error 2)
+```
+
+#### F-2027-011 + F-2027-013 — public helpers surfaced in the crate `//!`
+
+`SIGNATURE_SUFFIX` and `signature_path_for` are kept `pub` (operators / tooling enumerating expected sig files have a use for them), but the crate `//!` header now has an explicit **"Public helpers"** section listing both with usage guidance:
+
+- `signature_path_for` — prefer for path construction from a target.
+- `SIGNATURE_SUFFIX` — bare `".minisig"` constant for shell-out filtering / directory walkers.
+
+The header also gains an **"Error model"** section pointing at the F-2027-012 variant-per-failure-site contract.
+
+#### Tests
+
+`crates/selfdef-signing/src/lib.rs` `#[cfg(test)]` block (+3 new cases, 12 total):
+
+- `load_missing_pubkey_path_yields_read_public_key_variant` — `Verifier::load` on a non-existent file returns the typed `ReadPublicKey { path, source }` with `ErrorKind::NotFound`.
+- `verify_missing_target_path_yields_read_target_variant` — a present sidecar with a missing target yields `ReadTarget`.
+- `signing_error_display_carries_path` — sanity-check that `format!("{e}")` surfaces the path (otherwise tracing logs would be content-free).
+
+Existing 9 tests still pass — the `Io` variant rename is the only breaking change and there were no callers depending on it.
+
+#### Phase 2 status after this PR
+
+21 findings raised across 2 explorers. **18 nice (all closed)**, **1 SDD-debt open** (F-2027-010 — `events follow` TCP transport, awaiting design), **2 important (closed)**, **0 blockers**.
+
+The recent-PRs explorer's and the crate explorer's full backlogs are now drained at the actionable tiers. **Five explorers remain** (module, integration, docs, tests, security) — each will run in follow-up PRs and add more findings.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` all clean.
+
 ### Fixed — Phase 2 CLI / api ergonomics (closes F-2027-014..018)
 
 Second of three follow-up cluster PRs the Phase 2 crate explorer recommended. Five small fixes across `selfdef-api` and `selfdef-cli`; they didn't cluster on a single theme (auth guardrail, doc passes, error-message clarity, path-constant consolidation, env-var docs) but they did cluster on scope: each touches one or two files and ships in one PR.

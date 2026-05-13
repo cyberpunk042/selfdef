@@ -24,12 +24,33 @@
 //! ```
 //!
 //! The daemon loads the public key once at startup, then for each
-//! rule file calls [`verify_detached_file`] which reads the
-//! sibling `<rule>.minisig` and verifies.
+//! rule file calls [`Verifier::verify_detached_file`] which reads
+//! the sibling `<rule>.minisig` and verifies.
 //!
 //! Disabled by default; turn on via the daemon's
 //! `[security].require_signed_rules = true` (see
 //! `selfdef-config::SecurityConfig`).
+//!
+//! ## Public helpers (F-2027-011 + F-2027-013)
+//!
+//! Two helpers exist for tooling that enumerates expected sig
+//! files without going through the verifier:
+//!
+//! - [`signature_path_for`] — given a target path, returns the
+//!   expected `<target>.minisig` path. Use this anywhere you want
+//!   to predict the sidecar location (e.g. an installer that
+//!   needs to copy both files into place).
+//! - [`SIGNATURE_SUFFIX`] — the bare `".minisig"` constant.
+//!   Useful for `find -name "*.minisig"` shell-outs or directory
+//!   walkers that filter by extension. Prefer
+//!   [`signature_path_for`] when constructing paths from a target.
+//!
+//! ## Error model (F-2027-012)
+//!
+//! [`SigningError`] is variant-per-failure-site: each io error
+//! carries the path that triggered it. Callers (logging, doctor,
+//! the daemon's startup) can identify exactly which file was
+//! responsible without scraping a generic `io: …` message.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc)]
@@ -46,8 +67,37 @@ pub const SIGNATURE_SUFFIX: &str = ".minisig";
 
 #[derive(Debug, Error)]
 pub enum SigningError {
-    #[error("io: {0}")]
-    Io(#[from] std::io::Error),
+    /// F-2027-012: io failure reading the public-key file at
+    /// [`Verifier::load`]. The path is included so callers can
+    /// identify which key file was the problem.
+    #[error("reading public key {path}: {source}")]
+    ReadPublicKey {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// F-2027-012: io failure reading the target file
+    /// (`<rule>.yml`) at
+    /// [`Verifier::verify_detached_file`].
+    #[error("reading signed target {path}: {source}")]
+    ReadTarget {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// F-2027-012: io failure reading the signature sidecar
+    /// (`<rule>.yml.minisig`) at
+    /// [`Verifier::verify_detached_file`]. Distinct from
+    /// [`MissingSignature`](SigningError::MissingSignature) —
+    /// which fires when the sidecar simply doesn't exist —
+    /// because permission-denied / read-error cases are operator-
+    /// actionable in a different way.
+    #[error("reading signature file {path}: {source}")]
+    ReadSignature {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("public key file {path} unreadable or malformed: {reason}")]
     BadPublicKey { path: PathBuf, reason: String },
     #[error("signature file {path} is missing — operator must sign with `minisign -S -m {target}`")]
@@ -84,7 +134,10 @@ impl Verifier {
     /// errors are returned as [`SigningError::BadPublicKey`].
     pub fn load(path: impl AsRef<Path>) -> Result<Self, SigningError> {
         let path = path.as_ref();
-        let body = std::fs::read_to_string(path).map_err(SigningError::Io)?;
+        let body = std::fs::read_to_string(path).map_err(|source| SigningError::ReadPublicKey {
+            path: path.to_path_buf(),
+            source,
+        })?;
         // minisign's .pub file has a comment header on line 1 and
         // the base64 key on line 2. Pick whichever non-empty line
         // looks like base64.
@@ -124,8 +177,16 @@ impl Verifier {
                 target: target_path.to_path_buf(),
             });
         }
-        let target_bytes = std::fs::read(target_path).map_err(SigningError::Io)?;
-        let sig_str = std::fs::read_to_string(&sig_path).map_err(SigningError::Io)?;
+        let target_bytes =
+            std::fs::read(target_path).map_err(|source| SigningError::ReadTarget {
+                path: target_path.to_path_buf(),
+                source,
+            })?;
+        let sig_str =
+            std::fs::read_to_string(&sig_path).map_err(|source| SigningError::ReadSignature {
+                path: sig_path.clone(),
+                source,
+            })?;
         let signature = minisign_verify::Signature::decode(&sig_str).map_err(|e| {
             SigningError::BadSignature {
                 path: sig_path.clone(),
@@ -309,6 +370,63 @@ mod tests {
         assert_eq!(
             signature_path_for(Path::new("/etc/selfdef/rules/foo.yml")),
             PathBuf::from("/etc/selfdef/rules/foo.yml.minisig"),
+        );
+    }
+
+    #[test]
+    fn load_missing_pubkey_path_yields_read_public_key_variant() {
+        // F-2027-012: io errors on the pubkey-load side surface as
+        // ReadPublicKey { path, source }, not a generic Io(_). The
+        // path lets callers identify which key file was the issue.
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("does-not-exist.pub");
+        let err = Verifier::load(&missing).unwrap_err();
+        match err {
+            SigningError::ReadPublicKey { path, source } => {
+                assert_eq!(path, missing);
+                assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected ReadPublicKey, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_missing_target_path_yields_read_target_variant() {
+        // F-2027-012: a present `.minisig` sidecar but a missing
+        // target file should report which file was missing via
+        // ReadTarget. Doctor / logging can then point operators
+        // at the right thing.
+        let dir = tempfile::tempdir().unwrap();
+        let (pub_path, sk) = fresh_keypair(dir.path());
+        let target = dir.path().join("rule.yml");
+        std::fs::write(&target, b"title: x\n").unwrap();
+        sign_file(&sk, &target);
+        // Remove the target but leave the .minisig behind.
+        std::fs::remove_file(&target).unwrap();
+
+        let v = Verifier::load(&pub_path).unwrap();
+        let err = v.verify_detached_file(&target).unwrap_err();
+        match err {
+            SigningError::ReadTarget { path, source } => {
+                assert_eq!(path, target);
+                assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected ReadTarget, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn signing_error_display_carries_path() {
+        // F-2027-012: thiserror's Display impl on the new variants
+        // must surface the path. Doctor logs and the daemon's
+        // tracing both rely on `{e}` rendering self-describing.
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("ghost.pub");
+        let err = Verifier::load(&missing).unwrap_err();
+        let rendered = format!("{err}");
+        assert!(
+            rendered.contains(missing.to_str().unwrap()),
+            "Display should surface the path; got: {rendered}",
         );
     }
 }

@@ -4,8 +4,9 @@
 > recent-PRs (10 findings, all closed except 1 SDD-debt) and
 > crate (11 findings, all open `nice`). Five explorers remain
 > (module, integration, docs, tests, security).
-> Last updated: 2026-05-13 (Phase 2 CLI/api-ergonomics PR —
-> closes F-2027-014 through F-2027-018).
+> Last updated: 2026-05-13 (Phase 2 selfdef-signing API-surface
+> PR — closes F-2027-011 + F-2027-012 + F-2027-013; crate
+> explorer backlog fully drained).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -33,7 +34,7 @@ None.
 | F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 
-## Nice findings (18 — 15 closed, 3 open)
+## Nice findings (18 — 18 closed, 0 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -44,9 +45,9 @@ None.
 | F-2027-006 | nice | `modules/tetragon/install/apply.sh` | Spawns `selfdefctl keys verify` once per policy file (N spawns for N policies). | implement — **closed** by Phase 2 nice-cluster PR (new `selfdefctl keys verify-dir <dir>` verb; tetragon apply.sh + check.sh both batched to one invocation). |
 | F-2027-007 | nice | `selfdefctl rbac check --probe` | Built-in subject set is `system:authenticated` + `system:unauthenticated` only; common mistakes (`system:masters`, default ServiceAccount) aren't probed. | implement — **closed** by Phase 2 nice-cluster PR (built-in set now also probes `system:masters` and `system:serviceaccount:default:default`; `--as` still composes on top). |
 | F-2027-009 | nice | `selfdefctl init` `STARTER_CONFIG` | Template doesn't show a `[notifier.ntfy]` example; operators discover the shape only in `/usr/share/selfdef/selfdef.toml.example`. | doc — **closed** by Phase 2 nice-cluster PR (commented `[notifier.ntfy]` stanza embedded in the starter). |
-| F-2027-011 | nice | `selfdef-signing::SIGNATURE_SUFFIX` + `signature_path_for` | Both are `pub` but no external caller exists; tests build the `.minisig` path by hand. Either deprecate or surface in the crate `//!`. | implement |
-| F-2027-012 | nice | `selfdef-signing::SigningError::Io` | `#[from] io::Error` loses the path the io call was against; sibling variants (`BadPublicKey`, `BadSignature`) carry full context. | implement — split into `Io { path, source }` per call site. |
-| F-2027-013 | nice | `selfdef-signing` crate `//!` header | Walks operator through `minisign -G`/`-S` + daemon load path but doesn't mention the `signature_path_for` / `SIGNATURE_SUFFIX` public helpers. | doc — depends on the C2-001 decision. |
+| F-2027-011 | nice | `selfdef-signing::SIGNATURE_SUFFIX` + `signature_path_for` | Both are `pub` but no external caller exists; tests build the `.minisig` path by hand. Either deprecate or surface in the crate `//!`. | doc — **closed** by Phase 2 selfdef-signing API-surface PR (kept `pub` and surfaced in the crate `//!` "Public helpers" section, with usage guidance: `signature_path_for` for path construction, `SIGNATURE_SUFFIX` for shell-out filtering). |
+| F-2027-012 | nice | `selfdef-signing::SigningError::Io` | `#[from] io::Error` loses the path the io call was against; sibling variants (`BadPublicKey`, `BadSignature`) carry full context. | implement — **closed** by Phase 2 selfdef-signing API-surface PR (the `Io(#[from])` variant is gone; replaced by three typed variants `ReadPublicKey`, `ReadTarget`, `ReadSignature`, each carrying `{ path, source }`). |
+| F-2027-013 | nice | `selfdef-signing` crate `//!` header | Walks operator through `minisign -G`/`-S` + daemon load path but doesn't mention the `signature_path_for` / `SIGNATURE_SUFFIX` public helpers. | doc — **closed** by Phase 2 selfdef-signing API-surface PR (new "Public helpers" + "Error model" sections in the `//!`). |
 | F-2027-014 | nice | `selfdef-api::with_full_capability` | `pub fn` documented as "test-only convenience" but reachable from any consumer; rename or feature-gate to prevent silent auth-bypass via misuse. | implement — **closed** by Phase 2 CLI/api-ergonomics PR (helper now gated behind `test-helpers` Cargo feature; release builds elide it; integration tests enable the feature via a circular dev-dep). |
 | F-2027-015 | nice | `selfdef-api::metrics::{run_ingest, Metrics::*}` | Re-exported as `run_metrics_ingest` with zero rustdoc; gating contract ("only spawn when API is enabled") lives in the daemon's wire-up comment, not the signature. | doc — **closed** by Phase 2 CLI/api-ergonomics PR (`run_ingest` doc now states the api-enabled gate contract + the lag-accounting semantics inline). |
 | F-2027-016 | nice | `selfdef-api::ApiServer::run` `NoTransport` error | Same error for "api enabled but no transport set" and "api disabled"; operator-facing message could distinguish. | implement — **closed** by Phase 2 CLI/api-ergonomics PR (error message now spells out exactly which TOML keys to set or which to flip false). |
@@ -66,11 +67,12 @@ None.
 
 - **21 findings raised** across two explorers (recent-PRs: 10;
   crate: 11).
-- **0 blockers**, **2 important (both closed)**, **18 nice
-  (15 closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
-- Of the crate explorer's 11 entries, only the selfdef-signing
-  API-surface cluster (F-2027-011 + F-2027-012 + F-2027-013)
-  remains open; that's the next follow-up PR.
+- **0 blockers**, **2 important (both closed)**, **18 nice (all
+  closed)**, **1 SDD-debt (F-2027-010 open)**.
+- **Both explorers run so far are fully drained** at the
+  blocker/important/nice tiers. The only remaining open Phase 2
+  finding is F-2027-010 (SDD-debt — `events follow` TCP
+  transport), waiting on a design decision.
 - Five explorers remain (module, integration, docs, tests,
   security). Each will add more findings in follow-up PRs.
 
