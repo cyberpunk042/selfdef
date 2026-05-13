@@ -318,10 +318,20 @@ async fn main() -> Result<()> {
     }
 
     if cfg.collectors.eventstream.enabled {
-        use selfdef_collector_eventstream::{EventstreamCollector, ReadFrom as EReadFrom};
+        use selfdef_collector_eventstream::{
+            EventstreamCollector, IntegrityCheck, ReadFrom as EReadFrom,
+        };
         let read_from = EReadFrom::parse(&cfg.collectors.eventstream.read_from);
+        // SDD-004 F-2026-026 follow-up: build the integrity check
+        // once and clone it per path. Disabled by default so
+        // operator-owned emitter paths keep working unchanged.
+        let integrity = IntegrityCheck {
+            enabled: cfg.collectors.eventstream.integrity_check,
+            allowed_owners: cfg.collectors.eventstream.allowed_owners.clone(),
+        };
         for path in cfg.collectors.eventstream.paths.clone() {
-            let coll = EventstreamCollector::new(path.clone(), read_from, publisher.clone());
+            let coll = EventstreamCollector::new(path.clone(), read_from, publisher.clone())
+                .with_integrity_check(integrity.clone());
             let sd = shutdown.clone();
             let h = tokio::spawn(async move {
                 if let Err(e) = coll.run(sd).await {
@@ -332,6 +342,7 @@ async fn main() -> Result<()> {
         }
         info!(
             count = cfg.collectors.eventstream.paths.len(),
+            integrity_check = cfg.collectors.eventstream.integrity_check,
             "eventstream collector(s) enabled"
         );
     }

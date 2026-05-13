@@ -134,6 +134,24 @@ paths = []
 #   "/var/lib/selfdef/eventstream/integrity-sentinel.jsonl",
 # ]
 
+# SDD-004 F-2026-026 follow-up: opt-in parse-time integrity
+# check. When `true`, the collector refuses to tail any path
+# that is world-writable or owned by a UID outside
+# {daemon-effective-uid, root} ∪ allowed_owners. Disabled by
+# default so the operator-owned shell-wrapper emitter
+# (~/.local/share/selfdef/ssh-wrap.jsonl) keeps working without
+# extra config. Turn on once the hardening checklist's
+# `0750 selfdef:selfdef` posture is in place on the
+# /var/lib/selfdef/eventstream/ tree.
+integrity_check = false
+# Additional UIDs accepted as a writer when integrity_check is
+# true. Empty = daemon-effective-uid + root only. Add the
+# UID of any deliberate operator-owned emitter here.
+allowed_owners = []
+# Example with operator-owned ssh-wrap emitter (uid 1000):
+# integrity_check = true
+# allowed_owners = [1000]
+
 [collectors.ebpf]
 # Native in-kernel collection via aya. Requires the BPF object compiled
 # and installed (see docs/ebpf.md) and the systemd ebpf.conf drop-in.

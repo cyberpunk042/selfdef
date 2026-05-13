@@ -181,9 +181,16 @@ This block is intentionally short — copy it into your deployment runbook.
   pollute the multi-host NATS bridge via `host_tag` spoofing.
   The mitigation is filesystem-level: daemon-owned paths
   must be `0750 selfdef:selfdef`; operator-owned paths
-  inherit that operator's trust posture. A daemon-side
-  ownership / mode check at parse time is tracked under
-  SDD-004 follow-up.
+  inherit that operator's trust posture. An **opt-in**
+  parse-time integrity check shipped as the F-2026-026
+  follow-up — set `[collectors.eventstream].integrity_check = true`
+  and the daemon refuses to tail any path that is
+  world-writable or owned by a UID outside
+  `{daemon-effective-uid, root} ∪ allowed_owners`. Disabled
+  by default to preserve operator-owned emitters
+  (`~/.local/share/selfdef/ssh-wrap.jsonl`); turn on when the
+  hardening checklist's `0750 selfdef:selfdef` posture is
+  in place.
 - **Metrics uptime side channel (F-2026-066).** The
   `selfdef_uptime_seconds` counter on `/metrics` lets a
   scraper observe daemon restarts. An attacker who can
