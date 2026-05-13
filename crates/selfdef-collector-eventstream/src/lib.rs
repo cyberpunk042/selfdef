@@ -48,6 +48,16 @@ pub enum EventstreamError {
     /// the integrity check (ownership / mode mismatch).
     #[error("integrity-check refused path {path}: {reason}")]
     IntegrityRefused { path: PathBuf, reason: &'static str },
+    /// F-2027-035: the configured path is (or became) a symlink.
+    /// The integrity check uses `O_NOFOLLOW` so symlinks are never
+    /// resolved — the operator must point at a regular file
+    /// directly. Captured as its own variant because the operator-
+    /// facing remediation is different from generic
+    /// `IntegrityRefused` (rewrite the path vs. fix perms).
+    #[error(
+        "integrity-check refused symlink {path}: re-point [collectors.eventstream].paths at the real file, not a symlink"
+    )]
+    IntegritySymlink { path: PathBuf },
 }
 
 /// SDD-004 F-2026-026 follow-up: opt-in integrity check for
@@ -93,11 +103,25 @@ impl EventstreamCollector {
         info!(path = %self.input_path.display(), "eventstream collector starting");
         wait_for_file(&self.input_path, &shutdown).await;
 
-        if self.integrity.enabled {
-            check_path_integrity(&self.input_path, &self.integrity)?;
-        }
-
-        let mut file = tokio::fs::File::open(&self.input_path).await?;
+        // F-2027-035: open and integrity-check in a single
+        // syscall sequence. The pre-fix code stat'd the path,
+        // then opened it — leaving a TOCTOU window an attacker
+        // could exploit by renaming a symlink in between. The
+        // new sequence opens with `O_NOFOLLOW` (rejects symlinks
+        // up front) and then fstats the returned FD — the
+        // metadata is locked to the inode we'll actually read
+        // from, so a post-open replacement on disk can't change
+        // what we validated. The opened file is moved into the
+        // tokio runtime below.
+        let std_file = if self.integrity.enabled {
+            open_with_integrity_check(&self.input_path, &self.integrity)?
+        } else {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .open(&self.input_path)
+                .map_err(EventstreamError::Io)?
+        };
+        let mut file = tokio::fs::File::from_std(std_file);
         if self.read_from == ReadFrom::End {
             file.seek(std::io::SeekFrom::End(0)).await?;
         }
@@ -129,13 +153,80 @@ impl EventstreamCollector {
     }
 }
 
-/// SDD-004 F-2026-026 follow-up: stat the path and refuse to
-/// tail it if the file is world-writable or the owner UID isn't
-/// in the daemon-allowed set. Only invoked when the operator
-/// opted into `[collectors.eventstream].integrity_check = true`.
-fn check_path_integrity(path: &Path, check: &IntegrityCheck) -> Result<(), EventstreamError> {
-    use std::os::unix::fs::MetadataExt;
-    let md = std::fs::metadata(path).map_err(EventstreamError::Io)?;
+/// F-2027-035: open the file with `O_NOFOLLOW`, fstat the
+/// returned FD, validate ownership + mode against the operator-
+/// configured rules, and return the opened file ready for the
+/// reader to consume.
+///
+/// Why open-then-fstat instead of the pre-fix stat-then-open:
+///
+/// 1. **`O_NOFOLLOW`** — if the path is a symlink, `open(2)`
+///    returns `ELOOP`. Translated into
+///    [`EventstreamError::IntegritySymlink`] so operators see
+///    a remediation message that points them at the real file.
+///    Pre-fix code used [`std::fs::metadata`] (which is `stat`,
+///    not `lstat`) and silently followed symlinks.
+/// 2. **fstat on the FD** — the metadata returned by
+///    [`std::fs::File::metadata`] reads from the open FD, not
+///    a fresh path lookup. A post-open replacement on disk
+///    (mv, ln -sf, unlink+create) doesn't affect what we
+///    validated. Pre-fix code stat'd the path, then opened it,
+///    leaving a TOCTOU window during which a local attacker
+///    could swap in a different file.
+/// 3. **Single error path** — if either step fails, the FD is
+///    dropped (closed) on return, so an integrity refusal can't
+///    leak a partially-opened handle to the reader.
+fn open_with_integrity_check(
+    path: &Path,
+    check: &IntegrityCheck,
+) -> Result<std::fs::File, EventstreamError> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+
+    // O_NOFOLLOW = 0x20000 on Linux glibc / musl. The constant
+    // is stable Linux ABI; pulling in libc as a dep for a
+    // single integer would be heavy. (uapi/asm-generic/fcntl.h:
+    // `#define O_NOFOLLOW 00400000` = 0x20000.)
+    //
+    // O_NONBLOCK is added so we can refuse fifos / sockets via
+    // fstat without blocking on the open call (an `open(fifo,
+    // O_RDONLY)` would otherwise wait for a writer indefinitely).
+    // For regular files O_NONBLOCK is a no-op; for fifos it
+    // lets us open + fstat + refuse cleanly.
+    // (uapi/asm-generic/fcntl.h: `#define O_NONBLOCK 04000` = 0x800.)
+    const O_NOFOLLOW: i32 = 0x20000;
+    const O_NONBLOCK: i32 = 0x800;
+
+    let file = match std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(O_NOFOLLOW | O_NONBLOCK)
+        .open(path)
+    {
+        Ok(f) => f,
+        Err(e) if matches!(e.raw_os_error(), Some(libc_eloop) if libc_eloop == 40) => {
+            // ELOOP == 40 on Linux. Surfaced as a typed variant
+            // so the operator-facing message is actionable
+            // (rewrite the path) rather than the generic
+            // "Too many levels of symbolic links".
+            return Err(EventstreamError::IntegritySymlink {
+                path: path.to_path_buf(),
+            });
+        }
+        Err(e) => return Err(EventstreamError::Io(e)),
+    };
+
+    let md = file.metadata().map_err(EventstreamError::Io)?;
+
+    // Refuse anything that isn't a plain regular file — defense
+    // in depth against, e.g., a fifo or device node at the
+    // configured path (O_NOFOLLOW catches symlinks but not
+    // these).
+    if !md.is_file() {
+        return Err(EventstreamError::IntegrityRefused {
+            path: path.to_path_buf(),
+            reason: "not a regular file (fifo, socket, device, or directory)",
+        });
+    }
+
     let mode = md.mode();
     if mode & 0o002 != 0 {
         return Err(EventstreamError::IntegrityRefused {
@@ -143,6 +234,7 @@ fn check_path_integrity(path: &Path, check: &IntegrityCheck) -> Result<(), Event
             reason: "world-writable (mode & 0o002 != 0)",
         });
     }
+
     let owner = md.uid();
     // F-2027-003: read the daemon's effective UID for the
     // owner-match check. The pre-fix `unsafe_geteuid` silently
@@ -169,7 +261,7 @@ fn check_path_integrity(path: &Path, check: &IntegrityCheck) -> Result<(), Event
             reason: "owner uid not in allowed set (daemon-effective-uid, root, or [collectors.eventstream].allowed_owners)",
         });
     }
-    Ok(())
+    Ok(file)
 }
 
 /// libc geteuid wrapper. The selfdef workspace lint forbids
@@ -230,7 +322,7 @@ mod tests {
             enabled: true,
             allowed_owners: vec![],
         };
-        let err = check_path_integrity(file.path(), &check)
+        let err = open_with_integrity_check(file.path(), &check)
             .expect_err("world-writable file must be refused");
         match err {
             EventstreamError::IntegrityRefused { reason, .. } => {
@@ -248,7 +340,9 @@ mod tests {
         // The test runs as the CI user (often UID 0 or a build
         // user); either way the file is created with that UID
         // and the check should accept it because the file's
-        // owner == effective UID.
+        // owner == effective UID. F-2027-035: the function now
+        // returns the opened File handle on success — we drop
+        // it immediately, which closes the FD.
         let file = NamedTempFile::new().unwrap();
         let mut perms = std::fs::metadata(file.path()).unwrap().permissions();
         perms.set_mode(0o644);
@@ -257,7 +351,8 @@ mod tests {
             enabled: true,
             allowed_owners: vec![],
         };
-        check_path_integrity(file.path(), &check).expect("daemon-owned file must be accepted");
+        let _opened = open_with_integrity_check(file.path(), &check)
+            .expect("daemon-owned file must be accepted");
     }
 
     #[test]
@@ -279,7 +374,78 @@ mod tests {
             enabled: true,
             allowed_owners: vec![owner.saturating_add(1), owner],
         };
-        check_path_integrity(file.path(), &check).expect("allowlisted owner must be accepted");
+        let _opened = open_with_integrity_check(file.path(), &check)
+            .expect("allowlisted owner must be accepted");
+    }
+
+    #[test]
+    fn integrity_check_refuses_symlink() {
+        // F-2027-035: the pre-fix code used std::fs::metadata
+        // (which is stat, not lstat), so a symlink pointing at
+        // a daemon-owned file would silently pass the check;
+        // the collector then read attacker-controlled data
+        // through the symlink. Now: O_NOFOLLOW on the open(2)
+        // call yields ELOOP, surfaced as IntegritySymlink.
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("real.jsonl");
+        std::fs::write(&target, b"original\n").unwrap();
+        let link = dir.path().join("via-symlink.jsonl");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+
+        let check = IntegrityCheck {
+            enabled: true,
+            allowed_owners: vec![],
+        };
+        let err =
+            open_with_integrity_check(&link, &check).expect_err("symlink path must be refused");
+        match err {
+            EventstreamError::IntegritySymlink { path } => {
+                assert_eq!(path, link);
+            }
+            other => panic!("expected IntegritySymlink, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn integrity_check_refuses_non_regular_file() {
+        // F-2027-035: O_NOFOLLOW catches symlinks but not fifos,
+        // sockets, or device nodes. Defense-in-depth: the
+        // fstat'd metadata is_file() must be true.
+        //
+        // We pick the most common non-regular type that's cheap
+        // to create in user-space without privileges: a fifo
+        // (named pipe). The check refuses it.
+        let dir = tempfile::tempdir().unwrap();
+        let fifo = dir.path().join("pipe.fifo");
+        // mkfifo via the shell — selfdef-collector-eventstream
+        // doesn't carry a nix / rustix dep for this single call.
+        let status = std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .expect("spawn mkfifo");
+        if !status.success() {
+            // mkfifo isn't on PATH (busybox? minimal container?).
+            // Skip rather than fail — the property is observable
+            // in CI and the workspace-default host.
+            eprintln!("mkfifo unavailable; skipping non-regular-file test");
+            return;
+        }
+
+        let check = IntegrityCheck {
+            enabled: true,
+            allowed_owners: vec![],
+        };
+        let err = open_with_integrity_check(&fifo, &check)
+            .expect_err("fifo must be refused as non-regular");
+        match err {
+            EventstreamError::IntegrityRefused { reason, .. } => {
+                assert!(
+                    reason.contains("not a regular file"),
+                    "unexpected reason: {reason}",
+                );
+            }
+            other => panic!("expected IntegrityRefused (not regular), got: {other:?}"),
+        }
     }
 
     #[test]

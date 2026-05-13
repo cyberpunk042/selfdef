@@ -85,6 +85,17 @@ reference covering:
 6. **Optional**: rule signing (`docs/dev/signing.md`)
 7. **Optional**: API token rotation
 8. **Optional**: eventstream integrity
+   - The check is opt-in via `[collectors.eventstream].integrity_check = true`.
+   - F-2027-035: the check now opens with `O_NOFOLLOW` (refuses symlinks)
+     and fstats the returned FD (closes the stat-then-open TOCTOU window).
+     Point `paths` at the real file, not a symlink.
+   - F-2027-036: the check runs **once at collector startup** against
+     the FD. If a daily `logrotate` replaces the file post-startup,
+     the collector keeps reading the rotated-out file via the held
+     FD; ownership / mode drift after startup is **not** re-validated.
+     Restart the daemon after a rotation cycle if you want the check
+     to re-assert on the new file. The daemon's SIGHUP / SIGUSR2
+     handlers don't re-run collector setup today.
 9. **Optional**: TracingPolicy signing
 10. **Optional**: agent-guard pod-label RBAC (`docs/dev/rbac-posture.md`)
 11. Periodic health check via systemd timer

@@ -6,6 +6,47 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — eventstream collector: TOCTOU + symlink hardening (closes F-2027-035 + F-2027-036)
+
+Closes Phase 2's only open important finding. The opt-in `[collectors.eventstream].integrity_check = true` contract is now defeatable-only-by-kernel-bug instead of defeatable-by-local-attacker.
+
+#### F-2027-035 — TOCTOU and symlink-follow gap
+
+`check_path_integrity` previously did `std::fs::metadata(path)` (a `stat`, which follows symlinks) and then `tokio::fs::File::open(path)` (which also follows symlinks). Two attack vectors:
+
+1. **Symlink**: a non-root operator who could write the configured path could point it at a symlink targeting a daemon-owned file; the check passed against the target's metadata, then the collector read from a target the operator controlled.
+2. **TOCTOU**: between the stat and the open, a local attacker could rename the file in-place (atomic for symlinks). The validated metadata no longer matched what the open returned.
+
+The fix: a single-syscall-sequence rewrite. The function is renamed `open_with_integrity_check` and:
+
+1. Opens the file with `OpenOptions::new().read(true).custom_flags(O_NOFOLLOW)`. Symlinks fail open with `ELOOP`, surfaced as a new `EventstreamError::IntegritySymlink` variant whose Display message tells the operator to repoint `[collectors.eventstream].paths` at the real file.
+2. Calls `file.metadata()` (which is `fstat` on the returned FD, not a fresh path lookup). The validated metadata is locked to the inode the reader will consume — no TOCTOU window.
+3. Refuses non-regular files (`is_file() == false` → fifos, sockets, device nodes) — `O_NOFOLLOW` catches symlinks but not these.
+4. Returns the opened `std::fs::File` on success; the caller threads it into `tokio::fs::File::from_std` so there's only one open syscall. On any failure the FD is dropped (closed), so a partially-opened handle can't leak to the reader.
+
+Caveat: the workspace lints `unsafe_code = "forbid"` and doesn't carry a `libc` dep, so the `O_NOFOLLOW` value is hard-coded as the Linux ABI constant (0x20000, from `uapi/asm-generic/fcntl.h`). Same with `ELOOP == 40` for the typed-error branch. Both are stable Linux ABI; pulling in `libc` for two integers would be heavy.
+
+#### F-2027-036 — post-startup drift doc warning
+
+The check runs once at collector startup, against the opened FD. A daily `logrotate` that replaces the file post-startup doesn't trigger a re-check — the collector keeps reading the rotated-out file via the held FD, and ownership / mode drift on the new file goes unvalidated. The SIGHUP / SIGUSR2 handlers don't re-run collector setup today.
+
+`docs/dev/first-run.md` § "Optional: eventstream integrity" now spells this out, including the operator workaround: restart the daemon after a rotation cycle if you want the check to re-assert.
+
+#### Tests
+
+`crates/selfdef-collector-eventstream/src/lib.rs` `#[cfg(test)]` block (+2 new cases):
+
+- `integrity_check_refuses_symlink` — creates a symlink pointing at a daemon-owned regular file; the pre-fix code would silently pass; the new code returns `IntegritySymlink { path }`.
+- `integrity_check_refuses_non_regular_file` — creates a fifo via `mkfifo`; the check refuses with `IntegrityRefused { reason: "not a regular file …" }`. Falls back gracefully if `mkfifo` isn't on PATH (busybox / minimal containers).
+
+The three pre-existing tests (`world_writable`, `daemon_owned`, `allowed_owner`) are kept and converted from `check_path_integrity` (returns `()`) to the new `open_with_integrity_check` (returns `File`). Same coverage, FD dropped immediately in the test on success.
+
+#### Phase 2 status after this PR
+
+36 findings across 4 explorers. **3 important (all closed)**, **32 nice (25 closed, 7 open)**, **0 blockers**, **1 SDD-debt open**. Three seam-1/-2/-3 clusters remain as nice follow-ups; three Phase 2 explorers remain (docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 integration explorer (raises F-2027-028 through F-2027-036)
 
 Fourth of Phase 2's seven explorers ships. Surveys the four post-Phase-1 seams called out in the charter: SSE writer ↔ CLI follow consumer, SIGUSR2 token-reload, minisign verify ↔ correlator load, and integrity check ↔ eventstream open.
