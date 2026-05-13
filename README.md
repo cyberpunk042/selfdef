@@ -5,11 +5,15 @@ A multi-layered host detection, deception, and response platform aimed at
 personal workstations, home servers, public VPSes, and AI-machine hosts
 running containerised agents.
 
-> **Status:** All milestones M1–M15 shipped. Nine modules ship in the
-> catalog (see [`docs/src/modules-roadmap.md`](docs/src/modules-roadmap.md)).
-> Phase 1 architecture audit at [`docs/review/`](docs/review/) lists
-> the open issues; SDDs at [`docs/sdd/`](docs/sdd/) carry the design
-> work for each blocker.
+> **Status:** All milestones M1–M16 plus the AI-machine track shipped.
+> The Phase 1 architecture audit closeout is complete — every Phase-1
+> blocker, important, and SDD-debt finding is closed or carries a
+> tracked follow-up that's now shipped (see
+> [`docs/review/99-findings-ledger.md`](docs/review/99-findings-ledger.md)).
+> Nine modules ship in the catalog; six audit-shipped opt-in security
+> features (rule signing, TracingPolicy signing, eventstream integrity,
+> API token hot-rotation, k8s RBAC posture check, vpn-bridge
+> multi-instance honesty) ship behind operator-controlled toggles.
 
 ## Goals
 
@@ -32,6 +36,29 @@ running containerised agents.
 Explicit non-goal: offensive action against attackers. Active deception
 (honeytokens, honey services) is in scope; hacking back is not, ever.
 
+## Operator quick-start
+
+`selfdefctl init` bootstraps a deployment; `selfdefctl doctor`
+verifies it.
+
+```sh
+# Day 0
+sudo selfdefctl init config              # writes /etc/selfdef/selfdef.toml
+sudo selfdefctl init modules             # writes /etc/selfdef/modules.toml
+sudo systemctl enable --now selfdefd
+sudo selfdefctl modules apply
+selfdefctl doctor
+
+# Day N
+selfdefctl doctor                        # after editing config or rotating keys
+```
+
+`selfdefctl init checklist` prints the full 11-step first-run
+runbook covering each opt-in security feature. See
+[`docs/dev/first-run.md`](docs/dev/first-run.md) for the
+walkthrough and [`docs/dev/operator-health-check.md`](docs/dev/operator-health-check.md)
+for the doctor reference.
+
 ## Module catalog
 
 | Slug | Category | Purpose |
@@ -40,16 +67,62 @@ Explicit non-goal: offensive action against attackers. Active deception
 | `bridge-l2` | network | Transparent L2 bridge + nftables FORWARD policy. Foundation for inline IDS / TLS-tap modules. |
 | `suricata` | network | Inline IDS via NFQUEUE or AF_PACKET copy-mode. |
 | `polarproxy` | network | TLS termination → PCAP-over-IP for content visibility. |
-| `vpn-bridge` | network | Remote-network connectivity: WireGuard relay, Tailscale, Cloudflare Tunnel. |
+| `vpn-bridge` | network | Remote-network connectivity: WireGuard relay (multi-instance), Tailscale, Cloudflare Tunnel. Per-profile `instanced` capability honestly declared (SDD-003). |
 | `integrity-sentinel` | hardening | SHA256 baseline + drift detection. Optional notifier emission. |
-| `tetragon` | hardening | Tetragon (Cilium eBPF) substrate: config, event JSONL, policy dir, `/metrics`. |
-| `agent-guard` | hardening | TracingPolicies for AI agents in containers (etc-write, shell-exec, egress, SecureMessage stub, GPU device). |
+| `tetragon` | hardening | Tetragon (Cilium eBPF) substrate: config, event JSONL, policy dir, `/metrics`. Optional `require_signed_policies = true` gates TracingPolicy loading. |
+| `agent-guard` | hardening | TracingPolicies for AI agents in containers (etc-write, shell-exec, egress, SecureMessage stub, GPU device). Pod-label scope honors k8s label RBAC (verify via `selfdefctl rbac check`). |
 | `observability` | observability | Prometheus scrape config + Grafana dashboard for the selfdef stack. |
 
-Activate modules in `/etc/selfdef/modules.toml`; manage with
-`selfdefctl modules {list,info,apply,check,status,uninstall}`.
-See [`docs/src/modules.md`](docs/src/modules.md) for the contract and
-[`docs/src/modules-roadmap.md`](docs/src/modules-roadmap.md) for status.
+Activate modules in `/etc/selfdef/modules.toml` (or use
+`selfdefctl init modules` to scaffold it). Manage with
+`selfdefctl modules {list,info,apply,check,status,uninstall,show-requires}`.
+
+## `selfdefctl` reference
+
+Every operator-facing verb:
+
+### Read-only
+
+| Verb | Purpose |
+| --- | --- |
+| `status` | Daemon status (event count, store path). |
+| `events {tail,alerts}` | Recent events / alerts from the hot store. |
+| `events emit` | Inject a hand-crafted event onto the eventstream JSONL (testing). |
+| `forensics list` | List forensic bundles. |
+| `modules {list,info,check,status,show-requires}` | Inspect modules + their daemon_requires. |
+| `version` | Build info. |
+
+### Lifecycle
+
+| Verb | Purpose |
+| --- | --- |
+| `init {config,modules,checklist}` | First-run bootstrap. Non-destructive (refuse-to-clobber unless `--force`). |
+| `modules apply` | Apply every active module's `install/apply.sh` in dependency order. |
+| `modules uninstall` | Reverse-order uninstall. Requires `--confirm <hostname>`. |
+| `rules {list,validate,test,lint,coverage}` | Detection-rule tooling. |
+| `forensics collect` | Manually collect a bundle for an event by id. |
+| `panic` | Trigger panic mode (lockdown). Requires `--confirm <hostname>`. |
+| `reload` | SIGHUP the daemon (rules reload). |
+
+### Security opt-ins (audit-shipped)
+
+| Verb | Closes | Purpose |
+| --- | --- | --- |
+| `keys verify <target>` | original "Rule signing" Known gap | Verify a detached minisign signature against a target file (rule, TracingPolicy). |
+| `api rotate-token` | SDD-004 F-2026-023 | Generate a fresh 32-byte API bearer token, write atomically to `[api].token_file` at mode 0600, optionally SIGUSR2 the daemon to reload. |
+| `rbac check [--probe]` | SDD-004 F-2026-025 | Verify k8s RBAC posture for agent-guard's `pod-label` scope. With `--probe`, shells out to `kubectl auth can-i`. |
+| `doctor [--json]` | post-audit synthesis | Cross-cutting health check: rule signing, API token mode, eventstream integrity, RBAC posture summary. |
+
+### Operator runbooks
+
+Every audit-shipped feature has a runbook under `docs/dev/`:
+
+- [`first-run.md`](docs/dev/first-run.md) — `init` family walkthrough.
+- [`operator-health-check.md`](docs/dev/operator-health-check.md) — `doctor` reference + systemd-timer integration.
+- [`signing.md`](docs/dev/signing.md) — rule + TracingPolicy signing (minisign).
+- [`rbac-posture.md`](docs/dev/rbac-posture.md) — k8s pod-label RBAC verification.
+- [`module-helpers.md`](docs/dev/module-helpers.md) — shared module-script library (`packaging/lib/module-lib.sh`).
+- [`test-contract.md`](docs/dev/test-contract.md) — what "integration-tested" means in this codebase.
 
 ## Layout
 
@@ -59,28 +132,33 @@ crates/                          One workspace, many focused crates.
   selfdef-config/                Layered config (TOML + env + CLI).
   selfdef-bus/                   Event bus abstraction.
   selfdef-store/                 SQLite (hot) + DuckDB (warm) storage.
-  selfdef-correlator/            Sigma rule engine.
+  selfdef-correlator/            Sigma rule engine (opt-in signed-rule verification).
+  selfdef-signing/               Minisign-compatible detached signature verification.
   selfdef-notifier/              ntfy, signal-cli sinks.
   selfdef-responder/             Action runners (lockdown, snapshot, etc.).
-  selfdef-api/                   Read-only HTTP API + /metrics + control verbs.
+  selfdef-api/                   Read-only HTTP API + /metrics + control verbs + token hot-rotation.
   selfdef-nats/                  Multi-host bridge over NATS / JetStream.
   selfdef-collector-auditd/      auditd → bus.
   selfdef-collector-journald/    journald → bus.
   selfdef-collector-tetragon/    Tetragon JSON → bus.
   selfdef-collector-suricata/    Suricata EVE → bus.
   selfdef-collector-canary/      Honeytoken file watch → bus.
-  selfdef-collector-eventstream/ External JSONL emitters (ssh-wrap, modules) → bus.
+  selfdef-collector-eventstream/ External JSONL emitters (ssh-wrap, modules) → bus. Opt-in integrity check.
   selfdef-collector-ebpf/        Native in-kernel collection via aya.
-  selfdef-cli/                   selfdefctl admin binary.
+  selfdef-cli/                   selfdefctl admin binary (init, doctor, modules, api, keys, rbac, …).
   selfdef-daemon/                selfdefd main binary.
   selfdef-ssh-wrap/              Drop-in ssh wrapper (client-side).
 
 modules/                         Install modules — operator-activatable units.
 rules/                           Detection-as-code (sigma, tetragon, yara).
-packaging/                       OS packaging artifacts (debian, systemd, apparmor).
+packaging/                       OS packaging artifacts (debian, systemd, apparmor, lib).
+  packaging/lib/module-lib.sh    Shared module-script library (SDD-006 v2).
 selfdef-ebpf/                    eBPF programs (aya). Separate build target.
 tests/                           Integration tests, replay corpora.
-docs/                            mdbook documentation + audit + SDD trees.
+docs/                            mdbook documentation + audit + SDD trees + dev runbooks.
+  docs/dev/                      Operator runbooks (signing, doctor, init, rbac, ...).
+  docs/sdd/                      Six Phase-1 SDDs (000-charter + 001..006); all implemented.
+  docs/review/                   Phase-1 audit (charter, inventory, ledger).
 ansible/                         Deployment playbooks.
 ```
 
@@ -98,6 +176,11 @@ cargo deb -p selfdef-daemon
 sudo dpkg -i target/debian/selfdef-daemon_*.deb
 sudo systemctl enable --now selfdefd
 selfdefctl status
+
+# Bootstrap config + run cross-cutting health check
+sudo selfdefctl init config
+sudo selfdefctl init modules
+selfdefctl doctor
 ```
 
 ## Development
@@ -130,16 +213,15 @@ cargo audit
 - [x] **M15** — NATS bridge for multi-host correlation.
 - [x] **M16** — `/metrics` Prometheus exposition on the daemon's API.
 - [x] **AI-machine track** — `tetragon` substrate + `agent-guard` policy bundle (5 policies, audit/enforce profiles, container or pod-label scope) + `observability` (Prometheus scrape + Grafana dashboard).
+- [x] **Phase-1 audit cycle** — architect/PM sweep across the codebase. Six SDDs (charter + 001..006) plus the cleanup PRs they implied. Every blocker, important, SDD-debt finding now closed or has a shipped follow-up. See [`docs/review/99-findings-ledger.md`](docs/review/99-findings-ledger.md).
+- [x] **Audit-shipped opt-ins** — rule signing (`selfdef-signing` crate), TracingPolicy signing (`tetragon` module), API token hot-rotation (`selfdefctl api rotate-token` + daemon SIGUSR2), eventstream integrity gate, k8s RBAC posture check, shared module-script library v2.
+- [x] **Operator lifecycle verbs** — `selfdefctl init {config,modules,checklist}` (bootstrap) and `selfdefctl doctor [--json]` (verification). Together: day-0 bootstrap → day-N health check, one verb each.
 
 ## Threat model
 
-See [SECURITY.md](SECURITY.md) — the daemon itself is a target.
+See [SECURITY.md](SECURITY.md) — the daemon itself is a target. SDD-004 ([`docs/sdd/004-security-threat-model.md`](docs/sdd/004-security-threat-model.md)) rewrote the threat model to cover the post-M15 + post-AI-machine surfaces (`/metrics` endpoint, Tetragon policy directory, eventstream JSONL trust, k8s pod-label RBAC). The "Known gaps" list now enumerates each remaining gap with its tracking status; the previously-deferred follow-ups (rule signing, eventstream integrity, API token rotation, TracingPolicy signing, RBAC posture check) all ship as opt-in features turned on per `selfdefctl init checklist`.
 
-The post-M15 audit ([`docs/review/80-security-audit.md`](docs/review/80-security-audit.md))
-flagged new attack surfaces (`/metrics` exposure, Tetragon policy
-directory, pod-label trust) that the SECURITY.md threat model
-does not yet cover; design work for the rewrite is tracked in
-the SDD pipeline.
+The audit-recommended hardening posture for an AI-machine deployment is in the "Hardening checklist" sidebar at the end of SECURITY.md's Mitigations section.
 
 ## License
 
