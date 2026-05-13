@@ -10,6 +10,7 @@ classic agent-jailbreak behaviours:
 | `container-shell-guard` | `execve` of `bash` / `sh` / `dash` / `zsh` / `ash` | Post / Sigkill |
 | `egress-guard` | `tcp_connect` to non-allowlisted destinations | Post / Sigkill |
 | `securemessage-guard` | Open of a future SecureMessage endpoint | Post (stub) |
+| `gpu-device-guard` | `security_file_open` on `/dev/nvidia*` (or operator-defined device prefixes) by a binary outside the allowlist | Post / Sigkill |
 
 Every selector includes `matchNamespaces: { Pid: NotIn: [host_ns] }`
 so host-level processes are exempt. The agent runs in a non-host PID
@@ -65,6 +66,17 @@ egress_allowlist = "10.0.0.0/24, 198.51.100.10/32"
 securemessage_enabled  = true
 securemessage_action   = "default"
 securemessage_endpoint = ""
+
+# GPU device guard. Watches in-container opens of GPU device nodes
+# (NVIDIA by default; add more prefixes via `gpu_device_paths` for
+# AMD ROCm / Intel Habana / etc.). `gpu_device_allowlist` is the
+# CSV of in-container binary paths permitted to access them — empty
+# = match every binary. Populate before flipping to enforce, else
+# every container touching a GPU dies.
+gpu_device_enabled   = true
+gpu_device_action    = "default"
+gpu_device_paths     = ""    # empty = use shipped NVIDIA defaults
+gpu_device_allowlist = "/usr/local/bin/python3, /usr/bin/torchrun"
 ```
 
 ## Container scope — why `Pid != host_ns` and not pod labels
@@ -98,9 +110,5 @@ policy.
 - **Pod-label-aware variants** of the same policies, gated on
   `matchPodSelector` instead of `matchNamespaces`. Ship one of these
   alongside if you run k8s.
-- **GPU device guards** — kprobe on `nvidia_open` / `ioctl` paths
-  for processes outside an allowlist. Worth a follow-up if your
-  threat model includes a container muscling its way onto an
-  unauthorised device node.
 
 Track those in `docs/src/modules-roadmap.md` if you want them later.

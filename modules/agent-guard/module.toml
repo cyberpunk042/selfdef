@@ -1,6 +1,6 @@
 name        = "agent-guard"
-version     = "0.1.0"
-summary     = "Tetragon TracingPolicies for AI agents in containers — etc-write / shell-exec / egress / SecureMessage"
+version     = "0.2.0"
+summary     = "Tetragon TracingPolicies for AI agents in containers — etc-write / shell-exec / egress / SecureMessage / GPU-device"
 category    = "hardening"
 
 depends_on  = ["tetragon"]

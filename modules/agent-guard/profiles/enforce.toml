@@ -27,3 +27,14 @@ egress_allowlist = ""
 securemessage_enabled  = true
 securemessage_action   = "post"  # stays Post until endpoint is set
 securemessage_endpoint = ""
+
+# GPU device guard. enforce default = Sigkill on every in-container
+# open of a tracked device node by a binary outside the allowlist.
+# An empty `gpu_device_allowlist` with enforce mode means "kill
+# every container that touches a GPU device" — populate it (e.g.
+# "/usr/local/bin/python3,/usr/bin/torchrun") before flipping to
+# enforce.
+gpu_device_enabled   = true
+gpu_device_action    = "default"
+gpu_device_paths     = ""
+gpu_device_allowlist = ""

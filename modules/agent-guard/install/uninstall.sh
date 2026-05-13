@@ -22,7 +22,7 @@ if [[ -r "$TG_CFG" ]]; then
 fi
 
 removed=0
-for name in etc-write-guard container-shell-guard egress-guard securemessage-guard; do
+for name in etc-write-guard container-shell-guard egress-guard securemessage-guard gpu-device-guard; do
     dst="${POLICY_DIR}/selfdef-agent-${name}.yaml"
     if [[ -f "$dst" ]]; then
         run "remove $dst" -- rm -f "$dst"
