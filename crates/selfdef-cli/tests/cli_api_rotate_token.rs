@@ -21,10 +21,7 @@ fn rotate_token_writes_url_safe_token_at_0600() {
     let cfg = tmp.path().join("selfdef.toml");
     std::fs::write(
         &cfg,
-        format!(
-            "[api]\ntoken_file = \"{}\"\n",
-            token_path.display(),
-        ),
+        format!("[api]\ntoken_file = \"{}\"\n", token_path.display(),),
     )
     .unwrap();
 
@@ -81,10 +78,7 @@ fn rotate_token_with_explicit_path_overrides_config() {
     let cfg = tmp.path().join("selfdef.toml");
     std::fs::write(
         &cfg,
-        format!(
-            "[api]\ntoken_file = \"{}\"\n",
-            cfg_token.display(),
-        ),
+        format!("[api]\ntoken_file = \"{}\"\n", cfg_token.display(),),
     )
     .unwrap();
 
@@ -99,7 +93,11 @@ fn rotate_token_with_explicit_path_overrides_config() {
         ])
         .output()
         .expect("spawn");
-    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     // The override path got the new token; the config path
     // stayed untouched (didn't exist).
@@ -113,7 +111,10 @@ fn rotate_token_rejects_bytes_out_of_range() {
     let cfg = tmp.path().join("selfdef.toml");
     std::fs::write(
         &cfg,
-        format!("[api]\ntoken_file = \"{}\"\n", tmp.path().join("t").display()),
+        format!(
+            "[api]\ntoken_file = \"{}\"\n",
+            tmp.path().join("t").display()
+        ),
     )
     .unwrap();
 
@@ -143,21 +144,13 @@ fn rotate_token_two_invocations_produce_different_tokens() {
     let cfg = tmp.path().join("selfdef.toml");
     std::fs::write(
         &cfg,
-        format!(
-            "[api]\ntoken_file = \"{}\"\n",
-            token_path.display(),
-        ),
+        format!("[api]\ntoken_file = \"{}\"\n", token_path.display(),),
     )
     .unwrap();
 
     let run = || -> String {
         let out = Command::new(binary())
-            .args([
-                "--config",
-                cfg.to_str().unwrap(),
-                "api",
-                "rotate-token",
-            ])
+            .args(["--config", cfg.to_str().unwrap(), "api", "rotate-token"])
             .output()
             .expect("spawn");
         assert!(out.status.success());
