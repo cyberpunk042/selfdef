@@ -506,6 +506,32 @@ fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
 }
 
 fn build_notifier_chain(cfg: &Config) -> NotifierChain {
+    // Surface orphaned channel configs: a `[notifier.ntfy]` block
+    // with non-default values but no matching `"ntfy"` entry in
+    // `cfg.notifier.channels` is almost always an operator
+    // mistake — the channel is silently inert. Warn before
+    // building the chain so the operator sees it on a normal
+    // restart, not just on the first event. (F-2026-054)
+    let configured_ntfy = !cfg.notifier.ntfy.url.is_empty() || !cfg.notifier.ntfy.topic.is_empty();
+    let configured_signal =
+        !cfg.notifier.signal.account.is_empty() || !cfg.notifier.signal.recipient.is_empty();
+    let lists_ntfy = cfg.notifier.channels.iter().any(|c| c == "ntfy");
+    let lists_signal = cfg.notifier.channels.iter().any(|c| c == "signal");
+    if configured_ntfy && !lists_ntfy {
+        warn!(
+            "notifier: [notifier.ntfy] is configured but \"ntfy\" is not in \
+             [notifier].channels; the channel is inert. Add \"ntfy\" to \
+             channels or clear the [notifier.ntfy] block."
+        );
+    }
+    if configured_signal && !lists_signal {
+        warn!(
+            "notifier: [notifier.signal] is configured but \"signal\" is not in \
+             [notifier].channels; the channel is inert. Add \"signal\" to \
+             channels or clear the [notifier.signal] block."
+        );
+    }
+
     let mut inner: Vec<Box<dyn Notifier>> = Vec::new();
     for channel in &cfg.notifier.channels {
         match channel.as_str() {

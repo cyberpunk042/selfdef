@@ -94,6 +94,29 @@ on the host. This document is the threat model of the daemon itself.
 - Rule signing not yet enforced.
 - Defense against kernel rootkits is delegated to "don't run a compromised
   kernel" — i.e. UEFI Secure Boot + signed kernels, out of band.
+- **Eventstream JSONL injection (F-2026-026 / F-2026-065).**
+  `selfdefctl events emit --out <path>` is an event-injection
+  primitive. Anyone with write access to a path the daemon
+  tails via `[collectors.eventstream].paths` can inject
+  Findings-shaped events that fire the notifier chain or
+  pollute the multi-host NATS bridge via `host_tag` spoofing.
+  The mitigation is filesystem-level: daemon-owned paths
+  must be `0750 selfdef:selfdef`; operator-owned paths
+  inherit that operator's trust posture. A daemon-side
+  ownership / mode check at parse time is tracked under
+  SDD-004 follow-up.
+- **Metrics uptime side channel (F-2026-066).** The
+  `selfdef_uptime_seconds` counter on `/metrics` lets a
+  scraper observe daemon restarts. An attacker who can
+  scrape `/metrics` and also has unprivileged write access
+  to the notifier-credentials directory could time a
+  credential-file edit to a daemon restart, exploiting the
+  "credentials loaded once at startup" mitigation. Bind
+  `/metrics` to UNIX socket only (or to localhost behind a
+  bearer token) on hosts where the credential dir is not
+  exclusively root-writable. Credential rotation should
+  remain a deliberate operator action; an automated
+  uptime-watcher rotator is the wrong shape.
 
 ## Reporting
 

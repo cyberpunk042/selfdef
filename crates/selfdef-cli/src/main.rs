@@ -507,29 +507,15 @@ async fn main() -> Result<()> {
                 except,
                 confirm,
             } => {
-                if !dry_run {
-                    let actual_host = std::env::var("HOSTNAME")
-                        .ok()
-                        .or_else(|| {
-                            std::fs::read_to_string("/etc/hostname")
-                                .ok()
-                                .map(|s| s.trim().to_string())
-                        })
-                        .unwrap_or_default();
-                    let provided = confirm.as_deref().unwrap_or("").trim();
-                    if provided.is_empty() {
-                        eprintln!("Refusing to uninstall modules without --confirm <hostname>.");
-                        eprintln!(
-                            "Provide --confirm with this host's name, or pass --dry-run to preview."
-                        );
-                        std::process::exit(2);
+                if !dry_run
+                    && let Err(refusal) =
+                        check_confirm_hostname("uninstall modules", confirm.as_deref())
+                {
+                    refusal.print();
+                    if matches!(refusal, ConfirmRefusal::Missing { .. }) {
+                        eprintln!("(or pass --dry-run to preview)");
                     }
-                    if provided != actual_host {
-                        eprintln!(
-                            "Confirm mismatch: provided '{provided}', host is '{actual_host}'."
-                        );
-                        std::process::exit(2);
-                    }
+                    std::process::exit(2);
                 }
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -545,24 +531,14 @@ async fn main() -> Result<()> {
             }
         },
         Command::Panic { confirm } => {
-            let actual_host = std::env::var("HOSTNAME")
-                .ok()
-                .or_else(|| {
-                    std::fs::read_to_string("/etc/hostname")
-                        .ok()
-                        .map(|s| s.trim().to_string())
-                })
-                .unwrap_or_default();
-            let provided = confirm.as_deref().unwrap_or("").trim();
-            if provided.is_empty() {
-                eprintln!("Refusing to engage panic mode without --confirm <hostname>.");
-                eprintln!("Provide --confirm with this host's name to proceed.");
-                std::process::exit(2);
-            }
-            if provided != actual_host {
-                eprintln!("Confirm mismatch: provided '{provided}', host is '{actual_host}'.");
-                std::process::exit(2);
-            }
+            let actual_host = match check_confirm_hostname("engage panic mode", confirm.as_deref())
+            {
+                Ok(host) => host,
+                Err(refusal) => {
+                    refusal.print();
+                    std::process::exit(2);
+                }
+            };
 
             use selfdef_responder::actions::{Action, LockdownEgressAction, NotifyAction};
             use std::sync::Arc;
@@ -644,4 +620,59 @@ fn print_event_human(e: &Event) {
         e.host_tag,
         e.message.as_deref().unwrap_or(""),
     );
+}
+
+/// Outcome of a destructive-op hostname confirmation check. Used by
+/// `panic` and `modules uninstall` to gate their respective dangerous
+/// paths. Closes F-2026-059 — the two sites duplicated this logic
+/// before; this helper is the single source of truth.
+fn check_confirm_hostname(op_label: &str, confirm: Option<&str>) -> Result<String, ConfirmRefusal> {
+    let actual_host = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| {
+            std::fs::read_to_string("/etc/hostname")
+                .ok()
+                .map(|s| s.trim().to_string())
+        })
+        .unwrap_or_default();
+    let provided = confirm.unwrap_or("").trim();
+    if provided.is_empty() {
+        return Err(ConfirmRefusal::Missing {
+            op_label: op_label.to_string(),
+        });
+    }
+    if provided != actual_host {
+        return Err(ConfirmRefusal::Mismatch {
+            provided: provided.to_string(),
+            actual_host,
+        });
+    }
+    Ok(actual_host)
+}
+
+enum ConfirmRefusal {
+    Missing {
+        op_label: String,
+    },
+    Mismatch {
+        provided: String,
+        actual_host: String,
+    },
+}
+
+impl ConfirmRefusal {
+    fn print(&self) {
+        match self {
+            Self::Missing { op_label } => {
+                eprintln!("Refusing to {op_label} without --confirm <hostname>.");
+                eprintln!("Provide --confirm with this host's name to proceed.");
+            }
+            Self::Mismatch {
+                provided,
+                actual_host,
+            } => {
+                eprintln!("Confirm mismatch: provided '{provided}', host is '{actual_host}'.");
+            }
+        }
+    }
 }

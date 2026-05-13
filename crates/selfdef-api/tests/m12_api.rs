@@ -466,26 +466,63 @@ async fn metrics_endpoint_returns_prometheus_exposition() {
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_string();
-    assert!(
-        ct.starts_with("text/plain"),
-        "expected Prometheus content-type, got: {ct}",
+    // F-2026-061: assert the exact Prometheus content-type, not a
+    // permissive `starts_with`. Prometheus's exposition format spec
+    // pins the version pragma; allowing any `text/plain; ...` would
+    // let a bug shipping `text/plain; charset=ascii` (no version)
+    // pass silently.
+    assert_eq!(
+        ct, "text/plain; version=0.0.4; charset=utf-8",
+        "expected exact Prometheus content-type, got: {ct}",
     );
     let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    for line in [
+
+    // Each TYPE line must be present and unique. Substring-only
+    // checks let a duplicate metric definition through; counting
+    // per name catches it.
+    for type_line in [
         "# TYPE selfdef_build_info gauge",
         "# TYPE selfdef_uptime_seconds counter",
         "# TYPE selfdef_store_events gauge",
         "# TYPE selfdef_events_total counter",
         "# TYPE selfdef_findings_total counter",
     ] {
-        assert!(body.contains(line), "missing `{line}`:\n{body}");
+        let n = body.matches(type_line).count();
+        assert_eq!(
+            n, 1,
+            "expected exactly one `{type_line}` line, found {n}:\n{body}"
+        );
     }
     // build_state seeded 2 events in the store.
     assert!(
         body.contains("selfdef_store_events 2"),
         "expected store gauge = 2:\n{body}",
     );
+    // Spot-check a sample-line shape: every non-comment, non-empty
+    // line either starts with a valid metric name + label set + value,
+    // or is a blank line. A line that looks like a `#` comment but
+    // doesn't follow `# (HELP|TYPE) <name>` would be a bug.
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("# ") {
+            assert!(
+                rest.starts_with("HELP ") || rest.starts_with("TYPE "),
+                "comment line not in HELP/TYPE form: {line}",
+            );
+            continue;
+        }
+        // Sample line: <name>[{labels}] <value>. We require at
+        // least one whitespace separating the name+labels from
+        // the value.
+        assert!(
+            trimmed.contains(' '),
+            "metric line missing value separator: {line}",
+        );
+    }
 }
 
 #[tokio::test]
