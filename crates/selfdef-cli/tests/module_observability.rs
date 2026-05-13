@@ -236,3 +236,30 @@ fn uninstall_removes_rendered_files() {
     assert!(!scrape.exists(), "scrape file still present");
     assert!(!dashboard.exists(), "dashboard still present");
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// observability's apply writes scrape + dashboard files into
+/// the configured dirs; dry-run must skip the writes.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let fx = new_fixture();
+    write_bundled_config(&fx, "localhost:2112,otherhost:2112");
+    let scope = fx.root.clone();
+    let before = common::snapshot_tree(&scope);
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_OBSERVABILITY_CONFIG", &fx.config_path)
+        .env("PATH", "/usr/bin:/bin")
+        .output()
+        .expect("spawn apply.sh");
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(&scope);
+    common::assert_tree_unchanged(&before, &after);
+}

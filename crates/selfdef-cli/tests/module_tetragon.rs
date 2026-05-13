@@ -293,3 +293,34 @@ fn uninstall_preserves_policy_dir_when_non_empty() {
         "foreign policy must not be removed",
     );
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// tetragon's apply normally renders the main config + creates
+/// the policy directory; dry-run must skip the writes.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let fx = fixture();
+    // Snapshot the scratch root that holds the config, policy_dir,
+    // and config_render_path. The apply writes into these paths
+    // in live mode.
+    let scope = fx
+        .config_path
+        .parent()
+        .expect("config_path has parent")
+        .to_path_buf();
+    let before = common::snapshot_tree(&scope);
+    let out = run_dry_apply(&fx);
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(&scope);
+    common::assert_tree_unchanged(&before, &after);
+    assert!(
+        !fx.config_render_path.exists(),
+        "dry-run must not write the tetragon.yaml",
+    );
+}

@@ -347,3 +347,34 @@ fn uninstall_removes_baseline() {
     // paths_file is operator-managed; must not be touched.
     assert!(fx.root.join("paths.txt").exists());
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// integrity-sentinel's apply normally writes the
+/// `baseline.sha256` file; dry-run must skip the write.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let fx = fixture("strict", "create");
+    let scope = fx.root.clone();
+    let before = common::snapshot_tree(&scope);
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        .output()
+        .expect("spawn apply.sh");
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(&scope);
+    common::assert_tree_unchanged(&before, &after);
+    // Spot-check: the baseline file the live apply would write
+    // is absent.
+    assert!(
+        !fx.baseline_path.exists(),
+        "dry-run must not seal the baseline",
+    );
+}

@@ -687,3 +687,34 @@ fn reapply_is_byte_stable_for_every_rendered_policy() {
         );
     }
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op. The
+/// apply tests above assert the live-positive paths produce
+/// the right rendered output; this asserts the dry-run path
+/// mutates nothing on disk under the policy_dir or the
+/// manifest path. A regression making dry-run write a policy
+/// would have passed silently — every existing test only
+/// checked the status JSON.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let fx = fixture("profile = \"audit\"\n");
+    let scope = fx.policy_dir.parent().unwrap().to_path_buf();
+    let before = common::snapshot_tree(&scope);
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_AGENT_GUARD_CONFIG", &fx.config_path)
+        .env("SELFDEF_TETRAGON_CONFIG", &fx.tetragon_config)
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
+        .output()
+        .expect("spawn apply.sh");
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(&scope);
+    common::assert_tree_unchanged(&before, &after);
+}

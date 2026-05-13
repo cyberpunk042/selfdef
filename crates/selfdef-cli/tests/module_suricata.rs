@@ -177,3 +177,33 @@ fn check_reports_inactive_service() {
         "got: {line}"
     );
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// suricata's apply writes the systemd unit + ruleset in
+/// nfqueue mode; dry-run must skip the writes.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let cfg_path = scratch.path().join("suricata.toml");
+    std::fs::write(&cfg_path, "mode = \"nfqueue\"\nqueue_num = 0\n").unwrap();
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = Command::new("bash")
+        .arg(module_dir().join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_SURICATA_CONFIG", &cfg_path)
+        .env("SELFDEF_SURICATA_TEMPLATES", module_dir().join("templates"))
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn apply.sh");
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+}

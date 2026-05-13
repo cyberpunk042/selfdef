@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — dry-run-noop tests across every module (closes F-2026-030 fully)
+
+Closes F-2026-030 fully (was "reference closed" — adopted only in `vpn-bridge` from PR #41). Every other module-test file now carries a companion `dry_run_apply_must_be_a_noop_on_disk` test using the shared `snapshot_tree` + `assert_tree_unchanged` helpers from `tests/common/mod.rs`.
+
+The dry-run-negative contract: when `SELFDEF_DRY_RUN=1`, the module's `apply.sh` produces zero on-disk delta. A regression making dry-run write the rendered output, the unit file, the nftables ruleset, the baseline, the scrape config, or any other side-effect file is now caught by the test suite.
+
+- `module_agent_guard.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the policy_dir + manifest path.
+- `module_bridge_l2.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the config-holding tempdir.
+- `module_integrity_sentinel.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the scratch root + spot-checks the baseline file is absent.
+- `module_observability.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the bundled-profile scrape/dashboard dirs.
+- `module_polarproxy.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the scratch root + spot-checks the systemd unit / nftables ruleset are absent.
+- `module_suricata.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the nfqueue-mode fixture.
+- `module_tetragon.rs::dry_run_apply_must_be_a_noop_on_disk` — snapshots the tetragon.yaml + policy_dir scope.
+
+#### Tests
+
+7 new tests added, each ~25 lines, follow the same pattern. `cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — shared-lib v2: manifest helpers (SDD-006 F-2026-050 follow-up)
 
 Closes the SDD-006 F-2026-050 follow-up as **shipped**. Bumps
