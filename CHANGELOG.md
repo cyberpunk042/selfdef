@@ -6,6 +6,52 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — eventstream parse-time integrity check (SDD-004 F-2026-026 follow-up)
+
+Closes the SDD-004 F-2026-026 follow-up known gap as
+**opt-in shipped**. The daemon's `[collectors.eventstream]`
+config gains two new fields:
+
+- `integrity_check: bool` (default `false`). When `true`, the
+  collector refuses to tail any path that is world-writable
+  (`mode & 0o002 != 0`) or owned by a UID outside
+  `{daemon-effective-uid, root} ∪ allowed_owners`. Mismatches
+  return an `IntegrityRefused` error and the daemon logs a
+  structured warning; other configured paths continue tailing.
+- `allowed_owners: Vec<u32>`. Additional numeric UIDs accepted
+  as a writer when `integrity_check = true`. Empty list = only
+  the daemon-effective-uid and root are accepted. Operators
+  with a deliberate operator-owned emitter (e.g. the user's
+  own `~/.local/share/selfdef/ssh-wrap.jsonl`) add their UID
+  here.
+
+Default is `false` so operator-owned emitters keep working
+unchanged. The hardening checklist in `SECURITY.md` recommends
+turning it on once `/var/lib/selfdef/eventstream/` is
+`0750 selfdef:selfdef`.
+
+#### What this changes for operators
+
+- `config/selfdef.toml.example` documents the two new knobs
+  under `[collectors.eventstream]` with the
+  ssh-wrap-emitter-on-uid-1000 example.
+- `SECURITY.md` known-gap entry for eventstream JSONL
+  injection updates from "tracked under SDD-004 follow-up" to
+  "opt-in shipped; turn on via `integrity_check = true`".
+
+#### Tests
+
+- Unit (`crates/selfdef-collector-eventstream/src/lib.rs`):
+  - `integrity_check_rejects_world_writable_file`
+  - `integrity_check_accepts_daemon_or_root_owned_file`
+  - `integrity_check_accepts_explicit_allowed_owner`
+  - The pre-existing `tails_event_file_and_republishes` test
+    continues to pass, confirming the default-disabled path
+    is unchanged.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Documentation — security threat-model rewrite (SDD-004 implementation)
 
 Closes Phase-1 audit findings F-2026-023, F-2026-024, F-2026-025,

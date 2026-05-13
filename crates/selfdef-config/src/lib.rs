@@ -297,6 +297,27 @@ pub struct EventstreamConfig {
     /// selfdef-ssh-wrap) writes its own file.
     pub paths: Vec<PathBuf>,
     pub read_from: String,
+    /// SDD-004 F-2026-026 follow-up (opt-in): refuse to tail a JSONL
+    /// path whose ownership / mode doesn't match the trust posture
+    /// the daemon expects. Defaults to `false` to preserve existing
+    /// operator-owned emitters (e.g. `~/.local/share/selfdef/ssh-wrap.jsonl`),
+    /// which inherit the operator's trust posture by design.
+    ///
+    /// When set to `true`:
+    ///   - the file must not be world-writable (mode & 0o002 == 0)
+    ///   - the file's owner UID must either be the daemon's
+    ///     effective UID, root (UID 0), or an entry in
+    ///     `allowed_owners`.
+    ///
+    /// Mismatches log a structured warning and the collector
+    /// skips that path (the daemon stays up; other configured
+    /// paths continue tailing).
+    pub integrity_check: bool,
+    /// Additional UIDs (numeric) accepted as writers when
+    /// `integrity_check = true`. Empty = daemon-effective-uid +
+    /// root only. Operators with a deliberate operator-owned
+    /// emitter list its UID here.
+    pub allowed_owners: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
