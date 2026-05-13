@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — README refresh
+
+Comprehensive README rewrite reflecting everything shipped in the post-M16 audit cycle + the new operator lifecycle verbs (`init`, `doctor`, `keys verify`, `api rotate-token`, `rbac check`). The previous README still referenced "design work tracked in the SDD pipeline" — that pipeline shipped (6 SDDs implemented + every deferred follow-up closed). Drift items addressed:
+
+- **Status block** flips from "Phase 1 audit lists open issues" to "Phase 1 audit closeout complete; every blocker, important, SDD-debt finding closed or carries a shipped follow-up". Cross-links the findings ledger.
+- **New "Operator quick-start" section** — `init config` → `init modules` → `modules apply` → `doctor`, with `init checklist` for the full 11-step opt-in walkthrough.
+- **New "`selfdefctl` reference" section** enumerates every operator-facing verb (read-only, lifecycle, security opt-ins) with one-line descriptions and the audit finding each closes.
+- **New "Operator runbooks" index** points at every `docs/dev/<feature>.md` (first-run, operator-health-check, signing, rbac-posture, module-helpers, test-contract).
+- **Module catalog** annotates `vpn-bridge`, `tetragon`, `agent-guard` with their SDD-shipped opt-in details (multi-instance honesty, signed policies, pod-label scope verification).
+- **Crate layout** adds `selfdef-signing` (PR #45) and `packaging/lib/module-lib.sh` (SDD-006 v2).
+- **Quickstart** appends the `init` + `doctor` bootstrap commands.
+- **Milestones** adds three post-M16 entries: Phase-1 audit cycle, audit-shipped opt-ins, operator lifecycle verbs.
+- **Threat model** section flips from "SDD pipeline" pointer to a reference to the shipped SDD-004 rewrite + the hardening checklist.
+
+Pure doc; no code changes. `cargo fmt --all -- --check` clean (no Rust touched).
+
 ### Added — `selfdefctl init` (first-run bootstrap)
 
 The bookend to `selfdefctl doctor`. Doctor verifies an existing deployment; init bootstraps a new one. Three subcommands:
