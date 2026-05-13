@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdefctl events follow` (live tail)
+
+Live-tails events from the daemon's `/events/stream` SSE endpoint over a UNIX socket. Pairs with `events tail` (which reads the SQLite store for historical context) — together they cover both "what's happening right now?" and "what just happened?".
+
+#### Implementation
+
+- New `crates/selfdef-cli/src/follow.rs` (~100 LoC). Talks raw HTTP/1.1 over `tokio::net::UnixStream` rather than pulling a full HTTP client (hyper) into the CLI — the request is one GET, the response is a long-lived `Transfer-Encoding: chunked` SSE body that the parser line-tokenises into `data: <json>` records.
+- TCP transport is not supported; operators with TCP-only daemons run `curl --no-buffer -H "Authorization: Bearer ..." http://host:port/events/stream` directly.
+
+#### Flags
+
+- `--unix-socket <path>` — default `/run/selfdef.sock`.
+- `--alerts-only` — filter to `category_uid = 2` (Findings) using the structured field, not substring matching.
+- `-n <N>` — stop after N events (default: stream forever until Ctrl-C).
+
+#### Lagged events
+
+The daemon's SSE stream emits `event: lagged` frames when the broadcast bus's subscribe-side queue overflows. Follow surfaces these to stderr as `# lagged: missed N events` so operators see the gap in their tail.
+
+#### Tests
+
+`crates/selfdef-cli/tests/cli_events_follow.rs` ships 4 integration tests using a tiny fake daemon that listens on a tempdir UNIX socket and writes a canned 200 OK + chunked SSE body. Covers happy-path streaming + counting, `--alerts-only` filtering, lagged-frame stderr surfacing, and the connect-failure diagnostic for a bad socket path.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Documentation — ARCHITECTURE.md refresh
 
 Sibling refresh to the README rewrite (just shipped). Brings the architecture doc current with everything shipped since M16:
