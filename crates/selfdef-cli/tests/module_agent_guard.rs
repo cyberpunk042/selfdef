@@ -93,6 +93,7 @@ fn audit_profile_renders_post_action_for_every_enabled_policy() {
         "container-shell-guard",
         "egress-guard",
         "securemessage-guard",
+        "gpu-device-guard",
     ] {
         let body = read_policy(&fx, name);
         assert!(!body.is_empty(), "policy {name} was not rendered",);
@@ -107,7 +108,7 @@ fn audit_profile_renders_post_action_for_every_enabled_policy() {
     }
     let line = last_stdout_line(&out);
     assert!(
-        line.contains("profile=audit") && line.contains("installed=4"),
+        line.contains("profile=audit") && line.contains("installed=5"),
         "got: {line}",
     );
 }
@@ -117,8 +118,13 @@ fn enforce_profile_renders_sigkill_for_default_actions() {
     let fx = fixture("profile = \"enforce\"\n");
     let out = run_apply(&fx);
     assert!(out.status.success());
-    // etc-write, shell-exec, egress all flip to Sigkill.
-    for name in ["etc-write-guard", "container-shell-guard", "egress-guard"] {
+    // etc-write, shell-exec, egress, gpu-device all flip to Sigkill.
+    for name in [
+        "etc-write-guard",
+        "container-shell-guard",
+        "egress-guard",
+        "gpu-device-guard",
+    ] {
         let body = read_policy(&fx, name);
         assert!(
             body.contains("- action: Sigkill"),
@@ -130,6 +136,100 @@ fn enforce_profile_renders_sigkill_for_default_actions() {
     assert!(
         sm.contains("- action: Post"),
         "securemessage stub should stay Post:\n{sm}",
+    );
+}
+
+#[test]
+fn gpu_default_render_keeps_nvidia_prefixes_and_drops_match_binaries() {
+    // Default audit profile, no GPU config keys set. The policy should
+    // ship with NVIDIA device prefixes intact and the matchBinaries
+    // selector dropped so the rule matches every in-container binary
+    // touching those device nodes.
+    let fx = fixture("profile = \"audit\"\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    let body = read_policy(&fx, "gpu-device-guard");
+    assert!(
+        body.contains("/dev/nvidia"),
+        "missing NVIDIA prefix:\n{body}"
+    );
+    assert!(
+        body.contains("/dev/nvidia-uvm"),
+        "missing UVM prefix:\n{body}",
+    );
+    assert!(
+        !body.contains("matchBinaries:"),
+        "matchBinaries should have been dropped with empty allowlist:\n{body}",
+    );
+    assert!(
+        !body.contains("__SELFDEF_GPU_ALLOWLIST_PLACEHOLDER__"),
+        "placeholder must not survive rendering:\n{body}",
+    );
+}
+
+#[test]
+fn gpu_allowlist_when_set_keeps_match_binaries_with_operator_values() {
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         gpu_device_allowlist = \"/usr/local/bin/python3, /usr/bin/torchrun\"\n",
+    );
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    let body = read_policy(&fx, "gpu-device-guard");
+    assert!(
+        body.contains("matchBinaries:"),
+        "matchBinaries selector should be kept with non-empty allowlist:\n{body}",
+    );
+    assert!(
+        body.contains("/usr/local/bin/python3"),
+        "first allowlist binary missing:\n{body}",
+    );
+    assert!(
+        body.contains("/usr/bin/torchrun"),
+        "second allowlist binary missing:\n{body}",
+    );
+    assert!(
+        !body.contains("__SELFDEF_GPU_ALLOWLIST_PLACEHOLDER__"),
+        "placeholder must not survive:\n{body}",
+    );
+}
+
+#[test]
+fn gpu_custom_device_paths_replace_shipped_defaults() {
+    // Operator extends to AMD ROCm + Intel Habana device nodes.
+    let fx = fixture(
+        "profile = \"audit\"\n\
+         gpu_device_paths = \"/dev/kfd, /dev/accel\"\n",
+    );
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    let body = read_policy(&fx, "gpu-device-guard");
+    assert!(
+        body.contains("/dev/kfd"),
+        "operator path /dev/kfd missing:\n{body}",
+    );
+    assert!(
+        body.contains("/dev/accel"),
+        "operator path /dev/accel missing:\n{body}",
+    );
+    assert!(
+        !body.contains("/dev/nvidia"),
+        "shipped NVIDIA defaults should have been replaced:\n{body}",
+    );
+}
+
+#[test]
+fn gpu_disabled_drops_policy_file() {
+    let fx = fixture("profile = \"audit\"\ngpu_device_enabled = false\n");
+    let stale = fx.policy_dir.join("selfdef-agent-gpu-device-guard.yaml");
+    write_file(&stale, "stale: true\n");
+    let out = run_apply(&fx);
+    assert!(out.status.success(), "apply failed");
+    assert!(!stale.exists(), "disabled gpu policy must be removed");
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("installed=4") && line.contains("disabled=1"),
+        "got: {line}",
     );
 }
 
@@ -170,7 +270,7 @@ fn disabled_policy_is_not_rendered_and_stale_render_is_cleaned_up() {
     assert!(!read_policy(&fx, "etc-write-guard").is_empty());
     let line = last_stdout_line(&out);
     assert!(
-        line.contains("installed=3") && line.contains("disabled=1"),
+        line.contains("installed=4") && line.contains("disabled=1"),
         "got: {line}",
     );
 }
@@ -268,6 +368,7 @@ fn uninstall_removes_every_module_policy() {
         "container-shell-guard",
         "egress-guard",
         "securemessage-guard",
+        "gpu-device-guard",
     ];
     for n in names {
         assert!(

@@ -1,0 +1,47 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-agent-gpu-device-guard"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "agent-guard"
+    selfdef.io/attack: "T1068"   # Exploitation for Privilege Escalation
+spec:
+  kprobes:
+    - call: "security_file_open"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              # Default device prefix set: NVIDIA. Operators can splice
+              # in more device families (AMD ROCm /dev/kfd, Intel
+              # Habana, etc.) via `gpu_device_paths` in the host
+              # config — apply.sh rewrites this block.
+              values:
+                - "/dev/nvidia"
+                - "/dev/nvidiactl"
+                - "/dev/nvidia-uvm"
+                - "/dev/nvidia-uvm-tools"
+                - "/dev/nvidia-modeset"
+          # Binary allowlist. The shipped policy carries an
+          # always-impossible placeholder so nothing matches by
+          # default — apply.sh rewrites this to the operator's
+          # `gpu_device_allowlist` list (or drops the selector
+          # entirely when the allowlist is empty, which inverts the
+          # semantic to "match every binary inside a container").
+          matchBinaries:
+            - operator: "NotIn"
+              values:
+                - "__SELFDEF_GPU_ALLOWLIST_PLACEHOLDER__"
+          matchNamespaces:
+            - namespace: Pid
+              operator: NotIn
+              values:
+                - "host_ns"
+          matchActions:
+            # Rendered to Sigkill in `enforce` by agent-guard's apply.sh.
+            - action: Post

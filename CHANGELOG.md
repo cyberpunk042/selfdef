@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `agent-guard` v0.2.0: GPU device guard
+- New `gpu-device-guard` TracingPolicy ships in the `agent-guard`
+  bundle. Watches `security_file_open` against GPU device nodes
+  (`/dev/nvidia`, `/dev/nvidiactl`, `/dev/nvidia-uvm*`,
+  `/dev/nvidia-modeset` by default) from inside containers
+  (`matchNamespaces: Pid NotIn [host_ns]`). A `matchBinaries: NotIn`
+  selector filters out the operator's allowlist of permitted
+  in-container binary paths; anything else opening a tracked device
+  trips the policy.
+- New host-config keys: `gpu_device_enabled` (default true),
+  `gpu_device_action` (audit/enforce defaults via the existing
+  per-policy resolver), `gpu_device_paths` (CSV of device-path
+  prefixes — empty = ship default NVIDIA set; populate to add AMD
+  ROCm `/dev/kfd`, Intel Habana `/dev/accel`, etc.), and
+  `gpu_device_allowlist` (CSV of in-container binary paths
+  permitted to open those devices — empty = match every binary).
+- Apply / check / uninstall all extended to handle the fifth policy.
+  `lib.sh` gains `render_gpu_policy()` that rewrites the device
+  prefix block and the binary allowlist (or drops the
+  `matchBinaries` selector entirely when the allowlist is empty,
+  inverting the semantic from "allowlist" to "match every in-container
+  binary").
+- Module bumps to `0.2.0`. README + roadmap updated; the GPU
+  follow-up is removed from the remaining-work list.
+- 4 new integration tests:
+  - default render keeps NVIDIA prefixes and drops `matchBinaries`
+    with an empty allowlist
+  - non-empty allowlist keeps `matchBinaries` and splices values
+  - operator-supplied `gpu_device_paths` fully replace the shipped
+    NVIDIA defaults
+  - `gpu_device_enabled = false` removes any stale render
+
 ### Added — selfdef-daemon `/metrics` endpoint (Prometheus exposition)
 - New `GET /metrics` route on the existing API surface (UNIX socket
   + TCP), rendering Prometheus exposition format

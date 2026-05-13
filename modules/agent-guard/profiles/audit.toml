@@ -33,3 +33,15 @@ egress_allowlist = ""
 securemessage_enabled  = true
 securemessage_action   = "default"
 securemessage_endpoint = ""
+
+# GPU device guard. Watches `security_file_open` against device
+# nodes that AI workloads typically need (`/dev/nvidia*` by default;
+# extend via `gpu_device_paths` for AMD ROCm, Intel Habana, etc.).
+# `gpu_device_allowlist` is the CSV of in-container binary paths
+# permitted to open those devices — leave empty and any container
+# touching a GPU device fires the policy. Audit-mode shipping
+# default: emit events, don't kill.
+gpu_device_enabled   = true
+gpu_device_action    = "default"
+gpu_device_paths     = ""
+gpu_device_allowlist = ""

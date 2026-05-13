@@ -40,11 +40,15 @@ if [[ -z "$SM_ENDPOINT" ]]; then
     SM_ACTION="post"
 fi
 
+GPU_ENABLED=$(toml_get gpu_device_enabled "$CONFIG_FILE" || echo "true")
+GPU_ACTION=$(toml_get  gpu_device_action  "$CONFIG_FILE" || echo "default")
+
 declare -a CHECK=(
     "etc-write-guard:$ETC_WRITE_ENABLED:$ETC_WRITE_ACTION"
     "container-shell-guard:$SHELL_EXEC_ENABLED:$SHELL_EXEC_ACTION"
     "egress-guard:$EGRESS_ENABLED:$EGRESS_ACTION"
     "securemessage-guard:$SM_ENABLED:$SM_ACTION"
+    "gpu-device-guard:$GPU_ENABLED:$GPU_ACTION"
 )
 
 missing=0

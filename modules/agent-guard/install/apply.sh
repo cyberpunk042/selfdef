@@ -64,12 +64,18 @@ if [[ -z "$SM_ENDPOINT" ]]; then
     SM_ACTION="post"
 fi
 
+GPU_ENABLED=$(toml_get gpu_device_enabled  "$CONFIG_FILE" || echo "true")
+GPU_ACTION=$(toml_get  gpu_device_action   "$CONFIG_FILE" || echo "default")
+GPU_PATHS=$(toml_get   gpu_device_paths    "$CONFIG_FILE" || echo "")
+GPU_ALLOWLIST=$(toml_get gpu_device_allowlist "$CONFIG_FILE" || echo "")
+
 # Each policy is a (source-name, enabled, action-override, post-render-hook) tuple.
 declare -a POLICIES=(
     "etc-write-guard:$ETC_WRITE_ENABLED:$ETC_WRITE_ACTION:"
     "container-shell-guard:$SHELL_EXEC_ENABLED:$SHELL_EXEC_ACTION:"
     "egress-guard:$EGRESS_ENABLED:$EGRESS_ACTION:egress"
     "securemessage-guard:$SM_ENABLED:$SM_ACTION:securemessage"
+    "gpu-device-guard:$GPU_ENABLED:$GPU_ACTION:gpu"
 )
 
 changes=0
@@ -97,6 +103,7 @@ for entry in "${POLICIES[@]}"; do
     case "$post_hook" in
         egress)        render_egress_allowlist "$tmp" "$EGRESS_ALLOWLIST" ;;
         securemessage) render_securemessage_endpoint "$tmp" "$SM_ENDPOINT" ;;
+        gpu)           render_gpu_policy "$tmp" "$GPU_PATHS" "$GPU_ALLOWLIST" ;;
     esac
 
     if [[ ! -f "$dst" ]] || ! cmp -s "$tmp" "$dst"; then
