@@ -62,10 +62,6 @@ checked-in template propagate.
 
 ## What's NOT here yet
 
-- A selfdef-daemon `/metrics` endpoint to scrape. That's a daemon-
-  side change (`selfdef-api` would have to expose Prometheus
-  metrics on a known port); when it lands, add the new target to
-  `scrape_targets` in this module's config.
 - Alert rules. Grafana's alerting + Prometheus's alertmanager are
   operator-owned. The dashboard makes the data legible; reacting
   to it is the notifier chain's job (which integrity-sentinel +

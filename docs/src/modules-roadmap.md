@@ -49,7 +49,6 @@ Every module the roadmap originally named is now in the catalog. The catalog gai
 - `vpn-bridge` v0.3.0 (optional): STUN-assisted hole-punching profile. Lower priority now that `tailscale` covers most NAT-traversal cases via DERP fallback.
 - `agent-guard` pod-label variants: ship Kubernetes-aware policies gated on `matchPodSelector` instead of `matchNamespaces`. Useful for k8s hosts where the cluster's container scoping already exists.
 - `agent-guard` GPU device guards: kprobes on `nvidia_open` / device-node ioctls for processes outside an allowlist. Worth landing once the first real AI-machine deployment shakes out the right allowlist shape.
-- `selfdef-daemon` Prometheus endpoint: a `/metrics` surface on the API so `observability` has a second target beyond Tetragon's. Cross-crate change, separate PR.
 
 ## Lifecycle surface
 

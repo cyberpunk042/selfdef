@@ -142,11 +142,33 @@ async fn main() -> Result<()> {
     // The API holds an Arc clone of the same responder so its
     // `dispatch_single` / `fire` calls hit the same action set the bus
     // task runs.
+    // ---- metrics ----
+    // One process-wide Metrics handle, shared between the API (which
+    // serves /metrics) and the ingest task (which subscribes to the
+    // bus and bumps counters per event). The ingest task is gated on
+    // the API being enabled — without a scrape surface, the counters
+    // are dead weight.
+    let (metrics_handle, metrics_task) = if cfg.api.enabled {
+        let metrics = Arc::new(selfdef_api::Metrics::new(host_tag.clone()));
+        let m = Arc::clone(&metrics);
+        let b = Arc::clone(&bus);
+        let sd = shutdown.clone();
+        let task = tokio::spawn(async move {
+            selfdef_api::run_metrics_ingest(m, b, sd).await;
+        });
+        (Some(metrics), Some(task))
+    } else {
+        (None, None)
+    };
+
     let api_task = if cfg.api.enabled {
         use selfdef_api::{ApiServer, ApiState};
         let cfg_api = build_api_config(&cfg.api);
         let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
             .with_publisher(publisher.clone());
+        if let Some(m) = metrics_handle.clone() {
+            state = state.with_metrics(m);
+        }
         if let Some(c) = correlator.clone() {
             state = state.with_correlator(c);
         }
@@ -369,6 +391,10 @@ async fn main() -> Result<()> {
     if let Some(h) = api_task {
         let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
         info!("api stopped");
+    }
+    if let Some(h) = metrics_task {
+        let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
+        info!("metrics ingest stopped");
     }
     if let Some(h) = nats_task {
         let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
