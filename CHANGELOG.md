@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdefctl init` (first-run bootstrap)
+
+The bookend to `selfdefctl doctor`. Doctor verifies an existing deployment; init bootstraps a new one. Three subcommands:
+
+- **`init config`** — writes a starter `/etc/selfdef/selfdef.toml` (override with `--output`). Every audit-shipped opt-in security feature is OFF in the starter; operators turn each on after following the matching `docs/dev/<feature>.md` runbook. Default mode 0644. Atomic write (tempfile → fsync → rename) so a crash mid-write leaves the previous file intact.
+- **`init modules`** — writes a starter `/etc/selfdef/modules.toml` listing every shipped module (`tetragon`, `agent-guard`, `integrity-sentinel`, `bridge-l2`, `suricata`, `polarproxy`, `vpn-bridge`, `observability`, `detect-host`) commented out with a short description. Operators uncomment what they want activated.
+- **`init checklist`** — prints a first-run operator checklist (11 numbered steps from `init config` through periodic doctor timer). Read-only.
+
+Both `init config` and `init modules` are non-destructive by default — they refuse to overwrite an existing file unless `--force` is passed.
+
+#### Tests
+
+`crates/selfdef-cli/tests/cli_init.rs` ships 7 integration tests covering each subcommand's happy path, the --force semantics, parent-directory creation, and the structural invariant that the modules starter NEVER ships an uncommented `[modules.<slug>]` activation.
+
+#### Operator UX
+
+Together, `init` + `doctor` give operators the two go-to verbs for the lifecycle:
+
+```sh
+# Day 0
+sudo selfdefctl init config
+sudo selfdefctl init modules
+sudo systemctl enable --now selfdefd
+sudo selfdefctl modules apply
+selfdefctl doctor
+
+# Day N (after editing /etc/selfdef/selfdef.toml or rotating keys)
+selfdefctl doctor
+```
+
+`docs/dev/first-run.md` is the matching operator runbook.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — `selfdefctl doctor` (cross-cutting operator health check)
 
 A single verb that verifies the cross-cutting policy state every post-audit security feature depends on. Synthesizes everything the recent follow-up PRs added (rule signing, API token rotation, eventstream integrity, RBAC posture) into one go-to "is this deployment healthy?" command. Complementary to `selfdefctl modules check` — the two don't subsume each other.
