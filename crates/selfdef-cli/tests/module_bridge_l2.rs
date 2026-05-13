@@ -156,3 +156,40 @@ members     = ["eth0"]
         "unexpected status: {line}"
     );
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// bridge-l2's apply hard-codes its nftables output path at
+/// `/etc/nftables.d/selfdef-bridge.conf`, so we can't fully
+/// assert system-wide; but the test scope (the tempdir holding
+/// the config) must stay byte-stable across a dry-run apply —
+/// catching regressions that write diagnostic files alongside
+/// the config or to the script's working directory.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let cfg_path = scratch.path().join("bridge-l2.toml");
+    std::fs::write(
+        &cfg_path,
+        r#"
+bridge_name      = "br0"
+members          = ["eth0", "eth1"]
+management_iface = ""
+forward_policy   = "accept"
+persist          = "boot-script"
+"#,
+    )
+    .unwrap();
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = run_apply(&cfg_path, stubs.path());
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+}

@@ -235,3 +235,41 @@ fn check_reports_inactive_service() {
         "expected unit-missing error: {line}"
     );
 }
+
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
+/// polarproxy's apply writes the systemd unit + nft rules in
+/// host-tls-mitm mode; dry-run must skip the writes.
+#[test]
+fn dry_run_apply_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let cfg = write_config(
+        r#"
+profile           = "host-tls-mitm"
+listen_port       = 10443
+pcap_over_ip_port = 4430
+cert_http_port    = 10080
+log_dir           = "/var/log/polarproxy"
+ca_pfx_path       = "/etc/polarproxy/ca.pfx"
+ca_pfx_password   = ""
+"#,
+    );
+    let unit_dest = scratch.path().join("polarproxy.service");
+    let nft_dest = scratch.path().join("polarproxy-nat.conf");
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = run_apply(cfg.path(), stubs.path(), &unit_dest, &nft_dest);
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+    assert!(
+        !unit_dest.exists() && !nft_dest.exists(),
+        "dry-run must not write the unit or nft files",
+    );
+}
