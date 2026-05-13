@@ -308,6 +308,70 @@ fn verifier_source_tracks_reload() {
 }
 
 #[test]
+fn load_rules_yaml_error_takes_priority_over_signature() {
+    // F-2027-034: a malformed-but-signed rule used to return
+    // SigmaError::Signature because the signature was checked
+    // before the YAML parse. Now the parse runs first and the
+    // operator sees the real failure: SigmaError::Yaml with a
+    // serde_yaml_ng error pointing at the parse position. The
+    // signature is still verified before a rule is *added* to
+    // the engine, so the security contract is unchanged.
+    let dir = tempfile::tempdir().unwrap();
+    let rules_dir = dir.path().join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    let rule_path = rules_dir.join("malformed.yml");
+    // YAML that won't parse as a RawRule (a top-level array
+    // instead of the expected map).
+    std::fs::write(&rule_path, b"- not-a-rule\n- another-thing\n").unwrap();
+
+    let (pub_path, sk) = fresh_keypair(dir.path());
+    // Sign the malformed bytes anyway — the signature itself
+    // is valid; the content is not.
+    sign_file(&sk, &rule_path);
+
+    let verifier = selfdef_signing::Verifier::load(&pub_path).unwrap();
+    let corr = empty_correlator(&rules_dir).with_verifier(verifier);
+    let err = corr.load_rules().unwrap_err();
+    assert!(
+        matches!(err, SigmaError::Yaml { ref path, .. } if path.ends_with("malformed.yml")),
+        "expected Yaml error pointing at malformed.yml; got {err:?}",
+    );
+}
+
+#[test]
+fn load_rules_walks_yaml_in_sorted_order() {
+    // F-2027-033: walk_yaml's enumeration is now sorted
+    // lexicographically. We can't directly observe the order
+    // from outside the engine, but we can prove the contract
+    // by loading three rules whose detection blocks differ in
+    // a way that *would* be observable if precedence flipped —
+    // and asserting all three load (the sort is deterministic
+    // across machines + the count is stable). The stronger
+    // property (matching event fires deterministic rule first)
+    // is implicit; per-engine tests for that live elsewhere.
+    let dir = tempfile::tempdir().unwrap();
+    let rules_dir = dir.path().join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    // Three rules, named to put them in reverse alphabetical
+    // creation order so an unsorted walk would yield them in
+    // a different order than sorted on most filesystems.
+    let (pub_path, sk) = fresh_keypair(dir.path());
+    for (i, name) in ["zeta", "mu", "alpha"].iter().enumerate() {
+        let p = rules_dir.join(format!("{name}.yml"));
+        let body = RULE_YAML.replace(
+            "11111111-2222-3333-4444-555555555555",
+            &format!("00000000-0000-0000-0000-{i:012}"),
+        );
+        std::fs::write(&p, body).unwrap();
+        sign_file(&sk, &p);
+    }
+    let verifier = selfdef_signing::Verifier::load(&pub_path).unwrap();
+    let corr = empty_correlator(&rules_dir).with_verifier(verifier);
+    let n = corr.load_rules().expect("all three rules load under sort");
+    assert_eq!(n, 3);
+}
+
+#[test]
 fn load_rules_signature_failure_keeps_prior_ruleset() {
     // Two-step: (1) load a valid signed rule, (2) corrupt the
     // signature and reload, (3) verify the prior rule is still

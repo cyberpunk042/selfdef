@@ -6,6 +6,33 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — selfdef-correlator seam-3: deterministic load + error priority (closes F-2027-033 + F-2027-034)
+
+Closes the seam-3 cluster from the Phase 2 integration explorer.
+
+#### F-2027-033 — deterministic rule enumeration
+
+`walk_yaml` (in `crates/selfdef-correlator/src/sigma.rs`) previously returned paths in `std::fs::read_dir` order — undefined per the standard library docs. Two rules with the same priority that match the same event would fire in filesystem-enumeration order, kernel- and filesystem-version dependent. Now sorts lexicographically before returning, so operators can predict precedence by file naming alone.
+
+#### F-2027-034 — parse YAML before verifying signature
+
+`Engine::load_dir_maybe_verified` previously verified the signature *before* parsing the YAML. A malformed-but-signed rule (e.g. a yaml-typo accident) yielded `SigmaError::Signature` — counter-intuitive, because the signature was technically valid over the malformed bytes. Operators chasing a "rule won't load" mystery would run `selfdefctl keys verify` first, get a green light, and only then realise the issue was YAML.
+
+Now: read + `serde_yaml_ng::from_slice` runs first; signature verification runs second. A malformed file surfaces `SigmaError::Yaml { path, source }` with the parser's line-and-column detail. The signature is **still** verified before the rule is added to the engine, so the security contract ("only signed rules are loaded") is unchanged — only the failure-mode reporting changes.
+
+#### Tests
+
+`crates/selfdef-correlator/tests/signed_rules.rs` (+2 cases, 14 total):
+
+- `load_rules_yaml_error_takes_priority_over_signature` — signed-but-malformed YAML returns `Yaml`, not `Signature`.
+- `load_rules_walks_yaml_in_sorted_order` — three rules named `zeta` / `mu` / `alpha` all load under the deterministic walk; existing tests cover the actual matching precedence indirectly.
+
+#### Phase 2 status after this PR
+
+36 findings across 4 explorers. **3 important (all closed)**, **32 nice (27 closed, 5 open)**, **0 blockers**, **1 SDD-debt open**. Two seam clusters remain (seam-1 SSE, seam-2 SIGUSR2); three explorers remain (docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Fixed — eventstream collector: TOCTOU + symlink hardening (closes F-2027-035 + F-2027-036)
 
 Closes Phase 2's only open important finding. The opt-in `[collectors.eventstream].integrity_check = true` contract is now defeatable-only-by-kernel-bug instead of defeatable-by-local-attacker.

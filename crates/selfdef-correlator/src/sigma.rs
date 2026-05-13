@@ -542,6 +542,23 @@ impl Engine {
             {
                 continue;
             }
+            // F-2027-034: parse YAML *before* verifying the
+            // signature. The pre-fix order returned a confusing
+            // `SigmaError::Signature` error for a malformed-but-
+            // signed rule — operators chasing a YAML typo got a
+            // "signature check failed" message instead of "YAML
+            // parse error at line N". Parsing first means the
+            // operator sees the *real* failure mode: bad YAML
+            // returns `Yaml`, bad signature returns `Signature`.
+            // The signature is still verified before the rule is
+            // added to the engine, so the security contract
+            // ("only signed rules are loaded") is unchanged.
+            let yaml_bytes = std::fs::read(&entry)?;
+            let raw: RawRule =
+                serde_yaml_ng::from_slice(&yaml_bytes).map_err(|source| SigmaError::Yaml {
+                    path: entry.clone(),
+                    source,
+                })?;
             if let Some(v) = verifier {
                 v.verify_detached_file(&entry)
                     .map_err(|source| SigmaError::Signature {
@@ -549,12 +566,6 @@ impl Engine {
                         source,
                     })?;
             }
-            let yaml_bytes = std::fs::read(&entry)?;
-            let raw: RawRule =
-                serde_yaml_ng::from_slice(&yaml_bytes).map_err(|source| SigmaError::Yaml {
-                    path: entry.clone(),
-                    source,
-                })?;
             let compiled = compile_rule(raw, entry)?;
             rules.push(compiled);
         }
@@ -649,6 +660,14 @@ impl Engine {
 fn walk_yaml(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     let mut out = Vec::new();
     walk_yaml_inner(dir, &mut out)?;
+    // F-2027-033: `std::fs::read_dir` iteration order is
+    // undefined per the standard library docs. Two rules with
+    // the same priority (`level: high`, same logsource) that
+    // happen to match the same event would otherwise fire in
+    // filesystem-enumeration order — kernel-version /
+    // filesystem-version dependent. Sort lexicographically so
+    // operators can predict precedence by file naming alone.
+    out.sort();
     Ok(out)
 }
 
