@@ -75,8 +75,56 @@ enum Command {
         #[command(subcommand)]
         action: KeysAction,
     },
+    /// Kubernetes RBAC posture checks (SDD-004 F-2026-025
+    /// follow-up). Useful for verifying that the cluster's
+    /// RBAC doesn't allow unintended subjects to defeat
+    /// `agent-guard`'s pod-label scope.
+    Rbac {
+        #[command(subcommand)]
+        action: RbacAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Subcommand)]
+enum RbacAction {
+    /// SDD-004 F-2026-025 follow-up: print the recommended RBAC
+    /// posture for `agent-guard`'s `scope = "pod-label"`. Reads
+    /// the agent-guard module config to determine the configured
+    /// label key/value; if scope != "pod-label", reports the
+    /// check as not-applicable and exits 0.
+    ///
+    /// With `--probe`, additionally shells out to `kubectl auth
+    /// can-i patch pods --subresource=labels --as=<subject>`
+    /// for a built-in set of subjects (system:authenticated,
+    /// system:unauthenticated, plus operator-supplied `--as`)
+    /// and reports each as ok / overly-permissive.
+    Check {
+        /// Override the agent-guard module config path.
+        /// Default: `/etc/selfdef/modules/agent-guard.toml`.
+        #[arg(long)]
+        module_config: Option<PathBuf>,
+        /// Probe the cluster via `kubectl auth can-i ...`. Without
+        /// this flag, the verb is read-only documentation —
+        /// prints the recommended posture + the exact kubectl
+        /// commands the operator should run.
+        #[arg(long)]
+        probe: bool,
+        /// Additional subjects to probe via `kubectl auth can-i
+        /// --as=<value>`. Repeatable.
+        #[arg(long = "as", value_name = "SUBJECT")]
+        as_subjects: Vec<String>,
+        /// Namespace to scope the probe to. Default: all
+        /// namespaces (`kubectl auth can-i ... --all-namespaces`
+        /// equivalent — omits `-n`).
+        #[arg(long)]
+        namespace: Option<String>,
+        /// Don't fail the command on overly-permissive findings;
+        /// just print them.
+        #[arg(long)]
+        warn_only: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -337,6 +385,24 @@ async fn main() -> Result<()> {
             action: KeysAction::Verify { target, public_key },
         } => {
             keys_verify(&cfg, &target, public_key)?;
+        }
+        Command::Rbac {
+            action:
+                RbacAction::Check {
+                    module_config,
+                    probe,
+                    as_subjects,
+                    namespace,
+                    warn_only,
+                },
+        } => {
+            rbac_check(
+                module_config,
+                probe,
+                &as_subjects,
+                namespace.as_deref(),
+                warn_only,
+            )?;
         }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
@@ -970,6 +1036,204 @@ fn base64_urlsafe(bytes: &[u8]) -> String {
         out.push(A[((b >> 6) & 0x3f) as usize] as char);
     }
     out
+}
+
+/// SDD-004 F-2026-025 follow-up: print the recommended k8s RBAC
+/// posture for `agent-guard`'s `scope = "pod-label"`, optionally
+/// probing the live cluster via `kubectl auth can-i`.
+fn rbac_check(
+    module_config_override: Option<PathBuf>,
+    probe: bool,
+    extra_subjects: &[String],
+    namespace: Option<&str>,
+    warn_only: bool,
+) -> Result<()> {
+    let module_cfg_path = module_config_override
+        .unwrap_or_else(|| PathBuf::from("/etc/selfdef/modules/agent-guard.toml"));
+    let module_cfg = std::fs::read_to_string(&module_cfg_path).with_context(|| {
+        format!(
+            "reading agent-guard module config from {}",
+            module_cfg_path.display()
+        )
+    })?;
+    let (scope, label_key, label_value) = parse_agent_guard_scope(&module_cfg);
+
+    println!("# Agent-guard RBAC posture check");
+    println!("# Module config: {}", module_cfg_path.display());
+    println!();
+
+    if scope != "pod-label" {
+        println!(
+            "rbac check not applicable: agent-guard scope = \"{scope}\". Pod-label \
+             RBAC is only meaningful when scope = \"pod-label\"."
+        );
+        return Ok(());
+    }
+
+    println!("Configured boundary: pods carrying `{label_key}={label_value}`");
+    println!();
+    println!("Recommended posture:");
+    println!("  - Only cluster-admin and any documented narrow ServiceAccount");
+    println!("    may PATCH pod labels in namespaces where agent-guard runs.");
+    println!("  - Specifically, neither system:authenticated nor");
+    println!("    system:unauthenticated should be granted `patch` on `pods`");
+    println!("    (full or labels sub-resource).");
+    println!();
+    println!("Manual verification commands:");
+    let probe_subjects: Vec<String> = [
+        "system:authenticated".to_string(),
+        "system:unauthenticated".to_string(),
+    ]
+    .into_iter()
+    .chain(extra_subjects.iter().cloned())
+    .collect();
+    let ns_arg: Vec<&str> = match namespace {
+        Some(ns) => vec!["-n", ns],
+        None => vec![],
+    };
+    for subj in &probe_subjects {
+        let mut cmd_line = vec![
+            "kubectl",
+            "auth",
+            "can-i",
+            "patch",
+            "pods",
+            "--subresource=labels",
+            "--as",
+            subj.as_str(),
+        ];
+        cmd_line.extend(ns_arg.iter().copied());
+        println!("  $ {}", cmd_line.join(" "));
+    }
+
+    if !probe {
+        println!();
+        println!("Skipping live probe (pass --probe to run the kubectl commands).");
+        return Ok(());
+    }
+
+    println!();
+    println!("Live probe:");
+    let mut overly_permissive: Vec<String> = Vec::new();
+    for subj in &probe_subjects {
+        match rbac_probe_subject(subj, namespace)? {
+            ProbeOutcome::Cannot => println!("  ok:     {subj} — kubectl reports CANNOT"),
+            ProbeOutcome::Can => {
+                println!("  WARN:   {subj} — kubectl reports CAN (overly permissive)");
+                overly_permissive.push(subj.clone());
+            }
+            ProbeOutcome::KubectlMissing => {
+                anyhow::bail!("--probe: `kubectl` is not on PATH");
+            }
+            ProbeOutcome::Other(stderr) => {
+                println!("  skip:   {subj} — kubectl error: {}", stderr.trim());
+            }
+        }
+    }
+    println!();
+    if overly_permissive.is_empty() {
+        println!(
+            "ok: no probed subject can patch pod labels — RBAC posture matches \
+             agent-guard's pod-label scope assumption."
+        );
+        Ok(())
+    } else {
+        println!(
+            "warn: {} subject(s) can patch pod labels: {}",
+            overly_permissive.len(),
+            overly_permissive.join(", "),
+        );
+        if warn_only {
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "overly-permissive RBAC posture for agent-guard pod-label scope; \
+                 fix or pass --warn-only to suppress"
+            );
+        }
+    }
+}
+
+/// Parse the agent-guard module config TOML for `scope`,
+/// `pod_label_key`, and `pod_label_value`. Hand-rolled to avoid
+/// a toml-crate dependency hop just for three string scalars.
+/// Returns `("container", "", "")` defaults when keys are
+/// missing.
+fn parse_agent_guard_scope(body: &str) -> (String, String, String) {
+    let mut scope = String::from("container");
+    let mut key = String::new();
+    let mut value = String::new();
+    for line in body.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("scope") {
+            if let Some(v) = extract_toml_scalar(rest) {
+                scope = v;
+            }
+        } else if let Some(rest) = line.strip_prefix("pod_label_key") {
+            if let Some(v) = extract_toml_scalar(rest) {
+                key = v;
+            }
+        } else if let Some(rest) = line.strip_prefix("pod_label_value") {
+            if let Some(v) = extract_toml_scalar(rest) {
+                value = v;
+            }
+        }
+    }
+    (scope, key, value)
+}
+
+/// Extract a quoted-string scalar from a TOML `= "value"` tail.
+/// Returns None for any line shape this helper doesn't
+/// understand (the caller falls back to defaults).
+fn extract_toml_scalar(rest: &str) -> Option<String> {
+    let rest = rest.trim_start();
+    let rest = rest.strip_prefix('=')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+enum ProbeOutcome {
+    Cannot,
+    Can,
+    KubectlMissing,
+    Other(String),
+}
+
+fn rbac_probe_subject(subject: &str, namespace: Option<&str>) -> Result<ProbeOutcome> {
+    let mut cmd = std::process::Command::new("kubectl");
+    cmd.args([
+        "auth",
+        "can-i",
+        "patch",
+        "pods",
+        "--subresource=labels",
+        "--as",
+        subject,
+    ]);
+    if let Some(ns) = namespace {
+        cmd.args(["-n", ns]);
+    }
+    let out = match cmd.output() {
+        Ok(o) => o,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(ProbeOutcome::KubectlMissing);
+        }
+        Err(e) => return Err(e).context("spawn kubectl"),
+    };
+    // `kubectl auth can-i` semantics: exit 0 + "yes" on stdout
+    // means CAN; exit non-zero + "no" means CANNOT; anything
+    // else is an error condition we surface to the operator.
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+    match (out.status.success(), stdout.as_str()) {
+        (true, "yes") => Ok(ProbeOutcome::Can),
+        (false, "no") => Ok(ProbeOutcome::Cannot),
+        _ => Ok(ProbeOutcome::Other(stderr)),
+    }
 }
 
 /// SDD-004 rule-signing follow-up: verify a detached minisign

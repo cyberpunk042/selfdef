@@ -6,6 +6,60 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — k8s RBAC posture check (SDD-004 F-2026-025 follow-up)
+
+Closes the SDD-004 F-2026-025 known-gap follow-up as **shipped**.
+Adds `selfdefctl rbac check` — a verb that verifies whether the
+cluster's RBAC posture matches `agent-guard`'s `scope = "pod-label"`
+assumption (only documented narrow subjects should be able to
+PATCH pod labels).
+
+With this PR, **every tracked deferred follow-up from the
+Phase-1 audit, SDD-004, and SDD-006 is closed**.
+
+- **`selfdefctl rbac check`** — new CLI verb.
+  - Reads agent-guard's module config (default
+    `/etc/selfdef/modules/agent-guard.toml`, override via
+    `--module-config`).
+  - If `scope != "pod-label"`, reports the check as
+    not-applicable and exits 0.
+  - Otherwise, prints the recommended posture + the exact
+    `kubectl auth can-i patch pods --subresource=labels --as=<subj>`
+    commands the operator should run.
+  - With `--probe`, shells out to those commands for the
+    built-in subjects (`system:authenticated`,
+    `system:unauthenticated`) plus any operator-supplied
+    `--as <subject>`. Reports each as `ok:` or `WARN:` and
+    exits non-zero if any subject is overly permissive.
+    `--warn-only` suppresses the exit code.
+  - `--namespace <ns>` scopes the probe to one namespace.
+- **`docs/dev/rbac-posture.md`** — operator runbook covering
+  when the check applies, the recommended posture, read-only
+  vs probe modes, and the documented caveats (the check is
+  spot-checking on a fixed subject set, not a cluster-wide
+  enumeration).
+- **`SECURITY.md`** — F-2026-025 known-gap entry flips from
+  "desirable but not designed" to "shipped".
+
+#### Tests
+
+`crates/selfdef-cli/tests/cli_rbac_check.rs` ships 7
+integration tests using a stubbed `kubectl` on PATH (mapping
+`--as=<subject>` to the `yes`/`no` exit-code contract). Covers:
+
+- not-applicable when `scope = "container"`
+- read-only mode prints the recommended posture
+- clean posture (every probed subject CANNOT patch labels)
+  exits 0
+- overly-permissive subject exits non-zero with a clear WARN
+  line
+- `--warn-only` suppresses the exit code
+- operator-supplied `--as` subjects get probed too
+- `--namespace` propagates into the printed commands
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — dry-run-noop tests across every module (closes F-2026-030 fully)
 
 Closes F-2026-030 fully (was "reference closed" — adopted only in `vpn-bridge` from PR #41). Every other module-test file now carries a companion `dry_run_apply_must_be_a_noop_on_disk` test using the shared `snapshot_tree` + `assert_tree_unchanged` helpers from `tests/common/mod.rs`.
