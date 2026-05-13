@@ -104,18 +104,30 @@ impl TetragonCollector {
     }
 
     fn process_line(&self, line: &str) {
+        if let Some(event) = self.translate_line(line) {
+            self.publisher.publish_lossy(event);
+        }
+    }
+
+    /// SDD-005 Test-6: translate a single Tetragon JSON line into a
+    /// `selfdef_core::Event` without touching the bus. Returns
+    /// `None` for empty input or unparseable JSON (those are
+    /// soft-skipped with a debug log; callers can distinguish from
+    /// the structured-status flow by the `None`). External
+    /// translation tests use this surface to exercise the
+    /// collector in isolation.
+    pub fn translate_line(&self, line: &str) -> Option<Event> {
         if line.is_empty() {
-            return;
+            return None;
         }
         let v: serde_json::Value = match serde_json::from_str(line) {
             Ok(v) => v,
             Err(e) => {
                 debug!(error = %e, "ignored unparseable tetragon line");
-                return;
+                return None;
             }
         };
-
-        let event = if let Some(exec) = v.get("process_exec") {
+        Some(if let Some(exec) = v.get("process_exec") {
             self.build_process_exec(exec, &v)
         } else if let Some(kp) = v.get("process_kprobe") {
             self.build_process_kprobe(kp, &v)
@@ -123,8 +135,7 @@ impl TetragonCollector {
             self.build_process_exit(exit, &v)
         } else {
             self.build_generic(&v)
-        };
-        self.publisher.publish_lossy(event);
+        })
     }
 
     fn next_seq(&self) -> u64 {

@@ -62,13 +62,13 @@
 | F-2026-027 | important | `docs/src/{dev,ops}/*.md` | Five stub pages linked from `SUMMARY.md` are one-line TODOs. *(was D-009)* | doc — **closed** by doc-sweep PR |
 | F-2026-028 | important | `docs/api.md`, `docs/ebpf.md`, `docs/nats.md`, `docs/ssh-wrap-install.md` | Real operational guides orphaned from mdbook outline. *(was D-010)* | doc — **closed** by doc-sweep PR (files moved into `docs/src/{ops,dev}/`) |
 | F-2026-029 | important | `docs/src/modules.md:202-207` | Stale claim that only `detect-host` ships. *(was D-011)* | doc — **closed** by doc-sweep PR |
-| F-2026-030 | important | every `module_*.rs` integration test | Dry-run mode not negatively asserted — a regression making `SELFDEF_DRY_RUN=1` mutate state would pass every existing test. *(was T-003)* | implement |
-| F-2026-031 | important | `m12_api.rs:469-482` | `/metrics` content-type and exposition body checks too loose. *(was T-005)* | implement |
-| F-2026-032 | important | `m12_api.rs` | No test that `/metrics` is accessible with a Read-only token. *(was T-006)* | implement |
-| F-2026-033 | important | `selfdef-correlator/tests/` | No SIGHUP-while-processing test. Hot-reload claim from ARCHITECTURE.md is unverified under traffic. *(was T-007)* | implement |
-| F-2026-034 | important | `selfdef-store` | No concurrent-insert or crash-recovery test. *(was T-009)* | implement |
-| F-2026-035 | important | `selfdef-nats` | No real-broker round-trip test. JetStream durability promises unverified. *(was T-010)* | implement |
-| F-2026-036 | important | `selfdef-collector-tetragon` | No isolation test; every translation goes through daemon tests only. *(was T-011)* | implement |
+| F-2026-030 | important | every `module_*.rs` integration test | Dry-run mode not negatively asserted — a regression making `SELFDEF_DRY_RUN=1` mutate state would pass every existing test. *(was T-003)* | implement — **reference closed** by SDD-005 implementation PR (`snapshot_tree` + `assert_tree_unchanged` in `crates/selfdef-cli/tests/common/mod.rs`; reference test in `module_vpn_bridge.rs::endpoint_dry_run_must_be_a_noop_on_disk`; other modules follow when next touched) |
+| F-2026-031 | important | `m12_api.rs:469-482` | `/metrics` content-type and exposition body checks too loose. *(was T-005)* | implement — **closed** by SDD-005 implementation PR (new strict `mod prom` parser + `metrics_exposition_passes_format_strict_parse` test) |
+| F-2026-032 | important | `m12_api.rs` | No test that `/metrics` is accessible with a Read-only token. *(was T-006)* | implement — **closed** by SDD-005 implementation PR (`metrics_allows_read_capability` test) |
+| F-2026-033 | important | `selfdef-correlator/tests/` | No SIGHUP-while-processing test. Hot-reload claim from ARCHITECTURE.md is unverified under traffic. *(was T-007)* | implement — **closed** by SDD-005 implementation PR (`hot_reload.rs::correlator_swaps_rules_atomically_under_live_traffic` + `..._keeps_prior_set_on_parse_failure`) |
+| F-2026-034 | important | `selfdef-store` | No concurrent-insert or crash-recovery test. *(was T-009)* | implement — **closed** by SDD-005 implementation PR (`tests/concurrent.rs` × 3 tests covering both contracts) |
+| F-2026-035 | important | `selfdef-nats` | No real-broker round-trip test. JetStream durability promises unverified. *(was T-010)* | implement — **closed** by SDD-005 implementation PR (`tests/integration.rs` spawns a real `nats-server`; `#[ignore]`-gated so CI without the binary stays green) |
+| F-2026-036 | important | `selfdef-collector-tetragon` | No isolation test; every translation goes through daemon tests only. *(was T-011)* | implement — **closed** by SDD-005 implementation PR (`tests/translation.rs` × 10 tests covering every translation branch plus 3 tolerance branches; new `pub fn translate_line` surface) |
 | F-2026-037 | important | CHANGELOG + PR descriptions for #21, #22, #24 | Operator outcomes are described as if end-to-end; audit reveals they aren't. *(was R-003)* | doc — **closed** by doc-sweep PR via a CHANGELOG "Honest correction" entry pointing at SDD-001 |
 
 ---
@@ -103,7 +103,7 @@
 | --- | --- | --- | --- | --- |
 | F-2026-080 | SDD-debt | `modules/observability/assets/dashboards/` | Dashboard implicitly depends on agent-guard policies firing — no manifest-level coupling captured. *(was M-010)* | design |
 | F-2026-081 | SDD-debt | `modules/*/install/lib.sh` | Duplicated helpers (`toml_get`, `run`, `log`, `emit_status`) across every module. *(was M-011)* | design — **closed** by SDD-006 implementation PR (shared `packaging/lib/module-lib.sh`; eight modules migrated byte-stably; dispatcher exports `SELFDEF_MODULE_LIB` with workspace+system fallback; version-pinned at `SELFDEF_MODULE_LIB_VERSION=1` with mismatch refused at source time) |
-| F-2026-082 | SDD-debt | PR-author discipline | Tests verify the unit, not the flow. Need a design doc on what "integration-tested" means at the daemon ↔ module seam. *(was R-002)* | design |
+| F-2026-082 | SDD-debt | PR-author discipline | Tests verify the unit, not the flow. Need a design doc on what "integration-tested" means at the daemon ↔ module seam. *(was R-002)* | design — **closed** by SDD-005 implementation PR (`docs/dev/test-contract.md` runbook documents the four categories + three shared patterns; SDD-005 itself flips to `implemented`) |
 | F-2026-083 | SDD-debt | development cadence | Module PRs introducing new event sources should be preceded by collector/correlator prep PRs. *(was R-004)* | design |
 
 ---

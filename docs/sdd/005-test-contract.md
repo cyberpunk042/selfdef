@@ -1,11 +1,69 @@
 # SDD-005 — Test contract for the daemon ↔ module seam
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
-> Closes findings: F-2026-082, and scopes the implementation
-> work for F-2026-030, F-2026-031, F-2026-032, F-2026-033,
-> F-2026-034, F-2026-035, F-2026-036.
+> Closes findings: F-2026-082, F-2026-030 (reference adoption),
+> F-2026-031, F-2026-032, F-2026-033, F-2026-034, F-2026-035
+> (#[ignore]-gated), F-2026-036.
+
+## Implementation status
+
+Shipped in the SDD-005 implementation PR. The 6 Test-N PRs the
+SDD breaks the work into collapsed into a single PR per the
+operator's "big chunks" steer.
+
+- **D-5 — Test-contract runbook**: `docs/dev/test-contract.md`
+  documents the four test categories + the three shared
+  patterns for contributors.
+- **D-2a / Test-1 — Dry-run-negative helper**: extended
+  `crates/selfdef-cli/tests/common/mod.rs` with `snapshot_tree`
+  + `assert_tree_unchanged` (using a hand-rolled
+  length+first-32-bytes fingerprint to avoid a hash-crate
+  dependency). Adopted as a reference in
+  `crates/selfdef-cli/tests/module_vpn_bridge.rs`
+  (`endpoint_dry_run_must_be_a_noop_on_disk`). The other
+  module-test files follow the same pattern when they next get
+  touched. Closes F-2026-030 for the reference module.
+- **D-2b / Test-2 — Prometheus parser**: new
+  `mod prom` in `crates/selfdef-api/tests/m12_api.rs` provides
+  a strict exposition parser (Sample tuples, dedup-key check,
+  no comment shapes outside HELP/TYPE). New tests
+  `metrics_exposition_passes_format_strict_parse` and
+  `metrics_allows_read_capability` close F-2026-031 and
+  F-2026-032 respectively.
+- **D-2c / Test-3 — Real-broker NATS fixture**: new
+  `crates/selfdef-nats/tests/integration.rs` spawns a real
+  `nats-server` on a free port and asserts the bridge's
+  round-trip (`core_bridge_round_trips_event_between_two_hosts`)
+  + JetStream stream/consumer setup
+  (`jetstream_bridge_creates_stream_and_durable_consumer`).
+  Both are `#[ignore]`-gated so CI without the binary stays
+  green; the runbook documents the local-run incantation.
+  Closes F-2026-035 with the documented caveat.
+- **Test-4 — Correlator hot-reload**: new
+  `crates/selfdef-correlator/tests/hot_reload.rs` exercises
+  the SIGHUP-under-traffic atomicity claim
+  (`correlator_swaps_rules_atomically_under_live_traffic`)
+  plus the non-destructive failure path
+  (`correlator_load_rules_keeps_prior_set_on_parse_failure`).
+  Closes F-2026-033.
+- **Test-5 — Store concurrency + crash-recovery**: new
+  `crates/selfdef-store/tests/concurrent.rs` ships
+  `concurrent_inserts_do_not_lose_rows` (8 tasks × 200 inserts
+  / handle), `crash_recovery_surfaces_every_committed_insert`
+  (drop and reopen the on-disk file), and a composition test
+  combining the two. Closes F-2026-034.
+- **Test-6 — Tetragon collector isolation**: new
+  `crates/selfdef-collector-tetragon/tests/translation.rs` ships
+  10 translation tests covering every branch of
+  `process_exec` / `process_kprobe` (file/socket/unknown) /
+  `process_exit` / unknown-top-level + 3 tolerance branches
+  (empty line, malformed JSON, missing-fields). To enable the
+  external test surface, a new
+  `pub fn TetragonCollector::translate_line(&str) -> Option<Event>`
+  was added; `process_line` is a thin publisher on top.
+  Closes F-2026-036.
 
 ## Problem
 

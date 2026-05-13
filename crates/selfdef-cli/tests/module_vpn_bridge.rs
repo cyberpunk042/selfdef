@@ -113,6 +113,45 @@ forward_to_lan = ""
     );
 }
 
+mod common;
+
+/// SDD-005 D-2a / Test-1: dry-run must be a no-op. The
+/// endpoint apply above asserts the live-positive path
+/// succeeds; this negative asserts the dry-run path mutates
+/// nothing on disk. Pre-SDD-005, a regression making dry-run
+/// write the nft.conf file (or the wg-quick unit, etc.) would
+/// have passed silently — the existing test only checked the
+/// status JSON.
+#[test]
+fn endpoint_dry_run_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let wg_dir = scratch.path().join("wireguard");
+    std::fs::create_dir_all(&wg_dir).unwrap();
+    make_wg_conf(&wg_dir, "wg0");
+
+    let cfg_body = r#"
+profile        = "relay-via-server"
+role           = "relay"
+interface      = "wg0"
+listen_port    = 51820
+forward_to_lan = "br0"
+"#;
+    common::write_file(&scratch.path().join("vpn-bridge.toml"), cfg_body);
+    let cfg = scratch.path().join("vpn-bridge.toml");
+    let nft_dest = scratch.path().join("nft.conf");
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = run_apply(&cfg, stubs.path(), &wg_dir, &nft_dest);
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+}
+
 #[test]
 fn relay_apply_with_forward_to_lan_succeeds() {
     let stubs = stub_path_dir();
