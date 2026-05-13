@@ -202,6 +202,8 @@ version + its content hash.
 ## What's there today
 
 See [`modules-roadmap.md`](./modules-roadmap.md) for the current
-status of each absorbed / planned module. Only `detect-host` ships as
-a manifested module at the time of this writing — every other entry
-is `planned` or `absorbing`.
+status of each module. Every module the original roadmap named now
+ships as a manifested catalog entry: `detect-host`, `bridge-l2`,
+`suricata`, `polarproxy`, `vpn-bridge`, `integrity-sentinel`,
+`tetragon`, `agent-guard`, `observability`. The roadmap doc is
+the canonical inventory.

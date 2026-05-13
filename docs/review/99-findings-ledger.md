@@ -44,24 +44,24 @@
 | --- | --- | --- | --- | --- |
 | F-2026-010 | important | `modules/agent-guard/install/apply.sh` | tetragon `policy_dir` discovery depends on `SELFDEF_TETRAGON_CONFIG`; silent fallback to hard-coded path. *(was M-002)* | design |
 | F-2026-011 | important | `modules/tetragon/install/apply.sh` | `event_log_path` alignment with daemon eventstream is operator-managed; no apply-time surface or check. *(was M-004)* | design |
-| F-2026-012 | important | `modules/observability/` | Three different defaults for `scrape_targets` across README, both profile files, apply.sh fallback. *(was M-005)* | doc |
-| F-2026-013 | important | `modules/observability/README.md` | Dashboard depends on selfdef-daemon `/metrics`; README only mentions Tetragon. *(was M-006)* | doc |
+| F-2026-012 | important | `modules/observability/` | Three different defaults for `scrape_targets` across README, both profile files, apply.sh fallback. *(was M-005)* | doc — **closed** by doc-sweep PR |
+| F-2026-013 | important | `modules/observability/README.md` | Dashboard depends on selfdef-daemon `/metrics`; README only mentions Tetragon. *(was M-006)* | doc — **closed** by doc-sweep PR |
 | F-2026-014 | important | every module using the event bus | No `depends_on = ["detect-host"]` declared; consume-side of detect-host's `provides = ["event-bus"]` is silent. *(was M-009)* | design |
 | F-2026-015 | important | `selfdef-config CorrelatorConfig::window_secs / threshold` | Dead config knobs — exposed but never read. Sigma rules carry their own. *(was C-002)* | implement |
 | F-2026-016 | important | `selfdef-config StoreConfig::hot_retention_days` + `selfdef-store` | Dead knob — retention horizon exposed but no sweeper enforces it. *(was C-003)* | design |
 | F-2026-017 | important | `selfdef-store/src/sqlite.rs:106` | Duplicate `const SCHEMA_VERSION: u32 = 1` instead of referencing `selfdef_core::SCHEMA_VERSION`. *(was C-005)* | implement |
 | F-2026-018 | important | `modules/integrity-sentinel/profiles/*.toml` | `event_stream_path` commented out in shipped profiles. *(was I-001)* | implement |
-| F-2026-019 | important | `modules/observability/README.md` | Prometheus bearer-token auth on TCP `/metrics` is undocumented. Scrape will 401. *(was I-005)* | doc |
+| F-2026-019 | important | `modules/observability/README.md` | Prometheus bearer-token auth on TCP `/metrics` is undocumented. Scrape will 401. *(was I-005)* | doc — **closed** by doc-sweep PR |
 | F-2026-020 | important | repo-wide (packaging + module READMEs) | No bundled `selfdef.toml` template for "three modules with sane defaults". *(was I-009)* | design |
-| F-2026-021 | important | `README.md` line 7 | "Milestone 1 — Scaffolding only" status banner is false. *(was D-001)* | doc |
-| F-2026-022 | important | `ARCHITECTURE.md` | `/metrics` endpoint and the module catalog (AI-machine track) missing from the architecture description. *(was D-003, D-004)* | doc |
+| F-2026-021 | important | `README.md` line 7 | "Milestone 1 — Scaffolding only" status banner is false. *(was D-001)* | doc — **closed** by doc-sweep PR |
+| F-2026-022 | important | `ARCHITECTURE.md` | `/metrics` endpoint and the module catalog (AI-machine track) missing from the architecture description. *(was D-003, D-004)* | doc — **closed** by doc-sweep PR |
 | F-2026-023 | important | `SECURITY.md` (and mirror) | `/metrics` endpoint not in threat model. Token rotation lifecycle unspecified. *(was D-005, S-002)* | design |
 | F-2026-024 | important | `SECURITY.md` | `/etc/tetragon/tetragon.tp.d/` writable directory not in threat model — eBPF policy injection vector. *(was D-006, S-001)* | design |
 | F-2026-025 | important | `SECURITY.md` | Pod-label scope reliance on k8s label RBAC not in threat model. *(was D-007, S-003)* | design |
 | F-2026-026 | important | `SECURITY.md` | Eventstream JSONL paths are a trust boundary; no documented ownership / mode requirements. *(was S-004)* | design |
-| F-2026-027 | important | `docs/src/{dev,ops}/*.md` | Five stub pages linked from `SUMMARY.md` are one-line TODOs. *(was D-009)* | doc |
-| F-2026-028 | important | `docs/api.md`, `docs/ebpf.md`, `docs/nats.md`, `docs/ssh-wrap-install.md` | Real operational guides orphaned from mdbook outline. *(was D-010)* | doc |
-| F-2026-029 | important | `docs/src/modules.md:202-207` | Stale claim that only `detect-host` ships. *(was D-011)* | doc |
+| F-2026-027 | important | `docs/src/{dev,ops}/*.md` | Five stub pages linked from `SUMMARY.md` are one-line TODOs. *(was D-009)* | doc — **closed** by doc-sweep PR |
+| F-2026-028 | important | `docs/api.md`, `docs/ebpf.md`, `docs/nats.md`, `docs/ssh-wrap-install.md` | Real operational guides orphaned from mdbook outline. *(was D-010)* | doc — **closed** by doc-sweep PR (files moved into `docs/src/{ops,dev}/`) |
+| F-2026-029 | important | `docs/src/modules.md:202-207` | Stale claim that only `detect-host` ships. *(was D-011)* | doc — **closed** by doc-sweep PR |
 | F-2026-030 | important | every `module_*.rs` integration test | Dry-run mode not negatively asserted — a regression making `SELFDEF_DRY_RUN=1` mutate state would pass every existing test. *(was T-003)* | implement |
 | F-2026-031 | important | `m12_api.rs:469-482` | `/metrics` content-type and exposition body checks too loose. *(was T-005)* | implement |
 | F-2026-032 | important | `m12_api.rs` | No test that `/metrics` is accessible with a Read-only token. *(was T-006)* | implement |
@@ -69,7 +69,7 @@
 | F-2026-034 | important | `selfdef-store` | No concurrent-insert or crash-recovery test. *(was T-009)* | implement |
 | F-2026-035 | important | `selfdef-nats` | No real-broker round-trip test. JetStream durability promises unverified. *(was T-010)* | implement |
 | F-2026-036 | important | `selfdef-collector-tetragon` | No isolation test; every translation goes through daemon tests only. *(was T-011)* | implement |
-| F-2026-037 | important | CHANGELOG + PR descriptions for #21, #22, #24 | Operator outcomes are described as if end-to-end; audit reveals they aren't. *(was R-003)* | doc |
+| F-2026-037 | important | CHANGELOG + PR descriptions for #21, #22, #24 | Operator outcomes are described as if end-to-end; audit reveals they aren't. *(was R-003)* | doc — **closed** by doc-sweep PR via a CHANGELOG "Honest correction" entry pointing at SDD-001 |
 
 ---
 
