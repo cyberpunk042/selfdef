@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — selfdef-correlator verifier observability (closes F-2027-019 + F-2027-020 + F-2027-021)
+
+First of three follow-up cluster PRs the Phase 2 crate explorer recommended. The three findings all touched the correlator's post-PR-#58 verifier surface and share a theme: "make verifier state operator-visible". Shipped together as one cohesive bundle.
+
+#### F-2027-019 — crate `//!` header refreshed
+
+`crates/selfdef-correlator/src/lib.rs:1-7` previously stopped at M5's "SshBruteforceRule gone". The post-Phase-1 surface has grown a lot since then. The new header walks the operator through five surface areas in order: rule loading, SIGHUP hot reload, optional rule signing (SDD-004), SIGUSR2 hot rotation of the signing key (F-2027-005 / PR #58), and operator introspection (`verifier_source` / F-2027-021).
+
+#### F-2027-020 — `Correlator::load_rules` logs the verifier key path
+
+Previously `load_rules` only logged `rules = N` once via the daemon's caller. After a SIGUSR2 rotation the operator had no way to eye-ball "did the verifier actually swap?" without sifting through `/proc/$pid/fd`. Now: when a verifier is attached, the function emits
+
+```
+info!(rules = N, verifier_key = "/etc/selfdef/keys/policy.pub",
+      "rules loaded under signing verifier")
+```
+
+at the end of every successful load — including the post-rotation re-verify the SIGUSR2 handler triggers. No log line when no verifier is attached (signing is opt-in).
+
+#### F-2027-021 — public `Correlator::verifier_source() -> Option<PathBuf>` getter
+
+New public method that returns the absolute path the currently-loaded public key came from, or `None` if signing isn't opted in. The return type is owned (`PathBuf`) so callers can't accidentally hold a reference across the read-lock guard. Mirrors the existing `has_verifier()` shape.
+
+Use cases (none consumed in this PR; the getter is added so they have something to call):
+- `/status` API endpoint can surface "trusted policy.pub: …".
+- Future `selfdefctl status --verifier` verb.
+- Operator dashboards / Prometheus metrics.
+
+Tests (`crates/selfdef-correlator/tests/signed_rules.rs`, +3 cases):
+- `verifier_source_returns_none_without_verifier` — opt-in disabled.
+- `verifier_source_returns_loaded_path_after_with_verifier` — opt-in enabled at startup.
+- `verifier_source_tracks_reload` — path stays stable across a SIGUSR2-style hot rotation (the path didn't change, only the key file's bytes).
+
+#### Phase 2 backlog after this PR
+
+21 findings raised across two explorers. **18 nice (10 closed, 8 open)**, **1 SDD-debt (open)**, **2 important (closed)**, **0 blockers**. The remaining 8 open `nice` cluster into two follow-up PRs: selfdef-signing API surface (F-2027-011 + -012 + -013), and CLI / api ergonomics (F-2027-014 through -018). Five explorers remain.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 crate explorer (raises F-2027-011 through F-2027-021)
 
 Second of Phase 2's seven explorers ships. The crate audit walks the new `selfdef-signing` crate and the extended surfaces on `selfdef-cli`, `selfdef-api`, `selfdef-correlator`, and `selfdef-collector-eventstream` (scope per Phase 2 charter). 11 new findings raised; all triaged **nice** — no blockers, no important.

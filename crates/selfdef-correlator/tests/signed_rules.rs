@@ -259,6 +259,55 @@ fn reload_verifier_with_no_verifier_attached_is_typed_error() {
 }
 
 #[test]
+fn verifier_source_returns_none_without_verifier() {
+    // F-2027-021: a correlator built without `with_verifier`
+    // reports None — signing is opt-in, the getter must
+    // distinguish "no verifier" from "verifier loaded but key
+    // path empty" (which can't happen).
+    let dir = tempfile::tempdir().unwrap();
+    let rules_dir = dir.path().join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    let corr = empty_correlator(&rules_dir);
+    assert_eq!(corr.verifier_source(), None);
+}
+
+#[test]
+fn verifier_source_returns_loaded_path_after_with_verifier() {
+    // F-2027-021: the getter returns the absolute path the
+    // verifier was loaded from. Mirrors `Verifier::source()`.
+    let dir = tempfile::tempdir().unwrap();
+    let rules_dir = dir.path().join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    let (pub_path, _sk) = fresh_keypair(dir.path());
+    let verifier = selfdef_signing::Verifier::load(&pub_path).unwrap();
+    let corr = empty_correlator(&rules_dir).with_verifier(verifier);
+    assert_eq!(corr.verifier_source(), Some(pub_path));
+}
+
+#[test]
+fn verifier_source_tracks_reload() {
+    // F-2027-021: after a hot-rotate via `reload_verifier()`,
+    // the getter still reports the *path* (the path didn't
+    // change — only the key file's contents did). Sanity-check
+    // that the path stays stable across reloads.
+    let dir = tempfile::tempdir().unwrap();
+    let rules_dir = dir.path().join("rules");
+    std::fs::create_dir_all(&rules_dir).unwrap();
+    let (pub_path, _sk_a) = fresh_keypair(dir.path());
+    let verifier = selfdef_signing::Verifier::load(&pub_path).unwrap();
+    let corr = empty_correlator(&rules_dir).with_verifier(verifier);
+    assert_eq!(corr.verifier_source(), Some(pub_path.clone()));
+
+    // Operator rotates the on-disk key. reload_verifier reads
+    // the new bytes from the same path.
+    let kp_b = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    std::fs::write(&pub_path, kp_b.pk.to_box().unwrap().to_string()).unwrap();
+    let reloaded = corr.reload_verifier().expect("reload succeeds");
+    assert_eq!(reloaded, pub_path);
+    assert_eq!(corr.verifier_source(), Some(pub_path));
+}
+
+#[test]
 fn load_rules_signature_failure_keeps_prior_ruleset() {
     // Two-step: (1) load a valid signed rule, (2) corrupt the
     // signature and reload, (3) verify the prior rule is still

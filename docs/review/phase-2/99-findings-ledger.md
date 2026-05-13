@@ -4,8 +4,8 @@
 > recent-PRs (10 findings, all closed except 1 SDD-debt) and
 > crate (11 findings, all open `nice`). Five explorers remain
 > (module, integration, docs, tests, security).
-> Last updated: 2026-05-13 (Phase 2 crate explorer — adds
-> F-2027-011 through F-2027-021).
+> Last updated: 2026-05-13 (Phase 2 correlator-observability PR
+> — closes F-2027-019 + F-2027-020 + F-2027-021).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -33,7 +33,7 @@ None.
 | F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 
-## Nice findings (18 — 7 closed, 11 open)
+## Nice findings (18 — 10 closed, 8 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -52,9 +52,9 @@ None.
 | F-2027-016 | nice | `selfdef-api::ApiServer::run` `NoTransport` error | Same error for "api enabled but no transport set" and "api disabled"; operator-facing message could distinguish. | implement |
 | F-2027-017 | nice | `selfdef-cli` starter-config path constants | `init.rs` and `modules.rs` independently define defaults for the same `/etc/selfdef/` paths; drift risk. | implement |
 | F-2027-018 | nice | `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` env override | Test-only knob documented only in a source comment; not in `docs/dev/operator-health-check.md` or `--help`. | doc |
-| F-2027-019 | nice | `selfdef-correlator` crate `//!` header | Stops at M5's "SshBruteforceRule gone"; doesn't advertise the post-PR-#58 surface (`reload_verifier`, `has_verifier`, SIGUSR2). | doc |
-| F-2027-020 | nice | `selfdef-correlator::load_rules` | Logs `rules = N` but not the verifier source path it verified them against; post-SIGUSR2 operators can't eye-ball "did the verifier swap?". | implement |
-| F-2027-021 | nice | `selfdef-correlator` verifier source getter | No public `verifier_source()` getter — tests, `selfdefctl doctor`, dashboards all want to answer "which `policy.pub` is the daemon trusting right now?". | implement |
+| F-2027-019 | nice | `selfdef-correlator` crate `//!` header | Stops at M5's "SshBruteforceRule gone"; doesn't advertise the post-PR-#58 surface (`reload_verifier`, `has_verifier`, SIGUSR2). | doc — **closed** by Phase 2 correlator-observability PR (crate header now documents both reload signals, `reload_verifier`, `verifier_source`, and the SDD-004 signing posture). |
+| F-2027-020 | nice | `selfdef-correlator::load_rules` | Logs `rules = N` but not the verifier source path it verified them against; post-SIGUSR2 operators can't eye-ball "did the verifier swap?". | implement — **closed** by Phase 2 correlator-observability PR (`load_rules` now emits `info!(rules, verifier_key)` when the verifier branch was taken). |
+| F-2027-021 | nice | `selfdef-correlator` verifier source getter | No public `verifier_source()` getter — tests, `selfdefctl doctor`, dashboards all want to answer "which `policy.pub` is the daemon trusting right now?". | implement — **closed** by Phase 2 correlator-observability PR (new `Correlator::verifier_source() -> Option<PathBuf>`; 3 tests cover the none/present/post-reload paths). |
 
 ## SDD-debt findings (1)
 
@@ -67,12 +67,13 @@ None.
 - **21 findings raised** across two explorers (recent-PRs: 10;
   crate: 11).
 - **0 blockers**, **2 important (both closed)**, **18 nice
-  (7 closed, 11 open)**, **1 SDD-debt (F-2027-010 open)**.
-- The recent-PRs explorer's backlog is fully drained. The crate
-  explorer's 11 entries (F-2027-011 through F-2027-021) are all
-  fresh and triaged `nice` — they cluster into ~3 follow-up
-  PRs (selfdef-signing API surface; selfdef-correlator
-  observability; CLI/api ergonomics).
+  (10 closed, 8 open)**, **1 SDD-debt (F-2027-010 open)**.
+- The recent-PRs explorer's backlog is fully drained. Of the
+  crate explorer's 11 entries, the three correlator-observability
+  findings (F-2027-019, -020, -021) are closed; the remaining
+  open eight cluster into two follow-up PRs (selfdef-signing API
+  surface: F-2027-011 + -012 + -013; CLI / api ergonomics:
+  F-2027-014 through -018).
 - Five explorers remain (module, integration, docs, tests,
   security). Each will add more findings in follow-up PRs.
 
