@@ -9,6 +9,7 @@
 
 mod doctor;
 mod emit;
+mod follow;
 mod init;
 mod modules;
 
@@ -360,6 +361,28 @@ enum EventsAction {
         #[arg(long)]
         json: bool,
     },
+    /// Live-tail events as they hit the daemon's bus, via the
+    /// `/events/stream` SSE endpoint. Reads the UNIX socket the
+    /// daemon binds (no TCP / no bearer-token required). Prints
+    /// each event one per line to stdout — defaults to JSON.
+    ///
+    /// Useful for incident response and live debugging — pair
+    /// with `selfdefctl events tail` (which reads the SQLite
+    /// store) for historical context.
+    Follow {
+        /// Path to the daemon's UNIX socket. Default:
+        /// `/run/selfdef.sock` (matches the daemon's
+        /// `[api].unix_socket` default).
+        #[arg(long, default_value = "/run/selfdef.sock")]
+        unix_socket: PathBuf,
+        /// Filter to only category_uid = 2 (Findings / alerts).
+        /// Default: every event on the bus.
+        #[arg(long)]
+        alerts_only: bool,
+        /// Stop after N events (default: stream forever).
+        #[arg(short, long)]
+        n: Option<usize>,
+    },
     /// Append a single pre-formed event to a JSONL stream that the
     /// daemon's `eventstream` collector tails. Lets modules and
     /// helper scripts surface findings onto the bus without
@@ -500,6 +523,16 @@ async fn main() -> Result<()> {
                     print_event_human(event);
                 }
             }
+        }
+        Command::Events {
+            action:
+                EventsAction::Follow {
+                    unix_socket,
+                    alerts_only,
+                    n,
+                },
+        } => {
+            follow::events_follow(&unix_socket, alerts_only, n).await?;
         }
         Command::Events {
             action:
