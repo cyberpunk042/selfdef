@@ -47,9 +47,9 @@
 | F-2026-012 | important | `modules/observability/` | Three different defaults for `scrape_targets` across README, both profile files, apply.sh fallback. *(was M-005)* | doc — **closed** by doc-sweep PR |
 | F-2026-013 | important | `modules/observability/README.md` | Dashboard depends on selfdef-daemon `/metrics`; README only mentions Tetragon. *(was M-006)* | doc — **closed** by doc-sweep PR |
 | F-2026-014 | important | every module using the event bus | No `depends_on = ["detect-host"]` declared; consume-side of detect-host's `provides = ["event-bus"]` is silent. *(was M-009)* | design |
-| F-2026-015 | important | `selfdef-config CorrelatorConfig::window_secs / threshold` | Dead config knobs — exposed but never read. Sigma rules carry their own. *(was C-002)* | implement |
+| F-2026-015 | important | `selfdef-config CorrelatorConfig::window_secs / threshold` | Dead config knobs — exposed but never read. Sigma rules carry their own. *(was C-002)* | implement — **closed** by dead-knob cleanup PR (rustdoc-marked vestigial; commented out in `selfdef.toml.example`) |
 | F-2026-016 | important | `selfdef-config StoreConfig::hot_retention_days` + `selfdef-store` | Dead knob — retention horizon exposed but no sweeper enforces it. *(was C-003)* | design |
-| F-2026-017 | important | `selfdef-store/src/sqlite.rs:106` | Duplicate `const SCHEMA_VERSION: u32 = 1` instead of referencing `selfdef_core::SCHEMA_VERSION`. *(was C-005)* | implement |
+| F-2026-017 | important | `selfdef-store/src/sqlite.rs:106` | Duplicate `const SCHEMA_VERSION: u32 = 1` instead of referencing `selfdef_core::SCHEMA_VERSION`. *(was C-005)* | implement — **closed** by dead-knob cleanup PR (now imports `selfdef_core::SCHEMA_VERSION`) |
 | F-2026-018 | important | `modules/integrity-sentinel/profiles/*.toml` | `event_stream_path` commented out in shipped profiles. *(was I-001)* | implement |
 | F-2026-019 | important | `modules/observability/README.md` | Prometheus bearer-token auth on TCP `/metrics` is undocumented. Scrape will 401. *(was I-005)* | doc — **closed** by doc-sweep PR |
 | F-2026-020 | important | repo-wide (packaging + module READMEs) | No bundled `selfdef.toml` template for "three modules with sane defaults". *(was I-009)* | design |
@@ -80,7 +80,7 @@
 | F-2026-050 | nice | `modules/agent-guard/install/uninstall.sh` | Hand-enumerated policy list; will drift if a sixth policy is added. *(was M-001)* | implement |
 | F-2026-051 | nice | `modules/agent-guard/install/lib.sh render_pod_scope` | Awk state machine fragile against future policy selectors. *(was M-003)* | implement |
 | F-2026-052 | nice | `modules/observability/assets/dashboards/` | Hardcoded Tetragon metric name `tetragon_msg_sigkill_total` without an upstream-version pin. *(was M-007)* | investigate |
-| F-2026-053 | nice | `selfdef-config/src/lib.rs BusConfig::backend` | Dead knob — always "inproc", daemon doesn't branch on it. *(was C-001)* | implement |
+| F-2026-053 | nice | `selfdef-config/src/lib.rs BusConfig::backend` | Dead knob — always "inproc", daemon doesn't branch on it. *(was C-001)* | implement — **closed** by dead-knob cleanup PR (rustdoc-marked vestigial; commented out in `selfdef.toml.example`) |
 | F-2026-054 | nice | `selfdef-daemon/src/main.rs build_notifier_chain` | A `[notifier.ntfy]` block with no matching `"ntfy"` in `channels` silently disables ntfy without a startup warning. *(was C-004)* | implement |
 | F-2026-055 | nice | `selfdefctl events emit` | `--out` has no default. Callers must hard-code the path. *(was I-003)* | design |
 | F-2026-056 | nice | `README.md` | No catalog of shipped modules in the repo-root README. *(was D-002)* | doc |

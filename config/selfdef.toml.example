@@ -14,8 +14,12 @@ log_level = "info"
 log_format = "text"
 
 [bus]
-# "inproc" (default) or "nats". inproc is fine for single-host deployments.
-backend = "inproc"
+# `backend` is vestigial — the daemon doesn't branch on it (the
+# in-proc broadcast is always the local source of truth; the
+# [bus.nats] block below adds a multi-host bridge when enabled).
+# Field kept for backward-compatible config parsing; safe to omit.
+# See SDD-006 / F-2026-053 for the cleanup plan.
+# backend = "inproc"
 
 # Per-topic channel capacity for the in-proc broadcast.
 inproc_capacity = 4096
@@ -126,9 +130,11 @@ enable_kprobe_unlink = false    # kprobe:do_unlinkat — noisy on busy hosts
 rules_dir = "/etc/selfdef/rules"
 # Reload rules on SIGHUP without restarting the daemon.
 hot_reload = true
-# Built-in SSH brute-force rule:
-window_secs = 60
-threshold = 3
+# `window_secs` and `threshold` are vestigial — Sigma rules carry
+# their own time window and threshold per-rule. The daemon does not
+# read these fields. Closes F-2026-015. Safe to omit.
+# window_secs = 60
+# threshold = 3
 
 [notifier]
 # Order matters: first channel that succeeds wins.

@@ -85,10 +85,12 @@ impl Default for DaemonConfig {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct BusConfig {
-    /// `"inproc"` is the always-on local broadcast (source of truth for
-    /// subscribers). The `nats` block below adds a bridge that pumps
-    /// events between hosts via NATS — it never replaces the local
-    /// bus, it complements it.
+    /// **Vestigial — kept for backward-compatible deserialization of
+    /// existing operator configs.** The daemon does not branch on this
+    /// value: the in-proc broadcast is always the source of truth for
+    /// local subscribers, and the `nats` block (when its `enabled`
+    /// field is true) adds the multi-host bridge. Setting this field
+    /// has no runtime effect today. Closes F-2026-053 / C-001.
     pub backend: String,
     pub inproc_capacity: usize,
     pub nats: NatsBridgeConfig,
@@ -327,9 +329,15 @@ impl Default for EbpfCollectorConfig {
 pub struct CorrelatorConfig {
     pub enabled: bool,
     pub rules_dir: PathBuf,
-    /// Default time window for built-in rules, in seconds.
+    /// **Vestigial — kept for backward-compatible deserialization of
+    /// existing operator configs.** The correlator is driven entirely
+    /// by Sigma rules in `rules_dir`, each of which declares its own
+    /// time window. The daemon constructor does not read this field.
+    /// Closes F-2026-015 / C-002.
     pub window_secs: u64,
-    /// Default trigger threshold for built-in rules.
+    /// **Vestigial — same shape as `window_secs`.** Sigma rules
+    /// declare their own thresholds; the daemon does not read this
+    /// field. Closes F-2026-015 / C-002.
     pub threshold: u32,
 }
 

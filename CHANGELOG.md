@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — Phase 1 audit dead-knob cleanup
+- `selfdef-store/src/sqlite.rs` no longer carries its own
+  `const SCHEMA_VERSION: u32 = 1` — it now imports
+  `selfdef_core::SCHEMA_VERSION`. Drift risk eliminated; a
+  future schema bump in `selfdef-core` propagates to the
+  store's migration check automatically. Closes
+  **F-2026-017** (audit ledger).
+- `selfdef-config::BusConfig::backend` and
+  `selfdef-config::CorrelatorConfig::{window_secs,threshold}`
+  rustdoc-marked **vestigial**: the daemon doesn't branch on
+  any of the three. The fields stay in the struct so existing
+  operator configs keep parsing (serde `#[serde(default)]`
+  was already on the struct). Removed from
+  `config/selfdef.toml.example` so new operators don't copy
+  them in. Closes **F-2026-015** + **F-2026-053**.
+- No daemon behaviour change. No public-API removal.
+- Findings ledger updated with closure references.
+
 ### Docs — Phase 1 audit doc-sweep
 - `README.md` no longer claims "Milestone 1 — Scaffolding only".
   Adds a module catalog table and an AI-machine track milestone.

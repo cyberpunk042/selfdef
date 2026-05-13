@@ -4,17 +4,15 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
-use selfdef_core::Event;
+use selfdef_core::{Event, SCHEMA_VERSION};
 use tracing::{debug, info};
 use uuid::Uuid;
 
 use crate::StoreError;
 
-/// Current schema version this code targets. Increment when adding a
-/// migration in `migrations/`.
-const SCHEMA_VERSION: u32 = 1;
-
 /// All migrations, in order. Each `&str` is the body of `migrations/NNNN_*.sql`.
+/// The migration count must equal `selfdef_core::SCHEMA_VERSION`. When that
+/// constant bumps, add the migration here in the same PR.
 const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_initial.sql")];
 
 #[derive(Debug)]
