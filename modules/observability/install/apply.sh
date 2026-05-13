@@ -30,7 +30,11 @@ case "$PROFILE" in
     *) die "profile must be bundled|external, got '$PROFILE'" ;;
 esac
 
-SCRAPE_TARGETS=$(toml_get scrape_targets "$CONFIG_FILE" || echo "localhost:2112")
+# Default matches the shipped profile defaults (bundled.toml, external.toml).
+# Two targets: Tetragon's metrics endpoint + selfdef-daemon's /metrics. See
+# modules/observability/README.md "Scraping the daemon" for the bearer-token
+# requirement on the daemon endpoint.
+SCRAPE_TARGETS=$(toml_get scrape_targets "$CONFIG_FILE" || echo "localhost:2112, localhost:8443")
 DASHBOARD_UID=$(toml_get  dashboard_uid   "$CONFIG_FILE" || echo "selfdef")
 DASHBOARD_TITLE=$(toml_get dashboard_title "$CONFIG_FILE" || echo "selfdef — Host Self-Defense")
 

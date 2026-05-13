@@ -34,9 +34,15 @@ grafana_dashboards_dir = "/var/lib/grafana/dashboards/selfdef"
 staging_dir = "/var/lib/selfdef/observability/staging"
 
 # Both profiles. Comma-separated host:port targets Prometheus
-# scrapes. Default = Tetragon's metrics endpoint from the `tetragon`
-# module.
-scrape_targets = "localhost:2112"
+# scrapes. The shipped default covers both endpoints the
+# dashboard needs:
+#   - localhost:2112 — Tetragon's built-in metrics endpoint
+#     (from the `tetragon` module's default profile).
+#   - localhost:8443 — selfdef-daemon's `/metrics` endpoint
+#     (requires `[api] enabled = true` and `tcp_addr =
+#     "127.0.0.1:8443"` in /etc/selfdef/selfdef.toml; bearer
+#     token required — see "Scraping the daemon" below).
+scrape_targets = "localhost:2112, localhost:8443"
 
 # Both profiles. Dashboard metadata.
 dashboard_uid   = "selfdef"
@@ -45,15 +51,55 @@ dashboard_title = "selfdef — Host Self-Defense"
 
 ## Dashboard
 
-The shipped dashboard is intentionally narrow — four panels, all
-sourced from Tetragon's built-in metrics:
+The shipped dashboard renders seven panels — four from
+Tetragon's built-in metrics, three from the selfdef daemon's
+own `/metrics` endpoint:
 
-| Panel | Metric | Why |
+| Panel | Source | Metric |
 | --- | --- | --- |
-| Tetragon events / second | `rate(tetragon_events_total[5m])` | Sanity check that the substrate is collecting at all. |
-| Tetragon kills by policy | `rate(tetragon_msg_sigkill_total[5m])` by `policy` | The "are policies actually firing" signal. Spikes = either an attack or a busted policy; flat = a quiet host. |
-| Process cache utilization | `tetragon_process_cache_size` | If this saturates you'll lose short-lived process correlation; bump `process-cache-size` in the `tetragon` module config. |
-| Map operation errors | `rate(tetragon_map_errors_total[5m])` by `map`, `op` | Non-zero is a Tetragon-side bug; surface it before it eats events. |
+| Tetragon events / second | tetragon | `rate(tetragon_events_total[5m])` |
+| Tetragon kills by policy | tetragon | `rate(tetragon_msg_sigkill_total[5m])` by `policy` |
+| Process cache utilization | tetragon | `tetragon_process_cache_size` |
+| Map operation errors | tetragon | `rate(tetragon_map_errors_total[5m])` by `map`, `op` |
+| selfdef events / sec by class | selfdef-daemon | `sum by (class_uid) (rate(selfdef_events_by_class_total[5m]))` |
+| selfdef findings / sec by severity | selfdef-daemon | `sum by (severity_id) (rate(selfdef_findings_by_severity_total[5m]))` |
+| selfdef hot-store size | selfdef-daemon | `selfdef_store_events` |
+
+The daemon-side panels render flat / empty if the
+`scrape_targets` list doesn't include the daemon's `/metrics`
+endpoint (or if the daemon isn't running). Both endpoints are
+required for full dashboard coverage.
+
+## Scraping the daemon
+
+The selfdef daemon's `/metrics` endpoint is auth-gated:
+
+- **UNIX socket** (`/run/selfdef.sock`): no bearer token; gated
+  by filesystem permissions. Easiest if Prometheus runs on the
+  same host with read access to the socket.
+- **TCP** (`127.0.0.1:8443` or wherever `[api] tcp_addr` binds):
+  every request needs `Authorization: Bearer <token>` matching
+  the contents of `[api] token_file` (default
+  `/etc/selfdef/api.token`).
+
+Prometheus scrape config for the TCP transport with bearer
+token:
+
+```yaml
+scrape_configs:
+  - job_name: "selfdef-daemon"
+    scrape_interval: 15s
+    metrics_path: /metrics
+    bearer_token_file: /etc/selfdef/api.token
+    static_configs:
+      - targets: ["localhost:8443"]
+```
+
+If Prometheus runs as a different user than the daemon, copy
+the token to a file Prometheus can read at the right mode
+(typically `0600 prometheus:prometheus`). Don't symlink — the
+two services should hold their own copies so credential
+rotation is a deliberate operator action on each side.
 
 Extend the dashboard by editing
 `assets/dashboards/selfdef.json.template` and re-running apply —

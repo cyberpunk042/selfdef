@@ -6,6 +6,49 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs — Phase 1 audit doc-sweep
+- `README.md` no longer claims "Milestone 1 — Scaffolding only".
+  Adds a module catalog table and an AI-machine track milestone.
+- `ARCHITECTURE.md` updated to show the `/metrics` endpoint and a
+  Modules-layer overview.
+- `docs/src/modules.md` corrects the stale "only `detect-host`
+  ships" claim.
+- `modules/observability/README.md`: `scrape_targets` documented
+  default reconciled (Tetragon + selfdef-daemon, not Tetragon
+  alone). Dashboard panel list extended to cover the three new
+  selfdef-daemon panels. New "Scraping the daemon" section
+  walks the bearer-token scrape config Prometheus needs against
+  the daemon's `/metrics` TCP transport.
+- `modules/observability/install/apply.sh` fallback default for
+  `scrape_targets` now matches the shipped profile defaults.
+- mdbook `SUMMARY.md` surfaces the previously-orphan
+  `api.md`, `ebpf.md`, `nats.md`, `ssh-wrap-install.md`. Those
+  files moved from `docs/` into `docs/src/{ops,dev}/` so the
+  mdbook tree owns them.
+- Five `# TODO` stub pages (`dev/build`, `dev/collector`,
+  `ops/install`, `ops/config`, `ops/notifications`,
+  `detect/rules`, `detect/testing`) replaced with real, tight
+  content.
+- Closes Phase 1 audit findings F-2026-012 / -013 / -019 /
+  -021 / -022 / -027 / -028 / -029. Findings ledger is updated
+  with cross-references.
+
+### Honest correction — AI-machine track operator promise
+The CHANGELOG entries for PRs #21, #22, #24 described an
+operator-facing benefit (drift fires the notifier chain;
+agent-guard kills surface as alerts; GPU device access surfaces)
+that the Phase 1 audit (`docs/review/40-integration-audit.md`)
+showed is not plumbed end-to-end today. The kernel-side action
+works (Tetragon Sigkill terminates); the path from Tetragon
+event to operator alert breaks at two seams: the
+selfdef-collector-tetragon hardcodes `Informational`, and no
+sigma rule promotes Tetragon agent-guard events to findings.
+The fix is designed in `docs/sdd/001-ai-machine-end-to-end.md`
+(closes F-2026-001 / -002 / -003 / -006). Until that
+implementation lands, treat the agent-guard "you'll get a
+notifier ping on a violation" claim as **planned, not
+shipped**.
+
 ### Added — `agent-guard` v0.3.0: pod-label scope for Kubernetes
 - New `scope` config key in `agent-guard.toml` selects how the
   shipped policies decide "what counts as inside an agent

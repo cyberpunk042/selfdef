@@ -3,34 +3,65 @@
 ## Layered view
 
 ```
-                ┌──────────────────────────────────────────────────────┐
-                │                    Control plane                     │
-                │   selfdefctl   ·   PWA dashboard   ·   ntfy/signal   │
-                └────────────────────────┬─────────────────────────────┘
-                                         │
-┌──────────────────────────────────────────────────────────────────────┐
-│                            selfdef-daemon                            │
-│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐   │
-│  │ Collectors │──▶│    Bus     │──▶│ Correlator │──▶│ Responder  │   │
-│  │            │   │            │   │            │   │            │   │
-│  │ • auditd   │   │  in-proc   │   │  Sigma +   │   │ • lockdown │   │
-│  │ • journald │   │  broadcast │   │  windowed  │   │ • notify   │   │
-│  │ • tetragon │   │  (NATS opt)│   │  rules     │   │ • snapshot │   │
-│  │ • suricata │   │            │   │            │   │ • isolate  │   │
-│  └────────────┘   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘   │
-│                         │                 │                 │        │
-│                         ▼                 ▼                 ▼        │
-│                  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐│
-│                  │   Store      │  │  Notifier    │  │   Actions    ││
-│                  │ SQLite + DDB │  │ ntfy/signal  │  │  nft/systemd ││
-│                  └──────────────┘  └──────────────┘  └──────────────┘│
-└──────────────────────────────────────────────────────────────────────┘
+                ┌────────────────────────────────────────────────────────────┐
+                │                       Control plane                        │
+                │   selfdefctl  ·  PWA dashboard  ·  ntfy/signal  ·  Promet. │
+                └────────────────────────┬───────────────────────────────────┘
+                                         │ HTTP API + /metrics
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              selfdef-daemon                                │
+│  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐         │
+│  │ Collectors │──▶│    Bus     │──▶│ Correlator │──▶│ Responder  │         │
+│  │            │   │            │   │            │   │            │         │
+│  │ • auditd   │   │  in-proc   │   │  Sigma +   │   │ • lockdown │         │
+│  │ • journald │   │  broadcast │   │  windowed  │   │ • notify   │         │
+│  │ • tetragon │   │  (NATS opt)│   │  rules     │   │ • snapshot │         │
+│  │ • suricata │   │            │   │            │   │ • isolate  │         │
+│  │ • canary   │   │            │   │            │   │ • forensics│         │
+│  │ • eventstr │   │            │   │            │   │ • veloc.   │         │
+│  │ • ebpf     │   │            │   │            │   │            │         │
+│  └────────────┘   └─────┬──────┘   └─────┬──────┘   └─────┬──────┘         │
+│                         │                 │                 │              │
+│                         ▼                 ▼                 ▼              │
+│              ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│              │   Store      │  │  Notifier    │  │   Actions            │  │
+│              │ SQLite + DDB │  │ ntfy/signal  │  │  nft/systemd/scripts │  │
+│              └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│                         │                                                  │
+│                         ▼                                                  │
+│              ┌────────────────────────┐                                    │
+│              │   API + /metrics       │  bearer-token auth on TCP;         │
+│              │   /status /events      │  unix-socket auth via fs perms.    │
+│              │   /findings /metrics   │  Prometheus scrapes /metrics.      │
+│              └────────────────────────┘                                    │
+└────────────────────────────────────────────────────────────────────────────┘
 
                 ┌──────────────────────────────────────────────────────┐
                 │                  Kernel & system                     │
                 │   Tetragon · custom eBPF (aya) · auditd · AppArmor   │
                 └──────────────────────────────────────────────────────┘
 ```
+
+### Modules layer
+
+Operator-activatable modules sit on top of the daemon, each with its
+own apply / check / uninstall lifecycle (`selfdefctl modules apply`).
+Module phases (`pre / main / post`) order the apply across modules
+that share substrate. The current catalog:
+
+```
+phase=pre        tetragon (substrate)        integrity-sentinel (drift)
+                          │                          │
+phase=main       agent-guard (5 policies)    bridge-l2 → suricata, polarproxy
+                          │                  vpn-bridge (3 profiles, instanced)
+                          │
+phase=post       observability (Prometheus + Grafana)
+```
+
+Modules emit structured-status JSON to the CLI dispatcher. Some
+modules (e.g. `integrity-sentinel`) optionally emit OCSF events via
+`selfdefctl events emit` into a JSONL stream the daemon's
+`eventstream` collector tails — closing the loop back into the bus.
 
 ## Core principles
 
