@@ -182,12 +182,25 @@ is the canonical example.
 To run locally with the broker:
 
 ```sh
-apt install nats-server  # debian-derived
-cargo test -p selfdef-nats -- --include-ignored
+apt install nats-server                            # debian-derived, v2.10+
+# OR
+brew install nats-server                           # macOS
+# OR
+# binary from https://nats.io/download/
+
+cargo test -p selfdef-nats -- --include-ignored    # runs the gated tests
 ```
 
-CI installs `nats-server` so the gate doesn't permanently hide
-the test.
+`nats-server` 2.10+ is required for the JetStream tests (`KeyValue` /
+durable consumer flags this fixture uses). Older Debian repos ship
+2.9.x; download the latest from the nats.io release page if `apt`
+gives you an older version.
+
+CI installs `nats-server` so the gate doesn't permanently hide the
+test. F-2027-002 follow-up: the daemon's `[bus.nats]` JetStream
+support tracks 2.10+ semantics; running the fixture against an older
+broker silently skips the JetStream test and surfaces only the core
+pub/sub one.
 
 ## What not to test
 

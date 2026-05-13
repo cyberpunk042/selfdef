@@ -2074,6 +2074,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "minisign",
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",

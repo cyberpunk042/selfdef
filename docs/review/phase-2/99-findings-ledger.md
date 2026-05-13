@@ -3,7 +3,9 @@
 > Status: in progress. First-pass entries from the recent-PRs
 > audit; the other six explorers (crate, module, integration,
 > docs, tests, security) run in follow-up PRs.
-> Last updated: 2026-05-13
+> Last updated: 2026-05-13 (Phase 2 nice-cluster cleanup PR
+> — 6 of 7 nice findings closed; F-2027-005 still open as
+> design-debt).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -35,13 +37,13 @@ None.
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
-| F-2027-001 | nice | `selfdef-cli/src/modules.rs` SDD-003 refusal message | Profile name embedded in the error; could include the exact copy-pasteable TOML snippet. | implement |
-| F-2027-002 | nice | `docs/dev/test-contract.md` P-3 NATS pattern | Missing `cargo test -- --include-ignored` runtime guidance. | doc |
-| F-2027-004 | nice | `selfdef-cli/src/main.rs::discover_daemon_pid` | Missing `systemctl` on PATH yields "command not found" instead of a friendly diagnostic. | implement |
+| F-2027-001 | nice | `selfdef-cli/src/modules.rs` SDD-003 refusal message | Profile name embedded in the error; could include the exact copy-pasteable TOML snippet. | implement — **closed** by Phase 2 nice-cluster PR (refusal embeds the `[profiles.details.<profile>]` stanza inline). |
+| F-2027-002 | nice | `docs/dev/test-contract.md` P-3 NATS pattern | Missing `cargo test -- --include-ignored` runtime guidance. | doc — **closed** by Phase 2 nice-cluster PR (P-3 now documents the `--include-ignored` invocation + nats-server 2.10+ JetStream requirement). |
+| F-2027-004 | nice | `selfdef-cli/src/main.rs::discover_daemon_pid` | Missing `systemctl` on PATH yields "command not found" instead of a friendly diagnostic. | implement — **closed** by Phase 2 nice-cluster PR (`discover_daemon_pid` short-circuits on `ErrorKind::NotFound` with a `pgrep selfdefd` pointer). |
 | F-2027-005 | nice | `selfdef-daemon`'s rule-signing reload | SIGHUP reloads rules through the verifier but not the verifier itself; a rotated public-key path needs a full daemon restart. | implement — SIGUSR2 could re-load the verifier too. |
-| F-2027-006 | nice | `modules/tetragon/install/apply.sh` | Spawns `selfdefctl keys verify` once per policy file (N spawns for N policies). | implement — batch `selfdefctl keys verify --all <dir>` verb. |
-| F-2027-007 | nice | `selfdefctl rbac check --probe` | Built-in subject set is `system:authenticated` + `system:unauthenticated` only; common mistakes (`system:masters`, default ServiceAccount) aren't probed. | implement — expand the built-in set OR make it configurable. |
-| F-2027-009 | nice | `selfdefctl init` `STARTER_CONFIG` | Template doesn't show a `[notifier.ntfy]` example; operators discover the shape only in `/usr/share/selfdef/selfdef.toml.example`. | doc — embed a commented `[notifier.ntfy]` block in the starter. |
+| F-2027-006 | nice | `modules/tetragon/install/apply.sh` | Spawns `selfdefctl keys verify` once per policy file (N spawns for N policies). | implement — **closed** by Phase 2 nice-cluster PR (new `selfdefctl keys verify-dir <dir>` verb; tetragon apply.sh + check.sh both batched to one invocation). |
+| F-2027-007 | nice | `selfdefctl rbac check --probe` | Built-in subject set is `system:authenticated` + `system:unauthenticated` only; common mistakes (`system:masters`, default ServiceAccount) aren't probed. | implement — **closed** by Phase 2 nice-cluster PR (built-in set now also probes `system:masters` and `system:serviceaccount:default:default`; `--as` still composes on top). |
+| F-2027-009 | nice | `selfdefctl init` `STARTER_CONFIG` | Template doesn't show a `[notifier.ntfy]` example; operators discover the shape only in `/usr/share/selfdef/selfdef.toml.example`. | doc — **closed** by Phase 2 nice-cluster PR (commented `[notifier.ntfy]` stanza embedded in the starter). |
 
 ## SDD-debt findings (1)
 
@@ -52,8 +54,9 @@ None.
 ## Status
 
 - **10 findings raised** from one explorer (recent-PRs audit).
-- **0 blockers**, 2 important (both **closed**), 7 nice, 1
-  SDD-debt.
+- **0 blockers**, 2 important (both **closed**), 7 nice (6
+  **closed**, 1 open — F-2027-005 verifier-reload), 1 SDD-debt
+  (F-2027-010 open).
 - Other six explorers (crate, module, integration, docs,
   tests, security) will add more findings in follow-up PRs.
 

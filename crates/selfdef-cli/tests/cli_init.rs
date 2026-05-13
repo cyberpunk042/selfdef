@@ -36,6 +36,12 @@ fn init_config_writes_starter_file_at_0644() {
         body.contains("require_signed_rules    = false"),
         "every opt-in must default OFF",
     );
+    // F-2027-009: commented [notifier.ntfy] stanza inline so
+    // operators see the shape without grepping the example file.
+    assert!(
+        body.contains("# [notifier.ntfy]") && body.contains("# server") && body.contains("# topic"),
+        "starter must embed a commented [notifier.ntfy] example",
+    );
     let md = std::fs::metadata(&target).unwrap();
     assert_eq!(md.permissions().mode() & 0o777, 0o644);
 }

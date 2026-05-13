@@ -228,6 +228,47 @@ fn rbac_check_with_extra_as_subjects_probes_them_too() {
 }
 
 #[test]
+fn rbac_check_builtin_set_includes_system_masters_and_default_sa() {
+    // F-2027-007: the expanded built-in subject set probes
+    // system:masters and system:serviceaccount:default:default
+    // alongside the two public groups. Without --probe, the
+    // recommended-posture documentation should mention all four.
+    let fx = fixture("pod-label", &[]);
+    let out = run_rbac_check(&fx, &[]);
+    assert!(out.status.success());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    for needle in [
+        "system:authenticated",
+        "system:unauthenticated",
+        "system:masters",
+        "system:serviceaccount:default:default",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "expected built-in subject {needle} in posture output; stdout: {stdout}",
+        );
+    }
+}
+
+#[test]
+fn rbac_check_probe_flags_system_masters_when_permissive() {
+    // F-2027-007: catch the kubeadm-style "bind humans to
+    // system:masters" anti-pattern via the built-in set.
+    let fx = fixture("pod-label", &["system:masters"]);
+    let out = run_rbac_check(&fx, &["--probe"]);
+    assert!(
+        !out.status.success(),
+        "system:masters permissive must fail the check; stdout: {}",
+        String::from_utf8_lossy(&out.stdout),
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("WARN:   system:masters") && stdout.contains("warn: 1 subject(s)"),
+        "expected system:masters to be flagged; stdout: {stdout}",
+    );
+}
+
+#[test]
 fn rbac_check_namespace_arg_is_passed_to_kubectl() {
     // The stub kubectl prints "yes" for permissive subjects
     // regardless of -n, but if --namespace gets passed through

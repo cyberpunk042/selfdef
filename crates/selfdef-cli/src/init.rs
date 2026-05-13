@@ -160,6 +160,21 @@ channels = []
 # Add "ntfy", "signal" once the matching [notifier.<name>]
 # block is configured (see selfdef.toml.example).
 
+# F-2027-009: commented [notifier.ntfy] example so operators see
+# the exact shape without grepping /usr/share/selfdef. To enable
+# ntfy push notifications:
+#   1. Pick a topic at https://ntfy.sh/<your-topic> (or self-host).
+#   2. Uncomment the block below; flip channels above to ["ntfy"].
+#   3. (Optional) Set token_env to the env var holding a bearer
+#      token if you self-host with auth.
+#
+# [notifier.ntfy]
+# server    = "https://ntfy.sh"
+# topic     = "your-selfdef-topic"
+# priority  = "default"        # one of min|low|default|high|max
+# tags      = ["selfdef"]
+# token_env = ""               # name of env var with bearer token, or empty
+
 [responder]
 allowed_actions = ["notify"]
 dry_run         = true   # flip to false after verifying the

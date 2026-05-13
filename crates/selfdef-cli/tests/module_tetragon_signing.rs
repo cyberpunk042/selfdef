@@ -49,25 +49,47 @@ fn prepended_path(extra: &Path) -> std::ffi::OsString {
     out
 }
 
-/// Stub `selfdefctl` that mimics `keys verify`: exits 0 when the
-/// target's sibling `.minisig` exists, non-zero otherwise.
-/// Mirrors the real verifier's high-level behaviour without
-/// pulling minisign into the test fixture.
+/// Stub `selfdefctl` mimicking the two `keys` verbs the tetragon
+/// module shells out to:
+///   • `keys verify <target>` — exits 0 iff `${target}.minisig`
+///     exists, 1 otherwise.
+///   • `keys verify-dir <dir>` (F-2027-006) — walks the immediate
+///     `*.yml`/`*.yaml` in `<dir>`, exits 0 iff every file has a
+///     sibling `.minisig`, non-zero (count of failures) otherwise.
+///
+/// Mirrors the real CLI's exit-code contract without pulling
+/// minisign into the test fixture; verifier path is covered
+/// end-to-end by selfdef-signing's own unit suite + the
+/// correlator's signed_rules.rs integration suite.
 fn stub_selfdefctl() -> &'static str {
     r#"#!/usr/bin/env bash
-# Minimal selfdefctl stub for the tetragon-signing integration
-# tests. Looks for `keys verify <target>` and exits 0 if the
-# sidecar .minisig exists, 1 otherwise. Mirrors the real CLI's
-# exit-code contract.
 while [[ $# -gt 0 ]]; do
     case "$1" in
         keys)
             shift
-            if [[ "$1" == "verify" ]]; then
-                shift
-                target="$1"
-                [[ -f "${target}.minisig" ]] && exit 0 || exit 1
-            fi
+            case "$1" in
+                verify)
+                    shift
+                    target="$1"
+                    [[ -f "${target}.minisig" ]] && exit 0 || exit 1
+                    ;;
+                verify-dir)
+                    shift
+                    dir="$1"
+                    [[ -d "$dir" ]] || exit 2
+                    failed=0
+                    shopt -s nullglob
+                    for p in "$dir"/*.yml "$dir"/*.yaml; do
+                        if [[ -f "${p}.minisig" ]]; then
+                            echo "ok:   $p"
+                        else
+                            echo "fail: $p: missing sidecar"
+                            failed=$((failed + 1))
+                        fi
+                    done
+                    [[ "$failed" -eq 0 ]] && exit 0 || exit 1
+                    ;;
+            esac
             ;;
     esac
     shift
@@ -221,7 +243,7 @@ fn apply_refuses_when_signing_enabled_and_a_policy_is_unsigned() {
     let line = last_stdout_line(&out);
     assert!(
         line.contains("\"status\":\"failed\"")
-            && line.contains("1 policy file(s)")
+            && line.contains("policy file(s)")
             && line.contains("signature verification"),
         "got: {line}",
     );

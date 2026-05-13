@@ -37,3 +37,8 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# F-2027-006: `selfdefctl keys verify-dir` integration tests
+# generate a real ed25519 keypair via the `minisign` Rust crate
+# and sign fixtures with it. Mirrors the dev-dep setup the
+# selfdef-signing crate uses for its own verifier suite.
+minisign = "0.9"

@@ -533,12 +533,19 @@ pub(crate) fn resolve_active(
                     .map(|p| p.profile_instanced(&profile_name, manifest.instanced))
                     .unwrap_or(manifest.instanced);
                 if !profile_instanced {
+                    // F-2027-001: embed the exact copy-pasteable
+                    // TOML stanza in the diagnostic so operators
+                    // don't have to compose it from prose. The
+                    // stanza is what they'd paste into the module
+                    // manifest to opt the profile into multi-
+                    // instance.
                     anyhow::bail!(
                         "module `{slug}` profile `{profile_name}` does not support \
                          multi-instance (host key `{slug}#{inst_name}` refused). \
-                         Either pick a different profile or declare the profile \
-                         instanced via `[profiles.details.{profile_name}].instanced = true` \
-                         in the module manifest."
+                         Either pick a different profile, or opt this profile in by \
+                         adding to the module manifest:\n\n\
+                         [profiles.details.{profile_name}]\n\
+                         instanced = true\n"
                     );
                 }
             }

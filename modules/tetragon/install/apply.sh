@@ -38,22 +38,20 @@ if [[ "$REQUIRE_SIGNED" == "true" ]]; then
         die "require_signed_policies=true but selfdefctl is not on PATH"
     fi
     if [[ -d "$POLICY_DIR" ]]; then
-        unsigned=0
-        # shellcheck disable=SC2044
-        for p in $(find "$POLICY_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-            # Skip nothing — tetragon loads every .yml/.yaml in the
-            # drop dir, so every one must verify.
-            if [[ "$DRY_RUN" == "1" ]]; then
-                log "DRY-RUN: would verify $p against [security].signing_public_key_file"
-                continue
+        # F-2027-006: one-shot batch verify replaces the N-spawn
+        # per-file loop. `selfdefctl keys verify-dir` walks the
+        # immediate *.yml/*.yaml in $POLICY_DIR, verifies each
+        # against [security].signing_public_key_file, and exits
+        # non-zero iff any file fails. Empty dirs verify trivially.
+        if [[ "$DRY_RUN" == "1" ]]; then
+            log "DRY-RUN: would verify policies in $POLICY_DIR against [security].signing_public_key_file"
+        else
+            if ! selfdefctl keys verify-dir "$POLICY_DIR" >/dev/null 2>&1; then
+                # Re-run with output so the operator sees which
+                # file(s) failed.
+                selfdefctl keys verify-dir "$POLICY_DIR" || true
+                die "one or more policy file(s) in $POLICY_DIR failed signature verification — refusing to (re)start tetragon"
             fi
-            if ! selfdefctl keys verify "$p" >/dev/null 2>&1; then
-                log "unsigned or invalid TracingPolicy: $p"
-                unsigned=$((unsigned + 1))
-            fi
-        done
-        if [[ "$unsigned" -gt 0 ]]; then
-            die "$unsigned policy file(s) in $POLICY_DIR failed signature verification — refusing to (re)start tetragon"
         fi
     fi
 fi
