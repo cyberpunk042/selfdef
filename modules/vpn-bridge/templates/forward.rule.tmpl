@@ -6,8 +6,11 @@
 # Substituted at render time:
 #   @@WG_IFACE@@    — WireGuard interface name (e.g. wg0)
 #   @@LAN_IFACE@@   — LAN-side iface to bridge with (e.g. br0, eno1)
+#   @@NFT_TABLE@@   — per-instance table name (e.g. selfdef_vpn_bridge
+#                     or selfdef_vpn_bridge_publish). Defaults to the
+#                     legacy single-instance name when no instance set.
 
-table inet selfdef_vpn_bridge {
+table inet @@NFT_TABLE@@ {
     chain forward {
         type filter hook forward priority filter; policy accept;
 

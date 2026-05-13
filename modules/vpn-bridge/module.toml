@@ -22,10 +22,13 @@ requires    = [
     { kind = "binary",  value = "systemctl" },
 ]
 
-# Multi-instance is on: a host can run e.g. `relay-via-server` and
-# `cloudflare-tunnel` profiles simultaneously by declaring two host
-# entries — `[modules."vpn-bridge#overlay"]` and
-# `[modules."vpn-bridge#publish"]` — each pointing at its own config.
+# Multi-instance is on, BUT only some profiles support it. Per
+# SDD-003: relay-via-server is multi-instance-capable (each
+# instance gets its own WireGuard interface, nftables table, and
+# wg-quick@<iface>.service). tailscale and cloudflare-tunnel are
+# NOT — they each manage a singleton host-wide systemd service
+# (`tailscaled.service`, `cloudflared.service`) with a single
+# control-plane registration. See [profiles.details.*] below.
 instanced = true
 
 [install]
@@ -37,3 +40,15 @@ uninstall = "install/uninstall.sh"
 [profiles]
 default = "relay-via-server"
 available = ["relay-via-server", "tailscale", "cloudflare-tunnel"]
+
+# SDD-003: per-profile multi-instance capability. The resolver
+# refuses `vpn-bridge#<instance>` host keys when the chosen
+# profile is `instanced = false`.
+[profiles.details.relay-via-server]
+instanced = true
+
+[profiles.details.tailscale]
+instanced = false
+
+[profiles.details.cloudflare-tunnel]
+instanced = false

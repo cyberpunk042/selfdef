@@ -165,6 +165,38 @@ pub(crate) struct ProfileSpec {
     pub(crate) default: Option<String>,
     #[serde(default)]
     pub(crate) available: Vec<String>,
+    /// SDD-003 D-1: per-profile metadata. Keyed by profile name
+    /// (must appear in `available`). Profiles not listed here
+    /// inherit the module-level `instanced` value. Used by
+    /// modules where one profile is multi-instance-capable
+    /// (vpn-bridge's relay-via-server) and others aren't
+    /// (tailscale / cloudflare-tunnel, both singleton-service
+    /// workloads).
+    #[serde(default)]
+    pub(crate) details: BTreeMap<String, ProfileDetails>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct ProfileDetails {
+    /// Per-profile override of the module-level `instanced`. If
+    /// the module declares `instanced = true` but this profile
+    /// is `false`, instance suffixes are refused for this
+    /// profile.
+    #[serde(default)]
+    pub(crate) instanced: Option<bool>,
+}
+
+impl ProfileSpec {
+    /// Whether the named profile supports multi-instance. Falls
+    /// back to the module-level `instanced` when no
+    /// `[profiles.details.<name>]` entry exists or its `instanced`
+    /// field is absent.
+    pub(crate) fn profile_instanced(&self, profile: &str, module_default: bool) -> bool {
+        self.details
+            .get(profile)
+            .and_then(|d| d.instanced)
+            .unwrap_or(module_default)
+    }
 }
 
 /// Resolve the modules directory, honouring `--dir` if given, then a
@@ -467,6 +499,51 @@ pub(crate) fn resolve_active(
                  `#instance` keys are not allowed"
             );
         }
+        // SDD-003 D-2: per-profile multi-instance gate. For every
+        // instance, peek at its config file to learn which profile
+        // it'll run under, then reject if that profile is declared
+        // `instanced = false` even though the module-level flag is
+        // true. Catches the vpn-bridge case where the manifest
+        // promises multi-instance but `tailscale` /
+        // `cloudflare-tunnel` profile scripts manage singleton
+        // host services that can't be parallelised.
+        if any_instanced && manifest.profiles.is_some() {
+            for (instance, entry) in entries {
+                let inst_name = match instance {
+                    Some(n) => n,
+                    None => continue, // flat entries don't gate
+                };
+                let cfg_path = entry
+                    .config
+                    .clone()
+                    .unwrap_or_else(|| default_config_path(slug, Some(inst_name)));
+                let profile_name = read_profile_from_config(&cfg_path)
+                    .unwrap_or_else(|| {
+                        manifest
+                            .profiles
+                            .as_ref()
+                            .and_then(|p| p.default.clone())
+                            .unwrap_or_default()
+                    });
+                if profile_name.is_empty() {
+                    continue;
+                }
+                let profile_instanced = manifest
+                    .profiles
+                    .as_ref()
+                    .map(|p| p.profile_instanced(&profile_name, manifest.instanced))
+                    .unwrap_or(manifest.instanced);
+                if !profile_instanced {
+                    anyhow::bail!(
+                        "module `{slug}` profile `{profile_name}` does not support \
+                         multi-instance (host key `{slug}#{inst_name}` refused). \
+                         Either pick a different profile or declare the profile \
+                         instanced via `[profiles.details.{profile_name}].instanced = true` \
+                         in the module manifest."
+                    );
+                }
+            }
+        }
         if any_flat && entries.len() > 1 {
             // Should be impossible (BTreeMap dedupes identical keys),
             // but guard against any future structural change.
@@ -610,6 +687,19 @@ pub(crate) fn resolve_active(
     Ok(out)
 }
 
+/// SDD-003 D-2 helper: read just the `profile = "..."` line from a
+/// per-module config file. Returns `None` on any failure (file
+/// missing, malformed TOML, no `profile` key); callers fall back
+/// to the manifest's profile default.
+fn read_profile_from_config(path: &Path) -> Option<String> {
+    let body = std::fs::read_to_string(path).ok()?;
+    let value: toml::Value = toml::from_str(&body).ok()?;
+    value
+        .get("profile")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 fn default_config_path(slug: &str, instance: Option<&str>) -> PathBuf {
     let fname = match instance {
         Some(i) => format!("{slug}.{i}.toml"),
@@ -650,6 +740,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         profiles: m.profiles.as_ref().map(|p| ProfileSpec {
             default: p.default.clone(),
             available: p.available.clone(),
+            details: p.details.clone(),
         }),
         instanced: m.instanced,
         phase: m.phase,
@@ -781,7 +872,15 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     let mut cmd = Command::new("bash");
     cmd.arg(&script)
         .env(env_var_for_config(&active.slug), &active.config_path)
-        .env("SELFDEF_DRY_RUN", if dry_run { "1" } else { "0" })
+        .env("SELFDEF_DRY_RUN", if dry_run { "1" } else { "0" });
+    // SDD-003 D-3: surface the instance suffix to profile scripts
+    // so they can parameterise state paths. Absent for
+    // single-instance applies — scripts that need it should
+    // default sensibly.
+    if let Some(inst) = &active.instance {
+        cmd.env("SELFDEF_INSTANCE_ID", inst);
+    }
+    cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
@@ -1672,6 +1771,150 @@ mod tests {
         let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].config_path, PathBuf::from("/custom/path.toml"));
+    }
+
+    // -- SDD-003: per-profile multi-instance ------------------------
+
+    fn profile_spec_with_details(
+        default: &str,
+        available: &[&str],
+        details: &[(&str, bool)],
+    ) -> ProfileSpec {
+        ProfileSpec {
+            default: Some(default.to_string()),
+            available: available.iter().map(|s| (*s).to_string()).collect(),
+            details: details
+                .iter()
+                .map(|(name, inst)| {
+                    (
+                        (*name).to_string(),
+                        ProfileDetails {
+                            instanced: Some(*inst),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn profile_instanced_falls_back_to_module_default_when_unset() {
+        let spec = profile_spec_with_details("a", &["a", "b"], &[]);
+        // No per-profile detail → use module-level default.
+        assert!(spec.profile_instanced("a", true));
+        assert!(!spec.profile_instanced("b", false));
+    }
+
+    #[test]
+    fn profile_instanced_per_profile_override_wins() {
+        let spec = profile_spec_with_details(
+            "relay",
+            &["relay", "tailscale", "cf"],
+            &[("relay", true), ("tailscale", false), ("cf", false)],
+        );
+        assert!(spec.profile_instanced("relay", true));
+        assert!(!spec.profile_instanced("tailscale", true));
+        assert!(!spec.profile_instanced("cf", true));
+        // Profile not declared → module default.
+        assert!(spec.profile_instanced("other", true));
+    }
+
+    fn manifest_with_profiles(name: &str, instanced: bool, spec: ProfileSpec) -> ModuleManifest {
+        let mut m = make_manifest_full(name, &[], &[], instanced, Phase::Main);
+        m.profiles = Some(spec);
+        m
+    }
+
+    #[test]
+    fn resolver_rejects_instance_for_singleton_profile() {
+        // vpn-bridge#a chooses the tailscale profile, which is
+        // instanced=false. Resolver must refuse before running anything.
+        let tmp = tempfile::tempdir().unwrap();
+        let inst_cfg = tmp.path().join("vpn-bridge.a.toml");
+        std::fs::write(&inst_cfg, "profile = \"tailscale\"\n").unwrap();
+
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            manifest_with_profiles(
+                "vpn-bridge",
+                true,
+                profile_spec_with_details(
+                    "relay-via-server",
+                    &["relay-via-server", "tailscale", "cloudflare-tunnel"],
+                    &[
+                        ("relay-via-server", true),
+                        ("tailscale", false),
+                        ("cloudflare-tunnel", false),
+                    ],
+                ),
+            ),
+        )];
+        let host = host_from_toml(&format!(
+            "[modules.\"vpn-bridge#a\"]\nconfig = \"{}\"\n",
+            inst_cfg.display()
+        ));
+        let err = resolve_active(&host, Path::new("/tmp"), catalog)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("profile `tailscale` does not support"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn resolver_accepts_instance_for_multi_instance_profile() {
+        let tmp = tempfile::tempdir().unwrap();
+        let inst_cfg = tmp.path().join("vpn-bridge.overlay.toml");
+        std::fs::write(&inst_cfg, "profile = \"relay-via-server\"\n").unwrap();
+
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            manifest_with_profiles(
+                "vpn-bridge",
+                true,
+                profile_spec_with_details(
+                    "relay-via-server",
+                    &["relay-via-server", "tailscale", "cloudflare-tunnel"],
+                    &[
+                        ("relay-via-server", true),
+                        ("tailscale", false),
+                        ("cloudflare-tunnel", false),
+                    ],
+                ),
+            ),
+        )];
+        let host = host_from_toml(&format!(
+            "[modules.\"vpn-bridge#overlay\"]\nconfig = \"{}\"\n",
+            inst_cfg.display()
+        ));
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        assert_eq!(active.len(), 1);
+        assert_eq!(active[0].instance.as_deref(), Some("overlay"));
+    }
+
+    #[test]
+    fn resolver_falls_back_to_default_profile_when_config_missing() {
+        // Per-instance config file doesn't exist → use the manifest
+        // default profile (`relay-via-server`, which is instanced=true)
+        // so the apply succeeds.
+        let catalog = vec![(
+            "vpn-bridge".into(),
+            manifest_with_profiles(
+                "vpn-bridge",
+                true,
+                profile_spec_with_details(
+                    "relay-via-server",
+                    &["relay-via-server", "tailscale"],
+                    &[("relay-via-server", true), ("tailscale", false)],
+                ),
+            ),
+        )];
+        let host = host_from_toml(
+            "[modules.\"vpn-bridge#overlay\"]\nconfig = \"/nonexistent/missing.toml\"\n",
+        );
+        let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
+        assert_eq!(active.len(), 1);
     }
 
     // -- runner ------------------------------------------------------

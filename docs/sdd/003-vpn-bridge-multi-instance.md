@@ -1,9 +1,59 @@
 # SDD-003 — vpn-bridge multi-instance honesty
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
 > Closes findings: F-2026-005
+
+## Implementation status
+
+Shipped in the SDD-003 implementation PR.
+
+- **D-1 — ProfileSpec details**: `ProfileSpec` in
+  `crates/selfdef-cli/src/modules.rs` gained a `details:
+  BTreeMap<String, ProfileDetails>` field with optional
+  `instanced` per profile, plus a `ProfileSpec::profile_instanced`
+  helper that falls back to the module-level default.
+- **D-2 — Resolver gate**: `resolve_active` now reads each
+  instance's per-module config (parsing just the `profile = ...`
+  line), looks up the profile's `instanced` capability, and
+  refuses any `slug#instance` host-config key when the profile
+  is declared `instanced = false`. Falls back to the manifest's
+  default profile if the per-instance config can't be parsed.
+- **D-3 — Dispatcher env**: `run_one` passes
+  `SELFDEF_INSTANCE_ID=<inst>` into the spawned bash process
+  whenever `active.instance.is_some()`. Absent for the legacy
+  single-instance shape.
+- **D-4 — Profile scripts**: `relay-via-server.sh` derives
+  per-instance defaults from `${SELFDEF_INSTANCE_ID}`
+  (`selfdef-<inst>` iface, `selfdef_vpn_bridge_<inst>` nftables
+  table, `/etc/nftables.d/selfdef-vpn-bridge-<inst>.conf` state
+  file). Legacy single-instance defaults are unchanged when the
+  env var is absent. `tailscale.sh` and `cloudflare-tunnel.sh`
+  `die` defence-in-depth at the top of `profile_apply` /
+  `profile_uninstall` when `SELFDEF_INSTANCE_ID` is set.
+- **D-5 — Manifest + docs**: `modules/vpn-bridge/module.toml`
+  carries `[profiles.details.relay-via-server] instanced = true`,
+  `[profiles.details.tailscale] instanced = false`, and
+  `[profiles.details.cloudflare-tunnel] instanced = false`. The
+  README's pre-SDD-003 caveat block is rewritten into a
+  "Multi-instance support" section with the capability table,
+  per-instance naming convention, and migration notes.
+
+Tests:
+- Unit (`crates/selfdef-cli/src/modules.rs`):
+  `profile_instanced_falls_back_to_module_default_when_unset`,
+  `profile_instanced_per_profile_override_wins`,
+  `resolver_rejects_instance_for_singleton_profile`,
+  `resolver_accepts_instance_for_multi_instance_profile`,
+  `resolver_falls_back_to_default_profile_when_config_missing`.
+- Integration
+  (`crates/selfdef-cli/tests/module_vpn_bridge_multi_instance.rs`):
+  `relay_apply_with_instance_id_uses_per_instance_iface`,
+  `relay_apply_without_instance_id_keeps_legacy_wg0_defaults`,
+  `tailscale_apply_refuses_when_instance_id_is_set`,
+  `cloudflare_apply_refuses_when_instance_id_is_set`,
+  `cli_resolver_refuses_singleton_profile_with_instance_suffix`.
 
 ## Problem
 
