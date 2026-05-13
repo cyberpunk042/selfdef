@@ -104,14 +104,33 @@ After startup you have two hot-reload signals at your disposal:
 - **SIGHUP** — reload rules from disk. Re-uses the verifier that
   was constructed at startup. Picks up newly-signed rules but
   *not* a changed public-key file (path or contents).
-- **SIGUSR2** — reload the public-key file at the configured
-  `signing_public_key_file` path **and** re-run the rule load
-  with the fresh verifier. Use this when rotating the signing
-  key without bouncing the daemon (F-2027-005).
+- **SIGUSR2** — fan-outs to *every* hot-reloadable surface the
+  daemon owns. As of the current cycle that's three branches:
+  1. **API tokens** — re-reads `[api].token_file` and
+     `[api].control_token_file`, enforces mode-0600
+     (F-2027-031). Paired with `selfdefctl api rotate-token`.
+  2. **Rule-signing verifier** — re-reads
+     `signing_public_key_file` and swaps the in-memory
+     verifier (F-2027-005).
+  3. **Rule re-verify** — automatically follows the verifier
+     reload; any rule whose signature was rejected under the
+     previous public key gets a fresh attempt.
 
-Both signals are no-ops if the matching feature isn't enabled
-(SIGHUP without a correlator-enabled config; SIGUSR2 without a
-configured public key) — they log a `debug:` line and continue.
+  After the fan-out the daemon emits a single summary line so
+  operators can answer "did the rotation overall succeed?" in
+  one glance (F-2027-032):
+
+  ```
+  INFO tokens=ok verifier=ok rules=ok SIGUSR2 reload summary
+  ```
+
+  Each branch's outcome is one of `ok` / `failed` / `skipped`
+  (the latter when the feature isn't enabled). A failed branch
+  doesn't block the others — partial reloads are valid.
+
+Both signals are no-ops if no hot-reloadable surface is enabled
+(SIGHUP without a correlator-enabled config; SIGUSR2 without
+api / signing) — they log a `debug:` line and continue.
 
 When enforcement is on:
 

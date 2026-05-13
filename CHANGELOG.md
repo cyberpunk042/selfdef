@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 operator-facing docs refresh (closes F-2027-037 + -038 + -041 + -042 + -043 + -044)
+
+Closes the largest of the three docs-explorer follow-up clusters. Six findings, all docs-only, in a single coordinated pass across README + ARCHITECTURE.md + two runbooks.
+
+#### Per-finding fixes
+
+- **F-2027-037** — `docs/dev/signing.md`'s SIGUSR2 section previously documented the signal as a verifier-reload-only surface. It now enumerates all three reload branches (api tokens, verifier, rules re-verify) and shows the post-fan-out summary log line (`tokens=ok verifier=ok rules=ok SIGUSR2 reload summary`) that F-2027-032 added.
+- **F-2027-038** — `docs/dev/rbac-posture.md` listed the built-in probe set as 2 subjects. Now lists all four (post-F-2027-007: + `system:masters` + `system:serviceaccount:default:default`) with a one-line rationale per subject explaining the misuse pattern each catches.
+- **F-2027-041** — README's "Read-only" verb table now includes `selfdefctl events follow` (with a one-liner pointing at the F-2027-029/-030 protocol surface). The "Security opt-ins" table gains `keys verify-dir` (F-2027-006) and notes F-2027-031 mode-0600 enforcement + F-2027-007 expanded probe set on the existing entries.
+- **F-2027-042** — README's "Security opt-ins" section gains a new "Phase 2 hot-reload surfaces" sub-section calling out F-2027-005 (verifier hot-rotation), F-2027-032 (summary log), F-2027-035 (eventstream TOCTOU/symlink hardening), and F-2027-014 (`with_full_capability` feature-gating).
+- **F-2027-043** — README quickstart now runs `cargo deb -p selfdef-cli` alongside `selfdef-daemon` and `dpkg -i` both — the daemon and the CLI are separate Debian targets and the operator needs both.
+- **F-2027-044** — ARCHITECTURE.md's topology diagram label flipped from `SIGUSR2 (api tokens)` to `SIGUSR2 (tokens + verifier + rules)`. The security-properties section gains cross-references to F-2027-005 / -031 / -032 / -035 alongside the existing F-2026 follow-up citations.
+
+#### Phase 2 status after this PR
+
+**45 findings across 5 explorers. 41 nice (38 closed, 3 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. The three open `nice` findings are the runbook-structure cluster (F-2027-039 + -040) and the SDD-lineage cluster (F-2027-045). Two Phase 2 explorers remain (tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 docs explorer (raises F-2027-037 through F-2027-045)
 
 Fifth of Phase 2's seven explorers ships. Walks the six new `docs/dev/<feature>.md` runbooks, README.md, ARCHITECTURE.md, and the six SDDs — plus a sanity-check of the four already-shipped Phase 2 audit docs.

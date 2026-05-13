@@ -9,7 +9,7 @@
                 │   init · doctor · keys verify · rbac check · api rotate-token │
                 └────────────────────────┬────────────────────────────────────┘
                                          │ HTTP API + /metrics  (UNIX socket or TCP+bearer)
-                                         │ SIGHUP (rules) / SIGUSR2 (api tokens)
+                                         │ SIGHUP (rules) / SIGUSR2 (tokens + verifier + rules)
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                              selfdef-daemon                                │
 │  ┌────────────┐   ┌────────────┐   ┌────────────┐   ┌────────────┐         │
@@ -197,10 +197,18 @@ accordingly:
   the existing workflow).
 - API bearer tokens hot-rotate via `selfdefctl api
   rotate-token` + SIGUSR2 — no daemon restart, no
-  in-flight scrape disruption (SDD-004 F-2026-023 follow-up).
+  in-flight scrape disruption (SDD-004 F-2026-023 follow-up;
+  F-2027-031 enforces mode-0600 on reload).
+- The SIGUSR2 fan-out also rotates the rule-signing verifier
+  (F-2027-005) and re-runs `load_rules` against the fresh
+  verifier; the handler emits a one-line summary
+  `tokens=ok verifier=ok rules=ok` so operators can confirm
+  the rotation in one glance (F-2027-032).
 - Eventstream JSONL paths are opt-in integrity-gated
   (world-writable + foreign-owner refusal at parse time;
-  SDD-004 F-2026-026 follow-up).
+  SDD-004 F-2026-026 follow-up; F-2027-035 hardens the check
+  to `O_NOFOLLOW` open + fstat-on-FD, closing the
+  stat-then-open TOCTOU window).
 - State (sqlite, parquet) lives on a path the daemon can
   write but most other tools cannot.
 - Long-term: ship binary on a dm-verity / systemd-sysext

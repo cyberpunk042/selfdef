@@ -35,7 +35,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (41 — 32 closed, 9 open)
+## Nice findings (41 — 38 closed, 3 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -71,14 +71,14 @@ None.
 | F-2027-033 | nice | `selfdef-correlator::walk_yaml` rule enumeration | `std::fs::read_dir` order is undefined; rules with the same priority fire in fs-dependent order. Add a `paths.sort()`. | implement — **closed** by Phase 2 seam-3 PR (`walk_yaml` now sorts lexicographically before returning). |
 | F-2027-034 | nice | `SigmaError::Signature` ordering | Signature check runs before the YAML parse; a malformed-but-signed rule yields `Signature` error instead of `Yaml`. Counter-intuitive when the signature actually was valid (over malformed bytes). | implement — **closed** by Phase 2 seam-3 PR (`load_dir_maybe_verified` now reads + parses YAML first, then verifies the signature — malformed bytes surface `SigmaError::Yaml`; verifier is still consulted before the rule is added to the engine so the security contract is unchanged). |
 | F-2027-036 | nice | eventstream collector long-lived FD | After the initial integrity check, the `BufReader::new(file)` FD is held for the daemon's lifetime; nothing re-validates ownership or mode if `logrotate` replaces the file. Operator-facing doc warning needed. | doc — **closed** by Phase 2 eventstream-integrity PR (`docs/dev/first-run.md` § "Optional: eventstream integrity" now warns that the check runs once at startup against the FD; operators who rotate the file post-startup must restart the daemon to re-assert on the new file). |
-| F-2027-037 | nice | `docs/dev/signing.md:102-114` | Documents SIGUSR2 as a verifier-reload signal but doesn't mention that the same signal also reloads API tokens (post-PR-#58/#69/#70 the fan-out covers tokens + verifier + rules). | doc |
-| F-2027-038 | nice | `docs/dev/rbac-posture.md:35-36, 90-91` | Built-in probe set listed as 2 subjects (`system:authenticated` + `system:unauthenticated`); F-2027-007's closure expanded it to 4 (also `system:masters` and `system:serviceaccount:default:default`). | doc |
+| F-2027-037 | nice | `docs/dev/signing.md:102-114` | Documents SIGUSR2 as a verifier-reload signal but doesn't mention that the same signal also reloads API tokens (post-PR-#58/#69/#70 the fan-out covers tokens + verifier + rules). | doc — **closed** by Phase 2 docs-operator-refresh PR (signing.md SIGUSR2 section now enumerates all three reload branches + the summary log line). |
+| F-2027-038 | nice | `docs/dev/rbac-posture.md:35-36, 90-91` | Built-in probe set listed as 2 subjects (`system:authenticated` + `system:unauthenticated`); F-2027-007's closure expanded it to 4 (also `system:masters` and `system:serviceaccount:default:default`). | doc — **closed** by Phase 2 docs-operator-refresh PR (both sites now enumerate the full four built-in subjects with one-line rationale per subject). |
 | F-2027-039 | nice | `docs/dev/test-contract.md` | No "Per-test isolation overrides" section pointing at the `MODULE_INSTALLED_MANIFEST` env pattern landed in PR #65 (and similar overrides). | doc |
 | F-2027-040 | nice | Inconsistent runbook section structure | `first-run.md` has 11 sections, `signing.md` has 8, `rbac-posture.md` has 5 (no Env / Exit-codes / Tests sections). Pick canonical shape and apply. | doc |
-| F-2027-041 | nice | README verb tour | `selfdefctl init`, `doctor`, `events follow`, `keys verify-dir`, expanded `rbac check` are reachable via `--help` but not called out in the README's verb section. | doc |
-| F-2027-042 | nice | README "Security opt-ins" | Cites only `F-2026-` follow-ups; doesn't mention Phase 2 closure findings (`F-2027-005` verifier reload, `F-2027-007` expanded RBAC probes, `F-2027-014` `with_full_capability` feature-gating, `F-2027-035` eventstream TOCTOU). | doc |
-| F-2027-043 | nice | README quickstart `cargo deb -p selfdef-daemon` | Builds only the daemon; the CLI is a separate target (`selfdefctl`). Quickstart doesn't tell operators they need to package the CLI separately. | doc |
-| F-2027-044 | nice | `ARCHITECTURE.md:12, 199` SIGUSR2 fan-out | Topology diagram labels SIGUSR2 as `(api tokens)` only; post-PR-#58/#69/#70 also covers verifier reload + rule re-verify + summary log. | doc |
+| F-2027-041 | nice | README verb tour | `selfdefctl init`, `doctor`, `events follow`, `keys verify-dir`, expanded `rbac check` are reachable via `--help` but not called out in the README's verb section. | doc — **closed** by Phase 2 docs-operator-refresh PR (`events follow` added to the Read-only section; `keys verify-dir`, F-2027-007 RBAC expansion, F-2027-031 mode-0600 enforcement now in the Security opt-ins table). |
+| F-2027-042 | nice | README "Security opt-ins" | Cites only `F-2026-` follow-ups; doesn't mention Phase 2 closure findings (`F-2027-005` verifier reload, `F-2027-007` expanded RBAC probes, `F-2027-014` `with_full_capability` feature-gating, `F-2027-035` eventstream TOCTOU). | doc — **closed** by Phase 2 docs-operator-refresh PR (new "Phase 2 hot-reload surfaces" sub-section calls out F-2027-005, -014, -032, -035 with one-line summaries). |
+| F-2027-043 | nice | README quickstart `cargo deb -p selfdef-daemon` | Builds only the daemon; the CLI is a separate target (`selfdefctl`). Quickstart doesn't tell operators they need to package the CLI separately. | doc — **closed** by Phase 2 docs-operator-refresh PR (quickstart now builds `cargo deb -p selfdef-cli` alongside the daemon and `dpkg -i` both). |
+| F-2027-044 | nice | `ARCHITECTURE.md:12, 199` SIGUSR2 fan-out | Topology diagram labels SIGUSR2 as `(api tokens)` only; post-PR-#58/#69/#70 also covers verifier reload + rule re-verify + summary log. | doc — **closed** by Phase 2 docs-operator-refresh PR (diagram label updated to `tokens + verifier + rules`; F-2027-005 / -031 / -032 / -035 cross-references added in the security-properties section). |
 | F-2027-045 | nice | SDDs don't cross-ref `F-2027-NNN` follow-ups | SDD-003 (drove F-2027-001 + -025), SDD-004 (F-2027-005 + -006), SDD-006 (F-2027-024) have no "Follow-up findings" tail section. Lineage is discoverable from the ledger but not from the SDD reader's vantage. | doc |
 
 ## SDD-debt findings (1)
@@ -91,14 +91,13 @@ None.
 
 - **45 findings raised** across five explorers (recent-PRs: 10;
   crate: 11; module: 6; integration: 9; docs: 9).
-- **0 blockers**, **3 important (all closed)**, **41 nice (32
-  closed, 9 open)**, **1 SDD-debt (F-2027-010 open)**.
+- **0 blockers**, **3 important (all closed)**, **41 nice (38
+  closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
 - The first four Phase 2 explorers are fully drained at the
-  actionable tiers. The nine new docs-explorer findings
-  cluster into three follow-up PRs: an operator-facing
-  refresh (F-2027-037, -038, -041, -042, -043, -044), an SDD
-  lineage refresh (F-2027-045), and a runbook-structure pass
-  (F-2027-039 + -040).
+  actionable tiers. Six of the docs-explorer's nine findings
+  are closed (operator-facing refresh: F-2027-037 + -038 +
+  -041 + -042 + -043 + -044); three remain — runbook
+  structure (F-2027-039 + -040) and SDD lineage (F-2027-045).
 - Two explorers remain (tests, security). Each will add more
   findings in follow-up PRs.
 - Three explorers remain (docs, tests, security). Each will

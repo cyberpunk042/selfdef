@@ -32,9 +32,19 @@ pod_label_value = "true"
 - Only **cluster-admin** and any **documented narrow
   ServiceAccount** may PATCH pod labels in namespaces where
   agent-guard runs.
-- Neither `system:authenticated` nor `system:unauthenticated`
-  should be granted `patch` on `pods` (full or `labels`
-  sub-resource).
+- None of these subjects should be granted `patch` on `pods`
+  (full or `labels` sub-resource) — the four built-in probes
+  the CLI runs by default cover the common-mistake matrix
+  (F-2027-007):
+    - `system:authenticated` — any cred-bearing principal.
+    - `system:unauthenticated` — the anonymous group.
+    - `system:masters` — the kubeadm bootstrap superuser
+      group; granting it to humans bypasses every cluster
+      RBAC check by design.
+    - `system:serviceaccount:default:default` — the default
+      ServiceAccount in the default namespace; pods that
+      forget to set `serviceAccountName` run as this and any
+      RoleBinding on it leaks to every such pod.
 - Document the narrow ServiceAccounts that legitimately need
   label PATCH (e.g. a CD pipeline that re-labels pods on
   rollout) and probe them via `--as`.
@@ -87,8 +97,10 @@ selfdefctl rbac check --probe --namespace selfdef-agents
   reflects whatever role bindings exist at probe time; rotating
   RoleBindings after the check has been run requires re-running
   the check.
-- The check probes a fixed set of subjects (`system:authenticated`,
-  `system:unauthenticated`, plus operator-supplied `--as`). A
+- The check probes a fixed set of four built-in subjects
+  (`system:authenticated`, `system:unauthenticated`,
+  `system:masters`, `system:serviceaccount:default:default`),
+  plus any operator-supplied `--as` subjects (F-2027-007). A
   cluster with a malicious narrow ServiceAccount that the
   operator doesn't think to probe will pass — the check is
   documentation + spot-checking, not a cluster-wide
