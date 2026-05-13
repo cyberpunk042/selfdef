@@ -212,14 +212,18 @@ This block is intentionally short — copy it into your deployment runbook.
   exclusively root-writable. Credential rotation should
   remain a deliberate operator action; an automated
   uptime-watcher rotator is the wrong shape.
-- **TracingPolicy signing (F-2026-024 follow-up — partial).**
-  The verifier infrastructure (`selfdef-signing` + minisign-format
-  detached signatures) now ships and is wired into the
-  correlator's rule loader. Re-using it for the
-  `tetragon` module's `apply.sh` to refuse unsigned policies
-  before they reach the kernel is the remaining work; the
-  `[security].signing_public_key_file` config knob will be
-  re-used so operators don't need a second key.
+- **TracingPolicy signing (F-2026-024 follow-up — shipped).**
+  The `tetragon` module's `apply.sh` and `check.sh` re-use
+  `selfdefctl keys verify` to validate every policy file's
+  sibling `.minisig` against `[security].signing_public_key_file`.
+  Turn on via `require_signed_policies = true` in
+  `/etc/selfdef/modules/tetragon.toml`; apply refuses to
+  (re)start tetragon if any policy is unsigned or invalid, and
+  `selfdefctl modules check` reports the unsigned count as a
+  `failed` status. See `docs/dev/signing.md` "TracingPolicy
+  signing" for the runbook. Caveat: agent-guard renders policies
+  at runtime and its output isn't pre-signed — that's documented
+  in the runbook and intentionally out of scope.
 - **Metrics-token rotation (F-2026-023 follow-up — shipped).**
   `selfdefctl api rotate-token` ships in selfdef ≥ this release.
   The verb generates a fresh 32-byte high-entropy token, writes

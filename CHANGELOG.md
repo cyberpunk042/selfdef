@@ -6,6 +6,72 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — TracingPolicy signing (SDD-004 F-2026-024 follow-up)
+
+Closes the SDD-004 F-2026-024 known-gap follow-up as **shipped**.
+Re-uses the rule-signing infrastructure (PR before this one) to
+gate Tetragon TracingPolicies in
+`/etc/tetragon/tetragon.tp.d/`. The `tetragon` module's
+`apply.sh` and `check.sh` shell out to `selfdefctl keys verify`
+on every policy file before tetragon (re)starts.
+
+- **Tetragon module config**: new `require_signed_policies: bool`
+  (default `false`) in `modules/tetragon/profiles/default.toml`.
+  Operators turn it on per-host once they've signed every policy
+  in `policy_dir`.
+- **apply.sh enforcement**: when `require_signed_policies = true`,
+  apply.sh iterates every `*.yml`/`*.yaml` in `policy_dir` and
+  runs `selfdefctl keys verify` on each. Failures emit a
+  structured `failed` status and exit non-zero **before**
+  invoking `systemctl restart tetragon` — the running tetragon
+  stays up with whatever policies were already loaded.
+- **check.sh report**: when `require_signed_policies = true`,
+  check.sh reports the unsigned-policy count as a `failed`
+  structured status with detail
+  `"<N> of <M> policy file(s) in <dir> failed signature verification"`.
+  Non-fatal to the running tetragon — the check is purely a
+  state report.
+- **Dry-run** logs "DRY-RUN: would verify ..." for each policy
+  but never enforces — preserving the dry-run-is-a-no-op
+  contract (SDD-005 D-2a).
+- **`docs/dev/signing.md`**: new "TracingPolicy signing"
+  section walks operators through enabling the gate, apply +
+  check behaviour, and the agent-guard render-time caveat
+  (rendered policies are not pre-signed; operators turn on the
+  gate where they don't run agent-guard, or trust agent-guard's
+  output via package signatures + integrity-sentinel
+  baselining).
+
+#### Tests
+
+`crates/selfdef-cli/tests/module_tetragon_signing.rs` ships 6
+integration tests covering:
+- apply passes when signing disabled (sanity: existing workflow
+  unchanged)
+- apply passes when every policy is signed
+- apply refuses with a clear `failed` status when one policy
+  is unsigned
+- dry-run logs verification intent but never fails
+- check passes when signing disabled even with unsigned
+  policies
+- check fails when signing is enabled and an unsigned policy
+  exists
+
+The fixture uses a stubbed `selfdefctl` on PATH that mimics
+`keys verify`'s exit-code contract (0 if a sibling `.minisig`
+exists, 1 otherwise) — the real verifier path is covered
+end-to-end by `selfdef-signing`'s own unit suite + the
+correlator's `signed_rules.rs` integration suite.
+
+#### What this closes
+
+- **F-2026-024 follow-up** in `docs/review/99-findings-ledger.md`
+  flips from "partial close" to "shipped"; the SECURITY.md
+  known-gap entry flips accordingly.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests
+-- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — detection-rule signing (closes original "Rule signing" Known gap)
 
 Closes the original SECURITY.md "Rule signing not yet enforced"
