@@ -7,6 +7,19 @@ case). The module ships **three profiles**, each with a different
 trust + paradigm tradeoff, plus a documented extension hook so future
 overlay tech can slot in without forking.
 
+> **Multi-instance caveat (F-2026-005, tracked in
+> [SDD-003](../../docs/sdd/003-vpn-bridge-multi-instance.md))**:
+> the manifest declares `instanced = true`, but every shipped
+> profile script writes to instance-shared state paths (one
+> `/etc/wireguard/selfdef0.conf`, one
+> `/etc/nftables.d/selfdef-vpn-bridge.conf`, one
+> `tailscaled.service`, one `cloudflared.service`). Running
+> `[modules."vpn-bridge#a"]` and `[modules."vpn-bridge#b"]`
+> against the same profile silently corrupts state — whichever
+> instance applied last wins. Until SDD-003 ships, treat this
+> module as **single-instance per profile** and keep one
+> `[modules.vpn-bridge]` block per host.
+
 ## Decision matrix
 
 | Profile | Paradigm | Trust boundary | Setup cost | Best for |

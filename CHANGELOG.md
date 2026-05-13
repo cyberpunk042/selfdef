@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs — Phase 1 audit nice-cluster cleanup
+- `modules/vpn-bridge/README.md` — new "Multi-instance
+  caveat" block at the top calling out F-2026-005 / SDD-003
+  and warning operators not to declare two
+  `[modules."vpn-bridge#..."]` blocks against the same
+  profile until SDD-003 ships. Closes **F-2026-058**.
+- `modules/observability/README.md` — new "Tetragon
+  metric-name pin" section documenting the upstream-version
+  assumption (the dashboard panels target Tetragon v1.x's
+  metric naming). Documents **F-2026-052** as a partial
+  close; the `tetragon` module's `requires` block doesn't
+  pin a version range yet.
+- `docs/review/99-findings-ledger.md` — back-references the
+  nice-cluster PR. Also marks **F-2026-056** and
+  **F-2026-057** as closed by doc-sweep PR #30 (the
+  README's Module catalog table and the CHANGELOG's
+  "Honest correction" entry, respectively — they were
+  shipped but not back-referenced at the time).
+
 ### Changed — Phase 1 audit dead-knob cleanup
 - `selfdef-store/src/sqlite.rs` no longer carries its own
   `const SCHEMA_VERSION: u32 = 1` — it now imports

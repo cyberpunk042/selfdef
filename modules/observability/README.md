@@ -65,6 +65,22 @@ own `/metrics` endpoint:
 | selfdef findings / sec by severity | selfdef-daemon | `sum by (severity_id) (rate(selfdef_findings_by_severity_total[5m]))` |
 | selfdef hot-store size | selfdef-daemon | `selfdef_store_events` |
 
+### Tetragon metric-name pin
+
+The four Tetragon panels reference metric names from upstream
+Tetragon's built-in Prometheus exporter. The shipped panel
+queries are verified against **Tetragon v1.x** (the
+[`tetragon-metrics`](https://tetragon.io/docs/reference/metrics/)
+reference page is the canonical source). If you run a Tetragon
+version that renames any of these series (`tetragon_events_total`,
+`tetragon_msg_sigkill_total`, `tetragon_process_cache_size`,
+`tetragon_map_errors_total`), the corresponding panel renders
+flat. The `tetragon` module's `requires` block doesn't pin a
+Tetragon version range today (F-2026-052 in the audit ledger);
+Phase-2 follow-up tracked.
+
+### Daemon-side panels gating
+
 The daemon-side panels render flat / empty if the
 `scrape_targets` list doesn't include the daemon's `/metrics`
 endpoint (or if the daemon isn't running). Both endpoints are

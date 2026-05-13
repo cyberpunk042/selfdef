@@ -79,13 +79,13 @@
 | --- | --- | --- | --- | --- |
 | F-2026-050 | nice | `modules/agent-guard/install/uninstall.sh` | Hand-enumerated policy list; will drift if a sixth policy is added. *(was M-001)* | implement |
 | F-2026-051 | nice | `modules/agent-guard/install/lib.sh render_pod_scope` | Awk state machine fragile against future policy selectors. *(was M-003)* | implement |
-| F-2026-052 | nice | `modules/observability/assets/dashboards/` | Hardcoded Tetragon metric name `tetragon_msg_sigkill_total` without an upstream-version pin. *(was M-007)* | investigate |
+| F-2026-052 | nice | `modules/observability/assets/dashboards/` | Hardcoded Tetragon metric name `tetragon_msg_sigkill_total` without an upstream-version pin. *(was M-007)* | investigate — **partial close** by nice-cluster PR (added "Tetragon metric-name pin" section to observability README documenting the v1.x assumption; full pin via `requires` block is a Phase-2 follow-up) |
 | F-2026-053 | nice | `selfdef-config/src/lib.rs BusConfig::backend` | Dead knob — always "inproc", daemon doesn't branch on it. *(was C-001)* | implement — **closed** by dead-knob cleanup PR (rustdoc-marked vestigial; commented out in `selfdef.toml.example`) |
 | F-2026-054 | nice | `selfdef-daemon/src/main.rs build_notifier_chain` | A `[notifier.ntfy]` block with no matching `"ntfy"` in `channels` silently disables ntfy without a startup warning. *(was C-004)* | implement |
 | F-2026-055 | nice | `selfdefctl events emit` | `--out` has no default. Callers must hard-code the path. *(was I-003)* | design |
-| F-2026-056 | nice | `README.md` | No catalog of shipped modules in the repo-root README. *(was D-002)* | doc |
-| F-2026-057 | nice | `CHANGELOG.md` PR #22 entry | Observability scope ("we configure, we don't install") implicit; should be explicit. *(was D-008)* | doc |
-| F-2026-058 | nice | `modules/vpn-bridge/README.md` | No mention of multi-instance corruption risk (F-2026-005). *(was D-012)* | doc |
+| F-2026-056 | nice | `README.md` | No catalog of shipped modules in the repo-root README. *(was D-002)* | doc — **closed** by doc-sweep PR #30 (README now ships a Module catalog table) |
+| F-2026-057 | nice | `CHANGELOG.md` PR #22 entry | Observability scope ("we configure, we don't install") implicit; should be explicit. *(was D-008)* | doc — **closed** by doc-sweep PR #30 (CHANGELOG "Honest correction" entry) |
+| F-2026-058 | nice | `modules/vpn-bridge/README.md` | No mention of multi-instance corruption risk (F-2026-005). *(was D-012)* | doc — **closed** by nice-cluster PR (README now carries a Multi-instance caveat block referencing SDD-003) |
 | F-2026-059 | nice | `panic` subcommand vs `modules uninstall` | Hostname-confirm validation duplicated; could share a helper. *(was R-001)* | implement |
 | F-2026-060 | nice | `crates/selfdef-cli/tests/*` | Helper functions duplicated across 9 test files; refactor to `tests/common/mod.rs`. *(was T-001)* | implement |
 | F-2026-061 | nice | `cli_modules_apply.rs:118` and similar | Substring assertions on `Summary:` lines brittle against cosmetic changes. *(was T-002)* | implement |
