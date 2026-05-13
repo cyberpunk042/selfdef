@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdefctl doctor` (cross-cutting operator health check)
+
+A single verb that verifies the cross-cutting policy state every post-audit security feature depends on. Synthesizes everything the recent follow-up PRs added (rule signing, API token rotation, eventstream integrity, RBAC posture) into one go-to "is this deployment healthy?" command. Complementary to `selfdefctl modules check` — the two don't subsume each other.
+
+#### Categories
+
+- **`signing`** — when `[security].require_signed_rules = true`, verifies the public key loads + every rule in `[correlator].rules_dir` has a sibling `.minisig` that validates.
+- **`api`** — when `[api].enabled = true`, verifies the token file exists, is mode 0600, and is non-empty.
+- **`eventstream`** — when `[collectors.eventstream].integrity_check = true`, verifies every configured path passes the same checks the collector will run at startup (not world-writable, owned by daemon-allowed UID).
+- **`rbac`** — reads agent-guard's host config; when `scope = "pod-label"`, emits a `warn:` pointing at `selfdefctl rbac check --probe` for the actual cluster RBAC verification.
+
+#### Output
+
+- Human report by default (`## <category>` headings + `[status] check-name: detail` lines + summary count).
+- `--json` flag emits JSON-lines (one object per check) for CI / monitoring integration.
+- Exit `0` if no `FAIL`, `1` otherwise. `warn` and `skip` never trigger non-zero.
+
+#### Operator integration
+
+- Post-deploy smoke check: `selfdefctl doctor`.
+- Periodic via systemd timer: see `docs/dev/operator-health-check.md` for the unit + timer files.
+- CI: `selfdefctl doctor --json | jq -e '. | select(.status == "FAIL")'`.
+
+#### Tests
+
+`crates/selfdef-cli/tests/cli_doctor.rs` ships 6 integration tests covering: all-opt-ins-off → all `skip`; API token `0644` flagged as `FAIL`; API token `0600` reported as `ok`; signing enabled without key path flagged as `FAIL`; eventstream world-writable path flagged as `FAIL`; `--json` emits one object per check covering every expected category.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, and `cargo fmt --all -- --check` are clean.
+
 ### Added — k8s RBAC posture check (SDD-004 F-2026-025 follow-up)
 
 Closes the SDD-004 F-2026-025 known-gap follow-up as **shipped**.

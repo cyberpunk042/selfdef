@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod doctor;
 mod emit;
 mod modules;
 
@@ -82,6 +83,18 @@ enum Command {
     Rbac {
         #[command(subcommand)]
         action: RbacAction,
+    },
+    /// Holistic operator health check. Runs cross-cutting
+    /// audit-shipped state verifications (rule signing,
+    /// API token mode, eventstream integrity, RBAC posture
+    /// summary) in one go. Complementary to
+    /// `selfdefctl modules check`, which covers per-module
+    /// health via each module's `check.sh`.
+    Doctor {
+        /// JSON-lines output instead of the human report —
+        /// for CI / monitoring integration.
+        #[arg(long)]
+        json: bool,
     },
     /// Print version and build info.
     Version,
@@ -403,6 +416,16 @@ async fn main() -> Result<()> {
                 namespace.as_deref(),
                 warn_only,
             )?;
+        }
+        Command::Doctor { json } => {
+            let results = doctor::run(&cfg);
+            let (rendered, exit) = if json {
+                doctor::render_json(&results)?
+            } else {
+                doctor::render_human(&results)
+            };
+            print!("{rendered}");
+            std::process::exit(exit);
         }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
