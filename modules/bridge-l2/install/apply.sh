@@ -96,6 +96,12 @@ else
     run "load nftables ruleset" -- nft -f "$NFT_RULESET_PATH"
     changes=$((changes + 2))
 fi
+# F-2027-024: record the rendered file in the module manifest
+# regardless of whether we just wrote it or it was already at
+# target state — uninstall walks the manifest, and we want a
+# fresh apply on top of an existing install to leave the manifest
+# in a complete state.
+module_record_file "$NFT_RULESET_PATH"
 
 # ---------------------------------------------------------------- finalise
 if [[ "$changes" -eq 0 ]]; then

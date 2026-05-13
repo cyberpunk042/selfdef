@@ -29,6 +29,10 @@ struct Fixture {
     root: PathBuf,
     config_path: PathBuf,
     baseline_path: PathBuf,
+    /// F-2027-024: per-test override of the shared module-lib's
+    /// install-manifest path so parallel tests don't trample
+    /// `/var/lib/selfdef/installed/integrity-sentinel.manifest`.
+    manifest_path: PathBuf,
 }
 
 /// Build a scratch host with three tracked files under <root>/tracked
@@ -65,11 +69,14 @@ fn fixture(profile: &str, on_missing: &str) -> Fixture {
         ),
     );
 
+    let manifest_path = root.join("installed.manifest");
+
     Fixture {
         _root: root_holder,
         root,
         config_path,
         baseline_path,
+        manifest_path,
     }
 }
 
@@ -78,6 +85,8 @@ fn run_script(script: &str, fx: &Fixture) -> Output {
         .arg(module_dir().join("install").join(script))
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
+        // F-2027-024: isolate the install-manifest per test.
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn script")
 }

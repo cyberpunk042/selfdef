@@ -40,16 +40,46 @@ if command -v systemctl >/dev/null; then
     fi
 fi
 
-if [[ -f "$UNIT_PATH" ]]; then
-    run "remove $UNIT_PATH" -- rm -f "$UNIT_PATH"
-    run "systemctl daemon-reload" -- systemctl daemon-reload
-fi
-
 if command -v nft >/dev/null && nft list table inet selfdef_polarproxy >/dev/null 2>&1; then
     run "delete nftables table inet selfdef_polarproxy" -- nft delete table inet selfdef_polarproxy
 fi
-if [[ -f "$NFT_RULESET_PATH" ]]; then
-    run "remove $NFT_RULESET_PATH" -- rm -f "$NFT_RULESET_PATH"
+
+# F-2027-024: walk the rendered-file manifest. apply.sh records
+# UNIT_PATH (always) and NFT_RULESET_PATH (under host-tls-mitm
+# only); we just iterate.
+removed=0
+manifest_count=0
+unit_was_recorded=0
+while IFS= read -r dst; do
+    [[ -z "$dst" ]] && continue
+    manifest_count=$((manifest_count + 1))
+    if [[ "$dst" == "$UNIT_PATH" ]]; then
+        unit_was_recorded=1
+    fi
+    if [[ -f "$dst" ]]; then
+        run "remove $dst" -- rm -f "$dst"
+        removed=$((removed + 1))
+    fi
+done < <(module_render_files)
+
+# Migration path: pre-v2 install. Fall back to the legacy hand-
+# coded paths so existing deployments don't leave orphan files.
+if [[ "$manifest_count" -eq 0 ]]; then
+    if [[ -f "$UNIT_PATH" ]]; then
+        run "remove $UNIT_PATH (legacy enum)" -- rm -f "$UNIT_PATH"
+        removed=$((removed + 1))
+    fi
+    if [[ -f "$NFT_RULESET_PATH" ]]; then
+        run "remove $NFT_RULESET_PATH (legacy enum)" -- rm -f "$NFT_RULESET_PATH"
+        removed=$((removed + 1))
+    fi
 fi
 
-emit_status "ok" "uninstalled"
+# Reload systemd if we removed (or migration-removed) the unit.
+if [[ "$unit_was_recorded" -eq 1 || ( "$manifest_count" -eq 0 && ! -f "$UNIT_PATH" ) ]]; then
+    run "systemctl daemon-reload" -- systemctl daemon-reload
+fi
+
+module_clear_manifest
+
+emit_status "ok" "uninstalled ($removed file(s) removed)"

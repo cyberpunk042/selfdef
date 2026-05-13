@@ -66,6 +66,10 @@ if [[ ! -e "$BASELINE_PATH" ]]; then
         cp "$TMP_CURRENT" "$BASELINE_PATH"
         chmod 0600 "$BASELINE_PATH"
     fi
+    # F-2027-024: record the baseline in the module manifest so
+    # uninstall walks the manifest instead of hard-coding the
+    # path. Idempotent: module_record_file dedups.
+    module_record_file "$BASELINE_PATH"
     emit_status "ok" "baseline created ($COUNT entries) at $BASELINE_PATH"
     exit 0
 fi

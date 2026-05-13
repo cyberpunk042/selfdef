@@ -8,8 +8,14 @@
 #   DRY_RUN      — 0 | 1
 #   CONFIG_FILE  — path to the rendered host config
 
+# F-2027-024: opted into v2 to use module_record_file /
+# module_render_files / module_clear_manifest. Replaces the
+# hand-curated CONFIG_PATH duplication between apply.sh and
+# uninstall.sh. Tetragon's policy_dir / event_log are NOT
+# tracked — they're operator-owned drop dirs that long outlive
+# this module's installation.
 # shellcheck disable=SC1090,SC2034
-SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=2
 # Locate the shared module-lib. Precedence:
 #   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
 #      runs hit this).

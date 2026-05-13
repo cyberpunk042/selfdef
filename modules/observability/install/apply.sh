@@ -76,6 +76,11 @@ if [[ ! -f "$SCRAPE_DST" ]] || ! cmp -s "$NEW_SCRAPE" "$SCRAPE_DST"; then
     fi
     changes=$((changes + 1))
 fi
+# F-2027-024: record both rendered files in the manifest. The
+# bool above only counts diff-based changes; we want to record
+# unconditionally so an idempotent re-apply still leaves the
+# manifest complete.
+module_record_file "$SCRAPE_DST"
 
 # Render dashboard.
 NEW_DASHBOARD=$(mktemp)
@@ -89,6 +94,7 @@ if [[ ! -f "$DASHBOARD_DST" ]] || ! cmp -s "$NEW_DASHBOARD" "$DASHBOARD_DST"; th
     fi
     changes=$((changes + 1))
 fi
+module_record_file "$DASHBOARD_DST"
 
 # Reload Prometheus if bundled and something changed. Prometheus
 # 2.x reloads its config on SIGHUP without a full restart.

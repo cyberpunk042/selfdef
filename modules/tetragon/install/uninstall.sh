@@ -19,11 +19,9 @@ LIB_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 # shellcheck disable=SC1091
 source "${LIB_DIR}/lib.sh"
 
-CONFIG_PATH="/etc/tetragon/tetragon.yaml"
 POLICY_DIR="/etc/tetragon/tetragon.tp.d"
 SERVICE_UNIT="tetragon.service"
 if [[ -r "$CONFIG_FILE" ]]; then
-    CONFIG_PATH=$(toml_get config_path  "$CONFIG_FILE" || echo "$CONFIG_PATH")
     POLICY_DIR=$(toml_get policy_dir    "$CONFIG_FILE" || echo "$POLICY_DIR")
     SERVICE_UNIT=$(toml_get service_unit "$CONFIG_FILE" || echo "$SERVICE_UNIT")
 fi
@@ -33,8 +31,32 @@ if command -v systemctl >/dev/null 2>&1; then
     run "disable $SERVICE_UNIT" -- systemctl disable "$SERVICE_UNIT" >/dev/null 2>&1 || true
 fi
 
-if [[ -f "$CONFIG_PATH" ]]; then
-    run "remove $CONFIG_PATH" -- rm -f "$CONFIG_PATH"
+# F-2027-024: walk the rendered-file manifest. apply.sh records
+# CONFIG_PATH; we just iterate. policy_dir + event_log are NOT
+# in the manifest by design — they're operator-owned drop dirs
+# that long outlive this module's installation.
+removed=0
+manifest_count=0
+while IFS= read -r dst; do
+    [[ -z "$dst" ]] && continue
+    manifest_count=$((manifest_count + 1))
+    if [[ -f "$dst" ]]; then
+        run "remove $dst" -- rm -f "$dst"
+        removed=$((removed + 1))
+    fi
+done < <(module_render_files)
+
+# Migration path: pre-v2 install. Re-derive CONFIG_PATH the
+# same way apply.sh does and remove it.
+if [[ "$manifest_count" -eq 0 ]]; then
+    LEGACY_CONFIG_PATH="/etc/tetragon/tetragon.yaml"
+    if [[ -r "$CONFIG_FILE" ]]; then
+        LEGACY_CONFIG_PATH=$(toml_get config_path "$CONFIG_FILE" || echo "$LEGACY_CONFIG_PATH")
+    fi
+    if [[ -f "$LEGACY_CONFIG_PATH" ]]; then
+        run "remove $LEGACY_CONFIG_PATH (legacy enum)" -- rm -f "$LEGACY_CONFIG_PATH"
+        removed=$((removed + 1))
+    fi
 fi
 
 # Only remove the policy_dir if empty — refuse to take a live policy
@@ -47,4 +69,6 @@ if [[ -d "$POLICY_DIR" ]]; then
     fi
 fi
 
-emit_status "ok" "tetragon substrate removed"
+module_clear_manifest
+
+emit_status "ok" "tetragon substrate removed ($removed file(s))"

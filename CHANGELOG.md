@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — SDD-006 v2 manifest-helpers migration (closes F-2027-024)
+
+Closes the last open `nice` finding in the Phase 2 backlog. Five script-based modules — `bridge-l2`, `integrity-sentinel`, `polarproxy`, `observability`, `tetragon` — opted into SDD-006 v2 manifest helpers. Each module's `apply.sh` now records every rendered file via `module_record_file`, and each module's `uninstall.sh` walks `module_render_files` instead of hand-curating the same paths. The drift risk that v2 was specifically designed to remove is now eliminated for these five.
+
+The other two script-based modules don't migrate in this PR:
+- **`suricata`** — N/A. Renders no files outside its own template dir; v2 migration would have no manifest entries to track.
+- **`vpn-bridge`** — deferred. The dispatcher pattern delegates rendering to per-profile sourced scripts (`install/profiles/*.sh`); the migration needs to flow through each profile's `profile_apply` / `profile_uninstall` functions independently. Tracked as a follow-up under F-2027-024 in the docs.
+
+#### Per-module change shape
+
+Each migration is mechanical:
+1. **`install/lib.sh`** bumped to `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2`.
+2. **`install/apply.sh`** wraps each `install`/`cp` of a rendered file with `module_record_file "<absolute path>"` immediately after the write.
+3. **`install/uninstall.sh`** replaces hand-enumerated removals with a `module_render_files | while read dst; rm -f "$dst"; done` loop, then `module_clear_manifest`. A **legacy-fallback branch** (gated on `manifest_count == 0`) re-derives the old hand-coded paths so pre-v2 installs still uninstall cleanly after the upgrade.
+
+#### Test isolation
+
+The shared module-lib's default install-manifest path is `/var/lib/selfdef/installed/<MODULE>.manifest` — host-global. Parallel test runs were trampling that file, causing flaky failures. Fixed by wiring `MODULE_INSTALLED_MANIFEST=<tempdir>/installed.manifest` into the four affected test fixtures (`module_integrity_sentinel.rs`, `module_observability.rs`, `module_tetragon.rs`, `module_tetragon_signing.rs`). `module_polarproxy.rs` runs dry-run-only so the manifest is never written; no fix needed. `module_agent_guard.rs` already had the override.
+
+#### Adoption-table refresh
+
+`docs/dev/module-helpers.md`'s "Per-module adoption" table now reflects the post-migration state (5 v2, 1 still v1 with rationale, 1 dispatcher with deferred-migration note).
+
+#### Phase 2 status after this PR
+
+**27 findings across 3 explorers. 24 nice (all closed)**, **2 important (closed)**, **0 blockers**, **1 SDD-debt open** (F-2027-010 — `events follow` TCP transport, awaiting design).
+
+**All three Phase 2 run explorers are fully drained at the actionable tiers.** Four explorers remain (integration, docs, tests, security) — each will run in follow-up PRs.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` all clean. Verified stable across multiple parallel `cargo test` runs (no manifest-trampling flakes).
+
 ### Fixed — Phase 2 module-cleanup (closes F-2027-022, -023, -025, -026, -027)
 
 Five of the six findings the Phase 2 module explorer raised — closes the small / contained ones and leaves F-2027-024 (full v2-helpers migration of the seven script-based modules) as its own follow-up.
