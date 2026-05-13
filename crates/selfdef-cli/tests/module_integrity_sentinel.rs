@@ -261,6 +261,11 @@ fn drift_emits_finding_event_when_event_stream_path_is_set() {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
         .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
+        // F-2027-024: per-test override of the install-manifest
+        // path so apply.sh's module_record_file doesn't try to
+        // mkdir /var/lib/selfdef/installed/ as a non-root user.
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn seal");
     assert!(
@@ -280,6 +285,7 @@ fn drift_emits_finding_event_when_event_stream_path_is_set() {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
         .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn drift apply");
     // strict profile → script exits non-zero on drift; that's fine.
@@ -323,6 +329,7 @@ fn drift_skips_emission_when_event_stream_path_unset() {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
         .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn seal");
     assert!(seal.status.success());
@@ -333,6 +340,7 @@ fn drift_skips_emission_when_event_stream_path_unset() {
         .env("SELFDEF_DRY_RUN", "0")
         .env("SELFDEF_INTEGRITY_SENTINEL_CONFIG", &fx.config_path)
         .env("SELFDEF_CTL_BIN", env!("CARGO_BIN_EXE_selfdefctl"))
+        .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn drift");
     assert!(!drift.status.success(), "drift in strict must fail");
