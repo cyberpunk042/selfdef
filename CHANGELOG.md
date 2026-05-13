@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — SSE seam-1: shutdown marker + comment handling + real-bus lagged test (closes F-2027-028 + F-2027-029 + F-2027-030)
+
+Closes the seam-1 cluster from the Phase 2 integration explorer. With this PR, **all four Phase 2 explorers are fully drained at the actionable tiers** — every blocker, important, and nice finding raised across recent-PRs, crate, module, and integration is closed.
+
+#### F-2027-029 — writer emits `event: shutdown` on bus close
+
+`crates/selfdef-api/src/handlers.rs::events_stream`'s forwarder task previously exited silently when the bus closed (`BusError::Closed` = daemon shutdown) or returned a non-Lagged error. The reader saw `read_line` return 0 bytes and couldn't distinguish "daemon shutdown" from "TCP got chopped mid-stream". Now: on both exit paths the task emits an `event: shutdown` frame with a `data:` reason (`"bus closed"` or `"bus error"`) before returning. Best-effort via `try_send` — if the client already disconnected, no harm done.
+
+#### F-2027-028 — reader is frame-aware
+
+`crates/selfdef-cli/src/follow.rs` previously parsed each line independently — it stripped `data:` prefix, tried to decode as `Event`, and silently swallowed everything else (including `event:` lines and `:`-comments). The pre-fix code couldn't distinguish a `:ping` keep-alive from any other `:`-comment, and couldn't tell that a `data: bus closed` line followed an `event: shutdown` header.
+
+The reader now tracks `current_event_type` per-frame (reset on blank-line frame terminator). Dispatches:
+
+- `event: shutdown` → prints `# daemon stream shutdown: <reason>` to stderr, exits 0.
+- `event: lagged` → prints `# lagged: <payload>` to stderr (unchanged).
+- `event:` (unset) → decodes payload as `Event` for `--alerts-only` filtering.
+- `event: <other>` → prints `# unknown event-type "..."` to stderr.
+- `:ping` comment → silently ignored.
+- `:<other>` comment → prints `# sse-comment: <text>` to stderr (surfaces protocol anomalies).
+- Unknown fields (`id:`, `retry:`, …) → silently ignored per the SSE spec.
+
+#### F-2027-030 — real-bus lagged-event end-to-end test
+
+`crates/selfdef-cli/tests/cli_events_follow.rs:162-197` exercises the lagged path via hand-crafted SSE bytes — fine for the reader, but no test on the writer side ever produced a real `BusError::Lagged(_)`. New test `events_stream_emits_lagged_frame_on_real_bus_overflow` in `crates/selfdef-api/tests/m12_api.rs` builds a 2-slot `Bus`, hits `/events/stream`, publishes 100 events without consuming the response body for a moment, and asserts the streaming body contains `event: lagged` within a 5-second deadline.
+
+Plus two reader-side coverage tests in `cli_events_follow.rs`:
+
+- `follow_exits_cleanly_on_event_shutdown_frame` — `event: shutdown\ndata: bus closed` from a fake daemon yields exit-0 + a `# daemon stream shutdown` stderr line.
+- `follow_silently_swallows_ping_keepalive_comments` — `:ping` comments don't pollute stderr.
+- `follow_surfaces_unexpected_comment_to_stderr` — `:mystery-marker` surfaces as `# sse-comment: mystery-marker`.
+
+#### Build / lint
+
+`crates/selfdef-api/Cargo.toml` dev-dep adds `http-body-util = "0.1"` (already in the lockfile via axum/hyper-util transitively) so the streaming-body lagged test can poll frames directly.
+
+#### Phase 2 status after this PR
+
+**36 findings across 4 explorers. 32 nice (all closed)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open** (F-2027-010 — `events follow` TCP transport, awaiting design). All four Phase 2 explorers (recent-PRs, crate, module, integration) are now drained at the actionable tiers. Three explorers remain (docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Fixed — SIGUSR2 seam-2: token-file mode validation + summary log (closes F-2027-031 + F-2027-032)
 
 Closes the seam-2 cluster from the Phase 2 integration explorer.

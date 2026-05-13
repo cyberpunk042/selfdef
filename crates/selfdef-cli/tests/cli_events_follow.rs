@@ -197,6 +197,127 @@ async fn follow_surfaces_lagged_events_as_stderr_comments() {
 }
 
 #[tokio::test]
+async fn follow_exits_cleanly_on_event_shutdown_frame() {
+    // F-2027-029: when the daemon's writer task exits (bus
+    // closed = shutdown), it emits an `event: shutdown` frame.
+    // The CLI follow consumer must recognise it, surface a
+    // diagnostic line, and exit 0 — not crash with a malformed-
+    // event-frame complaint.
+    let tmp = tempfile::tempdir().unwrap();
+    let body = format!(
+        "data: {}\n\nevent: shutdown\ndata: bus closed\n\n",
+        evt_json(1001, false, "test", "pre-shutdown"),
+    );
+    let socket = spawn_fake_daemon(tmp.path(), move || body.into_bytes());
+
+    let out = tokio::task::spawn_blocking(move || {
+        Command::new(binary())
+            .args([
+                "events",
+                "follow",
+                "--unix-socket",
+                socket.to_str().unwrap(),
+            ])
+            .output()
+            .expect("spawn selfdefctl")
+    })
+    .await
+    .unwrap();
+
+    assert!(
+        out.status.success(),
+        "shutdown frame should yield clean exit; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("pre-shutdown"),
+        "expected pre-shutdown event on stdout; got: {stdout}",
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("daemon stream shutdown") && stderr.contains("bus closed"),
+        "expected shutdown diagnostic on stderr; got: {stderr}",
+    );
+}
+
+#[tokio::test]
+async fn follow_silently_swallows_ping_keepalive_comments() {
+    // F-2027-028: `:ping` keep-alive comments are silently
+    // ignored. The reader must not print anything to stderr or
+    // misinterpret the comment as a malformed event.
+    let tmp = tempfile::tempdir().unwrap();
+    let body = format!(
+        ":ping\n\n:ping\n\ndata: {}\n\n",
+        evt_json(1001, false, "test", "after-pings"),
+    );
+    let socket = spawn_fake_daemon(tmp.path(), move || body.into_bytes());
+
+    let out = tokio::task::spawn_blocking(move || {
+        Command::new(binary())
+            .args([
+                "events",
+                "follow",
+                "--unix-socket",
+                socket.to_str().unwrap(),
+                "-n",
+                "1",
+            ])
+            .output()
+            .expect("spawn selfdefctl")
+    })
+    .await
+    .unwrap();
+
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("# "),
+        ":ping comments must be silently ignored; got stderr: {stderr}",
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("after-pings"), "stdout: {stdout}");
+}
+
+#[tokio::test]
+async fn follow_surfaces_unexpected_comment_to_stderr() {
+    // F-2027-028: any SSE comment other than `:ping` is
+    // unexpected and should be surfaced to the operator. A
+    // hypothetical future protocol extension (e.g. `:lagged
+    // 5`) shouldn't be a silent no-op while the operator's
+    // dashboard misses the cue.
+    let tmp = tempfile::tempdir().unwrap();
+    let body = format!(
+        ":mystery-marker\n\ndata: {}\n\n",
+        evt_json(1001, false, "test", "after-mystery"),
+    );
+    let socket = spawn_fake_daemon(tmp.path(), move || body.into_bytes());
+
+    let out = tokio::task::spawn_blocking(move || {
+        Command::new(binary())
+            .args([
+                "events",
+                "follow",
+                "--unix-socket",
+                socket.to_str().unwrap(),
+                "-n",
+                "1",
+            ])
+            .output()
+            .expect("spawn selfdefctl")
+    })
+    .await
+    .unwrap();
+
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("# sse-comment") && stderr.contains("mystery-marker"),
+        "expected unknown-comment diagnostic on stderr; got: {stderr}",
+    );
+}
+
+#[tokio::test]
 async fn follow_fails_with_clear_error_when_socket_missing() {
     let tmp = tempfile::tempdir().unwrap();
     let bogus = tmp.path().join("not-a-socket.sock");

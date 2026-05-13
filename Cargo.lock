@@ -2032,6 +2032,7 @@ dependencies = [
  "async-trait",
  "axum",
  "futures",
+ "http-body-util",
  "hyper",
  "hyper-util",
  "rustls",

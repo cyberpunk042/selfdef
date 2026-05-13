@@ -51,6 +51,12 @@ tempfile = { workspace = true }
 tower = { workspace = true, features = ["util"] }
 selfdef-notifier = { workspace = true }
 selfdef-responder = { workspace = true }
+# F-2027-030: tests need to poll streaming response frames from
+# the /events/stream endpoint. http-body-util's BodyExt provides
+# `.frame()` for that. Already present in the lockfile as a
+# transitive dep via axum / hyper-util; pinned here so the test
+# can `use` it directly.
+http-body-util = "0.1"
 # F-2027-014: circular dev-dep enables the `test-helpers` feature
 # for this crate's own integration tests (which compile as a
 # separate crate against this library). Cargo specifically supports

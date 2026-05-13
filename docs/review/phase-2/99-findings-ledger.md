@@ -35,7 +35,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (32 — 29 closed, 3 open)
+## Nice findings (32 — all closed)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -63,9 +63,9 @@ None.
 | F-2027-025 | nice | `modules/vpn-bridge/install/profiles/relay-via-server.sh:20-23` | `$SELFDEF_INSTANCE_ID` is interpolated into nftables table names and per-instance config paths without going through the `safe_name` validator. Operator-controlled, so defense-in-depth — but tightening costs nothing. | implement — **closed** by Phase 2 module-cleanup PR (`_relay_inst_defaults` now `safe_name "$INST" \|\| die "..."` before any interpolation). |
 | F-2027-026 | nice | per-module READMEs | All 9 are silent on `SELFDEF_MODULE_LIB_VERSION_REQUIRED` and the v2 helpers. New contributors won't discover the v2 surface. | doc — **closed** by Phase 2 module-cleanup PR (`docs/dev/module-helpers.md` gains a "Per-module adoption" table — single source of truth — plus a 4-step bumping recipe). |
 | F-2027-027 | nice | `modules/{bridge-l2,suricata,polarproxy}/install/check.sh` | Missing the conventional `DRY_RUN=0` initialization that every other module's `check.sh` sets. Cosmetic but inconsistent with the v2 lib's caller contract. | implement — **closed** by Phase 2 module-cleanup PR (all three check.sh now set `DRY_RUN=0` before sourcing the lib). |
-| F-2027-028 | nice | SSE reader `crates/selfdef-cli/src/follow.rs:120-124` | Silently ignores non-`data:` lines including `:ping` keep-alives, but also a hypothetical malformed `:error …` comment. No way to surface protocol anomalies. | implement |
-| F-2027-029 | nice | SSE seam end-of-stream marker | The writer task at `crates/selfdef-api/src/handlers.rs:110-112` exits silently on client disconnect or shutdown; the reader can't distinguish "daemon shut down" from "daemon crashed mid-stream". An `event: shutdown` frame would close the gap. | implement |
-| F-2027-030 | nice | SSE lagged-event seam test gap | `crates/selfdef-cli/tests/cli_events_follow.rs:162-197` exercises the lagged-event path with hand-crafted bytes; no end-to-end test against a real bus overflow. | implement |
+| F-2027-028 | nice | SSE reader `crates/selfdef-cli/src/follow.rs:120-124` | Silently ignores non-`data:` lines including `:ping` keep-alives, but also a hypothetical malformed `:error …` comment. No way to surface protocol anomalies. | implement — **closed** by Phase 2 seam-1 PR (reader is now frame-aware: tracks `event:` field per frame; recognises `:ping` keep-alives as silent; surfaces any other `:`-comment to stderr as `# sse-comment: …`). |
+| F-2027-029 | nice | SSE seam end-of-stream marker | The writer task at `crates/selfdef-api/src/handlers.rs:110-112` exits silently on client disconnect or shutdown; the reader can't distinguish "daemon shut down" from "daemon crashed mid-stream". An `event: shutdown` frame would close the gap. | implement — **closed** by Phase 2 seam-1 PR (writer emits `event: shutdown` with a `data:` reason when the bus closes or returns a non-Lagged error; reader prints `# daemon stream shutdown: <reason>` to stderr and exits 0). |
+| F-2027-030 | nice | SSE lagged-event seam test gap | `crates/selfdef-cli/tests/cli_events_follow.rs:162-197` exercises the lagged-event path with hand-crafted bytes; no end-to-end test against a real bus overflow. | implement — **closed** by Phase 2 seam-1 PR (`m12_api.rs::events_stream_emits_lagged_frame_on_real_bus_overflow` builds a 2-slot bus, hits /events/stream, publishes 100 events, and asserts the response body contains `event: lagged`). |
 | F-2027-031 | nice | `selfdef-api::TokenReloader::reload` | Re-reads the token file but doesn't validate the mode-0600 invariant the writer asserts at rotate-token time. A `chmod 0644` after a successful rotate silently weakens the bearer-token surface. | implement — **closed** by Phase 2 seam-2 PR (`read_token` now checks `mode & 0o077 == 0` before reading; refuses with new typed `ServerError::LooseTokenMode` variant; prior in-memory tokens stay in place). |
 | F-2027-032 | nice | `selfdef-daemon` SIGUSR2 handler | Runs three reload paths (tokens, verifier, rules) independently and logs each result separately. Operator has to correlate multiple log lines to know the overall reload outcome. A summary line at the end would close the gap. | implement — **closed** by Phase 2 seam-2 PR (handler now tracks per-branch outcome (`ok` / `failed` / `skipped`) and emits one summary line `SIGUSR2 reload summary tokens=… verifier=… rules=…` at the end). |
 | F-2027-033 | nice | `selfdef-correlator::walk_yaml` rule enumeration | `std::fs::read_dir` order is undefined; rules with the same priority fire in fs-dependent order. Add a `paths.sort()`. | implement — **closed** by Phase 2 seam-3 PR (`walk_yaml` now sorts lexicographically before returning). |
@@ -82,12 +82,13 @@ None.
 
 - **36 findings raised** across four explorers (recent-PRs: 10;
   crate: 11; module: 6; integration: 9).
-- **0 blockers**, **3 important (all closed)**, **32 nice (29
-  closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
-- The integration explorer's seam-2 (SIGUSR2), seam-3
-  (signing), and seam-4 (eventstream) clusters are now
-  closed. Only the seam-1 SSE cluster remains open
-  (F-2027-028 + -029 + -030).
+- **0 blockers**, **3 important (all closed)**, **32 nice (all
+  closed)**, **1 SDD-debt (F-2027-010 open)**.
+- **Four Phase 2 explorers are fully drained at the actionable
+  tiers.** Only F-2027-010 (SDD-debt — `events follow` TCP
+  transport, awaiting design) remains open.
+- Three explorers remain (docs, tests, security). Each will
+  add more findings in follow-up PRs.
 - Three explorers remain (docs, tests, security). Each will
   add more findings in follow-up PRs. The only remaining open
   Phase 2 SDD-debt is F-2027-010 (`events follow` TCP transport),

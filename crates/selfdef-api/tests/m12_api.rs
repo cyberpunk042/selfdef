@@ -658,6 +658,88 @@ async fn metrics_ingest_task_subscribes_to_bus() {
 // format-strict parser + reuses it across the existing tests so future
 // metric additions can't degrade the exposition.
 
+/// F-2027-030: end-to-end test that real bus overflow surfaces
+/// as an SSE `event: lagged` frame on the wire. The hand-crafted
+/// lagged-event corpus in `cli_events_follow.rs` covers the
+/// reader side; this test covers the writer side under a real
+/// `BusError::Lagged(_)`.
+#[tokio::test]
+async fn events_stream_emits_lagged_frame_on_real_bus_overflow() {
+    // Tiny bus so we can force overflow with a handful of
+    // publishes. Bus capacity is per-subscriber lag buffer; a
+    // subscriber that doesn't poll fast enough sees Lagged once
+    // capacity is exceeded.
+    let bus = Arc::new(Bus::new(2));
+    let dir = tempdir().unwrap();
+    let store = Arc::new(SqliteStore::open(dir.path().join("state.sqlite")).unwrap());
+    let state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), "test-host".into());
+    std::mem::forget(dir);
+    let app = app(state);
+
+    // Connect to /events/stream. The handler subscribes to the
+    // bus before returning the response; we hold off polling the
+    // body while we overflow the bus.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    use selfdef_bus::Publisher;
+    let pub_: Publisher = bus.publisher();
+    // Publish well above the 2-slot capacity. The subscriber
+    // task (inside events_stream) reads them into its mpsc
+    // channel, but if it can't keep up, the bus emits Lagged.
+    // To force lag deterministically: we yield without polling
+    // the response body, then publish many events.
+    for i in 0..100 {
+        let evt = selfdef_core::Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            1,
+            SeverityId::Informational,
+            "test-host",
+            "lag.test",
+            0,
+        )
+        .with_message(format!("lag-burst-{i}"));
+        pub_.publish_lossy(evt);
+    }
+
+    // Poll the body until we see an `event: lagged` frame
+    // (or time out). The body is a streaming SSE response;
+    // we accumulate bytes until we see the marker.
+    let body = resp.into_body();
+    let mut body_stream = body.into_data_stream();
+    let mut buf = Vec::<u8>::new();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut saw_lagged = false;
+    use futures::StreamExt as _;
+    while std::time::Instant::now() < deadline {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), body_stream.next()).await
+        {
+            Ok(Some(Ok(chunk))) => {
+                buf.extend_from_slice(&chunk);
+                if buf
+                    .windows(b"event: lagged".len())
+                    .any(|w| w == b"event: lagged")
+                {
+                    saw_lagged = true;
+                    break;
+                }
+            }
+            Ok(Some(Err(_))) | Ok(None) => break,
+            Err(_) => continue,
+        }
+    }
+    assert!(
+        saw_lagged,
+        "expected `event: lagged` frame after bus overflow; body so far:\n{}",
+        String::from_utf8_lossy(&buf),
+    );
+}
+
 mod prom {
     //! Minimal Prometheus exposition parser for SDD-005 D-2b. Not a
     //! general parser — only handles what we emit (counters and gauges

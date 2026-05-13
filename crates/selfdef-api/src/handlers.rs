@@ -102,6 +102,23 @@ pub(crate) async fn events_stream(
     let (tx, rx) = tokio::sync::mpsc::channel::<SseEvent>(64);
 
     tokio::spawn(async move {
+        // F-2027-029: emit an explicit `event: shutdown` frame
+        // when the writer task exits cleanly (bus closed = daemon
+        // shutdown). The reader (`selfdefctl events follow`) uses
+        // this to distinguish "stream ended because the daemon is
+        // going away" from "TCP got chopped mid-stream" — the
+        // former is a clean exit (code 0), the latter looks like
+        // a crash.
+        //
+        // The frame is best-effort: if the client already
+        // disconnected we silently return (same pattern as the
+        // happy-path send error handling).
+        let send_shutdown = |tx: &tokio::sync::mpsc::Sender<SseEvent>, reason: &str| {
+            let frame = SseEvent::default().event("shutdown").data(reason);
+            // Use try_send so we don't await an already-closed channel.
+            let _ = tx.try_send(frame);
+        };
+
         loop {
             match sub.recv().await {
                 Ok(event) => match serde_json::to_string(&event) {
@@ -124,10 +141,12 @@ pub(crate) async fn events_stream(
                 }
                 Err(selfdef_bus::BusError::Closed) => {
                     debug!("sse: bus closed");
+                    send_shutdown(&tx, "bus closed");
                     return;
                 }
                 Err(e) => {
                     warn!(error = %e, "sse: bus error");
+                    send_shutdown(&tx, "bus error");
                     return;
                 }
             }
