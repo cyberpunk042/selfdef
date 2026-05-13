@@ -153,9 +153,13 @@ enum RbacAction {
     ///
     /// With `--probe`, additionally shells out to `kubectl auth
     /// can-i patch pods --subresource=labels --as=<subject>`
-    /// for a built-in set of subjects (system:authenticated,
-    /// system:unauthenticated, plus operator-supplied `--as`)
-    /// and reports each as ok / overly-permissive.
+    /// for a built-in set of common-mistake subjects
+    /// (system:authenticated, system:unauthenticated,
+    /// system:masters, system:serviceaccount:default:default,
+    /// plus operator-supplied `--as`) and reports each as
+    /// ok / overly-permissive. F-2027-007: the expanded set
+    /// catches kubeadm-style bootstrap superuser bindings and
+    /// the common "PATCH pods to default SA" anti-pattern.
     Check {
         /// Override the agent-guard module config path.
         /// Default: `/etc/selfdef/modules/agent-guard.toml`.
@@ -195,6 +199,21 @@ enum KeysAction {
         /// File to verify. The signature must live at
         /// `<file>.minisig` (minisign's default sidecar layout).
         target: PathBuf,
+        /// Override the public-key path (default: from
+        /// `[security].signing_public_key_file`).
+        #[arg(long)]
+        public_key: Option<PathBuf>,
+    },
+    /// F-2027-006 follow-up: batch-verify every `.yml`/`.yaml`
+    /// file under a directory in one process. Replaces N
+    /// `selfdefctl keys verify <p>` invocations from
+    /// `modules/tetragon/install/apply.sh`. Exits 0 iff every
+    /// file verifies; prints one line per file with the
+    /// pass/fail outcome.
+    VerifyDir {
+        /// Directory to walk. Non-recursive — checks the
+        /// immediate `*.yml` / `*.yaml` files in `dir`.
+        dir: PathBuf,
         /// Override the public-key path (default: from
         /// `[security].signing_public_key_file`).
         #[arg(long)]
@@ -463,6 +482,11 @@ async fn main() -> Result<()> {
             action: KeysAction::Verify { target, public_key },
         } => {
             keys_verify(&cfg, &target, public_key)?;
+        }
+        Command::Keys {
+            action: KeysAction::VerifyDir { dir, public_key },
+        } => {
+            keys_verify_dir(&cfg, &dir, public_key)?;
         }
         Command::Rbac {
             action:
@@ -1081,10 +1105,23 @@ fn api_rotate_token(
 /// selfdefd.service`. Returns the parsed pid or an error if systemctl
 /// isn't available or the unit isn't running.
 fn discover_daemon_pid() -> Result<i32> {
-    let out = std::process::Command::new("systemctl")
+    // F-2027-004: detect missing systemctl up front so the
+    // error message is operator-actionable rather than a raw
+    // "exited 127". Containerised dev, restricted distros, and
+    // BSD compat layers all hit this.
+    let out = match std::process::Command::new("systemctl")
         .args(["show", "-p", "MainPID", "--value", "selfdefd.service"])
         .output()
-        .context("spawn systemctl")?;
+    {
+        Ok(o) => o,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            anyhow::bail!(
+                "no `systemctl` on PATH — `--pid auto` can't discover the daemon. \
+                 Pass `--pid <pid>` directly (find it with e.g. `pgrep selfdefd`)"
+            );
+        }
+        Err(e) => return Err(e).context("spawn systemctl"),
+    };
     if !out.status.success() {
         anyhow::bail!(
             "systemctl exited {}: {}",
@@ -1186,14 +1223,31 @@ fn rbac_check(
     println!("Recommended posture:");
     println!("  - Only cluster-admin and any documented narrow ServiceAccount");
     println!("    may PATCH pod labels in namespaces where agent-guard runs.");
-    println!("  - Specifically, neither system:authenticated nor");
-    println!("    system:unauthenticated should be granted `patch` on `pods`");
-    println!("    (full or labels sub-resource).");
+    println!("  - Specifically, none of these subjects should be granted");
+    println!("    `patch` on `pods` (full or labels sub-resource):");
+    println!("      • system:authenticated  (any cred-bearing principal)");
+    println!("      • system:unauthenticated  (anonymous)");
+    println!("      • system:masters  (kubeadm bootstrap superuser group)");
+    println!("      • system:serviceaccount:default:default  (default-ns default SA)");
     println!();
     println!("Manual verification commands:");
+    // F-2027-007: expanded built-in set. Beyond the two
+    // public groups (authenticated / anonymous), include the
+    // two common-mistake bindings auditors hit in the wild:
+    //   • system:masters — the kubeadm bootstrap superuser
+    //     group; clusters that grant this to humans (vs only
+    //     the bootstrap admin.conf) bypass every cluster RBAC
+    //     check by design.
+    //   • system:serviceaccount:default:default — the default
+    //     ServiceAccount in the default namespace; pods that
+    //     forget to set serviceAccountName run as this and
+    //     any RoleBinding on it leaks to every "I forgot to
+    //     set it" pod in the cluster.
     let probe_subjects: Vec<String> = [
         "system:authenticated".to_string(),
         "system:unauthenticated".to_string(),
+        "system:masters".to_string(),
+        "system:serviceaccount:default:default".to_string(),
     ]
     .into_iter()
     .chain(extra_subjects.iter().cloned())
@@ -1376,6 +1430,68 @@ fn keys_verify(
         target.display(),
         pubkey.display(),
     );
+    Ok(())
+}
+
+/// F-2027-006 follow-up: batch-verify every `.yml`/`.yaml` file
+/// in `dir` against one public key in a single process. Used
+/// by `modules/tetragon/install/apply.sh` instead of spawning
+/// `selfdefctl keys verify` per policy file.
+///
+/// Walks `dir` non-recursively (matches the tetragon
+/// `policy_dir` shape — operators drop policy YAMLs flat).
+/// Exits 0 iff every file's `.minisig` verifies; prints one
+/// line per file as `ok: <path>` or `fail: <path>: <reason>`,
+/// then a summary line.
+fn keys_verify_dir(
+    cfg: &selfdef_config::Config,
+    dir: &std::path::Path,
+    override_pubkey: Option<PathBuf>,
+) -> Result<()> {
+    let pubkey = match override_pubkey {
+        Some(p) => p,
+        None => cfg.security.signing_public_key_file.clone().context(
+            "no public key configured: pass --public-key or set \
+                 [security].signing_public_key_file in selfdef.toml",
+        )?,
+    };
+    let verifier = selfdef_signing::Verifier::load(&pubkey)
+        .with_context(|| format!("loading public key from {}", pubkey.display()))?;
+    if !dir.is_dir() {
+        anyhow::bail!("not a directory: {}", dir.display());
+    }
+    let mut total = 0usize;
+    let mut failed = 0usize;
+    let entries =
+        std::fs::read_dir(dir).with_context(|| format!("reading directory {}", dir.display()))?;
+    // Sort for stable output across runs.
+    let mut paths: Vec<std::path::PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.extension()
+                .and_then(|s| s.to_str())
+                .is_some_and(|e| e == "yml" || e == "yaml")
+        })
+        .collect();
+    paths.sort();
+    for path in &paths {
+        total += 1;
+        match verifier.verify_detached_file(path) {
+            Ok(()) => println!("ok:   {}", path.display()),
+            Err(e) => {
+                failed += 1;
+                println!("fail: {}: {e}", path.display());
+            }
+        }
+    }
+    println!(
+        "summary: {total} file(s), {} ok, {failed} fail (key: {})",
+        total - failed,
+        pubkey.display(),
+    );
+    if failed > 0 {
+        anyhow::bail!("{failed} of {total} file(s) failed verification");
+    }
     Ok(())
 }
 

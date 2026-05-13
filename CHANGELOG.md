@@ -6,6 +6,50 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — Phase 2 nice-cluster cleanup (closes F-2027-001, -002, -004, -006, -007, -009)
+
+Six of the seven Phase 2 nice findings shipped as one bundle. Every change is small and contained; they share a PR because each is one-or-two-file diff and they have no inter-dependencies, just a common parent (post-Phase-1 surface auditing). The only nice finding still open is `F-2027-005` (rule-signing verifier reload via SIGUSR2 — needs a follow-up that touches the daemon's verifier wiring, deferred so it can land on its own).
+
+#### F-2027-001 — vpn-bridge profile-instanced refusal embeds copy-pasteable TOML
+
+`selfdef-cli/src/modules.rs::resolve_active` previously emitted a prose refusal when an operator tried to multi-instance a non-instanced profile. The fix embeds the exact `[profiles.details.<profile>]\ninstanced = true\n` stanza inline so the operator can paste it into the module manifest without composing it from the message.
+
+#### F-2027-002 — `docs/dev/test-contract.md` documents `--include-ignored` + nats-server 2.10+
+
+Pattern P-3's "real-broker NATS fixture" section now spells out the runtime invocation (`cargo test -p selfdef-nats -- --include-ignored`), lists the three install paths (apt / brew / nats.io binary), and flags the 2.10+ JetStream requirement so contributors on older Debian repos don't silently skip the gated test.
+
+#### F-2027-004 — `selfdefctl api rotate-token --pid auto` short-circuits on missing systemctl
+
+`discover_daemon_pid()` previously failed with a raw `Os(exited 127)` when `systemctl` wasn't on PATH (containerised dev, BSD compat, restricted distros). The fix detects `ErrorKind::NotFound` from `Command::output()` and emits a friendly diagnostic pointing the operator at `--pid <pid>` with a `pgrep selfdefd` suggestion.
+
+#### F-2027-006 — `selfdefctl keys verify-dir <dir>` batches policy verification
+
+New CLI verb: `selfdefctl keys verify-dir <dir>` walks the immediate `*.yml`/`*.yaml` files in a directory non-recursively, loads the public key once, verifies each file's `.minisig` sidecar in-process, prints one `ok:` / `fail:` line per file plus a `summary: N file(s), X ok, Y fail` line, and exits non-zero iff any file fails. Replaces the N-spawn `for p in $(find...); do selfdefctl keys verify $p; done` loop in `modules/tetragon/install/apply.sh` (and the mirror in `check.sh`) with one invocation.
+
+Tests: `crates/selfdef-cli/tests/cli_keys_verify_dir.rs` covers all-signed / mixed / empty / non-existent / non-yaml-decoy cases against a real minisign keypair generated at test time. The existing tetragon-signing tests are updated to stub the new verb and exercise both the apply and check paths.
+
+#### F-2027-007 — `selfdefctl rbac check --probe` built-in subject set expanded
+
+Two common-mistake bindings auditors hit in the wild are now probed by default:
+- `system:masters` — the kubeadm bootstrap superuser group; granting it to humans bypasses every cluster RBAC check by design.
+- `system:serviceaccount:default:default` — the default-ns default ServiceAccount; pods that forget to set `serviceAccountName` run as this and any RoleBinding on it leaks to every such pod.
+
+Operator-supplied `--as <subject>` still composes on top. The non-probe recommended-posture block now bullets all four subjects with a one-line explanation each.
+
+Tests: `rbac_check_builtin_set_includes_system_masters_and_default_sa` (documentation path) + `rbac_check_probe_flags_system_masters_when_permissive` (catches the kubeadm-superuser anti-pattern via the stub kubectl).
+
+#### F-2027-009 — `selfdefctl init config` starter embeds `[notifier.ntfy]` example
+
+The starter `selfdef.toml` written by `selfdefctl init config` now includes a commented `[notifier.ntfy]` stanza (server / topic / priority / tags / token_env) with a three-step inline runbook (pick topic → uncomment → flip channels). Operators no longer need to grep `/usr/share/selfdef/selfdef.toml.example` for the shape.
+
+Test: `init_config_writes_starter_file_at_0644` now asserts the `# [notifier.ntfy]` line + the `# server` / `# topic` fields are present.
+
+#### Phase 2 ledger update
+
+`docs/review/phase-2/99-findings-ledger.md` marks all six closed with back-references. Phase 2 backlog is now: 0 blockers, 0 important, 1 nice (`F-2027-005`), 1 SDD-debt (`F-2027-010`).
+
+`cargo test --workspace` and `cargo clippy --workspace --tests -- -D warnings` are clean.
+
 ### Fixed — Phase 2 first-fixes (closes F-2027-003 + F-2027-008)
 
 Closes the two important findings raised by Phase 2's recent-PRs audit (PR #55). Both fixes are small, contained, and shipped together so the Phase 2 ledger's "important" tier is empty.

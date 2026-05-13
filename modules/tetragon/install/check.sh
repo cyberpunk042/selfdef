@@ -44,15 +44,9 @@ if [[ "$REQUIRE_SIGNED" == "true" ]]; then
     if ! command -v selfdefctl >/dev/null; then
         die "require_signed_policies=true but selfdefctl is not on PATH"
     fi
-    unsigned=0
-    # shellcheck disable=SC2044
-    for p in $(find "$POLICY_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
-        if ! selfdefctl keys verify "$p" >/dev/null 2>&1; then
-            unsigned=$((unsigned + 1))
-        fi
-    done
-    if [[ "$unsigned" -gt 0 ]]; then
-        emit_status "failed" "$unsigned of $POLICY_COUNT policy file(s) in $POLICY_DIR failed signature verification"
+    # F-2027-006: batch verify replaces the N-spawn loop.
+    if ! selfdefctl keys verify-dir "$POLICY_DIR" >/dev/null 2>&1; then
+        emit_status "failed" "one or more policy file(s) in $POLICY_DIR failed signature verification"
         exit 1
     fi
 fi
