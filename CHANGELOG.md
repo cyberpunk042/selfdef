@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 docs explorer (raises F-2027-037 through F-2027-045)
+
+Fifth of Phase 2's seven explorers ships. Walks the six new `docs/dev/<feature>.md` runbooks, README.md, ARCHITECTURE.md, and the six SDDs — plus a sanity-check of the four already-shipped Phase 2 audit docs.
+
+**9 new findings, all triaged `nice` — no blockers, no important.** The doc surface is in good shape overall; the findings cluster around three themes:
+
+- **Drift from Phase 2 closures** — three runbooks (`signing.md`, `rbac-posture.md`, `test-contract.md`) and ARCHITECTURE.md still describe pre-closure behaviour for SIGUSR2 fan-out (F-2027-005 / -032 / -070), RBAC probe set (F-2027-007), and eventstream integrity (F-2027-035) etc.
+- **README missing post-Phase-1 verbs** — `selfdefctl init`, `doctor`, `events follow`, `keys verify-dir`, expanded `rbac check` are reachable via `--help` but not called out in the README's verb tour.
+- **Phase 2 audit hygiene** — runbook section structure varies (5/8/11 sections across the three runbooks); SDDs don't cross-reference the F-2027-NNN follow-ups that iterated on their surface.
+
+#### New document
+
+`docs/review/phase-2/60-docs-audit.md` — per-area notes with concrete `file:line` observations.
+
+#### Closing-PR clustering
+
+- **Operator-facing refresh** — F-2027-037 + -038 + -041 + -042 + -043 + -044 (six findings, all docs-only; one pass across README + ARCHITECTURE.md + the affected runbooks).
+- **SDD lineage refresh** — F-2027-045 (single PR adds "Follow-up findings" tails to SDD-003, -004, -006).
+- **Runbook structure pass** — F-2027-039 + -040 (`test-contract.md` "Per-test isolation overrides" section + canonical-shape application).
+
+#### Phase 2 status after this PR
+
+**45 findings across 5 explorers. 41 nice (32 closed, 9 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. Two explorers remain (tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Fixed — SSE seam-1: shutdown marker + comment handling + real-bus lagged test (closes F-2027-028 + F-2027-029 + F-2027-030)
 
 Closes the seam-1 cluster from the Phase 2 integration explorer. With this PR, **all four Phase 2 explorers are fully drained at the actionable tiers** — every blocker, important, and nice finding raised across recent-PRs, crate, module, and integration is closed.
