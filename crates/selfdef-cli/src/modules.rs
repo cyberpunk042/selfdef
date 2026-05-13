@@ -832,6 +832,39 @@ impl Action {
 /// Convention: per-module config path is exposed to the script via
 /// `SELFDEF_<UPPER_SLUG>_CONFIG`. Hyphens become underscores so the
 /// var name is a valid identifier.
+/// SDD-006 D-2: resolve the path to the shared module-lib that
+/// selfdefctl injects via `SELFDEF_MODULE_LIB` for every spawned
+/// script. Precedence:
+///   1. Operator override: existing `SELFDEF_MODULE_LIB` env var
+///      from the parent process (e.g. for debug runs against a
+///      patched copy).
+///   2. Workspace-relative path
+///      (`$CARGO_MANIFEST_DIR/../../packaging/lib/module-lib.sh`)
+///      if that file exists. Catches dev workflow / cargo test
+///      / cargo run from the workspace root.
+///   3. Installed system path
+///      (`/usr/share/selfdef/lib/module-lib.sh`) for `.deb`-shipped
+///      installations.
+///
+/// The function never errors on a missing path — modules that
+/// don't source the lib (or carry their own helpers in
+/// `install/lib.sh`) won't notice the env var is wrong. Modules
+/// that DO source it will surface the failure clearly when bash
+/// fails to read the file.
+pub(crate) fn resolve_module_lib_path() -> PathBuf {
+    if let Some(override_) = std::env::var_os("SELFDEF_MODULE_LIB") {
+        return PathBuf::from(override_);
+    }
+    // CARGO_MANIFEST_DIR is `crates/selfdef-cli/`; the workspace
+    // root is two levels up.
+    let workspace_lib =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging/lib/module-lib.sh");
+    if workspace_lib.exists() {
+        return workspace_lib;
+    }
+    PathBuf::from("/usr/share/selfdef/lib/module-lib.sh")
+}
+
 fn env_var_for_config(slug: &str) -> String {
     let upper: String = slug
         .chars()
@@ -871,7 +904,8 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     let mut cmd = Command::new("bash");
     cmd.arg(&script)
         .env(env_var_for_config(&active.slug), &active.config_path)
-        .env("SELFDEF_DRY_RUN", if dry_run { "1" } else { "0" });
+        .env("SELFDEF_DRY_RUN", if dry_run { "1" } else { "0" })
+        .env("SELFDEF_MODULE_LIB", resolve_module_lib_path());
     // SDD-003 D-3: surface the instance suffix to profile scripts
     // so they can parameterise state paths. Absent for
     // single-instance applies — scripts that need it should
@@ -1912,6 +1946,39 @@ mod tests {
         );
         let active = resolve_active(&host, Path::new("/tmp"), catalog).unwrap();
         assert_eq!(active.len(), 1);
+    }
+
+    // -- SDD-006: shared module-lib resolver ------------------------
+
+    #[test]
+    fn resolve_module_lib_path_finds_workspace_by_default() {
+        // Workspace path exists in this checkout — the resolver
+        // must prefer it over the system path when no override is
+        // set. We can only safely test the no-override branch
+        // in-process; the env-var override branch is covered by
+        // the integration test
+        // (`cli_modules_shared_lib::dispatcher_exports_module_lib_env_var`)
+        // which spawns a subprocess with the env var set.
+        //
+        // The test asserts (a) the resolver returns the workspace
+        // path, (b) that path actually exists — so the resolver
+        // would never silently fall through to the system path
+        // when sourced from a workspace.
+        let got = resolve_module_lib_path();
+        // If $SELFDEF_MODULE_LIB happens to be set in the test
+        // env (e.g. operator running tests under a debug shell),
+        // skip — the override branch is exercised by integration.
+        if std::env::var_os("SELFDEF_MODULE_LIB").is_some() {
+            return;
+        }
+        assert!(
+            got.display()
+                .to_string()
+                .ends_with("packaging/lib/module-lib.sh"),
+            "expected workspace path, got: {}",
+            got.display()
+        );
+        assert!(got.exists(), "workspace path must exist for this test");
     }
 
     // -- runner ------------------------------------------------------

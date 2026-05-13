@@ -1,46 +1,32 @@
-# Shared helpers used by apply.sh / check.sh / uninstall.sh and by the
-# per-profile scripts under install/profiles/. Sourced, not executed.
+# Module-specific helpers for vpn-bridge. Shared helpers (log,
+# emit_status, die, run, toml_get) come from
+# /usr/share/selfdef/lib/module-lib.sh.
 #
 # Caller must have already set:
 #   MODULE        — module slug, "vpn-bridge"
 #   DRY_RUN       — 0 | 1
 #   CONFIG_FILE   — path to the rendered host config
 
-# shellcheck disable=SC2034   # used by sourcing scripts
-
-log() { echo "[vpn-bridge] $*" >&2; }
-
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-
-die() { emit_status "failed" "$*"; exit 1; }
-
-run() {
-    local desc="$1"; shift
-    [[ "$1" == "--" ]] && shift
-    if [[ "${DRY_RUN:-0}" == "1" ]]; then
-        log "DRY-RUN: $desc"
-        log "    \$ $*"
-    else
-        log "$desc"
-        "$@"
-    fi
-}
-
-# Minimal TOML reader. Only handles `key = "value"` and `key = N`.
-# Multi-line tables / arrays are not supported (we don't need them).
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
+# shellcheck disable=SC1090,SC2034
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+# Locate the shared module-lib. Precedence:
+#   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
+#      runs hit this).
+#   2. Workspace-relative path (this lib.sh sits at
+#      modules/<slug>/install/lib.sh; the shared lib is at
+#      packaging/lib/module-lib.sh). Catches direct script
+#      invocations from integration tests + ad-hoc runs.
+#   3. Installed system path (.deb-shipped).
+if [[ -n "${SELFDEF_MODULE_LIB:-}" && -r "${SELFDEF_MODULE_LIB}" ]]; then
+    _selfdef_lib="${SELFDEF_MODULE_LIB}"
+elif [[ -r "${BASH_SOURCE[0]%/*}/../../../packaging/lib/module-lib.sh" ]]; then
+    _selfdef_lib="${BASH_SOURCE[0]%/*}/../../../packaging/lib/module-lib.sh"
+else
+    _selfdef_lib="/usr/share/selfdef/lib/module-lib.sh"
+fi
+# shellcheck disable=SC1090
+source "$_selfdef_lib"
+unset _selfdef_lib
 
 # Validate a name that will be interpolated into a shell command —
 # basic command-injection defense.

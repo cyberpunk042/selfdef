@@ -1,10 +1,74 @@
 # SDD-006 — Shared module-script library
 
-> Status: draft
+> Status: implemented
 > Owner: audit team
 > Last updated: 2026-05-13
-> Closes findings: F-2026-081 (SDD-debt parent), F-2026-050,
+> Closes findings: F-2026-081 (SDD-debt parent), F-2026-050
+> (deferred — see "Deferred to follow-up" below),
 > F-2026-051 (partial — see D-3).
+
+## Implementation status
+
+Shipped in the SDD-006 implementation PR. Phase A + B + C
+collapsed into a single PR (per the operator's "big chunks"
+steer): the shared library landed, the dispatcher exports
+`SELFDEF_MODULE_LIB`, and **all eight modules** with helpers
+migrated in one go (`agent-guard`, `tetragon`, `observability`,
+`integrity-sentinel`, `vpn-bridge`, `bridge-l2`, `polarproxy`,
+`suricata`). The migration is byte-stable: the shared helpers
+match the per-module copies exactly except for the slug literal
+in `log()`, which the shared lib parameterises on `${MODULE}`.
+
+- **D-1 — Shared library**: `packaging/lib/module-lib.sh` ships
+  the five helpers (`log`, `emit_status`, `die`, `run`,
+  `toml_get`) plus the version pin
+  (`SELFDEF_MODULE_LIB_VERSION=1`). Version-mismatch is enforced
+  at source time with exit 99.
+- **D-2 — Dispatcher plumbing**: `run_one` in
+  `crates/selfdef-cli/src/modules.rs` exports
+  `SELFDEF_MODULE_LIB` via a new `resolve_module_lib_path()` with
+  the three-tier precedence (env override → workspace
+  `packaging/lib/module-lib.sh` → installed
+  `/usr/share/selfdef/lib/module-lib.sh`). Both branches have
+  unit + integration coverage.
+- **D-3 — Per-module migration**: eight `install/lib.sh` files
+  now source the shared library with a `${BASH_SOURCE[0]%/*}`
+  parameter-expansion fallback to the workspace path (no
+  `dirname` call so the resolver works under stripped `$PATH`).
+  Modules' inline-helper scripts (`bridge-l2`, `polarproxy`,
+  `suricata`) gain a `lib.sh` of their own and source it from
+  apply / check / uninstall. `vpn-bridge`'s and `bridge-l2`'s
+  uninstall scripts override `log()` and `run()` after sourcing,
+  preserving the pre-SDD-006 `[<slug>:uninstall]` log prefix
+  and lenient continue-past-failure behaviour.
+- **D-4 — Helpers doc**: `docs/dev/module-helpers.md` documents
+  every exported helper, the caller contract, the versioning
+  policy, and how to add module-specific helpers / overrides.
+- **D-5 — Packaging**: `crates/selfdef-daemon/Cargo.toml`'s
+  `[package.metadata.deb]` assets list installs the shared lib
+  at `/usr/share/selfdef/lib/module-lib.sh` mode `0644`.
+- **D-6 — Tests**:
+  - Unit (`crates/selfdef-cli/src/modules.rs`):
+    `resolve_module_lib_path_finds_workspace_by_default`.
+    Operator-override branch covered by integration only
+    (workspace lint forbids in-process `std::env::set_var`).
+  - Integration
+    (`crates/selfdef-cli/tests/cli_modules_shared_lib.rs`):
+    `dispatcher_exports_module_lib_env_var`,
+    `module_sourcing_shared_lib_at_v1_succeeds`,
+    `module_requesting_newer_lib_version_is_refused`.
+
+## Deferred to follow-up
+
+- **F-2026-050** (`agent-guard/uninstall.sh` enumerates policy
+  filenames by hand). The SDD reserved a `module_render_files`
+  helper for a follow-up PR; this implementation keeps the v1
+  surface minimal. Tracked separately; ledger entry remains
+  open.
+- **F-2026-051** (`render_pod_scope` awk fragility). Partially
+  closed: the shared lib doesn't ship YAML-aware editing helpers
+  in v1. A future v2 of the library could ship `yq`- or
+  `python`-backed helpers; tracked as a separate ledger entry.
 
 ## Problem
 

@@ -6,6 +6,94 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — shared module-script library (SDD-006 implementation)
+
+Closes SDD-debt finding F-2026-081; partial close on F-2026-051.
+SDD-006 status flips from `draft` to `implemented`. Phase A + B + C
+of the SDD's rollout plan land together in one PR per the
+"big chunks" steer: the shared library, the dispatcher
+plumbing, **and** the byte-stable migration of all eight modules.
+
+- **D-1 — Shared library**: `packaging/lib/module-lib.sh` ships
+  the five core helpers (`log`, `emit_status`, `die`, `run`,
+  `toml_get`) plus version pin (`SELFDEF_MODULE_LIB_VERSION=1`).
+  Helpers are byte-identical to the per-module copies (except
+  `log()`, which the shared version parameterises on
+  `${MODULE}` instead of a hard-coded slug literal). The library
+  refuses to source when
+  `SELFDEF_MODULE_LIB_VERSION_REQUIRED` exceeds what it ships
+  (exits 99 with a clear stderr message).
+- **D-2 — Dispatcher plumbing**: `run_one` in
+  `crates/selfdef-cli/src/modules.rs` exports
+  `SELFDEF_MODULE_LIB` via a new `resolve_module_lib_path()`
+  with three-tier precedence (env override → workspace
+  `packaging/lib/module-lib.sh` → installed
+  `/usr/share/selfdef/lib/module-lib.sh`).
+- **D-3 — Per-module migration**: eight modules migrated in one
+  go: `agent-guard`, `tetragon`, `observability`,
+  `integrity-sentinel`, `vpn-bridge`, `bridge-l2`, `polarproxy`,
+  `suricata`. The five with an existing `install/lib.sh` had
+  their helper block replaced by a `source` of the shared lib;
+  the three with inlined helpers (`bridge-l2`, `polarproxy`,
+  `suricata`) gained a `lib.sh` of their own and source it from
+  apply / check / uninstall. The lib.sh files use a
+  `${BASH_SOURCE[0]%/*}` parameter-expansion fallback to the
+  workspace path so integration tests + ad-hoc invocations work
+  without `SELFDEF_MODULE_LIB` set, and the resolver never
+  shells out to `dirname` (some tests run the scripts under a
+  stripped `$PATH`). `bridge-l2`'s, `polarproxy`'s, and
+  `suricata`'s uninstall scripts override `log()` and `run()`
+  after sourcing to preserve the pre-SDD-006 `[<slug>:uninstall]`
+  log prefix and lenient continue-past-failure behaviour.
+- **D-4 — Helpers doc**: `docs/dev/module-helpers.md` is the new
+  authoritative reference — every exported helper, the caller
+  contract, the versioning policy, and how to add module-specific
+  helpers / shared-helper overrides.
+- **D-5 — Packaging**: `crates/selfdef-daemon/Cargo.toml`'s
+  `[package.metadata.deb]` assets list installs the shared lib
+  at `/usr/share/selfdef/lib/module-lib.sh` mode `0644`.
+
+#### Behavioural notes
+
+The migration is **byte-stable** for every shipped module's apply
+/ check / uninstall flow. The only externally visible change is
+the `log()` prefix: pre-SDD-006, each module hard-coded
+`[<slug>]` in its own `log()` definition; the shared lib uses
+`[${MODULE}]`, which produces the identical string at runtime.
+Operator log captures should diff cleanly. The `[<slug>:uninstall]`
+prefix that bridge-l2 / polarproxy / suricata's uninstall scripts
+emitted pre-SDD-006 is preserved by per-script `log()` overrides
+after sourcing.
+
+#### Tests
+
+- Unit (`crates/selfdef-cli/src/modules.rs`):
+  `resolve_module_lib_path_finds_workspace_by_default`. The
+  env-override branch is exercised by integration only because
+  the workspace lint forbids in-process `std::env::set_var`
+  (the lint is correct: env mutation isn't thread-safe).
+- Integration
+  (`crates/selfdef-cli/tests/cli_modules_shared_lib.rs`):
+  `dispatcher_exports_module_lib_env_var` asserts selfdefctl
+  exports the env var; `module_sourcing_shared_lib_at_v1_succeeds`
+  is a smoke test of the full source-and-call flow;
+  `module_requesting_newer_lib_version_is_refused` checks the
+  version-pin diagnostic.
+- All 13 per-module integration test files
+  (`module_*.rs`) continue to pass byte-stably — proof the
+  migration didn't change apply / check / uninstall behaviour.
+
+#### Deferred / partial
+
+- **F-2026-050** (agent-guard's hand-enumerated policy list in
+  `uninstall.sh`) is **deferred** to a follow-up. The SDD reserved
+  a `module_render_files` helper for this; v1's library surface
+  is intentionally minimal.
+- **F-2026-051** (`render_pod_scope` awk fragility) is **partial
+  close**: the v1 library doesn't ship YAML-aware editing
+  helpers. A future v2 of the library could ship `yq`/python
+  helpers and close it fully.
+
 ### Added — vpn-bridge multi-instance honesty (SDD-003 implementation)
 Closes Phase-1 audit blocker F-2026-005. SDD-003 status flips
 from `draft` to `implemented`. With this PR, all six Phase-1

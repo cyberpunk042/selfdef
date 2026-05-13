@@ -1,46 +1,33 @@
-# Shared helpers used by apply/check/uninstall. Sourced, not executed.
+# Module-specific helpers for integrity-sentinel. Shared helpers
+# (log, emit_status, die, run, toml_get) come from
+# /usr/share/selfdef/lib/module-lib.sh.
+#
 # Caller must have set:
 #   MODULE        — "integrity-sentinel"
 #   DRY_RUN       — 0 | 1
 #   CONFIG_FILE   — path to the rendered host config (selfdef sets this
 #                   via SELFDEF_INTEGRITY_SENTINEL_CONFIG)
 
-# shellcheck disable=SC2034  # used by sourcing scripts
-
-log() { echo "[integrity-sentinel] $*" >&2; }
-
-emit_status() {
-    local status="$1" message="$2"
-    printf '{"module":"%s","status":"%s","message":"%s"}\n' \
-        "$MODULE" "$status" "${message//\"/\\\"}"
-}
-
-die() { emit_status "failed" "$*"; exit 1; }
-
-run() {
-    local desc="$1"; shift
-    [[ "$1" == "--" ]] && shift
-    if [[ "${DRY_RUN:-0}" == "1" ]]; then
-        log "DRY-RUN: $desc"
-        log "    \$ $*"
-    else
-        log "$desc"
-        "$@"
-    fi
-}
-
-# Minimal TOML reader: only `key = "value"` / `key = N`. The
-# paths-as-an-array problem is handled by the separate paths_file
-# (one absolute path per line) rather than by parsing TOML arrays.
-toml_get() {
-    local key="$1" file="$2"
-    local line
-    line=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$file" | head -1 || true)
-    [[ -z "$line" ]] && return 1
-    line="${line#*=}"; line="${line## }"; line="${line%% #*}"
-    line="${line%\"}"; line="${line#\"}"
-    printf '%s' "$line"
-}
+# shellcheck disable=SC1090,SC2034
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+# Locate the shared module-lib. Precedence:
+#   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
+#      runs hit this).
+#   2. Workspace-relative path (this lib.sh sits at
+#      modules/<slug>/install/lib.sh; the shared lib is at
+#      packaging/lib/module-lib.sh). Catches direct script
+#      invocations from integration tests + ad-hoc runs.
+#   3. Installed system path (.deb-shipped).
+if [[ -n "${SELFDEF_MODULE_LIB:-}" && -r "${SELFDEF_MODULE_LIB}" ]]; then
+    _selfdef_lib="${SELFDEF_MODULE_LIB}"
+elif [[ -r "${BASH_SOURCE[0]%/*}/../../../packaging/lib/module-lib.sh" ]]; then
+    _selfdef_lib="${BASH_SOURCE[0]%/*}/../../../packaging/lib/module-lib.sh"
+else
+    _selfdef_lib="/usr/share/selfdef/lib/module-lib.sh"
+fi
+# shellcheck disable=SC1090
+source "$_selfdef_lib"
+unset _selfdef_lib
 
 # Expand the paths_file into a sorted, deduplicated list of absolute
 # paths. Globs (`*`, `**`) are expanded with globstar+nullglob so a
