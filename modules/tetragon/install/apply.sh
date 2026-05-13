@@ -24,6 +24,39 @@ POLICY_DIR=$(toml_get policy_dir    "$CONFIG_FILE" || echo "/etc/tetragon/tetrag
 METRICS_ADDR=$(toml_get metrics_address "$CONFIG_FILE" || echo "localhost:2112")
 CONFIG_PATH=$(toml_get config_path  "$CONFIG_FILE" || echo "/etc/tetragon/tetragon.yaml")
 SERVICE_UNIT=$(toml_get service_unit "$CONFIG_FILE" || echo "tetragon.service")
+REQUIRE_SIGNED=$(toml_get require_signed_policies "$CONFIG_FILE" || echo "false")
+
+# SDD-004 F-2026-024 follow-up: when require_signed_policies=true,
+# refuse to (re)start tetragon if any policy in $POLICY_DIR is
+# unsigned or its signature doesn't verify under the daemon's
+# configured public key. Verification re-uses
+# `selfdefctl keys verify` (which reads
+# [security].signing_public_key_file from /etc/selfdef/selfdef.toml)
+# so operators don't have to plumb a second key path.
+if [[ "$REQUIRE_SIGNED" == "true" ]]; then
+    if ! command -v selfdefctl >/dev/null; then
+        die "require_signed_policies=true but selfdefctl is not on PATH"
+    fi
+    if [[ -d "$POLICY_DIR" ]]; then
+        unsigned=0
+        # shellcheck disable=SC2044
+        for p in $(find "$POLICY_DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) 2>/dev/null); do
+            # Skip nothing — tetragon loads every .yml/.yaml in the
+            # drop dir, so every one must verify.
+            if [[ "$DRY_RUN" == "1" ]]; then
+                log "DRY-RUN: would verify $p against [security].signing_public_key_file"
+                continue
+            fi
+            if ! selfdefctl keys verify "$p" >/dev/null 2>&1; then
+                log "unsigned or invalid TracingPolicy: $p"
+                unsigned=$((unsigned + 1))
+            fi
+        done
+        if [[ "$unsigned" -gt 0 ]]; then
+            die "$unsigned policy file(s) in $POLICY_DIR failed signature verification — refusing to (re)start tetragon"
+        fi
+    fi
+fi
 
 # Render to a temp file and only swap in if the bytes changed —
 # avoids a service restart on a no-op apply.

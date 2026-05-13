@@ -175,10 +175,74 @@ and re-signing, exactly as above.
   configured verifier, including the "keep prior ruleset on
   failure" contract.
 
-## Coming soon (SDD-004 F-2026-024 follow-up)
+## TracingPolicy signing (SDD-004 F-2026-024 follow-up — shipped)
 
-The same verifier infrastructure will gate the Tetragon
-TracingPolicy directory (`/etc/tetragon/tetragon.tp.d/`). A
-future patch adds `[security].require_signed_tetragon_policies`
-and wires the verifier into the `tetragon` module's `apply.sh`
-so unsigned policies are refused before they reach the kernel.
+The same verifier gates Tetragon TracingPolicy YAMLs in
+`/etc/tetragon/tetragon.tp.d/`. The `tetragon` module's
+`apply.sh` and `check.sh` re-use `selfdefctl keys verify` to
+check every policy file's sibling `.minisig` before allowing
+tetragon to (re)start.
+
+### Turning it on
+
+In the tetragon module's per-host config
+(`/etc/selfdef/modules/tetragon.toml`):
+
+```toml
+profile = "default"
+require_signed_policies = true
+# (other knobs — event_log_path, policy_dir, etc — unchanged)
+```
+
+The verifier reads `[security].signing_public_key_file` from
+the daemon config — operators don't configure the key twice.
+
+### Apply behaviour
+
+When `require_signed_policies = true`:
+
+- `selfdefctl modules apply` runs the tetragon module's
+  `apply.sh`, which iterates every `*.yml`/`*.yaml` in
+  `policy_dir` and runs `selfdefctl keys verify` on each.
+- If any policy is unsigned or its `.minisig` fails to verify,
+  apply.sh emits a `failed` structured-status line and exits
+  non-zero **before** invoking `systemctl restart tetragon`.
+  The previously-running tetragon stays up with whatever
+  policies were already loaded; the operator fixes the
+  unsigned policy and re-applies.
+- Dry-run (`SELFDEF_DRY_RUN=1`) logs "DRY-RUN: would verify
+  ..." for each policy but does **not** fail — dry-runs report
+  what would happen, never enforce.
+
+### Check behaviour
+
+`selfdefctl modules check` runs `check.sh`, which reports an
+unsigned-policy count as a `failed` structured status with the
+detail line:
+
+```
+"<N> of <M> policy file(s) in /etc/tetragon/tetragon.tp.d failed signature verification"
+```
+
+This is non-fatal to the running tetragon (it never invokes
+systemctl) — the check is purely a state report.
+
+### Caveats
+
+- `agent-guard` renders its policies at runtime from operator
+  config (severity, scope, allow-lists). The rendered output
+  is **not** pre-signed. If you opt every module into signing,
+  you'll either need to sign agent-guard's rendered output
+  on each apply (defeating the offline-signing model — secret
+  key has to live on the host) or exempt agent-guard's
+  rendered files. The current shipped approach: operators turn
+  on `require_signed_policies` for hosts where they don't run
+  agent-guard, or where the agent-guard render output is
+  trusted via package signatures + integrity-sentinel
+  baselining.
+- The check is at apply-time, not load-time. Tetragon itself
+  has no signature gate; a policy that gets dropped into
+  `policy_dir` between applies will be loaded by tetragon
+  unverified. Mitigation: `integrity-sentinel` watches the
+  policy directory and surfaces unsigned additions as
+  Detection Findings.

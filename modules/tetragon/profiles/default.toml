@@ -27,3 +27,19 @@ metrics_address = "localhost:2112"
 # Tetragon differently from the upstream Debian package.
 config_path  = "/etc/tetragon/tetragon.yaml"
 service_unit = "tetragon.service"
+
+# SDD-004 F-2026-024 follow-up: opt-in TracingPolicy signature
+# verification. When `true`, the tetragon module refuses to
+# (re)start tetragon if any `*.yml`/`*.yaml` file in
+# `policy_dir` lacks a valid sibling `<policy>.minisig`.
+# Verification re-uses the daemon-side
+# `[security].signing_public_key_file` configured in
+# /etc/selfdef/selfdef.toml — operators don't need a second key.
+# Sign policies offline with `minisign -S -m <policy>.yml`;
+# see docs/dev/signing.md for the runbook.
+#
+# Default `false` to preserve the existing workflow. Turn on
+# once every policy in `policy_dir` (operator-provided ones
+# AND agent-guard-rendered ones, if you opt the latter into
+# signing) carries a `.minisig`.
+require_signed_policies = false
