@@ -28,8 +28,8 @@ None.
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
-| F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — emit a startup warning when the proc read fails so operators see the silent fallback. |
-| F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — flip to `skip:` ("posture not verified") or expand the warn message ("posture not verified — run `selfdefctl rbac check --probe`"). |
+| F-2027-003 | important | `selfdef-collector-eventstream::unsafe_geteuid` | `/proc/self/status` parse failure returns UID `0` (permissive); operators never notice the integrity check is degraded. | implement — **closed** by Phase 2 first-fixes PR (`read_euid` now returns `Option<u32>`; failure path emits a `tracing::warn!` and falls back to "root-only" — strict-safe instead of permissive). |
+| F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 
 ## Nice findings (7)
 
@@ -52,7 +52,8 @@ None.
 ## Status
 
 - **10 findings raised** from one explorer (recent-PRs audit).
-- **0 blockers**, 2 important, 7 nice, 1 SDD-debt.
+- **0 blockers**, 2 important (both **closed**), 7 nice, 1
+  SDD-debt.
 - Other six explorers (crate, module, integration, docs,
   tests, security) will add more findings in follow-up PRs.
 

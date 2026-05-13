@@ -347,7 +347,13 @@ fn check_eventstream(cfg: &Config) -> Vec<CheckResult> {
 /// `selfdefctl rbac check --probe`. Doctor just reports whether
 /// the rbac surface applies + points at the dedicated verb.
 fn check_rbac_posture(_cfg: &Config) -> Vec<CheckResult> {
-    let ag_path = std::path::PathBuf::from("/etc/selfdef/modules/agent-guard.toml");
+    // Test override: SELFDEF_DOCTOR_AGENT_GUARD_CONFIG lets the
+    // integration suite stage a fake agent-guard config in a
+    // tempdir without polluting /etc. Production callers (the
+    // real `selfdefctl doctor` invocation) leave this unset.
+    let ag_path = std::env::var_os("SELFDEF_DOCTOR_AGENT_GUARD_CONFIG")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/etc/selfdef/modules/agent-guard.toml"));
     if !ag_path.exists() {
         return vec![CheckResult {
             category: "rbac".into(),
@@ -372,12 +378,21 @@ fn check_rbac_posture(_cfg: &Config) -> Vec<CheckResult> {
     };
     let scope = extract_toml_scalar_line(&body, "scope").unwrap_or_else(|| "container".into());
     if scope == "pod-label" {
+        // F-2027-008: previously emitted `Warn` for pod-label
+        // scope. Doctor never probes the cluster (deliberate —
+        // probing is `selfdefctl rbac check --probe`'s job).
+        // The `warn:` line was inflating the doctor's
+        // top-level summary count, suggesting something was
+        // wrong when actually nothing was — just that the
+        // RBAC posture hadn't been verified yet. Flip to
+        // `Skipped` (which doesn't contribute to the warn or
+        // fail count) with explicit "not verified" wording.
         vec![CheckResult {
             category: "rbac".into(),
             name: "agent-guard scope".into(),
-            status: CheckStatus::Warn,
+            status: CheckStatus::Skipped,
             detail:
-                "scope = \"pod-label\" — run `selfdefctl rbac check --probe` to verify the cluster's RBAC posture matches"
+                "scope = \"pod-label\" — posture not verified here; run `selfdefctl rbac check --probe` to verify the cluster's RBAC matches"
                     .into(),
         }]
     } else {

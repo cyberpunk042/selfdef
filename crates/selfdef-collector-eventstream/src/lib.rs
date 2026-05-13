@@ -144,10 +144,24 @@ fn check_path_integrity(path: &Path, check: &IntegrityCheck) -> Result<(), Event
         });
     }
     let owner = md.uid();
-    // Effective UID of the daemon process. `geteuid` is provided
-    // by libc; the std `nix`-free way is via `users` crate — but
-    // we already use `std::os::unix` here. Read directly.
-    let euid = unsafe_geteuid();
+    // F-2027-003: read the daemon's effective UID for the
+    // owner-match check. The pre-fix `unsafe_geteuid` silently
+    // returned `0` on any /proc read failure, making the check
+    // accidentally permissive (any root-owned file passed even
+    // when the daemon's euid wasn't root). Now if the read
+    // fails we emit a `warn!` and fall back to "only root is
+    // allowed" — strict-safe rather than permissive.
+    let euid = match read_euid() {
+        Some(u) => u,
+        None => {
+            tracing::warn!(
+                "integrity check: /proc/self/status unreadable — \
+                 falling back to root-only ownership rule. \
+                 Effective UID match will not work."
+            );
+            0
+        }
+    };
     let allowed = owner == euid || owner == 0 || check.allowed_owners.contains(&owner);
     if !allowed {
         return Err(EventstreamError::IntegrityRefused {
@@ -161,22 +175,26 @@ fn check_path_integrity(path: &Path, check: &IntegrityCheck) -> Result<(), Event
 /// libc geteuid wrapper. The selfdef workspace lint forbids
 /// `unsafe` so we shell out to /proc/self/status as a portable,
 /// safe-Rust workaround. `Uid: <ruid> <euid> <suid> <fsuid>`.
-fn unsafe_geteuid() -> u32 {
-    let txt = match std::fs::read_to_string("/proc/self/status") {
-        Ok(s) => s,
-        Err(_) => return 0,
-    };
+///
+/// F-2027-003 follow-up: previously returned `0` silently on
+/// any failure, making the integrity check accidentally
+/// permissive — every root-owned file passed even when the
+/// daemon's effective UID wasn't root. Now returns `None` so
+/// callers can degrade explicitly and the operator sees a
+/// `warn!` line.
+fn read_euid() -> Option<u32> {
+    let txt = std::fs::read_to_string("/proc/self/status").ok()?;
     for line in txt.lines() {
         if let Some(rest) = line.strip_prefix("Uid:") {
             // Second whitespace-separated token is euid.
             let mut it = rest.split_whitespace();
             let _ruid = it.next();
             if let Some(euid_str) = it.next() {
-                return euid_str.parse().unwrap_or(0);
+                return euid_str.parse().ok();
             }
         }
     }
-    0
+    None
 }
 
 async fn wait_for_file(path: &Path, shutdown: &CancellationToken) {
@@ -273,6 +291,22 @@ mod tests {
         // test below, which uses default IntegrityCheck
         // (enabled=false) and reads a file regardless of
         // ownership.
+    }
+
+    #[test]
+    fn read_euid_returns_some_on_linux_test_host() {
+        // F-2027-003: read_euid previously returned 0 silently
+        // on /proc read failure, making the check accidentally
+        // permissive. On a Linux test host /proc/self/status
+        // is always readable, so we expect Some(_) and a
+        // non-bogus value (Uid line always present in
+        // /proc/self/status; the parsed euid is whatever the
+        // test process runs as).
+        let euid = read_euid();
+        assert!(
+            euid.is_some(),
+            "read_euid() must return Some on a Linux host with /proc; got None",
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
