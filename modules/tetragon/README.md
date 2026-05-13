@@ -33,9 +33,15 @@ The module's `requires` check refuses to apply if `tetragon` and
 ## What it does on apply
 
 1. Renders `/etc/tetragon/tetragon.yaml` with:
-   - `export-filename` = `event_log_path` (the daemon's eventstream
-     collector tails this — wire the daemon's
-     `[collectors.eventstream].paths` to match).
+   - `export-filename` = `event_log_path`. The daemon's
+     **`[collectors.tetragon]`** ingests this path
+     (`selfdef-collector-tetragon` parses Tetragon's native JSON
+     into selfdef Events). Set
+     `[collectors.tetragon].enabled = true` and
+     `[collectors.tetragon].input_path = "<event_log_path>"` in
+     `/etc/selfdef/selfdef.toml` — **not** `[collectors.eventstream]`;
+     that collector expects pre-formed selfdef Event JSON lines
+     and silently drops Tetragon's native format. Closes F-2026-003.
    - `tracing-policy-dir` = `policy_dir` (where `agent-guard` etc.
      will write their YAMLs).
    - `metrics-server` = `metrics_address` (Prometheus exporter
@@ -69,11 +75,14 @@ host activity.
 - The Tetragon binary itself.
 - Individual TracingPolicy YAMLs — `agent-guard` (and any future
   policy module) write those.
-- The eventstream collector's *configuration* on the daemon side —
-  set `[collectors.eventstream].paths = [event_log_path]` in
-  `/etc/selfdef/selfdef.toml`. The module logs the configured event
-  log path in its status message so the operator can verify
-  alignment.
+- The Tetragon collector's *configuration* on the daemon side —
+  set `[collectors.tetragon].enabled = true` and
+  `[collectors.tetragon].input_path = "<event_log_path>"` in
+  `/etc/selfdef/selfdef.toml`. The module logs the configured
+  event log path in its status message so the operator can
+  verify alignment. The `[collectors.eventstream]` collector is
+  **not** the right plumbing here — that one parses pre-formed
+  selfdef Event JSON, which Tetragon's wire format isn't.
 
 ## Phase
 

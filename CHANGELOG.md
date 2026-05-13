@@ -6,6 +6,50 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — AI-machine track is end-to-end (SDD-001 implementation)
+Closes the four Phase-1 audit blockers that surrounded the
+AI-machine track: F-2026-001, F-2026-002, F-2026-003,
+F-2026-006. SDD-001's status flips from `draft` to
+`implemented`.
+
+- `selfdef-collector-tetragon` now attaches a stable
+  `raw.tetragon.{policy_name,policy_namespace,action,function_name}`
+  subobject to every `process_kprobe` Event it builds.
+  Severity stays Informational at the collector layer
+  per the SDD's "collectors are dumb translators"
+  invariant — meaning lives in the correlator. Closes
+  **F-2026-001**.
+- New sigma rule
+  `rules/sigma/hardening/agent_guard_violation.yml`
+  matches `raw.tetragon.policy_name|startswith
+  "selfdef-agent-"` AND `raw.tetragon.action|in [Sigkill,
+  Override, NotifyKiller]`, promotes to `level: high`.
+  Audit-mode `Post` actions deliberately do **not** trip
+  this rule. Six-case `.tests.yaml` corpus covers Sigkill,
+  Override, NotifyKiller, audit-mode-Post-negative,
+  non-agent-guard-negative, non-tetragon-source-negative.
+  Closes **F-2026-002**.
+- `modules/tetragon/README.md` now names
+  `[collectors.tetragon]` as the correct daemon-side
+  ingest path with a paste-ready snippet, and the
+  "What's NOT owned" section explicitly calls out the
+  `[collectors.eventstream]` collector as the wrong
+  choice. Closes **F-2026-003**.
+- New daemon integration test
+  `crates/selfdef-daemon/tests/m_ai_machine.rs` exercises
+  the full pipeline (Tetragon JSON → collector → bus →
+  correlator → findings store) and asserts the negative
+  case (audit-mode `Post` does NOT promote). Closes
+  **F-2026-006**.
+
+Operator-visible effect: with the `tetragon` collector
+enabled in the daemon config and `agent-guard` running in
+`enforce` (or a per-policy `*_action = "sigkill"`
+override), a real policy violation now surfaces as a
+high-severity Detection Finding through the existing
+notifier chain (ntfy / Signal). The kernel-side action
+worked all along; this PR plumbs the operator alert side.
+
 ### Changed — Phase 1 audit follow-ups (one bigger PR)
 Seven small fixes batched together. Each closes (or partially
 closes) a Phase-1 ledger row.
