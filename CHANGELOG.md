@@ -6,6 +6,46 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 tests explorer (raises F-2027-046 through F-2027-056)
+
+Sixth of Phase 2's seven explorers ships. Walks the new integration tests added during the post-Phase-1 cycle, the three shared patterns from SDD-005 (P-1 dry-run-noop, P-2 Prometheus parser, P-3 real-broker NATS), and the four test categories.
+
+**11 new findings raised. All triaged `nice` — no blockers, no important.** Test surface is in good shape overall: every Phase 2 closure PR shipped with a regression test per the ledger's closure notes; the SDD-005 categories still match the codebase; the three patterns are used by the surfaces that need them.
+
+#### New document
+
+`docs/review/phase-2/70-tests-audit.md` — per-area notes with concrete `file:line` observations + a triage table that clusters the findings into five follow-up PRs.
+
+#### New findings
+
+| ID | Surface | Theme |
+| --- | --- | --- |
+| F-2027-046 | `module_suricata.rs` live-positive missing | P-1 dry-run-noop adoption gap |
+| F-2027-047 | `module_polarproxy.rs` P-1 pair missing | P-1 dry-run-noop adoption gap |
+| F-2027-048 | `module_vpn_bridge_{cloudflare,tailscale}.rs` P-1 gap | P-1 dry-run-noop adoption gap |
+| F-2027-049 | `workspace_root()` / `module_dir()` duplicated ~14× | helper duplication |
+| F-2027-050 | `last_stdout_line()` duplicated 6× | helper duplication |
+| F-2027-051 | `write_executable()` duplicated 4× | helper duplication |
+| F-2027-052 | `m4_alert.rs` real-time sleeps | SDD-005 anti-pattern |
+| F-2027-053 | `m8_honeytokens.rs` real-time sleeps | SDD-005 anti-pattern |
+| F-2027-054 | `dummy_action_set` shared `/tmp` paths | api-test isolation |
+| F-2027-055 | `std::mem::forget(dir)` SQLite leak | api-test isolation |
+| F-2027-056 | metrics tests bypass P-2 Prometheus parser | parser-adoption |
+
+#### Closing-PR clusters
+
+- **module-test backfill** — F-2027-046 + -047 + -048.
+- **`common/mod.rs` migration** — F-2027-049 + -050 + -051.
+- **`pause()`-conversion** — F-2027-052 + -053.
+- **api-test isolation** — F-2027-054 + -055.
+- **parser-adoption** — F-2027-056.
+
+#### Phase 2 status after this PR
+
+**56 findings across 6 explorers. 52 nice (41 closed, 11 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. One explorer remains (security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Documentation — Phase 2 docs-final-cluster (closes F-2027-039 + F-2027-040 + F-2027-045)
 
 Closes the last three open `nice` findings from the Phase 2 docs explorer. **All five Phase 2 explorers run so far (recent-PRs, crate, module, integration, docs) are now fully drained at the actionable tiers.** Only F-2027-010 (SDD-debt — `events follow` TCP transport, awaiting design) remains open across Phase 2.

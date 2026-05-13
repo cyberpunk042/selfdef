@@ -1,12 +1,13 @@
 # Phase 2 findings ledger
 
-> Status: in progress. Five of the seven explorers run so far —
+> Status: in progress. Six of the seven explorers run so far —
 > recent-PRs (10 findings, all closed except 1 SDD-debt), crate
 > (11 findings, all closed), module (6 findings, all closed),
-> integration (9 findings, all closed), and docs (9 findings,
-> all fresh and open). Two explorers remain (tests, security).
-> Last updated: 2026-05-13 (Phase 2 docs explorer — adds
-> F-2027-037 through F-2027-045).
+> integration (9 findings, all closed), docs (9 findings, all
+> closed), and tests (11 findings, all fresh and open). One
+> explorer remains (security).
+> Last updated: 2026-05-13 (Phase 2 tests explorer — adds
+> F-2027-046 through F-2027-056).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -35,7 +36,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (41 — all closed)
+## Nice findings (52 — 41 closed, 11 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -80,6 +81,17 @@ None.
 | F-2027-043 | nice | README quickstart `cargo deb -p selfdef-daemon` | Builds only the daemon; the CLI is a separate target (`selfdefctl`). Quickstart doesn't tell operators they need to package the CLI separately. | doc — **closed** by Phase 2 docs-operator-refresh PR (quickstart now builds `cargo deb -p selfdef-cli` alongside the daemon and `dpkg -i` both). |
 | F-2027-044 | nice | `ARCHITECTURE.md:12, 199` SIGUSR2 fan-out | Topology diagram labels SIGUSR2 as `(api tokens)` only; post-PR-#58/#69/#70 also covers verifier reload + rule re-verify + summary log. | doc — **closed** by Phase 2 docs-operator-refresh PR (diagram label updated to `tokens + verifier + rules`; F-2027-005 / -031 / -032 / -035 cross-references added in the security-properties section). |
 | F-2027-045 | nice | SDDs don't cross-ref `F-2027-NNN` follow-ups | SDD-003 (drove F-2027-001 + -025), SDD-004 (F-2027-005 + -006), SDD-006 (F-2027-024) have no "Follow-up findings" tail section. Lineage is discoverable from the ledger but not from the SDD reader's vantage. | doc — **closed** by Phase 2 docs-final-cluster PR (SDD-003, SDD-004, SDD-006 each gain a "Follow-up findings (F-2027-045)" tail section listing the F-2027-NNN entries that iterated on each SDD's surface). |
+| F-2027-046 | nice | `module_suricata.rs` live-positive test gap | Test runs only under `SELFDEF_DRY_RUN=1`; the live-positive path that actually loads suricata rules has no regression test. SDD-005 D-1 requires both paths. | implement |
+| F-2027-047 | nice | `module_polarproxy.rs` P-1 dry-run-noop pair missing | All cases run `SELFDEF_DRY_RUN=1` but no `snapshot_tree` / `assert_tree_unchanged` to guard against dry-run-becomes-live regression. | implement |
+| F-2027-048 | nice | `module_vpn_bridge_{cloudflare,tailscale}.rs` P-1 gap | Live-positive coverage present but no P-1 paired test. | implement |
+| F-2027-049 | nice | `workspace_root()` / `module_dir()` duplication | Re-implemented in ~14 module test files; `crates/selfdef-cli/tests/common/mod.rs` already exports canonical versions. | implement |
+| F-2027-050 | nice | `last_stdout_line()` duplication | Re-implemented in 6+ test files; common version exists. | implement |
+| F-2027-051 | nice | `write_executable()` duplication | Duplicated across 4 vpn-bridge / tetragon-signing tests. | implement |
+| F-2027-052 | nice | `m4_alert.rs` real-time sleeps | Three `tokio::time::sleep`/`timeout` calls with multi-second deadlines; SDD-005 forbids. | implement |
+| F-2027-053 | nice | `m8_honeytokens.rs` real-time sleeps | Seven real-time sleeps across three test cases; same anti-pattern. | implement |
+| F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement |
+| F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement |
+| F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement |
 
 ## SDD-debt findings (1)
 
@@ -89,15 +101,19 @@ None.
 
 ## Status
 
-- **45 findings raised** across five explorers (recent-PRs: 10;
-  crate: 11; module: 6; integration: 9; docs: 9).
-- **0 blockers**, **3 important (all closed)**, **41 nice (all
-  closed)**, **1 SDD-debt (F-2027-010 open)**.
-- **Five Phase 2 explorers are fully drained at the actionable
-  tiers.** Only F-2027-010 (SDD-debt — `events follow` TCP
-  transport, awaiting design) remains open across Phase 2.
-- Two explorers remain (tests, security). Each will add more
-  findings in follow-up PRs.
+- **56 findings raised** across six explorers (recent-PRs: 10;
+  crate: 11; module: 6; integration: 9; docs: 9; tests: 11).
+- **0 blockers**, **3 important (all closed)**, **52 nice (41
+  closed, 11 open)**, **1 SDD-debt (F-2027-010 open)**.
+- The first five Phase 2 explorers are fully drained at the
+  actionable tiers. The 11 new tests-explorer findings cluster
+  into five follow-up PRs: module-test backfill (F-2027-046
+  + -047 + -048), `common/mod.rs` migration (F-2027-049 + -050
+  + -051), `pause()`-conversion (F-2027-052 + -053), api-test
+  isolation (F-2027-054 + -055), and parser-adoption
+  (F-2027-056).
+- One explorer remains (security). Will add more findings in
+  follow-up PRs.
 - Three explorers remain (docs, tests, security). Each will
   add more findings in follow-up PRs. The only remaining open
   Phase 2 SDD-debt is F-2027-010 (`events follow` TCP transport),
