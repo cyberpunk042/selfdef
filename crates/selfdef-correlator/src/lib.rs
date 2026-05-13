@@ -1,9 +1,32 @@
 //! Correlator: subscribes to the bus, evaluates events against Sigma-style
 //! rules, emits Detection Finding events back onto the bus.
 //!
-//! M5: the hardcoded `SshBruteforceRule` is gone. The engine loads YAML
-//! rules from a directory and supports atomic hot reload (SIGHUP from the
-//! daemon).
+//! ## Surface highlights
+//!
+//! - **Rule loading**: [`Correlator::new`] returns a correlator
+//!   pointing at a rules directory. [`Correlator::load_rules`]
+//!   reads every `*.yml` file in the directory, compiles each to
+//!   a [`CompiledRule`], and atomically swaps the in-memory
+//!   engine. Failure keeps the previous rule set in place.
+//! - **Hot reload via SIGHUP**: the daemon's SIGHUP handler calls
+//!   [`Correlator::load_rules`] mid-flight. Rule files added,
+//!   removed, or edited on disk take effect on the next reload.
+//! - **Optional rule signing** (SDD-004): when constructed with
+//!   [`Correlator::with_verifier`], every load refuses any rule
+//!   file lacking a valid sibling `<file>.minisig` under the
+//!   verifier's public key. Wired from
+//!   `[security].require_signed_rules` in the daemon config.
+//! - **Hot rotation of the signing key via SIGUSR2** (F-2027-005,
+//!   PR #58): [`Correlator::reload_verifier`] re-reads the
+//!   configured public-key file off disk without restarting the
+//!   daemon. The daemon's SIGUSR2 handler fans out to
+//!   `reload_verifier` plus an immediate `load_rules` so rules
+//!   signed by a rotated key get picked up.
+//! - **Operator introspection** (F-2027-021):
+//!   [`Correlator::verifier_source`] returns the path the
+//!   currently-loaded public key came from, for `selfdefctl
+//!   doctor` / dashboards / "which `policy.pub` is the daemon
+//!   trusting right now?" investigations.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
@@ -116,19 +139,50 @@ impl Correlator {
         guard.is_some()
     }
 
+    /// F-2027-021: the absolute path the currently-loaded public
+    /// key came from, or `None` if no verifier is attached
+    /// (signing is opt-in). Used by `selfdefctl doctor` to
+    /// surface "trusted policy.pub: …" in its signing category,
+    /// and by `/status` dashboards.
+    ///
+    /// Returns an owned `PathBuf` because the verifier may be
+    /// hot-rotated under the read lock — callers can't hold a
+    /// reference to the inner path across awaits.
+    #[must_use]
+    pub fn verifier_source(&self) -> Option<PathBuf> {
+        let guard = self.verifier.read().unwrap_or_else(|p| p.into_inner());
+        guard.as_ref().map(|v| v.source().to_path_buf())
+    }
+
     /// Load (or reload) rules from disk. Atomically swaps the engine on
     /// success; on failure leaves the previous rule set in place.
+    ///
+    /// F-2027-020: when a verifier is attached, logs the public-key
+    /// path the rules were verified against at `info`. Operators
+    /// who SIGUSR2-rotate the key (F-2027-005) use this log line to
+    /// confirm the swap actually picked up the new key.
     pub fn load_rules(&self) -> Result<usize, SigmaError> {
-        let new_engine = Arc::new({
+        let (new_engine, verifier_key) = {
             let guard = self.verifier.read().unwrap_or_else(|p| p.into_inner());
             match guard.as_ref() {
-                Some(v) => Engine::load_dir_verified(&self.rules_dir, v)?,
-                None => Engine::load_dir(&self.rules_dir)?,
+                Some(v) => (
+                    Engine::load_dir_verified(&self.rules_dir, v)?,
+                    Some(v.source().to_path_buf()),
+                ),
+                None => (Engine::load_dir(&self.rules_dir)?, None),
             }
-        });
+        };
+        let new_engine = Arc::new(new_engine);
         let count = new_engine.rule_count();
         let mut guard = self.engine.write().unwrap_or_else(|p| p.into_inner());
         *guard = new_engine;
+        if let Some(key) = verifier_key {
+            info!(
+                rules = count,
+                verifier_key = %key.display(),
+                "rules loaded under signing verifier"
+            );
+        }
         Ok(count)
     }
 
