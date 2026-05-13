@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — Phase 2 module-cleanup (closes F-2027-022, -023, -025, -026, -027)
+
+Five of the six findings the Phase 2 module explorer raised — closes the small / contained ones and leaves F-2027-024 (full v2-helpers migration of the seven script-based modules) as its own follow-up.
+
+#### F-2027-022 — `[install] kind = "debian-package"` contract documented
+
+`docs/src/modules.md` `[install]` block now documents all three `kind` values inline (`script` / `debian-package` / `rust-binary`) with a per-value note. `modules/detect-host/README.md` (the only consumer) now points at the contract.
+
+#### F-2027-023 — tetragon signing-failure die message embeds the failing file
+
+`modules/tetragon/install/apply.sh` previously did `selfdefctl keys verify-dir … || true` to print the per-file ok/fail listing, then died with a generic message. Operators reading only the final error line had to scroll back. Now: the script captures the verifier output, prints it (preserving the per-file listing), then `die`s with `"policy signature verification failed (first failure: <path>) — refusing to (re)start tetragon. See output above for the full ok/fail listing."`. The integration test (`module_tetragon_signing.rs`) updated to accept either the new pointer or the legacy aggregate phrasing.
+
+#### F-2027-025 — vpn-bridge `safe_name` on `$SELFDEF_INSTANCE_ID`
+
+`_relay_inst_defaults` in `modules/vpn-bridge/install/profiles/relay-via-server.sh` now runs `$SELFDEF_INSTANCE_ID` through `safe_name "$INST" || die "..."` before interpolating it into nftables table names, interface names, and per-instance config paths. Operator-controlled string today, so this is defense-in-depth — but tightens the validator coverage for free in case a future config-reload path lets the daemon inject instance IDs.
+
+#### F-2027-026 — `docs/dev/module-helpers.md` documents per-module v2 adoption
+
+New "Per-module adoption" section in the helpers reference is the single source of truth for which library version each shipped module requires. Includes a 4-step bumping recipe for contributors migrating a module from v1 to v2. Replaces the audit-recommended approach of duplicating the same line across 8 READMEs.
+
+#### F-2027-027 — `DRY_RUN=0` standardised in three check.sh
+
+`modules/{bridge-l2,suricata,polarproxy}/install/check.sh` now set `DRY_RUN=0` before sourcing the v2 lib. The library's `run` helper consults `$DRY_RUN`, so an unset variable is technically `unbound` under `set -u` even though check.sh today doesn't reach `run`. Future-proofing against a v3 helper that does.
+
+#### Phase 2 backlog after this PR
+
+27 findings across three explorers. **24 nice (23 closed, 1 open — F-2027-024)**, **1 SDD-debt open**, **2 important closed**, **0 blockers**.
+
+The only remaining `nice` finding is F-2027-024, the full v2-helpers migration of the seven script-based modules — substantial enough to need its own PR. Four Phase 2 explorers remain (integration, docs, tests, security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 module explorer (raises F-2027-022 through F-2027-027)
 
 Third of Phase 2's seven explorers ships. Walks the 9 shipped modules' install scripts + manifests + READMEs, the SDD-006 v2 module-script library, and the post-Phase-1 surfaces called out in the charter (tetragon's `require_signed_policies`, v2 manifest helpers, vpn-bridge per-profile instanced). 6 new findings raised; all triaged **nice** — no blockers, no important.

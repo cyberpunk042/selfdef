@@ -16,9 +16,19 @@
 
 # Compute per-instance defaults from $SELFDEF_INSTANCE_ID. Sourced
 # by every profile_* function so all three see the same names.
+#
+# F-2027-025: SELFDEF_INSTANCE_ID flows from operator-controlled
+# /etc/selfdef/modules.toml today, but it ends up interpolated
+# directly into nftables table names (illegal chars => silent rule
+# load failure) and per-instance config paths (illegal chars =>
+# arbitrary fs traversal in pathological cases). safe_name is the
+# defense — it accepts only [a-zA-Z0-9_./:-], which is the same
+# character class iface / table names elsewhere in this file get
+# checked against. Cheap belt-and-suspenders defense-in-depth.
 _relay_inst_defaults() {
     INST="${SELFDEF_INSTANCE_ID:-}"
     if [[ -n "$INST" ]]; then
+        safe_name "$INST" || die "SELFDEF_INSTANCE_ID has unsafe characters: '$INST' (allowed: [a-zA-Z0-9_./:-])"
         DEFAULT_IFACE="selfdef-${INST}"
         DEFAULT_NFT_TABLE="selfdef_vpn_bridge_${INST}"
         DEFAULT_NFT_PATH="/etc/nftables.d/selfdef-vpn-bridge-${INST}.conf"

@@ -24,6 +24,10 @@ read findings (e.g. a future remote dashboard) declare
 the `selfdef-daemon` Debian package, built by `cargo deb -p
 selfdef-daemon`. No imperative install scripts.
 
+`detect-host` is the only module shipping with `kind = "debian-package"`;
+the contract for that install kind is documented in [`docs/src/modules.md`
+§ `module.toml` manifest](../../docs/src/modules.md) (F-2027-022).
+
 ## Config
 
 Configuration is **not yet** under the module-layer overlay (see

@@ -243,9 +243,17 @@ fn apply_refuses_when_signing_enabled_and_a_policy_is_unsigned() {
     let line = last_stdout_line(&out);
     assert!(
         line.contains("\"status\":\"failed\"")
-            && line.contains("policy file(s)")
-            && line.contains("signature verification"),
+            && line.contains("signature verification")
+            && line.contains("tetragon"),
         "got: {line}",
+    );
+    // F-2027-023: the die message embeds the first failing
+    // file's path so operators don't have to scroll back
+    // through the verifier's per-file listing.
+    assert!(
+        (line.contains("first failure:") && line.contains("bad.yml"))
+            || line.contains("policy file(s)"),
+        "expected first-failure pointer or legacy aggregate message; got: {line}",
     );
 }
 

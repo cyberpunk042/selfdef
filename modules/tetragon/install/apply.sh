@@ -46,11 +46,25 @@ if [[ "$REQUIRE_SIGNED" == "true" ]]; then
         if [[ "$DRY_RUN" == "1" ]]; then
             log "DRY-RUN: would verify policies in $POLICY_DIR against [security].signing_public_key_file"
         else
-            if ! selfdefctl keys verify-dir "$POLICY_DIR" >/dev/null 2>&1; then
-                # Re-run with output so the operator sees which
-                # file(s) failed.
-                selfdefctl keys verify-dir "$POLICY_DIR" || true
-                die "one or more policy file(s) in $POLICY_DIR failed signature verification — refusing to (re)start tetragon"
+            # F-2027-023: capture the verifier's per-file output so
+            # the die message can embed the first failing path
+            # instead of just pointing at the directory. Operators
+            # who only read the final error line shouldn't have to
+            # scroll back through script output.
+            verify_output=$(selfdefctl keys verify-dir "$POLICY_DIR" 2>&1) || verify_rc=$?
+            verify_rc="${verify_rc:-0}"
+            if [[ "$verify_rc" -ne 0 ]]; then
+                # Print the captured output to the operator's
+                # terminal first (preserving the per-file ok/fail
+                # listing), then fail with a message that names the
+                # first failing file.
+                printf '%s\n' "$verify_output"
+                first_fail=$(printf '%s\n' "$verify_output" | grep -m1 '^fail:' | sed -E 's/^fail:[[:space:]]*([^:]+):.*/\1/' | tr -d '[:space:]')
+                if [[ -n "$first_fail" ]]; then
+                    die "policy signature verification failed (first failure: $first_fail) — refusing to (re)start tetragon. See output above for the full ok/fail listing."
+                else
+                    die "one or more policy file(s) in $POLICY_DIR failed signature verification — refusing to (re)start tetragon"
+                fi
             fi
         fi
     fi

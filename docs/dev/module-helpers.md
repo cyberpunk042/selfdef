@@ -79,6 +79,39 @@ The manifest lives at
 tempdir per fixture so they don't pollute the host's
 `/var/lib/selfdef/installed/`.
 
+### Per-module adoption (F-2027-026)
+
+Authoritative table of which library version each shipped
+module requires. Operators rarely care; contributors editing a
+module's `apply.sh` / `uninstall.sh` need it to know which
+helpers are reachable. Bump the module's
+`SELFDEF_MODULE_LIB_VERSION_REQUIRED` when introducing a v2-only
+helper.
+
+| Module | Required version | Notes |
+| --- | --- | --- |
+| `agent-guard` | **2** | Uses `module_record_file` to track every TracingPolicy it renders into `/etc/tetragon/tetragon.tp.d/`; `uninstall.sh` walks the manifest. |
+| `bridge-l2` | 1 | Hand-curates `NFT_RULESET_PATH` in `uninstall.sh`. F-2027-024 candidate for v2 migration. |
+| `detect-host` | n/a | `[install] kind = "debian-package"`; no install scripts. |
+| `integrity-sentinel` | 1 | Single-instance baseline; no rendered files outside its own state. |
+| `observability` | 1 | Hand-curates `SCRAPE_DST` + `DASHBOARD_DST` in `uninstall.sh`. F-2027-024 candidate. |
+| `polarproxy` | 1 | Single systemd unit; uninstall path is small. |
+| `suricata` | 1 | Renders one `/etc/suricata/selfdef.rules` file; uninstall path is small. |
+| `tetragon` | 1 | Hand-curates four paths (config, policy_dir, event_log, service_unit) in `uninstall.sh`. F-2027-024 candidate. |
+| `vpn-bridge` | 1 | Per-profile dispatchers each own their own files; v2 migration would need to flow through the per-profile sourced scripts. |
+
+Bumping a module from v1 to v2 is mechanical:
+1. Set `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2` in the module's
+   `install/lib.sh` shim.
+2. In `apply.sh`, wrap every `install`/`mkdir`/`cp` of a
+   rendered file with `module_record_file "<absolute path>"`.
+3. Replace the hand-enumerated removals in `uninstall.sh` with
+   `for f in $(module_render_files); do rm -f "$f"; done` plus
+   `module_clear_manifest` at the end.
+4. Add a `dry_run_must_be_a_noop` test pair (Pattern P-1 in
+   `docs/dev/test-contract.md`) to confirm the manifest tracking
+   doesn't escape the dry-run no-op contract.
+
 ## Exported helpers (v1)
 
 ### `log "$msg"`
