@@ -197,6 +197,13 @@ enabled    = false
 # entirely; set it to a separate 0600 file with its own rotated
 # token to expose control under a stricter audience.
 # control_token_file = "/etc/selfdef/api.control.token"
+# SDD-007 D-4 / F-2028-037: caps on concurrent /events/stream
+# subscribers. The defaults (64 global, 8 per-token) bound how
+# much an authenticated bearer-holder can pin in process memory.
+# Raise / lower per the deployment's audience size; leaving them
+# unset falls back to the compiled-in defaults.
+# max_sse_subscribers           = 64
+# max_sse_subscribers_per_token = 8
 
 [security]
 # Rule signing (closes the original Known gap; see docs/dev/signing.md).

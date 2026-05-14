@@ -1,6 +1,6 @@
 # SDD-007 — Per-token SSE subscriber quota
 
-> Status: implemented (D-4 config knobs deferred to a thin follow-up)
+> Status: implemented (all five Ds shipped)
 > Owner: audit team
 > Last updated: 2026-05-14
 > Closes findings: F-2028-037, F-2028-039.
@@ -43,10 +43,18 @@ Shipped in the SDD-007 implementation PR. D-1 + D-2 + D-3 + D-5
   surface through the F-2028-016 JSON-extraction path in
   `events_follow_tcp`.
 
-D-4 (config knobs in `[api]`) deferred to a thin follow-up that
-plumbs the constants through `ApiConfig` so operators can tune
-without recompiling. The defaults (8 per-token, 64 global) match
-the documented design.
+D-4 — Config knobs: shipped in the D-4 follow-up PR.
+`selfdef-config::ApiConfig` gains optional
+`max_sse_subscribers: Option<usize>` and
+`max_sse_subscribers_per_token: Option<usize>` fields. The
+daemon copies them into `ApiState::sse_caps` via the new
+`ApiState::with_sse_caps(SseCaps { … })` builder; the
+`SubscriberGuard::try_acquire` path consults state-supplied
+overrides ahead of the compiled-in constants. `None`/`Some(0)`
+fall back to the defaults (64 global, 8 per-token). Init-template
+`STARTER_CONFIG` ships the two knobs commented at the defaults
+so operators see them when bootstrapping. Two new integration
+tests pin the override contract for both caps.
 
 ## Why now
 
@@ -239,8 +247,6 @@ chunk if test-fixture work doesn't bloat the diff.
 
 ## Status
 
-Implemented. D-4 (config knobs) is the only remaining work
-item; it's a thin plumbing PR that exposes the constants as
-operator-tunable `[api]` knobs without changing default
-behaviour. Phase 3 doesn't gate on D-4 — the security
-posture is now correct at the default values.
+Implemented. All five Ds (D-1 fingerprint, D-2 dual-counter
+guard, D-3 deferred terminate-on-revoke, D-4 config knobs,
+D-5 tests, D-6 distinguishable 503 reasons) shipped.

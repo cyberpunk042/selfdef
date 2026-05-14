@@ -504,6 +504,19 @@ pub struct ApiConfig {
     /// token is presented — opting in is explicit.
     pub control_token_file: String,
     pub tls: ApiTlsConfig,
+    /// SDD-007 D-4 / F-2028-037: cap on concurrent `/events/stream`
+    /// subscribers across the whole process. Backstop for the
+    /// per-token cap below. `None` (or 0) means "use the hardcoded
+    /// default of 64".
+    #[serde(default)]
+    pub max_sse_subscribers: Option<usize>,
+    /// SDD-007 D-4 / F-2028-037: per-token cap on concurrent
+    /// `/events/stream` subscribers, keyed off a SHA-256 fingerprint
+    /// of the presented bearer. `None` (or 0) means "use the
+    /// hardcoded default of 8". Bound the abuse a single
+    /// leaked/malicious token can do against legitimate operators.
+    #[serde(default)]
+    pub max_sse_subscribers_per_token: Option<usize>,
 }
 
 /// Optional TLS / mTLS wrapping for the TCP transport.
@@ -531,6 +544,8 @@ impl Default for ApiConfig {
             token_file: String::from("/etc/selfdef/api.token"),
             control_token_file: String::new(),
             tls: ApiTlsConfig::default(),
+            max_sse_subscribers: None,
+            max_sse_subscribers_per_token: None,
         }
     }
 }

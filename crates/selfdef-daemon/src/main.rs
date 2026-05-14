@@ -184,10 +184,17 @@ async fn main() -> Result<()> {
     };
 
     let (api_task, api_token_reloader) = if cfg.api.enabled {
-        use selfdef_api::{ApiServer, ApiState};
+        use selfdef_api::{ApiServer, ApiState, SseCaps};
         let cfg_api = build_api_config(&cfg.api);
         let mut state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), host_tag.clone())
-            .with_publisher(publisher.clone());
+            .with_publisher(publisher.clone())
+            // SDD-007 D-4: thread the operator-overrideable SSE
+            // caps into ApiState. Empty/None falls back to the
+            // compiled-in defaults (64 global, 8 per-token).
+            .with_sse_caps(SseCaps {
+                global: cfg.api.max_sse_subscribers,
+                per_token: cfg.api.max_sse_subscribers_per_token,
+            });
         if let Some(m) = metrics_handle.clone() {
             state = state.with_metrics(m);
         }
