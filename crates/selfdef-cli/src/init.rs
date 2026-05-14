@@ -252,6 +252,22 @@ channels = []
 # webhook_url_file = "/etc/selfdef/discord.webhook.url"
 # username         = "selfdef"
 
+# SDD-008 D-5: path to the persistent escalation engine. When set,
+# the daemon persists every outbound notification here and runs the
+# wake-task escalation loop (D-5c): unacked notifications re-fire
+# at their deadline, advance through rungs, and eventually close
+# when max rungs are reached.
+#
+# Operators ack / forget / list pending escalations with:
+#   selfdefctl notify ack    <event_id>
+#   selfdefctl notify forget <event_id>
+#   selfdefctl notify list   [--limit N] [--json]
+#
+# Default (unset): the daemon falls back to M4 fire-and-forget
+# (no persistence, no escalation). Uncomment to enable.
+#
+# escalations_path = "/var/lib/selfdef/escalations.sqlite"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:

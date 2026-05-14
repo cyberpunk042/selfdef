@@ -2151,6 +2151,8 @@ dependencies = [
  "selfdef-correlator",
  "selfdef-integration-ntfy",
  "selfdef-notifier",
+ "selfdef-notifier-engine",
+ "selfdef-notifier-orchestrator",
  "selfdef-responder",
  "selfdef-signing",
  "selfdef-store",
