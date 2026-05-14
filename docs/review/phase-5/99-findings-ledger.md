@@ -36,26 +36,30 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** across three Phase 5 explorers
-  (recent-PRs + crate + module). **All three 100% clean on
-  first-pass scrutiny.**
-- The Phase 4 closure cycle was exceptionally clean
-  execution. The module-side surface (vpn-bridge dispatcher
-  header doc-refresh) verifies correct against the actual
-  `profile_apply` behaviour; v2 migration coverage is
-  re-verified at 7/8 modules (suricata correctly exempt);
-  legacy-fallback dedup in `profile_uninstall` is sound
-  (only runs on empty-manifest branch).
+- **0 findings raised** across four Phase 5 explorers
+  (recent-PRs + crate + module + integration). **All four
+  100% clean on first-pass scrutiny.**
+- Phase 5 integration auditor traced all five seams from the
+  Phase 4 closure cycle end-to-end:
+  - TOML → daemon → ApiState chain test-covered at both ends.
+  - `Some(0)` fallback's `n > 0` guard correctly pinned by
+    test.
+  - `TokenFingerprint` Debug impl + tracing-safety contract
+    sound (defensive for future field-expansion usage).
+  - `vpn-bridge` `apply.sh` header claims verified against
+    `profile_apply` impl.
+  - `SECURITY.md` per-token SSE cap text verifies bytewise
+    against `handlers.rs` + `config.rs`.
 - **Trajectory comparison**:
 
-  | Cycle | recent-PRs | crate | module |
-  | --- | --- | --- | --- |
-  | Phase 2 | many | 11 nice | 6 nice |
-  | Phase 3 | 4 nice | 10 mixed | 1 important |
-  | Phase 4 | 1 demoted | 2 nice | 1 nice |
-  | **Phase 5** | **0** | **0** | **0** |
+  | Cycle | recent-PRs | crate | module | integration |
+  | --- | --- | --- | --- | --- |
+  | Phase 2 | many | 11 nice | 6 nice | 9 mixed |
+  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice |
+  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice |
+  | **Phase 5** | **0** | **0** | **0** | **0** |
 
-- Four explorers remain: integration, docs, tests, security.
+- Three explorers remain: docs, tests, security.
 - No Phase 5 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
