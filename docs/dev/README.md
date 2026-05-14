@@ -15,6 +15,7 @@ README is the index.
 | [`operator-health-check.md`](./operator-health-check.md) | `selfdefctl doctor` cross-cutting health check: categories, output formats, exit codes. |
 | [`test-contract.md`](./test-contract.md) | Contributor-facing: SDD-005 test contract, the four categories, the three shared patterns, per-test isolation overrides. |
 | [`module-helpers.md`](./module-helpers.md) | Contributor-facing: the `packaging/lib/module-lib.sh` v1/v2 helper library + per-module adoption table. |
+| [`integrations.md`](./integrations.md) | Contributor-facing: SDD-008 D-1 integration crate template (modules-vs-integrations boundary, Cargo manifest skeleton, channel-trait skeleton, extension recipe). |
 
 ## Canonical runbook shape (F-2027-040)
 
@@ -56,9 +57,10 @@ Contributor-facing runbooks (`test-contract.md`,
 
 ## Cross-references
 
-- `docs/sdd/` — six implemented Software Design Documents.
-  Each `docs/dev/` runbook traces back to one or more SDDs in
-  its TL;DR.
+- `docs/sdd/` — seven implemented Software Design Documents
+  (001..007) plus the draft SDD-008 charter on notifications
+  orchestration + integrations taxonomy. Each `docs/dev/`
+  runbook traces back to one or more SDDs in its TL;DR.
 - `docs/review/` (Phase 1) and `docs/review/phase-2/` —
   audit-cycle findings ledger. Most `F-2027-NNN` references
   in the runbooks resolve against

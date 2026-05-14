@@ -81,6 +81,72 @@ loop back into the bus. When
 collector refuses to tail world-writable or foreign-owned
 paths (SDD-004 F-2026-026 follow-up).
 
+### Integrations layer (SDD-008 D-1)
+
+Adapters to external services live as Rust crates under the
+naming pattern `crates/selfdef-integration-<service>`. They are
+architecturally distinct from modules and the distinction is
+load-bearing:
+
+```
+┌─────────────────────────────────┬──────────────────────────────────┐
+│  Module                         │  Integration                     │
+├─────────────────────────────────┼──────────────────────────────────┤
+│  installs things on the host    │  pure adapter — no install       │
+│  owns service lifecycle         │  stateless or lightly stateful   │
+│  mutates host topology          │  must NOT mutate host topology   │
+│  has install/apply.sh           │  has no install/ directory       │
+│  example: vpn-bridge, suricata  │  example: ntfy, signal, smtp     │
+│  lives under modules/<name>/    │  lives under crates/selfdef-     │
+│                                 │   integration-<service>/         │
+└─────────────────────────────────┴──────────────────────────────────┘
+```
+
+The rule operators can rely on: **an integration crate can be
+removed from the build without breaking the host.** A module
+cannot — uninstalling a module is itself a lifecycle event
+(`selfdefctl modules uninstall <name>`) with its own apply.sh
+inverse path. If a contributor reaches for an installer inside
+an integration crate, that's the structural signal the work
+belongs in `modules/`, not `crates/`.
+
+Integration crates depend only on:
+
+- `selfdef-core` for the event types they consume
+- the orchestrator trait crate (`selfdef-notifier-orchestrator`
+  for outbound channels, future analogues for inbound sinks)
+- one outbound transport crate (`reqwest` for HTTP, `lettre`
+  for SMTP, `tokio::process::Command` for subprocess channels
+  like `signal-cli`)
+
+Integration crates do **not** depend on `selfdef-daemon`,
+`selfdef-config`, or any module under `modules/`. That keeps
+them swappable and individually testable.
+
+Concrete catalog (current + planned per SDD-008 first-ship):
+
+```
+crates/selfdef-integration-ntfy       (current NtfyNotifier, refactor planned)
+crates/selfdef-integration-signal     (current SignalCliNotifier, refactor planned)
+crates/selfdef-integration-smtp       (first email channel — SDD-008 D-7 Q-E)
+crates/selfdef-integration-twilio     (future — SDD-008 Q-D)
+crates/selfdef-integration-slack      (future — SDD-008 Q-C)
+crates/selfdef-integration-discord    (future)
+crates/selfdef-integration-opensearch (future — observability export)
+crates/selfdef-integration-loki       (future — observability export)
+```
+
+Note: the **collectors** under `crates/selfdef-collector-*` are
+the inbound analogue of integrations — they bridge external
+event sources (auditd, journald, eBPF, Tetragon, Suricata, the
+JSONL eventstream) into the in-process bus. They predate the
+SDD-008 taxonomy and stay where they are; future inbound
+integrations may adopt the `selfdef-integration-*` naming if a
+clean adapter shape emerges.
+
+The contributor-facing template for new integration crates
+lives at [`docs/dev/integrations.md`](docs/dev/integrations.md).
+
 ## Core principles
 
 **Schema first.** Every collector emits an `Event` in a
