@@ -222,6 +222,22 @@ channels = []
 # to              = ["+15557654321"]    # E.164 recipients
 # timeout_secs    = 10
 
+# SDD-008 Q-C: commented [notifier.slack] example. Posts to a
+# Slack channel via an incoming webhook. To enable:
+#   1. Create a Slack app at https://api.slack.com/apps and add an
+#      "Incoming Webhook" feature; pick the destination channel.
+#   2. Copy the webhook URL into /etc/selfdef/slack.webhook.url
+#      (mode 0600 owned by the selfdef user) — the URL is itself
+#      the auth secret.
+#   3. Uncomment the block below; flip channels above to include
+#      "slack" in the order you want it tried.
+#   4. The channel refuses any non-https webhook URL.
+#
+# [notifier.slack]
+# webhook_url_file = "/etc/selfdef/slack.webhook.url"
+# username         = "selfdef"
+# icon_emoji       = ":shield:"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:

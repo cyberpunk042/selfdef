@@ -2345,6 +2345,7 @@ dependencies = [
  "selfdef-ebpf-common",
  "selfdef-integration-ntfy",
  "selfdef-integration-signal",
+ "selfdef-integration-slack",
  "selfdef-integration-smtp",
  "selfdef-integration-twilio",
  "selfdef-nats",
@@ -2394,6 +2395,25 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "selfdef-integration-slack"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]

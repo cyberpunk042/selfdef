@@ -636,6 +636,28 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
+                let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
+                    // Unreachable given the guard above, but keep
+                    // the destructure explicit for clarity.
+                    continue;
+                };
+                match selfdef_integration_slack::SlackNotifier::from_config(
+                    url_path,
+                    &cfg.notifier.slack.username,
+                    &cfg.notifier.slack.icon_emoji,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "slack channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             "twilio"
                 if !cfg.notifier.twilio.account_sid.is_empty()
                     && !cfg.notifier.twilio.to.is_empty() =>

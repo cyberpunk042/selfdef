@@ -409,6 +409,9 @@ pub struct NotifierConfig {
     /// SDD-008 Q-D: Twilio SMS outbound channel.
     /// Empty `account_sid` keeps the channel disabled.
     pub twilio: TwilioConfig,
+    /// SDD-008 Q-C: Slack incoming-webhook outbound channel.
+    /// Missing `webhook_url_file` keeps the channel disabled.
+    pub slack: SlackConfig,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -424,9 +427,31 @@ impl Default for NotifierConfig {
             signal: SignalConfig::default(),
             smtp: SmtpConfig::default(),
             twilio: TwilioConfig::default(),
+            slack: SlackConfig::default(),
             subscriptions: HashMap::new(),
         }
     }
+}
+
+/// SDD-008 Q-C: Slack incoming-webhook channel config.
+///
+/// The default `webhook_url_file = None` keeps the channel
+/// disabled; the daemon builds a `SlackNotifier` only when
+/// `webhook_url_file` is set AND the file is readable + contains
+/// an `https://` URL after trim.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SlackConfig {
+    /// Path to a file containing the Slack incoming-webhook URL.
+    /// Stored in a separate file (mode `0600` recommended) because
+    /// the URL itself is the auth secret — anyone with the URL can
+    /// post to the channel.
+    pub webhook_url_file: Option<PathBuf>,
+    /// Display name for posts. Defaults to `"selfdef"` when blank.
+    pub username: String,
+    /// Emoji shortcode for the post avatar. Defaults to `":shield:"`
+    /// when blank.
+    pub icon_emoji: String,
 }
 
 /// SDD-008 D-3: per-channel subscription filter.
