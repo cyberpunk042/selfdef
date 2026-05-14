@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Module + docs — vpn-bridge v2 manifest migration (closes F-2028-015) + Phase 3 integration explorer (raises F-2028-016..019)
+
+Two pieces in one PR: closure of the Phase 3 module-explorer's `important` finding plus the fourth Phase 3 explorer's audit.
+
+#### F-2028-015 closure — `modules/vpn-bridge` v1 → v2
+
+- `modules/vpn-bridge/install/lib.sh` bumped to `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2` with a comment naming the F-2028-015 driver.
+- `modules/vpn-bridge/install/profiles/relay-via-server.sh::profile_apply` now calls `module_record_file "$nft_path"` after the `install -D` write, so the per-module manifest carries the path.
+- `profile_uninstall` now enumerates from `module_render_files` and removes each tracked file, then calls `module_clear_manifest` to wipe the record. A legacy fallback handles pre-v2 installs (operator who installed under v1 then upgraded — first uninstall after upgrade still removes the legacy hard-coded path).
+
+The multi-instance leak the audit prescribed: `INST="relay1"` → `nft_path=/etc/nftables.d/selfdef-vpn-bridge-relay1.conf` writes; uninstall now finds it via the manifest instead of looking at the singleton default.
+
+New test `relay_apply_records_nft_path_in_manifest_then_uninstall_clears_it` pins the round-trip: live apply against stubs → assert nft.conf exists + manifest names it → live uninstall → assert nft.conf is gone.
+
+#### Phase 3 integration explorer — F-2028-016..019
+
+`docs/review/phase-3/50-integration-audit.md` surveys six integration seams introduced by the Phase 2 closure cycle:
+
+| Seam | Result |
+| --- | --- |
+| TCP-follow ↔ events_stream ↔ subscriber cap | 2 nice findings (F-2028-016, F-2028-017) |
+| init-template ↔ daemon config parsing | clean (control_token_file + integrity_check parsed correctly) |
+| ApiError::store ↔ store call sites | clean (both call sites route through the generic-message path) |
+| SIGUSR2 reload chain | clean (token + verifier + re-verify + summary log all present) |
+| validate_rbac_subject ↔ probe/dry-path | clean (validation runs before the split) |
+| SseParser ↔ both transports | 2 findings (F-2028-018 multi-byte UTF-8 split, F-2028-019 module-header parity note) |
+
+**F-2028-018 is the most material**: both `events_follow_unix` (`follow.rs:258`) and `events_follow_tcp` (`:308`) call `String::from_utf8_lossy(&chunk)` per-chunk before feeding the parser. A 4-byte UTF-8 sequence split 2/2 across two `Bytes` would be replaced with two `U+FFFD` instead of one codepoint. Payloads containing emoji or non-ASCII file paths would corrupt under chunked delivery. Fix: buffer raw bytes inside the parser. Triaged `nice` because typical SSE payloads fit in one TCP segment, but worth fixing for correctness.
+
+#### Tests
+
+- `cargo test -p selfdef-cli --test module_vpn_bridge` — 8/8 pass (was 7 before this PR added the manifest round-trip test).
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status
+
+19 findings across 4 explorers: 0 blockers, **1 important (now closed)**, 13 nice (2 closed by PR #86, 11 open), 5 demoted, 0 SDD-debt. Three explorers remain (docs, tests, security).
+
 ### Security + docs — Phase 3 module explorer (raises F-2028-015) + token-reader symmetry (closes F-2028-004 + F-2028-005)
 
 Third Phase 3 explorer + the first closure cluster off Phase 3's backlog. The audit explorer raises one **important** finding (F-2028-015) on `modules/vpn-bridge`; the same PR closes the token-reader symmetry cluster (F-2028-004 + F-2028-005) that the recent-PRs and crate explorers flagged.

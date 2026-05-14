@@ -41,21 +41,24 @@ design-shaped.
 | F-2028-012 | nice | `SubscriberGuard::Drop` doesn't `debug_assert!` against underflow | `crates/selfdef-api/src/handlers.rs:143-146` calls `fetch_sub(1, AcqRel)` without a defensive `prev > 0` check. The counter is owned by `ApiState` and only decrements via a guard `Drop`, so underflow can't happen today. A future logic bug (double-drop, decrement without acquire) would silently corrupt the counter; a `debug_assert!` would catch it under test. Not a safety issue (the cap is not the sole source of access control), nice-to-have for debuggability. | defer |
 | F-2028-013 | nice | `events_stream` `slow-client timeout` message doesn't name the deadline | `crates/selfdef-api/src/handlers.rs:194-203`'s `send_with_timeout` returns `Err("slow-client timeout")` on `SSE_SEND_TIMEOUT = 30s` expiry. Operators reading the log line would have to grep the source to know the deadline. `Err(format!("slow-client timeout ({}s)", SSE_SEND_TIMEOUT.as_secs()))` is a one-line improvement. | defer |
 | F-2028-014 | demoted | `reqwest` + `futures` dep additions properly justified | Crate-explorer reviewed `crates/selfdef-cli/Cargo.toml` lines 43-44. The inline comments explicitly justify the dep size ("reqwest already lives in the workspace via selfdef-notifier; net cost is the `stream` feature"). The dev-deps (`axum`, `selfdef-api` with `test-helpers`, `selfdef-bus`) are also commented. No findings. Kept in ledger for audit-trail completeness. | none |
-| F-2028-015 | important | `modules/vpn-bridge` did not migrate to SDD-006 v2 manifest helpers | `modules/vpn-bridge/install/lib.sh:11` declares `SELFDEF_MODULE_LIB_VERSION_REQUIRED=1`. `relay-via-server.sh:112` writes `nft_path` via `install -D -m 0644` but `apply.sh` never calls `module_record_file`. `profile_uninstall` (lines 174-197) hard-codes the cleanup path at line 193-194 rather than iterating `module_render_files`. The Phase 2 inventory claimed all 8 modules migrated; cross-check shows 6 are v2, suricata (correctly exempt — writes no persistent files), and **vpn-bridge** (incorrectly v1). When operators move from single-instance to multi-instance (`INST="relay1"`, `relay2`, …), the hard-coded uninstall path will silently leak the previous file. This is the exact drift v2 was designed to prevent. Fix: bump lib.sh to v2, add `module_record_file "$nft_path"` after the write in `relay-via-server.sh`, replace the hard-coded uninstall with `module_render_files` iteration matching the pattern in `bridge-l2`. | implement |
+| F-2028-015 | important | `modules/vpn-bridge` did not migrate to SDD-006 v2 manifest helpers | The Phase 2 inventory claimed all 8 modules migrated; cross-check shows 6 v2 + suricata (correctly exempt — writes no persistent files) + **vpn-bridge** (incorrectly v1). `relay-via-server.sh:112` writes `nft_path` via `install -D -m 0644` but `apply.sh` never called `module_record_file`. `profile_uninstall` (lines 174-197) hard-coded the cleanup path instead of iterating `module_render_files`. Multi-instance installs (`INST="relay1"`, `relay2`, …) would silently leak files. | implement — **closed** by the vpn-bridge v2 migration PR: `lib.sh` bumped to `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2`, `relay-via-server.sh`'s apply path now calls `module_record_file "$nft_path"` after the install, `profile_uninstall` enumerates from `module_render_files` (with a legacy fallback for pre-v2 installs) and clears the manifest at the end. New `relay_apply_records_nft_path_in_manifest_then_uninstall_clears_it` test pins the round-trip end-to-end. |
+| F-2028-016 | nice | TCP-follow 503 error message doesn't surface the cap-reached detail | `crates/selfdef-cli/src/follow.rs:292-300` routes the daemon's `HTTP 503 {"error":"sse subscriber cap reached"}` through the generic error handler. The CLI prints "daemon refused /events/stream: HTTP 503 ..." but doesn't extract the JSON `error` field. Operators reading the message have to check Prometheus metrics or inspect the response body to learn the cause. Parse the JSON body when present and surface the typed reason. | implement |
+| F-2028-017 | nice | TCP-follow lacks an end-to-end cap-saturation integration test | The daemon side has `events_stream_rejects_over_cap_with_503` (`crates/selfdef-api/tests/m12_api.rs:792-861`); no CLI test saturates the cap via N concurrent TCP clients and asserts the (N+1)th subprocess receives the 503 with a clear stderr. Add a test that uses `spawn_api_on_loopback()` to open `MAX_SSE_SUBSCRIBERS` connections and asserts the next CLI invocation reports the refusal. | implement |
+| F-2028-018 | nice | `SseParser` chunk-boundary UTF-8 handling — multi-byte split corrupts payload | `crates/selfdef-cli/src/follow.rs:258` (UNIX) and `:308` (TCP) both call `String::from_utf8_lossy(&chunk)` per-chunk before feeding the parser. If a multi-byte UTF-8 sequence spans a chunk boundary (e.g. a 4-byte sequence split 2/2 across two `Bytes`), the first chunk's lossy converter replaces the leading 2 bytes with U+FFFD, the second chunk's lossy converter replaces the trailing 2 bytes with U+FFFD — the original codepoint is destroyed. A payload containing emoji or non-ASCII file paths would corrupt under chunked delivery. Fix: buffer raw bytes inside the parser and convert to UTF-8 at the boundary points the parser already understands (newlines). Add a regression test feeding `parser.feed` a multi-byte sequence split across two calls. | implement |
+| F-2028-019 | nice | `follow.rs` module `//!` header doesn't name the byte-semantic parity requirement between transports | Lines 1-22 describe `SseParser` + the two transports but don't say "both transports must hand the parser byte-for-byte identical semantics; chunk boundaries must be invisible to the parser." A future maintainer adding a third transport (e.g. WebSocket) might re-introduce the F-2028-018 bug without this prompt. One-line addition to the module doc-comment. | implement |
 
 ## Status
 
-- **15 findings raised** across three explorers (recent-PRs,
-  crate, module). **0 blockers**, **1 important**
-  (F-2028-015 — vpn-bridge incomplete v2 migration), **9 nice**
-  (F-2028-001, F-2028-004, F-2028-005, F-2028-006, F-2028-007,
-  F-2028-008, F-2028-010, F-2028-012, F-2028-013), **5 demoted**
-  (F-2028-002, F-2028-003, F-2028-009, F-2028-011, F-2028-014).
-- **Token-reader symmetry cluster closed**: F-2028-004 + -005
-  shipped in the same PR that raises the module explorer's
-  findings.
-- Four explorers remain: integration, docs, tests, security.
-  Each will add findings in follow-up PRs.
+- **19 findings raised** across four explorers (recent-PRs,
+  crate, module, integration). **0 blockers**, **1 important
+  (closed)**, **13 nice** (F-2028-001, -004, -005, -006, -007,
+  -008, -010, -012, -013, -016, -017, -018, -019), **5 demoted**
+  (F-2028-002, -003, -009, -011, -014).
+- **Closed clusters**:
+  - Token-reader symmetry — F-2028-004 + -005 closed (PR #86).
+  - vpn-bridge v2 migration — F-2028-015 closed by the
+    follow-up PR.
+- Three explorers remain: docs, tests, security.
 - No Phase 3 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 references
