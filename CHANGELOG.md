@@ -6,6 +6,49 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Polish + audit — Phase 4 crate + module cluster (closes F-2029-002 + -003 + -004, raises F-2029-004)
+
+Folds the Phase 4 module explorer (third of seven) into the same PR that closes both `nice` findings from the crate explorer. The module explorer raised one trivial `nice` (F-2029-004 — a doc-comment gap), which is closed inline.
+
+#### F-2029-002 — `TokenFingerprint` Debug elision
+
+Closes both `nice` findings from the Phase 4 crate explorer.
+
+#### F-2029-002 — `TokenFingerprint` Debug elision
+
+`crates/selfdef-api/src/transport.rs::TokenFingerprint` no longer derives `Debug`. A custom `Debug` impl renders only the leading 4 bytes (`TokenFingerprint(a3b9c012…)`), keeping fingerprints visually distinct in log streams while removing the cross-time-linkage primitive. Fingerprints aren't secrets, but they're stable identifiers — an attacker who later acquires the token can recompute the fingerprint and link past log lines to the holder. The truncated prefix (32 bits) is collision-prone enough that it can't confirm linkage.
+
+Two new unit tests pin the contract:
+- `debug_renders_truncated_prefix` — shape (`TokenFingerprint(<8 hex chars>…)`) + char-class assertions.
+- `distinct_tokens_produce_distinct_debug_prefixes` — two operator-meaningful strings get distinct Debug forms.
+
+#### F-2029-003 — `SseCaps` `Some(0)` defensive test
+
+`crates/selfdef-api/src/handlers.rs::SubscriberGuard::try_acquire` already treats `Some(0)` like `None` (both fall back to the compiled-in default) per the SDD-007 D-4 doc-comment intent. The existing override tests use `Some(2)` and `Some(1)`; neither exercises the `Some(0)` path. The new `events_stream_zero_caps_fall_back_to_defaults` test sets both caps to `Some(0)` and asserts the first connection succeeds — a future refactor dropping the `n > 0` guard would saturate immediately and fail this test.
+
+#### F-2029-004 — vpn-bridge apply.sh dispatcher header documents dry-run + idempotency
+
+`modules/vpn-bridge/install/apply.sh`'s dispatcher header now names the SELFDEF_DRY_RUN-awareness, the idempotency contract, and the SDD-006 v2 manifest-tracking convention profiles must honour. The actual profile scripts already behave correctly via the shared-lib `run` helper and `module_record_file`; the header was the only inconsistency vs `bridge-l2` and `observability`.
+
+#### Phase 4 module explorer (third of seven)
+
+`docs/review/phase-4/40-module-audit.md` ships in the same PR. Highlights:
+
+- **vpn-bridge SDD-006 v2 migration verified complete**: `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2`, `module_record_file` called after the install, `profile_uninstall` iterates `module_render_files` with the legacy fallback for pre-v2 installs. The legacy fallback's deduplication is sound (only runs when manifest is empty, so no double-removal risk).
+- **100% v2 coverage for non-exempt modules**: 7 modules at v2 (agent-guard, bridge-l2, integrity-sentinel, observability, polarproxy, tetragon, vpn-bridge), suricata correctly exempt (writes no persistent files).
+- **STARTER_CONFIG/STARTER_MODULES templates verified**: 7/7 init tests pass; D-4 SSE caps documented; F-2028-022 mode hints present.
+- **Multi-instance scenario verified**: `relay-via-server` honours `SELFDEF_INSTANCE_ID` via `_relay_inst_defaults()`; `cloudflare-tunnel` + `tailscale` correctly refuse it.
+
+#### Tests
+
+- `cargo test -p selfdef-api` — **47/47 pass** (was 44; +3 new tests: 2 fingerprint Debug, 1 zero-cap fallback).
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 4 status
+
+**4 findings across 3 explorers**: 0 blockers, 0 important, **3 nice (all closed)**, 1 demoted, 0 SDD-debt. **Four explorers remain** (integration, docs, tests, security).
+
 ### Documentation — Phase 4 crate explorer (raises F-2029-002 + F-2029-003)
 
 Second of seven Phase 4 explorers. Audits the new Rust code from the Phase 3 closure cycle: `TokenFingerprint`, `SseCaps`, the dual-counter `SubscriberGuard`, `SseParser::feed_bytes`, JSON-503 extraction, the operator-tunable cap surface in `selfdef-config` + `selfdef-daemon`, the `paths.rs` compile-time invariants.

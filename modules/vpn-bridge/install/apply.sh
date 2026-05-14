@@ -7,6 +7,13 @@
 # the dispatcher only owns the preflight and the structured-status
 # contract.
 #
+# F-2029-004: idempotent + SELFDEF_DRY_RUN=1 aware (delegated to the
+# selected profile_apply). Profiles use the shared-lib `run` helper
+# which short-circuits on dry-run, and `module_record_file` (SDD-006
+# v2) to track every persistent file written so uninstall can
+# enumerate them. Re-running apply with the same config + present
+# target state is a no-op.
+#
 # To add a new transport / profile: drop install/profiles/<name>.sh
 # defining profile_apply / profile_check / profile_uninstall, list
 # the slug under [profiles].available in module.toml, and add a
