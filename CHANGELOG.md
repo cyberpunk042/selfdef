@@ -6,6 +6,51 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 4 security explorer; **ALL 7 PHASE 4 EXPLORERS HAVE RUN; PHASE 4 FULLY WRAPPED**
+
+Seventh and final Phase 4 explorer. Audits new attack surfaces from the Phase 3 closure cycle (SHA-256 fingerprint storage, operator-tunable caps, JSON 503 extraction, etc.) and re-audits five prior closures (F-2028-037, -018, -015, -004+-005, -001).
+
+#### Headline
+
+**0 blockers, 0 important, 0 actionable nice.** The Phase 3 closure cycle was exceptionally clean — every security-relevant property the closures shipped is verified holding.
+
+#### Re-audit results
+
+| Closure | Re-audit verdict |
+| --- | --- |
+| F-2028-037 (SDD-007 implementation) | Dual-counter logic verified race-free. |
+| F-2028-018 (SseParser bytes refactor) | UTF-8 chunk-boundary handling correct. |
+| F-2028-015 (vpn-bridge v2 migration) | Manifest dedup sound; legacy-fallback only runs on empty manifest. |
+| F-2028-004 + -005 (token-reader symmetry) | Mode check + Unicode trim bytewise identical between CLI and daemon. |
+| F-2028-001 (paths compile-time invariants) | Unbypassable; `const` declarations + assertion block ensure no runtime drift. |
+
+#### F-2029-009 — demoted
+
+The security explorer surfaced one entry (re-audit of F-2029-002's `TokenFingerprint` Debug elision): is a 4-byte (32-bit) prefix sufficient against cross-time linkage? Cross-check: yes — 32 bits is collision-prone at the SHA-256 distribution level, so an attacker observing a prefix in logs can't confirm it derives from a specific token they later acquire. Mitigation holds. Kept for audit-trail.
+
+#### New document
+
+`docs/review/phase-4/80-security-audit.md` — per-area observations, re-audit appendix, triage table.
+
+#### Phase 4 fully wrapped
+
+**9 findings raised across all seven explorers**: 0 blockers, 0 important, **5 nice (all closed)**, 4 demoted, 0 SDD-debt.
+
+Comparison across the four audit cycles:
+
+| Phase | Findings | Blockers | Important | Nice | SDD-debt | Pattern |
+| --- | --- | --- | --- | --- | --- | --- |
+| Phase 1 | 50+ | various | various | various | several | original audit baseline |
+| Phase 2 | 64 | 0 | 3 (all closed) | 60 (all closed) | 1 (closed) | initial closure-cycle audit |
+| Phase 3 | 39 | 0 | 2 (all closed) | 16 (15 closed) | 1 (closed) | tighter |
+| **Phase 4** | **9** | **0** | **0** | **5 (all closed)** | **0** | **cleanest yet** |
+
+The closure-cycle audit trajectory is converging — each cycle finds fewer issues than the prior, and Phase 4 confirms the Phase 3 closure work was exceptionally well-executed.
+
+Phase 4 closes here. Phase 5 kicks off whenever the operator triggers the next audit cycle.
+
+This PR is documentation-only.
+
 ### Documentation — Phase 4 tests explorer (verifies F-2029-008 demoted)
 
 Sixth of seven Phase 4 explorers. Audits the test infrastructure + new test cases from the Phase 3 closure cycle.

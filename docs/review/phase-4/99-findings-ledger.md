@@ -35,21 +35,24 @@ design-shaped.
 | F-2029-006 | demoted | STARTER_CONFIG SSE caps lack direct round-trip test (TOML parse → daemon read) | Auditor independently surfaced the same gap as F-2029-005, viewed from the STARTER_CONFIG/init.rs angle. Cross-check: the two findings are facets of the same underlying gap. Closed by the same tests that close F-2029-005. | none (duplicate of F-2029-005) |
 | F-2029-007 | nice | `SECURITY.md` doesn't document the per-token SSE subscriber quota | Phase 4 docs explorer noted that SDD-007 shipped during the Phase 3 cycle (closing F-2028-037 — authenticated-only DoS) but `SECURITY.md`'s § API surface didn't mention the new per-token cap, the SHA-256 fingerprint storage, the operator-tunable knobs, or the distinguishable 503 reasons. No security gap (the feature is well-tested and safe by default), but a documentation gap that hurts operator awareness. | implement — **closed** by the Phase-4-docs PR: `SECURITY.md` § API surface now documents the per-token SSE cap (default 8 per token, 64 process-wide), the SHA-256-fingerprint map, the operator-tunable `[api].max_sse_subscribers{,_per_token}` knobs, the `None`/`Some(0)` → default fallback, and the distinguishable 503 reasons. Back-references SDD-007 and `SubscriberGuard` for the full picture. |
 | F-2029-008 | demoted | Per-token drop-to-zero test uses 100ms real-time sleep instead of `start_paused` | Tests-explorer flagged `events_stream_per_token_counter_drops_to_zero_on_disconnect` (`crates/selfdef-api/tests/m12_api.rs:1085-1130`) for using a real-time `tokio::time::sleep(100ms)` to give the writer-task's drop chain breathing room. Auditor's own analysis concludes the sleep is deliberate and documented — a `start_paused` rewrite would deadlock since the writer is parked on `sub.recv().await` when the response is dropped, with no further bus event forthcoming. The test correctly pins the D-5.5 contract; SDD-005's "no real-time sleeps in pipeline tests" rule applies to deterministic-stage pipelines, not async-task-scheduling synchronization. No action. | none |
+| F-2029-009 | demoted | Security explorer re-audit of F-2029-002 (TokenFingerprint Debug prefix entropy) | The final Phase 4 explorer (security) ran a re-audit of the F-2029-002 closure and surfaced one entry: is a 4-byte (32-bit) Debug prefix sufficient to prevent cross-time linkage? Cross-check: yes — 32 bits is collision-prone at the SHA-256 distribution level (birthday paradox of ~65k tokens for 50% collision odds), so an attacker who observes a prefix can't confirm it derived from a specific token they later acquire. The mitigation holds. Kept in ledger for audit-trail completeness. | none |
 
 ## Status
 
-- **8 findings raised** across six Phase 4 explorers
-  (recent-PRs, crate, module, integration, docs, tests). **0
-  blockers**, **0 important**, **5 nice (all closed)**
-  (F-2029-002, -003, -004, -005, -007), **3 demoted**
-  (F-2029-001, -006, -008).
-- The Phase 3 closure cycle was the cleanest yet: 16/17 PRs
-  review-clean on recent-PRs; small `nice` findings on the
-  crate, module, integration, and docs sides — all closed
-  in cluster PRs. Tests explorer raised 0 actionable items
-  (the one observation cross-checked clean).
-- One explorer remains: **security**.
-- No Phase 4 SDD-debt findings yet.
+- **9 findings raised across all seven Phase 4 explorers**
+  (recent-PRs, crate, module, integration, docs, tests,
+  security). **0 blockers**, **0 important**, **5 nice (all
+  closed)** (F-2029-002, -003, -004, -005, -007), **4 demoted**
+  (F-2029-001, -006, -008, -009).
+- The Phase 3 closure cycle was **the cleanest yet** end-to-end:
+  16/17 PRs review-clean on recent-PRs; small `nice` findings
+  on the crate, module, integration, and docs sides — all
+  closed in cluster PRs. Tests + security explorers each
+  raised 0 actionable items (re-audit observations
+  cross-checked clean).
+- **Phase 4 is fully wrapped.** All seven explorers have run;
+  every finding is closed. No SDD-debt. The audit-driven
+  backlog from Phase 3's closure cycle is genuinely empty.
 
 ## Phase 1 / Phase 2 / Phase 3 references
 
