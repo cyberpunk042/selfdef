@@ -143,6 +143,17 @@ impl SubscriberGuard {
         state: &ApiState,
         fingerprint: Option<TokenFingerprint>,
     ) -> Result<Self, AcquireError> {
+        // SDD-007 D-4: caps may be operator-overridden via
+        // `[api].max_sse_subscribers{,_per_token}`. `None`/`0`
+        // falls back to the compiled-in defaults.
+        let cap_global = match state.sse_caps.global {
+            Some(n) if n > 0 => n,
+            _ => MAX_SSE_SUBSCRIBERS,
+        };
+        let cap_per_token = match state.sse_caps.per_token {
+            Some(n) if n > 0 => n,
+            _ => MAX_SSE_SUBSCRIBERS_PER_TOKEN,
+        };
         // Try the per-token cap first so we surface the more-specific
         // "per-token sse cap reached" reason when a single token is
         // the cause. SDD-007 D-6.
@@ -156,7 +167,7 @@ impl SubscriberGuard {
             // under the lock to avoid the lock-free CAS pattern
             // racing against entry removal in Drop.
             let current = entry.load(Ordering::Acquire);
-            if current >= MAX_SSE_SUBSCRIBERS_PER_TOKEN {
+            if current >= cap_per_token {
                 return Err(AcquireError::PerTokenCap);
             }
             entry.fetch_add(1, Ordering::AcqRel);
@@ -169,7 +180,7 @@ impl SubscriberGuard {
         let counter = &state.sse_subscribers;
         let mut current = counter.load(Ordering::Acquire);
         loop {
-            if current >= MAX_SSE_SUBSCRIBERS {
+            if current >= cap_global {
                 // Undo the per-token increment so the next request
                 // under the same token still gets its full slice.
                 if let Some((map, fp)) = &per_token {

@@ -6,6 +6,46 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Feature — SDD-007 D-4: operator-tunable SSE caps
+
+Closes the deferred work item from SDD-007. The two SSE caps (`MAX_SSE_SUBSCRIBERS` global, `MAX_SSE_SUBSCRIBERS_PER_TOKEN` per-token) are now operator-tunable from `selfdef.toml` without recompiling. SDD-007 status flips from "implemented (D-4 deferred)" → "implemented (all five Ds shipped)".
+
+#### Config surface
+
+```toml
+[api]
+# SDD-007 D-4 / F-2028-037: caps on concurrent /events/stream
+# subscribers. Defaults (64 global, 8 per-token) bound how
+# much an authenticated bearer-holder can pin in process memory.
+max_sse_subscribers           = 64
+max_sse_subscribers_per_token = 8
+```
+
+Both fields are optional `Option<usize>`. Unset, empty, or `Some(0)` falls back to the compiled-in defaults — zero behaviour change for existing deployments.
+
+#### Implementation
+
+- **`selfdef-config::ApiConfig`** — two new `Option<usize>` fields with `#[serde(default)]` so existing `selfdef.toml` files keep working unchanged.
+- **`selfdef-api::SseCaps`** — new `pub struct SseCaps { global: Option<usize>, per_token: Option<usize> }` carried on `ApiState`. New `ApiState::with_sse_caps(caps)` builder method.
+- **`selfdef-api::handlers::SubscriberGuard::try_acquire`** — consults `state.sse_caps` first, falling back to the constants when the operator hasn't overridden.
+- **`selfdef-daemon::main`** — passes `cfg.api.max_sse_subscribers{,_per_token}` to `ApiState::with_sse_caps(SseCaps { … })` during the API startup wiring.
+- **`init.rs::STARTER_CONFIG`** — the `[api]` block now ships both knobs commented at the defaults so operators discover them while bootstrapping.
+
+#### Tests
+
+Two new integration tests in `crates/selfdef-api/tests/m12_api.rs`:
+
+- `events_stream_per_token_cap_honours_operator_override` — sets per-token cap to 2 via `SseCaps`; asserts the 3rd connection is refused with the per-token typed reason.
+- `events_stream_global_cap_honours_operator_override` — sets global cap to 1; asserts the 2nd connection is refused with the global typed reason.
+
+The existing 5 events_stream tests continue to pass (they don't set `SseCaps`, so the compiled-in defaults apply).
+
+#### Test plan
+
+- [x] `cargo test -p selfdef-api -p selfdef-cli -p selfdef-config` — 279/279 pass.
+- [x] `cargo clippy --workspace --tests -- -D warnings` clean.
+- [x] `cargo fmt --all -- --check` clean.
+
 ### Polish — Phase 3 nice-cluster wrap-up (closes F-2028-001 + F-2028-012 + F-2028-013 + F-2028-025)
 
 Closes 4 of the 5 remaining open `nice` findings from Phase 3. After this PR, Phase 3 is effectively wrapped: every blocker, important, and SDD-debt finding is closed; the only remaining open finding (F-2028-008, SseParser visibility) is explicit `defer` per the crate audit ("no immediate consumer").

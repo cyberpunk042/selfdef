@@ -881,6 +881,88 @@ fn app_for_token(state: ApiState, fp: selfdef_api::TokenFingerprint) -> axum::Ro
     selfdef_api::with_full_capability_for_fingerprint(selfdef_api::router(state), fp)
 }
 
+/// SDD-007 D-4 follow-up: operator-tuned `[api].max_sse_subscribers_per_token`
+/// overrides the compiled-in default. Setting the cap to 2 means the
+/// 3rd connection with the same fingerprint gets 503 regardless of
+/// what the default is.
+#[tokio::test]
+async fn events_stream_per_token_cap_honours_operator_override() {
+    use selfdef_api::{SseCaps, TokenFingerprint};
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let state = state.with_sse_caps(SseCaps {
+        global: None,
+        per_token: Some(2),
+    });
+    let fp = TokenFingerprint::of("alice-low-cap");
+    let app = app_for_token(state, fp);
+
+    let req1 = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(r1.status(), StatusCode::OK);
+
+    let req2 = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r2 = app.clone().oneshot(req2).await.unwrap();
+    assert_eq!(r2.status(), StatusCode::OK);
+
+    // Override is 2; the 3rd request must be refused even though
+    // the compiled-in default would have allowed it.
+    let req3 = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r3 = app.oneshot(req3).await.unwrap();
+    assert_eq!(r3.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = to_bytes(r3.into_body(), 1024).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "per-token sse cap reached");
+}
+
+/// SDD-007 D-4 follow-up: operator-tuned `[api].max_sse_subscribers`
+/// overrides the global default. Setting to 1 saturates immediately.
+#[tokio::test]
+async fn events_stream_global_cap_honours_operator_override() {
+    use selfdef_api::SseCaps;
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let state = state.with_sse_caps(SseCaps {
+        global: Some(1),
+        per_token: None,
+    });
+    // `app(state)` uses with_full_capability which doesn't thread a
+    // fingerprint, so the per-token path is skipped — only the
+    // global cap applies. Override of 1 → 2nd request is refused.
+    let app = app(state);
+
+    let req1 = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r1 = app.clone().oneshot(req1).await.unwrap();
+    assert_eq!(r1.status(), StatusCode::OK);
+
+    let req2 = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let r2 = app.oneshot(req2).await.unwrap();
+    assert_eq!(r2.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = to_bytes(r2.into_body(), 1024).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(body["error"], "sse subscriber cap reached");
+}
+
 /// D-5.1: opening `MAX_SSE_SUBSCRIBERS_PER_TOKEN` connections with
 /// the same fingerprint succeeds; the (cap+1)th gets 503 with the
 /// per-token typed reason (distinguishable from the global 503).

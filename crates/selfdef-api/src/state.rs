@@ -53,11 +53,28 @@ pub struct ApiState {
     pub sse_subscribers: Arc<AtomicUsize>,
     /// SDD-007 D-2 / F-2028-037: per-token live count of
     /// `/events/stream` subscribers, keyed by SHA-256 fingerprint.
-    /// Each entry is capped at
-    /// [`crate::handlers::MAX_SSE_SUBSCRIBERS_PER_TOKEN`] (default 8).
     /// Entries are removed by `SubscriberGuard::Drop` when the count
     /// hits zero so a rotating operator doesn't leak HashMap entries.
     pub(crate) sse_subscribers_per_token: PerTokenCounters,
+    /// SDD-007 D-4 / F-2028-037: operator-tunable caps. `None`
+    /// falls back to the compiled-in defaults
+    /// ([`crate::handlers::MAX_SSE_SUBSCRIBERS`] = 64 global and
+    /// [`crate::handlers::MAX_SSE_SUBSCRIBERS_PER_TOKEN`] = 8 per
+    /// token). Use [`Self::with_sse_caps`] to override at startup
+    /// from the daemon config.
+    pub(crate) sse_caps: SseCaps,
+}
+
+/// SDD-007 D-4: operator-tunable SSE cap overrides. The daemon
+/// reads `[api].max_sse_subscribers` and
+/// `[api].max_sse_subscribers_per_token` from the config and
+/// populates these via [`ApiState::with_sse_caps`]. `None` (and
+/// `Some(0)`, which we treat as "operator left it commented") use
+/// the compiled-in defaults.
+#[derive(Clone, Copy, Default, Debug)]
+pub struct SseCaps {
+    pub global: Option<usize>,
+    pub per_token: Option<usize>,
 }
 
 impl ApiState {
@@ -75,7 +92,17 @@ impl ApiState {
             metrics,
             sse_subscribers: Arc::new(AtomicUsize::new(0)),
             sse_subscribers_per_token: Arc::new(Mutex::new(HashMap::new())),
+            sse_caps: SseCaps::default(),
         }
+    }
+
+    /// SDD-007 D-4: install operator-tuned SSE caps. Either field
+    /// may be `None`/`Some(0)` to fall back to the compiled-in
+    /// default for that knob.
+    #[must_use]
+    pub fn with_sse_caps(mut self, caps: SseCaps) -> Self {
+        self.sse_caps = caps;
+        self
     }
 
     /// Override the metrics handle (used when the daemon wants the
