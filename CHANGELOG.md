@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 5 audit kickoff (recent-PRs explorer: **0 findings**)
+
+Opens Phase 5 of the rolling structural audit. Phase 4 closed the cleanest cycle yet (9 findings, all closed); Phase 5 audits the 8 PRs of Phase 4's closure cycle (`22ff461..d239dad`).
+
+#### Headline
+
+**First explorer with a 100% review-clean rate.** Every Phase 4 closure PR's code change matches the audit's recommendation; CHANGELOG status lines match the ledger progression; demoted findings have justifications that hold up under cross-check.
+
+#### Recent-PRs explorer trajectory across cycles
+
+| Cycle | Recent-PRs findings | Pass rate |
+| --- | --- | --- |
+| Phase 2 | many | ~74% |
+| Phase 3 | 4 (3 nice + 1 demoted) | 73% (4 obs / 29 PRs) |
+| Phase 4 | 1 (demoted) | 94% (1 obs / 17 PRs) |
+| **Phase 5** | **0** | **100% (0 obs / 8 PRs)** |
+
+#### New documents
+
+- `docs/review/phase-5/00-charter.md` — same methodology as Phases 1, 2, 3, 4. Vintage prefix `F-2030-NNN`.
+- `docs/review/phase-5/10-inventory.md` — `git log 22ff461..d239dad` survey: 1 new SECURITY.md section, 1 vpn-bridge dispatcher header refresh, 1 custom `Debug` impl, 5 new tests.
+- `docs/review/phase-5/20-recent-prs-audit.md` — first explorer doc; 0 findings.
+- `docs/review/phase-5/99-findings-ledger.md` — initial ledger (empty).
+
+#### Status
+
+0 findings raised so far: 0 blockers, 0 important, 0 nice, 0 demoted, 0 SDD-debt. **Six explorers remain.**
+
+This PR is documentation-only.
+
 ### Documentation — Phase 4 security explorer; **ALL 7 PHASE 4 EXPLORERS HAVE RUN; PHASE 4 FULLY WRAPPED**
 
 Seventh and final Phase 4 explorer. Audits new attack surfaces from the Phase 3 closure cycle (SHA-256 fingerprint storage, operator-tunable caps, JSON 503 extraction, etc.) and re-audits five prior closures (F-2028-037, -018, -015, -004+-005, -001).
