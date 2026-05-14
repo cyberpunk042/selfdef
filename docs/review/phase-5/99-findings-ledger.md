@@ -1,6 +1,6 @@
 # Phase 5 — findings ledger
 
-> Status: in progress
+> Status: **wrapped** — all 7 explorers complete, 0 findings total.
 > Vintage prefix: **F-2030-NNN**
 > Last updated: 2026-05-14
 
@@ -36,9 +36,31 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** across six Phase 5 explorers
-  (recent-PRs + crate + module + integration + docs + tests).
-  **All six 100% clean on first-pass scrutiny.**
+- **0 findings raised across all seven Phase 5 explorers**
+  (recent-PRs + crate + module + integration + docs + tests +
+  security). **First Phase in this audit programme to land
+  bytewise clean across the entire explorer suite.** A
+  milestone-grade outcome for the closure-cycle programme.
+- Phase 5 security auditor verified that the Phase 4 closure
+  cycle's production surface diff is overwhelmingly negative
+  (less exposed surface, not more):
+  - `TokenFingerprint` Debug truncation — strictly defensive
+    (4-byte prefix, 28 bytes of entropy unrevealed); no
+    `Debug` in the derive list, no `Display`/hex escape
+    hatches.
+  - Zero-cap fallback test — pins existing `n > 0` guard; no
+    new code path.
+  - Config round-trip tests — harden operator-facing TOML
+    contract; no new code path.
+  - `apply.sh` doc-comment — documents existing dispatcher
+    behaviour; no code change.
+  - SECURITY.md § API surface — clarifies operator-facing cap
+    semantics; reduces configuration-error blast radius.
+  - Re-audits of F-2028-037 (dual-counter SSE quota),
+    F-2028-018 (SseParser bytes refactor), F-2028-015
+    (vpn-bridge manifest cleanup), F-2028-004/-005
+    (token-reader symmetry), and F-2028-001 (paths.rs
+    compile-time invariants) all hold; no regression.
 - Phase 5 tests auditor verified the three incremental tests
   (`events_stream_zero_caps_fall_back_to_defaults`,
   `sse_cap_knobs_round_trip_from_toml`,
@@ -59,17 +81,20 @@ Phase 4 closure cycle was exceptionally clean execution.)*
     `profile_apply` impl.
   - `SECURITY.md` per-token SSE cap text verifies bytewise
     against `handlers.rs` + `config.rs`.
-- **Trajectory comparison**:
+- **Trajectory comparison** (full seven-explorer view):
 
-  | Cycle | recent-PRs | crate | module | integration | docs | tests |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | Phase 2 | many | 11 nice | 6 nice | 9 mixed | 9 nice | 11 mixed |
-  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed |
-  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted |
-  | **Phase 5** | **0** | **0** | **0** | **0** | **0** | **0** |
+  | Cycle | recent-PRs | crate | module | integration | docs | tests | security |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | Phase 2 | many | 11 nice | 6 nice | 9 mixed | 9 nice | 11 mixed | 5 mixed |
+  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
+  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
+  | **Phase 5** | **0** | **0** | **0** | **0** | **0** | **0** | **0** |
 
-- One explorer remains: security.
-- No Phase 5 SDD-debt findings yet.
+- All explorers complete. No Phase 5 SDD-debt findings.
+  Phase 5 closes as **0 findings across 7 explorers** — the
+  convergence trajectory (64 → 39 → 9 → 0) has reached a steady
+  state. The closure-cycle programme is operating as designed:
+  audit → ship → re-audit → confirm no regression.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
 
