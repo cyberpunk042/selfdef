@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 4 tests explorer (verifies F-2029-008 demoted)
+
+Sixth of seven Phase 4 explorers. Audits the test infrastructure + new test cases from the Phase 3 closure cycle.
+
+#### Headline
+
+**0 blockers, 0 important, 0 actionable nice.** The Phase 3 closure-cycle test work is comprehensive and clean. Verifies:
+
+- 6 per-token SSE cap tests (SDD-007 D-4 + D-5) — all correctly pin their contracts.
+- 2 SseParser multibyte UTF-8 split tests (F-2028-018) — boundary positions match the claimed cases.
+- 3 CLI integration tests (F-2028-004, -015, -017) — proper per-test isolation, correct spawn-blocking pattern.
+- 2 config round-trip tests (F-2029-005/-006 closure) — pin the TOML parse hop.
+- 2 `TokenFingerprint` Debug-elision tests (F-2029-002 closure) — robust against algorithm swap.
+- Common-mod import migration (F-2028-025 closure): all 10 module-test files import `assert_tree_unchanged` + `snapshot_tree` directly. No `common::` qualified call sites remain.
+- Test helpers (`with_full_capability_for_fingerprint`, `MAX_SSE_SUBSCRIBERS_PER_TOKEN` const re-export) cleanly gated behind `test-helpers` feature.
+
+#### F-2029-008 — demoted on cross-check
+
+Auditor flagged `events_stream_per_token_counter_drops_to_zero_on_disconnect` for using a real-time `tokio::time::sleep(100ms)` instead of `start_paused`. Cross-check: the sleep is deliberate and documented — a `start_paused` rewrite would deadlock since the writer task is parked on `sub.recv().await` when the response drops, with no further bus event forthcoming. The test correctly pins the D-5.5 contract; SDD-005's "no real-time sleeps in pipeline tests" applies to deterministic-stage pipelines, not async-task-scheduling synchronization. **No action.** Kept in ledger for audit-trail completeness.
+
+#### New document
+
+`docs/review/phase-4/70-tests-audit.md` — per-theme observations with concrete file:line evidence.
+
+#### Phase 4 status
+
+**8 findings across 6 explorers**: 0 blockers, 0 important, **5 nice (all closed)**, 3 demoted, 0 SDD-debt. **One explorer remains: security.**
+
+This PR is documentation-only.
+
 ### Docs — Phase 4 docs explorer + SECURITY.md per-token SSE cap entry (raises + closes F-2029-007)
 
 Fifth of seven Phase 4 explorers. Audits the documentation surface from the Phase 3 closure cycle: seven Phase 3 audit docs, CHANGELOG entries, SDD-007, init.rs templates, runbooks, repo-root docs, the Phase 4 audit docs themselves.
