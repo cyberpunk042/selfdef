@@ -238,6 +238,20 @@ channels = []
 # username         = "selfdef"
 # icon_emoji       = ":shield:"
 
+# SDD-008: commented [notifier.discord] example. Posts to a Discord
+# channel via a webhook. To enable:
+#   1. In Discord, server settings → integrations → webhooks → new.
+#   2. Copy the webhook URL into /etc/selfdef/discord.webhook.url
+#      (mode 0600). The URL is itself the auth secret.
+#   3. Uncomment the block below; flip channels above to include
+#      "discord".
+#   4. Bodies > 1990 chars are truncated with a `…[truncated]`
+#      marker (Discord caps `content` at 2000 chars).
+#
+# [notifier.discord]
+# webhook_url_file = "/etc/selfdef/discord.webhook.url"
+# username         = "selfdef"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:

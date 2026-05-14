@@ -636,6 +636,25 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "discord" if cfg.notifier.discord.webhook_url_file.is_some() => {
+                let Some(url_path) = cfg.notifier.discord.webhook_url_file.as_ref() else {
+                    continue;
+                };
+                match selfdef_integration_discord::DiscordNotifier::from_config(
+                    url_path,
+                    &cfg.notifier.discord.username,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "discord channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
                 let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
                     // Unreachable given the guard above, but keep
