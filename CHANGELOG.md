@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fix + docs — SSE parser bytes refactor (closes F-2028-018 + F-2028-019) + Phase 3 docs explorer (raises F-2028-020..024)
+
+Two pieces in one PR: closure of the SseParser chunk-boundary UTF-8 bug surfaced by the integration explorer + the fifth Phase 3 explorer (docs audit).
+
+#### F-2028-018 + F-2028-019 closure — SseParser bytes refactor
+
+`crates/selfdef-cli/src/follow.rs::SseParser` no longer touches `String::from_utf8_lossy` per chunk. The internal buffer is now `Vec<u8>`; the public entry is `feed_bytes(&[u8])`; UTF-8 conversion happens line-at-a-time after a `\n` terminator is found. Both call sites (`events_follow_unix` reading chunked HTTP, `events_follow_tcp` reading `reqwest::bytes_stream`) now hand the parser raw bytes — chunk boundaries are invisible to the parser by construction.
+
+The module `//!` header (closes F-2028-019) now explicitly names the byte-semantic parity requirement and back-references F-2028-018 so a future third transport can't re-introduce the corruption pattern.
+
+Two new unit tests pin the round-trip:
+
+- `parser_reassembles_multibyte_utf8_split_across_chunks` — 4-byte 🦀 (U+1F980, `F0 9F A6 80`) split 2/2 across two `feed_bytes` calls.
+- `parser_reassembles_3byte_utf8_split_across_chunks` — 3-byte 漢 (U+6F22, `E6 BC A2`) split 1/2 across two calls.
+
+All existing parser unit tests (9), TCP integration tests (6), and UNIX follow tests (7) continue to pass.
+
+#### Phase 3 docs explorer — F-2028-020..024
+
+`docs/review/phase-3/60-docs-audit.md` surveys the docs surface introduced by the closure cycle: the seven Phase 2 audit docs, CHANGELOG entries, `init.rs` STARTER_CONFIG/STARTER_MODULES templates, runbooks, repo-root docs, the Phase 3 audit docs themselves.
+
+5 entries raised (2 actionable nice + 3 demoted after cross-check):
+
+| id | severity | summary |
+| --- | --- | --- |
+| F-2028-020 | demoted | CHANGELOG "9 nice (2 closed, 7 open)" flagged as off-by-one; cross-check confirmed count is correct (2+7=9). |
+| F-2028-021 | demoted | Integration-explorer PR's "1 important (now closed)" flagged as misleading; cross-check confirmed the closure shipped in the same PR. |
+| F-2028-022 | nice (low priority) | `STARTER_MODULES` header has the F-2027-059 trust-boundary warning but individual `[modules.<slug>]` blocks don't repeat the 0640 root:selfdef mode hint. Operator who copies a single block risks missing it. |
+| F-2028-023 | demoted | Phase 3 charter "remaining explorers will run in follow-up PRs" wording flagged as stale; cross-check confirmed charter is a static intent snapshot by-design (the ledger is the live status). |
+| F-2028-024 | nice (low priority) | Phase 3 inventory's "All 8 modules completed SDD-006 v2 migration" was wrong at write-time (vpn-bridge was v1 until F-2028-015 closed); now accidentally correct post-PR-#87. Add an "as of PR #87" note for time-anchored clarity. |
+
+#### Tests
+
+- `cargo test -p selfdef-cli --bin selfdefctl follow::` — 11/11 pass (9 existing + 2 new multi-byte split).
+- `cargo test -p selfdef-cli --test cli_events_follow --test cli_events_follow_tcp` — 13/13 pass.
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status
+
+24 findings across 5 explorers: 0 blockers, 1 important (closed), 15 nice (4 closed, 11 open), 8 demoted, 0 SDD-debt. Two explorers remain (tests, security).
+
 ### Module + docs — vpn-bridge v2 manifest migration (closes F-2028-015) + Phase 3 integration explorer (raises F-2028-016..019)
 
 Two pieces in one PR: closure of the Phase 3 module-explorer's `important` finding plus the fourth Phase 3 explorer's audit.
