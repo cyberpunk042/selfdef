@@ -48,9 +48,9 @@ design-shaped.
 | F-2028-019 | nice | `follow.rs` module `//!` header doesn't name the byte-semantic parity requirement between transports | One-line addition to the module doc-comment. | implement — **closed** by the parser-bytes-refactor PR: the module header now explicitly states "both transports hand the parser **raw bytes** via `SseParser::feed_bytes`; chunk boundaries are invisible to the parser by construction." with a back-reference to F-2028-018 explaining the failure mode a future transport must avoid. |
 | F-2028-020 | demoted | `CHANGELOG.md` "Phase 3 status" nice count flagged as off-by-one | Docs explorer flagged the module-explorer PR's status line "9 nice (2 closed, 7 open)" as wrong. Cross-checked: F-2028-001 + F-2028-004 (recent-PRs nice) + F-2028-005/-006/-007/-008/-010/-012/-013 (crate nice) = 9 nice total, 2 closed (-004, -005), 7 open. The CHANGELOG line is correct as written. | none |
 | F-2028-021 | demoted | `CHANGELOG.md` "now closed" timing flagged as ambiguous | Docs explorer flagged the integration-explorer PR's "1 important (now closed)" as misleading since F-2028-015 was raised by the module explorer and closed "later". Cross-checked: PR #87 closed F-2028-015 in the same PR that shipped the integration audit, so "now closed" reads correctly at merge time. No drift. | none |
-| F-2028-022 | nice | `STARTER_MODULES` header has the F-2027-059 mode/owner warning but per-module blocks don't repeat it | `crates/selfdef-cli/src/init.rs:240-248` documents the trust-boundary requirement (0640 root:selfdef) at the section header, but every commented `[modules.<slug>]` block below (`tetragon`, `agent-guard`, `integrity-sentinel`, `bridge-l2`, `suricata`, `polarproxy`, `vpn-bridge`, `observability`, `detect-host`) lists only `config = "/etc/selfdef/modules/<slug>.toml"` without a mode hint. An operator copying one block to a new modules.toml without scrolling up to the header would miss the requirement. One-line `# config must be 0640 root:selfdef — see header` per block, or a single global note that's hard to miss. | implement (low priority) |
+| F-2028-022 | nice | `STARTER_MODULES` header has the F-2027-059 mode/owner warning but per-module blocks don't repeat it | An operator copying one block to a new modules.toml without scrolling up to the header would miss the 0640 root:selfdef requirement. | implement — **closed** by the docs-polish PR: every commented `config = "..."` line now ends with a `# 0640 root:selfdef` trailing comment, plus a single global mid-section reminder right above the first module block that names the safe-copy invariant. |
 | F-2028-023 | demoted | Phase 3 charter "remaining explorers will run in follow-up PRs" was true at write-time but stale by docs-audit time | The charter is a snapshot of intent at Phase 3 kickoff; the live status is the ledger's `## Status` section. Charters in Phase 1 and Phase 2 follow the same pattern. The drift the docs explorer noticed is by-design separation between the two docs. | none |
-| F-2028-024 | nice | Phase 3 inventory's "All 8 modules completed SDD-006 v2 migration" was wrong at write-time | `docs/review/phase-3/10-inventory.md` claimed all 8 modules migrated; the module explorer (F-2028-015) showed vpn-bridge was at v1. PR #87 closed F-2028-015 so the claim is now true, but a reader reaching the inventory expecting it to reflect actuals would have been misled in the interval. Add an "as of PR #87" note next to the claim, or refactor the inventory to make the time-anchor explicit ("at Phase 3 kickoff, 6 modules + suricata-exempt; PR #87 added vpn-bridge → 7 + 1 exempt = 8 total"). | implement (low priority) |
+| F-2028-024 | nice | Phase 3 inventory's "All 8 modules completed SDD-006 v2 migration" was wrong at write-time | A reader reaching the inventory between Phase 3 kickoff and F-2028-015's closure would have been misled. | implement — **closed** by the docs-polish PR: the inventory entry now reads "At Phase 2 close: 6 modules at v2, suricata correctly exempt, vpn-bridge still at v1 — discovered by F-2028-015 and closed by PR #87. **As of PR #87**: every non-exempt module is v2." Time-anchor is now explicit. |
 
 ## Status
 
@@ -63,8 +63,9 @@ design-shaped.
 - **Closed clusters**:
   - Token-reader symmetry — F-2028-004 + -005 closed (PR #86).
   - vpn-bridge v2 migration — F-2028-015 closed (PR #87).
-  - SSE parser bytes refactor — F-2028-018 + -019 closed by
-    the same PR that raises the docs-explorer findings.
+  - SSE parser bytes refactor — F-2028-018 + -019 closed (PR #88).
+  - Docs polish — F-2028-022 + -024 closed in the same PR
+    that ships the next explorer.
 - Two explorers remain: tests, security.
 - No Phase 3 SDD-debt findings yet.
 

@@ -118,10 +118,16 @@ None. Phase 2's closure cycle added no new workspace members.
 
 ## Module-side machinery
 
-- **All 8 modules** completed SDD-006 v2 manifest-helpers
-  migration (closure of F-2027-024). Every `apply.sh` calls
-  `module_record_file`; every `uninstall.sh` iterates
-  `module_render_files` instead of hand-enumerating.
+- **SDD-006 v2 manifest-helpers migration** (closure of
+  F-2027-024). At Phase 2 close: 6 modules at v2, suricata
+  correctly exempt (writes no persistent files), vpn-bridge
+  still at v1 — discovered by the Phase 3 module explorer as
+  F-2028-015 and closed by PR #87. **As of PR #87**: every
+  non-exempt module is v2 (`apply.sh` calls `module_record_file`,
+  `uninstall.sh` iterates `module_render_files`). Time-anchor:
+  this section was written at Phase 3 kickoff and claimed "all
+  8 migrated"; that was wrong-at-write-time and is now accurate
+  post-F-2028-015's closure.
 
 - **integrity-sentinel** test fixture propagates
   `MODULE_INSTALLED_MANIFEST` to inline `Command` sites so
