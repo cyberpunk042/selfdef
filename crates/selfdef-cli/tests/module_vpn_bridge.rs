@@ -238,6 +238,86 @@ fn apply_rejects_unsafe_interface_name() {
     assert!(line.contains("unsafe characters"), "got: {line}");
 }
 
+/// F-2028-015: vpn-bridge's v1 → v2 manifest-helpers migration.
+/// Apply must record the rendered nft.conf in the per-module
+/// manifest; uninstall must enumerate from the manifest and
+/// remove every recorded file. Pre-migration, uninstall hard-
+/// coded the nft path; multi-instance installs (per-instance
+/// nft paths) leaked the previous file on every uninstall.
+#[test]
+fn relay_apply_records_nft_path_in_manifest_then_uninstall_clears_it() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let wg_dir = scratch.path().join("wireguard");
+    std::fs::create_dir_all(&wg_dir).unwrap();
+    make_wg_conf(&wg_dir, "wg0");
+
+    let cfg_path = scratch.path().join("vpn-bridge.toml");
+    common::write_file(
+        &cfg_path,
+        r#"
+profile        = "relay-via-server"
+role           = "relay"
+interface      = "wg0"
+listen_port    = 51820
+forward_to_lan = "br0"
+"#,
+    );
+    let nft_path = scratch.path().join("nft.conf");
+    let manifest_path = scratch.path().join("vpn-bridge.manifest");
+    let module = module_dir();
+
+    // Live apply (no SELFDEF_DRY_RUN). The stubs make wg / wg-quick /
+    // nft / systemctl all succeed; the actual write to nft_path
+    // happens via `install -D` (a real syscall, not a stub).
+    let apply = Command::new("bash")
+        .arg(module.join("install/apply.sh"))
+        .env("SELFDEF_VPN_BRIDGE_CONFIG", &cfg_path)
+        .env("SELFDEF_VPN_BRIDGE_TEMPLATES", module.join("templates"))
+        .env("SELFDEF_VPN_BRIDGE_NFT_PATH", &nft_path)
+        .env("SELFDEF_VPN_BRIDGE_WG_DIR", &wg_dir)
+        .env("MODULE_INSTALLED_MANIFEST", &manifest_path)
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn apply.sh");
+    assert!(
+        apply.status.success(),
+        "apply must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&apply.stderr),
+    );
+    assert!(nft_path.exists(), "apply must have written nft_path");
+
+    // Manifest must list nft_path.
+    let manifest = std::fs::read_to_string(&manifest_path).expect("manifest must exist");
+    assert!(
+        manifest
+            .lines()
+            .any(|l| l.trim() == nft_path.to_str().unwrap()),
+        "manifest must contain nft_path; got:\n{manifest}",
+    );
+
+    // Uninstall must enumerate from the manifest and remove nft_path.
+    let uninstall = Command::new("bash")
+        .arg(module.join("install/uninstall.sh"))
+        .env("SELFDEF_VPN_BRIDGE_CONFIG", &cfg_path)
+        .env("SELFDEF_VPN_BRIDGE_NFT_PATH", &nft_path)
+        .env("SELFDEF_VPN_BRIDGE_WG_DIR", &wg_dir)
+        .env("MODULE_INSTALLED_MANIFEST", &manifest_path)
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn uninstall.sh");
+    assert!(
+        uninstall.status.success(),
+        "uninstall must succeed; stderr:\n{}",
+        String::from_utf8_lossy(&uninstall.stderr),
+    );
+    assert!(
+        !nft_path.exists(),
+        "uninstall must have removed nft_path; uninstall stdout:\n{}",
+        String::from_utf8_lossy(&uninstall.stdout),
+    );
+}
+
 #[test]
 fn check_reports_missing_wg_config() {
     let stubs = stub_path_dir();
