@@ -12,7 +12,10 @@ use std::process::{Command, Output};
 // F-2027-049 / -050 — workspace_root / module_dir /
 // last_stdout_line / write_file all live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, write_file};
+// F-2028-025: explicit imports for every common helper used in
+// this file so a reader doesn't have to grep for the qualified
+// `common::*` call sites below.
+use common::{assert_tree_unchanged, last_stdout_line, snapshot_tree, write_file};
 
 fn module_dir() -> PathBuf {
     common::module_dir("agent-guard")
@@ -683,7 +686,7 @@ fn reapply_is_byte_stable_for_every_rendered_policy() {
 fn dry_run_apply_must_be_a_noop_on_disk() {
     let fx = fixture("profile = \"audit\"\n");
     let scope = fx.policy_dir.parent().unwrap().to_path_buf();
-    let before = common::snapshot_tree(&scope);
+    let before = snapshot_tree(&scope);
     let out = Command::new("bash")
         .arg(module_dir().join("install/apply.sh"))
         .env("SELFDEF_DRY_RUN", "1")
@@ -697,6 +700,6 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(&scope);
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(&scope);
+    assert_tree_unchanged(&before, &after);
 }

@@ -10,7 +10,7 @@ use std::process::{Command, Output};
 
 // F-2027-049 / -050: helpers live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, write_file};
+use common::{assert_tree_unchanged, last_stdout_line, snapshot_tree, write_file};
 
 fn module_dir() -> PathBuf {
     common::module_dir("integrity-sentinel")
@@ -355,7 +355,7 @@ fn uninstall_removes_baseline() {
 fn dry_run_apply_must_be_a_noop_on_disk() {
     let fx = fixture("strict", "create");
     let scope = fx.root.clone();
-    let before = common::snapshot_tree(&scope);
+    let before = snapshot_tree(&scope);
     let out = Command::new("bash")
         .arg(module_dir().join("install/apply.sh"))
         .env("SELFDEF_DRY_RUN", "1")
@@ -367,8 +367,8 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(&scope);
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(&scope);
+    assert_tree_unchanged(&before, &after);
     // Spot-check: the baseline file the live apply would write
     // is absent.
     assert!(

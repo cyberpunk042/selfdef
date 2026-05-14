@@ -11,7 +11,7 @@ use std::process::Command;
 
 // F-2027-049 / -050 / -051: helpers live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, prepended_path};
+use common::{assert_tree_unchanged, last_stdout_line, prepended_path, snapshot_tree};
 
 fn module_dir() -> PathBuf {
     common::module_dir("vpn-bridge")
@@ -127,15 +127,15 @@ forward_to_lan = "br0"
     let cfg = scratch.path().join("vpn-bridge.toml");
     let nft_dest = scratch.path().join("nft.conf");
 
-    let before = common::snapshot_tree(scratch.path());
+    let before = snapshot_tree(scratch.path());
     let out = run_apply(&cfg, stubs.path(), &wg_dir, &nft_dest);
     assert!(
         out.status.success(),
         "stderr: {}",
         String::from_utf8_lossy(&out.stderr)
     );
-    let after = common::snapshot_tree(scratch.path());
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(scratch.path());
+    assert_tree_unchanged(&before, &after);
 }
 
 #[test]

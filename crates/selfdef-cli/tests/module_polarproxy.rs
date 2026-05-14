@@ -7,7 +7,7 @@ use std::process::Command;
 
 // F-2027-049 / -050 / -051: helpers live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, prepended_path};
+use common::{assert_tree_unchanged, last_stdout_line, prepended_path, snapshot_tree};
 
 fn module_dir() -> PathBuf {
     common::module_dir("polarproxy")
@@ -245,15 +245,15 @@ ca_pfx_password   = ""
     let unit_dest = scratch.path().join("polarproxy.service");
     let nft_dest = scratch.path().join("polarproxy-nat.conf");
 
-    let before = common::snapshot_tree(scratch.path());
+    let before = snapshot_tree(scratch.path());
     let out = run_apply(cfg.path(), stubs.path(), &unit_dest, &nft_dest);
     assert!(
         out.status.success(),
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(scratch.path());
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(scratch.path());
+    assert_tree_unchanged(&before, &after);
     assert!(
         !unit_dest.exists() && !nft_dest.exists(),
         "dry-run must not write the unit or nft files",

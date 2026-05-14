@@ -7,7 +7,7 @@ use std::process::Command;
 
 // F-2027-049 / -050 / -051: helpers live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, prepended_path};
+use common::{assert_tree_unchanged, last_stdout_line, prepended_path, snapshot_tree};
 
 fn module_dir() -> PathBuf {
     common::module_dir("vpn-bridge")
@@ -177,13 +177,13 @@ fn tailscale_dry_run_must_be_a_noop_on_disk() {
     )
     .unwrap();
 
-    let before = common::snapshot_tree(scratch.path());
+    let before = snapshot_tree(scratch.path());
     let out = run_apply(&cfg_path, stubs.path());
     assert!(
         out.status.success(),
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(scratch.path());
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(scratch.path());
+    assert_tree_unchanged(&before, &after);
 }
