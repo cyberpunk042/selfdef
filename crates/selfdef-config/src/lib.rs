@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use figment::{
@@ -408,6 +409,11 @@ pub struct NotifierConfig {
     /// SDD-008 Q-D: Twilio SMS outbound channel.
     /// Empty `account_sid` keeps the channel disabled.
     pub twilio: TwilioConfig,
+    /// SDD-008 D-3: per-channel subscription filters keyed by
+    /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
+    /// …). Missing entry = accept every event (default). See
+    /// [`SubscriptionConfig`] for the per-channel field shape.
+    pub subscriptions: HashMap<String, SubscriptionConfig>,
 }
 
 impl Default for NotifierConfig {
@@ -418,8 +424,31 @@ impl Default for NotifierConfig {
             signal: SignalConfig::default(),
             smtp: SmtpConfig::default(),
             twilio: TwilioConfig::default(),
+            subscriptions: HashMap::new(),
         }
     }
+}
+
+/// SDD-008 D-3: per-channel subscription filter.
+///
+/// Operators set these per channel via
+/// `[notifier.subscriptions.<channel_name>]` in `selfdef.toml`.
+/// Missing entry → accept every event. v1 ships the two filters
+/// below; `quiet_hours` and `device_hint` from the charter follow
+/// in a subsequent PR.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SubscriptionConfig {
+    /// Minimum severity to forward to this channel. One of:
+    /// `informational` | `low` | `medium` | `high` | `critical` |
+    /// `fatal`. Case-insensitive. Unknown strings log a warn at
+    /// daemon start and are treated as "no floor".
+    pub severity_floor: Option<String>,
+    /// Substrings matched (case-insensitive) against
+    /// `Event::class_uid::name()`. e.g. `["security", "detection"]`
+    /// catches both "Security Finding" and "Detection Finding".
+    /// Empty list = accept all kinds.
+    pub event_kinds: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
