@@ -196,6 +196,71 @@ async fn events_follow_url_with_token_file_passes_bearer_header() {
     let _ = tokio::task::spawn_blocking(move || child.wait()).await;
 }
 
+/// F-2028-017: when the daemon's `/events/stream` is saturated at
+/// `MAX_SSE_SUBSCRIBERS`, the next CLI client must surface the
+/// 503 with the typed `"sse subscriber cap reached"` reason
+/// (F-2028-016 closure) rather than just "HTTP 503 {raw body}".
+/// Pairs the daemon-side cap test
+/// (`events_stream_rejects_over_cap_with_503`) with end-to-end
+/// coverage on the CLI side.
+#[tokio::test(flavor = "current_thread")]
+async fn events_follow_url_surfaces_cap_reached_reason_on_503() {
+    use selfdef_api::MAX_SSE_SUBSCRIBERS;
+
+    let (addr, _bus, _dir) = spawn_api_on_loopback().await;
+
+    // Saturate the cap with in-process reqwest streams. Each open
+    // `Response` keeps a server-side `SubscriberGuard` alive.
+    let client = reqwest::Client::new();
+    let url = format!("http://{addr}/events/stream");
+    let mut held = Vec::with_capacity(MAX_SSE_SUBSCRIBERS);
+    for i in 0..MAX_SSE_SUBSCRIBERS {
+        let resp = client
+            .get(&url)
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("subscriber {i}: {e}"));
+        assert!(
+            resp.status().is_success(),
+            "subscriber {i} should connect under cap; got {}",
+            resp.status(),
+        );
+        held.push(resp);
+    }
+
+    // The (cap+1)th request must be refused with the typed reason.
+    // Spawn the CLI subprocess inside `spawn_blocking` so the
+    // single-threaded runtime stays free to drive the in-process
+    // server (otherwise `Command::output()` would block the
+    // runtime and the server would never accept the subprocess's
+    // connection).
+    let bin = binary();
+    let addr_str = format!("http://{addr}");
+    let out = tokio::task::spawn_blocking(move || {
+        Command::new(bin)
+            .arg("events")
+            .arg("follow")
+            .arg("--url")
+            .arg(addr_str)
+            .arg("-n")
+            .arg("1")
+            .output()
+            .expect("spawn selfdefctl")
+    })
+    .await
+    .expect("blocking join");
+    assert!(!out.status.success(), "should fail with daemon at cap");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("503") && stderr.contains("sse subscriber cap reached"),
+        "expected typed cap-reached reason in stderr; got: {stderr}",
+    );
+
+    // Drop the held subscribers so the server's writer tasks can
+    // exit cleanly when the runtime drops.
+    drop(held);
+}
+
 /// F-2028-004: the CLI's `read_token_file` mirrors the
 /// daemon-side mode check — a token file with any `group` or
 /// `other` bit set is refused with a clear error. Pairs with
