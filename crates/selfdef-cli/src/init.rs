@@ -203,6 +203,25 @@ channels = []
 # to            = ["ops@example.org"]
 # timeout_secs  = 10
 
+# SDD-008 Q-D: commented [notifier.twilio] example. SMS delivery
+# via Twilio's REST API. To enable:
+#   1. Provision a Twilio account + SMS-capable phone number.
+#   2. Write the auth token to /etc/selfdef/twilio.token (mode
+#      0600 owned by the selfdef user).
+#   3. Uncomment the block below; flip channels above to include
+#      "twilio" in the order you want it tried.
+#   4. v1 ships SEND-ONLY: ack reply via inbound SMS webhook is
+#      not implemented (would require exposing a public HTTPS
+#      endpoint). Acks arrive via the HTTP click-link path or
+#      `selfdefctl notify ack <id>` instead.
+#
+# [notifier.twilio]
+# account_sid     = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# auth_token_file = "/etc/selfdef/twilio.token"
+# from            = "+15551234567"      # E.164, Twilio-provisioned
+# to              = ["+15557654321"]    # E.164 recipients
+# timeout_secs    = 10
+
 [responder]
 allowed_actions = ["notify"]
 dry_run         = true   # flip to false after verifying the

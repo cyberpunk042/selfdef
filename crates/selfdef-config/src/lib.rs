@@ -405,6 +405,9 @@ pub struct NotifierConfig {
     /// SDD-008 D-7 Q-E: SMTP (email) outbound channel via lettre.
     /// Empty `relay_host` keeps the channel disabled.
     pub smtp: SmtpConfig,
+    /// SDD-008 Q-D: Twilio SMS outbound channel.
+    /// Empty `account_sid` keeps the channel disabled.
+    pub twilio: TwilioConfig,
 }
 
 impl Default for NotifierConfig {
@@ -414,6 +417,7 @@ impl Default for NotifierConfig {
             ntfy: NtfyConfig::default(),
             signal: SignalConfig::default(),
             smtp: SmtpConfig::default(),
+            twilio: TwilioConfig::default(),
         }
     }
 }
@@ -489,6 +493,47 @@ impl Default for SmtpConfig {
             tls: "starttls".to_owned(),
             username: None,
             password_file: None,
+            from: String::new(),
+            to: vec![],
+            timeout_secs: 10,
+        }
+    }
+}
+
+/// SDD-008 Q-D: Twilio SMS outbound channel config.
+///
+/// The default `account_sid = ""` keeps the channel disabled; the
+/// daemon builds a `TwilioNotifier` only when `account_sid` is set,
+/// `from` is set, the recipient list is non-empty, and the
+/// `auth_token_file` is readable + non-empty after trim.
+///
+/// Per the SDD-008 charter's Q-D working assumption: v1 ships
+/// **send-only**; inbound reply webhooks for SMS ack would require
+/// the daemon to expose a public HTTPS endpoint and are deferred to
+/// a later D if operators ask.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TwilioConfig {
+    /// Twilio account SID. Starts with `AC`. Empty disables the
+    /// channel.
+    pub account_sid: String,
+    /// Path to a file containing the Twilio auth token. Read on
+    /// daemon start.
+    pub auth_token_file: Option<PathBuf>,
+    /// Twilio-provisioned `From:` number in E.164 format
+    /// (e.g. `+15551234567`).
+    pub from: String,
+    /// Recipient list in E.164 format.
+    pub to: Vec<String>,
+    /// Per-send timeout in seconds.
+    pub timeout_secs: u64,
+}
+
+impl Default for TwilioConfig {
+    fn default() -> Self {
+        Self {
+            account_sid: String::new(),
+            auth_token_file: None,
             from: String::new(),
             to: vec![],
             timeout_secs: 10,
