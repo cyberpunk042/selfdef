@@ -338,7 +338,15 @@ fn token_eq(presented: &str, expected: &str) -> bool {
 /// `request.extensions()` so downstream handlers (currently only
 /// `events_stream`) can key the per-token quota off it without
 /// re-hashing or re-touching the raw token bytes.
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+///
+/// F-2029-002: the `Debug` impl deliberately elides the full hash
+/// and renders only the leading hex prefix. Fingerprints aren't
+/// secrets, but they're stable identifiers — an attacker who later
+/// acquires the token can recompute the fingerprint and link past
+/// log lines to the holder. The truncated prefix keeps the
+/// diagnostic value (distinct fingerprints stay distinct in logs)
+/// while removing the cross-time-linkage primitive.
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TokenFingerprint(pub [u8; 32]);
 
 impl TokenFingerprint {
@@ -352,6 +360,22 @@ impl TokenFingerprint {
         let mut bytes = [0u8; 32];
         bytes.copy_from_slice(&out);
         Self(bytes)
+    }
+}
+
+impl std::fmt::Debug for TokenFingerprint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 4 bytes (8 hex chars) is enough to distinguish fingerprints
+        // in typical log streams while leaving 28 bytes of entropy
+        // unrevealed — an attacker who acquires the token cannot
+        // confirm a past log line was attributable to it from the
+        // 8-char prefix alone (2^32 = collision-prone even at the
+        // SHA-256 level).
+        write!(
+            f,
+            "TokenFingerprint({:02x}{:02x}{:02x}{:02x}…)",
+            self.0[0], self.0[1], self.0[2], self.0[3],
+        )
     }
 }
 
@@ -639,6 +663,54 @@ fn load_root_store(path: &std::path::Path) -> Result<rustls::RootCertStore, Serv
             .map_err(|e| ServerError::Tls(format!("add root: {e}")))?;
     }
     Ok(roots)
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    //! F-2029-002: the custom Debug impl elides the bulk of the
+    //! fingerprint so a `tracing` field expansion doesn't dump
+    //! the full 32-byte hash into the log.
+    use super::*;
+
+    #[test]
+    fn debug_renders_truncated_prefix() {
+        let fp = TokenFingerprint::of("alice");
+        let s = format!("{fp:?}");
+        // The full SHA-256 of "alice" starts with 2bd806c9…; we
+        // assert on the truncated prefix shape rather than the
+        // exact bytes so a future hash-input change doesn't
+        // require updating the test in lockstep with the
+        // (unlikely) algorithm swap.
+        assert!(s.starts_with("TokenFingerprint("), "shape changed: {s}",);
+        assert!(
+            s.ends_with("…)"),
+            "must end with truncation marker; got: {s}"
+        );
+        // Exactly 4 bytes = 8 hex chars visible.
+        let inside = s
+            .strip_prefix("TokenFingerprint(")
+            .and_then(|s| s.strip_suffix("…)"))
+            .expect("shape");
+        assert_eq!(
+            inside.len(),
+            8,
+            "prefix must be 8 hex chars; got: {inside:?}"
+        );
+        assert!(
+            inside.chars().all(|c| c.is_ascii_hexdigit()),
+            "prefix must be hex; got: {inside:?}",
+        );
+    }
+
+    #[test]
+    fn distinct_tokens_produce_distinct_debug_prefixes() {
+        // Different tokens must produce different leading 4 bytes
+        // with overwhelming probability (SHA-256 collision in 32
+        // bits is negligible). Two operator-meaningful strings.
+        let a = format!("{:?}", TokenFingerprint::of("alice-token"));
+        let b = format!("{:?}", TokenFingerprint::of("bob-token"));
+        assert_ne!(a, b, "distinct fingerprints must have distinct Debug forms");
+    }
 }
 
 #[cfg(test)]

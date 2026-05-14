@@ -881,6 +881,40 @@ fn app_for_token(state: ApiState, fp: selfdef_api::TokenFingerprint) -> axum::Ro
     selfdef_api::with_full_capability_for_fingerprint(selfdef_api::router(state), fp)
 }
 
+/// F-2029-003: `Some(0)` on the cap fields means "operator left
+/// it explicitly at zero in the config TOML, which is the same as
+/// not setting it at all → use the compiled-in default". A future
+/// refactor that drops the `n > 0` guard inside `try_acquire` and
+/// starts treating `Some(0)` literally would silently saturate the
+/// caps at the very first request. This test pins the contract.
+#[tokio::test]
+async fn events_stream_zero_caps_fall_back_to_defaults() {
+    use selfdef_api::{SseCaps, TokenFingerprint};
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let state = state.with_sse_caps(SseCaps {
+        global: Some(0),
+        per_token: Some(0),
+    });
+    let fp = TokenFingerprint::of("alice-zero-cap");
+    let app = app_for_token(state, fp);
+
+    // Both caps set to Some(0) → fall back to default (64 global,
+    // 8 per-token). The first request must succeed; if try_acquire
+    // started honouring `Some(0)` literally, this would 503.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "Some(0) must fall back to defaults, not saturate immediately",
+    );
+}
+
 /// SDD-007 D-4 follow-up: operator-tuned `[api].max_sse_subscribers_per_token`
 /// overrides the compiled-in default. Setting the cap to 2 means the
 /// 3rd connection with the same fingerprint gets 503 regardless of
