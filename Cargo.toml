@@ -75,6 +75,9 @@ tokio-rustls = { version = "0.26", default-features = false, features = ["tls12"
 rustls-pki-types = { version = "1.9", features = ["std"] }
 async-nats = { version = "0.48", default-features = false, features = ["ring", "jetstream"] }
 
+# email (SDD-008 D-7 Q-E: SMTP via lettre as the first email channel)
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1-rustls-tls", "ring", "tracing"] }
+
 # linux primitives
 inotify = "0.11"
 bytemuck = { version = "1.16", features = ["derive"] }
@@ -99,6 +102,7 @@ selfdef-notifier = { path = "crates/selfdef-notifier" }
 selfdef-notifier-orchestrator = { path = "crates/selfdef-notifier-orchestrator" }
 selfdef-integration-ntfy = { path = "crates/selfdef-integration-ntfy" }
 selfdef-integration-signal = { path = "crates/selfdef-integration-signal" }
+selfdef-integration-smtp = { path = "crates/selfdef-integration-smtp" }
 selfdef-responder = { path = "crates/selfdef-responder" }
 selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
 selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }
