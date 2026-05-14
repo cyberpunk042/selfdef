@@ -42,6 +42,7 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 mod dispatcher;
+pub mod wake_task;
 pub use dispatcher::{DispatchOutcome, PayloadDispatcher};
 
 use std::path::{Path, PathBuf};
@@ -281,6 +282,34 @@ impl EscalationEngine {
             Ok(guard.execute(
                 "DELETE FROM notification_escalations WHERE event_id = ?1",
                 params![event_id],
+            )?)
+        })
+        .await??;
+        Ok(changed > 0)
+    }
+
+    /// Advance a row to the next escalation rung. Sets
+    /// `rung_index = new_rung` and `deadline_at = new_deadline` for
+    /// the row keyed by `event_id`, ONLY when `acked_at IS NULL` (an
+    /// operator ack that lands between `take_due` and `advance_rung`
+    /// must short-circuit further escalation). Returns `Ok(true)` if
+    /// a row was advanced, `Ok(false)` if the event was unknown,
+    /// already acked, or already past `new_rung`.
+    pub async fn advance_rung(
+        &self,
+        event_id: EventId,
+        new_rung: u32,
+        new_deadline: i64,
+    ) -> Result<bool, EngineError> {
+        let event_id = event_id.0.to_string();
+        let conn = Arc::clone(&self.conn);
+        let changed = tokio::task::spawn_blocking(move || -> Result<usize, EngineError> {
+            let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
+            Ok(guard.execute(
+                "UPDATE notification_escalations
+                   SET rung_index = ?1, deadline_at = ?2
+                 WHERE event_id = ?3 AND acked_at IS NULL AND rung_index < ?1",
+                params![new_rung, new_deadline, event_id],
             )?)
         })
         .await??;
@@ -612,5 +641,59 @@ mod tests {
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].title, "idem-v2");
         assert_eq!(due[0].deadline_at, 200);
+    }
+
+    #[tokio::test]
+    async fn advance_rung_updates_index_and_deadline() {
+        let (eng, _dir) = fresh_engine().await;
+        let p = mk_payload("rung", SeverityId::High);
+        let eid = p.event_id.unwrap();
+        eng.enqueue(&p, 100, 0).await.unwrap();
+
+        let changed = eng.advance_rung(eid, 1, 300).await.unwrap();
+        assert!(changed);
+        let due = eng.take_due(1_000, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].rung_index, 1);
+        assert_eq!(due[0].deadline_at, 300);
+    }
+
+    #[tokio::test]
+    async fn advance_rung_refuses_after_ack() {
+        let (eng, _dir) = fresh_engine().await;
+        let p = mk_payload("acked-before-advance", SeverityId::High);
+        let eid = p.event_id.unwrap();
+        eng.enqueue(&p, 100, 0).await.unwrap();
+        eng.record_ack(eid, 50).await.unwrap();
+
+        // Even though the row exists, it's acked; advance_rung must
+        // refuse to clobber the operator's ack.
+        let changed = eng.advance_rung(eid, 1, 300).await.unwrap();
+        assert!(!changed);
+    }
+
+    #[tokio::test]
+    async fn advance_rung_refuses_backward_or_same_rung() {
+        let (eng, _dir) = fresh_engine().await;
+        let p = mk_payload("monotonic", SeverityId::High);
+        let eid = p.event_id.unwrap();
+        eng.enqueue(&p, 100, 0).await.unwrap();
+
+        // bump to rung 2 first
+        assert!(eng.advance_rung(eid, 2, 200).await.unwrap());
+        // attempting to set rung back to 1 must not succeed
+        let changed = eng.advance_rung(eid, 1, 300).await.unwrap();
+        assert!(!changed);
+        // attempting to set the same rung (2) again must also not succeed
+        let same = eng.advance_rung(eid, 2, 400).await.unwrap();
+        assert!(!same);
+    }
+
+    #[tokio::test]
+    async fn advance_rung_unknown_event_is_noop() {
+        let (eng, _dir) = fresh_engine().await;
+        let fake = EventId::from(Uuid::now_v7());
+        let changed = eng.advance_rung(fake, 1, 100).await.unwrap();
+        assert!(!changed);
     }
 }
