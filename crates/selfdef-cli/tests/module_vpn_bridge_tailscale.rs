@@ -154,3 +154,36 @@ tags             = "tag:home,tag:lab"
     );
     assert!(line.contains("\"status\":\"ok\""), "got: {line}");
 }
+
+/// F-2027-048: SDD-005 D-2a / Test-1 — dry-run must be a no-op on
+/// disk. tailscale's apply shells out to `tailscale up …` plus
+/// `systemctl enable --now tailscaled`; dry-run must skip both.
+/// The fixture scope catches any rogue write to the operator's
+/// scratch dir (e.g. a stray temp file leak from the renderer).
+#[test]
+fn tailscale_dry_run_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let key_path = scratch.path().join("auth.key");
+    std::fs::write(&key_path, "tskey-test\n").unwrap();
+
+    let cfg_path = scratch.path().join("vpn-bridge.toml");
+    std::fs::write(
+        &cfg_path,
+        format!(
+            "profile = \"tailscale\"\nauth_key_path = \"{}\"\n",
+            key_path.display(),
+        ),
+    )
+    .unwrap();
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = run_apply(&cfg_path, stubs.path());
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+}

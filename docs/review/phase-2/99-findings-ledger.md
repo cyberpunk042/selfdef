@@ -36,7 +36,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (52 — 44 closed, 8 open)
+## Nice findings (52 — 46 closed, 6 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -82,8 +82,8 @@ None.
 | F-2027-044 | nice | `ARCHITECTURE.md:12, 199` SIGUSR2 fan-out | Topology diagram labels SIGUSR2 as `(api tokens)` only; post-PR-#58/#69/#70 also covers verifier reload + rule re-verify + summary log. | doc — **closed** by Phase 2 docs-operator-refresh PR (diagram label updated to `tokens + verifier + rules`; F-2027-005 / -031 / -032 / -035 cross-references added in the security-properties section). |
 | F-2027-045 | nice | SDDs don't cross-ref `F-2027-NNN` follow-ups | SDD-003 (drove F-2027-001 + -025), SDD-004 (F-2027-005 + -006), SDD-006 (F-2027-024) have no "Follow-up findings" tail section. Lineage is discoverable from the ledger but not from the SDD reader's vantage. | doc — **closed** by Phase 2 docs-final-cluster PR (SDD-003, SDD-004, SDD-006 each gain a "Follow-up findings (F-2027-045)" tail section listing the F-2027-NNN entries that iterated on each SDD's surface). |
 | F-2027-046 | nice | `module_suricata.rs` live-positive test gap | Test runs only under `SELFDEF_DRY_RUN=1`; the live-positive path that actually loads suricata rules has no regression test. SDD-005 D-1 requires both paths. | implement |
-| F-2027-047 | nice | `module_polarproxy.rs` P-1 dry-run-noop pair missing | All cases run `SELFDEF_DRY_RUN=1` but no `snapshot_tree` / `assert_tree_unchanged` to guard against dry-run-becomes-live regression. | implement |
-| F-2027-048 | nice | `module_vpn_bridge_{cloudflare,tailscale}.rs` P-1 gap | Live-positive coverage present but no P-1 paired test. | implement |
+| F-2027-047 | nice | `module_polarproxy.rs` P-1 dry-run-noop pair missing | All cases run `SELFDEF_DRY_RUN=1` but no `snapshot_tree` / `assert_tree_unchanged` to guard against dry-run-becomes-live regression. | implement — **closed as false positive** (re-verified during the module-test-backfill PR — `module_polarproxy.rs::dry_run_apply_must_be_a_noop_on_disk` at line 231 already implements the P-1 snapshot pattern; the explorer's report was stale). |
+| F-2027-048 | nice | `module_vpn_bridge_{cloudflare,tailscale}.rs` P-1 gap | Live-positive coverage present but no P-1 paired test. | implement — **closed** by Phase 2 module-test-backfill PR (new `cloudflare_dry_run_must_be_a_noop_on_disk` + `tailscale_dry_run_must_be_a_noop_on_disk` cases use `snapshot_tree` / `assert_tree_unchanged` against the existing fixtures). |
 | F-2027-049 | nice | `workspace_root()` / `module_dir()` duplication | Re-implemented in ~14 module test files; `crates/selfdef-cli/tests/common/mod.rs` already exports canonical versions. | implement — **closed** by Phase 2 common-mod migration PR (17 test files now import from `common`; the 12 module-specific `module_dir()` wrappers are one-liners that delegate to `common::module_dir("<slug>")`). |
 | F-2027-050 | nice | `last_stdout_line()` duplication | Re-implemented in 6+ test files; common version exists. | implement — **closed** by Phase 2 common-mod migration PR (every test file uses `common::last_stdout_line` directly). |
 | F-2027-051 | nice | `write_executable()` duplication | Duplicated across 4 vpn-bridge / tetragon-signing tests. | implement — **closed** by Phase 2 common-mod migration PR (every test file uses `common::write_executable` + `common::prepended_path` + `common::write_file` directly). |
@@ -103,15 +103,17 @@ None.
 
 - **56 findings raised** across six explorers (recent-PRs: 10;
   crate: 11; module: 6; integration: 9; docs: 9; tests: 11).
-- **0 blockers**, **3 important (all closed)**, **52 nice (44
-  closed, 8 open)**, **1 SDD-debt (F-2027-010 open)**.
+- **0 blockers**, **3 important (all closed)**, **52 nice (46
+  closed, 6 open)**, **1 SDD-debt (F-2027-010 open)**.
 - The first five Phase 2 explorers are fully drained at the
   actionable tiers; the `common/mod.rs` migration cluster
-  (F-2027-049 + -050 + -051) is now also closed. Eight tests-
-  explorer findings remain open in four clusters: module-test
-  backfill (F-2027-046 + -047 + -048), `pause()`-conversion
-  (F-2027-052 + -053), api-test isolation (F-2027-054 + -055),
-  and parser-adoption (F-2027-056).
+  (F-2027-049 + -050 + -051) and most of the module-test
+  backfill (F-2027-047 false-positive + F-2027-048 closed)
+  are now also closed. Six tests-explorer findings remain
+  open in four clusters: F-2027-046 (suricata live-positive
+  missing), `pause()`-conversion (F-2027-052 + -053),
+  api-test isolation (F-2027-054 + -055), and parser-adoption
+  (F-2027-056).
 - One explorer remains (security). Will add more findings in
   follow-up PRs.
 - Three explorers remain (docs, tests, security). Each will

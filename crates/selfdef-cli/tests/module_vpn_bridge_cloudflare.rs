@@ -135,3 +135,34 @@ config_path      = "{}"
         "got: {line}"
     );
 }
+
+/// F-2027-048: SDD-005 D-2a / Test-1 — dry-run must be a no-op on
+/// disk. cloudflare-tunnel's apply touches systemd (`tunnel install
+/// --service`) and writes credentials.json; dry-run must skip both.
+#[test]
+fn cloudflare_dry_run_must_be_a_noop_on_disk() {
+    let stubs = stub_path_dir();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let token_path = scratch.path().join("token");
+    std::fs::write(&token_path, "ey...token...\n").unwrap();
+
+    let cfg_path = scratch.path().join("vpn-bridge.toml");
+    std::fs::write(
+        &cfg_path,
+        format!(
+            "profile = \"cloudflare-tunnel\"\ntunnel_token_path = \"{}\"\n",
+            token_path.display(),
+        ),
+    )
+    .unwrap();
+
+    let before = common::snapshot_tree(scratch.path());
+    let out = run_apply(&cfg_path, stubs.path());
+    assert!(
+        out.status.success(),
+        "dry-run apply must succeed; stderr: {}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let after = common::snapshot_tree(scratch.path());
+    common::assert_tree_unchanged(&before, &after);
+}

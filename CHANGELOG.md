@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Test — vpn-bridge P-1 dry-run-noop backfill (closes F-2027-048; F-2027-047 false-positive)
+
+Closes the bulk of the module-test backfill cluster from the Phase 2 tests explorer.
+
+#### F-2027-048 — new P-1 cases for cloudflare-tunnel + tailscale profiles
+
+`crates/selfdef-cli/tests/module_vpn_bridge_cloudflare.rs` and `module_vpn_bridge_tailscale.rs` had live-positive coverage but no `snapshot_tree` / `assert_tree_unchanged` paired test to guard against the dry-run-writes-files regression. Two new cases follow the SDD-005 P-1 pattern: snapshot scratch before, run `apply.sh` with `SELFDEF_DRY_RUN=1`, snapshot after, assert byte-identical.
+
+#### F-2027-047 — closed as false positive
+
+`module_polarproxy.rs::dry_run_apply_must_be_a_noop_on_disk` (line 231) already implements the P-1 snapshot pattern against the host-tls-mitm profile. The tests-explorer's report mis-classified polarproxy's coverage. Marked closed with a `re-verified` note in the ledger.
+
+#### F-2027-046 — remains open
+
+The suricata `module_suricata.rs` live-positive gap (the test suite covers only `SELFDEF_DRY_RUN=1`) is heavier to close — a live-positive test needs a fixture with writable target paths and stubbed `systemctl is-enabled` so the apply path takes the start+enable branches without actually invoking systemd. Defer to its own PR.
+
+#### Phase 2 status after this PR
+
+**56 findings across 6 explorers. 52 nice (46 closed, 6 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. Remaining open `nice`: F-2027-046 (suricata live-positive), F-2027-052/-053 (`pause()`-conversion), F-2027-054/-055 (api-test isolation), F-2027-056 (parser-adoption). One Phase 2 explorer remains (security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Refactor — common test-helper migration (closes F-2027-049 + F-2027-050 + F-2027-051)
 
 Migrates 17 test files in `crates/selfdef-cli/tests/` to use the canonical helpers in `tests/common/mod.rs` instead of locally duplicating them. Drops ~45 duplicate function definitions from the test surface.
