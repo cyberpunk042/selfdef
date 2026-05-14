@@ -100,6 +100,7 @@ selfdef-store = { path = "crates/selfdef-store" }
 selfdef-correlator = { path = "crates/selfdef-correlator" }
 selfdef-notifier = { path = "crates/selfdef-notifier" }
 selfdef-notifier-orchestrator = { path = "crates/selfdef-notifier-orchestrator" }
+selfdef-notifier-engine = { path = "crates/selfdef-notifier-engine" }
 selfdef-integration-ntfy = { path = "crates/selfdef-integration-ntfy" }
 selfdef-integration-signal = { path = "crates/selfdef-integration-signal" }
 selfdef-integration-smtp = { path = "crates/selfdef-integration-smtp" }
