@@ -42,8 +42,10 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 mod dispatcher;
+mod profile;
 pub mod wake_task;
 pub use dispatcher::{DispatchOutcome, Mode, PayloadDispatcher};
+pub use profile::{Profile, Rung};
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};

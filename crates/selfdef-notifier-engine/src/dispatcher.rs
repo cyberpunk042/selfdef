@@ -19,7 +19,7 @@ use std::sync::Arc;
 use selfdef_notifier_orchestrator::{Channel, ChannelError, EventId, Payload};
 use tracing::{info, warn};
 
-use crate::{EngineError, EscalationEngine};
+use crate::{EngineError, EscalationEngine, Profile};
 
 /// Result of a single [`PayloadDispatcher::submit`] call.
 #[derive(Debug)]
@@ -116,6 +116,7 @@ pub struct PayloadDispatcher {
     engine: Arc<EscalationEngine>,
     channels: Vec<Arc<dyn Channel>>,
     mode: Mode,
+    profile: Profile,
 }
 
 impl std::fmt::Debug for PayloadDispatcher {
@@ -138,6 +139,7 @@ impl PayloadDispatcher {
             engine,
             channels,
             mode: Mode::default(),
+            profile: Profile::default(),
         }
     }
 
@@ -147,6 +149,22 @@ impl PayloadDispatcher {
     pub fn with_mode(mut self, mode: Mode) -> Self {
         self.mode = mode;
         self
+    }
+
+    /// SDD-008 D-6b: builder-style profile selection. Defaults to
+    /// [`Profile::auto`] (2 attempts, 5-minute ack window) when
+    /// omitted — matches the D-5c hardcoded behaviour so existing
+    /// callers see zero change.
+    #[must_use]
+    pub fn with_profile(mut self, profile: Profile) -> Self {
+        self.profile = profile;
+        self
+    }
+
+    /// Current escalation profile.
+    #[must_use]
+    pub fn profile(&self) -> &Profile {
+        &self.profile
     }
 
     /// Current operating mode.

@@ -279,6 +279,20 @@ channels = []
 #
 # mode = "enforce"
 
+# SDD-008 D-6b: named escalation profile. One of:
+#   auto       — 2 attempts, 5-min ack window. The default. Matches
+#                the D-5c hardcoded behaviour so existing operators
+#                see zero change.
+#   aggressive — 3 attempts at 60s / 180s / 600s. Wake-the-on-call
+#                use cases where missed alerts are worse than a few
+#                extra pages.
+#   patient    — 4 attempts at 10/30/60/120 min. Non-critical
+#                channels where rapid retries would just be noise.
+# Operator-defined profiles + per-rung channel filtering land in
+# follow-up Ds (D-6c).
+#
+# profile = "auto"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:

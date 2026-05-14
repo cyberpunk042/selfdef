@@ -30,14 +30,21 @@ use selfdef_notifier_orchestrator::Payload;
 
 use crate::{EngineError, PayloadDispatcher, PendingEscalation};
 
-/// Maximum rung index. After a row reaches this rung, the next wake
-/// closes it without re-firing. `0` = first attempt (by `submit`),
-/// `1` = one retry by the wake task.
+/// Legacy maximum rung index from D-5c. **Deprecated** by D-6b's
+/// per-profile `max_rung()`. Kept exported so that callers still
+/// referencing the constant compile; the wake task itself now
+/// reads from the active [`Profile`] on every iteration. Equal to
+/// [`Profile::auto`]'s `max_rung()`.
+///
+/// [`Profile`]: crate::Profile
+/// [`Profile::auto`]: crate::Profile::auto
 pub const MAX_RUNG: u32 = 1;
 
-/// Default wait between rungs (operator ack window). D-6 lifts this
-/// to a per-profile setting; v1 hardcodes 5 minutes as a sensible
-/// default for "on-call hears within an hour overall".
+/// Legacy default rung interval from D-5c. **Deprecated** by D-6b's
+/// per-rung `ack_window_secs`. Kept exported for the
+/// [`DispatcherAdapter`](../../../selfdef-daemon/src/dispatcher_adapter.rs)
+/// in selfdef-daemon, which still uses it as the initial-submit
+/// deadline. D-6c will tie that to `profile.ack_window_for(0)`.
 pub const DEFAULT_RUNG_INTERVAL_SECS: i64 = 300;
 
 /// Idle poll interval — how long the wake task sleeps when the
@@ -65,8 +72,9 @@ pub const TAKE_DUE_LIMIT: usize = 100;
 /// 4. Loop. Cancellation short-circuits the sleep.
 pub async fn run(dispatcher: Arc<PayloadDispatcher>, cancel: CancellationToken) {
     info!(
-        max_rung = MAX_RUNG,
-        rung_interval_secs = DEFAULT_RUNG_INTERVAL_SECS,
+        profile = dispatcher.profile().name,
+        max_rung = dispatcher.profile().max_rung(),
+        rungs = dispatcher.profile().rungs.len(),
         "wake_task: starting",
     );
     loop {
@@ -128,7 +136,9 @@ async fn process_due(dispatcher: &PayloadDispatcher) {
 /// Handle one due row: either close (max rungs hit) or re-fire +
 /// advance.
 async fn handle_row(dispatcher: &PayloadDispatcher, row: PendingEscalation, now: i64) {
-    if row.rung_index >= MAX_RUNG {
+    let profile = dispatcher.profile();
+    let max_rung = profile.max_rung();
+    if row.rung_index >= max_rung {
         info!(
             event_id = %row.event_id,
             rung = row.rung_index,
@@ -157,7 +167,11 @@ async fn handle_row(dispatcher: &PayloadDispatcher, row: PendingEscalation, now:
     );
 
     let next_rung = row.rung_index + 1;
-    let next_deadline = now + DEFAULT_RUNG_INTERVAL_SECS;
+    // SDD-008 D-6b: use the active profile's per-rung ack window.
+    // Auto profile preserves the D-5c 5-minute default; operators
+    // who pick `aggressive` or `patient` get shorter / longer
+    // windows per rung.
+    let next_deadline = now + profile.ack_window_for(next_rung);
     match dispatcher
         .engine()
         .advance_rung(row.event_id, next_rung, next_deadline)
@@ -394,5 +408,124 @@ mod tests {
         dispatcher.submit(&p, 0, 0).await; // deadline = 0 → far past
         let sleep = compute_sleep(dispatcher.as_ref()).await;
         assert_eq!(sleep, Duration::ZERO);
+    }
+
+    /// SDD-008 D-6b: with the `aggressive` profile (3 rungs ⇒
+    /// max_rung = 2), a row at rung 1 is re-fired instead of closed
+    /// (which is what the default `auto` profile with max_rung = 1
+    /// would do).
+    #[tokio::test]
+    async fn aggressive_profile_re_fires_at_rung_1_unlike_auto() {
+        use crate::Profile;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(crate::EscalationEngine::open(&path).unwrap());
+        let (ch, counter) = stub_channel("ok");
+        let dispatcher =
+            Arc::new(PayloadDispatcher::new(engine, vec![ch]).with_profile(Profile::aggressive()));
+
+        let payload = mk_payload("aggressive-row");
+        let event_id = payload.event_id.unwrap();
+        dispatcher.submit(&payload, 0, 0).await;
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            1,
+            "initial submit fires once"
+        );
+
+        // Jump the row to rung 1 with deadline 0. Under `auto`
+        // (max_rung = 1) this would close — under `aggressive`
+        // (max_rung = 2) the wake task re-fires.
+        dispatcher
+            .engine()
+            .advance_rung(event_id, 1, 0)
+            .await
+            .unwrap();
+        process_due(dispatcher.as_ref()).await;
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            2,
+            "aggressive profile re-fires at rung 1 (max_rung = 2)",
+        );
+    }
+
+    /// SDD-008 D-6b: aggressive's max_rung is 2 — a row at rung 2
+    /// with a past deadline must close, not re-fire.
+    #[tokio::test]
+    async fn aggressive_profile_closes_at_rung_2() {
+        use crate::Profile;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(crate::EscalationEngine::open(&path).unwrap());
+        let (ch, counter) = stub_channel("ok");
+        let dispatcher =
+            Arc::new(PayloadDispatcher::new(engine, vec![ch]).with_profile(Profile::aggressive()));
+
+        let payload = mk_payload("aggressive-max-rung");
+        let event_id = payload.event_id.unwrap();
+        dispatcher.submit(&payload, 0, 0).await;
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+
+        // Skip straight to rung 2 with deadline 0.
+        dispatcher
+            .engine()
+            .advance_rung(event_id, 2, 0)
+            .await
+            .unwrap();
+        process_due(dispatcher.as_ref()).await;
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            1,
+            "at max rung the channel must not fire again",
+        );
+        assert_eq!(
+            dispatcher.engine().row_count().await.unwrap(),
+            0,
+            "row closed at max rung",
+        );
+    }
+
+    /// SDD-008 D-6b: the wake task uses the profile's per-rung
+    /// ack_window when advancing, not a global constant.
+    #[tokio::test]
+    async fn next_deadline_picks_up_profile_ack_window() {
+        use crate::Profile;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(crate::EscalationEngine::open(&path).unwrap());
+        let (ch, _counter) = stub_channel("ok");
+        // Aggressive: rung 0 = 60s, rung 1 = 180s, rung 2 = 600s.
+        let dispatcher =
+            Arc::new(PayloadDispatcher::new(engine, vec![ch]).with_profile(Profile::aggressive()));
+        // Submit with deadline_at = 0 so the first iteration is due.
+        let payload = mk_payload("aggressive-deadline");
+        dispatcher.submit(&payload, 0, 0).await;
+
+        // Re-fire; deadline should advance to rung 1's window (180).
+        // We can't observe `now` precisely (process_due reads
+        // SystemTime), so just check that the new deadline is at
+        // least ~150s in the future from before-wake, well clear
+        // of the auto profile's 300s.
+        let before = unix_now();
+        process_due(dispatcher.as_ref()).await;
+        let next = dispatcher.engine().next_pending_at().await.unwrap();
+        let new_deadline = next.expect("row still pending at rung 1");
+        let delta = new_deadline - before;
+        // Aggressive rung-1 ack window is 180s; allow generous bounds.
+        assert!(
+            (150..=210).contains(&delta),
+            "expected ~180s ack window from aggressive profile, got delta={delta}",
+        );
+    }
+
+    /// SDD-008 D-6b: default profile (no .with_profile()) preserves
+    /// the D-5c hardcoded behaviour exactly.
+    #[tokio::test]
+    async fn default_profile_preserves_d5c_behaviour() {
+        use crate::Profile;
+        let (dispatcher, _counter, _dir) = fresh_dispatcher().await;
+        assert_eq!(dispatcher.profile(), &Profile::auto());
+        assert_eq!(dispatcher.profile().max_rung(), 1);
+        assert_eq!(dispatcher.profile().ack_window_for(0), 300);
     }
 }
