@@ -1,27 +1,27 @@
-//! Outbound notification channels.
+//! Notifier trait + shared helpers + chain composer.
 //!
 //! Crate trajectory (SDD-008):
-//! - M4 shipped both [`NtfyNotifier`] and [`SignalCliNotifier`]
-//!   inside this crate.
+//! - M4 shipped `NtfyNotifier` + `SignalCliNotifier` inside this crate.
 //! - **D-2b** moved `NtfyNotifier` into
 //!   [`selfdef_integration_ntfy`](https://docs.rs/selfdef-integration-ntfy).
-//!   This crate still exports the trait + helpers used by the new
-//!   integration crate. `SignalCliNotifier` graduates similarly in D-2c.
+//! - **D-2c** moved `SignalCliNotifier` into
+//!   [`selfdef_integration_signal`](https://docs.rs/selfdef-integration-signal).
 //!
-//! The [`Notifier`] trait lives here as the legacy ABI; the new
-//! orchestrator ABI is [`selfdef_notifier_orchestrator::Channel`].
-//! Integration crates implement **both** so existing M4 callers keep
+//! What remains here is the legacy ABI surface every channel still
+//! plugs into: the [`Notifier`] trait, the [`NotifierError`] type,
+//! the shared rendering helpers ([`render_title`], [`render_body`],
+//! [`priority_for`]), and the [`NotifierChain`] composer. The new
+//! orchestrator ABI is [`selfdef_notifier_orchestrator::Channel`];
+//! integration crates implement **both** so existing M4 callers keep
 //! working through the legacy trait while the orchestrator (D-5+)
 //! consumes the same impl through `Channel`.
 //!
-//! [`NotifierChain`] composes a list of notifiers and tries them in
-//! order; the first success wins. The chain itself implements
-//! [`Notifier`] so it drops into anywhere a single notifier fits.
+//! [`NotifierChain`] tries notifiers in order; the first success
+//! wins. The chain itself implements [`Notifier`] so it drops into
+//! anywhere a single notifier fits.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
-
-use std::path::PathBuf;
 
 use async_trait::async_trait;
 use selfdef_core::Event;
@@ -99,58 +99,6 @@ pub const fn priority_for(severity: SeverityId) -> u8 {
         SeverityId::Low => 3,
         SeverityId::Medium => 4,
         SeverityId::High | SeverityId::Critical | SeverityId::Fatal | SeverityId::Other => 5,
-    }
-}
-
-// ---------------------------------------------------------------- SignalCliNotifier
-
-#[derive(Debug)]
-pub struct SignalCliNotifier {
-    binary: PathBuf,
-    account: String,
-    recipient: String,
-}
-
-impl SignalCliNotifier {
-    pub fn new(binary: PathBuf, account: String, recipient: String) -> Self {
-        Self {
-            binary,
-            account,
-            recipient,
-        }
-    }
-}
-
-#[async_trait]
-impl Notifier for SignalCliNotifier {
-    async fn notify(&self, event: &Event) -> Result<(), NotifierError> {
-        if self.account.is_empty() || self.recipient.is_empty() {
-            return Err(NotifierError::NotConfigured);
-        }
-        let message = format!("{}\n\n{}", render_title(event), render_body(event));
-
-        let output = tokio::process::Command::new(&self.binary)
-            .arg("-a")
-            .arg(&self.account)
-            .arg("send")
-            .arg("-m")
-            .arg(&message)
-            .arg(&self.recipient)
-            .output()
-            .await?;
-
-        if output.status.success() {
-            Ok(())
-        } else {
-            Err(NotifierError::SignalCli {
-                status: output.status.code().unwrap_or(-1),
-                stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            })
-        }
-    }
-
-    fn name(&self) -> &'static str {
-        "signal"
     }
 }
 

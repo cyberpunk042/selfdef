@@ -2284,6 +2284,7 @@ dependencies = [
  "selfdef-correlator",
  "selfdef-ebpf-common",
  "selfdef-integration-ntfy",
+ "selfdef-integration-signal",
  "selfdef-nats",
  "selfdef-notifier",
  "selfdef-responder",
@@ -2321,6 +2322,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-integration-signal"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "selfdef-nats"
 version = "0.1.0"
 dependencies = [
@@ -2341,9 +2355,7 @@ name = "selfdef-notifier"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "selfdef-config",
  "selfdef-core",
- "serde",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

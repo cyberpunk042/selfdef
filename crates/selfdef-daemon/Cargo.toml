@@ -25,6 +25,7 @@ selfdef-correlator = { workspace = true }
 selfdef-signing = { workspace = true }
 selfdef-notifier = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
+selfdef-integration-signal = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }

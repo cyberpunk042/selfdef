@@ -1,5 +1,5 @@
 [package]
-name = "selfdef-notifier"
+name = "selfdef-integration-signal"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,16 +7,16 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 publish.workspace = true
-description = "Notifier trait + shared helpers + chain composer (concrete channels moved to selfdef-integration-* in SDD-008 D-2b/c)."
+description = "signal-cli outbound channel (SDD-008 D-2c)."
 
 [lints]
 workspace = true
 
 [dependencies]
 selfdef-core = { workspace = true }
+selfdef-notifier = { workspace = true }
+selfdef-notifier-orchestrator = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
-
-[dev-dependencies]
-tokio = { workspace = true, features = ["macros", "rt"] }
