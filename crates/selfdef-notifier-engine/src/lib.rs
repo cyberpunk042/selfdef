@@ -41,6 +41,9 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod dispatcher;
+pub use dispatcher::{DispatchOutcome, PayloadDispatcher};
+
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
