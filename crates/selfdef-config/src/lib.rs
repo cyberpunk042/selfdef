@@ -425,6 +425,15 @@ pub struct NotifierConfig {
     /// list}` (D-4) to read / mutate the same SQLite file — WAL
     /// mode handles the concurrent reader/writer cleanly.
     pub escalations_path: Option<PathBuf>,
+    /// SDD-008 D-6a: operating mode of the dispatcher. One of
+    /// `enforce` (default; production, fires channels for real) or
+    /// `audit` (persists rows but does NOT call `channel.send` —
+    /// dry-run for verifying orchestrator wiring before going live).
+    ///
+    /// Only consulted when `escalations_path` is set; the M4 chain
+    /// path always behaves as `enforce`. Unknown strings log a
+    /// warn at daemon start and fall back to `enforce`.
+    pub mode: String,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -443,6 +452,7 @@ impl Default for NotifierConfig {
             slack: SlackConfig::default(),
             discord: DiscordConfig::default(),
             escalations_path: None,
+            mode: "enforce".to_owned(),
             subscriptions: HashMap::new(),
         }
     }

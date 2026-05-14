@@ -21,7 +21,7 @@ use selfdef_correlator::Correlator;
 use selfdef_integration_ntfy::NtfyNotifier;
 use selfdef_integration_signal::SignalCliNotifier;
 use selfdef_notifier::{Notifier, NotifierChain, Subscription};
-use selfdef_notifier_engine::{EscalationEngine, PayloadDispatcher, wake_task};
+use selfdef_notifier_engine::{EscalationEngine, Mode, PayloadDispatcher, wake_task};
 use selfdef_notifier_orchestrator::Channel;
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
@@ -758,10 +758,12 @@ fn build_notifier_path(
                      wake task will run and clean up timed-out rows)",
                 );
             }
-            let dispatcher = Arc::new(PayloadDispatcher::new(engine, channels));
+            let mode = parse_dispatcher_mode(&cfg.notifier.mode);
+            let dispatcher = Arc::new(PayloadDispatcher::new(engine, channels).with_mode(mode));
             info!(
                 path = %escalations_path.display(),
                 channels = dispatcher.channel_count(),
+                mode = mode.name(),
                 "escalation engine enabled (SDD-008 D-5d)",
             );
             let wake_handle = tokio::spawn({
@@ -935,6 +937,22 @@ fn build_subscription(channel: &str, cfg: &Config) -> Subscription {
     Subscription {
         severity_floor,
         event_kinds: sc.event_kinds.clone(),
+    }
+}
+
+/// SDD-008 D-6a: parse the `[notifier].mode` string into a typed
+/// [`Mode`]. Unknown strings log a warn and fall back to the
+/// default (`Enforce`) — never fail daemon startup on a typo.
+fn parse_dispatcher_mode(raw: &str) -> Mode {
+    match Mode::from_str_ci(raw) {
+        Some(m) => m,
+        None => {
+            warn!(
+                value = raw,
+                "ignoring unknown [notifier].mode; use one of enforce|audit; falling back to enforce",
+            );
+            Mode::default()
+        }
     }
 }
 

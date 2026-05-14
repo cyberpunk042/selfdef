@@ -54,6 +54,51 @@ impl DispatchOutcome {
     }
 }
 
+/// SDD-008 D-6a: operating mode of the dispatcher. Orthogonal to
+/// profiles (which control rung sequences); a mode is a per-process
+/// switch that influences whether channel sends are real, audit-
+/// only, or absent.
+///
+/// v1 ships two modes; `Test` (route everything to a designated
+/// test_destination) lands in a follow-up once per-channel
+/// test-target config is in scope.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// Production: persist + fire channels for real. The default.
+    #[default]
+    Enforce,
+    /// Dry-run: persist rows in the engine (so audit trails + ack
+    /// behaviour work) but DO NOT call `channel.send`. Useful for
+    /// pre-deployment verification that the orchestrator wiring is
+    /// correct without actually paging anyone. The wake task still
+    /// advances rungs / closes rows on schedule; channels see no
+    /// traffic.
+    Audit,
+}
+
+impl Mode {
+    /// Parse the operator-facing string form (case-insensitive):
+    /// `enforce` | `audit`. Returns `None` for unknown strings; the
+    /// caller logs a warn and falls back to the default.
+    #[must_use]
+    pub fn from_str_ci(s: &str) -> Option<Self> {
+        match s.to_ascii_lowercase().as_str() {
+            "enforce" => Some(Self::Enforce),
+            "audit" => Some(Self::Audit),
+            _ => None,
+        }
+    }
+
+    /// Stable lowercase label for logging.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Enforce => "enforce",
+            Self::Audit => "audit",
+        }
+    }
+}
+
 /// The dispatcher façade.
 ///
 /// Owns:
@@ -70,6 +115,7 @@ impl DispatchOutcome {
 pub struct PayloadDispatcher {
     engine: Arc<EscalationEngine>,
     channels: Vec<Arc<dyn Channel>>,
+    mode: Mode,
 }
 
 impl std::fmt::Debug for PayloadDispatcher {
@@ -77,6 +123,7 @@ impl std::fmt::Debug for PayloadDispatcher {
         f.debug_struct("PayloadDispatcher")
             .field("engine", &self.engine)
             .field("channel_count", &self.channels.len())
+            .field("mode", &self.mode)
             .finish_non_exhaustive()
     }
 }
@@ -87,7 +134,25 @@ impl PayloadDispatcher {
     /// `submit`; the first one that returns `Ok` wins.
     #[must_use]
     pub fn new(engine: Arc<EscalationEngine>, channels: Vec<Arc<dyn Channel>>) -> Self {
-        Self { engine, channels }
+        Self {
+            engine,
+            channels,
+            mode: Mode::default(),
+        }
+    }
+
+    /// Builder-style: set the operating mode. Defaults to
+    /// `Mode::Enforce` (production) when omitted.
+    #[must_use]
+    pub fn with_mode(mut self, mode: Mode) -> Self {
+        self.mode = mode;
+        self
+    }
+
+    /// Current operating mode.
+    #[must_use]
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 
     /// Number of channels held by this dispatcher. Diagnostic
@@ -117,26 +182,22 @@ impl PayloadDispatcher {
             warn!(error = %e, "dispatcher: persist failed; not attempting channel sends");
             return DispatchOutcome::PersistFailed(e);
         }
-        let mut last_err: Option<ChannelError> = None;
-        for channel in &self.channels {
-            match channel.send(payload).await {
-                Ok(_receipt) => {
-                    info!(channel = channel.name(), "dispatcher: channel accepted");
-                    return DispatchOutcome::Delivered {
-                        channel: channel.name().to_owned(),
-                    };
-                }
-                Err(e) => {
-                    warn!(channel = channel.name(), error = %e, "dispatcher: channel failed; trying next");
-                    last_err = Some(e);
-                }
+        if self.mode == Mode::Audit {
+            // Dry-run: row IS in the engine, but no channel sees
+            // the payload. Log per-channel "would have fired" so
+            // operators verifying wiring can grep the daemon log.
+            for channel in &self.channels {
+                info!(
+                    mode = "audit",
+                    channel = channel.name(),
+                    "dispatcher: would have fired (audit mode)"
+                );
             }
+            return DispatchOutcome::Delivered {
+                channel: "audit".to_owned(),
+            };
         }
-        DispatchOutcome::PersistedButAllChannelsFailed(
-            last_err.unwrap_or_else(|| {
-                ChannelError::Other("dispatcher: no channels configured".into())
-            }),
-        )
+        self.fire_channels(payload).await
     }
 
     /// Mark an event acked via the engine. Returns `Ok(true)` if
@@ -176,17 +237,37 @@ impl PayloadDispatcher {
     /// owns the row's lifecycle and is what makes the variant
     /// accurate for the caller).
     pub async fn dispatch_payload(&self, payload: &Payload) -> DispatchOutcome {
+        if self.mode == Mode::Audit {
+            for channel in &self.channels {
+                info!(
+                    mode = "audit",
+                    channel = channel.name(),
+                    "dispatcher: would have re-fired (audit mode)"
+                );
+            }
+            return DispatchOutcome::Delivered {
+                channel: "audit".to_owned(),
+            };
+        }
+        self.fire_channels(payload).await
+    }
+
+    /// Shared channel walk used by both `submit` (initial fire) and
+    /// `dispatch_payload` (wake-task re-fire). First-success-wins;
+    /// last error surfaces in the `PersistedButAllChannelsFailed`
+    /// variant when every channel rejects.
+    async fn fire_channels(&self, payload: &Payload) -> DispatchOutcome {
         let mut last_err: Option<ChannelError> = None;
         for channel in &self.channels {
             match channel.send(payload).await {
                 Ok(_receipt) => {
-                    info!(channel = channel.name(), "dispatcher: re-fire accepted");
+                    info!(channel = channel.name(), "dispatcher: channel accepted");
                     return DispatchOutcome::Delivered {
                         channel: channel.name().to_owned(),
                     };
                 }
                 Err(e) => {
-                    warn!(channel = channel.name(), error = %e, "dispatcher: re-fire failed; trying next");
+                    warn!(channel = channel.name(), error = %e, "dispatcher: channel failed; trying next");
                     last_err = Some(e);
                 }
             }
@@ -479,5 +560,93 @@ mod tests {
         let dispatcher = PayloadDispatcher::new(eng, vec![ch_a, ch_b]);
         let outcome = dispatcher.dispatch_payload(&mk_payload("all-fail")).await;
         assert!(!outcome.delivered());
+    }
+
+    #[test]
+    fn mode_default_is_enforce() {
+        assert_eq!(Mode::default(), Mode::Enforce);
+    }
+
+    #[test]
+    fn mode_from_str_ci_parses_known_strings() {
+        assert_eq!(Mode::from_str_ci("enforce"), Some(Mode::Enforce));
+        assert_eq!(Mode::from_str_ci("ENFORCE"), Some(Mode::Enforce));
+        assert_eq!(Mode::from_str_ci("Enforce"), Some(Mode::Enforce));
+        assert_eq!(Mode::from_str_ci("audit"), Some(Mode::Audit));
+        assert_eq!(Mode::from_str_ci("AUDIT"), Some(Mode::Audit));
+    }
+
+    #[test]
+    fn mode_from_str_ci_returns_none_for_unknown() {
+        assert!(Mode::from_str_ci("yolo").is_none());
+        assert!(Mode::from_str_ci("").is_none());
+    }
+
+    #[test]
+    fn mode_name_round_trips() {
+        for m in [Mode::Enforce, Mode::Audit] {
+            assert_eq!(Mode::from_str_ci(m.name()), Some(m));
+        }
+    }
+
+    #[tokio::test]
+    async fn audit_mode_persists_but_does_not_fire_channels() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("would-fire");
+        let dispatcher = PayloadDispatcher::new(Arc::clone(&eng), vec![ch]).with_mode(Mode::Audit);
+        let payload = mk_payload("audit-mode");
+        let event_id = payload.event_id.unwrap();
+        let outcome = dispatcher.submit(&payload, 100, 0).await;
+        // Outcome reports "delivered" via the synthetic "audit"
+        // channel so callers in enforce-tuned code paths see a
+        // success, but the real channel never saw the payload.
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "audit"),
+            other => panic!("expected Delivered(audit), got {other:?}"),
+        }
+        // Real channel was NOT invoked.
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            0,
+            "audit mode must not call channel.send"
+        );
+        // BUT the row IS in the engine — operators can ack / list
+        // / forget it via D-4 CLI verbs in dry-run.
+        assert_eq!(eng.row_count().await.unwrap(), 1);
+        let due = eng.take_due(1_000, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].event_id, event_id);
+    }
+
+    #[tokio::test]
+    async fn audit_mode_dispatch_payload_does_not_fire_channels() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("would-refire");
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_mode(Mode::Audit);
+        let payload = mk_payload("audit-refire");
+        // dispatch_payload is the wake-task path. Same audit semantics
+        // apply: it must NOT call channel.send.
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "audit"),
+            other => panic!("expected Delivered(audit), got {other:?}"),
+        }
+        assert_eq!(counter.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn enforce_mode_default_fires_channels() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("should-fire");
+        // No .with_mode() → Mode::Enforce by default.
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]);
+        assert_eq!(dispatcher.mode(), Mode::Enforce);
+        let payload = mk_payload("enforce-default");
+        let outcome = dispatcher.submit(&payload, 100, 0).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "should-fire"),
+            other => panic!("expected Delivered(should-fire), got {other:?}"),
+        }
+        assert_eq!(counter.load(Ordering::Acquire), 1);
     }
 }

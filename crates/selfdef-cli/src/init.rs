@@ -268,6 +268,17 @@ channels = []
 #
 # escalations_path = "/var/lib/selfdef/escalations.sqlite"
 
+# SDD-008 D-6a: dispatcher operating mode. One of:
+#   enforce — production; fire channels for real. The default.
+#   audit   — dry-run; persist rows in the engine so audit trails +
+#             ack/list/forget all work, but do NOT call channel.send.
+#             Useful for pre-deployment verification that the
+#             orchestrator wiring is correct without paging anyone.
+# Only consulted when escalations_path is set; the M4 chain path
+# always behaves as enforce.
+#
+# mode = "enforce"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:
