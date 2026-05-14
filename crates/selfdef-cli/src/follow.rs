@@ -27,6 +27,16 @@
 //! must do the same — never call `String::from_utf8_lossy`
 //! per-chunk before feeding, because a multi-byte UTF-8 sequence
 //! that straddles a chunk boundary would be destroyed (F-2028-018).
+//!
+//! Module-level entry points:
+//!
+//! - [`events_follow_unix`] — UNIX-socket transport.
+//! - [`events_follow_tcp`] — TCP/HTTP(S) transport (F-2027-010).
+//! - [`read_token_file`] — F-2028-007: helper used by the
+//!   `Follow` clap dispatch site (`main.rs`) to load a bearer
+//!   token from disk. Mirrors the daemon-side `read_token` in
+//!   `selfdef-api/src/transport.rs` byte-for-byte (mode check
+//!   `mode & 0o077 == 0` + Unicode-aware `trim()`).
 
 use std::path::Path;
 
@@ -303,6 +313,11 @@ pub(crate) async fn events_follow_unix(
 /// daemon's TCP transport's bearer-auth middleware will accept;
 /// pass `None` to skip the header (e.g. for a reverse-proxy-gated
 /// deployment).
+///
+/// F-2028-006: when `bearer_token` is `Some(t)`, the request sets
+/// `Authorization: Bearer <t>` (space-separated, no quoting). This
+/// matches the wire format `selfdef-api`'s bearer-auth middleware
+/// expects.
 pub(crate) async fn events_follow_tcp(
     base_url: &str,
     bearer_token: Option<&str>,

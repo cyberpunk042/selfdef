@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs + tests — CLI doc clarity (closes F-2028-006 + -007 + -010) + Phase 3 tests explorer (raises F-2028-025; verifies F-2028-026..035)
+
+Two pieces in one PR: closes the CLI doc-clarity cluster from the crate explorer + sixth Phase 3 explorer (tests audit).
+
+#### CLI doc clarity — closes F-2028-006 + F-2028-007 + F-2028-010
+
+Three small doc-comment additions in `crates/selfdef-cli/src/follow.rs` and `crates/selfdef-cli/src/main.rs`:
+
+- **F-2028-006**: `events_follow_tcp` doc-comment now names the wire format (`Authorization: Bearer <t>`, space-separated, no quoting). Matches the daemon-side bearer-auth middleware's expectation.
+- **F-2028-007**: `follow.rs` module `//!` header now lists the three module-level entry points with one-sentence summaries each: `events_follow_unix`, `events_follow_tcp`, and `read_token_file`. The helper is no longer hidden from a reader of the module header.
+- **F-2028-010**: `Follow` clap enum variant's doc-comment now explicitly restates the clap-enforced constraint structure ("--url and --unix-socket are mutually exclusive; --token-file requires --url") so a reader doesn't have to cross-reference the attributes.
+
+Zero behaviour change. All 232 `selfdef-cli` tests pass against the refreshed docs.
+
+#### Phase 3 tests explorer — F-2028-025 (nice) + F-2028-026..035 (demoted verifications)
+
+`docs/review/phase-3/70-tests-audit.md` surveys the test infrastructure + new test cases from the Phase 2 closure cycle (common-mod adoption, m4_alert + m8_honeytokens pause()-conversion, build_state TempDir handle, dummy_action_set per-call tempdir, prom parser adoption, ~25 new test cases).
+
+Headline: **0 blockers, 0 important; the closure-cycle test work shipped cleanly.**
+
+The one actionable finding is **F-2028-025 (nice, low priority)** — 11 module-test files call `common::snapshot_tree` and `common::assert_tree_unchanged` via fully-qualified paths without listing them in the `use common::{...}` import. Pure import-style asymmetry; explicit-import pattern would tidy them.
+
+The remaining 10 entries (F-2028-026..035) are **verification notes** confirming Phase 2 closures shipped correctly: SseParser UTF-8 split tests, `validate_rbac_subject` 7+1 tests, `events_stream` cap-saturation test, suricata live-apply test, vpn-bridge P-1 backfill, token-file mode test, relay manifest round-trip, `build_state` TempDir handle, `dummy_action_set` per-call tempdir, prom-parser metrics assertions. All marked `demoted` in the ledger (no action needed; they validate prior PRs landed as documented).
+
+#### Phase 3 status after this PR
+
+35 findings across 6 explorers: 0 blockers, 1 important (closed), 16 nice (9 closed, 7 open), 18 demoted, 0 SDD-debt. **One explorer remains: security.**
+
 ### Docs polish — STARTER_MODULES per-block mode hint + Phase 3 inventory time-anchor (closes F-2028-022 + F-2028-024)
 
 Closes the two actionable findings from the Phase 3 docs explorer. Both are minor documentation refreshes with no code-behaviour impact.

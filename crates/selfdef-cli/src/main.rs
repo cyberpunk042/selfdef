@@ -396,6 +396,13 @@ enum EventsAction {
     /// Useful for incident response and live debugging — pair
     /// with `selfdefctl events tail` (which reads the SQLite
     /// store) for historical context.
+    ///
+    /// F-2028-010: flag constraints (also enforced by clap):
+    /// `--url` and `--unix-socket` are mutually exclusive;
+    /// `--token-file` requires `--url`. Pass exactly one of
+    /// `--unix-socket` (default) or `--url`; pair `--url` with
+    /// `--token-file` when the daemon's TCP transport requires
+    /// bearer-auth (it does by default).
     Follow {
         /// Path to the daemon's UNIX socket. Default:
         /// `/run/selfdef.sock` (matches the daemon's
