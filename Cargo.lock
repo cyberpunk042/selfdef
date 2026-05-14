@@ -2458,6 +2458,7 @@ dependencies = [
 name = "selfdef-notifier-engine"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "rusqlite",
  "selfdef-core",
  "selfdef-notifier-orchestrator",
