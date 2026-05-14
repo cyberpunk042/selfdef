@@ -23,6 +23,10 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # quoted_printable (transitive via lettre, SDD-008 D-7 Q-E SMTP)
+    # ships under 0BSD (Zero-Clause BSD) — strictly more permissive
+    # than BSD-{2,3}-Clause; functionally public-domain-equivalent.
+    "0BSD",
     "ISC",
     "Unicode-3.0",
     "Zlib",
