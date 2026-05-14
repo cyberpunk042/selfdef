@@ -412,6 +412,9 @@ pub struct NotifierConfig {
     /// SDD-008 Q-C: Slack incoming-webhook outbound channel.
     /// Missing `webhook_url_file` keeps the channel disabled.
     pub slack: SlackConfig,
+    /// SDD-008: Discord webhook outbound channel. Missing
+    /// `webhook_url_file` keeps the channel disabled.
+    pub discord: DiscordConfig,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -428,6 +431,7 @@ impl Default for NotifierConfig {
             smtp: SmtpConfig::default(),
             twilio: TwilioConfig::default(),
             slack: SlackConfig::default(),
+            discord: DiscordConfig::default(),
             subscriptions: HashMap::new(),
         }
     }
@@ -452,6 +456,21 @@ pub struct SlackConfig {
     /// Emoji shortcode for the post avatar. Defaults to `":shield:"`
     /// when blank.
     pub icon_emoji: String,
+}
+
+/// SDD-008: Discord webhook channel config.
+///
+/// Same shape as [`SlackConfig`]: the webhook URL itself is the auth
+/// secret, so store it in a separate file with mode `0600`.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DiscordConfig {
+    /// Path to a file containing the Discord webhook URL. The URL
+    /// is itself the auth secret — anyone with it can post to the
+    /// channel.
+    pub webhook_url_file: Option<PathBuf>,
+    /// Display name for posts. Defaults to `"selfdef"` when blank.
+    pub username: String,
 }
 
 /// SDD-008 D-3: per-channel subscription filter.
