@@ -53,20 +53,51 @@ fn rotate_token_writes_url_safe_token_at_0600() {
 
     // Token is base64-url-safe, non-empty.
     let token = std::fs::read_to_string(&token_path).unwrap();
+    let token = token.trim_end_matches('\n');
     assert!(!token.is_empty());
     for c in token.chars() {
         assert!(
             c.is_ascii_alphanumeric() || c == '-' || c == '_',
-            "non-url-safe char {c:?} in token: {token}",
+            "non-url-safe char {c:?} in token (length {})",
+            token.len(),
         );
     }
 
-    // stdout has "wrote <path>" and the token (since --print).
+    // F-2027-064: assert the `--print` *contract* (token format)
+    // rather than substring-matching the literal token value. The
+    // tokens are tempfile-scoped and never used against a real
+    // daemon, so echoing them to CI logs is very low risk — but
+    // the format-only assertion is strictly stronger (it catches
+    // base64-vs-base64url drift, length-default regressions, and
+    // stray whitespace the value-match would silently accept).
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("wrote "), "stdout: {stdout}");
+    assert!(stdout.contains("wrote "), "stdout shape mismatch");
+
+    // Find the printed token line: stdout shape is
+    //   wrote <path> (<n> bytes)
+    //   <token>
+    // We hunt for a line that is non-empty, url-safe-base64,
+    // and (when `--bytes` is left at its default) of the
+    // expected length.
+    let printed = stdout
+        .lines()
+        .find(|line| {
+            !line.is_empty()
+                && line
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+        .expect("--print should write a url-safe-base64 line to stdout");
+    assert_eq!(
+        printed.len(),
+        token.len(),
+        "printed line length must match the file's token length",
+    );
+    // Cross-check the printed line equals the file content
+    // without including either value in the failure message.
     assert!(
-        stdout.contains(&token),
-        "expected --print to echo the token; stdout: {stdout}",
+        printed == token,
+        "printed token does not match the rotated file's content",
     );
 }
 

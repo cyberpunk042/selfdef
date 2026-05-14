@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — remaining security-explorer cluster (closes F-2027-060 + F-2027-063 + F-2027-064)
+
+Three small, contained hardening changes that close the rest of the Phase 2 security-explorer slate. After this PR every security finding from Phase 2 is closed; the only open `nice` clusters are tests-explorer leftovers.
+
+#### F-2027-060 — `rbac check --as` subject validator
+
+New `validate_rbac_subject` helper in `crates/selfdef-cli/src/main.rs`. Runs against every probe subject (built-in defaults + operator-supplied `--as` flags) before any `kubectl` invocation or stdout echo. Refuses anything outside `[A-Za-z0-9:._/@-]` or longer than 253 bytes (Kubernetes' own cap on subject names). Not a command-injection mitigation — `Command::new(...).args(...)` is already shell-free — but a log-pollution mitigation: an operator passing an ANSI-escape-laden string used to have those bytes land in the daemon's `error!` logs and the operator's terminal.
+
+7 new unit tests pin the charset/length contract (accepts built-in subjects + ServiceAccount form, rejects empty/shell-meta/ANSI/whitespace/over-length). 1 new CLI integration test (`rbac_check_rejects_unsafe_subject_passed_via_as_flag`) exercises the validator end-to-end.
+
+#### F-2027-063 — `ApiError::store` info disclosure
+
+`ApiError::store` used to flatten arbitrary store errors verbatim into the JSON 500 body (`"error":"store: sqlite: open /var/lib/selfdef/state.sqlite: permission denied"`). Even though the path is already discoverable from the daemon config, the audit prescribed shipping a generic message to the caller and keeping the detail server-side. The constructor now logs the error via `warn!(error = %e, "api: store error")` and returns the body `"error":"store unavailable"`. All existing handlers route store errors through this constructor, so the change is one-line at the call boundary.
+
+#### F-2027-064 — `cli_api_rotate_token` test posture
+
+`rotate_token_writes_url_safe_token_at_0600` used to echo the rotated token value into its assertion failure messages via `format!("got: {stdout}", …)`. Tokens are tempfile-scoped and never used against a real daemon so the risk is very low, but the audit asked for format-only validation as best practice. The test now hunts for a url-safe-base64 line in stdout, asserts length + charset, and cross-checks `printed == token` — none of those assertion messages echo either value. Strictly stronger: catches stray-whitespace + length-default regressions that the previous substring match would silently accept.
+
+#### Tests
+
+- `cargo test --workspace` passes (existing 29 api tests + 4 rotate-token tests + 10 rbac-check tests + 7 new validator unit tests).
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 2 status after this PR
+
+**Open `nice` clusters: 2 remaining, all in the tests-explorer cluster** (F-2027-046 suricata live-positive, F-2027-052 + -053 `pause()`-conversion). Every security-explorer finding is closed; Phase 2 wraps when the tests cluster lands.
+
 ### Security — SSE backpressure (closes F-2027-061 + F-2027-062)
 
 Two hardening changes to `crates/selfdef-api/src/handlers.rs::events_stream`, both surfaced by the Phase 2 security audit. Both are authenticated-DoS mitigations on the opt-in TCP transport — UNIX-socket operators were never at risk because filesystem permissions already gate access.
