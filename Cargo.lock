@@ -2353,6 +2353,8 @@ dependencies = [
  "selfdef-integration-twilio",
  "selfdef-nats",
  "selfdef-notifier",
+ "selfdef-notifier-engine",
+ "selfdef-notifier-orchestrator",
  "selfdef-responder",
  "selfdef-signing",
  "selfdef-store",
