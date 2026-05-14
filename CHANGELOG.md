@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Test — api-test isolation + parser-adoption (closes F-2027-054 + F-2027-055 + F-2027-056)
+
+Three small, contained fixes in `crates/selfdef-api/tests/m12_api.rs`.
+
+#### F-2027-054 — `dummy_action_set` uses per-test tempdirs
+
+Pre-fix: the helper wrote to `std::env::temp_dir().join("selfdef-api-test-snapshots")` and `.../selfdef-api-test-forensics` — two host-global paths shared across every test in the suite. Parallel test runs would step on each other's snap / forensics outputs. Now: `tempfile::tempdir()` per call so each test gets its own scratch path. The two TempDir handles are then `mem::forget`-leaked per-call (small, bounded leak — at most ~14 tempdirs per `cargo test --workspace` run) so the actions can still find the path when control verbs fire.
+
+#### F-2027-055 — `build_state()` returns the `TempDir` handle
+
+Pre-fix: `build_state()` ended with `std::mem::forget(dir)` to keep the sqlite file alive after the function returned. The leak was correct for in-process operations (Linux inode semantics keep the file alive while any FD is open) but documented as intentional with a stack-of-tempdirs accumulating in `/tmp` per test run.
+
+Now: `build_state()` returns `(ApiState, Arc<Bus>, Arc<SqliteStore>, tempfile::TempDir)`. Every caller adds `_dir` to its destructure; the handle is held on the test's stack frame and dropped cleanly on test exit. 12 callers updated. A second `mem::forget` site in `events_stream_emits_lagged_frame_on_real_bus_overflow` was replaced with a `let _dir_holder = dir` stack hold.
+
+#### F-2027-056 — `metrics_reflect_ingest_counters_via_record_event` uses the P-2 parser
+
+Pre-fix: the test asserted `body.contains("selfdef_events_total 4")` and three sibling substring checks against the raw exposition body. The hand-rolled P-2 Prometheus parser (already used by the strict-format tests in the same file) catches duplicate samples, malformed line shapes, and label-escape bugs that substring matching would miss.
+
+Now: the four assertions go through `prom::parse(&body)` + `exp.find(name, labels)`. Format-strict validation kicks in for free.
+
+#### Phase 2 status after this PR
+
+**56 findings across 6 explorers. 52 nice (49 closed, 3 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. Remaining open `nice`: F-2027-046 (suricata live-positive), F-2027-052/-053 (`pause()`-conversion). One Phase 2 explorer remains (security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. `m12_api.rs` runs 28 tests all green.
+
 ### Test — vpn-bridge P-1 dry-run-noop backfill (closes F-2027-048; F-2027-047 false-positive)
 
 Closes the bulk of the module-test backfill cluster from the Phase 2 tests explorer.

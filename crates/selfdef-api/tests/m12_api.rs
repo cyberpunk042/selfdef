@@ -22,7 +22,7 @@ fn app(state: ApiState) -> axum::Router {
     with_full_capability(router(state))
 }
 
-async fn build_state() -> (ApiState, Arc<Bus>, Arc<SqliteStore>) {
+async fn build_state() -> (ApiState, Arc<Bus>, Arc<SqliteStore>, tempfile::TempDir) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("state.sqlite");
     let store = Arc::new(SqliteStore::open(&path).unwrap());
@@ -52,14 +52,19 @@ async fn build_state() -> (ApiState, Arc<Bus>, Arc<SqliteStore>) {
 
     let bus = Arc::new(Bus::new(16));
     let state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), "test-host".into());
-    // Leak the tempdir so the SQLite file outlives the test scope.
-    std::mem::forget(dir);
-    (state, bus, store)
+    // F-2027-055: previously this leaked `dir` via `std::mem::forget` to
+    // keep the sqlite file alive for the test's lifetime. The handle now
+    // returns alongside so the caller holds it on the stack; the dir is
+    // cleaned up cleanly on test exit. The SqliteStore's open handle
+    // survives the file being unlink'd (Linux inode semantics) — but we
+    // don't *need* to rely on that since the caller keeps the TempDir
+    // until they're done with the store.
+    (state, bus, store, dir)
 }
 
 #[tokio::test]
 async fn status_returns_host_and_counters() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
 
     let req = Request::builder()
@@ -80,7 +85,7 @@ async fn status_returns_host_and_counters() {
 
 #[tokio::test]
 async fn findings_returns_only_findings_category() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
 
     let req = Request::builder()
@@ -101,7 +106,7 @@ async fn findings_returns_only_findings_category() {
 
 #[tokio::test]
 async fn events_paginates_with_n_query_param() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
@@ -117,7 +122,7 @@ async fn events_paginates_with_n_query_param() {
 
 #[tokio::test]
 async fn events_returns_default_page_size_when_n_missing() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
@@ -130,7 +135,7 @@ async fn events_returns_default_page_size_when_n_missing() {
 
 #[tokio::test]
 async fn unknown_route_returns_404() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
@@ -176,18 +181,31 @@ fn dummy_action_set() -> Vec<std::sync::Arc<dyn selfdef_responder::actions::Acti
     }
     let notifier: std::sync::Arc<dyn selfdef_notifier::Notifier> =
         std::sync::Arc::new(NullNotifier);
-    let tmp = std::env::temp_dir().join("selfdef-api-test-snapshots");
-    let forensics = std::env::temp_dir().join("selfdef-api-test-forensics");
+    // F-2027-054: use per-test tempdirs instead of the
+    // host-global `temp_dir().join("selfdef-api-test-*")`. The
+    // pre-fix code shared those two paths across every test in
+    // the suite — parallel runs would step on each other's
+    // snapshot / forensics outputs. `tempfile::tempdir()` gives
+    // each test its own scratch path; the leak (via
+    // `std::mem::forget` below) deliberately keeps the dirs
+    // alive for the lifetime of the test process so a control
+    // verb that writes to them can still find the path.
+    let snap_dir = tempfile::tempdir().expect("snap tmp");
+    let forensics_dir = tempfile::tempdir().expect("forensics tmp");
+    let snap_path = snap_dir.path().to_path_buf();
+    let forensics_path = forensics_dir.path().to_path_buf();
+    std::mem::forget(snap_dir);
+    std::mem::forget(forensics_dir);
     vec![
         std::sync::Arc::new(NotifyAction::new(notifier)),
         std::sync::Arc::new(KillPidAction::new()),
-        std::sync::Arc::new(SnapshotProcAction::new(tmp)),
-        std::sync::Arc::new(ForensicsBundleAction::new(forensics)),
+        std::sync::Arc::new(SnapshotProcAction::new(snap_path)),
+        std::sync::Arc::new(ForensicsBundleAction::new(forensics_path)),
     ]
 }
 
 async fn state_with_control(dry_run: bool) -> ApiState {
-    let (state, bus, _store) = build_state().await;
+    let (state, bus, _store, _dir) = build_state().await;
     let responder = std::sync::Arc::new(selfdef_responder::Responder::new(
         dummy_action_set(),
         vec![
@@ -225,7 +243,7 @@ async fn actions_list_returns_registered_action_names() {
 #[tokio::test]
 async fn rules_reload_returns_503_when_correlator_not_wired() {
     // build_state() returns an ApiState without a correlator handle.
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::POST)
@@ -331,7 +349,7 @@ async fn body_round_trips_as_real_event_envelopes() {
     // Catch regressions where /events returns something that doesn't
     // deserialize as selfdef_core::Event (e.g. if we ever switched to a
     // slimmed projection).
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
@@ -451,7 +469,7 @@ async fn control_endpoint_rejects_anonymous_with_401() {
 
 #[tokio::test]
 async fn metrics_endpoint_returns_prometheus_exposition() {
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)
@@ -532,7 +550,7 @@ async fn metrics_reflect_ingest_counters_via_record_event() {
     // background subscriber.
     use selfdef_core::category::ClassUid;
     use selfdef_core::prelude::*;
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
 
     let m = state.metrics.clone();
     for _ in 0..3 {
@@ -564,27 +582,45 @@ async fn metrics_reflect_ingest_counters_via_record_event() {
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = to_bytes(res.into_body(), 1 << 20).await.unwrap();
     let body = String::from_utf8(bytes.to_vec()).unwrap();
-    assert!(
-        body.contains("selfdef_events_total 4"),
-        "expected events_total = 4:\n{body}",
+
+    // F-2027-056: parse the exposition body via the P-2 parser
+    // (SDD-005) instead of substring-matching the raw bytes.
+    // The parser enforces every Prometheus invariant the
+    // hand-rolled `body.contains(...)` checks would miss: unique
+    // `(name, labels)` pairs, well-formed sample lines, valid
+    // label-string escaping.
+    let exp = prom::parse(&body).expect("metrics body must parse cleanly");
+    let ssh_class = format!("{}", ClassUid::SSH_ACTIVITY.0);
+    let high_sev = format!("{}", SeverityId::High as u32);
+    assert_eq!(
+        exp.find("selfdef_events_total", &[])
+            .map(|s| s.value.as_str()),
+        Some("4"),
+        "events_total = 4 expected; got:\n{body}",
     );
-    assert!(
-        body.contains(&format!(
-            "selfdef_events_by_class_total{{class_uid=\"{}\"}} 3",
-            ClassUid::SSH_ACTIVITY.0,
-        )),
-        "expected SSH class counter = 3:\n{body}",
+    assert_eq!(
+        exp.find(
+            "selfdef_events_by_class_total",
+            &[("class_uid", ssh_class.as_str())],
+        )
+        .map(|s| s.value.as_str()),
+        Some("3"),
+        "SSH class counter = 3 expected; got:\n{body}",
     );
-    assert!(
-        body.contains("selfdef_findings_total 1"),
-        "expected findings_total = 1:\n{body}",
+    assert_eq!(
+        exp.find("selfdef_findings_total", &[])
+            .map(|s| s.value.as_str()),
+        Some("1"),
+        "findings_total = 1 expected; got:\n{body}",
     );
-    assert!(
-        body.contains(&format!(
-            "selfdef_findings_by_severity_total{{severity_id=\"{}\"}} 1",
-            SeverityId::High as u32,
-        )),
-        "expected high-severity finding counter:\n{body}",
+    assert_eq!(
+        exp.find(
+            "selfdef_findings_by_severity_total",
+            &[("severity_id", high_sev.as_str())],
+        )
+        .map(|s| s.value.as_str()),
+        Some("1"),
+        "high-severity finding counter expected; got:\n{body}",
     );
 }
 
@@ -597,7 +633,7 @@ async fn metrics_ingest_task_subscribes_to_bus() {
     use selfdef_core::prelude::*;
     use tokio_util::sync::CancellationToken;
 
-    let (state, bus, _store) = build_state().await;
+    let (state, bus, _store, _dir) = build_state().await;
     let metrics = state.metrics.clone();
     let shutdown = CancellationToken::new();
     let task_metrics = metrics.clone();
@@ -673,7 +709,12 @@ async fn events_stream_emits_lagged_frame_on_real_bus_overflow() {
     let dir = tempdir().unwrap();
     let store = Arc::new(SqliteStore::open(dir.path().join("state.sqlite")).unwrap());
     let state = ApiState::new(Arc::clone(&store), Arc::clone(&bus), "test-host".into());
-    std::mem::forget(dir);
+    // F-2027-055: keep `dir` on the test's stack frame instead of
+    // leaking it. The sqlite store's open file descriptor survives
+    // the eventual unlink (Linux inode semantics), but holding the
+    // TempDir until the test returns means we don't have to rely
+    // on that — and the dir gets cleaned cleanly on test exit.
+    let _dir_holder = dir;
     let app = app(state);
 
     // Connect to /events/stream. The handler subscribes to the
@@ -977,7 +1018,7 @@ async fn metrics_exposition_passes_format_strict_parse() {
     // matching. Catches duplicate (name, labels) keys, malformed
     // sample lines, and orphan HELP/TYPE comments — none of which
     // the pre-SDD-005 substring matcher would have caught.
-    let (state, _bus, _store) = build_state().await;
+    let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
         .method(Method::GET)

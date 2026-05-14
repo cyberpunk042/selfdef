@@ -36,7 +36,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (52 — 46 closed, 6 open)
+## Nice findings (52 — 49 closed, 3 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -89,9 +89,9 @@ None.
 | F-2027-051 | nice | `write_executable()` duplication | Duplicated across 4 vpn-bridge / tetragon-signing tests. | implement — **closed** by Phase 2 common-mod migration PR (every test file uses `common::write_executable` + `common::prepended_path` + `common::write_file` directly). |
 | F-2027-052 | nice | `m4_alert.rs` real-time sleeps | Three `tokio::time::sleep`/`timeout` calls with multi-second deadlines; SDD-005 forbids. | implement |
 | F-2027-053 | nice | `m8_honeytokens.rs` real-time sleeps | Seven real-time sleeps across three test cases; same anti-pattern. | implement |
-| F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement |
-| F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement |
-| F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement |
+| F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement — **closed** by Phase 2 api-test isolation PR (helper now uses `tempfile::tempdir()` per call so each test gets its own snap+forensics scratch). |
+| F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement — **closed** by Phase 2 api-test isolation PR (`build_state()` now returns the `TempDir` handle as a 4th tuple element; 12 callers hold it via `_dir`; second leak site at line 694 replaced with a `let _dir_holder = dir` stack hold). |
+| F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement — **closed** by Phase 2 parser-adoption PR (the four substring assertions are now `exp.find(name, labels)` lookups against the parsed `Exposition`; format-strict validation kicks in for free). |
 
 ## SDD-debt findings (1)
 
@@ -103,17 +103,13 @@ None.
 
 - **56 findings raised** across six explorers (recent-PRs: 10;
   crate: 11; module: 6; integration: 9; docs: 9; tests: 11).
-- **0 blockers**, **3 important (all closed)**, **52 nice (46
-  closed, 6 open)**, **1 SDD-debt (F-2027-010 open)**.
-- The first five Phase 2 explorers are fully drained at the
-  actionable tiers; the `common/mod.rs` migration cluster
-  (F-2027-049 + -050 + -051) and most of the module-test
-  backfill (F-2027-047 false-positive + F-2027-048 closed)
-  are now also closed. Six tests-explorer findings remain
-  open in four clusters: F-2027-046 (suricata live-positive
-  missing), `pause()`-conversion (F-2027-052 + -053),
-  api-test isolation (F-2027-054 + -055), and parser-adoption
-  (F-2027-056).
+- **0 blockers**, **3 important (all closed)**, **52 nice (49
+  closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
+- Tests-explorer remaining open clusters: F-2027-046
+  (suricata live-positive) and `pause()`-conversion (F-2027-052
+  + -053). The `common/mod.rs` migration, module-test
+  backfill, api-test isolation, and parser-adoption clusters
+  are all closed.
 - One explorer remains (security). Will add more findings in
   follow-up PRs.
 - Three explorers remain (docs, tests, security). Each will
