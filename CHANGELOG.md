@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs polish — STARTER_MODULES per-block mode hint + Phase 3 inventory time-anchor (closes F-2028-022 + F-2028-024)
+
+Closes the two actionable findings from the Phase 3 docs explorer. Both are minor documentation refreshes with no code-behaviour impact.
+
+#### F-2028-022 — STARTER_MODULES per-block mode hint
+
+`crates/selfdef-cli/src/init.rs::STARTER_MODULES` had the F-2027-059 trust-boundary warning at the section header (0640 root:selfdef + `install -m 0640 -o root -g selfdef …` invocation), but the individual commented `[modules.<slug>]` blocks didn't repeat it. An operator copying a single block to a fresh `modules.toml` without scrolling up to the header would have missed the mode requirement.
+
+Two changes:
+
+- A mid-section reminder above the first module block names the safe-copy invariant: "every `config = "..."` line below must point at a file at 0640 root:selfdef".
+- Every per-module `config = "/etc/selfdef/modules/<slug>.toml"` line now ends with a `# 0640 root:selfdef` trailing comment. Copy-paste a single block now carries the constraint inline.
+
+The 7 `cli_init` tests still pass against the refreshed templates (assertions check byte-count == `STARTER_MODULES.len()` so the added comments are picked up automatically).
+
+#### F-2028-024 — Phase 3 inventory time-anchor
+
+`docs/review/phase-3/10-inventory.md` claimed "All 8 modules completed SDD-006 v2 migration"; this was wrong at write-time (vpn-bridge was at v1) and only became true after F-2028-015 closed in PR #87. The entry now reads:
+
+> At Phase 2 close: 6 modules at v2, suricata correctly exempt (writes no persistent files), vpn-bridge still at v1 — discovered by the Phase 3 module explorer as F-2028-015 and closed by PR #87. **As of PR #87**: every non-exempt module is v2.
+
+Time-anchored so a future reader can map the inventory's snapshot semantics against the audit trail.
+
+#### Phase 3 status after this PR
+
+24 findings across 5 explorers: 0 blockers, 1 important (closed), 15 nice (6 closed, 9 open), 8 demoted, 0 SDD-debt. Two explorers remain (tests, security).
+
+This PR is documentation-only.
+
 ### Fix + docs — SSE parser bytes refactor (closes F-2028-018 + F-2028-019) + Phase 3 docs explorer (raises F-2028-020..024)
 
 Two pieces in one PR: closure of the SseParser chunk-boundary UTF-8 bug surfaced by the integration explorer + the fifth Phase 3 explorer (docs audit).

@@ -247,23 +247,29 @@ const STARTER_MODULES: &str = r#"# modules.toml — modules activated on this ho
 # A 0644 file lets any local user influence module apply
 # behaviour the next time the daemon reloads.
 
+# F-2028-022: every `config = "..."` line below must point at a
+# file at 0640 root:selfdef. The header above ships the `install
+# -m 0640 -o root -g selfdef ...` invocation. If you copy a
+# single block here without scrolling up, this reminder will
+# catch you.
+
 # ----------------------------------------------------------------
 # Detection / response modules
 # ----------------------------------------------------------------
 
 # Tetragon eBPF event substrate. Required by agent-guard.
 # [modules.tetragon]
-# config = "/etc/selfdef/modules/tetragon.toml"
+# config = "/etc/selfdef/modules/tetragon.toml"   # 0640 root:selfdef
 
 # AI-machine hardening: agent-guard ships kernel-level policies
 # (etc-write-guard, container-shell-guard, egress-guard, etc).
 # Requires the tetragon module.
 # [modules."agent-guard"]
-# config = "/etc/selfdef/modules/agent-guard.toml"
+# config = "/etc/selfdef/modules/agent-guard.toml"   # 0640 root:selfdef
 
 # File-integrity baselining + drift alerts.
 # [modules."integrity-sentinel"]
-# config = "/etc/selfdef/modules/integrity-sentinel.toml"
+# config = "/etc/selfdef/modules/integrity-sentinel.toml"   # 0640 root:selfdef
 
 # ----------------------------------------------------------------
 # Network modules
@@ -271,20 +277,20 @@ const STARTER_MODULES: &str = r#"# modules.toml — modules activated on this ho
 
 # L2 bridge for multi-NIC inspection.
 # [modules."bridge-l2"]
-# config = "/etc/selfdef/modules/bridge-l2.toml"
+# config = "/etc/selfdef/modules/bridge-l2.toml"   # 0640 root:selfdef
 
 # Suricata IDS over a bridge or NFQUEUE.
 # [modules.suricata]
-# config = "/etc/selfdef/modules/suricata.toml"
+# config = "/etc/selfdef/modules/suricata.toml"   # 0640 root:selfdef
 
 # PolarProxy TLS MitM for outbound visibility.
 # [modules.polarproxy]
-# config = "/etc/selfdef/modules/polarproxy.toml"
+# config = "/etc/selfdef/modules/polarproxy.toml"   # 0640 root:selfdef
 
 # Remote connectivity (relay / tailscale / cloudflare-tunnel).
 # Multi-instance capable for relay-via-server only.
 # [modules."vpn-bridge"]
-# config = "/etc/selfdef/modules/vpn-bridge.toml"
+# config = "/etc/selfdef/modules/vpn-bridge.toml"   # 0640 root:selfdef
 
 # ----------------------------------------------------------------
 # Visibility modules
@@ -292,11 +298,11 @@ const STARTER_MODULES: &str = r#"# modules.toml — modules activated on this ho
 
 # Prometheus + Grafana scrape config + dashboards.
 # [modules.observability]
-# config = "/etc/selfdef/modules/observability.toml"
+# config = "/etc/selfdef/modules/observability.toml"   # 0640 root:selfdef
 
 # Host-baseline drift detection (passive observation).
 # [modules."detect-host"]
-# config = "/etc/selfdef/modules/detect-host.toml"
+# config = "/etc/selfdef/modules/detect-host.toml"   # 0640 root:selfdef
 "#;
 
 const CHECKLIST: &str = r#"# selfdef first-run checklist
