@@ -1,11 +1,52 @@
 # SDD-007 — Per-token SSE subscriber quota
 
-> Status: design
+> Status: implemented (D-4 config knobs deferred to a thin follow-up)
 > Owner: audit team
 > Last updated: 2026-05-14
-> Closes findings: F-2028-039 (SDD-debt parent), F-2028-037
-> (important — implementation will close this when the design
-> ships).
+> Closes findings: F-2028-037, F-2028-039.
+
+## Implementation status
+
+Shipped in the SDD-007 implementation PR. D-1 + D-2 + D-3 + D-5
++ D-6 landed:
+
+- **D-1 — Token identity**: `TokenFingerprint` (SHA-256, 32-byte)
+  in `crates/selfdef-api/src/transport.rs`. The `bearer_auth`
+  middleware threads it into `request.extensions()` alongside the
+  `Capability`. `with_full_capability_for_fingerprint` is the
+  test-helpers analogue for in-process tests.
+- **D-2 — Dual-counter SubscriberGuard**: `ApiState` carries a new
+  `Arc<Mutex<HashMap<TokenFingerprint, AtomicUsize>>>` per-token map
+  alongside the existing global `AtomicUsize`. `SubscriberGuard::
+  try_acquire` checks per-token first (so the typed 503 reason
+  identifies the abusive token's slice when it's the cause), then
+  the global cap; on global-cap failure it undoes the per-token
+  increment. `SubscriberGuard::Drop` decrements both counters and
+  prunes the HashMap entry when the per-token count hits zero
+  (no leak across rotations).
+- **D-3 — Revocation interaction**: deliberately deferred. Rotating
+  a token blocks *new* connections immediately (bearer-auth
+  refuses); existing connections drain via the F-2027-062 slow-
+  client timeout + normal client-disconnect paths. Future
+  hardening if operator demand surfaces.
+- **D-5 — Test coverage**: three new integration tests in
+  `crates/selfdef-api/tests/m12_api.rs`: per-token cap reached
+  (D-5.1), per-token cap is per-fingerprint (D-5.2), per-token
+  counter drops to zero on disconnect (D-5.5). D-5.3 (global cap
+  still applies) is covered by the existing
+  `events_stream_rejects_over_cap_with_503` from F-2027-061's
+  closure — its `with_full_capability` fixture has no fingerprint
+  so the test still exercises the global-cap path.
+- **D-6 — Status-code semantics**: both caps return 503; the JSON
+  body distinguishes them as `"sse subscriber cap reached"`
+  (global) vs `"per-token sse cap reached"` (per-token). Both
+  surface through the F-2028-016 JSON-extraction path in
+  `events_follow_tcp`.
+
+D-4 (config knobs in `[api]`) deferred to a thin follow-up that
+plumbs the constants through `ApiConfig` so operators can tune
+without recompiling. The defaults (8 per-token, 64 global) match
+the documented design.
 
 ## Why now
 
@@ -198,6 +239,8 @@ chunk if test-fixture work doesn't bloat the diff.
 
 ## Status
 
-Design phase. Implementation lands in the SDD-007 closure PR,
-which will close F-2028-037 + F-2028-039 + the SDD-007 entry
-on the `implemented` status line.
+Implemented. D-4 (config knobs) is the only remaining work
+item; it's a thin plumbing PR that exposes the constants as
+operator-tunable `[api]` knobs without changing default
+behaviour. Phase 3 doesn't gate on D-4 — the security
+posture is now correct at the default values.

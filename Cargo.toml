@@ -53,6 +53,13 @@ uuid = { version = "1", features = ["v4", "v7", "serde"] }
 # storage
 rusqlite = { version = "0.32", features = ["bundled", "time", "uuid"] }
 
+# hashing — SDD-007: per-token fingerprint key for the per-token
+# SSE subscriber quota in selfdef-api. Already a transitive dep
+# via minisign-verify; surfacing it as a workspace dep lets the
+# api crate use it directly without leaking the transitive
+# version pin.
+sha2 = "0.10"
+
 # systemd integration
 sd-notify = "0.4"
 

@@ -44,7 +44,8 @@ mod transport;
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
 pub use state::{ApiState, ControlHandles};
 pub use transport::{
-    ApiConfig, ApiServer, Capability, ServerError, TlsConfig, TokenReloader, with_capability,
+    ApiConfig, ApiServer, Capability, ServerError, TlsConfig, TokenFingerprint, TokenReloader,
+    with_capability,
 };
 
 /// **Test-only**: wraps the router in a layer granting every
@@ -60,12 +61,37 @@ pub fn with_full_capability(router: Router) -> Router {
     with_capability(router, Capability::Full)
 }
 
+/// **Test-only**: wrap the router so every request lands with
+/// both `Capability::Full` *and* a specific `TokenFingerprint`
+/// in extensions — exactly the post-bearer-auth state the
+/// production `bearer_auth` middleware leaves on the request.
+/// SDD-007 / F-2028-037: lets the per-token-cap integration
+/// tests choose which "token" each in-process call appears to
+/// be from, without setting up real bearer-auth.
+#[cfg(feature = "test-helpers")]
+pub fn with_full_capability_for_fingerprint(router: Router, fp: TokenFingerprint) -> Router {
+    use axum::body::Body;
+    use axum::extract::Request;
+    use axum::middleware::Next;
+    let layer = axum::middleware::from_fn(move |mut req: Request<Body>, next: Next| async move {
+        req.extensions_mut().insert(Capability::Full);
+        req.extensions_mut().insert(fp);
+        next.run(req).await
+    });
+    router.layer(layer)
+}
+
 /// **Test-only**: integration tests need the SSE subscriber cap
 /// to drive the cap-exhaustion case deterministically. F-2027-061
 /// owns the constant; this re-export is gated behind `test-helpers`
 /// so production code still treats it as an internal tuning knob.
 #[cfg(feature = "test-helpers")]
 pub const MAX_SSE_SUBSCRIBERS: usize = handlers::MAX_SSE_SUBSCRIBERS;
+
+/// **Test-only**: re-export of SDD-007's per-token cap so
+/// integration tests can saturate it deterministically.
+#[cfg(feature = "test-helpers")]
+pub const MAX_SSE_SUBSCRIBERS_PER_TOKEN: usize = handlers::MAX_SSE_SUBSCRIBERS_PER_TOKEN;
 
 use axum::Router;
 use axum::routing::{get, post};

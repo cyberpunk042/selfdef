@@ -45,6 +45,11 @@ tokio-rustls = { workspace = true }
 rustls-pki-types = { workspace = true }
 futures = { workspace = true }
 time = { workspace = true }
+# SDD-007 / F-2028-037: SHA-256 of the bearer-token bytes is the
+# identity key for the per-token SSE subscriber quota. Stable
+# 32-byte handle that doesn't store the raw secret in counter
+# maps; computed once per request inside `bearer_auth`.
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

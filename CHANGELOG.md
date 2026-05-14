@@ -6,6 +6,57 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — SDD-007 implementation: per-token SSE subscriber quota (closes F-2028-037 + F-2028-039)
+
+Implements SDD-007. **Closes the open `important` finding** from the Phase 3 security explorer. Status of SDD-007 flips from `design` → `implemented` (D-4 config knobs deferred to a thin follow-up).
+
+#### What changed
+
+**`crates/selfdef-api/src/transport.rs`** — new `TokenFingerprint(pub [u8; 32])` type computed as SHA-256 of the presented bearer token. `bearer_auth` threads it into `request.extensions()` alongside the `Capability` after auth succeeds. A token-rotation between requests changes the fingerprint, so the per-token counter naturally starts fresh.
+
+**`crates/selfdef-api/src/state.rs`** — `ApiState` carries a new `Arc<Mutex<HashMap<TokenFingerprint, AtomicUsize>>>` per-token map alongside the existing global `Arc<AtomicUsize>`. The `Mutex` is `std::sync::Mutex` (not the tokio variant) so the RAII `SubscriberGuard::Drop` can decrement synchronously without an async context. Microsecond lock holds.
+
+**`crates/selfdef-api/src/handlers.rs`** — `SubscriberGuard` refactored to track both counters:
+
+- `try_acquire(state, fingerprint)` checks the **per-token cap first** (so the typed 503 names the abusive token's slice when it's the cause), then the global cap.
+- On global-cap failure after a successful per-token increment, the per-token counter is undone — the next request under that token still gets its full slice.
+- `Drop` decrements both counters and **prunes the HashMap entry** when the per-token count hits zero. No leak across rotations.
+
+**`crates/selfdef-api/src/lib.rs`** — `TokenFingerprint`, `MAX_SSE_SUBSCRIBERS_PER_TOKEN`, and a new `with_full_capability_for_fingerprint(router, fp)` test helper re-exported (`fingerprint` gated on `test-helpers`).
+
+#### Distinguishable 503 reasons (D-6)
+
+| Cause | Body |
+| --- | --- |
+| Process-wide cap saturated | `{"error": "sse subscriber cap reached"}` |
+| This token's slice full | `{"error": "per-token sse cap reached"}` |
+
+Both surface through the F-2028-016 JSON-extraction path in `events_follow_tcp`, so a CLI operator sees the typed reason directly in stderr.
+
+#### Tests (D-5)
+
+Three new integration tests in `crates/selfdef-api/tests/m12_api.rs`:
+
+- `events_stream_per_token_cap_reached` (D-5.1) — open `MAX_SSE_SUBSCRIBERS_PER_TOKEN` connections with the same fingerprint; (cap+1)th gets 503 with the per-token typed reason.
+- `events_stream_per_token_cap_does_not_affect_other_tokens` (D-5.2) — saturate token A's slice; token B still succeeds.
+- `events_stream_per_token_counter_drops_to_zero_on_disconnect` (D-5.5) — open then disconnect; assert the HashMap entry is pruned.
+
+D-5.3 (global cap still applies) is covered by the existing `events_stream_rejects_over_cap_with_503` — its `with_full_capability` fixture has no fingerprint, so the test exercises the global-cap path directly.
+
+#### Deferred (D-4, separate PR)
+
+The two `[api]` config knobs (`max_sse_subscribers_per_token` / `max_sse_subscribers`) ship in a thin follow-up that plumbs the constants through `ApiConfig`. The defaults (8 per-token, 64 global) match SDD-007.
+
+#### Tests
+
+- `cargo test -p selfdef-api -p selfdef-cli` — 275/275 pass (was 272; +3 SDD-007 tests).
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status
+
+39 findings across all 7 explorers. **Closed**: 0 blockers, 2 important (both shipped), 11 of 16 nice, 20 demoted, 1 of 1 SDD-debt. **Open**: 5 low-priority nice (F-2028-001, -008, -012, -013, -025). Phase 3 wraps when those land or get deferred.
+
 ### Design — SDD-007 per-token SSE subscriber quota (scopes F-2028-037 + F-2028-039)
 
 Design doc that scopes the fix for the open `important` finding from the Phase 3 security explorer. Implementation lands in a follow-up PR.

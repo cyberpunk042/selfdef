@@ -333,6 +333,28 @@ fn token_eq(presented: &str, expected: &str) -> bool {
     presented.len() == expected.len() && presented.bytes().eq(expected.bytes())
 }
 
+/// SDD-007 D-1: stable 32-byte handle for a bearer token. Computed in
+/// `bearer_auth` after the token has been validated and inserted into
+/// `request.extensions()` so downstream handlers (currently only
+/// `events_stream`) can key the per-token quota off it without
+/// re-hashing or re-touching the raw token bytes.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct TokenFingerprint(pub [u8; 32]);
+
+impl TokenFingerprint {
+    /// SHA-256 of the raw token bytes. F-2028-037: keying off a hash
+    /// (not the raw token) keeps secrets out of the counter map.
+    pub fn of(token: &str) -> Self {
+        use sha2::Digest as _;
+        let mut h = sha2::Sha256::new();
+        h.update(token.as_bytes());
+        let out = h.finalize();
+        let mut bytes = [0u8; 32];
+        bytes.copy_from_slice(&out);
+        Self(bytes)
+    }
+}
+
 async fn bearer_auth(
     state: axum::extract::State<SharedTokens>,
     mut request: Request<Body>,
@@ -365,7 +387,17 @@ async fn bearer_auth(
     let Some(cap) = cap else {
         return unauthorized();
     };
+    // SDD-007 D-1: thread the fingerprint into the request so
+    // `events_stream` can key the per-token cap off it. `presented`
+    // is `Some(...)` here because we matched a real token above.
+    // Compute first so the immutable borrow of `request.headers()`
+    // (alive for `presented`) is released before the mutable
+    // `extensions_mut()` borrow.
+    let fingerprint = presented.map(TokenFingerprint::of);
     request.extensions_mut().insert(cap);
+    if let Some(fp) = fingerprint {
+        request.extensions_mut().insert(fp);
+    }
     next.run(request).await
 }
 

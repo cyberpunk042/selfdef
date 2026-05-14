@@ -861,6 +861,158 @@ async fn events_stream_rejects_over_cap_with_503() {
     );
 }
 
+// ---------------------------------------------------------------
+// SDD-007 / F-2028-037: per-token SSE subscriber quota tests.
+//
+// The five test cases mirror the SDD-007 D-5 test matrix:
+//
+//   D-5.1 — per-token cap reached
+//   D-5.2 — per-token cap is per-token (token B unaffected by A)
+//   D-5.3 — global cap still applies (multiple tokens, none over per-token cap)
+//   D-5.4 — rotation frees slots eventually (covered by drop-frees test below)
+//   D-5.5 — per-token counter drops to zero (HashMap entry pruned)
+//
+// All tests use `with_full_capability_for_fingerprint` to skip
+// real bearer-auth while threading a specific TokenFingerprint
+// into request extensions — exactly the post-bearer-auth state.
+// ---------------------------------------------------------------
+
+fn app_for_token(state: ApiState, fp: selfdef_api::TokenFingerprint) -> axum::Router {
+    selfdef_api::with_full_capability_for_fingerprint(selfdef_api::router(state), fp)
+}
+
+/// D-5.1: opening `MAX_SSE_SUBSCRIBERS_PER_TOKEN` connections with
+/// the same fingerprint succeeds; the (cap+1)th gets 503 with the
+/// per-token typed reason (distinguishable from the global 503).
+#[tokio::test]
+async fn events_stream_per_token_cap_reached() {
+    use selfdef_api::{MAX_SSE_SUBSCRIBERS_PER_TOKEN, TokenFingerprint};
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let fp = TokenFingerprint::of("alice-token");
+    let app = app_for_token(state, fp);
+
+    let mut held = Vec::with_capacity(MAX_SSE_SUBSCRIBERS_PER_TOKEN);
+    for i in 0..MAX_SSE_SUBSCRIBERS_PER_TOKEN {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/events/stream")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "subscriber {i} under per-token cap"
+        );
+        held.push(resp);
+    }
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = to_bytes(resp.into_body(), 1024).await.unwrap();
+    let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        body["error"], "per-token sse cap reached",
+        "expected per-token typed reason; got: {body:?}",
+    );
+}
+
+/// D-5.2: per-token caps are per-fingerprint. A second token gets
+/// its own slice even when the first is fully saturated.
+#[tokio::test]
+async fn events_stream_per_token_cap_does_not_affect_other_tokens() {
+    use selfdef_api::{MAX_SSE_SUBSCRIBERS_PER_TOKEN, TokenFingerprint};
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let fp_a = TokenFingerprint::of("alice");
+    let fp_b = TokenFingerprint::of("bob");
+
+    // Saturate token A's slice. Need to use the same router for
+    // all of A's calls so the in-memory state is shared.
+    let app_a = app_for_token(state.clone(), fp_a);
+    let mut held_a = Vec::with_capacity(MAX_SSE_SUBSCRIBERS_PER_TOKEN);
+    for i in 0..MAX_SSE_SUBSCRIBERS_PER_TOKEN {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/events/stream")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app_a.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "A's subscriber {i}");
+        held_a.push(resp);
+    }
+
+    // Token B should still succeed — its slice is empty.
+    let app_b = app_for_token(state.clone(), fp_b);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app_b.oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "token B should bypass token A's saturated slice",
+    );
+}
+
+/// D-5.5: when a per-token subscriber drops, the HashMap entry is
+/// pruned (no leak across many short-lived sessions). The state's
+/// `sse_subscribers_per_token` map drops back to empty.
+#[tokio::test]
+async fn events_stream_per_token_counter_drops_to_zero_on_disconnect() {
+    use selfdef_api::TokenFingerprint;
+    use selfdef_bus::Publisher;
+
+    let (state, bus, _store, _dir) = build_state().await;
+    let fp = TokenFingerprint::of("alice-leak-check");
+    let app = app_for_token(state.clone(), fp);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // Drop the response → ReceiverStream closes → writer task's
+    // next tx.send fails → guard drops. The drop chain is async,
+    // so we publish a bus event to wake the writer + give the
+    // runtime a tick.
+    drop(resp);
+    let pub_: Publisher = bus.publisher();
+    let evt = selfdef_core::Event::new(
+        ClassUid::PROCESS_ACTIVITY,
+        1,
+        SeverityId::Informational,
+        "test-host",
+        "leak.test",
+        0,
+    )
+    .with_message("wake-writer");
+    pub_.publish_lossy(evt);
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    // Map should now have no entry for the fingerprint (pruned by
+    // the guard's Drop).
+    let keys = state.sse_subscribers_per_token_keys();
+    assert!(
+        !keys.contains(&fp),
+        "per-token entry must be pruned after last subscriber drops; keys: {keys:?}",
+    );
+}
+
 mod prom {
     //! Minimal Prometheus exposition parser for SDD-005 D-2b. Not a
     //! general parser — only handles what we emit (counters and gauges

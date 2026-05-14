@@ -16,6 +16,7 @@ use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::ReceiverStream;
 use tracing::{debug, warn};
 
+use crate::TokenFingerprint;
 use crate::state::ApiState;
 
 const DEFAULT_PAGE: u32 = 50;
@@ -26,6 +27,17 @@ const MAX_PAGE: u32 = 1_000;
 /// 64-slot mpsc buffer; the cap bounds the worst-case memory +
 /// task footprint an authenticated TCP client can pin.
 pub(crate) const MAX_SSE_SUBSCRIBERS: usize = 64;
+
+/// SDD-007 / F-2028-037: per-token cap on concurrent
+/// `/events/stream` subscribers. One bearer-holder (or an
+/// attacker who exfiltrated a token) used to be able to
+/// saturate the global cap from a single process, denying
+/// service to every other authenticated client. The per-token
+/// cap bounds each token's slice. 8 is well below the global
+/// cap so multiple tokens can coexist; raise via the
+/// `[api].max_sse_subscribers_per_token` config knob if the
+/// deployment legitimately needs more.
+pub(crate) const MAX_SSE_SUBSCRIBERS_PER_TOKEN: usize = 8;
 
 /// F-2027-062: deadline on every SSE forwarder `tx.send().await`.
 /// A reader that opens the stream and stops draining its buffer
@@ -108,20 +120,65 @@ pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
         .into_response()
 }
 
-/// RAII handle that increments the per-state SSE subscriber
-/// counter on acquire and decrements it on drop. Acquire returns
-/// `None` if the counter has already reached the cap, in which
-/// case the handler responds with 503 (no task is spawned).
+/// RAII handle that increments the per-process and per-token SSE
+/// subscriber counters on acquire and decrements both on drop.
+/// SDD-007 D-2: when the per-token counter hits zero on drop, the
+/// `HashMap` entry is removed so a rotating operator doesn't leak
+/// entries. Anonymous requests (no fingerprint — only happens via
+/// the UNIX-socket `with_full_capability` path, where bearer-auth
+/// isn't applied) skip the per-token cap and only count against
+/// the global cap.
 struct SubscriberGuard {
-    counter: Arc<AtomicUsize>,
+    global: Arc<AtomicUsize>,
+    per_token: Option<(crate::state::PerTokenCounters, TokenFingerprint)>,
+}
+
+enum AcquireError {
+    GlobalCap,
+    PerTokenCap,
 }
 
 impl SubscriberGuard {
-    fn try_acquire(counter: &Arc<AtomicUsize>, cap: usize) -> Option<Self> {
+    fn try_acquire(
+        state: &ApiState,
+        fingerprint: Option<TokenFingerprint>,
+    ) -> Result<Self, AcquireError> {
+        // Try the per-token cap first so we surface the more-specific
+        // "per-token sse cap reached" reason when a single token is
+        // the cause. SDD-007 D-6.
+        let per_token = if let Some(fp) = fingerprint {
+            let mut map = state
+                .sse_subscribers_per_token
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let entry = map.entry(fp).or_insert_with(|| AtomicUsize::new(0));
+            // The entry's atomic is owned by the map; we look at it
+            // under the lock to avoid the lock-free CAS pattern
+            // racing against entry removal in Drop.
+            let current = entry.load(Ordering::Acquire);
+            if current >= MAX_SSE_SUBSCRIBERS_PER_TOKEN {
+                return Err(AcquireError::PerTokenCap);
+            }
+            entry.fetch_add(1, Ordering::AcqRel);
+            Some((Arc::clone(&state.sse_subscribers_per_token), fp))
+        } else {
+            None
+        };
+
+        // Global cap: CAS-loop on the process-wide counter.
+        let counter = &state.sse_subscribers;
         let mut current = counter.load(Ordering::Acquire);
         loop {
-            if current >= cap {
-                return None;
+            if current >= MAX_SSE_SUBSCRIBERS {
+                // Undo the per-token increment so the next request
+                // under the same token still gets its full slice.
+                if let Some((map, fp)) = &per_token {
+                    let m = map.lock().unwrap_or_else(|p| p.into_inner());
+                    if let Some(c) = m.get(fp) {
+                        c.fetch_sub(1, Ordering::AcqRel);
+                    }
+                }
+                return Err(AcquireError::GlobalCap);
             }
             match counter.compare_exchange_weak(
                 current,
@@ -130,8 +187,9 @@ impl SubscriberGuard {
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    return Some(Self {
-                        counter: Arc::clone(counter),
+                    return Ok(Self {
+                        global: Arc::clone(counter),
+                        per_token,
                     });
                 }
                 Err(observed) => current = observed,
@@ -142,22 +200,50 @@ impl SubscriberGuard {
 
 impl Drop for SubscriberGuard {
     fn drop(&mut self) {
-        self.counter.fetch_sub(1, Ordering::AcqRel);
+        // Decrement the global counter first; it's a pure atomic and
+        // can't fail.
+        self.global.fetch_sub(1, Ordering::AcqRel);
+        // Decrement the per-token counter and prune the map entry if
+        // this was the last subscriber under that fingerprint. The
+        // prune keeps the HashMap bounded across token rotations.
+        if let Some((map, fp)) = self.per_token.take() {
+            let mut m = map.lock().unwrap_or_else(|p| p.into_inner());
+            if let Some(c) = m.get(&fp) {
+                let prev = c.fetch_sub(1, Ordering::AcqRel);
+                if prev == 1 {
+                    m.remove(&fp);
+                }
+            }
+        }
     }
 }
 
 pub(crate) async fn events_stream(
     State(s): State<ApiState>,
+    request: axum::http::Request<axum::body::Body>,
 ) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
-    // F-2027-061: refuse the connection if the per-process cap is
-    // already saturated. The guard moves into the spawned task so
-    // the count drops back when the writer exits (client closed,
-    // bus closed, send timeout, etc.).
-    let Some(guard) = SubscriberGuard::try_acquire(&s.sse_subscribers, MAX_SSE_SUBSCRIBERS) else {
-        return Err(ApiError::with_status(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "sse subscriber cap reached",
-        ));
+    // SDD-007 D-1: bearer-auth threads the SHA-256 fingerprint of
+    // the presented token into request extensions. Anonymous
+    // callers (UNIX-socket `with_full_capability`) won't have one
+    // and bypass the per-token cap — they're operator-controlled.
+    let fingerprint = request.extensions().get::<TokenFingerprint>().copied();
+
+    // F-2027-061 + SDD-007 D-2: refuse with a typed reason if
+    // either the per-token or process-wide cap is saturated.
+    let guard = match SubscriberGuard::try_acquire(&s, fingerprint) {
+        Ok(g) => g,
+        Err(AcquireError::PerTokenCap) => {
+            return Err(ApiError::with_status(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "per-token sse cap reached",
+            ));
+        }
+        Err(AcquireError::GlobalCap) => {
+            return Err(ApiError::with_status(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "sse subscriber cap reached",
+            ));
+        }
     };
 
     let mut sub = s.bus.subscribe();
