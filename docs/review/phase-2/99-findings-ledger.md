@@ -93,9 +93,9 @@ None.
 | F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement — **closed** by Phase 2 api-test isolation PR (helper now uses `tempfile::tempdir()` per call so each test gets its own snap+forensics scratch). |
 | F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement — **closed** by Phase 2 api-test isolation PR (`build_state()` now returns the `TempDir` handle as a 4th tuple element; 12 callers hold it via `_dir`; second leak site at line 694 replaced with a `let _dir_holder = dir` stack hold). |
 | F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement — **closed** by Phase 2 parser-adoption PR (the four substring assertions are now `exp.find(name, labels)` lookups against the parsed `Exposition`; format-strict validation kicks in for free). |
-| F-2027-057 | nice | `init.rs:203-209` STARTER_CONFIG eventstream block | Tells operators to flip `integrity_check = true` + 0750 dir but doesn't mention the symlink + TOCTOU vectors F-2027-035 closed. Operators not reading SECURITY.md may not realise a symlinked `paths` value bypasses the check. | doc |
-| F-2027-058 | nice | `init.rs:187-191` STARTER_CONFIG `[api]` section | Lists `token_file` but never mentions `control_token_file` (the read-vs-control split). Asymmetric vs the full `.example` config. | doc |
-| F-2027-059 | nice | `init.rs:225-275` STARTER_MODULES | Module-config example paths don't warn that the config file should be 0640 root:selfdef (TOML the daemon evaluates is a trust-boundary). | doc |
+| F-2027-057 | nice | `init.rs:203-209` STARTER_CONFIG eventstream block | Tells operators to flip `integrity_check = true` + 0750 dir but doesn't mention the symlink + TOCTOU vectors F-2027-035 closed. Operators not reading SECURITY.md may not realise a symlinked `paths` value bypasses the check. | doc — **closed** by Phase 2 init-template hygiene PR (`[collectors.eventstream]` block now names the F-2027-035 mitigation explicitly and warns operators to keep `paths` rooted under a 0750 selfdef:selfdef dir and never list a symlinked target). |
+| F-2027-058 | nice | `init.rs:187-191` STARTER_CONFIG `[api]` section | Lists `token_file` but never mentions `control_token_file` (the read-vs-control split). Asymmetric vs the full `.example` config. | doc — **closed** by Phase 2 init-template hygiene PR (`[api]` block now documents `control_token_file` with the read-vs-control audience split). |
+| F-2027-059 | nice | `init.rs:225-275` STARTER_MODULES | Module-config example paths don't warn that the config file should be 0640 root:selfdef (TOML the daemon evaluates is a trust-boundary). | doc — **closed** by Phase 2 init-template hygiene PR (STARTER_MODULES header now warns that every `config = "..."` is a trust boundary and shows the `install -m 0640 -o root -g selfdef` invocation). |
 | F-2027-060 | nice | `rbac check --probe` `--as <subject>` validator | Subject strings flow to `kubectl` via `Command::new` (safe by construction) but aren't validated against a safe-charset regex. Defense-in-depth + log-pollution mitigation. | implement |
 | F-2027-061 | nice | `selfdef-api::events_stream` per-client connection cap | No global subscriber cap; an authenticated TCP client can open hundreds of `/events/stream` connections, each holding a 64-slot mpsc + tokio task. Authenticated DoS. | implement |
 | F-2027-062 | nice | `selfdef-api::events_stream` slow-client timeout | A client that stops reading blocks the forwarder task indefinitely on `tx.send().await`. No per-send inactivity timeout. | implement |
@@ -113,15 +113,17 @@ None.
 - **64 findings raised** across **seven explorers** (recent-PRs:
   10; crate: 11; module: 6; integration: 9; docs: 9; tests:
   11; security: 8). **All seven Phase 2 explorers have run.**
-- **0 blockers**, **3 important (all closed)**, **60 nice (49
-  closed, 11 open)**, **1 SDD-debt (F-2027-010 open)**.
+- **0 blockers**, **3 important (all closed)**, **60 nice (52
+  closed, 8 open)**, **1 SDD-debt (F-2027-010 open)**.
 - Open `nice` clusters: tests-explorer (F-2027-046 suricata
   live-positive, F-2027-052 + -053 `pause()`-conversion) and
-  the new security-explorer findings (F-2027-057 through
-  F-2027-064). The security explorer raised no blockers
-  and no important findings — the two security-tier closures
-  earlier in Phase 2 (F-2027-014 + F-2027-035) were re-audited
-  and verified holding.
+  the remaining security-explorer findings (F-2027-060
+  through F-2027-064). The init-template hygiene cluster
+  (F-2027-057 + -058 + -059) closed in the init-template PR.
+  The security explorer raised no blockers and no important
+  findings — the two security-tier closures earlier in Phase 2
+  (F-2027-014 + F-2027-035) were re-audited and verified
+  holding.
 - **No Phase 2 explorer remains.** Follow-up PRs close the
   open `nice` clusters; Phase 2 wraps when those are merged.
 - Three explorers remain (docs, tests, security). Each will
