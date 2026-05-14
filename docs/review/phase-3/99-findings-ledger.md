@@ -63,9 +63,9 @@ design-shaped.
 | F-2028-034 | demoted | `dummy_action_set()` `mem::forget` is deliberate + documented | Tests-explorer verification: F-2027-054 closure has the per-call `tempfile::tempdir()` + documented `mem::forget`. Intentional (the action snapshot path expects a long-lived directory). Confirms shipped, no action. | none |
 | F-2028-035 | demoted | metrics tests use format-strict prom parser, not substring assertions | Tests-explorer verification: F-2027-056 closure's `metrics_reflect_ingest_counters_via_record_event` consumes `prom::parse(&body)` and uses `exp.find(name, labels)` lookups. Confirms shipped, no action. | none |
 | F-2028-036 | demoted | `events_follow_tcp` URL scheme validation | Security-explorer review: reqwest's `Client::get(url)` accepts only `http`/`https` URLs at the client-builder level; a `file://` URL is rejected by reqwest before any I/O happens. No additional scheme validation needed at the CLI. | none |
-| F-2028-037 | important | SSE subscriber cap is global, not per-token; one malicious bearer-holder can DoS legitimate operators | `crates/selfdef-api/src/handlers.rs::SubscriberGuard` increments a global `Arc<AtomicUsize>` shared across all callers. Authenticated-only DoS, but the bearer-token model assumes all tokens are operationally equivalent; the cap should track each token separately so revoking the abusive token restores access for legitimate ones. | implement — **design landed** in SDD-007 (`docs/sdd/007-per-token-sse-subscriber-quota.md`); SHA-256-fingerprint-keyed per-token quota + process-wide backstop, distinguishable 503 reasons. Implementation PR closes this finding. |
+| F-2028-037 | important | SSE subscriber cap is global, not per-token; one malicious bearer-holder can DoS legitimate operators | `crates/selfdef-api/src/handlers.rs::SubscriberGuard` increments a global `Arc<AtomicUsize>` shared across all callers. Authenticated-only DoS. | implement — **closed** by the SDD-007 implementation PR: `bearer_auth` now threads a SHA-256 `TokenFingerprint` into request extensions; `events_stream` consults the new per-token counter map (`MAX_SSE_SUBSCRIBERS_PER_TOKEN = 8`) before the global cap; refusal returns 503 with a distinguishable `"per-token sse cap reached"` reason; `SubscriberGuard::Drop` decrements both counters and prunes the HashMap entry when the per-token count hits zero (no leak). 3 new integration tests pin the per-token-cap, per-token-isolation, and drop-prunes contracts. |
 | F-2028-038 | demoted | TCP-follow 503 error-message detail (duplicate of F-2028-016) | Security explorer independently surfaced the same observation as the integration explorer's F-2028-016. Same underlying surface; both closed by the SSE-503 PR's `serde_json` body extraction. | none (closed by F-2028-016) |
-| F-2028-039 | SDD-debt | Per-token SSE subscriber quota | F-2028-037's design counterpart. | design — **scoped** in `docs/sdd/007-per-token-sse-subscriber-quota.md`. D-1 picks SHA-256 fingerprint as token identity; D-2 specifies the dual-counter mechanism (per-token + global backstop); D-3 deliberately defers terminate-on-revoke; D-4 adds two `[api]` config knobs; D-5 specifies the test matrix; D-6 distinguishes the two 503 reasons. SDD status will flip to `implemented` when the closure PR lands. |
+| F-2028-039 | SDD-debt | Per-token SSE subscriber quota | F-2028-037's design counterpart. | design — **closed** by the SDD-007 implementation PR. D-1 (SHA-256 fingerprint), D-2 (dual-counter SubscriberGuard + HashMap pruning), D-3 (deferred terminate-on-revoke), D-5 (3 new integration tests), and D-6 (distinguishable 503 reasons) all shipped. D-4 (config knobs `max_sse_subscribers_per_token` / `max_sse_subscribers`) deferred to a thin follow-up that plumbs the constants through `ApiConfig`. SDD-007 status: implemented. |
 
 ## Status
 
@@ -83,11 +83,15 @@ design-shaped.
   - SSE parser bytes refactor — F-2028-018 + -019 closed (PR #88).
   - Docs polish — F-2028-022 + -024 closed (PR #89).
   - CLI doc clarity — F-2028-006 + -007 + -010 closed (PR #90).
-  - SSE 503 cluster — F-2028-016 + -017 closed in the same PR
-    that ships the security explorer.
-- **All seven explorers have run.** Open `nice` clusters remain
-  for follow-up PRs; F-2028-037 is the only open `important`,
-  blocked on SDD-007 design.
+  - SSE 503 cluster — F-2028-016 + -017 closed (PR #91).
+  - SDD-007 design — landed (PR #92).
+  - SDD-007 implementation — F-2028-037 + -039 closed in
+    the same PR (Phase 3's `important` finding shipped;
+    SDD-007 status flipped to `implemented`).
+- **All seven explorers have run; the only `important` finding
+  has shipped.** Phase 3 wraps when the 5 remaining low-priority
+  `nice` items (F-2028-001, -008, -012, -013, -025) land or get
+  deliberately deferred to Phase 4.
 
 ## Phase 1 / Phase 2 references
 
