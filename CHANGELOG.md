@@ -6,6 +6,39 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fix + docs — SSE 503 cluster (closes F-2028-016 + F-2028-017) + Phase 3 security explorer (raises F-2028-036..039; **ALL SEVEN PHASE 3 EXPLORERS HAVE NOW RUN**)
+
+Two pieces in one PR: closes the SSE-503 cluster from the integration explorer + the **seventh and final Phase 3 explorer** (security audit).
+
+#### SSE 503 cluster — closes F-2028-016 + F-2028-017
+
+`crates/selfdef-cli/src/follow.rs::events_follow_tcp` now parses the daemon's `{"error": "..."}` JSON 503 body and surfaces the typed reason. Operators hitting `MAX_SSE_SUBSCRIBERS` now see `daemon refused /events/stream: HTTP 503 sse subscriber cap reached` instead of the raw JSON. Falls back to the raw body for non-JSON errors (e.g. an upstream proxy's HTML 5xx page).
+
+New test `events_follow_url_surfaces_cap_reached_reason_on_503` pins the end-to-end contract: saturate the daemon's cap with `MAX_SSE_SUBSCRIBERS` in-process reqwest streams, then spawn the CLI subprocess (wrapped in `spawn_blocking` so the single-threaded test runtime stays free to drive the in-process server) and assert the subprocess's stderr names both `503` and `sse subscriber cap reached`.
+
+#### Phase 3 security explorer — F-2028-036..039
+
+`docs/review/phase-3/80-security-audit.md` is the final Phase 3 explorer doc. It surveys new attack surfaces introduced by the closure cycle: TCP-follow URL parsing, bearer-token file-read path (re-audited F-2027-031/-032), `validate_rbac_subject` charset, `ApiError::store` log line (re-audited F-2027-063), `SubscriberGuard` cap exhaustion as a DoS amplifier, plus a re-audit appendix for F-2027-014 + F-2027-035.
+
+| id | severity | summary |
+| --- | --- | --- |
+| F-2028-036 | demoted | URL scheme validation in `events_follow_tcp` — reqwest accepts only `http`/`https` by default; no additional CLI-side scheme check needed. |
+| **F-2028-037** | **important** | **SSE subscriber cap is process-global, not per-token. One malicious bearer-holder (or a leaked token) can saturate the 64-slot cap and DoS legitimate operators.** Gated on SDD-007 design. |
+| F-2028-038 | demoted | TCP-follow 503 error-message detail. Independently surfaced by the security explorer; same surface as F-2028-016. Closed by the F-2028-016 work in this PR. |
+| F-2028-039 | SDD-debt | Per-token SSE subscriber quota — design counterpart of F-2028-037. Spawn SDD-007 to scope: per-token vs per-fingerprint, revocation interaction, config knobs, status code semantics. |
+
+Re-audit appendix verifies F-2027-031/-032, F-2027-035, F-2027-061/-062, and F-2027-014 closures all hold.
+
+#### Tests
+
+- `cargo test -p selfdef-cli --test cli_events_follow_tcp` — 7/7 pass (was 6, now +1 for the cap-saturation test).
+- `cargo clippy -p selfdef-cli --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status
+
+**ALL SEVEN PHASE 3 EXPLORERS HAVE NOW RUN.** 39 findings raised across 7 explorers: 0 blockers, 2 important (F-2028-015 closed; **F-2028-037 open, gated on SDD-007**), 16 nice (11 closed, 5 open), 20 demoted, 1 SDD-debt (F-2028-039 open). Open `nice` follow-ups: F-2028-001, -008, -012, -013, -025. Phase 3 wraps when these + F-2028-037/-039 land.
+
 ### Docs + tests — CLI doc clarity (closes F-2028-006 + -007 + -010) + Phase 3 tests explorer (raises F-2028-025; verifies F-2028-026..035)
 
 Two pieces in one PR: closes the CLI doc-clarity cluster from the crate explorer + sixth Phase 3 explorer (tests audit).

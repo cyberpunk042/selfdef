@@ -42,8 +42,8 @@ design-shaped.
 | F-2028-013 | nice | `events_stream` `slow-client timeout` message doesn't name the deadline | `crates/selfdef-api/src/handlers.rs:194-203`'s `send_with_timeout` returns `Err("slow-client timeout")` on `SSE_SEND_TIMEOUT = 30s` expiry. Operators reading the log line would have to grep the source to know the deadline. `Err(format!("slow-client timeout ({}s)", SSE_SEND_TIMEOUT.as_secs()))` is a one-line improvement. | defer |
 | F-2028-014 | demoted | `reqwest` + `futures` dep additions properly justified | Crate-explorer reviewed `crates/selfdef-cli/Cargo.toml` lines 43-44. The inline comments explicitly justify the dep size ("reqwest already lives in the workspace via selfdef-notifier; net cost is the `stream` feature"). The dev-deps (`axum`, `selfdef-api` with `test-helpers`, `selfdef-bus`) are also commented. No findings. Kept in ledger for audit-trail completeness. | none |
 | F-2028-015 | important | `modules/vpn-bridge` did not migrate to SDD-006 v2 manifest helpers | The Phase 2 inventory claimed all 8 modules migrated; cross-check shows 6 v2 + suricata (correctly exempt — writes no persistent files) + **vpn-bridge** (incorrectly v1). `relay-via-server.sh:112` writes `nft_path` via `install -D -m 0644` but `apply.sh` never called `module_record_file`. `profile_uninstall` (lines 174-197) hard-coded the cleanup path instead of iterating `module_render_files`. Multi-instance installs (`INST="relay1"`, `relay2`, …) would silently leak files. | implement — **closed** by the vpn-bridge v2 migration PR: `lib.sh` bumped to `SELFDEF_MODULE_LIB_VERSION_REQUIRED=2`, `relay-via-server.sh`'s apply path now calls `module_record_file "$nft_path"` after the install, `profile_uninstall` enumerates from `module_render_files` (with a legacy fallback for pre-v2 installs) and clears the manifest at the end. New `relay_apply_records_nft_path_in_manifest_then_uninstall_clears_it` test pins the round-trip end-to-end. |
-| F-2028-016 | nice | TCP-follow 503 error message doesn't surface the cap-reached detail | `crates/selfdef-cli/src/follow.rs:292-300` routes the daemon's `HTTP 503 {"error":"sse subscriber cap reached"}` through the generic error handler. The CLI prints "daemon refused /events/stream: HTTP 503 ..." but doesn't extract the JSON `error` field. Operators reading the message have to check Prometheus metrics or inspect the response body to learn the cause. Parse the JSON body when present and surface the typed reason. | implement |
-| F-2028-017 | nice | TCP-follow lacks an end-to-end cap-saturation integration test | The daemon side has `events_stream_rejects_over_cap_with_503` (`crates/selfdef-api/tests/m12_api.rs:792-861`); no CLI test saturates the cap via N concurrent TCP clients and asserts the (N+1)th subprocess receives the 503 with a clear stderr. Add a test that uses `spawn_api_on_loopback()` to open `MAX_SSE_SUBSCRIBERS` connections and asserts the next CLI invocation reports the refusal. | implement |
+| F-2028-016 | nice | TCP-follow 503 error message doesn't surface the cap-reached detail | The CLI printed `daemon refused /events/stream: HTTP 503 {"error":"sse subscriber cap reached"}` (the raw JSON body) rather than extracting the `error` field. | implement — **closed** by the SSE-503 PR: `events_follow_tcp` now `serde_json::from_str`'s the body and extracts the `error` field when present, falling back to raw body for non-JSON errors. Operators now see `daemon refused /events/stream: HTTP 503 sse subscriber cap reached`. |
+| F-2028-017 | nice | TCP-follow lacks an end-to-end cap-saturation integration test | The daemon side has `events_stream_rejects_over_cap_with_503`; the CLI side had no equivalent. | implement — **closed** by the SSE-503 PR: new `events_follow_url_surfaces_cap_reached_reason_on_503` test saturates the cap via `MAX_SSE_SUBSCRIBERS` in-process reqwest streams, then spawns the CLI subprocess via `spawn_blocking` and asserts the stderr names both `503` and `sse subscriber cap reached`. |
 | F-2028-018 | nice | `SseParser` chunk-boundary UTF-8 handling — multi-byte split corrupts payload | Both UNIX and TCP follow paths called `String::from_utf8_lossy(&chunk)` per-chunk before feeding the parser. A 4-byte UTF-8 sequence split 2/2 across two `Bytes` would become two `U+FFFD` instead of one codepoint. | implement — **closed** by the parser-bytes-refactor PR: `SseParser::buf` is now `Vec<u8>`, the public entry is `feed_bytes(&[u8])`, UTF-8 conversion happens at line boundaries (`\n`-terminated). Both `events_follow_unix` and `events_follow_tcp` now hand the parser raw bytes. Two new unit tests (`parser_reassembles_multibyte_utf8_split_across_chunks` for a 4-byte 🦀 + `parser_reassembles_3byte_utf8_split_across_chunks` for a 3-byte 漢) pin the round-trip across split boundaries. |
 | F-2028-019 | nice | `follow.rs` module `//!` header doesn't name the byte-semantic parity requirement between transports | One-line addition to the module doc-comment. | implement — **closed** by the parser-bytes-refactor PR: the module header now explicitly states "both transports hand the parser **raw bytes** via `SseParser::feed_bytes`; chunk boundaries are invisible to the parser by construction." with a back-reference to F-2028-018 explaining the failure mode a future transport must avoid. |
 | F-2028-020 | demoted | `CHANGELOG.md` "Phase 3 status" nice count flagged as off-by-one | Docs explorer flagged the module-explorer PR's status line "9 nice (2 closed, 7 open)" as wrong. Cross-checked: F-2028-001 + F-2028-004 (recent-PRs nice) + F-2028-005/-006/-007/-008/-010/-012/-013 (crate nice) = 9 nice total, 2 closed (-004, -005), 7 open. The CHANGELOG line is correct as written. | none |
@@ -62,25 +62,32 @@ design-shaped.
 | F-2028-033 | demoted | `build_state()` returns the TempDir handle | Tests-explorer verification: F-2027-055 closure dropped `std::mem::forget(dir)`; the caller holds `_dir` on stack. Confirms shipped, no action. | none |
 | F-2028-034 | demoted | `dummy_action_set()` `mem::forget` is deliberate + documented | Tests-explorer verification: F-2027-054 closure has the per-call `tempfile::tempdir()` + documented `mem::forget`. Intentional (the action snapshot path expects a long-lived directory). Confirms shipped, no action. | none |
 | F-2028-035 | demoted | metrics tests use format-strict prom parser, not substring assertions | Tests-explorer verification: F-2027-056 closure's `metrics_reflect_ingest_counters_via_record_event` consumes `prom::parse(&body)` and uses `exp.find(name, labels)` lookups. Confirms shipped, no action. | none |
+| F-2028-036 | demoted | `events_follow_tcp` URL scheme validation | Security-explorer review: reqwest's `Client::get(url)` accepts only `http`/`https` URLs at the client-builder level; a `file://` URL is rejected by reqwest before any I/O happens. No additional scheme validation needed at the CLI. | none |
+| F-2028-037 | important | SSE subscriber cap is global, not per-token; one malicious bearer-holder can DoS legitimate operators | `crates/selfdef-api/src/handlers.rs::SubscriberGuard` increments a global `Arc<AtomicUsize>` shared across all callers. A bearer-token holder (or an attacker who exfiltrated a token) can open `MAX_SSE_SUBSCRIBERS = 64` connections from a single process and DoS every other authenticated client. Authenticated-only DoS, but the bearer-token model assumes all tokens are operationally equivalent; the cap should track each token separately so revoking the abusive token restores access for legitimate ones. Fix is design-shaped: per-token quota + revocation interaction (SDD-007 in progress, see F-2028-039). | implement (gated on SDD-007) |
+| F-2028-038 | demoted | TCP-follow 503 error-message detail (duplicate of F-2028-016) | Security explorer independently surfaced the same observation as the integration explorer's F-2028-016. Same underlying surface; both closed by the SSE-503 PR's `serde_json` body extraction. | none (closed by F-2028-016) |
+| F-2028-039 | SDD-debt | Per-token SSE subscriber quota | F-2028-037's design counterpart. Open questions: per-token vs per-token-fingerprint (some operators rotate tokens but the SubscriberGuard counter would zero on each rotation); does the quota include `/events` polling (no — only `/events/stream`); is the quota static or operator-configurable per token; revocation interaction (revoking a token must free its slots immediately, not wait for the existing connections to drain). Spawn SDD-007 to scope. | design |
 
 ## Status
 
-- **35 findings raised** across six explorers (recent-PRs,
-  crate, module, integration, docs, tests). **0 blockers**,
-  **1 important (closed)**, **16 nice** (F-2028-001, -004,
-  -005, -006, -007, -008, -010, -012, -013, -016, -017, -018,
-  -019, -022, -024, -025), **18 demoted** (F-2028-002, -003,
-  -009, -011, -014, -020, -021, -023, -026, -027, -028, -029,
-  -030, -031, -032, -033, -034, -035).
+- **39 findings raised** across **all seven Phase 3 explorers**
+  (recent-PRs, crate, module, integration, docs, tests,
+  security). **0 blockers**, **2 important** (F-2028-015
+  closed, F-2028-037 open gated on SDD-007), **16 nice**
+  (F-2028-001, -004, -005, -006, -007, -008, -010, -012, -013,
+  -016, -017, -018, -019, -022, -024, -025), **20 demoted**
+  (F-2028-002, -003, -009, -011, -014, -020, -021, -023,
+  -026..035, -036, -038), **1 SDD-debt** (F-2028-039 open).
 - **Closed clusters**:
   - Token-reader symmetry — F-2028-004 + -005 closed (PR #86).
   - vpn-bridge v2 migration — F-2028-015 closed (PR #87).
   - SSE parser bytes refactor — F-2028-018 + -019 closed (PR #88).
   - Docs polish — F-2028-022 + -024 closed (PR #89).
-  - CLI doc clarity — F-2028-006 + -007 + -010 closed in the
-    same PR that ships the tests explorer.
-- One explorer remains: **security**.
-- No Phase 3 SDD-debt findings yet.
+  - CLI doc clarity — F-2028-006 + -007 + -010 closed (PR #90).
+  - SSE 503 cluster — F-2028-016 + -017 closed in the same PR
+    that ships the security explorer.
+- **All seven explorers have run.** Open `nice` clusters remain
+  for follow-up PRs; F-2028-037 is the only open `important`,
+  blocked on SDD-007 design.
 
 ## Phase 1 / Phase 2 references
 
