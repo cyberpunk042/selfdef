@@ -30,7 +30,15 @@ fn audit_failure_line(serial: u64) -> String {
     )
 }
 
-#[tokio::test(flavor = "current_thread")]
+// F-2027-052: pipeline test runs with paused virtual time so the
+// polling loop + responder settle + shutdown-join `tokio::time::*`
+// calls below cost zero real seconds. The runtime auto-advances
+// to the next pending timer whenever no task is ready to run; real
+// pipeline work (collector → bus → correlator → responder → wiremock
+// + SQLite I/O) still runs in real time, but the gaps *between* it
+// elapse instantly. Trades 5s × 50ms-poll worst-case real-time
+// flakiness for a deterministic virtual-time test.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn end_to_end_alert_fires_one_notification() {
     // ---- ntfy mock ----
     let server = MockServer::start().await;

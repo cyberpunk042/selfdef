@@ -82,14 +82,14 @@ None.
 | F-2027-043 | nice | README quickstart `cargo deb -p selfdef-daemon` | Builds only the daemon; the CLI is a separate target (`selfdefctl`). Quickstart doesn't tell operators they need to package the CLI separately. | doc — **closed** by Phase 2 docs-operator-refresh PR (quickstart now builds `cargo deb -p selfdef-cli` alongside the daemon and `dpkg -i` both). |
 | F-2027-044 | nice | `ARCHITECTURE.md:12, 199` SIGUSR2 fan-out | Topology diagram labels SIGUSR2 as `(api tokens)` only; post-PR-#58/#69/#70 also covers verifier reload + rule re-verify + summary log. | doc — **closed** by Phase 2 docs-operator-refresh PR (diagram label updated to `tokens + verifier + rules`; F-2027-005 / -031 / -032 / -035 cross-references added in the security-properties section). |
 | F-2027-045 | nice | SDDs don't cross-ref `F-2027-NNN` follow-ups | SDD-003 (drove F-2027-001 + -025), SDD-004 (F-2027-005 + -006), SDD-006 (F-2027-024) have no "Follow-up findings" tail section. Lineage is discoverable from the ledger but not from the SDD reader's vantage. | doc — **closed** by Phase 2 docs-final-cluster PR (SDD-003, SDD-004, SDD-006 each gain a "Follow-up findings (F-2027-045)" tail section listing the F-2027-NNN entries that iterated on each SDD's surface). |
-| F-2027-046 | nice | `module_suricata.rs` live-positive test gap | Test runs only under `SELFDEF_DRY_RUN=1`; the live-positive path that actually loads suricata rules has no regression test. SDD-005 D-1 requires both paths. | implement |
+| F-2027-046 | nice | `module_suricata.rs` live-positive test gap | Test runs only under `SELFDEF_DRY_RUN=1`; the live-positive path that actually loads suricata rules has no regression test. SDD-005 D-1 requires both paths. | implement — **closed** by Phase 2 tests-cluster PR (new `live_apply_invokes_nft_load_and_systemctl_start` runs apply.sh without `SELFDEF_DRY_RUN=1`, uses recording stubs for `nft` + `systemctl` + `suricata`, asserts `nft -f <rendered>` + `systemctl enable suricata.service` + `systemctl start suricata.service` all land, plus checks the "load NFQUEUE jump" log line proves apply entered the install branch). |
 | F-2027-047 | nice | `module_polarproxy.rs` P-1 dry-run-noop pair missing | All cases run `SELFDEF_DRY_RUN=1` but no `snapshot_tree` / `assert_tree_unchanged` to guard against dry-run-becomes-live regression. | implement — **closed as false positive** (re-verified during the module-test-backfill PR — `module_polarproxy.rs::dry_run_apply_must_be_a_noop_on_disk` at line 231 already implements the P-1 snapshot pattern; the explorer's report was stale). |
 | F-2027-048 | nice | `module_vpn_bridge_{cloudflare,tailscale}.rs` P-1 gap | Live-positive coverage present but no P-1 paired test. | implement — **closed** by Phase 2 module-test-backfill PR (new `cloudflare_dry_run_must_be_a_noop_on_disk` + `tailscale_dry_run_must_be_a_noop_on_disk` cases use `snapshot_tree` / `assert_tree_unchanged` against the existing fixtures). |
 | F-2027-049 | nice | `workspace_root()` / `module_dir()` duplication | Re-implemented in ~14 module test files; `crates/selfdef-cli/tests/common/mod.rs` already exports canonical versions. | implement — **closed** by Phase 2 common-mod migration PR (17 test files now import from `common`; the 12 module-specific `module_dir()` wrappers are one-liners that delegate to `common::module_dir("<slug>")`). |
 | F-2027-050 | nice | `last_stdout_line()` duplication | Re-implemented in 6+ test files; common version exists. | implement — **closed** by Phase 2 common-mod migration PR (every test file uses `common::last_stdout_line` directly). |
 | F-2027-051 | nice | `write_executable()` duplication | Duplicated across 4 vpn-bridge / tetragon-signing tests. | implement — **closed** by Phase 2 common-mod migration PR (every test file uses `common::write_executable` + `common::prepended_path` + `common::write_file` directly). |
-| F-2027-052 | nice | `m4_alert.rs` real-time sleeps | Three `tokio::time::sleep`/`timeout` calls with multi-second deadlines; SDD-005 forbids. | implement |
-| F-2027-053 | nice | `m8_honeytokens.rs` real-time sleeps | Seven real-time sleeps across three test cases; same anti-pattern. | implement |
+| F-2027-052 | nice | `m4_alert.rs` real-time sleeps | Three `tokio::time::sleep`/`timeout` calls with multi-second deadlines; SDD-005 forbids. | implement — **closed** by Phase 2 tests-cluster PR (`#[tokio::test(start_paused = true)]` makes every `tokio::time::sleep`/`timeout` virtual; tokio auto-advances the clock when the runtime is idle, so the previous ~250-500ms of real-time polling elapses instantly; test now runs in 0.10s). |
+| F-2027-053 | nice | `m8_honeytokens.rs` real-time sleeps | Seven real-time sleeps across three test cases; same anti-pattern. | implement — **closed** by Phase 2 tests-cluster PR (same `start_paused = true` conversion; canary-touch dispatch test now runs in 0.02s, all timers are virtual). |
 | F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement — **closed** by Phase 2 api-test isolation PR (helper now uses `tempfile::tempdir()` per call so each test gets its own snap+forensics scratch). |
 | F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement — **closed** by Phase 2 api-test isolation PR (`build_state()` now returns the `TempDir` handle as a 4th tuple element; 12 callers hold it via `_dir`; second leak site at line 694 replaced with a `let _dir_holder = dir` stack hold). |
 | F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement — **closed** by Phase 2 parser-adoption PR (the four substring assertions are now `exp.find(name, labels)` lookups against the parsed `Exposition`; format-strict validation kicks in for free). |
@@ -113,19 +113,25 @@ None.
 - **64 findings raised** across **seven explorers** (recent-PRs:
   10; crate: 11; module: 6; integration: 9; docs: 9; tests:
   11; security: 8). **All seven Phase 2 explorers have run.**
-- **0 blockers**, **3 important (all closed)**, **60 nice (57
-  closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
-- Open `nice` clusters: tests-explorer only (F-2027-046
-  suricata live-positive, F-2027-052 + -053
-  `pause()`-conversion). **All security-explorer findings are
-  closed.** The init-template hygiene cluster (F-2027-057 +
-  -058 + -059), the SSE-backpressure cluster (F-2027-061 +
-  -062), and the remaining security cluster (F-2027-060 +
-  -063 + -064) all landed in dedicated PRs.
+- **0 blockers**, **3 important (all closed)**, **60 nice (all
+  closed)**, **1 SDD-debt (F-2027-010 open — design decision
+  awaited).**
+- **Phase 2 is closed for `nice` findings.** Every `nice` and
+  `important` finding across all seven explorers has shipped
+  in a follow-up PR. The init-template hygiene cluster
+  (F-2027-057 + -058 + -059), the SSE-backpressure cluster
+  (F-2027-061 + -062), the remaining security cluster
+  (F-2027-060 + -063 + -064), and the tests-cluster
+  (F-2027-046 + -052 + -053) all landed in dedicated PRs.
 - The security explorer raised no blockers and no important
   findings — the two security-tier closures earlier in Phase 2
   (F-2027-014 + F-2027-035) were re-audited and verified
   holding.
+- The only Phase 2 item still open is F-2027-010 (`events
+  follow` TCP transport, SDD-debt) — awaiting a design
+  decision on the size/security trade-off between pulling
+  in an HTTP client and documenting a remote-tunneling
+  pattern.
 - **No Phase 2 explorer remains.** Follow-up PRs close the
   open `nice` clusters; Phase 2 wraps when those are merged.
 - Three explorers remain (docs, tests, security). Each will

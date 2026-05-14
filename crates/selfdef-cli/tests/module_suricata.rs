@@ -193,3 +193,128 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
     let after = common::snapshot_tree(scratch.path());
     common::assert_tree_unchanged(&before, &after);
 }
+
+/// F-2027-046: SDD-005 D-1 live-positive coverage. Previously the
+/// suricata module-script tests all ran under `SELFDEF_DRY_RUN=1`,
+/// so the live branch — which actually invokes `nft -f` to load
+/// the NFQUEUE rule and `systemctl enable`/`start` to bring the
+/// service up — had zero regression protection. This test runs
+/// apply.sh *without* dry-run against recording stubs and asserts
+/// every side-effecting command landed exactly as the script
+/// describes its work in its emitted log.
+///
+/// The stubs append their argv into a per-test log file so the
+/// test asserts on the call sequence; no real systemd / nft state
+/// is touched.
+#[test]
+fn live_apply_invokes_nft_load_and_systemctl_start() {
+    let scratch = tempfile::tempdir().expect("scratch");
+    let calls_log = scratch.path().join("calls.log");
+
+    let stubs = tempfile::tempdir().expect("stubs");
+
+    // `suricata` stub: preflight `command -v` only.
+    std::fs::write(
+        stubs.path().join("suricata"),
+        "#!/usr/bin/env bash\nexit 0\n",
+    )
+    .unwrap();
+
+    // `nft` stub:
+    //   * `list table inet selfdef_bridge` → exit 0 (table present).
+    //   * `list chain ... forward_hook`    → exit 0 with output that
+    //     does NOT mention `selfdef-suricata`, so `have_nfqueue_rule`
+    //     returns false and the script enters the install branch.
+    //   * `-f <file>` (and anything else)  → exit 0; we record argv.
+    std::fs::write(
+        stubs.path().join("nft"),
+        format!(
+            r#"#!/usr/bin/env bash
+echo "nft $*" >> "{log}"
+if [[ "$1" == "list" && "$2" == "table" ]]; then exit 0; fi
+if [[ "$1" == "-a" && "$2" == "list" && "$3" == "chain" ]]; then
+    # Empty chain dump — no selfdef-suricata jump present.
+    echo "table inet selfdef_bridge {{ chain forward_hook {{ type filter hook forward priority 0; }} }}"
+    exit 0
+fi
+exit 0
+"#,
+            log = calls_log.display(),
+        ),
+    )
+    .unwrap();
+
+    // `systemctl` stub:
+    //   * `is-enabled suricata.service` → exit 3 (NOT enabled → trigger enable).
+    //   * `is-active  suricata.service` → exit 3 (NOT active  → trigger start).
+    //   * `enable` / `start`            → exit 0; we record argv.
+    std::fs::write(
+        stubs.path().join("systemctl"),
+        format!(
+            r#"#!/usr/bin/env bash
+echo "systemctl $*" >> "{log}"
+case "$1" in
+    is-active|is-enabled) exit 3 ;;
+    *) exit 0 ;;
+esac
+"#,
+            log = calls_log.display(),
+        ),
+    )
+    .unwrap();
+
+    for name in &["suricata", "nft", "systemctl"] {
+        let p = stubs.path().join(name);
+        let mut perms = std::fs::metadata(&p).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&p, perms).unwrap();
+    }
+
+    let cfg = write_config("mode = \"nfqueue\"\nqueue_num = 7\n");
+    let module = module_dir();
+    let out = Command::new("bash")
+        .arg(module.join("install/apply.sh"))
+        // NOTE: SELFDEF_DRY_RUN deliberately *not* set → live branch.
+        .env("SELFDEF_SURICATA_CONFIG", cfg.path())
+        .env("SELFDEF_SURICATA_TEMPLATES", module.join("templates"))
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn apply.sh");
+    let line = last_stdout_line(&out);
+    assert!(
+        out.status.success(),
+        "live apply must succeed; stderr: {}\nlast stdout line: {line}",
+        String::from_utf8_lossy(&out.stderr),
+    );
+    assert!(
+        line.contains("\"status\":\"ok\"") && line.contains("\"module\":\"suricata\""),
+        "got: {line}",
+    );
+
+    let calls = std::fs::read_to_string(&calls_log).expect("calls log");
+
+    // The NFQUEUE jump must have been installed via `nft -f <rendered>`.
+    assert!(
+        calls.lines().any(|l| l.starts_with("nft -f ")),
+        "expected `nft -f <file>` call; calls:\n{calls}",
+    );
+    // The service must have been both enabled and started.
+    assert!(
+        calls.contains("systemctl enable suricata.service"),
+        "expected systemctl enable; calls:\n{calls}",
+    );
+    assert!(
+        calls.contains("systemctl start suricata.service"),
+        "expected systemctl start; calls:\n{calls}",
+    );
+
+    // The script's `log` helper writes to stderr; the "load
+    // NFQUEUE jump" description landing there is our proof that
+    // apply.sh entered the install branch (not the
+    // "already-present" early-exit).
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("load NFQUEUE jump"),
+        "apply log should describe the NFQUEUE install; stderr: {stderr}",
+    );
+}
