@@ -399,9 +399,26 @@ enum EventsAction {
     Follow {
         /// Path to the daemon's UNIX socket. Default:
         /// `/run/selfdef.sock` (matches the daemon's
-        /// `[api].unix_socket` default).
+        /// `[api].unix_socket` default). Ignored when `--url`
+        /// is set.
         #[arg(long, default_value = "/run/selfdef.sock")]
         unix_socket: PathBuf,
+        /// F-2027-010: base URL of the daemon's TCP transport
+        /// (e.g. `https://selfdef.example.com:7443`). When set,
+        /// `--unix-socket` is ignored and the live-tail goes
+        /// over HTTP/HTTPS instead of the local socket. Pair
+        /// with `--token-file` if the daemon's TCP transport
+        /// requires bearer-auth (it does by default).
+        #[arg(long, conflicts_with = "unix_socket")]
+        url: Option<String>,
+        /// F-2027-010: path to a file holding the bearer token
+        /// the daemon's TCP transport accepts (one line, the
+        /// raw token — same shape `selfdefctl api rotate-token`
+        /// produces). Only meaningful with `--url`. Reading
+        /// the token from a file (vs `--token` on the command
+        /// line) keeps it out of `ps` / shell history.
+        #[arg(long, requires = "url")]
+        token_file: Option<PathBuf>,
         /// Filter to only category_uid = 2 (Findings / alerts).
         /// Default: every event on the bus.
         #[arg(long)]
@@ -560,12 +577,27 @@ async fn main() -> Result<()> {
             action:
                 EventsAction::Follow {
                     unix_socket,
+                    url,
+                    token_file,
                     alerts_only,
                     n,
                 },
-        } => {
-            follow::events_follow(&unix_socket, alerts_only, n).await?;
-        }
+        } => match url {
+            Some(base_url) => {
+                // F-2027-010: TCP/HTTP(S) transport. Token comes
+                // from `--token-file`; the file's contents flow
+                // straight into the `Authorization: Bearer ...`
+                // header.
+                let token = match token_file {
+                    Some(path) => Some(follow::read_token_file(&path)?),
+                    None => None,
+                };
+                follow::events_follow_tcp(&base_url, token.as_deref(), alerts_only, n).await?;
+            }
+            None => {
+                follow::events_follow_unix(&unix_socket, alerts_only, n).await?;
+            }
+        },
         Command::Events {
             action:
                 EventsAction::Emit {

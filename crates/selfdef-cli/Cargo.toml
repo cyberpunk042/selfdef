@@ -34,6 +34,14 @@ serde_json = { workspace = true }
 time = { workspace = true }
 toml = { workspace = true }
 uuid = { workspace = true }
+# F-2027-010: `selfdefctl events follow --url http(s)://...`
+# needs a streaming HTTP client. `reqwest` already lives in
+# the workspace (selfdef-notifier pulls it for ntfy), so the
+# CLI adopting it adds zero net dep size beyond the new
+# `stream` feature. `futures` gives us `StreamExt::next` for
+# walking `Response::bytes_stream()` chunks.
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -42,3 +50,9 @@ tempfile = { workspace = true }
 # and sign fixtures with it. Mirrors the dev-dep setup the
 # selfdef-signing crate uses for its own verifier suite.
 minisign = "0.9"
+# F-2027-010: TCP-follow integration test boots the api router
+# on a 127.0.0.1:0 ephemeral port, then invokes the CLI binary
+# as a subprocess against it.
+axum = { workspace = true }
+selfdef-api = { workspace = true, features = ["test-helpers"] }
+selfdef-bus = { workspace = true }

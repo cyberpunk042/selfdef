@@ -106,7 +106,7 @@ None.
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
-| F-2027-010 | SDD-debt | `selfdefctl events follow` TCP transport | UNIX socket only; TCP operators are out. Either pull in an HTTP client dep (size/security tradeoff) or document a remote-tunneling pattern (operator UX tradeoff). | design |
+| F-2027-010 | SDD-debt | `selfdefctl events follow` TCP transport | UNIX socket only; TCP operators are out. Either pull in an HTTP client dep (size/security tradeoff) or document a remote-tunneling pattern (operator UX tradeoff). | design — **closed** by the post-Phase-2 follow-up PR (operator decision: bundle a streaming HTTP client). The CLI now grows `--url <base>` + `--token-file <path>` flags that route the live tail through `reqwest::Response::bytes_stream()` (reqwest already lived in the workspace via selfdef-notifier so net dep size is the `stream` feature only). The shared `SseParser` state machine in `follow.rs` is reused by both the UNIX HTTP/1.1 path and the new TCP path so framing behaviour stays in sync. 9 parser unit tests + 5 TCP integration tests + the 7 existing UNIX tests all pass. |
 
 ## Status
 
@@ -114,8 +114,10 @@ None.
   10; crate: 11; module: 6; integration: 9; docs: 9; tests:
   11; security: 8). **All seven Phase 2 explorers have run.**
 - **0 blockers**, **3 important (all closed)**, **60 nice (all
-  closed)**, **1 SDD-debt (F-2027-010 open — design decision
-  awaited).**
+  closed)**, **1 SDD-debt (F-2027-010 closed — operator picked
+  the bundle-reqwest option; see ledger row).**
+- **Phase 2 is fully closed.** Every blocker / important /
+  nice / SDD-debt finding has shipped a follow-up PR.
 - **Phase 2 is closed for `nice` findings.** Every `nice` and
   `important` finding across all seven explorers has shipped
   in a follow-up PR. The init-template hygiene cluster
@@ -127,11 +129,10 @@ None.
   findings — the two security-tier closures earlier in Phase 2
   (F-2027-014 + F-2027-035) were re-audited and verified
   holding.
-- The only Phase 2 item still open is F-2027-010 (`events
-  follow` TCP transport, SDD-debt) — awaiting a design
-  decision on the size/security trade-off between pulling
-  in an HTTP client and documenting a remote-tunneling
-  pattern.
+- The only Phase 2 item still open was F-2027-010 (`events
+  follow` TCP transport, SDD-debt); the operator picked the
+  bundle-reqwest option and the follow-up PR shipped the
+  client + tests. Phase 2 is wrapped.
 - **No Phase 2 explorer remains.** Follow-up PRs close the
   open `nice` clusters; Phase 2 wraps when those are merged.
 - Three explorers remain (docs, tests, security). Each will
