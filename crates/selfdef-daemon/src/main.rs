@@ -760,22 +760,18 @@ fn build_notifier_path(
             }
             let mode = parse_dispatcher_mode(&cfg.notifier.mode);
             let profile = parse_dispatcher_profile(&cfg.notifier.profile);
-            let panic_floor = cfg
-                .notifier
-                .panic_floor
-                .as_deref()
-                .and_then(|raw| {
-                    let parsed = parse_severity_floor(raw);
-                    if parsed.is_none() {
-                        warn!(
-                            value = raw,
-                            "ignoring unknown [notifier].panic_floor; \
+            let panic_floor = cfg.notifier.panic_floor.as_deref().and_then(|raw| {
+                let parsed = parse_severity_floor(raw);
+                if parsed.is_none() {
+                    warn!(
+                        value = raw,
+                        "ignoring unknown [notifier].panic_floor; \
                              use one of informational|low|medium|high|critical|fatal; \
                              no panic floor will apply",
-                        );
-                    }
-                    parsed
-                });
+                    );
+                }
+                parsed
+            });
             let mut dispatcher_builder = PayloadDispatcher::new(engine, channels)
                 .with_mode(mode)
                 .with_profile(profile.clone());
