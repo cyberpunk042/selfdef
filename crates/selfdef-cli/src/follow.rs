@@ -20,6 +20,13 @@
 //! share the same logic: blank-line frame termination, `event:`
 //! / `data:` / `:comment` dispatch, and the `event: shutdown`
 //! and `event: lagged` handling F-2027-029 + -028 introduced.
+//!
+//! F-2028-019: both transports hand the parser **raw bytes**
+//! via [`SseParser::feed_bytes`]; chunk boundaries are invisible
+//! to the parser by construction. Any future third transport
+//! must do the same — never call `String::from_utf8_lossy`
+//! per-chunk before feeding, because a multi-byte UTF-8 sequence
+//! that straddles a chunk boundary would be destroyed (F-2028-018).
 
 use std::path::Path;
 
@@ -51,9 +58,18 @@ enum SseFrame {
 /// Stateful line-oriented SSE parser. Owns the partial-line buffer
 /// plus the in-progress `event:` accumulator (which is per-frame
 /// and resets on each blank-line terminator).
+///
+/// F-2028-018: the buffer holds **raw bytes** rather than UTF-8.
+/// Each transport hands the parser `&[u8]` directly; the parser
+/// only converts a slice to UTF-8 once a complete line is in the
+/// buffer (newline-bounded). This keeps chunk boundaries invisible
+/// — a multi-byte UTF-8 sequence split across two `feed_bytes`
+/// calls round-trips cleanly instead of being mangled into two
+/// `U+FFFD` replacements as it would under per-chunk
+/// `String::from_utf8_lossy`.
 #[derive(Default)]
 struct SseParser {
-    buf: String,
+    buf: Vec<u8>,
     current_event_type: String,
 }
 
@@ -62,17 +78,29 @@ impl SseParser {
         Self::default()
     }
 
-    /// Feed raw UTF-8 bytes from the wire. Returns every frame the
-    /// added bytes complete; partial trailing data stays in the
-    /// buffer until the next `feed`.
-    fn feed(&mut self, chunk: &str) -> Vec<SseFrame> {
-        self.buf.push_str(chunk);
+    /// Feed raw bytes from the wire. Returns every frame the added
+    /// bytes complete; partial trailing data stays in the buffer
+    /// until the next call. UTF-8 conversion happens line-at-a-time
+    /// after a `\n` terminator is found — so a multi-byte codepoint
+    /// split across `feed_bytes` calls is reassembled before
+    /// decoding.
+    fn feed_bytes(&mut self, chunk: &[u8]) -> Vec<SseFrame> {
+        self.buf.extend_from_slice(chunk);
         let mut out = Vec::new();
         loop {
-            let Some(idx) = self.buf.find('\n') else {
+            let Some(idx) = self.buf.iter().position(|b| *b == b'\n') else {
                 break;
             };
-            let line = self.buf[..idx].trim_end_matches('\r').to_string();
+            // Take the bytes up to (not including) the newline; strip
+            // a trailing `\r` if present (HTTP-style CRLF). Decode the
+            // resulting slice as UTF-8; replacement happens at the
+            // line level rather than the chunk level, so a malformed
+            // codepoint only corrupts the line that contains it.
+            let mut line_bytes = &self.buf[..idx];
+            if line_bytes.last() == Some(&b'\r') {
+                line_bytes = &line_bytes[..line_bytes.len() - 1];
+            }
+            let line = String::from_utf8_lossy(line_bytes).into_owned();
             self.buf.drain(..=idx);
 
             // Blank line → frame terminator. The current-event-type
@@ -255,7 +283,11 @@ pub(crate) async fn events_follow_unix(
         let mut _trailer = [0u8; 2];
         let _ = reader.read_exact(&mut _trailer).await;
 
-        let frames = parser.feed(&String::from_utf8_lossy(&body));
+        // F-2028-018: feed raw bytes, not lossy-decoded text. A
+        // multi-byte UTF-8 sequence at the very end of `body` whose
+        // bytes complete only after the next chunk arrives is now
+        // reassembled inside the parser before decoding.
+        let frames = parser.feed_bytes(&body);
         for frame in frames {
             match handle_frame(frame, alerts_only, limit, &mut printed) {
                 PrintOutcome::Continue => {}
@@ -305,8 +337,12 @@ pub(crate) async fn events_follow_tcp(
     let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("reading sse chunk")?;
-        let text = String::from_utf8_lossy(&bytes);
-        for frame in parser.feed(&text) {
+        // F-2028-018: feed raw bytes. `reqwest::bytes_stream` doesn't
+        // promise that each `Bytes` ends on a UTF-8 boundary —
+        // upstream re-chunking under HTTP/2 or any intermediate proxy
+        // can split a multi-byte codepoint across two `Bytes`. The
+        // parser's internal byte buffer reassembles them.
+        for frame in parser.feed_bytes(&bytes) {
             match handle_frame(frame, alerts_only, limit, &mut printed) {
                 PrintOutcome::Continue => {}
                 PrintOutcome::Done => return Ok(()),
@@ -357,6 +393,15 @@ pub(crate) fn read_token_file(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl SseParser {
+        /// Test-only ergonomic wrapper. The production path always
+        /// feeds raw bytes via `feed_bytes`; the unit tests use this
+        /// shim so their string literals stay readable.
+        fn feed(&mut self, chunk: &str) -> Vec<SseFrame> {
+            self.feed_bytes(chunk.as_bytes())
+        }
+    }
 
     #[test]
     fn parser_handles_a_single_data_frame() {
@@ -442,5 +487,51 @@ mod tests {
         let mut p = SseParser::new();
         let frames = p.feed("id: 42\nretry: 5000\ndata: ok\n\n");
         assert_eq!(frames, vec![SseFrame::Data("ok".to_string())]);
+    }
+
+    /// F-2028-018: a multi-byte UTF-8 sequence split across two
+    /// `feed_bytes` calls must round-trip cleanly. Pre-fix, each
+    /// call's `String::from_utf8_lossy` replaced the partial
+    /// bytes with `U+FFFD`, destroying the codepoint.
+    #[test]
+    fn parser_reassembles_multibyte_utf8_split_across_chunks() {
+        // 4-byte UTF-8 sequence for 🦀 (U+1F980, F0 9F A6 80) inside
+        // a JSON payload. Split 2/2 across the two feed_bytes calls,
+        // immediately before the terminating `\n\n`.
+        let prefix = b"data: \"rust ".to_vec();
+        let crab = [0xF0, 0x9F, 0xA6, 0x80];
+        let suffix = b"\"\n\n".to_vec();
+        let mut p = SseParser::new();
+
+        let mut first = prefix;
+        first.extend_from_slice(&crab[..2]); // ← cut mid-codepoint
+        assert!(p.feed_bytes(&first).is_empty());
+
+        let mut second = crab[2..].to_vec();
+        second.extend_from_slice(&suffix);
+        let frames = p.feed_bytes(&second);
+        assert_eq!(frames, vec![SseFrame::Data("\"rust 🦀\"".to_string())]);
+    }
+
+    /// F-2028-018: even when a chunk boundary lands inside a
+    /// 3-byte codepoint, the parser reassembles cleanly. Covers
+    /// the most-common non-ASCII case (Latin-1 supplement and
+    /// most BMP CJK glyphs are 2- or 3-byte).
+    #[test]
+    fn parser_reassembles_3byte_utf8_split_across_chunks() {
+        // 3-byte UTF-8 sequence for 漢 (U+6F22, E6 BC A2).
+        let prefix = b"data: ".to_vec();
+        let han = [0xE6, 0xBC, 0xA2];
+        let suffix = b"\n\n".to_vec();
+        let mut p = SseParser::new();
+
+        let mut first = prefix;
+        first.push(han[0]); // ← only the first byte of the codepoint
+        assert!(p.feed_bytes(&first).is_empty());
+
+        let mut second = han[1..].to_vec();
+        second.extend_from_slice(&suffix);
+        let frames = p.feed_bytes(&second);
+        assert_eq!(frames, vec![SseFrame::Data("漢".to_string())]);
     }
 }
