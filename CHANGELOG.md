@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — init-template hygiene (closes F-2027-057 + F-2027-058 + F-2027-059)
+
+Three doc-comment refreshes inside `crates/selfdef-cli/src/init.rs`'s embedded `STARTER_CONFIG` and `STARTER_MODULES` templates. Each closes one of the Phase 2 security-explorer init-template gaps without changing any value `selfdefctl init` writes — the byte stream only gains comment lines.
+
+#### Changes
+
+- **F-2027-057** — `[collectors.eventstream]` block now names the F-2027-035 mitigation explicitly. Adds a paragraph after the existing `integrity_check`/0750 hint explaining that the check protects the *file open* (via `O_NOFOLLOW` + fstat-on-FD) and warning operators to keep `paths` rooted under a 0750 selfdef:selfdef dir and never list a symlinked target. Closes the "operator never reads SECURITY.md" footgun the explorer flagged.
+- **F-2027-058** — `[api]` block now documents `control_token_file` alongside `token_file`. Spells out the read-vs-control audience split: `token_file` gates the read endpoints (/events, /events/stream, /metrics, /status); `control_token_file` gates the mutating control endpoints. Operators who only need read can leave control unset; operators wanting a stricter control audience get a separate 0600 file with its own rotated token.
+- **F-2027-059** — `STARTER_MODULES` header now warns that every per-module `config = "..."` is a trust boundary the daemon evaluates at apply time. Includes the verbatim `install -m 0640 -o root -g selfdef …` invocation that gives the file the right ownership/permissions before uncommenting the matching `[modules.<slug>]` block.
+
+#### Tests
+
+- `cargo test -p selfdef-cli --test cli_init` — all 7 cases pass; the existing assertions only check that the byte count matches `STARTER_CONFIG.len()` / `STARTER_MODULES.len()`, so the added comment lines are picked up automatically.
+- `cargo build -p selfdef-cli` clean.
+
+#### Phase 2 status after this PR
+
+**Open `nice` clusters: 5 remaining.** Tests-explorer leftovers (F-2027-046 suricata live-positive, F-2027-052/-053 `pause()`-conversion) and four security-explorer items (F-2027-060 rbac validator, F-2027-061 + -062 SSE backpressure, F-2027-063 info disclosure, F-2027-064 test posture). The init-template hygiene cluster is closed.
+
 ### Documentation — Phase 2 security explorer (raises F-2027-057 through F-2027-064)
 
 **Last of Phase 2's seven explorers.** Walks the new attack surfaces added during the post-Phase-1 cycle: `/events/stream` SSE endpoint, operator-side `init` config templates, `rbac check --probe`'s `kubectl` exec, plus a re-audit of F-2027-014 (`with_full_capability` feature-gate) and F-2027-035 (eventstream TOCTOU/symlink).

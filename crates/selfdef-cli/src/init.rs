@@ -189,6 +189,14 @@ enabled    = false
 # Once enabled, run `selfdefctl api rotate-token` to generate
 # the bearer token at the path below (mode 0600).
 # token_file = "/etc/selfdef/api.token"
+# F-2027-058: read-vs-control token split. `token_file` gates
+# the read endpoints (/events, /events/stream, /metrics, /status);
+# the optional `control_token_file` below gates the mutating
+# control endpoints (/control/* — rule reload, daemon kick).
+# Leave control_token_file unset to disable the control plane
+# entirely; set it to a separate 0600 file with its own rotated
+# token to expose control under a stricter audience.
+# control_token_file = "/etc/selfdef/api.control.token"
 
 [security]
 # Rule signing (closes the original Known gap; see docs/dev/signing.md).
@@ -204,6 +212,13 @@ require_signed_rules    = false
 # Set integrity_check = true once /var/lib/selfdef/eventstream/
 # is 0750 selfdef:selfdef (see docs/dev/rbac-posture.md +
 # SECURITY.md hardening checklist).
+# F-2027-057: integrity_check defends against TOCTOU + symlink
+# swap by opening with O_NOFOLLOW + fstat-on-FD (closes
+# F-2027-035). It only protects the *file open* — if `paths`
+# points at a directory whose parents an attacker can rewrite
+# the collector still follows the operator-supplied path. Keep
+# `paths` rooted under a 0750 selfdef:selfdef dir and never list
+# a symlinked target.
 enabled         = false
 integrity_check = false
 paths           = []
@@ -221,6 +236,16 @@ const STARTER_MODULES: &str = r#"# modules.toml — modules activated on this ho
 #
 # After editing, `selfdefctl modules apply --dry-run` shows
 # what would happen.
+#
+# F-2027-059: every per-module `config = "..."` file below is a
+# trust boundary — the daemon evaluates its contents at apply
+# time. Provision each file as 0640 root:selfdef before
+# uncommenting the matching block:
+#     sudo install -m 0640 -o root -g selfdef \
+#       /usr/share/selfdef/modules/<slug>.toml.example \
+#       /etc/selfdef/modules/<slug>.toml
+# A 0644 file lets any local user influence module apply
+# behaviour the next time the daemon reloads.
 
 # ----------------------------------------------------------------
 # Detection / response modules
