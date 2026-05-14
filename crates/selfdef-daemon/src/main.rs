@@ -630,6 +630,32 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "twilio"
+                if !cfg.notifier.twilio.account_sid.is_empty()
+                    && !cfg.notifier.twilio.to.is_empty() =>
+            {
+                let Some(token_path) = cfg.notifier.twilio.auth_token_file.as_ref() else {
+                    warn!(channel, "twilio channel skipped (auth_token_file not set)");
+                    continue;
+                };
+                match selfdef_integration_twilio::TwilioNotifier::from_config(
+                    &cfg.notifier.twilio.account_sid,
+                    token_path,
+                    &cfg.notifier.twilio.from,
+                    &cfg.notifier.twilio.to,
+                    std::time::Duration::from_secs(cfg.notifier.twilio.timeout_secs),
+                ) {
+                    Ok(n) => {
+                        inner.push(Box::new(n));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "twilio channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }

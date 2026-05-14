@@ -2346,6 +2346,7 @@ dependencies = [
  "selfdef-integration-ntfy",
  "selfdef-integration-signal",
  "selfdef-integration-smtp",
+ "selfdef-integration-twilio",
  "selfdef-nats",
  "selfdef-notifier",
  "selfdef-responder",
@@ -2408,6 +2409,22 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "selfdef-integration-twilio"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "wiremock",
 ]
 
 [[package]]
