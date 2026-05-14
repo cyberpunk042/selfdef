@@ -6,6 +6,43 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 5 integration explorer (**0 findings**; fourth consecutive clean explorer)
+
+Fourth of seven Phase 5 explorers. Traces the five integration seams from the Phase 4 closure cycle end-to-end.
+
+#### Headline
+
+**0 findings.** Four Phase 5 explorers in; all 100% clean.
+
+#### Seams verified
+
+| Seam | Verdict |
+| --- | --- |
+| TOML → daemon → ApiState chain | clean — test-covered at both parse and handler ends |
+| `Some(0)` fallback → `n > 0` guard | clean — `events_stream_zero_caps_fall_back_to_defaults` pins the contract |
+| `TokenFingerprint` Debug → tracing field expansion | clean — custom impl sound; defensively documented for future use |
+| `vpn-bridge` `apply.sh` header → `profile_apply` | clean — all three documented claims verified against impl |
+| `SECURITY.md` → `handlers.rs` + `config.rs` | clean — every claim about defaults, knob names, 503 reasons, SHA-256 fingerprinting, Drop semantics verifies bytewise |
+
+#### Integration-explorer trajectory
+
+| Cycle | Integration findings |
+| --- | --- |
+| Phase 2 | 9 (1 important + 8 nice) |
+| Phase 3 | 4 nice |
+| Phase 4 | 2 nice |
+| **Phase 5** | **0** |
+
+#### New document
+
+`docs/review/phase-5/50-integration-audit.md` — per-seam evidence + triage.
+
+#### Phase 5 status
+
+0 findings raised across 4 explorers: 0 blockers, 0 important, 0 nice, 0 demoted, 0 SDD-debt. **Three explorers remain** (docs, tests, security). Trajectory continues to suggest a complete-cycle zero-findings result — a milestone marker for project stability.
+
+This PR is documentation-only.
+
 ### Documentation — Phase 5 module explorer (**0 findings**; third consecutive clean explorer)
 
 Third of seven Phase 5 explorers. Audits the module-side changes from the Phase 4 closure cycle.
