@@ -222,6 +222,32 @@ channels = []
 # to              = ["+15557654321"]    # E.164 recipients
 # timeout_secs    = 10
 
+# SDD-008 D-3: per-channel subscription filters. Without these
+# blocks every channel sees every event (the M4 behaviour). Add a
+# block per channel you want filtered:
+#
+#   severity_floor — one of informational|low|medium|high|critical|fatal.
+#                    Events below this severity skip the channel.
+#   event_kinds    — substrings matched case-insensitively against the
+#                    OCSF class_uid name. e.g. ["security", "detection"]
+#                    matches both "Security Finding" and "Detection
+#                    Finding". Empty list = accept all kinds.
+#
+# Common posture: route High+ to SMS, Critical+ to phone, everything to
+# email, security findings only to ntfy.
+#
+# [notifier.subscriptions.twilio]
+# severity_floor = "critical"          # SMS for blockers only
+#
+# [notifier.subscriptions.smtp]
+# severity_floor = "medium"            # email for medium+
+#
+# [notifier.subscriptions.ntfy]
+# event_kinds    = ["security", "detection"]
+#
+# [notifier.subscriptions.signal]
+# severity_floor = "high"
+
 [responder]
 allowed_actions = ["notify"]
 dry_run         = true   # flip to false after verifying the

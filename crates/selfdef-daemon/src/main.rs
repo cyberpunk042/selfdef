@@ -18,7 +18,7 @@ use selfdef_config::Config;
 use selfdef_correlator::Correlator;
 use selfdef_integration_ntfy::NtfyNotifier;
 use selfdef_integration_signal::SignalCliNotifier;
-use selfdef_notifier::{Notifier, NotifierChain};
+use selfdef_notifier::{Notifier, NotifierChain, Subscription};
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
 use tokio::signal::unix::{SignalKind, signal};
@@ -579,26 +579,32 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
         );
     }
 
-    let mut inner: Vec<Box<dyn Notifier>> = Vec::new();
+    let mut inner: Vec<(Box<dyn Notifier>, Subscription)> = Vec::new();
     for channel in &cfg.notifier.channels {
         match channel.as_str() {
             "ntfy" if !cfg.notifier.ntfy.url.is_empty() && !cfg.notifier.ntfy.topic.is_empty() => {
-                inner.push(Box::new(NtfyNotifier::from_config(
-                    &cfg.notifier.ntfy.url,
-                    &cfg.notifier.ntfy.topic,
-                    cfg.notifier.ntfy.token_file.as_ref(),
-                )));
+                inner.push((
+                    Box::new(NtfyNotifier::from_config(
+                        &cfg.notifier.ntfy.url,
+                        &cfg.notifier.ntfy.topic,
+                        cfg.notifier.ntfy.token_file.as_ref(),
+                    )),
+                    build_subscription(channel, cfg),
+                ));
                 info!(channel, "notifier channel enabled");
             }
             "signal"
                 if !cfg.notifier.signal.account.is_empty()
                     && !cfg.notifier.signal.recipient.is_empty() =>
             {
-                inner.push(Box::new(SignalCliNotifier::new(
-                    cfg.notifier.signal.binary.clone(),
-                    cfg.notifier.signal.account.clone(),
-                    cfg.notifier.signal.recipient.clone(),
-                )));
+                inner.push((
+                    Box::new(SignalCliNotifier::new(
+                        cfg.notifier.signal.binary.clone(),
+                        cfg.notifier.signal.account.clone(),
+                        cfg.notifier.signal.recipient.clone(),
+                    )),
+                    build_subscription(channel, cfg),
+                ));
                 info!(channel, "notifier channel enabled");
             }
             "smtp"
@@ -620,7 +626,7 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     std::time::Duration::from_secs(cfg.notifier.smtp.timeout_secs),
                 ) {
                     Ok(n) => {
-                        inner.push(Box::new(n));
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
                         info!(channel, "notifier channel enabled");
                     }
                     Err(e) => warn!(
@@ -646,7 +652,7 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     std::time::Duration::from_secs(cfg.notifier.twilio.timeout_secs),
                 ) {
                     Ok(n) => {
-                        inner.push(Box::new(n));
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
                         info!(channel, "notifier channel enabled");
                     }
                     Err(e) => warn!(
@@ -659,7 +665,50 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
-    NotifierChain::new(inner)
+    NotifierChain::with_subscriptions(inner)
+}
+
+/// SDD-008 D-3: build the [`Subscription`] for a channel slug by
+/// looking up `[notifier.subscriptions.<channel>]` in the config and
+/// translating string-shaped fields into the typed
+/// [`selfdef_notifier::Subscription`]. Missing entry returns the
+/// default (accept-all) subscription.
+fn build_subscription(channel: &str, cfg: &Config) -> Subscription {
+    let Some(sc) = cfg.notifier.subscriptions.get(channel) else {
+        return Subscription::default();
+    };
+    let severity_floor = sc.severity_floor.as_deref().and_then(|raw| {
+        let parsed = parse_severity_floor(raw);
+        if parsed.is_none() {
+            warn!(
+                channel,
+                value = raw,
+                "ignoring unknown severity_floor in [notifier.subscriptions]; \
+                 use one of informational|low|medium|high|critical|fatal",
+            );
+        }
+        parsed
+    });
+    Subscription {
+        severity_floor,
+        event_kinds: sc.event_kinds.clone(),
+    }
+}
+
+/// Parse the string shape used in `[notifier.subscriptions.<ch>].severity_floor`
+/// into a [`selfdef_core::severity::SeverityId`]. Unknown strings return
+/// `None`; the caller logs a warn and treats it as no floor.
+fn parse_severity_floor(s: &str) -> Option<selfdef_core::severity::SeverityId> {
+    use selfdef_core::severity::SeverityId;
+    match s.to_ascii_lowercase().as_str() {
+        "info" | "informational" => Some(SeverityId::Informational),
+        "low" => Some(SeverityId::Low),
+        "medium" | "med" => Some(SeverityId::Medium),
+        "high" => Some(SeverityId::High),
+        "critical" | "crit" => Some(SeverityId::Critical),
+        "fatal" => Some(SeverityId::Fatal),
+        _ => None,
+    }
 }
 
 fn init_tracing(level_override: Option<&str>) -> Result<()> {

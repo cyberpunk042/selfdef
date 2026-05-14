@@ -102,11 +102,64 @@ pub const fn priority_for(severity: SeverityId) -> u8 {
     }
 }
 
+// ---------------------------------------------------------------- Subscription (D-3)
+
+/// SDD-008 D-3: per-channel subscription filter.
+///
+/// Operators configure these per channel via
+/// `[notifier.subscriptions.<channel_name>]`. A channel without an
+/// explicit subscription uses [`Subscription::default`] which
+/// accepts every event.
+///
+/// v1 ships two filters; the charter's full set
+/// (severity_floor / event_kinds / quiet_hours / device_hint) lands
+/// incrementally — quiet_hours + device_hint follow once TZ +
+/// channel-routing semantics are scoped.
+#[derive(Debug, Clone, Default)]
+pub struct Subscription {
+    /// Minimum severity to forward. Events below this are dropped
+    /// before the channel sees them. `None` = accept all severities.
+    pub severity_floor: Option<SeverityId>,
+    /// Allowed event-kind substrings (matched case-insensitively
+    /// against `Event::class_uid::name()`). Empty = accept all kinds.
+    /// e.g. `["security", "detection"]` matches both "Security
+    /// Finding" and "Detection Finding".
+    pub event_kinds: Vec<String>,
+}
+
+impl Subscription {
+    /// Returns `true` when this event should be forwarded to the
+    /// channel under this subscription.
+    #[must_use]
+    pub fn matches(&self, event: &Event) -> bool {
+        if let Some(floor) = self.severity_floor
+            && (event.severity_id as u32) < (floor as u32)
+        {
+            return false;
+        }
+        if !self.event_kinds.is_empty() {
+            let class = event.class_uid.name().to_ascii_lowercase();
+            if !self
+                .event_kinds
+                .iter()
+                .any(|k| class.contains(&k.to_ascii_lowercase()))
+            {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 // ---------------------------------------------------------------- NotifierChain
 
-/// Tries notifiers in order, returning on the first success.
+/// Tries notifiers in order, returning on the first success. Each
+/// notifier carries a [`Subscription`] filter (SDD-008 D-3); events
+/// that fail the subscription skip the channel before any I/O. A
+/// chain in which every channel filters the event out returns
+/// `Ok(())` — that's "operator chose silence", not a failure.
 pub struct NotifierChain {
-    inner: Vec<Box<dyn Notifier>>,
+    inner: Vec<(Box<dyn Notifier>, Subscription)>,
 }
 
 impl std::fmt::Debug for NotifierChain {
@@ -118,8 +171,23 @@ impl std::fmt::Debug for NotifierChain {
 }
 
 impl NotifierChain {
+    /// Construct with default (accept-all) subscriptions on every
+    /// channel. Pre-D-3 callers keep working unchanged.
     #[must_use]
     pub fn new(inner: Vec<Box<dyn Notifier>>) -> Self {
+        Self {
+            inner: inner
+                .into_iter()
+                .map(|n| (n, Subscription::default()))
+                .collect(),
+        }
+    }
+
+    /// SDD-008 D-3: construct from explicit (notifier, subscription)
+    /// pairs. Each pair's subscription gates whether that channel
+    /// sees an event.
+    #[must_use]
+    pub fn with_subscriptions(inner: Vec<(Box<dyn Notifier>, Subscription)>) -> Self {
         Self { inner }
     }
 
@@ -135,11 +203,21 @@ impl Notifier for NotifierChain {
         if self.inner.is_empty() {
             return Err(NotifierError::NotConfigured);
         }
-        for n in &self.inner {
+        let mut tried = 0usize;
+        for (n, sub) in &self.inner {
+            if !sub.matches(event) {
+                continue;
+            }
+            tried += 1;
             match n.notify(event).await {
                 Ok(()) => return Ok(()),
                 Err(e) => warn!(channel = n.name(), error = %e, "channel failed, trying next"),
             }
+        }
+        if tried == 0 {
+            // Operator filtered every channel out for this event.
+            // That's intentional silence, not a failure.
+            return Ok(());
         }
         Err(NotifierError::AllChannelsFailed)
     }
@@ -169,6 +247,28 @@ mod tests {
         .with_message("Possible SSH brute force from 192.0.2.5")
     }
 
+    fn low_event() -> Event {
+        Event::new(
+            ClassUid::DETECTION_FINDING,
+            1,
+            SeverityId::Low,
+            "test-host",
+            "selfdef.correlator.test",
+            0,
+        )
+    }
+
+    fn process_event() -> Event {
+        Event::new(
+            ClassUid(1007), // "Process Activity"
+            1,
+            SeverityId::High,
+            "test-host",
+            "selfdef.correlator.test",
+            0,
+        )
+    }
+
     #[test]
     fn render_title_includes_severity_and_summary() {
         let e = finding_event();
@@ -194,5 +294,156 @@ mod tests {
             chain.notify(&e).await,
             Err(NotifierError::NotConfigured)
         ));
+    }
+
+    #[test]
+    fn subscription_default_matches_every_event() {
+        let s = Subscription::default();
+        assert!(s.matches(&finding_event()));
+        assert!(s.matches(&low_event()));
+        assert!(s.matches(&process_event()));
+    }
+
+    #[test]
+    fn subscription_severity_floor_blocks_below() {
+        let s = Subscription {
+            severity_floor: Some(SeverityId::High),
+            ..Subscription::default()
+        };
+        assert!(s.matches(&finding_event())); // High
+        assert!(!s.matches(&low_event())); // Low
+    }
+
+    #[test]
+    fn subscription_severity_floor_passes_at_and_above() {
+        let s = Subscription {
+            severity_floor: Some(SeverityId::Medium),
+            ..Subscription::default()
+        };
+        // High >= Medium → pass
+        let mut e = low_event();
+        e.severity_id = SeverityId::Medium;
+        assert!(s.matches(&e));
+        e.severity_id = SeverityId::Critical;
+        assert!(s.matches(&e));
+        e.severity_id = SeverityId::Low;
+        assert!(!s.matches(&e));
+    }
+
+    #[test]
+    fn subscription_event_kinds_substring_case_insensitive() {
+        let s = Subscription {
+            event_kinds: vec!["detection".to_owned()],
+            ..Subscription::default()
+        };
+        assert!(s.matches(&finding_event())); // "Detection Finding" contains "detection"
+        assert!(!s.matches(&process_event())); // "Process Activity" doesn't
+    }
+
+    #[test]
+    fn subscription_empty_event_kinds_accepts_all() {
+        let s = Subscription {
+            event_kinds: vec![],
+            ..Subscription::default()
+        };
+        assert!(s.matches(&finding_event()));
+        assert!(s.matches(&process_event()));
+    }
+
+    #[test]
+    fn subscription_multi_kind_any_match_passes() {
+        let s = Subscription {
+            event_kinds: vec!["security".to_owned(), "detection".to_owned()],
+            ..Subscription::default()
+        };
+        assert!(s.matches(&finding_event()));
+    }
+
+    /// A tiny stub Notifier that always succeeds, records the
+    /// invocation in an atomic counter, and exposes a name.
+    struct StubNotifier {
+        name: &'static str,
+        sent: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Notifier for StubNotifier {
+        async fn notify(&self, _event: &Event) -> Result<(), NotifierError> {
+            self.sent.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+            Ok(())
+        }
+        fn name(&self) -> &'static str {
+            self.name
+        }
+    }
+
+    fn stub(
+        name: &'static str,
+    ) -> (
+        Box<dyn Notifier>,
+        std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        (
+            Box::new(StubNotifier {
+                name,
+                sent: std::sync::Arc::clone(&counter),
+            }),
+            counter,
+        )
+    }
+
+    #[tokio::test]
+    async fn chain_with_subscriptions_filters_per_channel() {
+        let (n_high, c_high) = stub("high-only");
+        let (n_all, c_all) = stub("accept-all");
+        let chain = NotifierChain::with_subscriptions(vec![
+            (
+                n_high,
+                Subscription {
+                    severity_floor: Some(SeverityId::High),
+                    ..Subscription::default()
+                },
+            ),
+            (n_all, Subscription::default()),
+        ]);
+
+        // Low event: high-only filters out, accept-all wins.
+        chain.notify(&low_event()).await.expect("ok");
+        assert_eq!(c_high.load(std::sync::atomic::Ordering::Acquire), 0);
+        assert_eq!(c_all.load(std::sync::atomic::Ordering::Acquire), 1);
+
+        // High event: high-only fires first, accept-all never sees it.
+        chain.notify(&finding_event()).await.expect("ok");
+        assert_eq!(c_high.load(std::sync::atomic::Ordering::Acquire), 1);
+        assert_eq!(c_all.load(std::sync::atomic::Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn chain_with_subscriptions_all_filtered_returns_ok() {
+        // Two channels both with severity_floor = Critical; a Low
+        // event is filtered by both. The chain returns Ok because
+        // "everyone filtered" is operator-intended silence.
+        let (n1, c1) = stub("crit-1");
+        let (n2, c2) = stub("crit-2");
+        let chain = NotifierChain::with_subscriptions(vec![
+            (
+                n1,
+                Subscription {
+                    severity_floor: Some(SeverityId::Critical),
+                    ..Subscription::default()
+                },
+            ),
+            (
+                n2,
+                Subscription {
+                    severity_floor: Some(SeverityId::Critical),
+                    ..Subscription::default()
+                },
+            ),
+        ]);
+        chain.notify(&low_event()).await.expect("ok");
+        assert_eq!(c1.load(std::sync::atomic::Ordering::Acquire), 0);
+        assert_eq!(c2.load(std::sync::atomic::Ordering::Acquire), 0);
     }
 }
