@@ -6,6 +6,39 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Feature — `selfdefctl events follow --url` over TCP/HTTP(S) (closes F-2027-010, wraps Phase 2)
+
+Operator-facing live-tail now works against the daemon's TCP transport, not just the UNIX socket. The Phase 2 audit flagged the gap as SDD-debt awaiting a design decision; the operator picked the bundle-reqwest option, and this PR ships it.
+
+#### CLI shape
+
+```
+selfdefctl events follow                            # existing UNIX-socket path, unchanged
+selfdefctl events follow --url https://host:7443    # new: TCP transport
+selfdefctl events follow --url ... --token-file PATH
+```
+
+`--url` and `--unix-socket` are mutually exclusive (clap-enforced); `--token-file` requires `--url`. Reading the token from a file mirrors `[api].token_file` on the daemon side and keeps the token out of `ps`/shell history.
+
+#### Implementation
+
+- New `events_follow_tcp(base_url, bearer_token, alerts_only, limit)` in `crates/selfdef-cli/src/follow.rs` uses `reqwest::Client::get(base_url + "/events/stream").send().await.bytes_stream()` to receive the SSE body. reqwest already lives in the workspace via `selfdef-notifier`; the net dep cost is the `stream` feature plus `futures::StreamExt::next` to walk the chunk iterator.
+- The existing UNIX HTTP/1.1 hand-roll is renamed `events_follow_unix` (no behaviour change).
+- Both paths share a new `SseParser` state machine that owns the partial-line buffer + the per-frame `event:` accumulator. Frame decode (`Data` / `Shutdown` / `Lagged` / `UnknownEventType` / `Comment`) is identical across transports, so the `event: shutdown` and `event: lagged` contracts (F-2027-029 + F-2027-028) hold for TCP without re-implementation.
+- `read_token_file(path)` trims trailing whitespace and rejects empty tokens (matches daemon-side validation).
+
+#### Tests
+
+- **Parser unit tests** (9): single-data frame, optional space after `data:`, event-type pairing, blank-line event-type reset, `:ping` keepalive vs operator-surfaced comment, `event: shutdown`, unknown event-type passthrough, partial-line buffering across `feed()` calls, unknown SSE fields ignored.
+- **TCP integration tests** (5, `cli_events_follow_tcp.rs`): end-to-end stream of one event via subprocess + axum on `127.0.0.1:0`; bad URL fails fast; `--token-file` round-trips; `--url` and `--unix-socket` mutually exclusive (clap conflict); `--token-file` requires `--url` (clap requires-error).
+- **Existing UNIX tests** (7): all pass against the refactored shared parser.
+
+`cargo clippy --workspace --tests -- -D warnings` clean; `cargo fmt --all -- --check` clean.
+
+#### Phase 2 status
+
+**Phase 2 is fully wrapped.** Every finding across the seven explorers is closed: 0 blockers, 3 important (closed), 60 nice (closed), 1 SDD-debt (closed by this PR).
+
 ### Test — Phase 2 tests-cluster (closes F-2027-046 + F-2027-052 + F-2027-053)
 
 The last three open `nice` findings from the Phase 2 tests-explorer cluster. After this PR every Phase 2 `nice` and `important` finding is closed; only F-2027-010 (SDD-debt, awaiting design decision) remains.
@@ -2819,24 +2852,4 @@ shipped**.
 - OCSF-aligned `Event` envelope with: `schema`, `id` (UUIDv7), `time_dt`
   (RFC3339), `category_uid`, `class_uid`, `activity_id`, `type_uid`,
   `severity_id`, `status_id`, `host_tag`, `source`, `message`, `metadata`,
-  `raw`, plus optional typed observables.
-- Typed observables: `Actor`, `User`, `Process`, `Session`, `File`,
-  `FileType`, `Hash`, `HashAlgorithm`, `Endpoint`, `NetworkConnection`,
-  `Direction`.
-- MITRE ATT&CK overlay: `Tactic` enum with stable `TA*` IDs,
-  `TechniqueRef` with convenience constructors.
-- `Metadata` block with `Product`, `logged_time_dt`, `sequence`, `profiles`.
-- Builder methods on `Event` (`with_status`, `with_actor`, ...).
-- `Event::validate()` invariant check.
-- 6 inline unit tests + insta snapshot tests for 4 canonical event shapes
-  + proptest properties for round-trip, type_uid, category, validation.
-- `SCHEMA_VERSION` bumped from 0 (placeholder) to 1 (first real schema).
-- Daemon logs schema version on startup; `selfdefctl version` displays it.
-
-### Added — Milestone 1 (Foundation)
-- Cargo workspace with 13 crates.
-- Pinned Rust toolchain, lint policy, `cargo-deny` config.
-- Hardened systemd unit, AppArmor profile, Debian packaging metadata.
-- CI workflow skeleton (fmt, clippy, test, deny, audit, build).
-- Documentation skeleton (mdbook), architecture and security threat model.
-- Example configuration.
+  `raw`, plus optional typ
