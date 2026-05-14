@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 5 docs explorer (**0 findings**; fifth consecutive clean explorer)
+
+Fifth of seven Phase 5 explorers. Audits the documentation surface from the Phase 4 closure cycle.
+
+#### Headline
+
+**0 findings.** Five Phase 5 explorers in; all 100% clean.
+
+#### What was verified
+
+- **`SECURITY.md` § API surface** (F-2029-007 closure): knob names match `ApiConfig`, defaults (8 per-token, 64 global) match code constants, SHA-256 fingerprint description matches `TokenFingerprint::of`, `Drop` pruning behaviour matches `SubscriberGuard::Drop`, 503 reason strings are exact bytewise match.
+- **`docs/sdd/007-per-token-sse-subscriber-quota.md`**: "implemented (all five Ds shipped)" status verified against code.
+- **`docs/review/phase-4/*`**: charter + seven explorer docs + ledger cross-references hold; trajectory tables accurate; demoted rationales sound.
+- **CHANGELOG.md**: Phase 4 status lines increment correctly across successive entries; trajectory tables match ledger snapshots.
+- **`init.rs::STARTER_CONFIG`** knob names still valid against current `ApiConfig` parser.
+- **Phase 5's own docs**: charter, inventory, four prior explorer docs, ledger — all consistent with auditor verdicts.
+
+#### Docs-explorer trajectory
+
+| Cycle | Docs findings |
+| --- | --- |
+| Phase 2 | 9 nice |
+| Phase 3 | 5 (2 nice, 3 demoted) |
+| Phase 4 | 1 nice (SECURITY.md gap) |
+| **Phase 5** | **0** |
+
+#### New document
+
+`docs/review/phase-5/60-docs-audit.md`
+
+#### Phase 5 status
+
+0 findings raised across 5 explorers: 0 blockers, 0 important, 0 nice, 0 demoted, 0 SDD-debt. **Two explorers remain** (tests, security). The trajectory strongly suggests Phase 5 will produce a complete-cycle zero-findings result.
+
+This PR is documentation-only.
+
 ### Documentation — Phase 5 integration explorer (**0 findings**; fourth consecutive clean explorer)
 
 Fourth of seven Phase 5 explorers. Traces the five integration seams from the Phase 4 closure cycle end-to-end.

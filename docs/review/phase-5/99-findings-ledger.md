@@ -36,9 +36,9 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** across four Phase 5 explorers
-  (recent-PRs + crate + module + integration). **All four
-  100% clean on first-pass scrutiny.**
+- **0 findings raised** across five Phase 5 explorers
+  (recent-PRs + crate + module + integration + docs). **All
+  five 100% clean on first-pass scrutiny.**
 - Phase 5 integration auditor traced all five seams from the
   Phase 4 closure cycle end-to-end:
   - TOML → daemon → ApiState chain test-covered at both ends.
@@ -52,14 +52,14 @@ Phase 4 closure cycle was exceptionally clean execution.)*
     against `handlers.rs` + `config.rs`.
 - **Trajectory comparison**:
 
-  | Cycle | recent-PRs | crate | module | integration |
-  | --- | --- | --- | --- | --- |
-  | Phase 2 | many | 11 nice | 6 nice | 9 mixed |
-  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice |
-  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice |
-  | **Phase 5** | **0** | **0** | **0** | **0** |
+  | Cycle | recent-PRs | crate | module | integration | docs |
+  | --- | --- | --- | --- | --- | --- |
+  | Phase 2 | many | 11 nice | 6 nice | 9 mixed | 9 nice |
+  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed |
+  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice |
+  | **Phase 5** | **0** | **0** | **0** | **0** | **0** |
 
-- Three explorers remain: docs, tests, security.
+- Two explorers remain: tests, security.
 - No Phase 5 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
