@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 3 crate explorer (raises F-2028-005 through F-2028-014)
+
+Second of seven Phase 3 explorers. Audits the Rust code introduced by the Phase 2 closure cycle (~28 PRs, commits `2d918ac` through `ee0e1a9`): `SseParser` state machine + dual-transport architecture in `selfdef-cli/src/follow.rs`, `validate_rbac_subject` + `Follow` clap shape in `main.rs`, `SubscriberGuard` RAII + refactored `events_stream` + rewritten `ApiError::store` in `selfdef-api/src/handlers.rs`, `sse_subscribers` field in `state.rs`, `MAX_SSE_SUBSCRIBERS` re-export in `lib.rs`, and new `reqwest`/`futures` deps in `Cargo.toml`.
+
+#### New document
+
+`docs/review/phase-3/30-crate-audit.md` — per-crate notes with concrete `file:line` observations.
+
+#### Headline
+
+**No blockers, no important findings.** The closure code went through PR review and CI; the new machinery is well-integrated and test-covered.
+
+#### Findings raised (10 entries, 7 actionable + 3 demoted after cross-check)
+
+- **F-2028-005 (nice)** — `read_token_file` whitespace-trim asymmetry: CLI uses ASCII-only trim, daemon uses Unicode `.trim()`.
+- **F-2028-006 (nice)** — `events_follow_tcp` doc-comment doesn't name the wire-format `Authorization: Bearer <token>`.
+- **F-2028-007 (nice)** — `follow.rs` `//!` module header doesn't enumerate the new `read_token_file` helper.
+- **F-2028-008 (nice, defer)** — `SseParser` is private but well-tested + reusable; defer until a second consumer emerges.
+- **F-2028-009 (demoted)** — `validate_rbac_subject` charset audit returned no actionable findings; the validator is well-scoped, well-tested, and the recent-PRs explorer (F-2028-003) already touched this surface.
+- **F-2028-010 (nice)** — `Follow` clap doc-comment correctly uses `conflicts_with` / `requires` attributes but doesn't restate the structure in prose.
+- **F-2028-011 (demoted)** — `SubscriberGuard` atomics + memory ordering reviewed; the CAS loop (`Ordering::Acquire` + `AcqRel`) is correct.
+- **F-2028-012 (nice, defer)** — `SubscriberGuard::Drop` doesn't `debug_assert!(prev > 0)` against underflow; can't happen today, would catch future double-drop bugs under test.
+- **F-2028-013 (nice, defer)** — `events_stream` `"slow-client timeout"` message doesn't name the `SSE_SEND_TIMEOUT = 30s` deadline.
+- **F-2028-014 (demoted)** — `reqwest` + `futures` dep additions reviewed and properly justified; inline comments explain the dep-size cost.
+
+#### Closing-PR clusters
+
+- **CLI token-reader symmetry** — F-2028-004 (recent-PRs) + F-2028-005 (crate). One PR aligns the CLI and daemon `read_token_file` implementations on mode validation + whitespace trimming.
+- **CLI doc-comment clarity** — F-2028-006 + F-2028-007 + F-2028-010. One PR refreshes the `follow.rs` module header, the `events_follow_tcp` Bearer-format note, and the `Follow` clap doc-comment.
+
+F-2028-008, F-2028-012, F-2028-013 are deferred — no immediate consumer / observed misuse / forcing change.
+
+#### Phase 3 status after this PR
+
+14 findings raised across 2 explorers. 0 blockers, 0 important, 9 nice, 5 demoted, 0 SDD-debt. Five explorers remain.
+
 ### Documentation — Phase 3 audit kickoff (raises F-2028-001 through F-2028-004)
 
 Opens Phase 3 of the rolling structural audit. Phase 2 closed in this session — every blocker / important / nice / SDD-debt finding across the seven Phase 2 explorers shipped via closure PRs. Phase 3 audits *what those closure PRs shipped*: drift, coverage gaps, and inconsistencies the closure cycle introduced that didn't get caught at PR-review time.
