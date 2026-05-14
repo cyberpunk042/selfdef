@@ -97,6 +97,7 @@ selfdef-store = { path = "crates/selfdef-store" }
 selfdef-correlator = { path = "crates/selfdef-correlator" }
 selfdef-notifier = { path = "crates/selfdef-notifier" }
 selfdef-notifier-orchestrator = { path = "crates/selfdef-notifier-orchestrator" }
+selfdef-integration-ntfy = { path = "crates/selfdef-integration-ntfy" }
 selfdef-responder = { path = "crates/selfdef-responder" }
 selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
 selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }
