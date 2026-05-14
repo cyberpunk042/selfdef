@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs — Phase 4 docs explorer + SECURITY.md per-token SSE cap entry (raises + closes F-2029-007)
+
+Fifth of seven Phase 4 explorers. Audits the documentation surface from the Phase 3 closure cycle: seven Phase 3 audit docs, CHANGELOG entries, SDD-007, init.rs templates, runbooks, repo-root docs, the Phase 4 audit docs themselves.
+
+#### Headline
+
+**0 blockers, 0 important.** One `nice` finding closed inline.
+
+#### F-2029-007 — SECURITY.md per-token SSE cap entry
+
+SDD-007 shipped during the Phase 3 cycle (closing F-2028-037 — authenticated-only DoS) but `SECURITY.md`'s § API surface didn't mention the new per-token cap. No security gap (feature is well-tested and safe by default), but a documentation gap.
+
+`SECURITY.md` § API surface now documents:
+- The per-token cap (default 8) and global cap (default 64).
+- The SHA-256-fingerprint counter map and its prune-on-empty semantics.
+- The operator-tunable `[api].max_sse_subscribers{,_per_token}` knobs with `None`/`Some(0)` → default fallback.
+- The distinguishable 503 reasons (`"sse subscriber cap reached"` global vs `"per-token sse cap reached"`).
+- Back-references to SDD-007 and `SubscriberGuard` for full implementation context.
+
+#### Phase 4 status
+
+**7 findings across 5 explorers**: 0 blockers, 0 important, **5 nice (all closed)**, 2 demoted, 0 SDD-debt. **Two explorers remain** (tests, security).
+
 ### Audit + test — Phase 4 integration explorer (raises + closes F-2029-005 + -006)
 
 Fourth of seven Phase 4 explorers. Audits the seven integration seams introduced by the Phase 3 closure cycle.
