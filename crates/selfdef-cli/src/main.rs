@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod init;
 mod modules;
+mod notify;
 mod paths;
 
 use std::path::PathBuf;
@@ -73,6 +74,14 @@ enum Command {
     Api {
         #[command(subcommand)]
         action: ApiAction,
+    },
+    /// SDD-008 D-4: acknowledge, forget, or list pending
+    /// notification escalations. Talks directly to the persistent
+    /// escalation engine (`[notifier].escalations_path`); WAL mode
+    /// handles concurrent daemon reads.
+    Notify {
+        #[command(subcommand)]
+        action: NotifyAction,
     },
     /// Detection-rule signing tools (operator-side).
     Keys {
@@ -261,6 +270,39 @@ enum ApiAction {
         /// only on disk, where the next scrape config reads it).
         #[arg(long)]
         print: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum NotifyAction {
+    /// SDD-008 D-4: mark an in-flight escalation as acknowledged.
+    /// The wake task short-circuits any further rungs — the operator
+    /// has seen the event. Idempotent: re-acking an already-acked
+    /// event reports "already acked" and exits 0.
+    Ack {
+        /// Event ID (UUID) to ack. Matches `EventId` in the
+        /// escalation engine; the same id the operator sees in
+        /// the notification body.
+        event_id: String,
+    },
+    /// SDD-008 D-4: forget a pending escalation entirely (DELETE
+    /// the row). Use when the operator wants to suppress further
+    /// rungs WITHOUT recording an ack — e.g. when the alert was a
+    /// false positive and the audit trail should reflect that.
+    Forget {
+        /// Event ID (UUID) to forget.
+        event_id: String,
+    },
+    /// SDD-008 D-4: print the pending escalation queue. Read-only.
+    /// Useful for "what's in flight right now?" triage.
+    List {
+        /// Maximum rows to print. Default 50.
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        /// JSON-lines output for scripting. Default is a human
+        /// table with severity emoji.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -509,6 +551,21 @@ async fn main() -> Result<()> {
                 },
         } => {
             api_rotate_token(&cfg, token_file, bytes, pid, print)?;
+        }
+        Command::Notify {
+            action: NotifyAction::Ack { event_id },
+        } => {
+            notify::ack(&cfg, &event_id)?;
+        }
+        Command::Notify {
+            action: NotifyAction::Forget { event_id },
+        } => {
+            notify::forget(&cfg, &event_id)?;
+        }
+        Command::Notify {
+            action: NotifyAction::List { limit, json },
+        } => {
+            notify::list(&cfg, limit, json)?;
         }
         Command::Keys {
             action: KeysAction::Verify { target, public_key },

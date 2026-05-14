@@ -415,6 +415,16 @@ pub struct NotifierConfig {
     /// SDD-008: Discord webhook outbound channel. Missing
     /// `webhook_url_file` keeps the channel disabled.
     pub discord: DiscordConfig,
+    /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
+    /// SQLite database. When set, the daemon opens this file at
+    /// startup, persists outbound events in it, and runs the wake-
+    /// task escalation loop. When `None`, the daemon falls back to
+    /// the M4 fire-and-forget chain (no persistence, no escalation).
+    ///
+    /// Used by both the daemon and `selfdefctl notify {ack,forget,
+    /// list}` (D-4) to read / mutate the same SQLite file — WAL
+    /// mode handles the concurrent reader/writer cleanly.
+    pub escalations_path: Option<PathBuf>,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -432,6 +442,7 @@ impl Default for NotifierConfig {
             twilio: TwilioConfig::default(),
             slack: SlackConfig::default(),
             discord: DiscordConfig::default(),
+            escalations_path: None,
             subscriptions: HashMap::new(),
         }
     }
