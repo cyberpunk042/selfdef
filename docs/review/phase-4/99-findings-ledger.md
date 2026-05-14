@@ -34,19 +34,21 @@ design-shaped.
 | F-2029-005 | nice | SDD-007 D-4 config knobs lack end-to-end test (config file → daemon → API state) | Integration auditor noted the four hops (TOML parse → `Config::load` → `ApiConfig` Option fields → daemon → `ApiState::with_sse_caps`) have no test exercising the full chain. Each hop has unit-level coverage but a regression in any one of them would only surface in production. | implement — **closed** by the Phase-4-integration PR: two new tests in `crates/selfdef-config/src/lib.rs::tests` exercise the TOML parse hop end-to-end (`sse_cap_knobs_round_trip_from_toml` for the override case, `sse_cap_knobs_default_to_none_when_unset` for the unset case). Together with the existing `events_stream_per_token_cap_honours_operator_override` + `events_stream_global_cap_honours_operator_override` tests (which pin the consumption hop), the full TOML → ApiState → handler chain is now test-covered. |
 | F-2029-006 | demoted | STARTER_CONFIG SSE caps lack direct round-trip test (TOML parse → daemon read) | Auditor independently surfaced the same gap as F-2029-005, viewed from the STARTER_CONFIG/init.rs angle. Cross-check: the two findings are facets of the same underlying gap. Closed by the same tests that close F-2029-005. | none (duplicate of F-2029-005) |
 | F-2029-007 | nice | `SECURITY.md` doesn't document the per-token SSE subscriber quota | Phase 4 docs explorer noted that SDD-007 shipped during the Phase 3 cycle (closing F-2028-037 — authenticated-only DoS) but `SECURITY.md`'s § API surface didn't mention the new per-token cap, the SHA-256 fingerprint storage, the operator-tunable knobs, or the distinguishable 503 reasons. No security gap (the feature is well-tested and safe by default), but a documentation gap that hurts operator awareness. | implement — **closed** by the Phase-4-docs PR: `SECURITY.md` § API surface now documents the per-token SSE cap (default 8 per token, 64 process-wide), the SHA-256-fingerprint map, the operator-tunable `[api].max_sse_subscribers{,_per_token}` knobs, the `None`/`Some(0)` → default fallback, and the distinguishable 503 reasons. Back-references SDD-007 and `SubscriberGuard` for the full picture. |
+| F-2029-008 | demoted | Per-token drop-to-zero test uses 100ms real-time sleep instead of `start_paused` | Tests-explorer flagged `events_stream_per_token_counter_drops_to_zero_on_disconnect` (`crates/selfdef-api/tests/m12_api.rs:1085-1130`) for using a real-time `tokio::time::sleep(100ms)` to give the writer-task's drop chain breathing room. Auditor's own analysis concludes the sleep is deliberate and documented — a `start_paused` rewrite would deadlock since the writer is parked on `sub.recv().await` when the response is dropped, with no further bus event forthcoming. The test correctly pins the D-5.5 contract; SDD-005's "no real-time sleeps in pipeline tests" rule applies to deterministic-stage pipelines, not async-task-scheduling synchronization. No action. | none |
 
 ## Status
 
-- **7 findings raised** across five Phase 4 explorers
-  (recent-PRs, crate, module, integration, docs). **0
+- **8 findings raised** across six Phase 4 explorers
+  (recent-PRs, crate, module, integration, docs, tests). **0
   blockers**, **0 important**, **5 nice (all closed)**
-  (F-2029-002, -003, -004, -005, -007), **2 demoted**
-  (F-2029-001, -006).
+  (F-2029-002, -003, -004, -005, -007), **3 demoted**
+  (F-2029-001, -006, -008).
 - The Phase 3 closure cycle was the cleanest yet: 16/17 PRs
   review-clean on recent-PRs; small `nice` findings on the
   crate, module, integration, and docs sides — all closed
-  in this or the prior cluster PRs.
-- Two explorers remain: tests, security.
+  in cluster PRs. Tests explorer raised 0 actionable items
+  (the one observation cross-checked clean).
+- One explorer remains: **security**.
 - No Phase 4 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 references
