@@ -2351,6 +2351,7 @@ dependencies = [
  "selfdef-integration-slack",
  "selfdef-integration-smtp",
  "selfdef-integration-twilio",
+ "selfdef-integration-wall",
  "selfdef-nats",
  "selfdef-notifier",
  "selfdef-notifier-engine",
@@ -2469,6 +2470,20 @@ dependencies = [
  "tokio",
  "tracing",
  "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-wall"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -32,6 +32,7 @@ selfdef-integration-discord = { workspace = true }
 selfdef-integration-slack = { workspace = true }
 selfdef-integration-smtp = { workspace = true }
 selfdef-integration-twilio = { workspace = true }
+selfdef-integration-wall = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }
