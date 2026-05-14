@@ -6,6 +6,41 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 5 module explorer (**0 findings**; third consecutive clean explorer)
+
+Third of seven Phase 5 explorers. Audits the module-side changes from the Phase 4 closure cycle.
+
+#### Headline
+
+**0 findings.** Three Phase 5 explorers in; all 100% clean.
+
+#### What was verified
+
+- **`vpn-bridge/install/apply.sh` dispatcher header** (F-2029-004 closure): the doc-comment's dry-run-awareness, idempotency, and SDD-006 v2 manifest-tracking claims all match the actual `profile_apply` behaviour. Wording consistent with the cited `bridge-l2`/`observability` reference style.
+- **SDD-006 v2 migration coverage** re-verified at 7/8 modules (agent-guard, bridge-l2, integrity-sentinel, observability, polarproxy, tetragon, vpn-bridge) + suricata correctly exempt.
+- **`relay-via-server.sh::profile_uninstall` legacy fallback** dedup sound — `removed == 0` guard prevents double-removal.
+- **STARTER_CONFIG / STARTER_MODULES** parse cleanly; `cli_init` 7/7 tests pass.
+- **Multi-instance manifest test** (`relay_apply_records_nft_path_in_manifest_then_uninstall_clears_it`) covers the full apply → record → uninstall → enumerate round-trip.
+
+#### Module-explorer trajectory across cycles
+
+| Cycle | Module findings |
+| --- | --- |
+| Phase 2 | 6 nice |
+| Phase 3 | 1 **important** (vpn-bridge v2 gap) |
+| Phase 4 | 1 nice (dispatcher header) |
+| **Phase 5** | **0** |
+
+#### New document
+
+`docs/review/phase-5/40-module-audit.md` — per-module verification notes.
+
+#### Phase 5 status
+
+0 findings raised across 3 explorers: 0 blockers, 0 important, 0 nice, 0 demoted, 0 SDD-debt. **Four explorers remain** (integration, docs, tests, security). Trajectory continues to suggest a complete-cycle zero-findings result.
+
+This PR is documentation-only.
+
 ### Documentation — Phase 5 crate explorer (**0 findings**; second consecutive clean explorer)
 
 Second of seven Phase 5 explorers. Audits the new Rust code from the Phase 4 closure cycle: custom `Debug` impl on `TokenFingerprint`, 2 fingerprint unit tests, 1 SseCaps zero-cap integration test, 2 TOML round-trip tests.

@@ -36,30 +36,26 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** across two Phase 5 explorers
-  (recent-PRs + crate). **Both explorers 100% clean on
-  first-pass scrutiny.** The Phase 4 closure cycle was
-  exceptionally clean execution:
-  - Charter, inventory, all seven explorer docs match
-    stated scope.
-  - Every closure PR's code change matches its audit
-    recommendation.
-  - The 5 new tests added by the cycle are well-isolated and
-    correctly pin their contracts.
-  - The custom `Debug` impl on `TokenFingerprint` correctly
-    renders bytes[0..4] as 8 hex chars with a Unicode
-    ellipsis; no edge-case fragility.
+- **0 findings raised** across three Phase 5 explorers
+  (recent-PRs + crate + module). **All three 100% clean on
+  first-pass scrutiny.**
+- The Phase 4 closure cycle was exceptionally clean
+  execution. The module-side surface (vpn-bridge dispatcher
+  header doc-refresh) verifies correct against the actual
+  `profile_apply` behaviour; v2 migration coverage is
+  re-verified at 7/8 modules (suricata correctly exempt);
+  legacy-fallback dedup in `profile_uninstall` is sound
+  (only runs on empty-manifest branch).
 - **Trajectory comparison**:
 
-  | Cycle | recent-PRs | crate |
-  | --- | --- | --- |
-  | Phase 2 | many | 11 nice |
-  | Phase 3 | 4 nice | 10 (7 nice, 3 demoted) |
-  | Phase 4 | 1 demoted | 2 nice |
-  | **Phase 5** | **0** | **0** |
+  | Cycle | recent-PRs | crate | module |
+  | --- | --- | --- | --- |
+  | Phase 2 | many | 11 nice | 6 nice |
+  | Phase 3 | 4 nice | 10 mixed | 1 important |
+  | Phase 4 | 1 demoted | 2 nice | 1 nice |
+  | **Phase 5** | **0** | **0** | **0** |
 
-- Five explorers remain: module, integration, docs, tests,
-  security.
+- Four explorers remain: integration, docs, tests, security.
 - No Phase 5 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
