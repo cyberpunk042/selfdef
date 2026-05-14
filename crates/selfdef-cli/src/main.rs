@@ -927,11 +927,13 @@ async fn main() -> Result<()> {
                     && !cfg.notifier.ntfy.url.is_empty()
                     && !cfg.notifier.ntfy.topic.is_empty()
                 {
-                    chain.push(Box::new(selfdef_notifier::NtfyNotifier::from_config(
-                        &cfg.notifier.ntfy.url,
-                        &cfg.notifier.ntfy.topic,
-                        cfg.notifier.ntfy.token_file.as_ref(),
-                    )));
+                    chain.push(Box::new(
+                        selfdef_integration_ntfy::NtfyNotifier::from_config(
+                            &cfg.notifier.ntfy.url,
+                            &cfg.notifier.ntfy.topic,
+                            cfg.notifier.ntfy.token_file.as_ref(),
+                        ),
+                    ));
                 }
             }
             let notifier: Arc<dyn selfdef_notifier::Notifier> =

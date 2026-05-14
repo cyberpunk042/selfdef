@@ -1,26 +1,33 @@
 //! Outbound notification channels.
 //!
-//! M4 ships two implementations of the [`Notifier`] trait:
-//! - [`NtfyNotifier`] — HTTP POST to a self-hosted ntfy server. Optional
-//!   bearer token loaded from disk.
-//! - [`SignalCliNotifier`] — subprocess call to `signal-cli`. Useful as a
-//!   fallback channel when the network ntfy path is down.
+//! Crate trajectory (SDD-008):
+//! - M4 shipped both [`NtfyNotifier`] and [`SignalCliNotifier`]
+//!   inside this crate.
+//! - **D-2b** moved `NtfyNotifier` into
+//!   [`selfdef_integration_ntfy`](https://docs.rs/selfdef-integration-ntfy).
+//!   This crate still exports the trait + helpers used by the new
+//!   integration crate. `SignalCliNotifier` graduates similarly in D-2c.
 //!
-//! [`NotifierChain`] composes a list of notifiers and tries them in order;
-//! the first success wins. The chain itself implements [`Notifier`] so it
-//! drops into anywhere a single notifier fits.
+//! The [`Notifier`] trait lives here as the legacy ABI; the new
+//! orchestrator ABI is [`selfdef_notifier_orchestrator::Channel`].
+//! Integration crates implement **both** so existing M4 callers keep
+//! working through the legacy trait while the orchestrator (D-5+)
+//! consumes the same impl through `Channel`.
+//!
+//! [`NotifierChain`] composes a list of notifiers and tries them in
+//! order; the first success wins. The chain itself implements
+//! [`Notifier`] so it drops into anywhere a single notifier fits.
 
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 use std::path::PathBuf;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use selfdef_core::Event;
 use selfdef_core::severity::SeverityId;
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::warn;
 
 #[derive(Debug, Error)]
 pub enum NotifierError {
@@ -92,102 +99,6 @@ pub const fn priority_for(severity: SeverityId) -> u8 {
         SeverityId::Low => 3,
         SeverityId::Medium => 4,
         SeverityId::High | SeverityId::Critical | SeverityId::Fatal | SeverityId::Other => 5,
-    }
-}
-
-// ---------------------------------------------------------------- NtfyNotifier
-
-#[derive(Debug)]
-pub struct NtfyNotifier {
-    url: String,
-    topic: String,
-    token: Option<String>,
-    client: reqwest::Client,
-}
-
-impl NtfyNotifier {
-    pub fn new(url: impl Into<String>, topic: impl Into<String>, token: Option<String>) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()
-            .unwrap_or_default();
-        Self {
-            url: url.into(),
-            topic: topic.into(),
-            token,
-            client,
-        }
-    }
-
-    /// Construct from a token file. If `token_file` is None or unreadable,
-    /// authentication is omitted (suitable for unauthenticated ntfy servers).
-    pub fn from_config(url: &str, topic: &str, token_file: Option<&PathBuf>) -> Self {
-        let token = token_file
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
-        Self::new(url, topic, token)
-    }
-}
-
-#[async_trait]
-impl Notifier for NtfyNotifier {
-    async fn notify(&self, event: &Event) -> Result<(), NotifierError> {
-        if self.url.is_empty() || self.topic.is_empty() {
-            return Err(NotifierError::NotConfigured);
-        }
-        let endpoint = format!("{}/{}", self.url.trim_end_matches('/'), self.topic);
-        let title = render_title(event);
-        let body = render_body(event);
-        let priority = priority_for(event.severity_id);
-        let tags = if event.attack.is_empty() {
-            "shield".to_string()
-        } else {
-            let mut t = vec!["shield".to_string()];
-            for technique in &event.attack {
-                t.push(technique.id.clone());
-            }
-            t.join(",")
-        };
-
-        // Up to 3 attempts with light backoff. ntfy is single-POST, no streaming.
-        let mut last_err: Option<NotifierError> = None;
-        for attempt in 0u32..3 {
-            if attempt > 0 {
-                let backoff = Duration::from_millis(200u64 << attempt);
-                tokio::time::sleep(backoff).await;
-            }
-            let mut req = self
-                .client
-                .post(&endpoint)
-                .header("Title", &title)
-                .header("Priority", priority.to_string())
-                .header("Tags", &tags)
-                .body(body.clone());
-            if let Some(t) = &self.token {
-                req = req.bearer_auth(t);
-            }
-            match req.send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    debug!(attempt, status = %resp.status(), "ntfy delivered");
-                    return Ok(());
-                }
-                Ok(resp) => {
-                    let status = resp.status();
-                    last_err = Some(NotifierError::Http(format!("non-success status: {status}")));
-                    warn!(attempt, %status, "ntfy non-success response");
-                }
-                Err(e) => {
-                    last_err = Some(NotifierError::Http(e.to_string()));
-                    warn!(attempt, error = %e, "ntfy send failed");
-                }
-            }
-        }
-        Err(last_err.unwrap_or_else(|| NotifierError::Http("unknown".into())))
-    }
-
-    fn name(&self) -> &'static str {
-        "ntfy"
     }
 }
 
