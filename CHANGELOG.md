@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Test — Phase 2 tests-cluster (closes F-2027-046 + F-2027-052 + F-2027-053)
+
+The last three open `nice` findings from the Phase 2 tests-explorer cluster. After this PR every Phase 2 `nice` and `important` finding is closed; only F-2027-010 (SDD-debt, awaiting design decision) remains.
+
+#### F-2027-046 — suricata live-positive coverage
+
+`crates/selfdef-cli/tests/module_suricata.rs::live_apply_invokes_nft_load_and_systemctl_start`. Runs `apply.sh` *without* `SELFDEF_DRY_RUN=1` against recording stubs for `nft`, `systemctl`, and `suricata`. Asserts the live-branch side effects:
+
+- `nft -f <rendered>` lands (NFQUEUE jump installed)
+- `systemctl enable suricata.service` lands
+- `systemctl start suricata.service` lands
+- Apply emits `"status":"ok","message":"applied 3 change(s)"`
+- The `[suricata] load NFQUEUE jump …` log line proves apply entered the install branch (not the "already-present" early-exit)
+
+This closes the SDD-005 D-1 gap where every prior suricata test ran under `SELFDEF_DRY_RUN=1`, so the live branch had no regression protection.
+
+#### F-2027-052 + F-2027-053 — pipeline tests on virtual time
+
+`crates/selfdef-daemon/tests/m4_alert.rs::end_to_end_alert_fires_one_notification` and `crates/selfdef-daemon/tests/m8_honeytokens.rs::canary_touch_dispatches_actions_in_dry_run` both gain `start_paused = true` on their `#[tokio::test(…)]` attribute. SDD-005 forbids real-time sleeps in pipeline tests because they trade deterministic execution for CI-machine-speed flakiness; under `start_paused`, every `tokio::time::sleep` / `tokio::time::timeout` becomes virtual and the runtime auto-advances the clock whenever no task is ready to run.
+
+Real pipeline work (collector → bus → correlator → responder → wiremock + SQLite I/O) still runs in real time, but the timer *gaps* between elapsed instants elapse instantly. Concretely:
+
+- `m4_alert` end-to-end alert test: previously took ~500ms of real-time polling (5s deadline × 50ms intervals + 200ms settle); now runs in 0.10s wall-clock.
+- `m8_honeytokens` canary-touch dispatch test: previously had seven real-time sleeps totaling 100ms+150ms+200ms+settle; now runs in 0.02s wall-clock.
+
+#### Tests
+
+- `cargo test -p selfdef-cli --test module_suricata` — 7/7 pass.
+- `cargo test -p selfdef-daemon --test m4_alert --test m8_honeytokens` — 3/3 pass, all in <0.2s.
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 2 status after this PR
+
+**Phase 2 is closed for `nice` findings.** All 60 `nice` + 3 `important` findings across the seven explorers are closed. The only Phase 2 item still open is **F-2027-010** (SDD-debt: `events follow` TCP transport) — awaiting a design decision on whether to pull in an HTTP client or document a remote-tunneling pattern instead.
+
 ### Security — remaining security-explorer cluster (closes F-2027-060 + F-2027-063 + F-2027-064)
 
 Three small, contained hardening changes that close the rest of the Phase 2 security-explorer slate. After this PR every security finding from Phase 2 is closed; the only open `nice` clusters are tests-explorer leftovers.

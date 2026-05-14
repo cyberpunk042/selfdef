@@ -43,7 +43,13 @@ impl selfdef_notifier::Notifier for NullNotifier {
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+// F-2027-053: pipeline test runs with paused virtual time. The
+// inotify-warmup sleep, finding-poll loop, and shutdown-join
+// timeouts all become virtual under `start_paused = true`; real
+// pipeline work (collector → bus → responder → SQLite) still runs
+// in real time but the timer gaps between elapsed instants
+// auto-advance the moment the runtime is otherwise idle.
+#[tokio::test(flavor = "current_thread", start_paused = true)]
 async fn canary_touch_dispatches_actions_in_dry_run() {
     // Canary file the collector will watch.
     let mut canary = NamedTempFile::new().unwrap();
