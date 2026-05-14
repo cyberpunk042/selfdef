@@ -8,7 +8,14 @@
 #   CONFIG_FILE   — path to the rendered host config
 
 # shellcheck disable=SC1090,SC2034
-SELFDEF_MODULE_LIB_VERSION_REQUIRED=1
+# F-2028-015: bumped from 1 to 2. The relay-via-server profile
+# writes a forward-rules .conf file at apply time; v2 lets us
+# track that write in the per-module manifest so uninstall can
+# enumerate-and-remove instead of hard-coding the path. Needed
+# for the multi-instance use-case (`INST="relay1"`, "relay2",
+# ...) where the hard-coded uninstall path silently leaks the
+# previous file.
+SELFDEF_MODULE_LIB_VERSION_REQUIRED=2
 # Locate the shared module-lib. Precedence:
 #   1. $SELFDEF_MODULE_LIB exported by selfdefctl (workspace
 #      runs hit this).

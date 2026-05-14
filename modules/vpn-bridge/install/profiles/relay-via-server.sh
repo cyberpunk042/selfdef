@@ -113,6 +113,13 @@ profile_apply() {
             run "load forward rules" -- nft -f "$nft_path"
             changes=$((changes + 2))
         fi
+        # F-2028-015: track the rendered forward-rules file in the
+        # per-module manifest so uninstall enumerates from disk
+        # rather than hard-coding the path. Critical for the
+        # multi-instance case where `$nft_path` includes
+        # `${SELFDEF_INSTANCE_ID}` — the manifest is per-instance
+        # too, so uninstall finds exactly the files apply wrote.
+        module_record_file "$nft_path"
     else
         if [[ "$have_table" == "1" ]]; then
             run "remove stale forward table (forward_to_lan unset)" \
@@ -190,8 +197,24 @@ profile_uninstall() {
     if command -v nft >/dev/null && nft list table inet "$nft_table" >/dev/null 2>&1; then
         run "delete forward table $nft_table" -- nft delete table inet "$nft_table" || log "(continuing)"
     fi
-    if [[ -f "$nft_path" ]]; then
-        run "remove $nft_path" -- rm -f "$nft_path" || log "(continuing)"
+    # F-2028-015: enumerate-and-remove from the per-module manifest
+    # instead of hard-coding `$nft_path`. The legacy fallback below
+    # handles pre-v2 installs where the manifest doesn't exist yet
+    # (operator who installed under v1 then upgraded — first uninstall
+    # after upgrade still removes the legacy hard-coded path).
+    local removed=0
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        if [[ -f "$f" ]]; then
+            run "remove $f" -- rm -f "$f" || log "(continuing past failure removing $f)"
+            removed=$((removed + 1))
+        fi
+    done < <(module_render_files 2>/dev/null || true)
+    if [[ "$removed" -eq 0 && -f "$nft_path" ]]; then
+        # Legacy fallback: pre-v2 install, no manifest. Remove the
+        # path the apply-time defaults would have written.
+        run "remove $nft_path (legacy)" -- rm -f "$nft_path" || log "(continuing)"
     fi
+    module_clear_manifest 2>/dev/null || true
     emit_status "ok" "uninstalled (wg.conf + keys preserved)"
 }
