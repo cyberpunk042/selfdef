@@ -252,6 +252,26 @@ channels = []
 # webhook_url_file = "/etc/selfdef/discord.webhook.url"
 # username         = "selfdef"
 
+# SDD-008 D-8: wall(1) session-attention channel. Broadcasts a
+# one-line attention banner to every logged-in TTY when a
+# high-severity event fires — the "talk to the bash session" path
+# for operators who are at the terminal, not just at their phone.
+# To enable:
+#   1. Confirm /usr/bin/wall exists on the host (`which wall`).
+#      Most Linux distros ship it as part of util-linux.
+#   2. The daemon process needs permission to wall to user TTYs —
+#      typically operator membership in the `tty` group OR running
+#      as root. wall(1) silently skips TTYs it can't write to.
+#   3. Uncomment the block below; flip channels above to include
+#      "wall" (typically LAST in the chain — wall is loud).
+#   4. severity_floor defaults to "high". Events below this severity
+#      quietly skip wall to avoid bothering every TTY on routine
+#      events.
+#
+# [notifier.wall]
+# binary         = "/usr/bin/wall"
+# severity_floor = "high"   # info|low|medium|high|critical|fatal
+
 # SDD-008 D-5: path to the persistent escalation engine. When set,
 # the daemon persists every outbound notification here and runs the
 # wake-task escalation loop (D-5c): unacked notifications re-fire

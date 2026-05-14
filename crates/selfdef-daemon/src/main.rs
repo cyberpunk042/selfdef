@@ -711,6 +711,27 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "wall" if !cfg.notifier.wall.binary.as_os_str().is_empty() => {
+                let floor = if cfg.notifier.wall.severity_floor.is_empty() {
+                    None
+                } else {
+                    Some(cfg.notifier.wall.severity_floor.as_str())
+                };
+                match selfdef_integration_wall::WallChannel::from_config(
+                    &cfg.notifier.wall.binary,
+                    floor,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "wall channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
@@ -931,6 +952,25 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "twilio engine-channel skipped");
+                    }
+                }
+            }
+            "wall" if !cfg.notifier.wall.binary.as_os_str().is_empty() => {
+                let floor = if cfg.notifier.wall.severity_floor.is_empty() {
+                    None
+                } else {
+                    Some(cfg.notifier.wall.severity_floor.as_str())
+                };
+                match selfdef_integration_wall::WallChannel::from_config(
+                    &cfg.notifier.wall.binary,
+                    floor,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "wall engine-channel skipped");
                     }
                 }
             }

@@ -415,6 +415,11 @@ pub struct NotifierConfig {
     /// SDD-008: Discord webhook outbound channel. Missing
     /// `webhook_url_file` keeps the channel disabled.
     pub discord: DiscordConfig,
+    /// SDD-008 D-8: wall(1) session-attention channel. Broadcasts
+    /// to every logged-in TTY when a high-severity event fires —
+    /// the operator's "talk to the bash session" surface. Default
+    /// `binary = ""` keeps the channel disabled.
+    pub wall: WallConfig,
     /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
     /// SQLite database. When set, the daemon opens this file at
     /// startup, persists outbound events in it, and runs the wake-
@@ -471,6 +476,7 @@ impl Default for NotifierConfig {
             twilio: TwilioConfig::default(),
             slack: SlackConfig::default(),
             discord: DiscordConfig::default(),
+            wall: WallConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
@@ -514,6 +520,25 @@ pub struct DiscordConfig {
     pub webhook_url_file: Option<PathBuf>,
     /// Display name for posts. Defaults to `"selfdef"` when blank.
     pub username: String,
+}
+
+/// SDD-008 D-8: wall(1) session-attention channel config.
+///
+/// Default `binary = ""` keeps the channel disabled. Set to the
+/// path of the `wall` binary (typically `/usr/bin/wall`) to enable.
+/// `severity_floor` defaults to `"high"` — wall is system-wide
+/// broadcast, bothering every TTY on routine events is wrong.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct WallConfig {
+    /// Path to the `wall(1)` binary. Empty disables the channel.
+    pub binary: PathBuf,
+    /// Severity threshold below which wall stays silent. One of:
+    /// `informational` | `low` | `medium` | `high` | `critical` |
+    /// `fatal`. Empty defaults to `high`. Unknown strings reject
+    /// the config at daemon start (the wall channel is disabled
+    /// rather than firing on every event).
+    pub severity_floor: String,
 }
 
 /// SDD-008 D-3: per-channel subscription filter.
