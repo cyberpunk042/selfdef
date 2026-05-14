@@ -201,8 +201,15 @@ impl SubscriberGuard {
 impl Drop for SubscriberGuard {
     fn drop(&mut self) {
         // Decrement the global counter first; it's a pure atomic and
-        // can't fail.
-        self.global.fetch_sub(1, Ordering::AcqRel);
+        // can't fail. F-2028-012: assert under test that the counter
+        // never goes negative — a future logic bug (double-drop,
+        // acquire without holding the guard) would surface as a
+        // panic in debug builds instead of silent corruption.
+        let prev_global = self.global.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(
+            prev_global > 0,
+            "global SubscriberGuard counter underflow (prev = 0)",
+        );
         // Decrement the per-token counter and prune the map entry if
         // this was the last subscriber under that fingerprint. The
         // prune keeps the HashMap bounded across token rotations.
@@ -210,9 +217,15 @@ impl Drop for SubscriberGuard {
             let mut m = map.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(c) = m.get(&fp) {
                 let prev = c.fetch_sub(1, Ordering::AcqRel);
+                debug_assert!(
+                    prev > 0,
+                    "per-token SubscriberGuard counter underflow for fp={fp:?}",
+                );
                 if prev == 1 {
                     m.remove(&fp);
                 }
+            } else {
+                debug_assert!(false, "per-token entry missing on guard drop for fp={fp:?}",);
             }
         }
     }
@@ -283,7 +296,12 @@ pub(crate) async fn events_stream(
                 match tokio::time::timeout(SSE_SEND_TIMEOUT, tx.send(frame)).await {
                     Ok(Ok(())) => Ok(()),
                     Ok(Err(_)) => Err("disconnected"),
-                    Err(_) => Err("slow-client timeout"),
+                    // F-2028-013: name the deadline so an operator reading
+                    // the daemon log line doesn't have to grep the source
+                    // to learn what the timeout was. The literal must
+                    // stay in sync with SSE_SEND_TIMEOUT above; the const
+                    // is documented inline next to this string.
+                    Err(_) => Err("slow-client timeout (30s)"),
                 }
             }
         };

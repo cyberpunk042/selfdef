@@ -38,3 +38,37 @@ pub(crate) const MODULES_PER_MODULE_DIR: &str = "/etc/selfdef/modules";
 /// configured scope, in the absence of an env override. Lives
 /// under `MODULES_PER_MODULE_DIR`.
 pub(crate) const AGENT_GUARD_CONFIG: &str = "/etc/selfdef/modules/agent-guard.toml";
+
+// F-2028-001: compile-time invariants on the path constants
+// above. A future maintainer who renames the project's etc-dir
+// (or accidentally drops the leading slash) gets a build error
+// instead of a runtime drift discovered weeks later. The asserts
+// run at compile time — zero runtime cost.
+const _: () = {
+    // Every default path must be under `/etc/selfdef/`.
+    let dc = DAEMON_CONFIG.as_bytes();
+    let mc = MODULES_HOST_CONFIG.as_bytes();
+    let md = MODULES_PER_MODULE_DIR.as_bytes();
+    let ag = AGENT_GUARD_CONFIG.as_bytes();
+    assert!(starts_with(dc, b"/etc/selfdef/"));
+    assert!(starts_with(mc, b"/etc/selfdef/"));
+    assert!(starts_with(md, b"/etc/selfdef/"));
+    assert!(starts_with(ag, b"/etc/selfdef/"));
+    // The agent-guard config must live under the per-module dir.
+    assert!(starts_with(ag, MODULES_PER_MODULE_DIR.as_bytes()));
+};
+
+#[allow(clippy::indexing_slicing, dead_code)] // const-context only.
+const fn starts_with(haystack: &[u8], needle: &[u8]) -> bool {
+    if haystack.len() < needle.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < needle.len() {
+        if haystack[i] != needle[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}

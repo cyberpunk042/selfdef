@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Polish — Phase 3 nice-cluster wrap-up (closes F-2028-001 + F-2028-012 + F-2028-013 + F-2028-025)
+
+Closes 4 of the 5 remaining open `nice` findings from Phase 3. After this PR, Phase 3 is effectively wrapped: every blocker, important, and SDD-debt finding is closed; the only remaining open finding (F-2028-008, SseParser visibility) is explicit `defer` per the crate audit ("no immediate consumer").
+
+#### F-2028-001 — paths constant invariants
+
+`crates/selfdef-cli/src/paths.rs` gains a `const _: () = { … }` block that asserts at compile time:
+
+- `DAEMON_CONFIG`, `MODULES_HOST_CONFIG`, `MODULES_PER_MODULE_DIR`, `AGENT_GUARD_CONFIG` all start with `/etc/selfdef/`.
+- `AGENT_GUARD_CONFIG` lives under `MODULES_PER_MODULE_DIR`.
+
+Zero runtime cost; a future maintainer who renames the etc-dir or drops a leading slash gets a build error instead of runtime drift.
+
+#### F-2028-012 — SubscriberGuard underflow debug-asserts
+
+`SubscriberGuard::Drop` in `crates/selfdef-api/src/handlers.rs` now `debug_assert!(prev > 0, …)` on both the global and per-token counter decrements, plus a `debug_assert!(false, …)` on the "per-token entry missing on drop" branch. Future logic bugs (double-drop, decrement without acquire, bypass-then-drop) surface as panics in debug builds instead of silent counter corruption.
+
+#### F-2028-013 — SSE timeout error names the deadline
+
+`events_stream`'s writer-task `send_with_timeout` closure now returns `Err("slow-client timeout (30s)")` instead of just `Err("slow-client timeout")`. Operators reading the log line see the deadline directly. The literal is documented inline next to `SSE_SEND_TIMEOUT` so a future const change updates both.
+
+#### F-2028-025 — common-mod import-style symmetry
+
+10 module-test files in `crates/selfdef-cli/tests/` (agent_guard, bridge_l2, integrity_sentinel, suricata, vpn_bridge, vpn_bridge_cloudflare, vpn_bridge_tailscale, observability, tetragon, polarproxy) now import `assert_tree_unchanged` and `snapshot_tree` from `common` alongside their existing helpers. Call sites rewrite from `common::snapshot_tree(...)` to bare `snapshot_tree(...)`. Style is now consistent across the test suite.
+
+#### Tests
+
+- `cargo test -p selfdef-cli -p selfdef-api` — 275/275 pass.
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status — effectively wrapped
+
+39 findings across 7 explorers:
+- 0 blockers
+- **2 important — both shipped** (F-2028-015 in PR #87, F-2028-037 in PR #93)
+- **15 of 16 nice closed** (open: F-2028-008, `defer` per crate audit — no immediate consumer)
+- 20 demoted
+- **1 of 1 SDD-debt closed** (F-2028-039 in PR #93)
+
+Phase 3 closes here. Phase 4 kicks off when a new audit cycle is operator-triggered.
+
 ### Security — SDD-007 implementation: per-token SSE subscriber quota (closes F-2028-037 + F-2028-039)
 
 Implements SDD-007. **Closes the open `important` finding** from the Phase 3 security explorer. Status of SDD-007 flips from `design` → `implemented` (D-4 config knobs deferred to a thin follow-up).

@@ -20,7 +20,9 @@ use std::process::{Command, Output};
 // (was previously late in the file for the dry-run-noop test
 // only) is now re-used across the whole test module.
 mod common;
-use common::{last_stdout_line, prepended_path, write_executable};
+use common::{
+    assert_tree_unchanged, last_stdout_line, prepended_path, snapshot_tree, write_executable,
+};
 
 fn module_dir() -> PathBuf {
     common::module_dir("tetragon")
@@ -296,15 +298,15 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
         .parent()
         .expect("config_path has parent")
         .to_path_buf();
-    let before = common::snapshot_tree(&scope);
+    let before = snapshot_tree(&scope);
     let out = run_dry_apply(&fx);
     assert!(
         out.status.success(),
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(&scope);
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(&scope);
+    assert_tree_unchanged(&before, &after);
     assert!(
         !fx.config_render_path.exists(),
         "dry-run must not write the tetragon.yaml",

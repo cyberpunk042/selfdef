@@ -11,7 +11,7 @@ use std::process::Command;
 
 // F-2027-049 / -050 / -051: helpers live in common/mod.rs.
 mod common;
-use common::{last_stdout_line, prepended_path};
+use common::{assert_tree_unchanged, last_stdout_line, prepended_path, snapshot_tree};
 
 fn module_dir() -> PathBuf {
     common::module_dir("suricata")
@@ -176,7 +176,7 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
     let cfg_path = scratch.path().join("suricata.toml");
     std::fs::write(&cfg_path, "mode = \"nfqueue\"\nqueue_num = 0\n").unwrap();
 
-    let before = common::snapshot_tree(scratch.path());
+    let before = snapshot_tree(scratch.path());
     let out = Command::new("bash")
         .arg(module_dir().join("install/apply.sh"))
         .env("SELFDEF_DRY_RUN", "1")
@@ -190,8 +190,8 @@ fn dry_run_apply_must_be_a_noop_on_disk() {
         "dry-run apply must succeed; stderr: {}",
         String::from_utf8_lossy(&out.stderr),
     );
-    let after = common::snapshot_tree(scratch.path());
-    common::assert_tree_unchanged(&before, &after);
+    let after = snapshot_tree(scratch.path());
+    assert_tree_unchanged(&before, &after);
 }
 
 /// F-2027-046: SDD-005 D-1 live-positive coverage. Previously the
