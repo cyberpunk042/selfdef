@@ -1,13 +1,14 @@
 # Phase 2 findings ledger
 
-> Status: in progress. Six of the seven explorers run so far —
+> Status: in progress. Seven of the seven explorers run so far —
 > recent-PRs (10 findings, all closed except 1 SDD-debt), crate
 > (11 findings, all closed), module (6 findings, all closed),
 > integration (9 findings, all closed), docs (9 findings, all
-> closed), and tests (11 findings, all fresh and open). One
-> explorer remains (security).
-> Last updated: 2026-05-13 (Phase 2 tests explorer — adds
-> F-2027-046 through F-2027-056).
+> closed), tests (11 findings, 8 closed + 3 open), and
+> security (8 findings, all fresh and open). **All seven Phase
+> 2 explorers have now run.**
+> Last updated: 2026-05-14 (Phase 2 security explorer — adds
+> F-2027-057 through F-2027-064).
 
 Numbering convention: `F-2027-NNN`. The `2027` prefix maps the
 finding's vintage (Phase 2 audit cycle) so it never collides
@@ -36,7 +37,7 @@ None.
 | F-2027-008 | important | `selfdefctl doctor` rbac category | Emits a `warn:` pointer to `selfdefctl rbac check` whenever agent-guard is in pod-label scope, even if the operator never ran rbac-check. The warn count inflates the summary line, suggesting failure where there is none. | implement — **closed** by Phase 2 first-fixes PR (`check_rbac_posture` now emits `Skipped` for pod-label with detail "posture not verified — run `selfdefctl rbac check --probe`"; warn count stays at 0). |
 | F-2027-035 | important | `selfdef-collector-eventstream::check_path_integrity` | Uses `std::fs::metadata` (stat, not lstat); a symlink at the configured path passes the check based on the target's metadata. The follow-up `tokio::fs::File::open` follows the same symlink. Combined with the stat→open TOCTOU window, the opt-in integrity check has a defeatable gap. | implement — **closed** by Phase 2 eventstream-integrity PR (renamed to `open_with_integrity_check`; opens with `O_NOFOLLOW` (symlinks → `IntegritySymlink`), fstats the returned FD instead of stat-then-open, rejects non-regular files; FD threaded through to the reader so there's only one open syscall). |
 
-## Nice findings (52 — 49 closed, 3 open)
+## Nice findings (60 — 49 closed, 11 open)
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
@@ -92,6 +93,14 @@ None.
 | F-2027-054 | nice | `dummy_action_set` shared tmp paths | `m12_api.rs` helper writes to host-global `temp_dir().join("selfdef-api-test-snapshots")`; parallel runs trample. | implement — **closed** by Phase 2 api-test isolation PR (helper now uses `tempfile::tempdir()` per call so each test gets its own snap+forensics scratch). |
 | F-2027-055 | nice | `std::mem::forget(dir)` SQLite leak | `m12_api.rs:56` leaks tempdirs on purpose; SQLite files accumulate in `/tmp` across runs. | implement — **closed** by Phase 2 api-test isolation PR (`build_state()` now returns the `TempDir` handle as a 4th tuple element; 12 callers hold it via `_dir`; second leak site at line 694 replaced with a `let _dir_holder = dir` stack hold). |
 | F-2027-056 | nice | metrics tests bypass P-2 parser | `m12_api.rs::metrics_reflect_ingest_counters_via_record_event` uses raw `body.contains(...)`; should consume the P-2 parser output. | implement — **closed** by Phase 2 parser-adoption PR (the four substring assertions are now `exp.find(name, labels)` lookups against the parsed `Exposition`; format-strict validation kicks in for free). |
+| F-2027-057 | nice | `init.rs:203-209` STARTER_CONFIG eventstream block | Tells operators to flip `integrity_check = true` + 0750 dir but doesn't mention the symlink + TOCTOU vectors F-2027-035 closed. Operators not reading SECURITY.md may not realise a symlinked `paths` value bypasses the check. | doc |
+| F-2027-058 | nice | `init.rs:187-191` STARTER_CONFIG `[api]` section | Lists `token_file` but never mentions `control_token_file` (the read-vs-control split). Asymmetric vs the full `.example` config. | doc |
+| F-2027-059 | nice | `init.rs:225-275` STARTER_MODULES | Module-config example paths don't warn that the config file should be 0640 root:selfdef (TOML the daemon evaluates is a trust-boundary). | doc |
+| F-2027-060 | nice | `rbac check --probe` `--as <subject>` validator | Subject strings flow to `kubectl` via `Command::new` (safe by construction) but aren't validated against a safe-charset regex. Defense-in-depth + log-pollution mitigation. | implement |
+| F-2027-061 | nice | `selfdef-api::events_stream` per-client connection cap | No global subscriber cap; an authenticated TCP client can open hundreds of `/events/stream` connections, each holding a 64-slot mpsc + tokio task. Authenticated DoS. | implement |
+| F-2027-062 | nice | `selfdef-api::events_stream` slow-client timeout | A client that stops reading blocks the forwarder task indefinitely on `tx.send().await`. No per-send inactivity timeout. | implement |
+| F-2027-063 | nice | `selfdef-api::ApiError::store` info disclosure | Formats arbitrary store errors verbatim into the JSON 500 body; a future store error including a path would leak it. Authenticated caller, low risk. | implement |
+| F-2027-064 | nice | `cli_api_rotate_token.rs:64-70` test prints token value | Asserts stdout contains the token; the value lands in CI logs. Tokens are ephemeral / tempfile-scoped so the risk is very low. Best practice would be format-only assertion. | implement (low priority) |
 
 ## SDD-debt findings (1)
 
@@ -101,17 +110,20 @@ None.
 
 ## Status
 
-- **56 findings raised** across six explorers (recent-PRs: 10;
-  crate: 11; module: 6; integration: 9; docs: 9; tests: 11).
-- **0 blockers**, **3 important (all closed)**, **52 nice (49
-  closed, 3 open)**, **1 SDD-debt (F-2027-010 open)**.
-- Tests-explorer remaining open clusters: F-2027-046
-  (suricata live-positive) and `pause()`-conversion (F-2027-052
-  + -053). The `common/mod.rs` migration, module-test
-  backfill, api-test isolation, and parser-adoption clusters
-  are all closed.
-- One explorer remains (security). Will add more findings in
-  follow-up PRs.
+- **64 findings raised** across **seven explorers** (recent-PRs:
+  10; crate: 11; module: 6; integration: 9; docs: 9; tests:
+  11; security: 8). **All seven Phase 2 explorers have run.**
+- **0 blockers**, **3 important (all closed)**, **60 nice (49
+  closed, 11 open)**, **1 SDD-debt (F-2027-010 open)**.
+- Open `nice` clusters: tests-explorer (F-2027-046 suricata
+  live-positive, F-2027-052 + -053 `pause()`-conversion) and
+  the new security-explorer findings (F-2027-057 through
+  F-2027-064). The security explorer raised no blockers
+  and no important findings — the two security-tier closures
+  earlier in Phase 2 (F-2027-014 + F-2027-035) were re-audited
+  and verified holding.
+- **No Phase 2 explorer remains.** Follow-up PRs close the
+  open `nice` clusters; Phase 2 wraps when those are merged.
 - Three explorers remain (docs, tests, security). Each will
   add more findings in follow-up PRs. The only remaining open
   Phase 2 SDD-debt is F-2027-010 (`events follow` TCP transport),

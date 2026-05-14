@@ -6,6 +6,44 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 2 security explorer (raises F-2027-057 through F-2027-064)
+
+**Last of Phase 2's seven explorers.** Walks the new attack surfaces added during the post-Phase-1 cycle: `/events/stream` SSE endpoint, operator-side `init` config templates, `rbac check --probe`'s `kubectl` exec, plus a re-audit of F-2027-014 (`with_full_capability` feature-gate) and F-2027-035 (eventstream TOCTOU/symlink).
+
+**8 new findings raised, all triaged `nice` — no blockers, no important.** Both re-audited security closures verified holding.
+
+#### New document
+
+`docs/review/phase-2/80-security-audit.md` — per-area notes with concrete `file:line` observations.
+
+#### Themes
+
+- **Init-template hygiene** (F-2027-057 + -058 + -059) — three doc gaps in `STARTER_CONFIG` / `STARTER_MODULES` where the starter doesn't warn about a known footgun (eventstream integrity_check pairing, control_token_file knob, module config file mode).
+- **Defense-in-depth input validation** (F-2027-060) — `rbac check --probe` passes `--as <subject>` strings to `kubectl` via `Command::new` (safe by construction — no shell), but the strings aren't validated against a safe-charset regex. Log-pollution mitigation, not a code-injection vector.
+- **SSE backpressure** (F-2027-061 + -062) — `/events/stream` lacks per-client connection caps and slow-client inactivity timeouts. Authenticated TCP DoS only (bearer-token holder required), but real for operators exposing the TCP port without an upstream rate limiter.
+- **Information disclosure surface** (F-2027-063) — `ApiError::store` flattens store errors verbatim into the JSON 500 body; a future store error message that names an internal path would leak it.
+- **Test-fixture posture** (F-2027-064, low priority) — `cli_api_rotate_token` asserts on token *value* rather than format, echoing the value to CI logs.
+
+#### Closing-PR clusters
+
+- **Init-template hygiene** — F-2027-057 + -058 + -059.
+- **rbac input validation** — F-2027-060.
+- **SSE backpressure** — F-2027-061 + -062.
+- **Info-disclosure + test posture** — F-2027-063 + -064.
+
+#### Re-audit appendix
+
+- **F-2027-035** (eventstream TOCTOU/symlink, PR #67) — `O_NOFOLLOW | O_NONBLOCK` open + fstat-on-FD + non-regular-file refusal: complete, no remaining gaps.
+- **F-2027-014** (`with_full_capability` feature-gate, PR #61) — `#[cfg(feature = "test-helpers")]` guard correctly prevents the symbol from appearing in release builds.
+
+#### Phase 2 status after this PR
+
+**64 findings across 7 explorers. All 7 Phase 2 explorers have now run.** 0 blockers, 3 important (all closed), 60 nice (49 closed, 11 open), 1 SDD-debt open.
+
+Open `nice` clusters: tests-explorer leftovers (F-2027-046 suricata live-positive, F-2027-052/-053 `pause()`-conversion) and the new security-explorer cluster. Phase 2 wraps when those follow-up PRs merge.
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean. This PR is documentation-only.
+
 ### Test — api-test isolation + parser-adoption (closes F-2027-054 + F-2027-055 + F-2027-056)
 
 Three small, contained fixes in `crates/selfdef-api/tests/m12_api.rs`.
