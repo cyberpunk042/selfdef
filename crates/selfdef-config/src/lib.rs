@@ -583,4 +583,64 @@ mod tests {
         assert_eq!(cfg.daemon.log_level, "trace");
         assert!(cfg.collectors.auditd.enabled);
     }
+
+    /// F-2029-005 + F-2029-006: end-to-end test for the SDD-007 D-4
+    /// config knobs. The `[api].max_sse_subscribers` and
+    /// `max_sse_subscribers_per_token` flow from the TOML file
+    /// through `Config::load` into `ApiConfig`'s `Option<usize>`
+    /// fields. The daemon then threads them into `ApiState` via
+    /// `SseCaps`; the SubscriberGuard reads them at request time.
+    /// This test pins the parse hop; the API-side handler test
+    /// pins the consumption hop. Together they close both
+    /// integration-audit findings.
+    #[test]
+    fn sse_cap_knobs_round_trip_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [api]
+            enabled = true
+            max_sse_subscribers           = 16
+            max_sse_subscribers_per_token = 4
+            "#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.api.enabled, "api section must parse");
+        assert_eq!(
+            cfg.api.max_sse_subscribers,
+            Some(16),
+            "global cap override must round-trip",
+        );
+        assert_eq!(
+            cfg.api.max_sse_subscribers_per_token,
+            Some(4),
+            "per-token cap override must round-trip",
+        );
+    }
+
+    /// F-2029-005 + F-2029-006: pin the default-when-unset
+    /// contract. When the TOML omits the cap fields entirely,
+    /// `ApiConfig::default()` yields `None` for both; the
+    /// daemon's `SseCaps::from(cfg.api)` then falls back to the
+    /// compiled-in defaults at consumption time.
+    #[test]
+    fn sse_cap_knobs_default_to_none_when_unset() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [api]
+            enabled = true
+            "#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.api.enabled);
+        assert_eq!(cfg.api.max_sse_subscribers, None);
+        assert_eq!(cfg.api.max_sse_subscribers_per_token, None);
+    }
 }

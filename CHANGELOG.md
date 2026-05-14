@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Audit + test — Phase 4 integration explorer (raises + closes F-2029-005 + -006)
+
+Fourth of seven Phase 4 explorers. Audits the seven integration seams introduced by the Phase 3 closure cycle.
+
+#### Result
+
+**0 blockers, 0 important; all seven seams hold under the closure code.** Two `nice` test-coverage findings, both closed inline:
+
+| Seam | Verdict |
+| --- | --- |
+| bearer_auth → TokenFingerprint → events_stream extension flow | clean |
+| per-token cap ↔ global cap ↔ operator config knobs | clean (per-token rejection short-circuits before global increment; no slot leak) |
+| SDD-007 D-4 config knobs ↔ daemon startup wiring | F-2029-005 |
+| TCP-follow ↔ JSON-503 ↔ typed reasons | clean |
+| vpn-bridge SDD-006 v2 ↔ manifest persistence | clean |
+| STARTER_CONFIG SSE caps ↔ daemon parse | F-2029-006 (duplicate of F-2029-005) |
+| SseParser feed_bytes ↔ both transports | clean |
+
+**F-2029-005** and **F-2029-006** are facets of the same gap (no end-to-end test from TOML file → daemon parse → `ApiConfig` → `ApiState::with_sse_caps`). Two new tests in `crates/selfdef-config/src/lib.rs::tests`:
+
+- `sse_cap_knobs_round_trip_from_toml` — sets both caps in TOML, asserts `Config::load` yields `Some(16)` and `Some(4)` respectively.
+- `sse_cap_knobs_default_to_none_when_unset` — pins the unset-defaults-to-None contract so a regression where `#[serde(default)]` accidentally yields `Some(0)` is caught at parse time.
+
+Together with the existing `events_stream_per_token_cap_honours_operator_override` and `events_stream_global_cap_honours_operator_override` tests (which pin the consumption hop on the API side), the full TOML → ApiState → handler chain is now test-covered.
+
+#### New document
+
+`docs/review/phase-4/50-integration-audit.md` — seam-by-seam notes with concrete `file:line` evidence.
+
+#### Tests
+
+- `cargo test -p selfdef-config` — 4/4 pass (was 2; +2 new round-trip tests).
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 4 status
+
+**6 findings across 4 explorers**: 0 blockers, 0 important, **4 nice (all closed)**, 2 demoted, 0 SDD-debt. **Three explorers remain** (docs, tests, security).
+
 ### Polish + audit — Phase 4 crate + module cluster (closes F-2029-002 + -003 + -004, raises F-2029-004)
 
 Folds the Phase 4 module explorer (third of seven) into the same PR that closes both `nice` findings from the crate explorer. The module explorer raised one trivial `nice` (F-2029-004 — a doc-comment gap), which is closed inline.
