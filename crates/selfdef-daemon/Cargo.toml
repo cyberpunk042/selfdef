@@ -24,6 +24,8 @@ selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
 selfdef-signing = { workspace = true }
 selfdef-notifier = { workspace = true }
+selfdef-notifier-engine = { workspace = true }
+selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-integration-signal = { workspace = true }
 selfdef-integration-discord = { workspace = true }
@@ -45,6 +47,7 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-journald = { workspace = true }

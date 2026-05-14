@@ -6,6 +6,8 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod dispatcher_adapter;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,6 +21,8 @@ use selfdef_correlator::Correlator;
 use selfdef_integration_ntfy::NtfyNotifier;
 use selfdef_integration_signal::SignalCliNotifier;
 use selfdef_notifier::{Notifier, NotifierChain, Subscription};
+use selfdef_notifier_engine::{EscalationEngine, PayloadDispatcher, wake_task};
+use selfdef_notifier_orchestrator::Channel;
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
 use tokio::signal::unix::{SignalKind, signal};
@@ -121,14 +125,14 @@ async fn main() -> Result<()> {
         (None, None)
     };
 
-    // ---- notifier chain ----
-    let notifier = build_notifier_chain(&cfg);
-    if notifier.is_empty() {
-        warn!("no notification channels configured");
-    }
-
-    // ---- responder ----
-    let notifier_arc: Arc<dyn selfdef_notifier::Notifier> = Arc::new(notifier);
+    // ---- notifier path: M4 chain OR SDD-008 D-5d engine ----
+    // When [notifier].escalations_path is set, we open the
+    // persistent EscalationEngine, build a Vec<Arc<dyn Channel>>,
+    // wrap them in a PayloadDispatcher, and spawn the wake task.
+    // The responder gets a DispatcherAdapter (impl Notifier) so
+    // existing call sites are unchanged. When unset, we fall back
+    // to the M4 NotifierChain — no persistence, no escalation.
+    let (notifier_arc, wake_task_handle) = build_notifier_path(&cfg, &shutdown);
     let actions: Vec<Arc<dyn selfdef_responder::actions::Action>> = vec![
         Arc::new(selfdef_responder::actions::NotifyAction::new(notifier_arc)),
         Arc::new(selfdef_responder::actions::SnapshotProcAction::new(
@@ -435,6 +439,10 @@ async fn main() -> Result<()> {
     }
     let _ = tokio::time::timeout(Duration::from_secs(5), responder_task).await;
     info!("responder stopped");
+    if let Some(h) = wake_task_handle {
+        let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
+        info!("escalation wake_task stopped");
+    }
     if let Some(h) = api_task {
         let _ = tokio::time::timeout(Duration::from_secs(5), h).await;
         info!("api stopped");
@@ -714,6 +722,200 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
 /// translating string-shaped fields into the typed
 /// [`selfdef_notifier::Subscription`]. Missing entry returns the
 /// default (accept-all) subscription.
+/// SDD-008 D-5d: choose between the M4 fire-and-forget chain and
+/// the persistent-engine dispatcher based on whether the operator
+/// set `[notifier].escalations_path`.
+///
+/// - Path unset → build the existing `NotifierChain` (M4 path).
+/// - Path set, engine opens OK → build `Vec<Arc<dyn Channel>>`,
+///   wrap in `PayloadDispatcher`, spawn `wake_task::run` on the
+///   shutdown token, return a `DispatcherAdapter` so the responder
+///   sees an `Arc<dyn Notifier>` regardless.
+/// - Path set, engine fails to open → log + fall back to M4. Daemon
+///   startup never fails on a notifier misconfiguration.
+fn build_notifier_path(
+    cfg: &Config,
+    shutdown: &tokio_util::sync::CancellationToken,
+) -> (
+    Arc<dyn selfdef_notifier::Notifier>,
+    Option<tokio::task::JoinHandle<()>>,
+) {
+    let Some(escalations_path) = cfg.notifier.escalations_path.as_ref() else {
+        let chain = build_notifier_chain(cfg);
+        if chain.is_empty() {
+            warn!("no notification channels configured");
+        }
+        return (Arc::new(chain), None);
+    };
+
+    match EscalationEngine::open(escalations_path) {
+        Ok(engine) => {
+            let engine = Arc::new(engine);
+            let channels = build_channel_set(cfg);
+            if channels.is_empty() {
+                warn!(
+                    "no notification channels configured (escalation engine still active; \
+                     wake task will run and clean up timed-out rows)",
+                );
+            }
+            let dispatcher = Arc::new(PayloadDispatcher::new(engine, channels));
+            info!(
+                path = %escalations_path.display(),
+                channels = dispatcher.channel_count(),
+                "escalation engine enabled (SDD-008 D-5d)",
+            );
+            let wake_handle = tokio::spawn({
+                let d = Arc::clone(&dispatcher);
+                let sd = shutdown.clone();
+                async move { wake_task::run(d, sd).await }
+            });
+            let adapter: Arc<dyn selfdef_notifier::Notifier> =
+                Arc::new(dispatcher_adapter::DispatcherAdapter::new(dispatcher));
+            (adapter, Some(wake_handle))
+        }
+        Err(e) => {
+            error!(
+                error = %e,
+                path = %escalations_path.display(),
+                "failed to open escalation engine; falling back to M4 fire-and-forget",
+            );
+            let chain = build_notifier_chain(cfg);
+            if chain.is_empty() {
+                warn!("no notification channels configured");
+            }
+            (Arc::new(chain), None)
+        }
+    }
+}
+
+/// SDD-008 D-5d: build the `Vec<Arc<dyn Channel>>` consumed by the
+/// `PayloadDispatcher`. Parallels `build_notifier_chain` but
+/// constructs the orchestrator-shaped trait objects instead of the
+/// legacy chain.
+///
+/// Per-channel subscription filtering (D-3) is **not** applied
+/// here in v1 — the dispatcher fires every channel in operator-
+/// supplied order. Subscription-aware dispatching lands in a
+/// follow-up D-5e / D-6 once `PayloadDispatcher::new` grows a
+/// subscription-pair input.
+fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
+    let mut channels: Vec<Arc<dyn Channel>> = Vec::new();
+    for channel in &cfg.notifier.channels {
+        match channel.as_str() {
+            "ntfy" if !cfg.notifier.ntfy.url.is_empty() && !cfg.notifier.ntfy.topic.is_empty() => {
+                channels.push(Arc::new(NtfyNotifier::from_config(
+                    &cfg.notifier.ntfy.url,
+                    &cfg.notifier.ntfy.topic,
+                    cfg.notifier.ntfy.token_file.as_ref(),
+                )));
+                info!(channel, "engine-channel enabled");
+            }
+            "signal"
+                if !cfg.notifier.signal.account.is_empty()
+                    && !cfg.notifier.signal.recipient.is_empty() =>
+            {
+                channels.push(Arc::new(SignalCliNotifier::new(
+                    cfg.notifier.signal.binary.clone(),
+                    cfg.notifier.signal.account.clone(),
+                    cfg.notifier.signal.recipient.clone(),
+                )));
+                info!(channel, "engine-channel enabled");
+            }
+            "smtp"
+                if !cfg.notifier.smtp.relay_host.is_empty() && !cfg.notifier.smtp.to.is_empty() =>
+            {
+                let tls = match cfg.notifier.smtp.tls.as_str() {
+                    "implicit_tls" => selfdef_integration_smtp::TlsProfile::ImplicitTls,
+                    "plain" => selfdef_integration_smtp::TlsProfile::Plain,
+                    _ => selfdef_integration_smtp::TlsProfile::StartTls,
+                };
+                match selfdef_integration_smtp::SmtpNotifier::from_config(
+                    &cfg.notifier.smtp.relay_host,
+                    cfg.notifier.smtp.relay_port,
+                    tls,
+                    cfg.notifier.smtp.username.as_deref(),
+                    cfg.notifier.smtp.password_file.as_ref(),
+                    &cfg.notifier.smtp.from,
+                    &cfg.notifier.smtp.to,
+                    std::time::Duration::from_secs(cfg.notifier.smtp.timeout_secs),
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "smtp engine-channel skipped");
+                    }
+                }
+            }
+            "discord" if cfg.notifier.discord.webhook_url_file.is_some() => {
+                let Some(url_path) = cfg.notifier.discord.webhook_url_file.as_ref() else {
+                    continue;
+                };
+                match selfdef_integration_discord::DiscordNotifier::from_config(
+                    url_path,
+                    &cfg.notifier.discord.username,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "discord engine-channel skipped");
+                    }
+                }
+            }
+            "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
+                let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
+                    continue;
+                };
+                match selfdef_integration_slack::SlackNotifier::from_config(
+                    url_path,
+                    &cfg.notifier.slack.username,
+                    &cfg.notifier.slack.icon_emoji,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "slack engine-channel skipped");
+                    }
+                }
+            }
+            "twilio"
+                if !cfg.notifier.twilio.account_sid.is_empty()
+                    && !cfg.notifier.twilio.to.is_empty() =>
+            {
+                let Some(token_path) = cfg.notifier.twilio.auth_token_file.as_ref() else {
+                    warn!(
+                        channel,
+                        "twilio engine-channel skipped (auth_token_file not set)"
+                    );
+                    continue;
+                };
+                match selfdef_integration_twilio::TwilioNotifier::from_config(
+                    &cfg.notifier.twilio.account_sid,
+                    token_path,
+                    &cfg.notifier.twilio.from,
+                    &cfg.notifier.twilio.to,
+                    std::time::Duration::from_secs(cfg.notifier.twilio.timeout_secs),
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "twilio engine-channel skipped");
+                    }
+                }
+            }
+            other => warn!(channel = other, "engine-channel skipped (missing config)"),
+        }
+    }
+    channels
+}
+
 fn build_subscription(channel: &str, cfg: &Config) -> Subscription {
     let Some(sc) = cfg.notifier.subscriptions.get(channel) else {
         return Subscription::default();
