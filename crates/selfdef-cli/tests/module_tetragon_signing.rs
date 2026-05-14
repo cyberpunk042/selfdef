@@ -18,35 +18,15 @@
 //!   • presence of `.minisig` sidecars
 //!   • simulated `selfdefctl keys verify` exit code
 
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+// F-2027-049 / -050 / -051: helpers live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, prepended_path, write_executable};
+
 fn module_dir() -> PathBuf {
-    workspace_root().join("modules/tetragon")
-}
-
-fn write_executable(path: &Path, body: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
-    let mut perms = std::fs::metadata(path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms).unwrap();
-}
-
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
+    common::module_dir("tetragon")
 }
 
 /// Stub `selfdefctl` mimicking the two `keys` verbs the tetragon
@@ -175,15 +155,6 @@ fn run_check(fx: &Fixture) -> Output {
         .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn check.sh")
-}
-
-fn last_stdout_line(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .last()
-        .unwrap_or("")
-        .trim()
-        .to_string()
 }
 
 fn write_policy_with_sig(dir: &Path, name: &str) -> PathBuf {

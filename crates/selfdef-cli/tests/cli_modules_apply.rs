@@ -5,25 +5,16 @@
 //! `--host-config` + `--dir` overrides. Exercises the CLI from the
 //! same surface an operator uses.
 
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::process::Command;
+
+// F-2027-051: helpers live in common/mod.rs.
+mod common;
+use common::write_executable;
 
 fn binary() -> std::path::PathBuf {
     // CARGO_BIN_EXE_<name> is populated by cargo for integration tests.
     std::path::PathBuf::from(env!("CARGO_BIN_EXE_selfdefctl"))
-}
-
-fn write_executable(path: &Path, body: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
-    let mut perms = std::fs::metadata(path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms).unwrap();
 }
 
 fn write_module(catalog: &Path, slug: &str, deps: &[&str], apply_body: &str) {

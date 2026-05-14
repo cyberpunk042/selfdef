@@ -5,23 +5,15 @@
 //! module's apply.sh / check.sh against it. No fake binaries are
 //! shimmed — sha256sum and diff come from the system PATH.
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-fn module_dir() -> PathBuf {
-    workspace_root().join("modules/integrity-sentinel")
-}
+// F-2027-049 / -050: helpers live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, write_file};
 
-fn write_file(path: &Path, body: &str) {
-    if let Some(p) = path.parent() {
-        std::fs::create_dir_all(p).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
+fn module_dir() -> PathBuf {
+    common::module_dir("integrity-sentinel")
 }
 
 struct Fixture {
@@ -89,15 +81,6 @@ fn run_script(script: &str, fx: &Fixture) -> Output {
         .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn script")
-}
-
-fn last_stdout_line(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .last()
-        .unwrap_or("")
-        .trim()
-        .to_string()
 }
 
 #[test]
@@ -364,8 +347,6 @@ fn uninstall_removes_baseline() {
     // paths_file is operator-managed; must not be touched.
     assert!(fx.root.join("paths.txt").exists());
 }
-
-mod common;
 
 /// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
 /// integrity-sentinel's apply normally writes the

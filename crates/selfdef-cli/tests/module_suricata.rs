@@ -9,11 +9,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+// F-2027-049 / -050 / -051: helpers live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, prepended_path};
+
 fn module_dir() -> PathBuf {
-    workspace_root().join("modules/suricata")
+    common::module_dir("suricata")
 }
 
 fn write_config(body: &str) -> tempfile::NamedTempFile {
@@ -49,14 +50,6 @@ fn stub_path_dir() -> tempfile::TempDir {
     dir
 }
 
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
-}
-
 fn run_apply(cfg: &Path, path_dir: &Path) -> std::process::Output {
     let module = module_dir();
     Command::new("bash")
@@ -67,11 +60,6 @@ fn run_apply(cfg: &Path, path_dir: &Path) -> std::process::Output {
         .env("PATH", prepended_path(path_dir))
         .output()
         .expect("spawn apply.sh")
-}
-
-fn last_stdout_line(out: &std::process::Output) -> String {
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    stdout.lines().last().unwrap_or("").trim().to_string()
 }
 
 #[test]
@@ -177,8 +165,6 @@ fn check_reports_inactive_service() {
         "got: {line}"
     );
 }
-
-mod common;
 
 /// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
 /// suricata's apply writes the systemd unit + ruleset in

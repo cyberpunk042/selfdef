@@ -11,27 +11,19 @@
 //! reports "already at desired state" and never restarts the
 //! service).
 
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-fn module_dir() -> PathBuf {
-    workspace_root().join("modules/tetragon")
-}
+// F-2027-049 / -050 / -051: workspace_root / module_dir /
+// write_executable / prepended_path / last_stdout_line all live
+// in `tests/common/mod.rs`. The `mod common;` declaration below
+// (was previously late in the file for the dry-run-noop test
+// only) is now re-used across the whole test module.
+mod common;
+use common::{last_stdout_line, prepended_path, write_executable};
 
-fn write_executable(path: &Path, body: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
-    let mut perms = std::fs::metadata(path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms).unwrap();
+fn module_dir() -> PathBuf {
+    common::module_dir("tetragon")
 }
 
 /// Stub bin dir with `tetragon` (no-op) and `systemctl` (accepts
@@ -48,14 +40,6 @@ fn stub_bin_dir() -> tempfile::TempDir {
         "#!/usr/bin/env bash\nexit 0\n",
     );
     dir
-}
-
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
 }
 
 struct Fixture {
@@ -134,15 +118,6 @@ fn run_live_apply(fx: &Fixture) -> Output {
         .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn apply.sh")
-}
-
-fn last_stdout_line(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .last()
-        .unwrap_or("")
-        .trim()
-        .to_string()
 }
 
 #[test]
@@ -306,8 +281,6 @@ fn uninstall_preserves_policy_dir_when_non_empty() {
         "foreign policy must not be removed",
     );
 }
-
-mod common;
 
 /// SDD-005 D-2a / Test-1: dry-run must be a no-op on disk.
 /// tetragon's apply normally renders the main config + creates

@@ -9,11 +9,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+// F-2027-049 / -050 / -051: helpers live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, prepended_path};
+
 fn module_dir() -> PathBuf {
-    workspace_root().join("modules/vpn-bridge")
+    common::module_dir("vpn-bridge")
 }
 
 fn write_config(body: &str) -> tempfile::NamedTempFile {
@@ -47,14 +48,6 @@ fn stub_path_dir() -> tempfile::TempDir {
     dir
 }
 
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
-}
-
 fn make_wg_conf(dir: &Path, iface: &str) {
     std::fs::write(dir.join(format!("{iface}.conf")), "# placeholder\n").expect("wg.conf");
 }
@@ -71,11 +64,6 @@ fn run_apply(cfg: &Path, path_dir: &Path, wg_dir: &Path, nft_dest: &Path) -> std
         .env("PATH", prepended_path(path_dir))
         .output()
         .expect("spawn apply.sh")
-}
-
-fn last_stdout_line(out: &std::process::Output) -> String {
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    stdout.lines().last().unwrap_or("").trim().to_string()
 }
 
 #[test]
@@ -112,8 +100,6 @@ forward_to_lan = ""
         "got: {line}"
     );
 }
-
-mod common;
 
 /// SDD-005 D-2a / Test-1: dry-run must be a no-op. The
 /// endpoint apply above asserts the live-positive path

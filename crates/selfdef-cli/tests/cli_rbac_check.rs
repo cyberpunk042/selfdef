@@ -16,32 +16,15 @@
 //! off the `--as` value. This keeps the test hermetic — no real
 //! cluster access required.
 
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
+
+// F-2027-051: helpers live in common/mod.rs.
+mod common;
+use common::{prepended_path, write_executable};
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_selfdefctl"))
-}
-
-fn write_executable(path: &Path, body: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
-    let mut perms = std::fs::metadata(path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms).unwrap();
-}
-
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
 }
 
 /// Stub `kubectl auth can-i ... --as=<subject>` keyed by
