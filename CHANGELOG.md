@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 4 crate explorer (raises F-2029-002 + F-2029-003)
+
+Second of seven Phase 4 explorers. Audits the new Rust code from the Phase 3 closure cycle: `TokenFingerprint`, `SseCaps`, the dual-counter `SubscriberGuard`, `SseParser::feed_bytes`, JSON-503 extraction, the operator-tunable cap surface in `selfdef-config` + `selfdef-daemon`, the `paths.rs` compile-time invariants.
+
+#### Headline
+
+**No blockers, no important findings.** The Phase 3 closure code is well-integrated and test-covered. Two `nice` observations on defensive hardening.
+
+#### New document
+
+`docs/review/phase-4/30-crate-audit.md` — per-file notes with concrete `file:line` evidence.
+
+#### Findings
+
+- **F-2029-002 (nice)** — `TokenFingerprint`'s derived `Debug` dumps the full 32 bytes; `tracing` via `?fp` would log the raw hash, giving attackers who later acquire the token a way to link past log lines to the holder. Fingerprints aren't secrets but they're persistent identifiers. Custom `Debug` impl that prints a truncated hex prefix (e.g. `TokenFingerprint(a3b9…)`) preserves diagnostic value without the linkage.
+- **F-2029-003 (nice)** — The `SseCaps` `try_acquire` path treats `Some(0)` the same as `None` (both fall back to the compiled-in default) per the SDD-007 D-4 intent. The existing override tests use `Some(2)` and `Some(1)`; neither exercises the `Some(0)` path. A future refactor dropping the `n > 0` guard would silently break the contract. Defensive test gap.
+
+#### Phase 4 status
+
+3 findings across 2 explorers: 0 blockers, 0 important, 2 nice, 1 demoted, 0 SDD-debt. Five explorers remain (module, integration, docs, tests, security).
+
+This PR is documentation-only.
+
 ### Documentation — Phase 4 recent-PRs explorer + ledger (raises F-2029-001)
 
 First of seven Phase 4 explorers. Surveys the ~17 PRs from the Phase 3 closure cycle (commits `f40bf05` through `8b44322`). Documents the cleanest cycle yet — 16/17 PRs review-clean (94% pass rate).
