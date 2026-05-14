@@ -43,7 +43,7 @@
 
 mod dispatcher;
 pub mod wake_task;
-pub use dispatcher::{DispatchOutcome, PayloadDispatcher};
+pub use dispatcher::{DispatchOutcome, Mode, PayloadDispatcher};
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
