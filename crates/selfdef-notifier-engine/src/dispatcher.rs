@@ -160,6 +160,43 @@ impl PayloadDispatcher {
     pub fn engine(&self) -> Arc<EscalationEngine> {
         Arc::clone(&self.engine)
     }
+
+    /// Fire the channel set against a [`Payload`] **without**
+    /// touching persistence. Used by the D-5c wake task when re-
+    /// firing a row that's already in the engine: the persistence
+    /// state is updated separately via [`EscalationEngine::advance_rung`]
+    /// or [`EscalationEngine::close_event`].
+    ///
+    /// Semantics mirror [`Self::submit`]'s channel walk:
+    /// first-success-wins; returns either [`DispatchOutcome::Delivered`]
+    /// naming the winning channel, or
+    /// [`DispatchOutcome::PersistedButAllChannelsFailed`] when every
+    /// channel returned an error (variant name kept for return-type
+    /// uniformity — no persist happened here, but the wake task
+    /// owns the row's lifecycle and is what makes the variant
+    /// accurate for the caller).
+    pub async fn dispatch_payload(&self, payload: &Payload) -> DispatchOutcome {
+        let mut last_err: Option<ChannelError> = None;
+        for channel in &self.channels {
+            match channel.send(payload).await {
+                Ok(_receipt) => {
+                    info!(channel = channel.name(), "dispatcher: re-fire accepted");
+                    return DispatchOutcome::Delivered {
+                        channel: channel.name().to_owned(),
+                    };
+                }
+                Err(e) => {
+                    warn!(channel = channel.name(), error = %e, "dispatcher: re-fire failed; trying next");
+                    last_err = Some(e);
+                }
+            }
+        }
+        DispatchOutcome::PersistedButAllChannelsFailed(
+            last_err.unwrap_or_else(|| {
+                ChannelError::Other("dispatcher: no channels configured".into())
+            }),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -396,5 +433,51 @@ mod tests {
         );
         assert!(!DispatchOutcome::PersistedButAllChannelsFailed(ChannelError::Timeout).delivered());
         assert!(!DispatchOutcome::PersistFailed(EngineError::PayloadMissingEventId).delivered());
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_does_not_touch_persistence() {
+        // Empty engine — dispatch_payload must NOT enqueue a row.
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_ok, ok_counter) = MockChannel::always_ok("ok");
+        let dispatcher = PayloadDispatcher::new(Arc::clone(&eng), vec![ch_ok]);
+        let payload = mk_payload("no-persist");
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(outcome.delivered());
+        assert_eq!(ok_counter.load(Ordering::Acquire), 1);
+        // Persistence is untouched: row_count stays at zero.
+        assert_eq!(eng.row_count().await.unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_first_success_wins() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_fail, fail_counter) =
+            MockChannel::always_fail("fail-1", ChannelError::Transport("synthetic".into()));
+        let (ch_ok, ok_counter) = MockChannel::always_ok("ok-1");
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch_fail, ch_ok]);
+        let outcome = dispatcher.dispatch_payload(&mk_payload("walk")).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "ok-1"),
+            other => panic!("expected Delivered, got {other:?}"),
+        }
+        assert_eq!(fail_counter.load(Ordering::Acquire), 1);
+        assert_eq!(ok_counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_returns_failure_when_all_fail() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_a, _a) = MockChannel::always_fail("a", ChannelError::Transport("a".into()));
+        let (ch_b, _b) = MockChannel::always_fail(
+            "b",
+            ChannelError::Remote {
+                status: 500,
+                body: "b".into(),
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch_a, ch_b]);
+        let outcome = dispatcher.dispatch_payload(&mk_payload("all-fail")).await;
+        assert!(!outcome.delivered());
     }
 }
