@@ -120,6 +120,20 @@ surfaces the shipped modules introduce.
   restarts. Rotate notifier credentials via a deliberate operator action,
   not through automated watchers that key on uptime resets. See known gap
   F-2026-066.
+- **Per-token SSE subscriber quota** (SDD-007): `/events/stream` is capped
+  at `MAX_SSE_SUBSCRIBERS_PER_TOKEN` (default 8) per bearer-token fingerprint
+  and `MAX_SSE_SUBSCRIBERS` (default 64) process-wide. The token fingerprint
+  is SHA-256 of the presented bearer; the per-token map prunes empty entries
+  on `Drop` so rotation doesn't leak counter slots. Bounds the authenticated-
+  only DoS a single malicious bearer-holder (or a leaked token) can mount
+  against legitimate operators — capping each token's slice means revoking
+  the abusive token restores legitimate access. Both caps are operator-
+  tunable via `[api].max_sse_subscribers` and `max_sse_subscribers_per_token`
+  in `selfdef.toml`; `None`/`Some(0)` fall back to the defaults. Distinguishable
+  503 reasons (`"sse subscriber cap reached"` global vs `"per-token sse cap
+  reached"`) so operators can tell which limit they hit. See
+  `crates/selfdef-api/src/handlers.rs::SubscriberGuard` and SDD-007 for the
+  full implementation + the deferred terminate-on-revoke hardening note.
 
 ### Policy surface
 - **TracingPolicy directory** (`/etc/tetragon/tetragon.tp.d/`): the
