@@ -164,6 +164,30 @@ fn rbac_check_with_probe_clean_posture_exits_zero() {
     );
 }
 
+/// F-2027-060: operator-supplied `--as` strings flow into
+/// `kubectl` args and into the daemon's own logs. The validator
+/// must refuse subjects that would corrupt logs / terminals
+/// (shell metacharacters, ANSI escapes, whitespace, …) before
+/// anything is spawned or echoed. Probe is intentionally NOT
+/// set — validation runs in the dry path too so operators see
+/// the error immediately.
+#[test]
+fn rbac_check_rejects_unsafe_subject_passed_via_as_flag() {
+    let fx = fixture("pod-label", &[]);
+    let out = run_rbac_check(&fx, &["--as", "system:masters$(whoami)"]);
+    assert!(
+        !out.status.success(),
+        "should reject shell-metachar subject; stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("disallowed byte") && stderr.contains("0x24"),
+        "expected charset-violation error; stderr: {stderr}",
+    );
+}
+
 #[test]
 fn rbac_check_with_probe_flags_overly_permissive_subject() {
     // system:authenticated is in the permissive list → kubectl

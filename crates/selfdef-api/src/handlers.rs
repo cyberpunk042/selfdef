@@ -261,8 +261,19 @@ impl ApiError {
         }
     }
 
+    /// F-2027-063: store errors used to flatten verbatim into
+    /// the JSON 500 body. Any future store-error message that
+    /// names an internal path (e.g.
+    /// `sqlite: open /var/lib/selfdef/state.sqlite: permission denied`)
+    /// would leak that path to the (authenticated) caller. We
+    /// now log the detail server-side at WARN and ship a generic
+    /// `"store unavailable"` to the client. The status code
+    /// (500) tells the caller the API is the wrong place to
+    /// debug — the operator gets the real message in the
+    /// daemon's logs.
     pub(crate) fn store(e: impl std::fmt::Display) -> Self {
-        Self::with_status(StatusCode::INTERNAL_SERVER_ERROR, format!("store: {e}"))
+        warn!(error = %e, "api: store error");
+        Self::with_status(StatusCode::INTERNAL_SERVER_ERROR, "store unavailable")
     }
 }
 

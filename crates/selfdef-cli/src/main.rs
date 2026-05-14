@@ -1260,6 +1260,22 @@ fn rbac_check(
     .into_iter()
     .chain(extra_subjects.iter().cloned())
     .collect();
+    // F-2027-060: validate every probe subject up front. The
+    // built-in defaults are static strings under our control,
+    // but `extra_subjects` come from operator-supplied `--as`
+    // flags and could carry shell metacharacters or ANSI escapes
+    // that would corrupt the daemon's logs + the operator's
+    // terminal when we echo the subject back through error
+    // paths. No shell-injection vector (we use `Command::new`,
+    // not the shell) — this is a log-pollution mitigation.
+    for subj in &probe_subjects {
+        validate_rbac_subject(subj).with_context(|| {
+            format!(
+                "refusing to probe an unsafe subject (length {} bytes)",
+                subj.len(),
+            )
+        })?;
+    }
     let ns_arg: Vec<&str> = match namespace {
         Some(ns) => vec!["-n", ns],
         None => vec![],
@@ -1406,6 +1422,95 @@ fn rbac_probe_subject(subject: &str, namespace: Option<&str>) -> Result<ProbeOut
         (true, "yes") => Ok(ProbeOutcome::Can),
         (false, "no") => Ok(ProbeOutcome::Cannot),
         _ => Ok(ProbeOutcome::Other(stderr)),
+    }
+}
+
+/// F-2027-060: defense-in-depth validator for `--as <subject>`.
+/// Subject strings flow to `kubectl` via `Command::new(...).args(...)`
+/// (no shell, so no injection vector) and into the daemon's
+/// own logs and stdout when the probe summarises results. An
+/// operator passing an ANSI-escape-laden or otherwise malformed
+/// string would corrupt those logs / terminals; this validator
+/// rejects anything outside the safe Kubernetes-identifier
+/// charset (`A-Z a-z 0-9 : . _ / @ -`) plus the 1..=253 char
+/// length window k8s already enforces on subject names.
+///
+/// Returns `Ok(())` on a valid subject, an `anyhow::Error` whose
+/// message names the offending byte (not the whole string — that
+/// would re-introduce the very log-pollution this guards against).
+fn validate_rbac_subject(subject: &str) -> Result<()> {
+    if subject.is_empty() {
+        anyhow::bail!("--as: subject is empty");
+    }
+    if subject.len() > 253 {
+        anyhow::bail!(
+            "--as: subject is {} bytes; Kubernetes caps subject names at 253",
+            subject.len(),
+        );
+    }
+    for (i, b) in subject.bytes().enumerate() {
+        let ok = b.is_ascii_alphanumeric() || matches!(b, b':' | b'.' | b'_' | b'/' | b'@' | b'-');
+        if !ok {
+            anyhow::bail!(
+                "--as: subject contains disallowed byte 0x{b:02x} at position {i}; \
+                 allowed charset is [A-Za-z0-9:._/@-]",
+            );
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod rbac_subject_tests {
+    use super::validate_rbac_subject;
+
+    #[test]
+    fn accepts_default_built_in_subjects() {
+        validate_rbac_subject("system:authenticated").unwrap();
+        validate_rbac_subject("system:unauthenticated").unwrap();
+        validate_rbac_subject("system:masters").unwrap();
+    }
+
+    #[test]
+    fn accepts_serviceaccount_form() {
+        validate_rbac_subject("system:serviceaccount:kube-system:default").unwrap();
+        validate_rbac_subject("alice@example.com").unwrap();
+        validate_rbac_subject("group/team_a.v1-rc").unwrap();
+    }
+
+    #[test]
+    fn rejects_empty() {
+        let err = validate_rbac_subject("").unwrap_err().to_string();
+        assert!(err.contains("subject is empty"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_shell_metacharacters() {
+        let err = validate_rbac_subject("system:masters$(whoami)")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("disallowed byte 0x24"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_ansi_escape() {
+        let err = validate_rbac_subject("alice\x1b[31m")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("0x1b"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_whitespace() {
+        let err = validate_rbac_subject("alice bob").unwrap_err().to_string();
+        assert!(err.contains("0x20"), "got: {err}");
+    }
+
+    #[test]
+    fn rejects_over_length() {
+        let s = "a".repeat(254);
+        let err = validate_rbac_subject(&s).unwrap_err().to_string();
+        assert!(err.contains("254 bytes"), "got: {err}");
     }
 }
 
