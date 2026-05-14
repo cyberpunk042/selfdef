@@ -6,6 +6,41 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 5 crate explorer (**0 findings**; second consecutive clean explorer)
+
+Second of seven Phase 5 explorers. Audits the new Rust code from the Phase 4 closure cycle: custom `Debug` impl on `TokenFingerprint`, 2 fingerprint unit tests, 1 SseCaps zero-cap integration test, 2 TOML round-trip tests.
+
+#### Headline
+
+**0 findings.** Both Phase 5 explorers so far are 100% clean.
+
+#### What was verified
+
+- The custom `Debug` impl renders `bytes[0..4]` as 8 hex chars + Unicode ellipsis exactly as documented; no edge-case fragility.
+- `fingerprint_tests::debug_renders_truncated_prefix` correctly asserts the shape (`TokenFingerprint(<8 hex>…)`).
+- `fingerprint_tests::distinct_tokens_produce_distinct_debug_prefixes` correctly verifies different tokens yield different Debug forms.
+- `events_stream_zero_caps_fall_back_to_defaults` correctly pins the `Some(0)` → default fallback contract.
+- `sse_cap_knobs_round_trip_from_toml` + `sse_cap_knobs_default_to_none_when_unset` correctly exercise both branches of the TOML parse contract.
+
+#### Crate-explorer trajectory across cycles
+
+| Cycle | Crate findings |
+| --- | --- |
+| Phase 2 | 11 nice |
+| Phase 3 | 10 (7 nice, 3 demoted) |
+| Phase 4 | 2 nice |
+| **Phase 5** | **0** |
+
+#### New document
+
+`docs/review/phase-5/30-crate-audit.md` — per-file notes, edge-case analysis, triage table.
+
+#### Phase 5 status
+
+0 findings raised across 2 explorers: 0 blockers, 0 important, 0 nice, 0 demoted, 0 SDD-debt. **Five explorers remain** (module, integration, docs, tests, security). Trajectory suggests Phase 5 may produce a complete-cycle zero-findings result.
+
+This PR is documentation-only.
+
 ### Documentation — Phase 5 audit kickoff (recent-PRs explorer: **0 findings**)
 
 Opens Phase 5 of the rolling structural audit. Phase 4 closed the cleanest cycle yet (9 findings, all closed); Phase 5 audits the 8 PRs of Phase 4's closure cycle (`22ff461..d239dad`).

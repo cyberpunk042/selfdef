@@ -36,30 +36,30 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** by the first Phase 5 explorer
-  (recent-PRs). **First explorer with a 100% review-clean
-  rate.** Phase 4's closure cycle was the cleanest execution
-  yet:
-  - Charter, inventory, and all seven explorer docs match
-    their stated scope exactly.
-  - Every closure PR's code change matches the audit's
+- **0 findings raised** across two Phase 5 explorers
+  (recent-PRs + crate). **Both explorers 100% clean on
+  first-pass scrutiny.** The Phase 4 closure cycle was
+  exceptionally clean execution:
+  - Charter, inventory, all seven explorer docs match
+    stated scope.
+  - Every closure PR's code change matches its audit
     recommendation.
-  - CHANGELOG status lines at each PR match the ledger
-    progression.
-  - Demoted findings have thorough cross-check
-    justifications that hold up under scrutiny.
+  - The 5 new tests added by the cycle are well-isolated and
+    correctly pin their contracts.
+  - The custom `Debug` impl on `TokenFingerprint` correctly
+    renders bytes[0..4] as 8 hex chars with a Unicode
+    ellipsis; no edge-case fragility.
 - **Trajectory comparison**:
 
-  | Cycle | Recent-PRs explorer | Pass rate |
+  | Cycle | recent-PRs | crate |
   | --- | --- | --- |
-  | Phase 2 | many findings | ~74% |
-  | Phase 3 | 4 findings | 73% (4 obs / 29 PRs) |
-  | Phase 4 | 1 finding (demoted) | 94% (1 obs / 17 PRs) |
-  | **Phase 5** | **0 findings** | **100% (0 obs / 8 PRs)** |
+  | Phase 2 | many | 11 nice |
+  | Phase 3 | 4 nice | 10 (7 nice, 3 demoted) |
+  | Phase 4 | 1 demoted | 2 nice |
+  | **Phase 5** | **0** | **0** |
 
-- Six explorers remain: crate, module, integration, docs,
-  tests, security. Each will add findings (if any) in
-  follow-up PRs.
+- Five explorers remain: module, integration, docs, tests,
+  security.
 - No Phase 5 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
