@@ -434,6 +434,17 @@ pub struct NotifierConfig {
     /// path always behaves as `enforce`. Unknown strings log a
     /// warn at daemon start and fall back to `enforce`.
     pub mode: String,
+    /// SDD-008 D-6b: named escalation profile. One of:
+    ///   `auto`       — 2 attempts, 5-min ack window (default).
+    ///   `aggressive` — 3 attempts at 60s / 180s / 600s. For
+    ///                  wake-the-on-call use cases.
+    ///   `patient`    — 4 attempts at 10/30/60/120 min. For
+    ///                  non-critical channels where rapid retries
+    ///                  would just be noise.
+    ///
+    /// Only consulted when `escalations_path` is set. Unknown
+    /// strings log a warn and fall back to `auto`.
+    pub profile: String,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -453,6 +464,7 @@ impl Default for NotifierConfig {
             discord: DiscordConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
+            profile: "auto".to_owned(),
             subscriptions: HashMap::new(),
         }
     }

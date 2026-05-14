@@ -21,7 +21,7 @@ use selfdef_correlator::Correlator;
 use selfdef_integration_ntfy::NtfyNotifier;
 use selfdef_integration_signal::SignalCliNotifier;
 use selfdef_notifier::{Notifier, NotifierChain, Subscription};
-use selfdef_notifier_engine::{EscalationEngine, Mode, PayloadDispatcher, wake_task};
+use selfdef_notifier_engine::{EscalationEngine, Mode, PayloadDispatcher, Profile, wake_task};
 use selfdef_notifier_orchestrator::Channel;
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
@@ -759,12 +759,19 @@ fn build_notifier_path(
                 );
             }
             let mode = parse_dispatcher_mode(&cfg.notifier.mode);
-            let dispatcher = Arc::new(PayloadDispatcher::new(engine, channels).with_mode(mode));
+            let profile = parse_dispatcher_profile(&cfg.notifier.profile);
+            let dispatcher = Arc::new(
+                PayloadDispatcher::new(engine, channels)
+                    .with_mode(mode)
+                    .with_profile(profile.clone()),
+            );
             info!(
                 path = %escalations_path.display(),
                 channels = dispatcher.channel_count(),
                 mode = mode.name(),
-                "escalation engine enabled (SDD-008 D-5d)",
+                profile = profile.name,
+                max_rung = profile.max_rung(),
+                "escalation engine enabled (SDD-008 D-5d + D-6b)",
             );
             let wake_handle = tokio::spawn({
                 let d = Arc::clone(&dispatcher);
@@ -952,6 +959,22 @@ fn parse_dispatcher_mode(raw: &str) -> Mode {
                 "ignoring unknown [notifier].mode; use one of enforce|audit; falling back to enforce",
             );
             Mode::default()
+        }
+    }
+}
+
+/// SDD-008 D-6b: parse the `[notifier].profile` string into a
+/// typed [`Profile`]. Unknown strings log a warn and fall back to
+/// the default (`auto`).
+fn parse_dispatcher_profile(raw: &str) -> Profile {
+    match Profile::from_name(raw) {
+        Some(p) => p,
+        None => {
+            warn!(
+                value = raw,
+                "ignoring unknown [notifier].profile; use one of auto|aggressive|patient; falling back to auto",
+            );
+            Profile::default()
         }
     }
 }
