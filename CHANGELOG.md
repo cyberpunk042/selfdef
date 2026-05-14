@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security — SSE backpressure (closes F-2027-061 + F-2027-062)
+
+Two hardening changes to `crates/selfdef-api/src/handlers.rs::events_stream`, both surfaced by the Phase 2 security audit. Both are authenticated-DoS mitigations on the opt-in TCP transport — UNIX-socket operators were never at risk because filesystem permissions already gate access.
+
+#### F-2027-061 — per-process subscriber cap
+
+`ApiState` now carries an `Arc<AtomicUsize>` subscriber counter. Each `/events/stream` request acquires a slot via a RAII `SubscriberGuard` (CAS-based `try_acquire`); when the cap (`MAX_SSE_SUBSCRIBERS = 64`) is saturated the handler returns `503 Service Unavailable` with `{"error":"sse subscriber cap reached"}` instead of spawning another forwarder task + 64-slot mpsc. The guard moves into the spawned task, so it runs its `Drop` when the writer exits (client gone, bus closed, send timeout) — the slot frees automatically.
+
+#### F-2027-062 — slow-client send timeout
+
+Every forwarder `tx.send(frame).await` is now wrapped in `tokio::time::timeout(SSE_SEND_TIMEOUT, …)` with a 30-second deadline. A client that stops draining its buffer used to pin the writer task indefinitely once the 64-slot mpsc filled; with the timeout, the writer logs `reason = "slow-client timeout"` and returns, which drops the `SubscriberGuard` and frees the cap slot. The deadline applies to both the normal forwarding path and the `event: lagged` overflow notification.
+
+#### Tests
+
+- New `events_stream_rejects_over_cap_with_503` (`crates/selfdef-api/tests/m12_api.rs`) — opens `MAX_SSE_SUBSCRIBERS` streams, asserts the next returns 503, then drops one held response, publishes a bus event to wake the writer (so it notices the disconnect), and asserts a fresh subscription now succeeds. This pins both the cap and the slot-reuse semantics.
+- `MAX_SSE_SUBSCRIBERS` is re-exported from `lib.rs` behind the existing `test-helpers` Cargo feature so it stays out of release builds (same pattern as `with_full_capability`, F-2027-014).
+- Existing `events_stream_emits_lagged_frame_on_real_bus_overflow` continues to pass — the timeout wrapping preserves the lagged-frame contract.
+
+`cargo test -p selfdef-api`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` all clean.
+
+#### Phase 2 status after this PR
+
+**Open `nice` clusters: 3 remaining.** Tests-explorer leftovers (F-2027-046 suricata live-positive, F-2027-052 + -053 `pause()`-conversion) plus three security-explorer items (F-2027-060 rbac validator, F-2027-063 info disclosure, F-2027-064 test posture). Init-template hygiene + SSE-backpressure clusters are both closed.
+
 ### Documentation — init-template hygiene (closes F-2027-057 + F-2027-058 + F-2027-059)
 
 Three doc-comment refreshes inside `crates/selfdef-cli/src/init.rs`'s embedded `STARTER_CONFIG` and `STARTER_MODULES` templates. Each closes one of the Phase 2 security-explorer init-template gaps without changing any value `selfdefctl init` writes — the byte stream only gains comment lines.

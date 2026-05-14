@@ -60,6 +60,13 @@ pub fn with_full_capability(router: Router) -> Router {
     with_capability(router, Capability::Full)
 }
 
+/// **Test-only**: integration tests need the SSE subscriber cap
+/// to drive the cap-exhaustion case deterministically. F-2027-061
+/// owns the constant; this re-export is gated behind `test-helpers`
+/// so production code still treats it as an internal tuning knob.
+#[cfg(feature = "test-helpers")]
+pub const MAX_SSE_SUBSCRIBERS: usize = handlers::MAX_SSE_SUBSCRIBERS;
+
 use axum::Router;
 use axum::routing::{get, post};
 use tower_http::cors::CorsLayer;
