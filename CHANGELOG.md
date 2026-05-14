@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Design — SDD-007 per-token SSE subscriber quota (scopes F-2028-037 + F-2028-039)
+
+Design doc that scopes the fix for the open `important` finding from the Phase 3 security explorer. Implementation lands in a follow-up PR.
+
+#### What F-2028-037 surfaced
+
+The current `SubscriberGuard` increments a process-global `Arc<AtomicUsize>`; one bearer-holder who opens 64 concurrent `/events/stream` connections from a single process saturates `MAX_SSE_SUBSCRIBERS = 64` and DoSs every other authenticated client. The bearer-token model treats every token as equivalent, so the cap should too.
+
+#### Design decisions
+
+`docs/sdd/007-per-token-sse-subscriber-quota.md` spells out:
+
+- **D-1 — Token identity**: SHA-256 fingerprint, computed once in the bearer-auth middleware, threaded via `request.extensions()` to the handler. Avoids storing raw secrets in maps; gives a stable handle for the quota counter.
+- **D-2 — Quota mechanism**: `ApiState::sse_subscribers` becomes a `HashMap<Fingerprint, AtomicUsize>` (or `DashMap` for lock-free). Each request increments both the per-fingerprint and global counters. Refusal returns 503 with a distinguishable reason.
+- **D-3 — Revocation interaction**: deliberately deferred. Rotating a token blocks *new* connections immediately (bearer-auth rejects); existing connections drain via the usual paths (client disconnect / slow-client timeout). Terminate-on-revoke is marked as future hardening.
+- **D-4 — Config surface**: two new optional `[api]` knobs (`max_sse_subscribers_per_token` default 8, `max_sse_subscribers` unchanged at 64).
+- **D-5 — Test coverage**: per-token cap reached, per-token cap is per-token, global cap still applies, rotation frees slots eventually, per-token counter drops to zero.
+- **D-6 — Status-code semantics**: both caps return 503 but distinguishable bodies (`"sse subscriber cap reached"` global vs `"per-token sse cap reached"`). Surfaces through the F-2028-016 JSON-extraction path so operators see the right typed reason.
+
+#### Out of scope
+
+Per-IP quotas, per-audience quotas (would need token issuer to thread audience metadata), and the Prometheus quota-exhaustion metric are all marked future SDDs.
+
+#### Phase 3 status after this PR
+
+39 findings, all seven explorers done. **Open items remaining**:
+- F-2028-001, F-2028-008, F-2028-012, F-2028-013, F-2028-025 (5 nice, all low-priority or deferred)
+- F-2028-037 (important, design landed; implementation pending)
+- F-2028-039 (SDD-debt, scoped to SDD-007)
+
+Phase 3 wraps when the SDD-007 implementation PR lands.
+
 ### Fix + docs — SSE 503 cluster (closes F-2028-016 + F-2028-017) + Phase 3 security explorer (raises F-2028-036..039; **ALL SEVEN PHASE 3 EXPLORERS HAVE NOW RUN**)
 
 Two pieces in one PR: closes the SSE-503 cluster from the integration explorer + the **seventh and final Phase 3 explorer** (security audit).
