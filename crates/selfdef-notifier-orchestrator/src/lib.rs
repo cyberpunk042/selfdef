@@ -7,10 +7,11 @@
 //!
 //! Today the crate ships **only** the trait + types. The engine,
 //! the SQLite persistence layer, the profile loader, and the ack
-//! tracker land in subsequent Ds. Channel implementations
-//! (`NtfyNotifier`, `SignalCliNotifier`) still live in
-//! `crates/selfdef-notifier` and graduate to integration crates in
-//! D-2b / D-2c.
+//! tracker land in subsequent Ds. Channel implementations now live
+//! in their respective integration crates:
+//! `crates/selfdef-integration-ntfy` (D-2b) and
+//! `crates/selfdef-integration-signal` (D-2c). Future channels
+//! (smtp / twilio / slack / discord) follow the same pattern.
 //!
 //! See [`docs/sdd/008-notifications-orchestration.md`](../../../docs/sdd/008-notifications-orchestration.md)
 //! for the full design and
