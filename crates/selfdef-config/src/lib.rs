@@ -402,6 +402,9 @@ pub struct NotifierConfig {
     pub channels: Vec<String>,
     pub ntfy: NtfyConfig,
     pub signal: SignalConfig,
+    /// SDD-008 D-7 Q-E: SMTP (email) outbound channel via lettre.
+    /// Empty `relay_host` keeps the channel disabled.
+    pub smtp: SmtpConfig,
 }
 
 impl Default for NotifierConfig {
@@ -410,6 +413,7 @@ impl Default for NotifierConfig {
             channels: vec![],
             ntfy: NtfyConfig::default(),
             signal: SignalConfig::default(),
+            smtp: SmtpConfig::default(),
         }
     }
 }
@@ -439,6 +443,55 @@ impl Default for SignalConfig {
             binary: PathBuf::from("/usr/bin/signal-cli"),
             account: String::new(),
             recipient: String::new(),
+        }
+    }
+}
+
+/// SDD-008 D-7 Q-E: SMTP outbound channel config.
+///
+/// The default `relay_host = ""` keeps the channel disabled; the
+/// daemon builds an `SmtpNotifier` only when `relay_host` is set
+/// AND at least one recipient is listed. The TLS profile defaults to
+/// STARTTLS, matching the most-common operator-controlled relay
+/// posture (port 587 with PLAIN auth over upgraded TLS).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SmtpConfig {
+    /// Relay hostname. Empty disables the channel.
+    pub relay_host: String,
+    /// Relay port. 587 for STARTTLS (default), 465 for implicit TLS,
+    /// 25 for plain (testing only).
+    pub relay_port: u16,
+    /// TLS profile: `starttls` | `implicit_tls` | `plain`.
+    /// Plain refuses any auth-bearing send at construction time.
+    pub tls: String,
+    /// SMTP auth username. Optional; when set, `password_file` must
+    /// also be set.
+    pub username: Option<String>,
+    /// Path to a file containing the SMTP auth password. Read on
+    /// daemon start; mode-check parity with the ntfy token file path
+    /// is the operator's concern today and the orchestrator's
+    /// concern at SDD-008 D-5+.
+    pub password_file: Option<PathBuf>,
+    /// `From:` address. e.g. `selfdef-alerts@example.org`.
+    pub from: String,
+    /// Recipient list. Empty disables the channel.
+    pub to: Vec<String>,
+    /// Per-send timeout in seconds.
+    pub timeout_secs: u64,
+}
+
+impl Default for SmtpConfig {
+    fn default() -> Self {
+        Self {
+            relay_host: String::new(),
+            relay_port: 587,
+            tls: "starttls".to_owned(),
+            username: None,
+            password_file: None,
+            from: String::new(),
+            to: vec![],
+            timeout_secs: 10,
         }
     }
 }

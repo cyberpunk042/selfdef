@@ -601,6 +601,35 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                 )));
                 info!(channel, "notifier channel enabled");
             }
+            "smtp"
+                if !cfg.notifier.smtp.relay_host.is_empty() && !cfg.notifier.smtp.to.is_empty() =>
+            {
+                let tls = match cfg.notifier.smtp.tls.as_str() {
+                    "implicit_tls" => selfdef_integration_smtp::TlsProfile::ImplicitTls,
+                    "plain" => selfdef_integration_smtp::TlsProfile::Plain,
+                    _ => selfdef_integration_smtp::TlsProfile::StartTls,
+                };
+                match selfdef_integration_smtp::SmtpNotifier::from_config(
+                    &cfg.notifier.smtp.relay_host,
+                    cfg.notifier.smtp.relay_port,
+                    tls,
+                    cfg.notifier.smtp.username.as_deref(),
+                    cfg.notifier.smtp.password_file.as_ref(),
+                    &cfg.notifier.smtp.from,
+                    &cfg.notifier.smtp.to,
+                    std::time::Duration::from_secs(cfg.notifier.smtp.timeout_secs),
+                ) {
+                    Ok(n) => {
+                        inner.push(Box::new(n));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "smtp channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }

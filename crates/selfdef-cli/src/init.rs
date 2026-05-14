@@ -161,7 +161,7 @@ rules_dir = "/etc/selfdef/rules"
 
 [notifier]
 channels = []
-# Add "ntfy", "signal" once the matching [notifier.<name>]
+# Add "ntfy", "signal", "smtp" once the matching [notifier.<name>]
 # block is configured (see selfdef.toml.example).
 
 # F-2027-009: commented [notifier.ntfy] example so operators see
@@ -178,6 +178,30 @@ channels = []
 # priority  = "default"        # one of min|low|default|high|max
 # tags      = ["selfdef"]
 # token_env = ""               # name of env var with bearer token, or empty
+
+# SDD-008 D-7 Q-E: commented [notifier.smtp] example. Email
+# delivery via an operator-supplied SMTP relay using STARTTLS by
+# default. To enable:
+#   1. Pick a relay (your provider's smtp.<isp> on port 587, or a
+#      self-hosted Postfix on port 587/465).
+#   2. Write the auth password to /etc/selfdef/smtp.password
+#      (mode 0600 owned by the selfdef user) if the relay requires
+#      it.
+#   3. Uncomment the block below; flip channels above to include
+#      "smtp" in the order you want it tried.
+#   4. The channel refuses auth-bearing send over tls = "plain";
+#      use "starttls" (port 587) or "implicit_tls" (port 465) for
+#      any relay that authenticates.
+#
+# [notifier.smtp]
+# relay_host    = "smtp.example.org"
+# relay_port    = 587
+# tls           = "starttls"           # starttls | implicit_tls | plain
+# username      = "selfdef@example.org"
+# password_file = "/etc/selfdef/smtp.password"
+# from          = "selfdef-alerts@example.org"
+# to            = ["ops@example.org"]
+# timeout_secs  = 10
 
 [responder]
 allowed_actions = ["notify"]

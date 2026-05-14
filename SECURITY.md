@@ -14,7 +14,7 @@ surfaces the shipped modules introduce.
 | Detection rules | `/etc/selfdef/rules/` | Tampering = silent detection failure |
 | Hot event store | `/var/lib/selfdef/state.sqlite` | Recent forensic record |
 | Cold event archive | Off-host (logging VPS) | Tamper-resistant forensic record |
-| Notification credentials | `/etc/selfdef/secrets/` | ntfy tokens, signal-cli auth |
+| Notification credentials | `/etc/selfdef/secrets/` | ntfy tokens, signal-cli auth, SMTP `password_file` (`[notifier.smtp]` per SDD-008 D-7 Q-E). Each integration crate reads its credential from a disk path; daemon must run as the file owner and the file mode must keep group/world readers out (`0600` recommended). |
 | eBPF programs | embedded in binary | Tampering disables in-kernel detection |
 | `/metrics` endpoint | UNIX socket `/run/selfdef.sock` or TCP `<api.bind>` | Activity-fingerprint information; chained-attack timing of credential edits to daemon restart (see API surface mitigations + F-2026-066 known gap) |
 | Tetragon policy directory | `/etc/tetragon/tetragon.tp.d/` | Writable: malicious YAML loads as kernel-level eBPF policy (Sigkill / Override / NotifyKiller / mask). Owned by the `tetragon` module install |

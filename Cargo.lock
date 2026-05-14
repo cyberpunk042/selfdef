@@ -2345,6 +2345,7 @@ dependencies = [
  "selfdef-ebpf-common",
  "selfdef-integration-ntfy",
  "selfdef-integration-signal",
+ "selfdef-integration-smtp",
  "selfdef-nats",
  "selfdef-notifier",
  "selfdef-responder",
