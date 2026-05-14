@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 3 audit kickoff (raises F-2028-001 through F-2028-004)
+
+Opens Phase 3 of the rolling structural audit. Phase 2 closed in this session — every blocker / important / nice / SDD-debt finding across the seven Phase 2 explorers shipped via closure PRs. Phase 3 audits *what those closure PRs shipped*: drift, coverage gaps, and inconsistencies the closure cycle introduced that didn't get caught at PR-review time.
+
+#### New documents
+
+- `docs/review/phase-3/00-charter.md` — same methodology as Phases 1 + 2 (seven explorers, F-NNNN findings, SDDs where the fix is design-shaped). Vintage prefix `F-2028-NNN` so the three ledgers never collide. Scope table assigns each explorer a slice of the closure surface.
+- `docs/review/phase-3/10-inventory.md` — hand-counted from `git log 2d918ac..ee0e1a9`. Lists the ~28 closure PRs by topic, the new `events follow --url` capability, modified crates / handlers / state, the test-infrastructure refactors, and ~25 new tests.
+- `docs/review/phase-3/20-recent-prs-audit.md` — first of seven explorer docs. Surveyed 29 PRs from the closure cycle; 25 review-clean, 4 observations (all `nice` or `demoted`).
+- `docs/review/phase-3/99-findings-ledger.md` — initial Phase 3 ledger with the four recent-PRs explorer findings.
+
+#### F-2028-NNN findings raised
+
+- **F-2028-001 (nice)** — `paths` module is correctly consolidated across CLI call sites, but startup-time path validation would catch future env-var-override drift earlier. Very low priority.
+- **F-2028-002 (demoted)** — Auditor flagged a "1 important + 8 nice" phrasing in `phase-2/50-integration-audit.md` as potentially ambiguous; cross-check confirmed the math is correct (1 + 8 = 9 = `F-2027-028..036`). No drift, kept in ledger for audit-trail transparency.
+- **F-2028-003 (demoted)** — Auditor flagged a "8 nice findings (F-2027-057..064)" phrasing in `phase-2/80-security-audit.md` as not mentioning F-2027-010 (SDD-debt); cross-check confirmed F-2027-010 was raised by the recent-PRs explorer, not the security explorer, so the doc is correct as scoped.
+- **F-2028-004 (nice)** — The CLI's `--token-file` reader doesn't enforce the same `mode & 0o077 == 0` check the daemon-side `[api].token_file` reader does (closed F-2027-031). Symmetry issue, not a security gap. Worth resolving so the two readers behave the same way.
+
+#### Status after this PR
+
+- 4 findings raised, 0 blockers, 0 important, 2 nice (F-2028-001, F-2028-004), 2 demoted (F-2028-002, F-2028-003).
+- Six explorers remain (crate, module, integration, docs, tests, security). Each will add findings in follow-up PRs.
+
+This PR is documentation-only.
+
 ### Feature — `selfdefctl events follow --url` over TCP/HTTP(S) (closes F-2027-010, wraps Phase 2)
 
 Operator-facing live-tail now works against the daemon's TCP transport, not just the UNIX socket. The Phase 2 audit flagged the gap as SDD-debt awaiting a design decision; the operator picked the bundle-reqwest option, and this PR ships it.
