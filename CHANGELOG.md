@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — Phase 4 recent-PRs explorer + ledger (raises F-2029-001)
+
+First of seven Phase 4 explorers. Surveys the ~17 PRs from the Phase 3 closure cycle (commits `f40bf05` through `8b44322`). Documents the cleanest cycle yet — 16/17 PRs review-clean (94% pass rate).
+
+#### New documents
+
+- `docs/review/phase-4/20-recent-prs-audit.md` — first of seven explorer docs.
+- `docs/review/phase-4/99-findings-ledger.md` — initial Phase 4 ledger.
+
+#### F-2029-NNN findings raised
+
+| id | severity | summary |
+| --- | --- | --- |
+| F-2029-001 | demoted | SDD-007 implementation PR (`a1d6823`) defers D-4 in its commit message; D-4 follow-up (`8b44322`) ships 13 minutes later. Cross-check: defer-and-pair pattern is intentional; SDD status doc correctly updated by the D-4 PR to "all five Ds shipped". No drift; kept for audit-trail completeness. |
+
+#### Pass rate
+
+**94%** review-clean (16/17 PRs). Higher than:
+- Phase 3 recent-PRs explorer: 73% clean (4 observations across 29 PRs).
+- Phase 2 recent-PRs explorer: comparable rate.
+
+The closure-cycle work landed cleanly — every Phase 3 closure PR matched its scope.
+
+#### Status
+
+1 finding raised: 0 blockers, 0 important, 0 nice, 1 demoted, 0 SDD-debt. Six explorers remain.
+
+This PR is documentation-only.
+
 ### Feature — SDD-007 D-4: operator-tunable SSE caps
 
 Closes the deferred work item from SDD-007. The two SSE caps (`MAX_SSE_SUBSCRIBERS` global, `MAX_SSE_SUBSCRIBERS_PER_TOKEN` per-token) are now operator-tunable from `selfdef.toml` without recompiling. SDD-007 status flips from "implemented (D-4 deferred)" → "implemented (all five Ds shipped)".
