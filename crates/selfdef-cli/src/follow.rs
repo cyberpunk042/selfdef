@@ -340,10 +340,20 @@ pub(crate) async fn events_follow_tcp(
     let status = resp.status();
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
+        // F-2028-016: when the daemon returns an `ApiError`-shaped
+        // JSON body (`{"error": "..."}`), surface the typed reason
+        // directly so an operator hitting a 503 sees "sse subscriber
+        // cap reached" instead of having to manually parse the
+        // wire body. Falls back to the raw text for non-JSON
+        // bodies (e.g. an upstream proxy's HTML 5xx page).
+        let detail = serde_json::from_str::<serde_json::Value>(body.trim())
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned))
+            .unwrap_or_else(|| body.trim().to_owned());
         anyhow::bail!(
             "daemon refused /events/stream: HTTP {} {}",
             status.as_u16(),
-            body.trim(),
+            detail,
         );
     }
 
