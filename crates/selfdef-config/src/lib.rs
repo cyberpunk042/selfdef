@@ -445,6 +445,15 @@ pub struct NotifierConfig {
     /// Only consulted when `escalations_path` is set. Unknown
     /// strings log a warn and fall back to `auto`.
     pub profile: String,
+    /// SDD-008 D-7: severity threshold at or above which audit mode
+    /// is bypassed (channels fire for real). The escape hatch for
+    /// "operator misconfiguration cannot leave a blocker un-
+    /// notified".
+    ///
+    /// One of: `informational` | `low` | `medium` | `high` |
+    /// `critical` | `fatal`. Empty / unset = no floor (audit mode
+    /// suppresses every severity).
+    pub panic_floor: Option<String>,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -465,6 +474,7 @@ impl Default for NotifierConfig {
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
+            panic_floor: None,
             subscriptions: HashMap::new(),
         }
     }

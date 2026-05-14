@@ -16,7 +16,7 @@
 
 use std::sync::Arc;
 
-use selfdef_notifier_orchestrator::{Channel, ChannelError, EventId, Payload};
+use selfdef_notifier_orchestrator::{Channel, ChannelError, EventId, Payload, SeverityId};
 use tracing::{info, warn};
 
 use crate::{EngineError, EscalationEngine, Profile};
@@ -117,6 +117,15 @@ pub struct PayloadDispatcher {
     channels: Vec<Arc<dyn Channel>>,
     mode: Mode,
     profile: Profile,
+    /// SDD-008 D-7: severity threshold at or above which the
+    /// dispatcher fires channels for real **regardless of mode**.
+    /// `None` (default) → no override; `Mode::Audit` suppresses
+    /// every send. `Some(SeverityId::Critical)` → audit mode still
+    /// dry-runs `Low`/`Medium`/`High` events but `Critical` /
+    /// `Fatal` always page real channels. The escape hatch for
+    /// "operator misconfiguration cannot leave a blocker un-
+    /// notified".
+    panic_floor: Option<SeverityId>,
 }
 
 impl std::fmt::Debug for PayloadDispatcher {
@@ -125,6 +134,7 @@ impl std::fmt::Debug for PayloadDispatcher {
             .field("engine", &self.engine)
             .field("channel_count", &self.channels.len())
             .field("mode", &self.mode)
+            .field("panic_floor", &self.panic_floor)
             .finish_non_exhaustive()
     }
 }
@@ -140,6 +150,7 @@ impl PayloadDispatcher {
             channels,
             mode: Mode::default(),
             profile: Profile::default(),
+            panic_floor: None,
         }
     }
 
@@ -165,6 +176,36 @@ impl PayloadDispatcher {
     #[must_use]
     pub fn profile(&self) -> &Profile {
         &self.profile
+    }
+
+    /// SDD-008 D-7: builder-style panic-floor selection. Events at
+    /// or above this severity bypass `Mode::Audit` (always fire
+    /// channels for real). Defaults to `None` — no override; audit
+    /// mode suppresses every send.
+    #[must_use]
+    pub fn with_panic_floor(mut self, floor: SeverityId) -> Self {
+        self.panic_floor = Some(floor);
+        self
+    }
+
+    /// Current panic floor, if any. `None` = audit mode suppresses
+    /// every send regardless of severity.
+    #[must_use]
+    pub fn panic_floor(&self) -> Option<SeverityId> {
+        self.panic_floor
+    }
+
+    /// Returns `true` when the payload's severity crosses the
+    /// panic floor (`panic_floor.is_some()` AND `severity >= floor`).
+    /// Used internally to decide whether audit-mode suppression
+    /// applies; exposed for tests + future operator-tunable bypass
+    /// rules.
+    #[must_use]
+    pub fn crosses_panic_floor(&self, severity: SeverityId) -> bool {
+        match self.panic_floor {
+            Some(floor) => (severity as u32) >= (floor as u32),
+            None => false,
+        }
     }
 
     /// Current operating mode.
@@ -200,7 +241,7 @@ impl PayloadDispatcher {
             warn!(error = %e, "dispatcher: persist failed; not attempting channel sends");
             return DispatchOutcome::PersistFailed(e);
         }
-        if self.mode == Mode::Audit {
+        if self.mode == Mode::Audit && !self.crosses_panic_floor(payload.severity) {
             // Dry-run: row IS in the engine, but no channel sees
             // the payload. Log per-channel "would have fired" so
             // operators verifying wiring can grep the daemon log.
@@ -214,6 +255,17 @@ impl PayloadDispatcher {
             return DispatchOutcome::Delivered {
                 channel: "audit".to_owned(),
             };
+        }
+        if self.mode == Mode::Audit {
+            // Panic-floor crossed → bypass audit mode and fire for
+            // real. SDD-008 D-7: operator misconfig must not be
+            // able to leave a blocker un-notified.
+            info!(
+                mode = "audit",
+                severity = %payload.severity,
+                panic_floor = ?self.panic_floor,
+                "dispatcher: panic floor crossed; bypassing audit mode",
+            );
         }
         self.fire_channels(payload).await
     }
@@ -255,7 +307,7 @@ impl PayloadDispatcher {
     /// owns the row's lifecycle and is what makes the variant
     /// accurate for the caller).
     pub async fn dispatch_payload(&self, payload: &Payload) -> DispatchOutcome {
-        if self.mode == Mode::Audit {
+        if self.mode == Mode::Audit && !self.crosses_panic_floor(payload.severity) {
             for channel in &self.channels {
                 info!(
                     mode = "audit",
@@ -266,6 +318,14 @@ impl PayloadDispatcher {
             return DispatchOutcome::Delivered {
                 channel: "audit".to_owned(),
             };
+        }
+        if self.mode == Mode::Audit {
+            info!(
+                mode = "audit",
+                severity = %payload.severity,
+                panic_floor = ?self.panic_floor,
+                "dispatcher: panic floor crossed on re-fire; bypassing audit mode",
+            );
         }
         self.fire_channels(payload).await
     }
@@ -666,5 +726,142 @@ mod tests {
             other => panic!("expected Delivered(should-fire), got {other:?}"),
         }
         assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    // ---------------- SDD-008 D-7: panic floor ----------------
+
+    fn mk_payload_with_severity(title: &str, severity: SeverityId) -> Payload {
+        Payload {
+            id: PayloadId::new(),
+            event_id: Some(EventId::from(Uuid::now_v7())),
+            title: title.into(),
+            body: format!("body for {title}"),
+            severity,
+            ack_link: None,
+        }
+    }
+
+    #[test]
+    fn panic_floor_default_is_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(EscalationEngine::open(&path).unwrap());
+        let dispatcher = PayloadDispatcher::new(engine, vec![]);
+        assert!(dispatcher.panic_floor().is_none());
+    }
+
+    #[test]
+    fn crosses_panic_floor_returns_false_when_unset() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(EscalationEngine::open(&path).unwrap());
+        let dispatcher = PayloadDispatcher::new(engine, vec![]);
+        // No floor set; nothing crosses.
+        for s in [SeverityId::Low, SeverityId::High, SeverityId::Fatal] {
+            assert!(!dispatcher.crosses_panic_floor(s), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn crosses_panic_floor_uses_repr_ordering() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(EscalationEngine::open(&path).unwrap());
+        let dispatcher =
+            PayloadDispatcher::new(engine, vec![]).with_panic_floor(SeverityId::Critical);
+        // Below the floor:
+        assert!(!dispatcher.crosses_panic_floor(SeverityId::Low));
+        assert!(!dispatcher.crosses_panic_floor(SeverityId::Medium));
+        assert!(!dispatcher.crosses_panic_floor(SeverityId::High));
+        // At and above the floor:
+        assert!(dispatcher.crosses_panic_floor(SeverityId::Critical));
+        assert!(dispatcher.crosses_panic_floor(SeverityId::Fatal));
+    }
+
+    #[tokio::test]
+    async fn audit_mode_suppresses_below_panic_floor() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("would-fire");
+        // Audit + panic floor = Critical. A High event must STAY
+        // suppressed because High < Critical.
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::Critical);
+        let payload = mk_payload_with_severity("below-floor", SeverityId::High);
+        let outcome = dispatcher.submit(&payload, 100, 0).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "audit"),
+            other => panic!("expected Delivered(audit), got {other:?}"),
+        }
+        // Channel was NOT invoked.
+        assert_eq!(counter.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn audit_mode_bypassed_above_panic_floor() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("must-fire");
+        // Audit + panic floor = Critical. A Critical event MUST
+        // page real channels even though we're in audit mode.
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::Critical);
+        let payload = mk_payload_with_severity("crosses-floor", SeverityId::Critical);
+        let outcome = dispatcher.submit(&payload, 100, 0).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "must-fire"),
+            other => panic!("expected Delivered(must-fire), got {other:?}"),
+        }
+        // Real channel WAS invoked.
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn audit_mode_bypassed_at_fatal_when_floor_critical() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("must-fire");
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::Critical);
+        let payload = mk_payload_with_severity("fatal-above-floor", SeverityId::Fatal);
+        let outcome = dispatcher.submit(&payload, 100, 0).await;
+        assert!(outcome.delivered());
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_honors_panic_floor_on_refire() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("refire");
+        // Audit + panic floor = Critical. dispatch_payload is the
+        // wake-task re-fire path; panic-floor bypass must apply
+        // there too.
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::High);
+        let payload = mk_payload_with_severity("refire-floor", SeverityId::High);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "refire"),
+            other => panic!("expected Delivered(refire), got {other:?}"),
+        }
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn enforce_mode_with_panic_floor_unchanged() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("enforce-fire");
+        // Enforce mode + panic floor is a no-op (panic floor only
+        // matters when mode would otherwise suppress).
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_mode(Mode::Enforce)
+            .with_panic_floor(SeverityId::Critical);
+        // Both below-floor AND above-floor events fire.
+        let low = mk_payload_with_severity("low", SeverityId::Low);
+        let crit = mk_payload_with_severity("crit", SeverityId::Critical);
+        dispatcher.submit(&low, 100, 0).await;
+        dispatcher.submit(&crit, 100, 0).await;
+        assert_eq!(counter.load(Ordering::Acquire), 2);
     }
 }

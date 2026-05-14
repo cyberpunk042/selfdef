@@ -293,6 +293,18 @@ channels = []
 #
 # profile = "auto"
 
+# SDD-008 D-7: severity threshold at or above which audit mode is
+# bypassed (channels fire for real). The escape hatch for
+# "operator misconfiguration cannot leave a blocker un-notified" —
+# e.g. an operator who set mode = "audit" for a deployment-wide
+# dry-run still wants `critical` and `fatal` events to actually
+# page the on-call.
+#
+# One of: informational | low | medium | high | critical | fatal.
+# Default unset = no floor (audit mode suppresses every severity).
+#
+# panic_floor = "critical"
+
 # SDD-008 D-3: per-channel subscription filters. Without these
 # blocks every channel sees every event (the M4 behaviour). Add a
 # block per channel you want filtered:
