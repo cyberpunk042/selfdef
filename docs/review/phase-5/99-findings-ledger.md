@@ -36,9 +36,18 @@ Phase 4 closure cycle was exceptionally clean execution.)*
 
 ## Status
 
-- **0 findings raised** across five Phase 5 explorers
-  (recent-PRs + crate + module + integration + docs). **All
-  five 100% clean on first-pass scrutiny.**
+- **0 findings raised** across six Phase 5 explorers
+  (recent-PRs + crate + module + integration + docs + tests).
+  **All six 100% clean on first-pass scrutiny.**
+- Phase 5 tests auditor verified the three incremental tests
+  (`events_stream_zero_caps_fall_back_to_defaults`,
+  `sse_cap_knobs_round_trip_from_toml`,
+  `sse_cap_knobs_default_to_none_when_unset`) are isolated,
+  deterministic, free of real-time sleeps (SDD-005 compliant),
+  and pin precisely the contracts their docstrings claim. The
+  TOML → `ApiConfig` → `SseCaps` → `try_acquire` chain is now
+  test-covered at every hop with no remaining coverage gap on
+  the SDD-007 D-4 cap surface.
 - Phase 5 integration auditor traced all five seams from the
   Phase 4 closure cycle end-to-end:
   - TOML → daemon → ApiState chain test-covered at both ends.
@@ -52,14 +61,14 @@ Phase 4 closure cycle was exceptionally clean execution.)*
     against `handlers.rs` + `config.rs`.
 - **Trajectory comparison**:
 
-  | Cycle | recent-PRs | crate | module | integration | docs |
-  | --- | --- | --- | --- | --- | --- |
-  | Phase 2 | many | 11 nice | 6 nice | 9 mixed | 9 nice |
-  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed |
-  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice |
-  | **Phase 5** | **0** | **0** | **0** | **0** | **0** |
+  | Cycle | recent-PRs | crate | module | integration | docs | tests |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Phase 2 | many | 11 nice | 6 nice | 9 mixed | 9 nice | 11 mixed |
+  | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed |
+  | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted |
+  | **Phase 5** | **0** | **0** | **0** | **0** | **0** | **0** |
 
-- Two explorers remain: tests, security.
+- One explorer remains: security.
 - No Phase 5 SDD-debt findings yet.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 references
