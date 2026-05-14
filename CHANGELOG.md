@@ -6,6 +6,41 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security + docs — Phase 3 module explorer (raises F-2028-015) + token-reader symmetry (closes F-2028-004 + F-2028-005)
+
+Third Phase 3 explorer + the first closure cluster off Phase 3's backlog. The audit explorer raises one **important** finding (F-2028-015) on `modules/vpn-bridge`; the same PR closes the token-reader symmetry cluster (F-2028-004 + F-2028-005) that the recent-PRs and crate explorers flagged.
+
+#### Module explorer — F-2028-015 (important)
+
+**Finding**: Phase 3's inventory claimed all 8 modules completed the SDD-006 v2 manifest-helpers migration. Cross-check via `grep SELFDEF_MODULE_LIB_VERSION_REQUIRED modules/*/install/lib.sh` shows 6 modules at v2 + `suricata` (correctly exempt — writes no persistent files) + **`vpn-bridge` at v1 (incorrect)**.
+
+`modules/vpn-bridge/install/profiles/relay-via-server.sh:112` writes `nft_path` via `install -D -m 0644` but `apply.sh` never calls `module_record_file`. `profile_uninstall` hard-codes the cleanup path at lines 193-194 instead of iterating `module_render_files`. When operators move single-instance → multi-instance (`INST="relay1"`, `relay2`, …) the hard-coded uninstall path silently leaks the previous file — exactly the drift v2 was designed to prevent.
+
+**Severity**: important. Fix is a separate PR (bump `lib.sh` to v2, add `module_record_file` after the write, replace hard-coded uninstall with `module_render_files` iteration).
+
+#### Token-reader symmetry — closes F-2028-004 + F-2028-005
+
+`crates/selfdef-cli/src/follow.rs::read_token_file` now mirrors the daemon-side `read_token` in `selfdef-api/src/transport.rs` byte-for-byte:
+
+- **F-2028-004**: mode check. The CLI now refuses files with `mode & 0o077 != 0`, matching the daemon's `LooseTokenMode` refusal. Operators who fat-finger a `chmod 0644 /etc/selfdef/api.token` see the same error regardless of which side they hit first.
+- **F-2028-005**: whitespace trim. The CLI now uses `str::trim()` (Unicode-whitespace aware) instead of `trim_end_matches(['\n', '\r', ' ', '\t'])`. Tokens with stray NBSP / BOM / ZWSP no longer round-trip differently between CLI and daemon.
+
+Existing `events_follow_url_with_token_file_passes_bearer_header` test updated to `chmod 0o600` the token before invoking the CLI. New `events_follow_token_file_refuses_world_readable_mode` test exercises the loose-mode refusal end-to-end via subprocess.
+
+#### Documents
+
+- `docs/review/phase-3/40-module-audit.md` — third explorer's full audit doc with per-section evidence, cross-module pattern verification, v2-migration grep output.
+
+#### Tests
+
+- `cargo test -p selfdef-cli --test cli_events_follow_tcp` — 6/6 pass.
+- `cargo clippy --workspace --tests -- -D warnings` clean.
+- `cargo fmt --all -- --check` clean.
+
+#### Phase 3 status after this PR
+
+15 findings raised across 3 explorers: 0 blockers, 1 important (F-2028-015, open), 9 nice (2 closed, 7 open), 5 demoted, 0 SDD-debt. Four explorers remain (integration, docs, tests, security).
+
 ### Documentation — Phase 3 crate explorer (raises F-2028-005 through F-2028-014)
 
 Second of seven Phase 3 explorers. Audits the Rust code introduced by the Phase 2 closure cycle (~28 PRs, commits `2d918ac` through `ee0e1a9`): `SseParser` state machine + dual-transport architecture in `selfdef-cli/src/follow.rs`, `validate_rbac_subject` + `Follow` clap shape in `main.rs`, `SubscriberGuard` RAII + refactored `events_stream` + rewritten `ApiError::store` in `selfdef-api/src/handlers.rs`, `sse_subscribers` field in `state.rs`, `MAX_SSE_SUBSCRIBERS` re-export in `lib.rs`, and new `reqwest`/`futures` deps in `Cargo.toml`.

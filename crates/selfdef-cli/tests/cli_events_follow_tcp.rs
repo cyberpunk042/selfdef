@@ -150,6 +150,15 @@ async fn events_follow_url_with_token_file_passes_bearer_header() {
     let token_dir = tempfile::tempdir().expect("token dir");
     let token_path = token_dir.path().join("api.token");
     std::fs::write(&token_path, "test-bearer-token-not-secret\n").unwrap();
+    // F-2028-004 + -005: read_token_file now mirrors the daemon-side
+    // mode check (`mode & 0o077 == 0`). The token file must be 0600
+    // for the CLI to consume it.
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mut perms = std::fs::metadata(&token_path).unwrap().permissions();
+        perms.set_mode(0o600);
+        std::fs::set_permissions(&token_path, perms).unwrap();
+    }
 
     let mut child = Command::new(binary())
         .arg("events")
@@ -185,6 +194,41 @@ async fn events_follow_url_with_token_file_passes_bearer_header() {
         "expected an event line; got: {line:?}",
     );
     let _ = tokio::task::spawn_blocking(move || child.wait()).await;
+}
+
+/// F-2028-004: the CLI's `read_token_file` mirrors the
+/// daemon-side mode check — a token file with any `group` or
+/// `other` bit set is refused with a clear error. Pairs with
+/// the daemon's `LooseTokenMode` so an operator who fat-fingers
+/// a `chmod` sees the same refusal regardless of which side
+/// they hit first.
+#[test]
+fn events_follow_token_file_refuses_world_readable_mode() {
+    let token_dir = tempfile::tempdir().expect("token dir");
+    let token_path = token_dir.path().join("api.token");
+    std::fs::write(&token_path, "loose-token\n").unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let mut perms = std::fs::metadata(&token_path).unwrap().permissions();
+        perms.set_mode(0o644);
+        std::fs::set_permissions(&token_path, perms).unwrap();
+    }
+
+    let out = Command::new(binary())
+        .arg("events")
+        .arg("follow")
+        .arg("--url")
+        .arg("http://127.0.0.1:1")
+        .arg("--token-file")
+        .arg(&token_path)
+        .output()
+        .expect("spawn");
+    assert!(!out.status.success(), "should refuse loose-mode token file",);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("too permissive") && stderr.contains("644"),
+        "expected loose-mode error naming the offending mode; stderr: {stderr}",
+    );
 }
 
 #[test]

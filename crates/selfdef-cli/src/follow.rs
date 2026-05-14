@@ -316,14 +316,38 @@ pub(crate) async fn events_follow_tcp(
     Ok(())
 }
 
-/// Read a bearer token from `path`, trimming trailing whitespace.
-/// Used by `events follow --token-file <path>` to mirror the
-/// daemon's `[api].token_file` knob without echoing the token onto
-/// the operator's process table via `--token`.
+/// Read a bearer token from `path`. Mirrors the daemon-side
+/// `read_token` in `selfdef-api/src/transport.rs` so a file the
+/// daemon accepts/refuses is treated the same way by the CLI:
+///
+/// - **F-2028-004**: refuses files whose mode has any `group` or
+///   `other` bits set (`mode & 0o077 != 0`). An operator who
+///   `chmod 0644 /etc/selfdef/api.token` after rotation would
+///   otherwise see the daemon refuse to load the file
+///   (F-2027-031) but the CLI silently consume it. Symmetric
+///   strictness lets operators discover the loose-mode footgun
+///   the same way regardless of which side they hit first.
+/// - **F-2028-005**: uses `str::trim()` (Unicode-whitespace aware)
+///   to match the daemon's trimming. A token file with stray
+///   non-ASCII whitespace (NBSP, BOM, ZWSP) would otherwise
+///   round-trip through the CLI verbatim but be stripped by the
+///   daemon — auth mismatch.
 pub(crate) fn read_token_file(path: &Path) -> Result<String> {
+    use std::os::unix::fs::MetadataExt as _;
+    let md = std::fs::metadata(path)
+        .with_context(|| format!("stat-ing token file {}", path.display()))?;
+    let mode = md.mode() & 0o777;
+    if mode & 0o077 != 0 {
+        anyhow::bail!(
+            "refusing to read token from {}: mode {:o} is too permissive \
+             (any group/other bit set); chmod 0600 to fix",
+            path.display(),
+            mode,
+        );
+    }
     let raw = std::fs::read_to_string(path)
         .with_context(|| format!("reading token from {}", path.display()))?;
-    let trimmed = raw.trim_end_matches(['\n', '\r', ' ', '\t']).to_string();
+    let trimmed = raw.trim().to_string();
     if trimmed.is_empty() {
         anyhow::bail!("token file is empty: {}", path.display());
     }
