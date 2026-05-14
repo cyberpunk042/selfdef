@@ -6,6 +6,46 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Refactor — common test-helper migration (closes F-2027-049 + F-2027-050 + F-2027-051)
+
+Migrates 17 test files in `crates/selfdef-cli/tests/` to use the canonical helpers in `tests/common/mod.rs` instead of locally duplicating them. Drops ~45 duplicate function definitions from the test surface.
+
+#### Pre-fix → post-fix
+
+Before:
+- `workspace_root()` re-implemented in 13 files.
+- `module_dir()` re-implemented in 12 files (each hard-coded one slug).
+- `last_stdout_line()` re-implemented in 12 files.
+- `write_executable()` re-implemented in 7 files.
+- `prepended_path()` re-implemented in 10 files.
+- `write_file()` re-implemented in 3 files.
+- `mod common;` declared late (after the first set of helpers) in 8 module files.
+
+After:
+- Every test file declares `mod common;` near the top and `use common::{...};` for the helpers it needs.
+- The 12 parameterless `module_dir()` calls in module tests become one-liner wrappers (`fn module_dir() -> PathBuf { common::module_dir("<slug>") }`) — preserving the call shape while delegating the path math.
+
+#### Per-file touch
+
+| File | Helpers removed |
+| --- | --- |
+| `module_tetragon.rs` | wsroot, module_dir, last_stdout_line, write_executable, prepended_path |
+| `module_agent_guard.rs` | wsroot, module_dir, last_stdout_line, write_file |
+| `module_bridge_l2.rs` | wsroot, module_dir, last_stdout_line, prepended_path |
+| `module_integrity_sentinel.rs` | wsroot, module_dir, last_stdout_line, write_file |
+| `module_observability.rs` | wsroot, module_dir, last_stdout_line, write_file |
+| `module_polarproxy.rs` | wsroot, module_dir, last_stdout_line, prepended_path |
+| `module_suricata.rs` | wsroot, module_dir, last_stdout_line, prepended_path |
+| `module_tetragon_signing.rs` | wsroot, module_dir, last_stdout_line, write_executable, prepended_path |
+| `module_vpn_bridge*.rs` (4 files) | wsroot, module_dir, last_stdout_line, prepended_path |
+| `cli_modules_apply.rs`, `cli_modules_daemon_requires.rs`, `cli_modules_uninstall.rs`, `cli_rbac_check.rs`, `cli_modules_shared_lib.rs` | write_executable, prepended_path, wsroot (where present) |
+
+#### Phase 2 status after this PR
+
+**56 findings across 6 explorers. 52 nice (44 closed, 8 open)**, **3 important (all closed)**, **0 blockers**, **1 SDD-debt open**. Remaining open `nice` clusters: module-test backfill (F-2027-046/-047/-048), pause()-conversion (F-2027-052/-053), api-test isolation (F-2027-054/-055), parser-adoption (F-2027-056). One Phase 2 explorer remains (security).
+
+`cargo test --workspace`, `cargo clippy --workspace --tests -- -D warnings`, `cargo fmt --all -- --check` clean.
+
 ### Documentation — Phase 2 tests explorer (raises F-2027-046 through F-2027-056)
 
 Sixth of Phase 2's seven explorers ships. Walks the new integration tests added during the post-Phase-1 cycle, the three shared patterns from SDD-005 (P-1 dry-run-noop, P-2 Prometheus parser, P-3 real-broker NATS), and the four test categories.

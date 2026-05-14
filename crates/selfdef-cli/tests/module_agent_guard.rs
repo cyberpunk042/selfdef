@@ -6,23 +6,16 @@
 //! action (`Post` in audit, `Sigkill` in enforce) and that
 //! per-policy overrides + the egress allowlist splice correctly.
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-fn module_dir() -> PathBuf {
-    workspace_root().join("modules/agent-guard")
-}
+// F-2027-049 / -050 — workspace_root / module_dir /
+// last_stdout_line / write_file all live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, write_file};
 
-fn write_file(path: &Path, body: &str) {
-    if let Some(p) = path.parent() {
-        std::fs::create_dir_all(p).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
+fn module_dir() -> PathBuf {
+    common::module_dir("agent-guard")
 }
 
 struct Fixture {
@@ -73,15 +66,6 @@ fn run_apply(fx: &Fixture) -> Output {
         .env("MODULE_INSTALLED_MANIFEST", &fx.manifest_path)
         .output()
         .expect("spawn apply.sh")
-}
-
-fn last_stdout_line(out: &Output) -> String {
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .last()
-        .unwrap_or("")
-        .trim()
-        .to_string()
 }
 
 fn read_policy(fx: &Fixture, name: &str) -> String {
@@ -687,8 +671,6 @@ fn reapply_is_byte_stable_for_every_rendered_policy() {
         );
     }
 }
-
-mod common;
 
 /// SDD-005 D-2a / Test-1: dry-run must be a no-op. The
 /// apply tests above assert the live-positive paths produce

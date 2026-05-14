@@ -16,11 +16,12 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+// F-2027-049 / -050 / -051: helpers live in common/mod.rs.
+mod common;
+use common::{last_stdout_line, prepended_path};
+
 fn module_dir() -> PathBuf {
-    workspace_root().join("modules/vpn-bridge")
+    common::module_dir("vpn-bridge")
 }
 
 fn write_config(body: &str) -> tempfile::NamedTempFile {
@@ -52,19 +53,6 @@ fn relay_stub_path() -> tempfile::TempDir {
         "#!/usr/bin/env bash\ncase \"$1\" in is-active|is-enabled) exit 3 ;; *) exit 0 ;; esac\n",
     );
     dir
-}
-
-fn prepended_path(extra: &Path) -> std::ffi::OsString {
-    let existing = std::env::var_os("PATH").unwrap_or_default();
-    let mut out = std::ffi::OsString::from(extra);
-    out.push(":");
-    out.push(&existing);
-    out
-}
-
-fn last_stdout_line(out: &std::process::Output) -> String {
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    stdout.lines().last().unwrap_or("").trim().to_string()
 }
 
 #[test]
@@ -280,7 +268,7 @@ fn cli_resolver_refuses_singleton_profile_with_instance_suffix() {
             "--host-config",
             host_cfg.to_str().unwrap(),
             "--dir",
-            workspace_root().join("modules").to_str().unwrap(),
+            common::workspace_root().join("modules").to_str().unwrap(),
             "--ignore-daemon-requires", // SDD-002 — keep this test focused on SDD-003.
             "--dry-run",
         ])

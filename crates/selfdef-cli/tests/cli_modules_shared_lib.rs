@@ -6,25 +6,12 @@
 //! version than the lib provides aborts with exit 99 and a clear
 //! stderr message.
 
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-fn workspace_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn write_executable(path: &Path, body: &str) {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).unwrap();
-    }
-    let mut f = std::fs::File::create(path).unwrap();
-    f.write_all(body.as_bytes()).unwrap();
-    let mut perms = std::fs::metadata(path).unwrap().permissions();
-    perms.set_mode(0o755);
-    std::fs::set_permissions(path, perms).unwrap();
-}
+// F-2027-049 / -051: helpers live in common/mod.rs.
+mod common;
+use common::{workspace_root, write_executable};
 
 fn shared_lib_path() -> PathBuf {
     workspace_root().join("packaging/lib/module-lib.sh")
