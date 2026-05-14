@@ -1,6 +1,7 @@
 //! Shared state passed into every handler.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 
 use selfdef_bus::{Bus, Publisher};
@@ -33,6 +34,12 @@ pub struct ApiState {
     /// [`Self::new`]; the daemon populates it via
     /// [`crate::run_metrics_ingest`].
     pub metrics: Arc<Metrics>,
+    /// F-2027-061: live count of `/events/stream` subscribers.
+    /// Capped at [`crate::handlers::MAX_SSE_SUBSCRIBERS`] to
+    /// bound authenticated-client memory + task pressure on the
+    /// TCP transport. Shared across clones so every handler call
+    /// hits the same counter.
+    pub sse_subscribers: Arc<AtomicUsize>,
 }
 
 impl ApiState {
@@ -48,6 +55,7 @@ impl ApiState {
             started_at: Instant::now(),
             control: ControlHandles::default(),
             metrics,
+            sse_subscribers: Arc::new(AtomicUsize::new(0)),
         }
     }
 

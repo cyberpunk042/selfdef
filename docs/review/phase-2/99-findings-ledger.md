@@ -97,8 +97,8 @@ None.
 | F-2027-058 | nice | `init.rs:187-191` STARTER_CONFIG `[api]` section | Lists `token_file` but never mentions `control_token_file` (the read-vs-control split). Asymmetric vs the full `.example` config. | doc — **closed** by Phase 2 init-template hygiene PR (`[api]` block now documents `control_token_file` with the read-vs-control audience split). |
 | F-2027-059 | nice | `init.rs:225-275` STARTER_MODULES | Module-config example paths don't warn that the config file should be 0640 root:selfdef (TOML the daemon evaluates is a trust-boundary). | doc — **closed** by Phase 2 init-template hygiene PR (STARTER_MODULES header now warns that every `config = "..."` is a trust boundary and shows the `install -m 0640 -o root -g selfdef` invocation). |
 | F-2027-060 | nice | `rbac check --probe` `--as <subject>` validator | Subject strings flow to `kubectl` via `Command::new` (safe by construction) but aren't validated against a safe-charset regex. Defense-in-depth + log-pollution mitigation. | implement |
-| F-2027-061 | nice | `selfdef-api::events_stream` per-client connection cap | No global subscriber cap; an authenticated TCP client can open hundreds of `/events/stream` connections, each holding a 64-slot mpsc + tokio task. Authenticated DoS. | implement |
-| F-2027-062 | nice | `selfdef-api::events_stream` slow-client timeout | A client that stops reading blocks the forwarder task indefinitely on `tx.send().await`. No per-send inactivity timeout. | implement |
+| F-2027-061 | nice | `selfdef-api::events_stream` per-client connection cap | No global subscriber cap; an authenticated TCP client can open hundreds of `/events/stream` connections, each holding a 64-slot mpsc + tokio task. Authenticated DoS. | implement — **closed** by Phase 2 SSE-backpressure PR (`ApiState::sse_subscribers: Arc<AtomicUsize>` + RAII `SubscriberGuard` cap each instance at `MAX_SSE_SUBSCRIBERS = 64`; the (cap+1)th request now returns 503 Service Unavailable; new `events_stream_rejects_over_cap_with_503` test pins the guard semantics including slot reuse after disconnect). |
+| F-2027-062 | nice | `selfdef-api::events_stream` slow-client timeout | A client that stops reading blocks the forwarder task indefinitely on `tx.send().await`. No per-send inactivity timeout. | implement — **closed** by Phase 2 SSE-backpressure PR (`tokio::time::timeout(SSE_SEND_TIMEOUT, tx.send(frame))` on every forwarder send; on the 30s deadline the writer task drops the client, the RAII guard runs, and the subscriber slot frees). |
 | F-2027-063 | nice | `selfdef-api::ApiError::store` info disclosure | Formats arbitrary store errors verbatim into the JSON 500 body; a future store error including a path would leak it. Authenticated caller, low risk. | implement |
 | F-2027-064 | nice | `cli_api_rotate_token.rs:64-70` test prints token value | Asserts stdout contains the token; the value lands in CI logs. Tokens are ephemeral / tempfile-scoped so the risk is very low. Best practice would be format-only assertion. | implement (low priority) |
 
@@ -113,17 +113,17 @@ None.
 - **64 findings raised** across **seven explorers** (recent-PRs:
   10; crate: 11; module: 6; integration: 9; docs: 9; tests:
   11; security: 8). **All seven Phase 2 explorers have run.**
-- **0 blockers**, **3 important (all closed)**, **60 nice (52
-  closed, 8 open)**, **1 SDD-debt (F-2027-010 open)**.
+- **0 blockers**, **3 important (all closed)**, **60 nice (54
+  closed, 6 open)**, **1 SDD-debt (F-2027-010 open)**.
 - Open `nice` clusters: tests-explorer (F-2027-046 suricata
   live-positive, F-2027-052 + -053 `pause()`-conversion) and
-  the remaining security-explorer findings (F-2027-060
-  through F-2027-064). The init-template hygiene cluster
-  (F-2027-057 + -058 + -059) closed in the init-template PR.
-  The security explorer raised no blockers and no important
-  findings — the two security-tier closures earlier in Phase 2
-  (F-2027-014 + F-2027-035) were re-audited and verified
-  holding.
+  the remaining security-explorer findings (F-2027-060,
+  F-2027-063, F-2027-064). The init-template hygiene cluster
+  (F-2027-057 + -058 + -059) and the SSE-backpressure cluster
+  (F-2027-061 + -062) are closed. The security explorer raised
+  no blockers and no important findings — the two security-tier
+  closures earlier in Phase 2 (F-2027-014 + F-2027-035) were
+  re-audited and verified holding.
 - **No Phase 2 explorer remains.** Follow-up PRs close the
   open `nice` clusters; Phase 2 wraps when those are merged.
 - Three explorers remain (docs, tests, security). Each will

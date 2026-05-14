@@ -1,6 +1,8 @@
 //! HTTP request handlers.
 
 use std::convert::Infallible;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use axum::Json;
@@ -18,6 +20,19 @@ use crate::state::ApiState;
 
 const DEFAULT_PAGE: u32 = 50;
 const MAX_PAGE: u32 = 1_000;
+
+/// F-2027-061: global cap on concurrent `/events/stream`
+/// subscribers. Each subscription holds a tokio task plus a
+/// 64-slot mpsc buffer; the cap bounds the worst-case memory +
+/// task footprint an authenticated TCP client can pin.
+pub(crate) const MAX_SSE_SUBSCRIBERS: usize = 64;
+
+/// F-2027-062: deadline on every SSE forwarder `tx.send().await`.
+/// A reader that opens the stream and stops draining its buffer
+/// would otherwise block the writer task indefinitely (the 64-slot
+/// mpsc fills, then `send()` parks). On timeout the writer drops
+/// the client (which also drops the `SubscriberGuard`).
+const SSE_SEND_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct PageQuery {
@@ -93,15 +108,67 @@ pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
         .into_response()
 }
 
+/// RAII handle that increments the per-state SSE subscriber
+/// counter on acquire and decrements it on drop. Acquire returns
+/// `None` if the counter has already reached the cap, in which
+/// case the handler responds with 503 (no task is spawned).
+struct SubscriberGuard {
+    counter: Arc<AtomicUsize>,
+}
+
+impl SubscriberGuard {
+    fn try_acquire(counter: &Arc<AtomicUsize>, cap: usize) -> Option<Self> {
+        let mut current = counter.load(Ordering::Acquire);
+        loop {
+            if current >= cap {
+                return None;
+            }
+            match counter.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => {
+                    return Some(Self {
+                        counter: Arc::clone(counter),
+                    });
+                }
+                Err(observed) => current = observed,
+            }
+        }
+    }
+}
+
+impl Drop for SubscriberGuard {
+    fn drop(&mut self) {
+        self.counter.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 pub(crate) async fn events_stream(
     State(s): State<ApiState>,
-) -> Sse<impl Stream<Item = Result<SseEvent, Infallible>>> {
+) -> Result<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>, ApiError> {
+    // F-2027-061: refuse the connection if the per-process cap is
+    // already saturated. The guard moves into the spawned task so
+    // the count drops back when the writer exits (client closed,
+    // bus closed, send timeout, etc.).
+    let Some(guard) = SubscriberGuard::try_acquire(&s.sse_subscribers, MAX_SSE_SUBSCRIBERS) else {
+        return Err(ApiError::with_status(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "sse subscriber cap reached",
+        ));
+    };
+
     let mut sub = s.bus.subscribe();
     // 64 is enough headroom for typical bursts; over-eager rules can lag
     // the broadcast and we surface that as a `:lagged` SSE comment line.
     let (tx, rx) = tokio::sync::mpsc::channel::<SseEvent>(64);
 
     tokio::spawn(async move {
+        // Hold the cap-guard for the lifetime of the writer task.
+        // F-2027-061: when the task exits the counter decrements.
+        let _guard = guard;
         // F-2027-029: emit an explicit `event: shutdown` frame
         // when the writer task exits cleanly (bus closed = daemon
         // shutdown). The reader (`selfdefctl events follow`) uses
@@ -119,13 +186,29 @@ pub(crate) async fn events_stream(
             let _ = tx.try_send(frame);
         };
 
+        // F-2027-062: wrap every send in a deadline. A slow or
+        // stuck client lets the 64-slot mpsc fill, after which
+        // `tx.send().await` would park forever; the timeout
+        // forces the writer to drop the client and return so
+        // the subscriber-counter slot is freed.
+        let send_with_timeout = |tx: &tokio::sync::mpsc::Sender<SseEvent>, frame: SseEvent| {
+            let tx = tx.clone();
+            async move {
+                match tokio::time::timeout(SSE_SEND_TIMEOUT, tx.send(frame)).await {
+                    Ok(Ok(())) => Ok(()),
+                    Ok(Err(_)) => Err("disconnected"),
+                    Err(_) => Err("slow-client timeout"),
+                }
+            }
+        };
+
         loop {
             match sub.recv().await {
                 Ok(event) => match serde_json::to_string(&event) {
                     Ok(json) => {
                         let frame = SseEvent::default().data(json);
-                        if tx.send(frame).await.is_err() {
-                            debug!("sse client disconnected; stopping forwarder");
+                        if let Err(reason) = send_with_timeout(&tx, frame).await {
+                            debug!(reason, "sse: stopping forwarder");
                             return;
                         }
                     }
@@ -135,7 +218,8 @@ pub(crate) async fn events_stream(
                     let frame = SseEvent::default()
                         .event("lagged")
                         .data(format!("missed {n} events"));
-                    if tx.send(frame).await.is_err() {
+                    if let Err(reason) = send_with_timeout(&tx, frame).await {
+                        debug!(reason, "sse: stopping forwarder mid-lag");
                         return;
                     }
                 }
@@ -154,11 +238,11 @@ pub(crate) async fn events_stream(
     });
 
     let stream = ReceiverStream::new(rx).map(Ok);
-    Sse::new(stream).keep_alive(
+    Ok(Sse::new(stream).keep_alive(
         KeepAlive::new()
             .interval(Duration::from_secs(15))
             .text("ping"),
-    )
+    ))
 }
 
 // -------------------------------------------------- error type

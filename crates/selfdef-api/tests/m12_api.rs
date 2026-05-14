@@ -781,6 +781,86 @@ async fn events_stream_emits_lagged_frame_on_real_bus_overflow() {
     );
 }
 
+/// F-2027-061: once `MAX_SSE_SUBSCRIBERS` connections are live,
+/// the next `/events/stream` request must be rejected with 503
+/// rather than spawning a fresh subscriber + tokio task. Dropping
+/// a held response frees the slot once the writer next tries to
+/// forward a bus event (the writer parks in `sub.recv().await`
+/// otherwise, which is exactly the slow-reader case F-2027-062
+/// guards against with a send timeout).
+#[tokio::test]
+async fn events_stream_rejects_over_cap_with_503() {
+    use selfdef_api::MAX_SSE_SUBSCRIBERS;
+    use selfdef_bus::Publisher;
+
+    let (state, bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    // Open the cap-worth of streams; each Response carries the
+    // streaming body whose Drop frees the writer task — keep them
+    // all alive for the duration of the test.
+    let mut held = Vec::with_capacity(MAX_SSE_SUBSCRIBERS);
+    for i in 0..MAX_SSE_SUBSCRIBERS {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri("/events/stream")
+            .body(Body::empty())
+            .unwrap();
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "subscriber {i} should connect under cap",
+        );
+        held.push(resp);
+    }
+
+    // The (cap+1)th request must be refused.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    // Drop one held response. The writer task is parked in
+    // `sub.recv().await`; publish one bus event so the writer
+    // wakes, tries to forward, the dropped channel fails the
+    // send, and the task exits — freeing the slot.
+    held.pop();
+    let pub_: Publisher = bus.publisher();
+    let evt = selfdef_core::Event::new(
+        ClassUid::PROCESS_ACTIVITY,
+        1,
+        SeverityId::Informational,
+        "test-host",
+        "cap.test",
+        0,
+    )
+    .with_message("wake-dropped-writer");
+    pub_.publish_lossy(evt);
+
+    // Yield + small sleep so the writer tasks run their send +
+    // Drop chains.
+    for _ in 0..5 {
+        tokio::task::yield_now().await;
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/events/stream")
+        .body(Body::empty())
+        .unwrap();
+    let resp = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::OK,
+        "freed slot should accept new subscriber",
+    );
+}
+
 mod prom {
     //! Minimal Prometheus exposition parser for SDD-005 D-2b. Not a
     //! general parser — only handles what we emit (counters and gauges
