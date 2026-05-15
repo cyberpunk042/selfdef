@@ -79,13 +79,41 @@ impl std::fmt::Debug for DispatcherAdapter {
 impl Notifier for DispatcherAdapter {
     async fn notify(&self, event: &Event) -> Result<(), NotifierError> {
         // SDD-008 D-4 HTTP ack: when the operator configured
-        // `[notifier].ack_link_base`, mint a per-event UUIDv7 token
-        // and render the click-link URL. The token is also passed
-        // through `Payload.ack_token` so the engine persists it for
-        // record_ack_by_token lookups.
+        // `[notifier].ack_link_base`, embed a per-event ack URL in
+        // the payload.
+        //
+        // Phase 7 F-2032-005 closure: we ask the engine for the
+        // CANONICAL token via `lookup_or_mint_token(event_id)`
+        // instead of always minting a fresh UUIDv7. The engine
+        // preserves the existing token across re-submits of the
+        // same event_id (`ack_token` deliberately NOT updated on
+        // INSERT-or-replace conflict). Without this lookup, the
+        // adapter would mint T2, the engine would keep T1, and the
+        // channel would send a URL containing T2 that the HTTP
+        // handler can't find → 404 on click. With the lookup, the
+        // channel's URL matches the row the handler looks up.
+        let event_id_typed = EventId(event.id);
         let (ack_token, ack_link) = match &self.ack_link_base {
             Some(base) => {
-                let token = Uuid::now_v7().simple().to_string();
+                let token = self
+                    .dispatcher
+                    .engine()
+                    .lookup_or_mint_token(event_id_typed)
+                    .await
+                    .unwrap_or_else(|e| {
+                        // Engine read failed (SQLite wedge?). Fall
+                        // back to local mint so the channel-send
+                        // path still works; the resulting URL won't
+                        // resolve, but the operator at least gets
+                        // the notification body and can ack via CLI.
+                        // Logged so the failure is visible.
+                        tracing::warn!(
+                            event_id = %event.id,
+                            error = %e,
+                            "adapter: engine.lookup_or_mint_token failed; falling back to local mint",
+                        );
+                        Uuid::now_v7().simple().to_string()
+                    });
                 let link = format!("{base}/{token}");
                 (Some(token), Some(link))
             }
@@ -93,7 +121,7 @@ impl Notifier for DispatcherAdapter {
         };
         let payload = Payload {
             id: PayloadId::new(),
-            event_id: Some(EventId(event.id)),
+            event_id: Some(event_id_typed),
             title: render_title(event),
             body: render_body(event),
             severity: event.severity_id,
@@ -281,6 +309,50 @@ mod tests {
             "expected deadline ~now+60s for aggressive profile rung 0; \
              got now_before={now_before} deadline={deadline} now_after={now_after}",
         );
+    }
+
+    // ---------------- F-2032-005: ack_token stability across re-submits ----------------
+
+    #[tokio::test]
+    async fn resubmit_of_same_event_id_uses_engine_canonical_token() {
+        // When ack_link_base is set and the responder re-fires the
+        // same event_id (e.g. operator manual re-dispatch), the
+        // adapter must look up the engine's canonical ack_token
+        // instead of minting a fresh one. The channel's URL has to
+        // match the row the HTTP handler will look up.
+        let (adapter, _counter, dispatcher, _dir) = fresh_adapter().await;
+        // Configure ack_link_base so the lookup-or-mint path runs.
+        let adapter = adapter.with_ack_link_base(Some("https://daemon.example/notify/ack".into()));
+
+        let event = finding_event();
+        let event_id = EventId(event.id);
+
+        // First submit mints a token, persists it.
+        adapter.notify(&event).await.expect("ok");
+        let token_after_first = dispatcher
+            .engine()
+            .lookup_or_mint_token(event_id)
+            .await
+            .unwrap();
+
+        // Second submit of the same event_id: engine's ON CONFLICT
+        // preserves the token. After the F-2032-005 fix, the
+        // adapter's second-call ack_link uses this same token, not
+        // a fresh mint.
+        adapter.notify(&event).await.expect("ok");
+        let token_after_second = dispatcher
+            .engine()
+            .lookup_or_mint_token(event_id)
+            .await
+            .unwrap();
+
+        // The stored token must not change across re-submits.
+        assert_eq!(
+            token_after_first, token_after_second,
+            "ack_token must be stable across re-submits (F-2032-005)",
+        );
+        // Engine still has exactly one row (event_id PRIMARY KEY).
+        assert_eq!(dispatcher.engine().row_count().await.unwrap(), 1);
     }
 
     #[test]
