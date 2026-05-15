@@ -137,6 +137,18 @@ surfaces the shipped modules introduce.
   reached"`) so operators can tell which limit they hit. See
   `crates/selfdef-api/src/handlers.rs::SubscriberGuard` and SDD-007 for the
   full implementation + the deferred terminate-on-revoke hardening note.
+  **Terminate-on-revoke posture (D-002, 2026-05-15)**: token rotation refuses
+  *new* connections immediately via bearer-auth, but existing SSE connections
+  continue to drain until they hit the F-2027-062 slow-client timeout
+  (currently `30s`, hardcoded — see
+  `crates/selfdef-api/src/handlers.rs:396`) or the client disconnects
+  naturally. The 30-second timeout is the **documented upper bound** on the
+  leak window between a token rotation and the final close of a connection
+  bearing the revoked credential. Operators who require zero leak window
+  should rotate, then wait ≥30s before treating the credential as fully
+  revoked. `drained_at`-per-fingerprint terminate-on-revoke hardening is the
+  documented upgrade path if operator demand surfaces (see SDD-007 D-3 and
+  `docs/decisions.md` D-002 for the rationale to keep current behaviour).
 
 ### Policy surface
 - **TracingPolicy directory** (`/etc/tetragon/tetragon.tp.d/`): the
