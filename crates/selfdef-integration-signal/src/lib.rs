@@ -226,4 +226,73 @@ mod tests {
         assert_eq!(<SignalCliNotifier as Notifier>::name(&n), "signal");
         assert_eq!(<SignalCliNotifier as Channel>::name(&n), "signal");
     }
+
+    // Subprocess-exec tests use coreutils `/bin/true` and `/bin/false`
+    // which are universally available on the daemon's target platforms
+    // (Linux). They exercise the three terminal outcomes of `run()`
+    // (success, non-zero exit, exec failure) without requiring the
+    // real `signal-cli` binary.
+
+    fn payload() -> Payload {
+        Payload {
+            id: PayloadId::new(),
+            event_id: None,
+            title: "alert title".into(),
+            body: "alert body".into(),
+            severity: SeverityId::High,
+            ack_link: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn run_succeeds_when_binary_exits_zero() {
+        let n = SignalCliNotifier::new(
+            PathBuf::from("/bin/true"),
+            "+15550000000".into(),
+            "+15551234567".into(),
+        );
+        let r = <SignalCliNotifier as Channel>::send(&n, &payload()).await;
+        assert!(r.is_ok(), "{r:?}");
+    }
+
+    #[tokio::test]
+    async fn run_maps_nonzero_exit_to_remote_error() {
+        let n = SignalCliNotifier::new(
+            PathBuf::from("/bin/false"),
+            "+15550000000".into(),
+            "+15551234567".into(),
+        );
+        let r = <SignalCliNotifier as Channel>::send(&n, &payload()).await;
+        match r {
+            Err(ChannelError::Remote { status, .. }) => {
+                assert_eq!(status, 1, "/bin/false exits 1");
+            }
+            other => panic!("expected Remote(1), got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn run_maps_missing_binary_to_transport_error() {
+        let n = SignalCliNotifier::new(
+            PathBuf::from("/nonexistent/path/to/signal-cli"),
+            "+15550000000".into(),
+            "+15551234567".into(),
+        );
+        let r = <SignalCliNotifier as Channel>::send(&n, &payload()).await;
+        match r {
+            Err(ChannelError::Transport(_)) => {}
+            other => panic!("expected Transport(io), got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_notify_succeeds_when_binary_exits_zero() {
+        let n = SignalCliNotifier::new(
+            PathBuf::from("/bin/true"),
+            "+15550000000".into(),
+            "+15551234567".into(),
+        );
+        let r = <SignalCliNotifier as Notifier>::notify(&n, &finding_event()).await;
+        assert!(r.is_ok(), "{r:?}");
+    }
 }

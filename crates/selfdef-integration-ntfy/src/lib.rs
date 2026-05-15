@@ -32,12 +32,25 @@ use selfdef_notifier_orchestrator::{
 use tracing::{debug, warn};
 
 /// ntfy outbound channel.
-#[derive(Debug)]
 pub struct NtfyNotifier {
     url: String,
     topic: String,
     token: Option<String>,
     client: reqwest::Client,
+}
+
+// Custom `Debug` impl elides the bearer token so it never leaks
+// through `tracing::error!("{notifier:?}", …)` or a panic backtrace.
+// Matches the secret-elision posture of the slack/discord/twilio/smtp
+// integration crates (F-2031-005).
+impl std::fmt::Debug for NtfyNotifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NtfyNotifier")
+            .field("url", &self.url)
+            .field("topic", &self.topic)
+            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .finish_non_exhaustive()
+    }
 }
 
 impl NtfyNotifier {
@@ -280,5 +293,86 @@ mod tests {
         let n = NtfyNotifier::new("http://example.invalid", "topic", None);
         assert_eq!(<NtfyNotifier as Notifier>::name(&n), "ntfy");
         assert_eq!(<NtfyNotifier as Channel>::name(&n), "ntfy");
+    }
+
+    #[test]
+    fn debug_elides_bearer_token() {
+        let n = NtfyNotifier::new("https://ntfy.example", "t", Some("SECRET-TOKEN-XYZ".into()));
+        let s = format!("{n:?}");
+        assert!(s.contains("ntfy.example"), "host visible: {s}");
+        assert!(s.contains("t"), "topic visible: {s}");
+        assert!(!s.contains("SECRET-TOKEN-XYZ"), "leaks token: {s}");
+    }
+
+    #[test]
+    fn debug_shows_no_token_when_none() {
+        let n = NtfyNotifier::new("https://ntfy.example", "t", None);
+        let s = format!("{n:?}");
+        assert!(s.contains("ntfy.example"), "host visible: {s}");
+        assert!(!s.contains("redacted"), "no token configured: {s}");
+    }
+
+    mod wiremock_tests {
+        use super::*;
+        use selfdef_notifier_orchestrator::EventId;
+        use uuid::Uuid;
+        use wiremock::matchers::{header, header_exists, method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        fn payload() -> Payload {
+            Payload {
+                id: PayloadId::new(),
+                event_id: Some(EventId::from(Uuid::now_v7())),
+                title: "alert title".into(),
+                body: "alert body".into(),
+                severity: SeverityId::High,
+                ack_link: None,
+            }
+        }
+
+        #[tokio::test]
+        async fn happy_path_against_wiremock() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(path("/selfdef-test"))
+                .and(header_exists("title"))
+                .and(header_exists("priority"))
+                .and(header_exists("tags"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+                .mount(&server)
+                .await;
+            let n = NtfyNotifier::new(server.uri(), "selfdef-test", None);
+            let r = <NtfyNotifier as Channel>::send(&n, &payload()).await;
+            assert!(r.is_ok(), "{r:?}");
+        }
+
+        #[tokio::test]
+        async fn non_success_status_maps_to_remote_error() {
+            // ntfy retries up to 3 times — return 4xx every time.
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+                .mount(&server)
+                .await;
+            let n = NtfyNotifier::new(server.uri(), "selfdef-test", None);
+            let r = <NtfyNotifier as Channel>::send(&n, &payload()).await;
+            match r {
+                Err(ChannelError::Remote { status, .. }) => assert_eq!(status, 403),
+                other => panic!("expected Remote(403), got {other:?}"),
+            }
+        }
+
+        #[tokio::test]
+        async fn bearer_token_attached_when_configured() {
+            let server = MockServer::start().await;
+            Mock::given(method("POST"))
+                .and(header("authorization", "Bearer secret-token-xyz"))
+                .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+                .mount(&server)
+                .await;
+            let n = NtfyNotifier::new(server.uri(), "t", Some("secret-token-xyz".into()));
+            let r = <NtfyNotifier as Channel>::send(&n, &payload()).await;
+            assert!(r.is_ok(), "expected bearer-auth match, got {r:?}");
+        }
     }
 }
