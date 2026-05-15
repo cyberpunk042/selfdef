@@ -1,6 +1,6 @@
 ---
 name: questions
-description: Interactive queue for pending design questions. Surfaces unanswered questions from project docs (SDDs / RFCs / handoffs), drills into one at a time with options + tradeoffs, records the operator's answer by editing the source doc AND appending a chronological decision log entry. Argument shape — `show` (default) | `<selector>` | `solve <selector>` | `answer <selector> <option>`. Selector — `Q-N` | `first` | `last` | `all` | `N` | `N,M`. Use when the user types /questions or asks to "resolve / answer / decide on the open questions."
+description: Interactive queue for pending design questions. Surfaces unanswered questions from project docs (SDDs / RFCs / handoffs), drills into one at a time with options + tradeoffs, records the operator's answer by editing the source doc AND appending a chronological decision log entry. Argument shape — `show` (default) | `<selector>` | `solve <selector>` | `solve-all` | `answer <selector> <option>`. Selector — `Q-N` | `first` | `last` | `all` | `N` | `N,M`. Use when the user types /questions or asks to "resolve / answer / decide on the open questions."
 ---
 
 # /questions — interactive question-resolution layer
@@ -45,6 +45,8 @@ decision committed to the source doc and to a chronological log.
 | `/questions show` | Same as above, explicit |
 | `/questions <selector>` | Shortcut for `solve <selector>` |
 | `/questions solve <selector>` | Enter solving-mode for the selected question(s) |
+| `/questions solve` (no selector) | Render queue + ask which to enter (two-hop) |
+| `/questions solve-all` | **Alias for `solve all`** — walk every question sequentially. Use this when you know you want to do all of them; saves the no-selector picker hop. |
 | `/questions answer <selector> <option>` | Fast-path: pick a known option (A/B/C/D or text) |
 | `/questions detail <selector>` | Read-only deep render of one question (mini-RFC) |
 
