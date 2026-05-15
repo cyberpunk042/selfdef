@@ -163,15 +163,11 @@ impl PagerDutyNotifier {
         } else {
             source.to_owned()
         };
-        Ok(Self {
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .build()
-                .unwrap_or_default(),
-            endpoint,
-            routing_key,
-            source,
-        })
+        // Route through `Self::new` so the reqwest::Client::builder
+        // shape stays in one place (F-2032-004 closure: was a
+        // duplicated block, drifted from the other Q-G adapters that
+        // all go through their `new`).
+        Ok(Self::new(routing_key, source).with_endpoint(endpoint))
     }
 
     /// Shared core for the two trait impls. POSTs the rendered
