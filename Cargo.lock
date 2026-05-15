@@ -2404,6 +2404,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-notifier",
  "selfdef-notifier-orchestrator",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",

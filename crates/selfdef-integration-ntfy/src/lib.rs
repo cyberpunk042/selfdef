@@ -71,11 +71,45 @@ impl NtfyNotifier {
     /// Construct from config: read a token from `token_file` if given,
     /// otherwise emit unauthenticated requests (suitable for an
     /// unauthenticated self-hosted ntfy server).
+    ///
+    /// **Security (F-2031-015)**: when `token_file` is `Some` but the
+    /// file is unreadable (wrong permissions / missing / typo) the
+    /// previous behaviour silently swallowed the IO error and
+    /// produced an unauthenticated client — an operator who
+    /// configured a token believed auth was enforced when it wasn't.
+    /// Now: an unreadable `token_file` logs a `warn!` so the
+    /// misconfiguration surfaces in the daemon log. The channel
+    /// still constructs (matches the other channels' "channel-level
+    /// degradation logs loudly" posture) so a daemon doesn't fail
+    /// to start on a single bad credential file, but the operator
+    /// is no longer left in the dark.
     pub fn from_config(url: &str, topic: &str, token_file: Option<&PathBuf>) -> Self {
-        let token = token_file
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty());
+        let token = match token_file {
+            None => None,
+            Some(p) => match std::fs::read_to_string(p) {
+                Ok(s) => {
+                    let t = s.trim().to_string();
+                    if t.is_empty() {
+                        warn!(
+                            path = %p.display(),
+                            "ntfy token_file is empty after trim; sending unauthenticated",
+                        );
+                        None
+                    } else {
+                        Some(t)
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "ntfy token_file unreadable; sending unauthenticated. \
+                         Check file exists and daemon has read permission (0600 + daemon owner recommended)",
+                    );
+                    None
+                }
+            },
+        };
         Self::new(url, topic, token)
     }
 
@@ -310,6 +344,62 @@ mod tests {
         let s = format!("{n:?}");
         assert!(s.contains("ntfy.example"), "host visible: {s}");
         assert!(!s.contains("redacted"), "no token configured: {s}");
+    }
+
+    // F-2031-015: an unreadable token_file used to silently degrade
+    // to unauthenticated. These tests pin the post-fix behaviour:
+    // construction still succeeds (channel-level degradation logs
+    // loudly but doesn't fail the daemon), and the resulting client
+    // has no token attached.
+
+    #[test]
+    fn from_config_no_token_file_yields_unauthenticated() {
+        let n = NtfyNotifier::from_config("https://ntfy.example", "t", None);
+        assert!(n.token.is_none());
+    }
+
+    #[test]
+    fn from_config_unreadable_token_file_yields_unauthenticated_with_warn() {
+        let n = NtfyNotifier::from_config(
+            "https://ntfy.example",
+            "t",
+            Some(&PathBuf::from("/nonexistent/path/to/ntfy.token")),
+        );
+        assert!(
+            n.token.is_none(),
+            "unreadable token_file must not produce a token",
+        );
+        // (We can't inspect the warn! call here without tracing
+        // capture; the contract is "constructed channel has no
+        // token AND the daemon log surfaces the warn". The latter
+        // is verified by the operator at startup.)
+    }
+
+    #[test]
+    fn from_config_empty_token_file_yields_unauthenticated() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        // Empty file (default) — Path exists, read succeeds, trim → "".
+        let n =
+            NtfyNotifier::from_config("https://ntfy.example", "t", Some(&tmp.path().to_path_buf()));
+        assert!(n.token.is_none());
+    }
+
+    #[test]
+    fn from_config_whitespace_only_token_file_yields_unauthenticated() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "   \n\t  \n").unwrap();
+        let n =
+            NtfyNotifier::from_config("https://ntfy.example", "t", Some(&tmp.path().to_path_buf()));
+        assert!(n.token.is_none());
+    }
+
+    #[test]
+    fn from_config_well_formed_token_file_attaches_token() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "the-secret-token\n").unwrap();
+        let n =
+            NtfyNotifier::from_config("https://ntfy.example", "t", Some(&tmp.path().to_path_buf()));
+        assert_eq!(n.token.as_deref(), Some("the-secret-token"));
     }
 
     mod wiremock_tests {

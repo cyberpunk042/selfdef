@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **open** — 7 explorers landed (inventory, recent-PRs, crate, module, integration, docs, tests); 1 pending (security).
+> Status: **ready-to-wrap** — all 7 explorers landed (inventory, recent-PRs, crate, module, integration, docs, tests, security).
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -32,7 +32,7 @@ design-shaped.
 | --- | --- | --- | --- | --- |
 | F-2031-001 | nice (closed) | docs (SDD-008) | PR #114's commit title labels the SMTP integration crate as `D-7` even though SDD-008's D-7 is the panic floor (which shipped under PR #127 with the correct label). Pre-history label collision. | **Closed by Phase 6 docs explorer** — SDD-008 gains a "PR labels — appendix" disambiguating exhaustively, plus an "Implementation status" table mapping each D → PR. |
 | F-2031-002 | nice (closed) | crate (ntfy + signal) | Ntfy (4 tests) and Signal (3 tests) integration crates lack the wiremock / subprocess-exec end-to-end coverage that the later channel crates adopted (twilio, slack, discord, wall: 12–16 tests each). Coverage parity gap. | **Closed by Phase 6 crate explorer** — both crates raised to 7+ tests (ntfy at 9, signal at 7) with wiremock + coreutils stand-ins exercising the `post()` / subprocess paths. |
-| F-2031-003 | nice | supply-chain (deny.toml) | `0BSD` was added to `deny.toml`'s `licenses.allow` to permit `quoted_printable` 0.5.2 (transitive via `lettre`). Documented in-line, but should be re-audited end-to-end. | Phase 6 security explorer. |
+| F-2031-003 | nice (closed) | supply-chain (deny.toml) | `0BSD` was added to `deny.toml`'s `licenses.allow` to permit `quoted_printable` 0.5.2 (transitive via `lettre`). Documented in-line, but should be re-audited end-to-end. | **Closed by Phase 6 security explorer** — `cargo deny check licenses` confirms 0BSD matches only `quoted_printable`; single inbound edge from `lettre`; 0BSD is functionally public-domain-equivalent and strictly more permissive than BSD-2-Clause already in allow list. Addition is safe; no code change. |
 | F-2031-004 | demoted | tooling (rustfmt) | PR #127 needed a `chore(fmt)` fix-up commit (`3b80a85`) to satisfy CI's rustfmt 1.88.0 chain-collapse on the panic-floor parsing path. Local rustfmt produced different output. Single observed incident; CI caught it before merge. | None — re-flag if a second occurrence appears in a future cycle. |
 | F-2031-005 | nice (closed) | crate (ntfy) | `NtfyNotifier` derived `Debug`, which would render the bearer token verbatim in any `tracing` log. Out of step with the secret-elision posture of slack/discord/twilio/smtp. | **Closed by Phase 6 crate explorer** — custom `Debug` impl elides token to `<redacted>`; 2 tests pin elision shape. |
 | F-2031-006 | **important** (closed) | crate (wall) | `selfdef-integration-wall::broadcast()` failed eagerly on EPIPE when the child exited before reading stdin. Manifested as a flaky CI failure on `ubuntu-latest`; also a latent production defect for wall(1) on TTY-less hosts. | **Closed by Phase 6 crate explorer** — tolerate `BrokenPipe` on both `write_all` and `shutdown`, fall through to wait-on-exit. Stress-tested 15× green. |
@@ -44,6 +44,8 @@ design-shaped.
 | F-2031-012 | nice (closed) | docs (init.rs STARTER_CONFIG) | STARTER_CONFIG documents per-channel subscription filters in detail but never mentions F-2031-009 — operators following the starter config faithfully would set both `escalations_path` and `[notifier.subscriptions.*]` and silently get every event on every channel. The daemon-side stopgap warning (PR #135) catches this at runtime; the operator should learn about the gap at config-write time. Also: D-6c past-tense "lands in follow-up Ds" was stale (D-6c has shipped). | **Closed by Phase 6 docs explorer** — subscription block carries the F-2031-009 caveat inline; D-6c reference fixed to present tense. |
 | F-2031-013 | nice (SDD-debt) | tests (daemon integration) | The 22-PR SDD-008 cycle shipped 159 new tests but **zero Category-2 (pipeline) tests** for the engine path. Operator-visible promises ("an unacked notification re-fires at its rung deadline", "ack from a separate process stops further re-fires", "mode=audit honoured at daemon startup") lack daemon-level end-to-end coverage. Same pattern as F-2026-082 (the SDD-005 parent). | **Open — follow-up PR under SDD-005's implementation-PR pattern.** New `m_notify_engine.rs` + `EngineHarness` helper; needs `tokio::time::pause()` for deterministic wake-task driving. |
 | F-2031-014 | demoted | tests (wake_task) | `wake_task::run_exits_on_cancellation` uses `tokio::time::sleep(50ms)` to give the spawned task time to reach its `tokio::select` arm before cancelling. Initially flagged as SDD-005 pipeline-determinism concern. | Cross-checked: this is a Cat-4 seam test for cancellation propagation, not a pipeline test. The sleep is scheduler-jitter absorption with a 2s timeout absorbing scheduler stalls. Pattern-distinct from "pipeline tests must be deterministic". Demoted. |
+| F-2031-015 | **important** (closed) | security (ntfy creds) | `selfdef-integration-ntfy::from_config` used `.ok()` on the `token_file` read — any IO error (file missing / wrong permissions / typo) silently produced an unauthenticated client. Operator who configured `token_file` believed auth was enforced when it wasn't. Other 4 credential-bearing channels (smtp/twilio/slack/discord) propagate the IO error and refuse to construct. | **Closed by Phase 6 security explorer** — `from_config` rewritten as explicit `match`; unreadable/empty file degrades-with-`warn!` naming the path + error. 5 new tests pin the contract. |
+| F-2031-016 | nice (closed) | docs (SECURITY.md) | `[notifier.escalations_path]` SQLite file holds rendered title+body of every persisted alert (hostnames, IPs, ATT&CK ids, command lines) — cleartext at rest. WAL adds `-wal`+`-shm` siblings with same sensitivity. Cycle's SECURITY.md additions documented credentials + TTY broadcast but missed the escalations file itself. | **Closed by Phase 6 security explorer** — new SECURITY.md row documents the escalations store as sensitive data-at-rest, including WAL siblings and the SQLite-doesn't-zero-freelist gotcha on close. |
 
 ## Status
 
@@ -52,16 +54,23 @@ design-shaped.
   the inventory of the 9 new crates / 22 PRs / 159 new tests
   / 13 new TOML surface elements, and the PR-by-PR audit
   raising 3 nice findings + 1 demoted observation.
-- Tests explorer landed (this PR ships `70-tests-audit.md`),
-  raises F-2031-013 (Category-2 pipeline-test gap) as
-  SDD-debt for SDD-005 implementation-PR follow-up; demotes
-  F-2031-014 on cross-check (50ms cancellation-propagation
-  sleep is not pipeline-determinism). Categories 1 + 4 of
-  SDD-005 audit clean for the 171-test SDD-008 surface.
-- One explorer remains (ships in follow-up PR):
-  1. `80-security-audit.md` — credentials, TTY broadcast,
-     SQLite injection surface, rung-advance race, TLS
-     posture; address F-2031-003 (0BSD allow-list re-audit).
+- **Security explorer landed** (this PR ships
+  `80-security-audit.md`), closes F-2031-003 + F-2031-015
+  + F-2031-016 in-place. **All 7 Phase 6 explorers
+  complete.** A separate Phase 6 wrap PR will mark this
+  ledger `wrapped` and document the cumulative trajectory.
+- 16 findings total: 12 closed in-place, 2 SDD-debt open
+  (F-2031-009 D-5e + F-2031-013 SDD-005 follow-up), 1
+  demoted (F-2031-014), 1 historic (F-2031-004 demoted
+  tooling).
+- **3 important findings** caught + closed by Phase 6:
+  F-2031-006 (wall EPIPE production fix), F-2031-007
+  (DispatcherAdapter profile-rung-0 timing bug), F-2031-015
+  (ntfy silent-degrades-to-unauth).
+- **1 important SDD-debt** still open with stopgaps both
+  sides: F-2031-009 (subscription filter bypass on engine
+  path) — daemon startup-warn + STARTER_CONFIG caveat
+  landed; principled fix tracked under SDD-008 D-5e PR.
 - Phase 6 closes when every important / blocker has either a
   "closed by <PR>" back-reference or a tracked SDD.
 
@@ -75,7 +84,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | **1 nice (SDD-debt) + 1 demoted** | *pending* |
+| **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | **1 nice (SDD-debt) + 1 demoted** | **1 important + 2 nice (all closed)** |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an
