@@ -1,0 +1,25 @@
+[package]
+name = "selfdef-integration-write"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "write(1) per-user session-attention channel (SDD-008 D-8 sibling / D-004 realization)."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-notifier = { workspace = true }
+selfdef-notifier-orchestrator = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+uuid = { workspace = true }

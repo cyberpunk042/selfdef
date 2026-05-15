@@ -264,3 +264,13 @@ canonical source of truth; this log gives the chronological view.
 **Affected items**: `docs/decisions.md` (this entry supersedes D-015's "implementation-PR follow-up" framing); operator-facing reality unchanged.
 **Reversibility**: fully-reversible — if the message ever drops the stanza in a refactor, this entry is the audit-trail evidence that it shouldn't.
 **Linked**: PR (this PR); supersedes D-015 (`docs/decisions.md`).
+
+## D-024 — 2026-05-15 — D-004 realization: per-user transport ships as the `write` channel (not `wall.users`)
+
+**Decision**: D-004 prescribed "per-user opt-in for wall(1) lands as `[notifier.wall].users = [...]`." On implementation, that mechanism doesn't cleanly map to `wall(1)` semantics — `wall(1)` natively broadcasts to every logged-in TTY and has no per-user filter. Forcing a `wall.users` allowlist would have required either (a) shelling out to `write(1)` under the hood for the filtered case (duplicating logic the write crate now owns), or (b) reimplementing per-user TTY enumeration inside the wall crate (substantial). Instead, **per-user opt-in is realized as a separate first-class channel**: `selfdef-integration-write` (new crate) targeting `write(1)` per user. `wall` keeps its broadcast-all-TTYs semantics; operators wanting per-user opt-in configure the `write` channel.
+**Question**: How is D-004's per-user opt-in mechanism actually shipped?
+**Source**: `docs/decisions.md` D-004 entry (supersedes the "wall.users allowlist" mechanism wording).
+**Rationale**: Faithful to D-004's **intent** (operators get per-user opt-in for session-attention) while respecting Unix `wall(1)` semantics. Cleaner separation of concerns — each channel has one transport (`wall` = `wall(1)` broadcast; `write` = `write(1)` per-user). Removes the need to duplicate per-user logic across both crates. Documented in `WallConfig`'s rustdoc: "`wall.users` intentionally does not exist; the per-user transport is its own channel."
+**Affected items**: New crate `crates/selfdef-integration-write/`; `selfdef-config::NotifierConfig::write` field + `WriteConfig` struct; `selfdef-daemon` channel wiring (both legacy chain + engine path); `selfdef-cli::init` STARTER_CONFIG block for `[notifier.write]`.
+**Reversibility**: fully-reversible — if operator demand surfaces for a literal `wall.users` field, the wall crate could grow per-user mode (delegating to write(1) under the hood). The shipped split keeps the future option open.
+**Linked**: PR (this PR); supersedes D-004 (`docs/decisions.md`).

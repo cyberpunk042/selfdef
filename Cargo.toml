@@ -106,6 +106,7 @@ selfdef-integration-signal = { path = "crates/selfdef-integration-signal" }
 selfdef-integration-smtp = { path = "crates/selfdef-integration-smtp" }
 selfdef-integration-twilio = { path = "crates/selfdef-integration-twilio" }
 selfdef-integration-wall = { path = "crates/selfdef-integration-wall" }
+selfdef-integration-write = { path = "crates/selfdef-integration-write" }
 selfdef-integration-slack = { path = "crates/selfdef-integration-slack" }
 selfdef-integration-discord = { path = "crates/selfdef-integration-discord" }
 selfdef-integration-pagerduty = { path = "crates/selfdef-integration-pagerduty" }

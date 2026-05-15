@@ -432,6 +432,12 @@ pub struct NotifierConfig {
     /// the operator's "talk to the bash session" surface. Default
     /// `binary = ""` keeps the channel disabled.
     pub wall: WallConfig,
+    /// D-004 realization: write(1) per-user session-attention channel.
+    /// Sibling of `wall` for operators wanting per-user opt-in
+    /// (only listed users' TTYs receive escalations) instead of
+    /// wall's broadcast-all-TTYs behavior. Empty `users` keeps the
+    /// channel disabled.
+    pub write: WriteConfig,
     /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
     /// SQLite database. When set, the daemon opens this file at
     /// startup, persists outbound events in it, and runs the wake-
@@ -530,6 +536,7 @@ impl Default for NotifierConfig {
             opensearch: OpenSearchConfig::default(),
             thehive: TheHiveConfig::default(),
             wall: WallConfig::default(),
+            write: WriteConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
@@ -705,6 +712,12 @@ pub struct PagerDutyConfig {
 /// path of the `wall` binary (typically `/usr/bin/wall`) to enable.
 /// `severity_floor` defaults to `"high"` — wall is system-wide
 /// broadcast, bothering every TTY on routine events is wrong.
+///
+/// **D-004 note**: `wall(1)` does not natively filter by user.
+/// Operators wanting per-user opt-in should configure the sibling
+/// `[notifier.write]` channel instead — `write(1)` targets one user
+/// at a time. The `wall.users` field intentionally does not exist;
+/// the per-user transport is its own channel.
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct WallConfig {
@@ -716,6 +729,30 @@ pub struct WallConfig {
     /// the config at daemon start (the wall channel is disabled
     /// rather than firing on every event).
     pub severity_floor: String,
+}
+
+/// D-004 realization: write(1) per-user session-attention channel.
+///
+/// Sibling of `wall` for per-user TTY delivery. Where wall(1)
+/// broadcasts to every logged-in TTY, write(1) targets one user at
+/// a time. Operators who want session-attention only on a specific
+/// allowlist of operator accounts wire up this channel.
+///
+/// Empty `binary` OR empty `users` keeps the channel disabled.
+/// `severity_floor` defaults to `"high"` (same posture as wall).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct WriteConfig {
+    /// Path to the `write(1)` binary. Empty disables the channel.
+    pub binary: PathBuf,
+    /// Severity threshold below which write stays silent. Same
+    /// values as `WallConfig::severity_floor`.
+    pub severity_floor: String,
+    /// Target users. Each name in this list receives a per-user
+    /// `write(1) <name>` invocation. Empty disables the channel.
+    /// Usernames must match `[a-zA-Z0-9._-]+` — shell metacharacters
+    /// are rejected at config-load time.
+    pub users: Vec<String>,
 }
 
 /// SDD-008 D-6c: operator-defined custom escalation profile shape.

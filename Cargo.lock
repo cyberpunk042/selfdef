@@ -2358,6 +2358,7 @@ dependencies = [
  "selfdef-integration-thehive",
  "selfdef-integration-twilio",
  "selfdef-integration-wall",
+ "selfdef-integration-write",
  "selfdef-nats",
  "selfdef-notifier",
  "selfdef-notifier-engine",
@@ -2562,6 +2563,20 @@ dependencies = [
 
 [[package]]
 name = "selfdef-integration-wall"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "selfdef-integration-write"
 version = "0.1.0"
 dependencies = [
  "async-trait",
