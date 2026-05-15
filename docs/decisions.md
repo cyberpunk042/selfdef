@@ -244,3 +244,23 @@ canonical source of truth; this log gives the chronological view.
 **Rationale**: Premature commitment without a YAML-editing module that needs the helper; deferring keeps v1 scope tight.
 **Affected items**: Future v2 SDD for YAML-editing helpers
 **Reversibility**: fully-reversible
+
+## D-022 — 2026-05-15 — Realization note: D-003 already shipped via the minisign path
+
+**Decision**: D-003's working hypothesis (TracingPolicy/sigma signing as "inline detached signatures + bundled CA") is **already realized in shipped code** via the minisign-based signing path that landed before D-003 was logged. The "future F-2026-024 follow-up SDD" framing in D-003 is therefore obsolete: the F-2026-024 follow-up shipped as opt-in features. No further SDD work needed unless the operator wants to revisit the signing format (e.g. cosign/OCI instead of minisign).
+**Question**: Is D-003 still pending, or has it been realized?
+**Source**: `docs/decisions.md` D-003 entry (supersedes); `docs/sdd/004-security-threat-model.md`:321-340 (post-#166 status: "shipped"); `SECURITY.md`:244 (TracingPolicy signing runbook).
+**Rationale**: When D-003 was logged in PR #159, the framing assumed signing was net-new design work. Investigation in PR #166 (SDD-004 known-gaps refresh) surfaced that minisign-based rule signing + TracingPolicy signing already shipped as F-2026-024 follow-up — the working hypothesis is concretely realized via `.minisig` sibling files + `[security].signing_public_key_file`. D-003's "inline detached + bundled CA" is structurally what minisign provides (`.minisig` = inline detached, the configured public-key file = the trust anchor).
+**Affected items**: `docs/decisions.md` (this entry supersedes D-003's "pending working hypothesis" framing); operator-facing reality unchanged.
+**Reversibility**: fully-reversible — if operators later prefer cosign/OCI over minisign, that's a new design conversation; both paths can coexist via the `.minisig` opt-in mechanism.
+**Linked**: PR (this PR); supersedes D-003 (`docs/decisions.md`).
+
+## D-023 — 2026-05-15 — Realization note: D-015 already shipped via F-2027-001
+
+**Decision**: D-015 (vpn-bridge profile-resolver error message includes the suggested fix `[profiles.details.<profile>] instanced = true`) is **already realized in shipped code**. The error path at `crates/selfdef-cli/src/modules.rs:547-553` embeds the exact copy-pasteable TOML stanza in its `anyhow::bail!` message, per the F-2027-001 audit finding closure ("embed the exact copy-pasteable TOML stanza in the diagnostic so operators don't have to compose it from prose").
+**Question**: Is D-015's "include the suggested fix" requirement met by current code?
+**Source**: `docs/decisions.md` D-015 entry; `crates/selfdef-cli/src/modules.rs`:540-553 (the error path with the embedded stanza); F-2027-001 audit finding closure.
+**Rationale**: D-015 logged the design intent on 2026-05-15 in PR #165. Investigation during a follow-up sweep found that the implementation already ships per F-2027-001 — the resolver bails with the full TOML stanza, not just prose. The decision is therefore retrospectively documenting existing behaviour, not gating new work.
+**Affected items**: `docs/decisions.md` (this entry supersedes D-015's "implementation-PR follow-up" framing); operator-facing reality unchanged.
+**Reversibility**: fully-reversible — if the message ever drops the stanza in a refactor, this entry is the audit-trail evidence that it shouldn't.
+**Linked**: PR (this PR); supersedes D-015 (`docs/decisions.md`).
