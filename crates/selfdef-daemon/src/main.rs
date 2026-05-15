@@ -823,6 +823,31 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "write"
+                if !cfg.notifier.write.binary.as_os_str().is_empty()
+                    && !cfg.notifier.write.users.is_empty() =>
+            {
+                let floor = if cfg.notifier.write.severity_floor.is_empty() {
+                    None
+                } else {
+                    Some(cfg.notifier.write.severity_floor.as_str())
+                };
+                match selfdef_integration_write::WriteChannel::from_config(
+                    &cfg.notifier.write.binary,
+                    floor,
+                    &cfg.notifier.write.users,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "write channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
@@ -1153,6 +1178,29 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "wall engine-channel skipped");
+                    }
+                }
+            }
+            "write"
+                if !cfg.notifier.write.binary.as_os_str().is_empty()
+                    && !cfg.notifier.write.users.is_empty() =>
+            {
+                let floor = if cfg.notifier.write.severity_floor.is_empty() {
+                    None
+                } else {
+                    Some(cfg.notifier.write.severity_floor.as_str())
+                };
+                match selfdef_integration_write::WriteChannel::from_config(
+                    &cfg.notifier.write.binary,
+                    floor,
+                    &cfg.notifier.write.users,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "write engine-channel skipped");
                     }
                 }
             }

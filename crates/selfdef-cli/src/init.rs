@@ -364,6 +364,31 @@ channels = []
 # binary         = "/usr/bin/wall"
 # severity_floor = "high"   # info|low|medium|high|critical|fatal
 
+# D-004 (decisions log): write(1) per-user session-attention channel.
+# Sibling of wall(1) for *per-user* TTY delivery — write(1) targets one
+# user at a time, so operators wanting session-attention only on a
+# specific allowlist of operator accounts wire this up instead of wall.
+# Per-user vs broadcast-all is the only real semantic difference; the
+# severity-floor / config shape mirrors wall.
+# To enable:
+#   1. Confirm /usr/bin/write exists (`which write`, part of util-linux).
+#   2. The daemon process needs permission to write to user TTYs —
+#      typically operator membership in the `tty` group OR running
+#      as root. write(1) exits non-zero when the target user is not
+#      logged in or has `mesg n` set; the channel logs that at warn
+#      and moves on to the next target user (best-effort delivery).
+#   3. Uncomment the block below; flip channels above to include
+#      "write" (typically LAST in the chain like wall — write is loud).
+#   4. severity_floor defaults to "high" (same posture as wall).
+#   5. users is the target allowlist. Required — empty disables the
+#      channel. Usernames must match [a-zA-Z0-9._-]+ ; shell
+#      metacharacters are rejected at config-load time.
+#
+# [notifier.write]
+# binary         = "/usr/bin/write"
+# severity_floor = "high"        # info|low|medium|high|critical|fatal
+# users          = ["alice", "bob"]
+
 # SDD-008 D-5: path to the persistent escalation engine. When set,
 # the daemon persists every outbound notification here and runs the
 # wake-task escalation loop (D-5c): unacked notifications re-fire
