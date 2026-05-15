@@ -137,10 +137,12 @@ crates/selfdef-integration-pagerduty  (shipped — SDD-008 Q-G,  PR #143)
 crates/selfdef-integration-loki       (shipped — SDD-008 Q-G,  PR #144)
 crates/selfdef-integration-opensearch (shipped — SDD-008 Q-G,  PR #145)
 crates/selfdef-integration-thehive    (shipped — SDD-008 Q-G,  PR #146)
+crates/selfdef-integration-write      (shipped — D-024,        PR #170)
 ```
 
-Eleven channels in total covering the operator-facing matrix (push,
-IM, email, SMS, voice/wall, paging, log-aggregation, SIEM, IR-tools).
+Twelve channels in total covering the operator-facing matrix (push,
+IM, email, SMS, broadcast TTY, per-user TTY, paging, log-aggregation,
+SIEM, IR-tools).
 The four Q-G entries (PagerDuty / Loki / OpenSearch / TheHive)
 empirically answer "which alert-routing integrations matter?" by
 shipping them. See [`docs/sdd/008-notifications-orchestration.md`](docs/sdd/008-notifications-orchestration.md)

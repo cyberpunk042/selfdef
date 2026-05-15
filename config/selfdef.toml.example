@@ -190,6 +190,214 @@ binary = "/usr/bin/signal-cli"
 account = ""
 recipient = ""
 
+# SDD-008 D-7 Q-E — SMTP (email) outbound channel via lettre.
+# Empty relay_host keeps the channel disabled. Default TLS profile is
+# starttls (port 587 with PLAIN auth over upgraded TLS — the most
+# common operator-controlled relay posture). Use implicit_tls for
+# port-465 deployments; plain refuses any auth-bearing send at
+# construction time.
+[notifier.smtp]
+# relay_host = "smtp.example.org"
+# relay_port = 587
+# tls = "starttls"                              # starttls | implicit_tls | plain
+# username = "alerts@example.org"
+# password_file = "/etc/selfdef/secrets/smtp.password"  # mode 0600
+# from = "selfdef-alerts@example.org"
+# to = ["oncall@example.org"]
+# timeout_secs = 10
+relay_host = ""
+relay_port = 587
+tls = "starttls"
+from = ""
+to = []
+timeout_secs = 10
+
+# SDD-008 Q-D — Twilio SMS outbound channel.
+# Empty account_sid keeps the channel disabled. v1 ships send-only;
+# inbound reply webhooks for SMS ack would require a public HTTPS
+# endpoint and are deferred. Numbers must be E.164 (+15551234567).
+[notifier.twilio]
+# account_sid = "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+# auth_token_file = "/etc/selfdef/secrets/twilio.token"  # mode 0600
+# from = "+15551234567"
+# to = ["+15559876543"]
+# timeout_secs = 10
+account_sid = ""
+from = ""
+to = []
+timeout_secs = 10
+
+# SDD-008 Q-C — Slack incoming-webhook outbound channel.
+# Missing webhook_url_file keeps the channel disabled. The webhook URL
+# IS the auth secret — anyone with it can post to the channel — so
+# store it in a separate file at mode 0600.
+[notifier.slack]
+# webhook_url_file = "/etc/selfdef/secrets/slack.webhook"  # mode 0600
+# username = "selfdef"
+# icon_emoji = ":shield:"
+username = "selfdef"
+icon_emoji = ":shield:"
+
+# SDD-008 — Discord webhook outbound channel.
+# Same shape as Slack: the webhook URL is the auth secret; store it
+# in a separate file at mode 0600.
+[notifier.discord]
+# webhook_url_file = "/etc/selfdef/secrets/discord.webhook"  # mode 0600
+# username = "selfdef"
+username = "selfdef"
+
+# SDD-008 Q-G — PagerDuty Events API v2 channel.
+# Missing routing_key_file keeps the channel disabled. The 32-char hex
+# routing key (per-service integration key from PagerDuty's UI) IS the
+# auth; store at mode 0600. Leave `endpoint` empty for the global US
+# endpoint; set it explicitly for EU-only or staging.
+[notifier.pagerduty]
+# routing_key_file = "/etc/selfdef/secrets/pagerduty.key"  # mode 0600
+# endpoint = ""
+# source = "selfdef"
+endpoint = ""
+source = "selfdef"
+
+# SDD-008 Q-G — Grafana Loki push-API channel.
+# Empty endpoint keeps the channel disabled. Must be https:// (refuses
+# to ship bearer tokens over plaintext). Three auth modes:
+#   • self-hosted single-tenant — leave tenant_id empty, no auth_token_file.
+#   • self-hosted multi-tenant  — set tenant_id (sent as X-Scope-OrgID).
+#   • Grafana Cloud             — set both tenant_id (stack id) and
+#                                 auth_token_file (API key — sent as Bearer).
+[notifier.loki]
+# endpoint = "https://logs-prod.grafana.net/loki/api/v1/push"
+# tenant_id = ""                                         # required for cloud/multi-tenant
+# auth_token_file = "/etc/selfdef/secrets/loki.token"    # mode 0600
+# source = "selfdef"
+endpoint = ""
+tenant_id = ""
+source = "selfdef"
+
+# SDD-008 Q-G — OpenSearch / Elasticsearch document-index channel.
+# Empty endpoint keeps the channel disabled. Must be https://. Each
+# event becomes one document indexed at <endpoint>/<index>/_doc.
+# auth_kind is one of "none" | "basic" | "apikey" — unknown values are
+# rejected at startup so operators see the misconfig.
+[notifier.opensearch]
+# endpoint = "https://opensearch.internal:9200"
+# index = "selfdef-events"
+# auth_kind = "none"                                     # none | basic | apikey
+# username = ""                                          # required for basic
+# auth_token_file = "/etc/selfdef/secrets/opensearch.auth"  # mode 0600 (password or apikey)
+# source = "selfdef"
+endpoint = ""
+index = ""
+auth_kind = "none"
+username = ""
+source = "selfdef"
+
+# SDD-008 Q-G — TheHive incident-management alert channel.
+# Empty endpoint keeps the channel disabled. Must be https://. The
+# Bearer API key in api_key_file IS the auth — store at mode 0600.
+# Each event POSTs to <endpoint>/api/v1/alert; TLP defaults to Amber
+# (SOC-internal posture).
+[notifier.thehive]
+# endpoint = "https://hive.internal:9000"
+# api_key_file = "/etc/selfdef/secrets/thehive.key"      # mode 0600
+# source = "selfdef"
+# alert_type = "selfdef"
+endpoint = ""
+source = "selfdef"
+alert_type = "selfdef"
+
+# SDD-008 D-8 — wall(1) session-attention channel.
+# Broadcasts to every logged-in TTY when a high-severity event fires.
+# Empty binary keeps the channel disabled. severity_floor defaults to
+# "high" — wall is system-wide, bothering every TTY on routine events
+# is wrong.
+#
+# Note: wall(1) does NOT filter per-user. For per-user opt-in
+# (allowlist of operator accounts), configure [notifier.write] instead
+# — that's the sibling per-user transport (D-024 realization of D-004).
+[notifier.wall]
+# binary = "/usr/bin/wall"
+# severity_floor = "high"                                # informational | low | medium | high | critical | fatal
+binary = ""
+severity_floor = "high"
+
+# SDD-008 D-024 — write(1) per-user session-attention channel.
+# Sibling of wall(1) for per-user TTY delivery: each name in `users`
+# receives a per-user `write(1) <name>` invocation. Empty binary OR
+# empty users keeps the channel disabled. Usernames must match
+# [a-zA-Z0-9._-]+ — shell metacharacters are rejected at config-load.
+[notifier.write]
+# binary = "/usr/bin/write"
+# severity_floor = "high"
+# users = ["alice", "bob"]
+binary = ""
+severity_floor = "high"
+users = []
+
+# SDD-008 D-3 — per-channel subscription filters (optional).
+# Missing entry = accept every event. severity_floor + event_kinds
+# both compose (event must pass BOTH to fire on this channel).
+# Example: route only high+ findings to PagerDuty, everything to Loki:
+#   [notifier.subscriptions.pagerduty]
+#   severity_floor = "high"
+#   event_kinds = ["security", "detection"]
+#
+#   [notifier.subscriptions.loki]
+#   severity_floor = "informational"
+
+# SDD-008 D-5a/b/c — persistent escalation engine.
+# When set, the daemon opens this SQLite file at startup, persists
+# outbound events in it, and runs the wake-task escalation loop.
+# When unset (default), the daemon falls back to the M4 fire-and-
+# forget chain (no persistence, no escalation). Used by both the
+# daemon and `selfdefctl notify {ack,forget,list}`.
+# escalations_path = "/var/lib/selfdef/escalations.sqlite"
+
+# SDD-008 D-6a — dispatcher operating mode.
+# enforce (default) = production; fires channels for real.
+# audit             = persists rows but does NOT call channel.send —
+#                     dry-run for verifying orchestrator wiring before
+#                     going live. Only consulted when escalations_path
+#                     is set; the M4 chain path always behaves as enforce.
+# mode = "enforce"
+
+# SDD-008 D-6b — named escalation profile.
+# auto       (default) = 2 attempts, 5-min ack window.
+# aggressive           = 3 attempts at 60s / 180s / 600s. Wake-the-on-call.
+# patient              = 4 attempts at 10/30/60/120 min. Low-noise channels.
+# Operators can also name a custom profile defined under
+# [notifier.profiles.<name>] (see below).
+# profile = "auto"
+
+# SDD-008 D-7 — panic floor (audit-mode bypass).
+# Severity threshold at or above which audit mode is bypassed
+# (channels fire for real even when mode = "audit"). The escape hatch
+# for "operator misconfiguration cannot leave a blocker un-notified".
+# One of: informational | low | medium | high | critical | fatal.
+# Unset = no floor (audit mode suppresses every severity).
+# panic_floor = "critical"
+
+# SDD-008 D-6c — operator-defined custom escalation profiles.
+# Active profile is picked by [notifier].profile. When that name
+# matches a key here, the daemon constructs a custom profile from
+# this configured rung sequence. Empty channels at a rung = "fire all
+# configured channels" (WUPHF semantics).
+# [notifier.profiles.weekend]
+# rungs = [
+#     { channels = ["ntfy"],   ack_window_secs = 1800 },
+#     { channels = ["signal"], ack_window_secs = 3600 },
+#     { channels = [],         ack_window_secs = 600  },  # WUPHF
+# ]
+
+# SDD-008 D-4 HTTP ack — optional click-link ack endpoint base URL.
+# When set, the dispatcher mints a per-event UUIDv7 token, appends it
+# to this base (<base>/<token>), and embeds the result in each
+# outbound payload's ack_link. Operators click the link → daemon's
+# GET /notify/ack/:token records the ack. Unset (default) = ack is
+# CLI-only via `selfdefctl notify ack <event-id>`.
+# Note: NO trailing slash; the dispatcher appends /<token> exactly.
+# ack_link_base = "https://selfdef.example.org/notify/ack"
+
 [responder]
 # Dry-run prints what would be done without executing. Flip to false once
 # you trust your action allowlist and have verified the scripts behave.
