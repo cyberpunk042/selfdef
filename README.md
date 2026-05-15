@@ -148,7 +148,21 @@ crates/                          One workspace, many focused crates.
   selfdef-store/                 SQLite (hot) + DuckDB (warm) storage.
   selfdef-correlator/            Sigma rule engine (opt-in signed-rule verification).
   selfdef-signing/               Minisign-compatible detached signature verification.
-  selfdef-notifier/              ntfy, signal-cli sinks.
+  selfdef-notifier/              Legacy notifier-chain ABI; channel implementations now live in selfdef-integration-* (M4 carve, SDD-008 D-2+).
+  selfdef-notifier-orchestrator/ `Channel` trait crate (SDD-008 D-2a) — every integration implements it.
+  selfdef-notifier-engine/       SDD-008 D-5 — persistent escalation engine (SQLite, WAL, wake task, profiles, mode, ack tokens).
+  selfdef-integration-ntfy/      Self-hosted push (SDD-008 D-2b).
+  selfdef-integration-signal/    Signal IM via `signal-cli` subprocess (SDD-008 D-2c).
+  selfdef-integration-slack/     Slack incoming-webhook (SDD-008 Q-C).
+  selfdef-integration-discord/   Discord webhook (2000-char cap with truncation).
+  selfdef-integration-smtp/      Email via STARTTLS / implicit-TLS / plain (SDD-008 D-7 Q-E).
+  selfdef-integration-twilio/    Twilio SMS, send-only (SDD-008 Q-D).
+  selfdef-integration-pagerduty/ PagerDuty Events API v2; OCSF 6 → PD 4 severity collapse (SDD-008 Q-G).
+  selfdef-integration-loki/      Grafana Loki push-API; three auth modes (SDD-008 Q-G).
+  selfdef-integration-opensearch/ OpenSearch / Elasticsearch document index; three auth modes (SDD-008 Q-G).
+  selfdef-integration-thehive/   TheHive alert API; TLP=Amber default (SDD-008 Q-G).
+  selfdef-integration-wall/      `wall(1)` broadcast TTY session-attention (SDD-008 D-8).
+  selfdef-integration-write/     `write(1)` per-user TTY session-attention (D-024 — sibling of wall).
   selfdef-responder/             Action runners (lockdown, snapshot, etc.).
   selfdef-api/                   Read-only HTTP API + /metrics + control verbs + token hot-rotation.
   selfdef-nats/                  Multi-host bridge over NATS / JetStream.
@@ -169,10 +183,13 @@ packaging/                       OS packaging artifacts (debian, systemd, apparm
   packaging/lib/module-lib.sh    Shared module-script library (SDD-006 v2).
 selfdef-ebpf/                    eBPF programs (aya). Separate build target.
 tests/                           Integration tests, replay corpora.
-docs/                            mdbook documentation + audit + SDD trees + dev runbooks.
-  docs/dev/                      Operator runbooks (signing, doctor, init, rbac, ...).
-  docs/sdd/                      Six Phase-1 SDDs (000-charter + 001..006); all implemented.
-  docs/review/                   Phase-1 audit (charter, inventory, ledger).
+docs/                            mdbook documentation + audit + SDD trees + dev/operator runbooks.
+  docs/dev/                      Contributor-facing runbooks (signing, doctor, init, rbac, integrations template, ...).
+  docs/operator/                 Operator-facing references (`channels.md` is the canonical 12-channel reference).
+  docs/sdd/                      Nine SDDs (000-charter + 001..008 implemented; 009 requirements-only stub).
+  docs/review/                   Audit programme — Phase 2..8 ledgers (Phase 8 deferred per cycle constraints).
+  docs/decisions.md              Operator-decisions audit log (D-001..D-024 — every `Q-X` row across SDDs answered or explicitly deferred).
+  docs/handoff/                  Cold-start signposts for cross-session continuity.
 ansible/                         Deployment playbooks.
 ```
 
