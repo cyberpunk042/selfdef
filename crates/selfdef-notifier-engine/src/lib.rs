@@ -102,11 +102,20 @@ pub struct PendingEscalation {
     pub rung_index: u32,
     /// Unix seconds when this rung's ack window expires.
     pub deadline_at: i64,
+    /// Event-kind name (OCSF class_uid name) from the originating
+    /// event, used by D-5e's per-channel subscription filter on
+    /// wake-task re-fire. `None` for rows enqueued before schema v2
+    /// shipped or for orchestrator-internal payloads.
+    pub event_kind: Option<String>,
 }
 
 /// The schema version this crate writes. Bumped whenever a schema
 /// migration ships.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// - v1 (D-5a, initial ship)
+/// - v2 (D-5e) — adds nullable `event_kind` column for the
+///   per-channel subscription filter that survives rung re-fires.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Persistent escalation engine backed by SQLite.
 pub struct EscalationEngine {
@@ -185,6 +194,19 @@ impl EscalationEngine {
             conn.pragma_update(None, "user_version", 1_i64)?;
             debug!("escalation schema migrated to v1");
         }
+        if current < 2 {
+            // D-5e: persistent event-kind metadata so the wake-task
+            // re-fire honours per-channel subscription filters.
+            // Nullable for rows enqueued before D-5e shipped; the
+            // dispatcher treats `event_kind = NULL` conservatively
+            // (drops the row from any subscription with a non-empty
+            // event_kinds filter).
+            conn.execute_batch(
+                "ALTER TABLE notification_escalations ADD COLUMN event_kind TEXT NULL;",
+            )?;
+            conn.pragma_update(None, "user_version", 2_i64)?;
+            debug!("escalation schema migrated to v2 (event_kind column)");
+        }
         Ok(())
     }
 
@@ -216,6 +238,7 @@ impl EscalationEngine {
             ack_link: payload.ack_link.clone(),
             deadline_at,
             created_at: now,
+            event_kind: payload.event_kind.clone(),
         };
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || -> Result<(), EngineError> {
@@ -224,9 +247,9 @@ impl EscalationEngine {
                 r#"
                 INSERT INTO notification_escalations (
                     event_id, payload_id, title, body, severity, ack_link,
-                    rung_index, deadline_at, acked_at, created_at
+                    rung_index, deadline_at, acked_at, created_at, event_kind
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, ?8)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, ?8, ?9)
                 ON CONFLICT(event_id) DO UPDATE SET
                     payload_id  = excluded.payload_id,
                     title       = excluded.title,
@@ -235,7 +258,8 @@ impl EscalationEngine {
                     ack_link    = excluded.ack_link,
                     rung_index  = 0,
                     deadline_at = excluded.deadline_at,
-                    acked_at    = NULL
+                    acked_at    = NULL,
+                    event_kind  = excluded.event_kind
                 "#,
                 params![
                     row.event_id,
@@ -246,6 +270,7 @@ impl EscalationEngine {
                     row.ack_link,
                     row.deadline_at,
                     row.created_at,
+                    row.event_kind,
                 ],
             )?;
             Ok(())
@@ -354,7 +379,7 @@ impl EscalationEngine {
                 let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
                 let mut stmt = guard.prepare(
                     "SELECT event_id, payload_id, title, body, severity, ack_link, \
-                            rung_index, deadline_at
+                            rung_index, deadline_at, event_kind
                      FROM notification_escalations
                      WHERE acked_at IS NULL AND deadline_at <= ?1
                      ORDER BY deadline_at ASC
@@ -370,6 +395,7 @@ impl EscalationEngine {
                         let ack_link: Option<String> = row.get(5)?;
                         let rung_index: u32 = row.get(6)?;
                         let deadline_at: i64 = row.get(7)?;
+                        let event_kind: Option<String> = row.get(8)?;
                         Ok((
                             event_id,
                             payload_id,
@@ -379,11 +405,12 @@ impl EscalationEngine {
                             ack_link,
                             rung_index,
                             deadline_at,
+                            event_kind,
                         ))
                     })?
                     .collect::<Result<Vec<_>, rusqlite::Error>>()?;
                 let mut out = Vec::with_capacity(mapped.len());
-                for (eid, pid, title, body, sev, ack, rung, deadline) in mapped {
+                for (eid, pid, title, body, sev, ack, rung, deadline, kind) in mapped {
                     let event_id = parse_uuid(&eid).map(EventId)?;
                     let payload_id = parse_uuid(&pid).map(PayloadId)?;
                     let severity = severity_from_u32(sev)?;
@@ -396,6 +423,7 @@ impl EscalationEngine {
                         ack_link: ack,
                         rung_index: rung,
                         deadline_at: deadline,
+                        event_kind: kind,
                     });
                 }
                 Ok(out)
@@ -430,6 +458,7 @@ struct StoredRow {
     ack_link: Option<String>,
     deadline_at: i64,
     created_at: i64,
+    event_kind: Option<String>,
 }
 
 fn parse_uuid(s: &str) -> Result<Uuid, rusqlite::Error> {
@@ -464,6 +493,7 @@ mod tests {
             body: format!("body for {title}"),
             severity,
             ack_link: Some(format!("https://selfdef.example/ack/{title}")),
+            event_kind: None,
         }
     }
 
@@ -604,6 +634,7 @@ mod tests {
             body: "no-id".into(),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let err = eng.enqueue(&p, 100, 0).await.expect_err("must reject");
         assert!(matches!(err, EngineError::PayloadMissingEventId));

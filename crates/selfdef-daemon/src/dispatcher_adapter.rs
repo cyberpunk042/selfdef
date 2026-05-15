@@ -68,6 +68,11 @@ impl Notifier for DispatcherAdapter {
             // once the daemon exposes the /notify/ack endpoint.
             // Today operators ack via `selfdefctl notify ack <id>`.
             ack_link: None,
+            // SDD-008 D-5e: populate event_kind from the originating
+            // event so per-channel subscription filters
+            // (`[notifier.subscriptions.<ch>].event_kinds`) apply
+            // on the engine path.
+            event_kind: Some(event.class_uid.name().to_string()),
         };
         let now = unix_now();
         // SDD-008 D-6b/D-6c: initial deadline derives from the

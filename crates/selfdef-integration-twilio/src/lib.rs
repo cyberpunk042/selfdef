@@ -493,6 +493,7 @@ mod tests {
             body: "b".into(),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let r = <TwilioNotifier as Channel>::send(&n, &p).await;
         assert!(matches!(r, Err(ChannelError::Other(_))));
@@ -547,6 +548,7 @@ mod tests {
             body: "b".into(),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let r = <TwilioNotifier as Channel>::send(&n, &p).await;
         match r {
@@ -582,6 +584,7 @@ mod tests {
             body: "b".into(),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let r = <TwilioNotifier as Channel>::send(&n, &p).await;
         assert!(r.is_ok(), "expected ok with all recipients succeeded");

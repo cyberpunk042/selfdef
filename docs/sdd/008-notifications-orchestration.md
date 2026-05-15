@@ -23,7 +23,8 @@ Per-D status:
 | D-2a | `selfdef-notifier-orchestrator` trait crate | shipped | #111 |
 | D-2b | `selfdef-integration-ntfy` carve | shipped | #112 |
 | D-2c | `selfdef-integration-signal` carve | shipped | #113 |
-| D-3 | Per-channel subscription model | shipped (engine path: see Phase 6 F-2031-009) | #115 + #117 |
+| D-3 | Per-channel subscription model | shipped (legacy chain path) | #115 + #117 |
+| D-5e | Subscription filter on engine path | shipped (closes Phase 6 F-2031-009) | this PR |
 | D-4 | `selfdefctl notify {ack,forget,list}` | shipped | #123 |
 | D-5a | `EscalationEngine` persistent layer | shipped | #118 |
 | D-5b | `PayloadDispatcher` façade | shipped | #119 |

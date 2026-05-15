@@ -16,8 +16,12 @@
 
 use std::sync::Arc;
 
-use selfdef_notifier_orchestrator::{Channel, ChannelError, EventId, Payload, SeverityId};
-use tracing::{info, warn};
+use std::collections::HashMap;
+
+use selfdef_notifier_orchestrator::{
+    Channel, ChannelError, EventId, Payload, SeverityId, Subscription,
+};
+use tracing::{debug, info, warn};
 
 use crate::{EngineError, EscalationEngine, Profile};
 
@@ -126,6 +130,13 @@ pub struct PayloadDispatcher {
     /// "operator misconfiguration cannot leave a blocker un-
     /// notified".
     panic_floor: Option<SeverityId>,
+    /// SDD-008 D-5e: per-channel subscription filter. Keyed by
+    /// `channel.name()` (e.g. `"discord"`); each value is the
+    /// operator-configured `[notifier.subscriptions.<channel>]`.
+    /// Channels without an entry run unfiltered (legacy default).
+    /// Empty map (the default after `new`) restores the pre-D-5e
+    /// behaviour where every channel sees every event.
+    subscriptions: HashMap<String, Subscription>,
 }
 
 impl std::fmt::Debug for PayloadDispatcher {
@@ -151,7 +162,32 @@ impl PayloadDispatcher {
             mode: Mode::default(),
             profile: Profile::default(),
             panic_floor: None,
+            subscriptions: HashMap::new(),
         }
+    }
+
+    /// SDD-008 D-5e: builder-style per-channel subscription map.
+    /// Keys are channel `name()` slugs (`"ntfy"`, `"slack"`, …).
+    /// Channels without a map entry run unfiltered (legacy default).
+    ///
+    /// The map is consulted by [`fire_channels_filtered`] before
+    /// each `channel.send`; a channel whose `Subscription::matches`
+    /// returns `false` is skipped just as if it weren't configured.
+    /// Audit mode (D-6a) and panic-floor (D-7) still take
+    /// precedence — a panic-floor event fires every channel even if
+    /// its subscription would otherwise filter it out, so an
+    /// operator misconfiguration cannot leave a blocker
+    /// un-notified.
+    #[must_use]
+    pub fn with_subscriptions(mut self, subscriptions: HashMap<String, Subscription>) -> Self {
+        self.subscriptions = subscriptions;
+        self
+    }
+
+    /// Current per-channel subscription map.
+    #[must_use]
+    pub fn subscriptions(&self) -> &HashMap<String, Subscription> {
+        &self.subscriptions
     }
 
     /// Builder-style: set the operating mode. Defaults to
@@ -338,10 +374,27 @@ impl PayloadDispatcher {
         self.fire_channels_filtered(payload, &[]).await
     }
 
-    /// SDD-008 D-6c: channel walk with a per-rung allow-list.
+    /// SDD-008 D-6c + D-5e: channel walk with a per-rung allow-list
+    /// AND a per-channel subscription filter.
     /// Empty `rung_filter` = "every configured channel" (the pre-
     /// D-6c default). Non-empty list = only channels whose `name()`
     /// matches an entry. First-success-wins among the matched set.
+    ///
+    /// D-5e adds: each channel that survives the `rung_filter` is
+    /// then checked against the dispatcher's `subscriptions` map. A
+    /// channel whose `Subscription::matches(payload)` returns
+    /// `false` is **skipped** (not counted as a failed attempt;
+    /// it's filtered out, not unreachable). Channels without a
+    /// subscription entry run unfiltered.
+    ///
+    /// Panic-floor bypass (D-7) takes precedence: when the
+    /// dispatcher caller has already decided to fire (because the
+    /// payload crosses the panic floor in audit mode, or because
+    /// we're in enforce mode), the subscription filter still
+    /// applies for routine routing — operators don't expect
+    /// `severity_floor = "critical"` to mean "even louder than
+    /// usual on Critical events". A panic-floor crossing widens
+    /// the *mode* (audit → fire-anyway), not the *channel set*.
     async fn fire_channels_filtered(
         &self,
         payload: &Payload,
@@ -349,8 +402,21 @@ impl PayloadDispatcher {
     ) -> DispatchOutcome {
         let mut last_err: Option<ChannelError> = None;
         let mut attempted = 0usize;
+        let mut filtered = 0usize;
         for channel in &self.channels {
             if !rung_filter.is_empty() && !rung_filter.iter().any(|n| n == channel.name()) {
+                continue;
+            }
+            if let Some(sub) = self.subscriptions.get(channel.name())
+                && !sub.matches(payload)
+            {
+                debug!(
+                    channel = channel.name(),
+                    severity = %payload.severity,
+                    event_kind = ?payload.event_kind,
+                    "dispatcher: channel filtered by subscription",
+                );
+                filtered += 1;
                 continue;
             }
             attempted += 1;
@@ -368,7 +434,11 @@ impl PayloadDispatcher {
             }
         }
         DispatchOutcome::PersistedButAllChannelsFailed(last_err.unwrap_or_else(|| {
-            if attempted == 0 && !rung_filter.is_empty() {
+            if attempted == 0 && filtered > 0 {
+                ChannelError::Other(format!(
+                    "dispatcher: every configured channel filtered out by [notifier.subscriptions.*] ({filtered} channels filtered)"
+                ))
+            } else if attempted == 0 && !rung_filter.is_empty() {
                 ChannelError::Other(format!(
                     "dispatcher: rung's channel allow-list {rung_filter:?} matched none of the configured channels"
                 ))
@@ -496,6 +566,7 @@ mod tests {
             body: format!("body for {title}"),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         }
     }
 
@@ -592,6 +663,7 @@ mod tests {
             body: "no-id".into(),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let outcome = dispatcher.submit(&payload, 100, 0).await;
         match outcome {
@@ -788,6 +860,7 @@ mod tests {
             body: format!("body for {title}"),
             severity,
             ack_link: None,
+            event_kind: None,
         }
     }
 
@@ -1044,5 +1117,185 @@ mod tests {
             1,
             "panic floor must bypass audit"
         );
+    }
+
+    // ---------------- SDD-008 D-5e: subscription filter ----------------
+
+    fn mk_payload_with_kind(
+        title: &str,
+        severity: SeverityId,
+        event_kind: Option<&str>,
+    ) -> Payload {
+        Payload {
+            id: PayloadId::new(),
+            event_id: Some(EventId::from(Uuid::now_v7())),
+            title: title.into(),
+            body: format!("body for {title}"),
+            severity,
+            ack_link: None,
+            event_kind: event_kind.map(str::to_owned),
+        }
+    }
+
+    #[tokio::test]
+    async fn subscription_severity_floor_filters_below() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_ntfy, ntfy_counter) = MockChannel::always_ok("ntfy");
+        let (ch_slack, slack_counter) = MockChannel::always_ok("slack");
+        let mut subs = HashMap::new();
+        subs.insert(
+            "slack".to_string(),
+            Subscription {
+                severity_floor: Some(SeverityId::Critical),
+                event_kinds: vec![],
+            },
+        );
+        let dispatcher =
+            PayloadDispatcher::new(eng, vec![ch_ntfy, ch_slack]).with_subscriptions(subs);
+        // Low-severity payload: slack filter drops it; ntfy
+        // (no filter entry) accepts; first-success-wins picks ntfy.
+        let payload = mk_payload_with_kind("low-sev", SeverityId::Low, None);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(matches!(outcome, DispatchOutcome::Delivered { ref channel } if channel == "ntfy"));
+        assert_eq!(ntfy_counter.load(Ordering::Acquire), 1);
+        assert_eq!(slack_counter.load(Ordering::Acquire), 0, "slack filtered");
+    }
+
+    #[tokio::test]
+    async fn subscription_event_kinds_filters_unmatched() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("discord");
+        let mut subs = HashMap::new();
+        subs.insert(
+            "discord".to_string(),
+            Subscription {
+                severity_floor: None,
+                event_kinds: vec!["security".into()],
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_subscriptions(subs);
+        let payload = mk_payload_with_kind("noisy", SeverityId::High, Some("Process Activity"));
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        // Only configured channel filtered out → AllChannelsFailed.
+        assert!(matches!(
+            outcome,
+            DispatchOutcome::PersistedButAllChannelsFailed(_),
+        ));
+        assert_eq!(counter.load(Ordering::Acquire), 0, "discord filtered");
+    }
+
+    #[tokio::test]
+    async fn subscription_pass_through_when_matches() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("discord");
+        let mut subs = HashMap::new();
+        subs.insert(
+            "discord".to_string(),
+            Subscription {
+                severity_floor: Some(SeverityId::High),
+                event_kinds: vec!["security".into(), "detection".into()],
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_subscriptions(subs);
+        let payload = mk_payload_with_kind("passes", SeverityId::High, Some("Security Finding"));
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(matches!(
+            outcome,
+            DispatchOutcome::Delivered { ref channel } if channel == "discord",
+        ));
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn subscription_no_entry_runs_unfiltered() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("ntfy");
+        // Map has an entry for slack only — ntfy is unfiltered.
+        let mut subs = HashMap::new();
+        subs.insert(
+            "slack".to_string(),
+            Subscription {
+                severity_floor: Some(SeverityId::Critical),
+                event_kinds: vec![],
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_subscriptions(subs);
+        let payload = mk_payload_with_kind("low", SeverityId::Informational, None);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(matches!(
+            outcome,
+            DispatchOutcome::Delivered { ref channel } if channel == "ntfy",
+        ));
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn subscription_empty_map_is_pre_d5e_behaviour() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("ntfy");
+        // Empty subscriptions map → pre-D-5e: every channel fires.
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_subscriptions(HashMap::new());
+        let payload = mk_payload_with_kind("any", SeverityId::Informational, None);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(matches!(
+            outcome,
+            DispatchOutcome::Delivered { ref channel } if channel == "ntfy",
+        ));
+        assert_eq!(counter.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn subscription_filter_skips_unmatched_keeps_first_match() {
+        // Three channels in order: ntfy (filtered out), slack
+        // (filter passes but channel errors), discord (no filter,
+        // succeeds). First-success-wins picks discord.
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_ntfy, ntfy_counter) = MockChannel::always_ok("ntfy");
+        let (ch_slack, slack_counter) =
+            MockChannel::always_fail("slack", ChannelError::Transport("slack down".into()));
+        let (ch_discord, discord_counter) = MockChannel::always_ok("discord");
+        let mut subs = HashMap::new();
+        subs.insert(
+            "ntfy".to_string(),
+            Subscription {
+                severity_floor: Some(SeverityId::Critical),
+                event_kinds: vec![],
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch_ntfy, ch_slack, ch_discord])
+            .with_subscriptions(subs);
+        let payload = mk_payload_with_kind("med", SeverityId::Medium, None);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        assert!(matches!(
+            outcome,
+            DispatchOutcome::Delivered { ref channel } if channel == "discord",
+        ));
+        assert_eq!(ntfy_counter.load(Ordering::Acquire), 0, "ntfy filtered");
+        assert_eq!(slack_counter.load(Ordering::Acquire), 1, "slack attempted");
+        assert_eq!(discord_counter.load(Ordering::Acquire), 1, "discord won");
+    }
+
+    #[tokio::test]
+    async fn subscription_all_filtered_returns_specific_error() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("ntfy");
+        let mut subs = HashMap::new();
+        subs.insert(
+            "ntfy".to_string(),
+            Subscription {
+                severity_floor: Some(SeverityId::Critical),
+                event_kinds: vec![],
+            },
+        );
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_subscriptions(subs);
+        let payload = mk_payload_with_kind("low", SeverityId::Low, None);
+        let outcome = dispatcher.dispatch_payload(&payload).await;
+        match outcome {
+            DispatchOutcome::PersistedButAllChannelsFailed(ChannelError::Other(msg)) => {
+                assert!(msg.contains("filtered"), "got: {msg}");
+            }
+            other => panic!("expected filtered Other error, got {other:?}"),
+        }
+        assert_eq!(counter.load(Ordering::Acquire), 0);
     }
 }

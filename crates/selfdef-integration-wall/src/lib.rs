@@ -331,6 +331,7 @@ mod tests {
             body: "body".into(),
             severity,
             ack_link: None,
+            event_kind: None,
         }
     }
 

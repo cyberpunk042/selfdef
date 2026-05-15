@@ -298,6 +298,7 @@ mod tests {
             body: "body line\nmore body\n".into(),
             severity: SeverityId::Critical,
             ack_link: Some("https://selfdef.example/ack/abc".into()),
+            event_kind: None,
         }
     }
 

@@ -214,6 +214,7 @@ mod tests {
             body: format!("body for {title}"),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         rt.block_on(engine.enqueue(&payload, 100, 0)).unwrap();
         event_id
