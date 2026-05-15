@@ -304,6 +304,21 @@ enum NotifyAction {
         #[arg(long)]
         json: bool,
     },
+    /// Pull the next wake-task action forward to "right now" by
+    /// setting the row's `deadline_at = now`. The daemon's wake task
+    /// then fires the current rung's channels at its next poll
+    /// (typically within 60s). Use when an operator wants to re-fire
+    /// a notification without waiting for the rung's natural ack
+    /// window — e.g. testing a freshly-configured channel, or
+    /// believing the previous delivery failed silently. Does NOT
+    /// reset rung state or bypass profile limits; the row's
+    /// rung_index keeps marching forward exactly as the wake task
+    /// would have advanced it at the natural deadline. Idempotent;
+    /// re-sending an already-acked event reports "noop" and exits 0.
+    Resend {
+        /// Event ID (UUID) to resend.
+        event_id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -566,6 +581,11 @@ async fn main() -> Result<()> {
             action: NotifyAction::List { limit, json },
         } => {
             notify::list(&cfg, limit, json)?;
+        }
+        Command::Notify {
+            action: NotifyAction::Resend { event_id },
+        } => {
+            notify::resend(&cfg, &event_id)?;
         }
         Command::Keys {
             action: KeysAction::Verify { target, public_key },

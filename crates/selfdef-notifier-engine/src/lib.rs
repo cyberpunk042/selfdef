@@ -493,6 +493,35 @@ impl EscalationEngine {
         Ok(changed > 0)
     }
 
+    /// Make an unacked row immediately due. Sets `deadline_at = now`
+    /// on the row keyed by `event_id` ONLY when `acked_at IS NULL`.
+    /// Returns `Ok(true)` if a row was updated, `Ok(false)` if the
+    /// event was unknown or already acked.
+    ///
+    /// Operator-facing escape hatch (`selfdefctl notify resend
+    /// <event_id>`): pulls the next wake-task action forward to
+    /// "right now" instead of waiting for the rung's natural deadline.
+    /// What the wake task then does is whatever it would have done at
+    /// the natural deadline — fire the current rung's channels and
+    /// advance, or close if the row is already at the profile's max
+    /// rung. Resend does NOT reset the rung to 0 or bypass the rung
+    /// state machine; it only collapses the wait.
+    pub async fn reschedule_now(&self, event_id: EventId, now: i64) -> Result<bool, EngineError> {
+        let event_id = event_id.0.to_string();
+        let conn = Arc::clone(&self.conn);
+        let changed = tokio::task::spawn_blocking(move || -> Result<usize, EngineError> {
+            let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
+            Ok(guard.execute(
+                "UPDATE notification_escalations
+                   SET deadline_at = ?1
+                 WHERE event_id = ?2 AND acked_at IS NULL",
+                params![now, event_id],
+            )?)
+        })
+        .await??;
+        Ok(changed > 0)
+    }
+
     /// Advance a row to the next escalation rung. Sets
     /// `rung_index = new_rung` and `deadline_at = new_deadline` for
     /// the row keyed by `event_id`, ONLY when `acked_at IS NULL` (an
