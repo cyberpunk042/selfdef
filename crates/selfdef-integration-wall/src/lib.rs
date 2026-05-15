@@ -129,15 +129,25 @@ impl WallChannel {
             .spawn()
             .map_err(|e| WallDeliveryError::Spawn(e.to_string()))?;
         if let Some(stdin) = child.stdin.as_mut() {
-            stdin
-                .write_all(message.as_bytes())
-                .await
-                .map_err(|e| WallDeliveryError::WriteStdin(e.to_string()))?;
+            // EPIPE on write means the child has already exited (or
+            // closed its stdin) before we finished delivering the
+            // message. Don't fail eagerly — the wait below will
+            // surface the child's actual exit status, which is what
+            // callers act on. A real wall(1) with no logged-in TTYs
+            // can plausibly hit this path; in tests, fast stand-ins
+            // like /bin/true and /bin/false exhibit the same race.
+            if let Err(e) = stdin.write_all(message.as_bytes()).await
+                && e.kind() != std::io::ErrorKind::BrokenPipe
+            {
+                return Err(WallDeliveryError::WriteStdin(e.to_string()));
+            }
             // Drop stdin so wall sees EOF and starts broadcasting.
-            stdin
-                .shutdown()
-                .await
-                .map_err(|e| WallDeliveryError::WriteStdin(e.to_string()))?;
+            // Same EPIPE tolerance as the write above.
+            if let Err(e) = stdin.shutdown().await
+                && e.kind() != std::io::ErrorKind::BrokenPipe
+            {
+                return Err(WallDeliveryError::WriteStdin(e.to_string()));
+            }
         }
         let output = child
             .wait_with_output()

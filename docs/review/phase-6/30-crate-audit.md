@@ -273,8 +273,8 @@ no real `signal-cli` is required.
 
 ### `selfdef-integration-wall` (483 LOC, 16 tests)
 
-- `WallNotifier { enabled: bool, binary: PathBuf }`. No
-  secrets; derived `Debug` is fine.
+- `WallChannel { binary: PathBuf, severity_floor: SeverityId
+  }`. No secrets; derived `Debug` is fine.
 - `from_config` accepts an optional binary path; default
   `/usr/bin/wall`.
 - Spawns `tokio::process::Command` with stdin piped — message
@@ -285,7 +285,52 @@ no real `signal-cli` is required.
   the wall(1) surface required exhaustive coverage of the
   pipe-stdin / no-binary / non-zero-exit / kill-signal paths.
 
+**Raises F-2031-006 (important, closed in this PR):** the
+`broadcast()` stdin path fails eagerly on EPIPE if the child
+exits before reading stdin. Manifested as a flaky CI failure
+on `ubuntu-latest` (test `at_or_above_floor_spawns_and_uses_
+exit_status` saw `Broken pipe (os error 32)` writing to
+`/bin/true`'s closed stdin). Same race latent in
+`nonzero_exit_surfaces_as_remote_error_via_channel` for
+`/bin/false`. **Closed in this PR** by tolerating EPIPE on
+both `write_all` and `shutdown` in `broadcast()` and falling
+through to the wait-on-exit path. Stress-tested 15× green;
+matches the production-correct semantics that a real wall(1)
+on a TTY-less host can also exit before consuming stdin.
+
 ## Findings
+
+### F-2031-006 (important, closed-in-place)
+
+`selfdef-integration-wall::broadcast()` failed eagerly on
+EPIPE when the child process exited before the parent
+finished writing stdin. Surfaced as a flaky CI failure on
+`ubuntu-latest` (caught after PR #133's first push; the
+prior wall PR #128 had latent flakiness that hadn't yet
+fired on the cycle's CI runs). Two tests exposed it
+(`at_or_above_floor_spawns_and_uses_exit_status` against
+`/bin/true`; `nonzero_exit_surfaces_as_remote_error_via_
+channel` against `/bin/false`). The race is scheduler-
+dependent: on faster runners the child exits before the
+parent's `write_all` resolves; the syscall returns EPIPE
+and `WriteStdin` swallows the more-informative exit-status
+that the wait-path would have surfaced.
+
+Marked **important** because:
+
+- CI-blocking when it fires.
+- Production-relevant: a real `wall(1)` invocation on a host
+  with zero logged-in TTYs (cron context, headless CI) may
+  exit before consuming stdin, which under the pre-fix
+  semantics surfaces as a `Transport`-class error instead of
+  the more-informative `Subprocess { status: 0 }` Ok-path.
+
+**Closed in this PR** by tolerating
+`io::ErrorKind::BrokenPipe` on both `write_all` and
+`shutdown` and falling through to `wait_with_output`. Other
+IO error kinds (permission denied, OS-level resource
+exhaustion) still escalate as before. Stress-tested 15×
+green locally.
 
 ### F-2031-002: closed-in-place
 
@@ -344,11 +389,13 @@ posture**.
 - Trait crate (`selfdef-notifier-orchestrator`): **clean**.
 - Engine crate (`selfdef-notifier-engine`, 4 modules):
   **clean** at the shape level (module-level audit follows).
-- 7 channel integration crates: **clean** except for ntfy's
-  derived `Debug` (F-2031-005, nice).
-- F-2031-002 (test-coverage parity) **closed in this PR** —
-  ntfy + signal at 7 tests each, wiremock + coreutils
-  stand-ins exercise the `post()` / `signal-cli` paths.
+- 7 channel integration crates: **clean** after this PR
+  closes F-2031-002 (ntfy + signal coverage), F-2031-005
+  (ntfy Debug elision), and F-2031-006 (wall EPIPE-on-stdin
+  flake). The flake on F-2031-006 was caught by CI on this
+  PR; the underlying defect predates the PR (introduced in
+  PR #128's D-8 work) and was not exercised by previous
+  CI runs.
 
 ## Hand-off
 

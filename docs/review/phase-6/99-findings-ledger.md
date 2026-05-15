@@ -35,6 +35,7 @@ design-shaped.
 | F-2031-003 | nice | supply-chain (deny.toml) | `0BSD` was added to `deny.toml`'s `licenses.allow` to permit `quoted_printable` 0.5.2 (transitive via `lettre`). Documented in-line, but should be re-audited end-to-end. | Phase 6 security explorer. |
 | F-2031-004 | demoted | tooling (rustfmt) | PR #127 needed a `chore(fmt)` fix-up commit (`3b80a85`) to satisfy CI's rustfmt 1.88.0 chain-collapse on the panic-floor parsing path. Local rustfmt produced different output. Single observed incident; CI caught it before merge. | None — re-flag if a second occurrence appears in a future cycle. |
 | F-2031-005 | nice (closed) | crate (ntfy) | `NtfyNotifier` derived `Debug`, which would render the bearer token verbatim in any `tracing` log. Out of step with the secret-elision posture of slack/discord/twilio/smtp. | **Closed by Phase 6 crate explorer** — custom `Debug` impl elides token to `<redacted>`; 2 tests pin elision shape. |
+| F-2031-006 | **important** (closed) | crate (wall) | `selfdef-integration-wall::broadcast()` failed eagerly on EPIPE when the child exited before reading stdin. Manifested as a flaky CI failure on `ubuntu-latest`; also a latent production defect for wall(1) on TTY-less hosts. | **Closed by Phase 6 crate explorer** — tolerate `BrokenPipe` on both `write_all` and `shutdown`, fall through to wait-on-exit. Stress-tested 15× green. |
 
 ## Status
 
@@ -70,7 +71,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | **3 nice + 1 demoted** | **2 nice (both closed)** | *pending* | *pending* | *pending* | *pending* | *pending* |
+| **Phase 6** | **3 nice + 1 demoted** | **1 important + 2 nice (all closed)** | *pending* | *pending* | *pending* | *pending* | *pending* |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an
