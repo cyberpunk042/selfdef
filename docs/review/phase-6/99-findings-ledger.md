@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **ready-to-wrap** — all 7 explorers landed (inventory, recent-PRs, crate, module, integration, docs, tests, security).
+> Status: **wrapped** — all 7 explorers complete, 16 findings raised, 12 closed in-place, 2 SDD-debt open with tracked closure PRs, 2 demoted.
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -49,30 +49,119 @@ design-shaped.
 
 ## Status
 
-- Charter (PR #131) landed.
-- This PR ships `10-inventory.md` + `20-recent-prs-audit.md` —
-  the inventory of the 9 new crates / 22 PRs / 159 new tests
-  / 13 new TOML surface elements, and the PR-by-PR audit
-  raising 3 nice findings + 1 demoted observation.
-- **Security explorer landed** (this PR ships
-  `80-security-audit.md`), closes F-2031-003 + F-2031-015
-  + F-2031-016 in-place. **All 7 Phase 6 explorers
-  complete.** A separate Phase 6 wrap PR will mark this
-  ledger `wrapped` and document the cumulative trajectory.
-- 16 findings total: 12 closed in-place, 2 SDD-debt open
-  (F-2031-009 D-5e + F-2031-013 SDD-005 follow-up), 1
-  demoted (F-2031-014), 1 historic (F-2031-004 demoted
-  tooling).
-- **3 important findings** caught + closed by Phase 6:
-  F-2031-006 (wall EPIPE production fix), F-2031-007
-  (DispatcherAdapter profile-rung-0 timing bug), F-2031-015
-  (ntfy silent-degrades-to-unauth).
-- **1 important SDD-debt** still open with stopgaps both
-  sides: F-2031-009 (subscription filter bypass on engine
-  path) — daemon startup-warn + STARTER_CONFIG caveat
-  landed; principled fix tracked under SDD-008 D-5e PR.
-- Phase 6 closes when every important / blocker has either a
-  "closed by <PR>" back-reference or a tracked SDD.
+**WRAPPED**. The Phase 6 closure-cycle audit programme has
+completed all seven explorers over the 22-PR SDD-008
+notifications-orchestration cycle (`#109`..`#130`,
+charter `#131`, explorers `#132`..`#138`, wrap this PR).
+
+### Closure summary
+
+- **16 findings raised** (F-2031-001 through F-2031-016).
+- **12 closed in-place** during the audit cycle:
+  - F-2031-001 (PR-label collision → SDD-008 appendix)
+  - F-2031-002 (ntfy + signal test-coverage parity)
+  - F-2031-003 (0BSD allow-list re-audit, no code change)
+  - F-2031-005 (ntfy Debug elision)
+  - F-2031-006 (wall EPIPE production fix) — **important**
+  - F-2031-007 (DispatcherAdapter rung-0 timing) — **important**
+  - F-2031-008 (wake_task doc drift)
+  - F-2031-010 (custom-profile ack_window_secs warn)
+  - F-2031-011 (SDD-008 implementation status + Q-letter revisions)
+  - F-2031-012 (init.rs STARTER_CONFIG subscription caveat)
+  - F-2031-015 (ntfy silent-degrades-to-unauth) — **important**
+  - F-2031-016 (escalations SQLite data-at-rest in SECURITY.md)
+- **2 SDD-debt open** with tracked closure PRs outside the
+  audit programme:
+  - F-2031-009 — subscription filter bypass on engine path.
+    Stopgaps shipped daemon-side (PR #135) +
+    STARTER_CONFIG-side (PR #136). Principled fix:
+    `feat(sdd-008): D-5e — wire SubscriptionConfig through
+    PayloadDispatcher` PR.
+  - F-2031-013 — Category-2 daemon-pipeline-test gap for
+    the engine path. Closure under SDD-005's
+    implementation-PR pattern (new `m_notify_engine.rs` +
+    `EngineHarness` helper using `tokio::time::pause()`).
+- **2 demoted** on cross-check:
+  - F-2031-004 (rustfmt 1.88.0 fmt-drift, single incident).
+  - F-2031-014 (50ms cancel-propagation sleep, not a
+    pipeline-determinism concern).
+
+### Important findings — Phase 6's catch list
+
+Phase 6 surfaced **3 important production-relevant defects**
+on the SDD-008 surface, all closed in-place:
+
+1. **F-2031-006** (`selfdef-integration-wall`): `broadcast()`
+   failed eagerly on EPIPE when wall(1) exited before reading
+   stdin. Caught initially as a flaky `ubuntu-latest` CI
+   failure; the deeper diagnosis revealed a latent production
+   defect for any TTY-less host. Fix: tolerate
+   `BrokenPipe` on both `write_all` and `shutdown`,
+   fall through to the wait-on-exit path. Stress-tested
+   15× green.
+
+2. **F-2031-007** (`selfdef-daemon::dispatcher_adapter`):
+   initial submit deadline used the legacy
+   `DEFAULT_RUNG_INTERVAL_SECS = 300` constant instead of
+   `profile.ack_window_for(0)`. Operators selecting the
+   `aggressive` profile (rung 0 = 60s) saw the first rung-
+   advance fire 5 minutes later instead of 60 seconds —
+   exact opposite of the profile's stated purpose. Fix:
+   adapter reads the profile's rung-0 window; test pins the
+   `Profile::aggressive` deadline to ~now+60s.
+
+3. **F-2031-015** (`selfdef-integration-ntfy`): `from_config`
+   silently swallowed IO errors on the bearer-token file
+   read via `.ok()`, producing an unauthenticated client
+   when the operator configured a token. The 4 other
+   credential-bearing channels propagate the IO error;
+   ntfy was the outlier. Fix: explicit `match` with
+   `warn!` on unreadable + empty-after-trim; 5 new tests.
+
+This is the audit programme's **first phase since Phase 3 to
+surface production-relevant code bugs** — proportionate to
+the 9-crate, 159-test, persistent-storage, outbound-credential
+nature of the SDD-008 cycle, and a sharp validation of the
+"don't carry forward Phase 5's 0-finding prediction" stance
+the charter took.
+
+### Cumulative trajectory (Phases 2–6, summary)
+
+| Phase | Cycle audited | Findings | Important | Closed | SDD-debt |
+| --- | --- | --- | --- | --- | --- |
+| Phase 2 | Phase 1 closure cycle | 64 | 3 | 3 imp + 60 nice | 1 |
+| Phase 3 | Phase 2 closure cycle | 39 | 2 | 2 imp + 15 nice | 1 |
+| Phase 4 | Phase 3 closure cycle | 9 | 0 | 5 nice | 0 |
+| Phase 5 | Phase 4 closure cycle | 0 | 0 | 0 | 0 |
+| **Phase 6** | **SDD-008 cycle (22 PRs / 9 crates)** | **16** | **3** | **12** | **2** |
+
+The convergence trajectory (64 → 39 → 9 → 0) was an artifact
+of the cycles' shapes, not the programme's diminishing
+utility. Phase 6 audits an opposite-shaped cycle (large
+feature-stack vs. closure-doc) and surfaces a finding rate
++ severity proportionate to its surface area.
+
+### Open SDD-debt — closure path
+
+The two open findings close outside the Phase 6 audit
+programme:
+
+- **F-2031-009 → SDD-008 D-5e PR**. Wires the operator's
+  `[notifier.subscriptions.<channel>]` filter through the
+  engine path's dispatcher. Currently shipped: daemon
+  startup-warn (PR #135) + STARTER_CONFIG inline caveat
+  (PR #136), so operators discover the gap at runtime
+  AND at config-write time.
+- **F-2031-013 → SDD-005 implementation PR**. Adds the
+  missing Category-2 (daemon-pipeline) tests for the engine
+  path. Pattern follows SDD-005's D-3 ("Implementation PR
+  breakdown") — new `crates/selfdef-daemon/tests/m_notify_
+  engine.rs` plus a reusable `EngineHarness` helper in
+  `crates/selfdef-daemon/tests/common/` for future SDD-008
+  follow-ups to inherit.
+
+Phase 7 (when material new code lands) picks up the SDD-008
+D-5e + SDD-005 implementation PRs in its recent-PRs explorer.
 
 ## Trajectory snapshot
 
@@ -87,10 +176,12 @@ For context — full closure-cycle convergence to date:
 | **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | **1 nice (SDD-debt) + 1 demoted** | **1 important + 2 nice (all closed)** |
 
 Phase 5's zero-finding result reflected its audit surface (a
-documentation-heavy closure cycle); Phase 6 audits an
+documentation-heavy closure cycle); Phase 6 audited an
 opposite-shaped cycle (9 new crates, persistent storage,
-outbound credentials, background tasks). Carry-forward of the
-0-finding prediction would be unsound.
+outbound credentials, background tasks). The 16-finding
+outcome is proportionate to the surface area; the
+trajectory's apparent "convergence" was an artifact of cycle
+shape, not programme utility.
 
 ## Phase 1 / Phase 2 / Phase 3 / Phase 4 / Phase 5 references
 
