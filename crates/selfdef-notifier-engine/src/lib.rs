@@ -734,6 +734,130 @@ mod tests {
         assert_eq!(due[0].ack_token, "explicit-token");
     }
 
+    // Phase 7 F-2032-006 close: simulate an old-schema daemon
+    // upgrading. We hand-write a v1 schema (just the original
+    // notification_escalations table + index) with user_version=1,
+    // then open the engine and let it walk through the v2 + v3
+    // migrations. Verifies the post-Phase-7 transactional wrap is
+    // safe across the full upgrade path, not just the fresh-install
+    // path that every other migration test exercises.
+    #[tokio::test]
+    async fn migration_upgrades_v1_database_to_current_schema() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        // Hand-craft a v1-shaped file: matches the
+        // exact SQL the v1 migration block runs, then sets
+        // user_version = 1 (skipping v2 + v3). No rows yet.
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE notification_escalations (
+                    event_id    TEXT PRIMARY KEY,
+                    payload_id  TEXT NOT NULL,
+                    title       TEXT NOT NULL,
+                    body        TEXT NOT NULL,
+                    severity    INTEGER NOT NULL,
+                    ack_link    TEXT NULL,
+                    rung_index  INTEGER NOT NULL DEFAULT 0,
+                    deadline_at INTEGER NOT NULL,
+                    acked_at    INTEGER NULL,
+                    created_at  INTEGER NOT NULL
+                );
+                CREATE INDEX idx_escalations_deadline
+                  ON notification_escalations(deadline_at)
+                  WHERE acked_at IS NULL;
+                "#,
+            )
+            .unwrap();
+            conn.pragma_update(None, "user_version", 1_i64).unwrap();
+            // Insert a row directly so we can verify back-fill
+            // happens on the v2/v3 upgrade. Use INSERT with the
+            // v1 column set — the new event_kind + ack_token
+            // columns don't exist yet.
+            conn.execute(
+                "INSERT INTO notification_escalations (
+                    event_id, payload_id, title, body, severity,
+                    ack_link, rung_index, deadline_at, acked_at, created_at
+                ) VALUES (?1, ?2, 'old-row', 'old-body', 4, NULL, 0, 100, NULL, 0)",
+                params![
+                    "00000000-0000-0000-0000-000000000001",
+                    "01234567-89ab-cdef-0123-456789abcdef"
+                ],
+            )
+            .unwrap();
+        }
+
+        // Open the engine — migrate() walks v1 → v2 → v3 in two
+        // separate transactions; the v3 block back-fills the
+        // existing row with a freshly-minted ack_token.
+        let eng = EscalationEngine::open(&path).expect("upgrade open");
+
+        // Row survived the migration, and was back-filled with a
+        // 32-char hex token (the migration's
+        // `lower(hex(randomblob(16)))` shape).
+        let due = eng.take_due(1_000, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].title, "old-row");
+        assert_eq!(due[0].ack_token.len(), 32, "got: {}", due[0].ack_token);
+        assert!(due[0].ack_token.chars().all(|c| c.is_ascii_hexdigit()));
+        assert!(due[0].event_kind.is_none(), "v1 row has no event_kind");
+
+        // Second open is a no-op (idempotent at v3).
+        drop(eng);
+        let _eng = EscalationEngine::open(&path).expect("re-open at v3");
+    }
+
+    #[tokio::test]
+    async fn migration_upgrades_v2_database_to_v3() {
+        // Same shape as the v1 upgrade test, but starts at v2 (the
+        // event_kind column already exists). Verifies the v3-only
+        // back-fill path runs cleanly when the v2 step is skipped.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                r#"
+                CREATE TABLE notification_escalations (
+                    event_id    TEXT PRIMARY KEY,
+                    payload_id  TEXT NOT NULL,
+                    title       TEXT NOT NULL,
+                    body        TEXT NOT NULL,
+                    severity    INTEGER NOT NULL,
+                    ack_link    TEXT NULL,
+                    rung_index  INTEGER NOT NULL DEFAULT 0,
+                    deadline_at INTEGER NOT NULL,
+                    acked_at    INTEGER NULL,
+                    created_at  INTEGER NOT NULL,
+                    event_kind  TEXT NULL
+                );
+                CREATE INDEX idx_escalations_deadline
+                  ON notification_escalations(deadline_at)
+                  WHERE acked_at IS NULL;
+                "#,
+            )
+            .unwrap();
+            conn.pragma_update(None, "user_version", 2_i64).unwrap();
+            conn.execute(
+                "INSERT INTO notification_escalations (
+                    event_id, payload_id, title, body, severity,
+                    ack_link, rung_index, deadline_at, acked_at, created_at, event_kind
+                ) VALUES (?1, ?2, 'v2-row', 'body', 3, NULL, 0, 200, NULL, 0, 'Process Activity')",
+                params![
+                    "00000000-0000-0000-0000-000000000002",
+                    "11111111-1111-1111-1111-111111111111"
+                ],
+            )
+            .unwrap();
+        }
+        let eng = EscalationEngine::open(&path).expect("v2 → v3 open");
+        let due = eng.take_due(1_000, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].event_kind.as_deref(), Some("Process Activity"));
+        assert_eq!(due[0].ack_token.len(), 32);
+    }
+
     #[tokio::test]
     async fn enqueue_then_take_due_returns_row() {
         let (eng, _dir) = fresh_engine().await;

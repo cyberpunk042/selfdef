@@ -1,6 +1,6 @@
 # Phase 7 — findings ledger
 
-> Status: **open** — 6 explorers landed; 2 explorers pending.
+> Status: **open** — 7 explorers landed; 1 explorer pending (security).
 > Vintage prefix: **F-2032-NNN**
 > Last updated: 2026-05-15
 
@@ -36,19 +36,18 @@ design-shaped.
 | F-2032-003 | nice (closed) | docs (SDD-008 PR labels) | The 4 Q-G commit titles use `feat(sdd-008): Q-G — <service> integration`. SDD-008's `Q-G` is an open-question identifier (not a design point); casual readers might confuse "Q-G" for D-N-shaped naming. Extends Phase 6's F-2031-001 family of "PR-label disambiguation" concerns. | **Closed by Phase 7 docs explorer** — SDD-008 PR-labels appendix extended with a "Post-Phase-6 cycle commits" section covering PRs #140-#146 + a shorthand convention (`D-N` / `Q-X` / no prefix). Impl-status table normalized with actual PR numbers. |
 | F-2032-004 | nice (closed) | crate (pagerduty) | PagerDuty's `from_config` duplicated the `Client::builder().timeout(10s)` block inline instead of routing through `Self::new` like the other 3 Q-G adapters do. Drift on a contract that's invisible until a future client-config change has to be applied twice. | **Closed by Phase 7 crate explorer** — `from_config` now returns `Self::new(routing_key, source).with_endpoint(endpoint)`. 12 existing tests still pass. |
 | F-2032-005 | **important** (closed) | module (dispatcher_adapter + engine) | DispatcherAdapter mints a fresh UUIDv7 ack_token on every `notify()` call; engine's `enqueue` ON-CONFLICT-preserve clause keeps the OLD token. On re-submits of the same event_id, the channel fires with URL containing T2 but the engine has T1 → click → 404 silently. Operator-visible correctness defect on D-4 HTTP ack. | **Closed by Phase 7 module explorer** — new `EscalationEngine::lookup_or_mint_token` API; adapter calls it before constructing payload so the URL bytes match the engine's canonical state. 4 new tests pin the contract. |
+| F-2032-006 | nice (closed) | tests (engine migration upgrades) | The existing migration tests (`migration_idempotent_when_re_opening_at_current_version`, `migration_handles_existing_rows_during_v3_backfill`, `open_creates_empty_engine`) all start from a **fresh DB**. The v0 → v1 → v2 → v3 sequence runs on every fresh test, but no test exercises the operator-side upgrade scenario: a v1 or v2 schema on disk getting upgraded to v3 across an entire daemon-version bump. F-2032-001's transactional-wrap fix's correctness on upgrade paths was reasoning-pinned, not test-pinned. | **Closed by Phase 7 tests explorer** — 2 new tests hand-write v1- and v2-shaped DBs (raw SQL + manual `user_version`) + insert pre-existing rows, then re-open the engine and verify v2 + v3 migrations run cleanly + back-fill rows with 32-char hex tokens. |
 
 ## Status
 
-- Docs explorer landed; closes F-2032-003 in-place
-  (SDD-008 PR-labels appendix extended; impl-status PRs
-  normalized). Integration explorer closed F-2032-001
-  (schema migrations transactional). Module explorer closed
-  F-2032-005 (D-4 token-stability). Crate explorer closed
-  F-2032-004 (PagerDuty client-builder uniformity).
-- Two explorers remain (ship in follow-up PRs):
-  1. `70-tests-audit.md` — `EngineHarness` pattern, Q-G test
-     count variance, schema-migration test coverage gap.
-  2. `80-security-audit.md` — new unauth `/notify/ack/:token` route, 4 new credential
+- Tests explorer landed; closes F-2032-006 in-place
+  (migration upgrade-path test coverage; 2 new tests).
+  Docs explorer closed F-2032-003. Integration explorer
+  closed F-2032-001. Module explorer closed F-2032-005.
+  Crate explorer closed F-2032-004.
+- One explorer remains (ships in follow-up PR):
+  1. `80-security-audit.md` — close F-2032-002 (token-IS-auth
+     audit on new unauth `/notify/ack/:token` route); 4 new credential
      surfaces.
 - Phase 7 closes when every important / blocker has either a
   "closed by <PR>" back-reference or a tracked SDD.
@@ -64,7 +63,7 @@ For context — full closure-cycle convergence to date:
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Phase 6 | 3 nice + 1 demoted | 1 important + 2 nice | 2 important + 1 nice + 1 SDD-debt | 1 nice + stopgap | 3 nice | 1 SDD-debt + 1 demoted | 1 important + 2 nice |
-| **Phase 7** | **2 nice + 1 referral** | **1 nice (closed)** | **1 important (closed)** | **1 nice (closed)** | **1 nice (closed)** | *pending* | *pending* |
+| **Phase 7** | **2 nice + 1 referral** | **1 nice (closed)** | **1 important (closed)** | **1 nice (closed)** | **1 nice (closed)** | **1 nice (closed)** | *pending* |
 
 Phase 6 audited a 22-PR / 9-new-crate feature cycle and
 caught 3 important production-relevant defects; Phase 7
