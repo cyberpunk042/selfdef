@@ -123,18 +123,28 @@ Integration crates do **not** depend on `selfdef-daemon`,
 `selfdef-config`, or any module under `modules/`. That keeps
 them swappable and individually testable.
 
-Concrete catalog (current + planned per SDD-008 first-ship):
+Concrete catalog (all shipped — SDD-008 complete except D-9 dashboard):
 
 ```
-crates/selfdef-integration-ntfy       (current NtfyNotifier, refactor planned)
-crates/selfdef-integration-signal     (current SignalCliNotifier, refactor planned)
-crates/selfdef-integration-smtp       (first email channel — SDD-008 D-7 Q-E)
-crates/selfdef-integration-twilio     (future — SDD-008 Q-D)
-crates/selfdef-integration-slack      (future — SDD-008 Q-C)
-crates/selfdef-integration-discord    (future)
-crates/selfdef-integration-opensearch (future — observability export)
-crates/selfdef-integration-loki       (future — observability export)
+crates/selfdef-integration-ntfy       (shipped — SDD-008 D-2b, PR #112)
+crates/selfdef-integration-signal     (shipped — SDD-008 D-2c, PR #113)
+crates/selfdef-integration-smtp       (shipped — SDD-008 Q-E,  PR #114)
+crates/selfdef-integration-twilio     (shipped — SDD-008 Q-D,  PR #116)
+crates/selfdef-integration-slack      (shipped — SDD-008 Q-C,  PR #120)
+crates/selfdef-integration-discord    (shipped —               PR #121)
+crates/selfdef-integration-wall       (shipped — SDD-008 D-8,  PR #128)
+crates/selfdef-integration-pagerduty  (shipped — SDD-008 Q-G,  PR #143)
+crates/selfdef-integration-loki       (shipped — SDD-008 Q-G,  PR #144)
+crates/selfdef-integration-opensearch (shipped — SDD-008 Q-G,  PR #145)
+crates/selfdef-integration-thehive    (shipped — SDD-008 Q-G,  PR #146)
 ```
+
+Eleven channels in total covering the operator-facing matrix (push,
+IM, email, SMS, voice/wall, paging, log-aggregation, SIEM, IR-tools).
+The four Q-G entries (PagerDuty / Loki / OpenSearch / TheHive)
+empirically answer "which alert-routing integrations matter?" by
+shipping them. See [`docs/sdd/008-notifications-orchestration.md`](docs/sdd/008-notifications-orchestration.md)
+for the per-D status table.
 
 Note: the **collectors** under `crates/selfdef-collector-*` are
 the inbound analogue of integrations — they bridge external
