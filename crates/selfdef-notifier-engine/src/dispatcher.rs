@@ -335,8 +335,25 @@ impl PayloadDispatcher {
     /// last error surfaces in the `PersistedButAllChannelsFailed`
     /// variant when every channel rejects.
     async fn fire_channels(&self, payload: &Payload) -> DispatchOutcome {
+        self.fire_channels_filtered(payload, &[]).await
+    }
+
+    /// SDD-008 D-6c: channel walk with a per-rung allow-list.
+    /// Empty `rung_filter` = "every configured channel" (the pre-
+    /// D-6c default). Non-empty list = only channels whose `name()`
+    /// matches an entry. First-success-wins among the matched set.
+    async fn fire_channels_filtered(
+        &self,
+        payload: &Payload,
+        rung_filter: &[String],
+    ) -> DispatchOutcome {
         let mut last_err: Option<ChannelError> = None;
+        let mut attempted = 0usize;
         for channel in &self.channels {
+            if !rung_filter.is_empty() && !rung_filter.iter().any(|n| n == channel.name()) {
+                continue;
+            }
+            attempted += 1;
             match channel.send(payload).await {
                 Ok(_receipt) => {
                     info!(channel = channel.name(), "dispatcher: channel accepted");
@@ -350,11 +367,44 @@ impl PayloadDispatcher {
                 }
             }
         }
-        DispatchOutcome::PersistedButAllChannelsFailed(
-            last_err.unwrap_or_else(|| {
+        DispatchOutcome::PersistedButAllChannelsFailed(last_err.unwrap_or_else(|| {
+            if attempted == 0 && !rung_filter.is_empty() {
+                ChannelError::Other(format!(
+                    "dispatcher: rung's channel allow-list {rung_filter:?} matched none of the configured channels"
+                ))
+            } else {
                 ChannelError::Other("dispatcher: no channels configured".into())
-            }),
-        )
+            }
+        }))
+    }
+
+    /// SDD-008 D-6c: wake-task re-fire for a specific rung. Looks
+    /// up the rung's channel allow-list from the active profile and
+    /// filters the channel walk to it. Audit-mode + below panic
+    /// floor still suppresses (D-6a + D-7).
+    pub async fn dispatch_payload_for_rung(
+        &self,
+        payload: &Payload,
+        rung_index: u32,
+    ) -> DispatchOutcome {
+        let filter = self.profile.channels_for(rung_index).to_vec();
+        if self.mode == Mode::Audit && !self.crosses_panic_floor(payload.severity) {
+            for channel in &self.channels {
+                if !filter.is_empty() && !filter.iter().any(|n| n == channel.name()) {
+                    continue;
+                }
+                info!(
+                    mode = "audit",
+                    rung = rung_index,
+                    channel = channel.name(),
+                    "dispatcher: would have re-fired (audit mode + rung filter)"
+                );
+            }
+            return DispatchOutcome::Delivered {
+                channel: "audit".to_owned(),
+            };
+        }
+        self.fire_channels_filtered(payload, &filter).await
     }
 }
 
@@ -863,5 +913,136 @@ mod tests {
         dispatcher.submit(&low, 100, 0).await;
         dispatcher.submit(&crit, 100, 0).await;
         assert_eq!(counter.load(Ordering::Acquire), 2);
+    }
+
+    // ---------------- SDD-008 D-6c: rung-aware dispatch ----------------
+
+    use crate::Rung;
+
+    #[tokio::test]
+    async fn dispatch_payload_for_rung_filters_by_channel_name() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_a, counter_a) = MockChannel::always_ok("ntfy");
+        let (ch_b, counter_b) = MockChannel::always_ok("smtp");
+        // Profile: rung 0 = ntfy only; rung 1 = smtp only.
+        let profile = Profile::custom(
+            "test-rungs",
+            vec![
+                Rung::with_channels(60, vec!["ntfy".into()]),
+                Rung::with_channels(120, vec!["smtp".into()]),
+            ],
+        )
+        .unwrap();
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch_a, ch_b]).with_profile(profile);
+        let payload = mk_payload("rung-filter");
+
+        // Rung 0 → only ntfy fires.
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 0).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "ntfy"),
+            other => panic!("expected Delivered(ntfy), got {other:?}"),
+        }
+        assert_eq!(counter_a.load(Ordering::Acquire), 1);
+        assert_eq!(
+            counter_b.load(Ordering::Acquire),
+            0,
+            "smtp must not fire at rung 0"
+        );
+
+        // Rung 1 → only smtp fires.
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 1).await;
+        match outcome {
+            DispatchOutcome::Delivered { channel } => assert_eq!(channel, "smtp"),
+            other => panic!("expected Delivered(smtp), got {other:?}"),
+        }
+        assert_eq!(
+            counter_a.load(Ordering::Acquire),
+            1,
+            "ntfy must not fire at rung 1"
+        );
+        assert_eq!(counter_b.load(Ordering::Acquire), 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_for_rung_empty_filter_fires_all() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch_a, counter_a) = MockChannel::always_ok("a");
+        let (ch_b, counter_b) = MockChannel::always_ok("b");
+        // Profile with one rung, empty channels = WUPHF / all.
+        let profile = Profile::custom("wuphf-style", vec![Rung::new(60)]).unwrap();
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch_a, ch_b]).with_profile(profile);
+        let payload = mk_payload("wuphf");
+        // First-success-wins: "a" wins, "b" never invoked.
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 0).await;
+        assert!(matches!(outcome, DispatchOutcome::Delivered { ref channel } if channel == "a"));
+        assert_eq!(counter_a.load(Ordering::Acquire), 1);
+        assert_eq!(counter_b.load(Ordering::Acquire), 0);
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_for_rung_no_channel_matches_filter() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, _counter) = MockChannel::always_ok("ntfy");
+        // Operator-defined profile names a channel that doesn't exist
+        // in the configured set. Should surface a clear error.
+        let profile = Profile::custom(
+            "bad-rungs",
+            vec![Rung::with_channels(60, vec!["nonexistent".into()])],
+        )
+        .unwrap();
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch]).with_profile(profile);
+        let payload = mk_payload("orphan");
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 0).await;
+        match outcome {
+            DispatchOutcome::PersistedButAllChannelsFailed(ChannelError::Other(msg)) => {
+                assert!(
+                    msg.contains("allow-list") && msg.contains("nonexistent"),
+                    "expected helpful error message, got: {msg}",
+                );
+            }
+            other => panic!("expected allow-list-matches-none error, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_for_rung_audit_mode_below_floor_skips() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("ntfy");
+        let profile =
+            Profile::custom("test", vec![Rung::with_channels(60, vec!["ntfy".into()])]).unwrap();
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_profile(profile)
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::Critical);
+        let payload = mk_payload_with_severity("audit-rung", SeverityId::High); // below floor
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 0).await;
+        assert!(
+            matches!(outcome, DispatchOutcome::Delivered { ref channel } if channel == "audit")
+        );
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            0,
+            "audit + below floor must not fire"
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_payload_for_rung_audit_mode_above_floor_fires() {
+        let (eng, _dir) = fresh_engine().await;
+        let (ch, counter) = MockChannel::always_ok("ntfy");
+        let profile =
+            Profile::custom("test", vec![Rung::with_channels(60, vec!["ntfy".into()])]).unwrap();
+        let dispatcher = PayloadDispatcher::new(eng, vec![ch])
+            .with_profile(profile)
+            .with_mode(Mode::Audit)
+            .with_panic_floor(SeverityId::Critical);
+        let payload = mk_payload_with_severity("audit-rung-crit", SeverityId::Critical);
+        let outcome = dispatcher.dispatch_payload_for_rung(&payload, 0).await;
+        assert!(matches!(outcome, DispatchOutcome::Delivered { ref channel } if channel == "ntfy"));
+        assert_eq!(
+            counter.load(Ordering::Acquire),
+            1,
+            "panic floor must bypass audit"
+        );
     }
 }
