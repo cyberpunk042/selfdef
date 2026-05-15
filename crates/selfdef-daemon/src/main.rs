@@ -779,6 +779,21 @@ fn build_notifier_path(
                      wake task will run and clean up timed-out rows)",
                 );
             }
+            // SDD-008 F-2031-009 stopgap: the engine path doesn't
+            // currently consult [notifier.subscriptions.<channel>]
+            // filters (D-3 only applies on the legacy chain path).
+            // Until the D-5e follow-up wires SubscriptionConfig
+            // through PayloadDispatcher, warn the operator loudly
+            // so they don't assume the filter is being enforced.
+            if !cfg.notifier.subscriptions.is_empty() {
+                warn!(
+                    subscription_channels = ?cfg.notifier.subscriptions.keys().collect::<Vec<_>>(),
+                    "[notifier.subscriptions] is configured but ignored on the engine path \
+                     (escalations_path set). Per-channel severity_floor + event_kinds \
+                     filters apply only on the legacy chain path until SDD-008 D-5e ships. \
+                     See docs/review/phase-6/40-module-audit.md F-2031-009.",
+                );
+            }
             let mode = parse_dispatcher_mode(&cfg.notifier.mode);
             let profile = parse_dispatcher_profile(&cfg.notifier.profile, cfg);
             let panic_floor = cfg.notifier.panic_floor.as_deref().and_then(|raw| {
@@ -1037,10 +1052,24 @@ fn parse_dispatcher_profile(raw: &str, cfg: &Config) -> Profile {
         let rungs: Vec<selfdef_notifier_engine::Rung> = custom_cfg
             .rungs
             .iter()
-            .map(|r| {
+            .enumerate()
+            .map(|(idx, r)| {
                 let window = if r.ack_window_secs > 0 {
                     r.ack_window_secs
                 } else {
+                    // SDD-008 D-6c: an invalid ack_window_secs (zero
+                    // or negative — a typo / operator misconfig) used
+                    // to silently become 300. Now warns first so the
+                    // operator notices the bad config instead of
+                    // wondering why their "aggressive" profile
+                    // ack-waits 5 minutes on this rung.
+                    warn!(
+                        profile = raw,
+                        rung = idx,
+                        configured = r.ack_window_secs,
+                        fallback_secs = 300,
+                        "invalid ack_window_secs (must be > 0) in [[notifier.profiles.<name>.rungs]]; falling back to 300s",
+                    );
                     300
                 };
                 if r.channels.is_empty() {
