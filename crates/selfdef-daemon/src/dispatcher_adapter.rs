@@ -20,7 +20,7 @@ use std::time::SystemTime;
 use async_trait::async_trait;
 use selfdef_core::Event;
 use selfdef_notifier::{Notifier, NotifierError, render_body, render_title};
-use selfdef_notifier_engine::{DispatchOutcome, PayloadDispatcher, wake_task};
+use selfdef_notifier_engine::{DispatchOutcome, PayloadDispatcher};
 use selfdef_notifier_orchestrator::{EventId, Payload, PayloadId};
 use tracing::debug;
 
@@ -29,11 +29,13 @@ use tracing::debug;
 /// knowing about the engine.
 ///
 /// `notify(event)` synthesises a [`Payload`] from the event, sets
-/// the initial deadline to `now + DEFAULT_RUNG_INTERVAL_SECS`
-/// (5 minutes by default), and calls `dispatcher.submit`. The
-/// dispatcher's persist-before-fire ordering guarantees the row is
-/// in the engine even if every channel returns an error — the wake
-/// task will retry on the next deadline.
+/// the initial deadline to `now + profile.ack_window_for(0)` (the
+/// rung-0 window from the dispatcher's active escalation profile —
+/// `auto` defaults to 5 minutes; `aggressive` shortens it to 60s),
+/// and calls `dispatcher.submit`. The dispatcher's persist-before-
+/// fire ordering guarantees the row is in the engine even if every
+/// channel returns an error — the wake task will retry on the next
+/// deadline.
 pub(crate) struct DispatcherAdapter {
     dispatcher: Arc<PayloadDispatcher>,
 }
@@ -68,7 +70,13 @@ impl Notifier for DispatcherAdapter {
             ack_link: None,
         };
         let now = unix_now();
-        let deadline = now + wake_task::DEFAULT_RUNG_INTERVAL_SECS;
+        // SDD-008 D-6b/D-6c: initial deadline derives from the
+        // active profile's rung-0 ack window — not the legacy
+        // hardcoded 5-minute constant. This makes operator-chosen
+        // profiles (e.g. `aggressive` → 60s) actually shape the
+        // first rung-advance timing, instead of waiting 5 min
+        // regardless of profile.
+        let deadline = now + self.dispatcher.profile().ack_window_for(0);
         debug!(
             event_id = %event.id,
             severity = %event.severity_id,
@@ -207,6 +215,35 @@ mod tests {
             due[0].body.contains("host:") || due[0].body.contains("id:"),
             "body: {}",
             due[0].body,
+        );
+    }
+
+    #[tokio::test]
+    async fn deadline_uses_active_profile_rung_0_ack_window() {
+        use selfdef_notifier_engine::Profile;
+        // Aggressive profile: rung 0 = 60s ack window (not the
+        // legacy 5-minute constant). Verifies F-2031-007 closure.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(EscalationEngine::open(&path).unwrap());
+        let counter = Arc::new(AtomicUsize::new(0));
+        let ch: Arc<dyn Channel> = Arc::new(StubChannel {
+            sent: Arc::clone(&counter),
+        });
+        let dispatcher =
+            Arc::new(PayloadDispatcher::new(engine, vec![ch]).with_profile(Profile::aggressive()));
+        let adapter = DispatcherAdapter::new(Arc::clone(&dispatcher));
+        let event = finding_event();
+        let now_before = unix_now();
+        adapter.notify(&event).await.expect("ok");
+        let now_after = unix_now();
+        let due = dispatcher.engine().take_due(i64::MAX, 10).await.unwrap();
+        let deadline = due[0].deadline_at;
+        // Aggressive rung 0 ack window = 60s; adapter must apply it.
+        assert!(
+            deadline >= now_before + 60 && deadline <= now_after + 60,
+            "expected deadline ~now+60s for aggressive profile rung 0; \
+             got now_before={now_before} deadline={deadline} now_after={now_after}",
         );
     }
 
