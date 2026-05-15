@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **open** — 4 explorers landed (inventory, recent-PRs, crate, module); 3 pending.
+> Status: **open** — 5 explorers landed (inventory, recent-PRs, crate, module, integration); 3 pending.
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -38,7 +38,8 @@ design-shaped.
 | F-2031-006 | **important** (closed) | crate (wall) | `selfdef-integration-wall::broadcast()` failed eagerly on EPIPE when the child exited before reading stdin. Manifested as a flaky CI failure on `ubuntu-latest`; also a latent production defect for wall(1) on TTY-less hosts. | **Closed by Phase 6 crate explorer** — tolerate `BrokenPipe` on both `write_all` and `shutdown`, fall through to wait-on-exit. Stress-tested 15× green. |
 | F-2031-007 | **important** (closed) | module (dispatcher-adapter) | `DispatcherAdapter` set the initial deadline via the legacy `DEFAULT_RUNG_INTERVAL_SECS = 300` hardcoded constant instead of `profile.ack_window_for(0)`. Operators selecting `aggressive` (rung 0 = 60s) saw the first rung-advance fire 5 min later instead of 60s — exact opposite of the profile's stated purpose. | **Closed by Phase 6 module explorer** — adapter now reads `self.dispatcher.profile().ack_window_for(0)`; test pins the new contract. |
 | F-2031-008 | nice (closed) | module (wake_task) | `wake_task::run` doc-comment referenced the legacy `MAX_RUNG` constant, `dispatch_payload` (no-rung-filter), and `RUNG_INTERVAL` — all replaced by `profile.max_rung()`, `dispatch_payload_for_rung`, and `profile.ack_window_for`. Doc-vs-code drift. | **Closed by Phase 6 module explorer** — doc-comment rewritten to match D-6b/D-6c shipping shape. |
-| F-2031-009 | **important** (SDD-debt) | module (dispatcher path) | Per-channel subscription filter (D-3: `[notifier.subscriptions.<channel>]`) silently stops being applied when the operator switches to the engine path (`escalations_path` set). `build_channel_set` strips subscription metadata; `fire_channels_filtered` walks every configured channel regardless. Silent broadening of channel firing on the operator's principal noise-reduction lever. | **Defer to SDD-008 D-5e follow-up PR**. Integration explorer to ship the startup-warning stopgap. |
+| F-2031-009 | **important** (SDD-debt, stopgap shipped) | module (dispatcher path) | Per-channel subscription filter (D-3: `[notifier.subscriptions.<channel>]`) silently stops being applied when the operator switches to the engine path (`escalations_path` set). `build_channel_set` strips subscription metadata; `fire_channels_filtered` walks every configured channel regardless. Silent broadening of channel firing on the operator's principal noise-reduction lever. | **Stopgap shipped by Phase 6 integration explorer** — startup warn fires when `[notifier.subscriptions]` is non-empty on engine path. Principled fix defers to SDD-008 D-5e follow-up PR. |
+| F-2031-010 | nice (closed) | integration (config parse) | `parse_dispatcher_profile` silently mapped any non-positive `ack_window_secs` in a custom profile rung to 300 — operator typos like `ack_window_secs = 0` or `-60` produced 5-minute waits with no indication anything was wrong. | **Closed by Phase 6 integration explorer** — invalid values now log a structured `warn!` naming the profile, rung index, configured value, and fallback. |
 
 ## Status
 
@@ -47,19 +48,21 @@ design-shaped.
   the inventory of the 9 new crates / 22 PRs / 159 new tests
   / 13 new TOML surface elements, and the PR-by-PR audit
   raising 3 nice findings + 1 demoted observation.
-- Module explorer landed (this PR ships `40-module-audit.md`)
-  plus closes F-2031-007 + F-2031-008 in-place, raises
-  F-2031-009 as SDD-debt for D-5e follow-up.
+- Integration explorer landed (this PR ships
+  `50-integration-audit.md`), closes F-2031-010 in-place,
+  ships the F-2031-009 stopgap warning, adds the 2-test
+  SDD-008 TOML round-trip coverage (selfdef-config 4 → 6).
 - Three explorers remain (ship in follow-up PRs):
-  1. `50-integration-audit.md` — startup wiring, config round-trip,
-     wake-task lifecycle; ships F-2031-009 stopgap warning.
-  2. `60-docs-audit.md` — SDD-008, ARCHITECTURE.md, integrations
+  1. `60-docs-audit.md` — SDD-008, ARCHITECTURE.md, integrations
      contributor doc, SECURITY.md additions, init.rs starter
-     config.
-  3. `70-tests-audit.md` — engine + dispatcher + wake-task +
-     channel-validation + profile tests.
-  4. `80-security-audit.md` — credentials, TTY broadcast, SQLite
-     injection surface, rung-advance race, TLS posture.
+     config; address F-2031-001 (D-7 commit-title label
+     collision).
+  2. `70-tests-audit.md` — engine + dispatcher + wake-task +
+     channel-validation + profile tests; SDD-005 pipeline-
+     determinism compliance.
+  3. `80-security-audit.md` — credentials, TTY broadcast, SQLite
+     injection surface, rung-advance race, TLS posture;
+     address F-2031-003 (0BSD allow-list re-audit).
 - Phase 6 closes when every important / blocker has either a
   "closed by <PR>" back-reference or a tracked SDD.
 
@@ -73,7 +76,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | **3 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **1 important + 1 nice (closed) + 1 important (SDD-debt)** | *pending* | *pending* | *pending* | *pending* |
+| **Phase 6** | **3 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | *pending* | *pending* | *pending* |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an

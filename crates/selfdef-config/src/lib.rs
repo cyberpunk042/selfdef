@@ -907,6 +907,105 @@ mod tests {
         );
     }
 
+    /// Phase 6 integration explorer: end-to-end round-trip of the
+    /// SDD-008 surface. Pins the TOML → `Config::load` →
+    /// `NotifierConfig` parse for the cycle's 13 new operator-facing
+    /// keys (escalations_path, mode, profile, panic_floor, one
+    /// channel section, one subscription, one custom profile). Any
+    /// future refactor to the schema that drops a `#[serde(default)]`
+    /// or renames a key gets caught at parse time.
+    #[test]
+    fn sdd_008_notifier_surface_round_trips_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier]
+            escalations_path = "/var/lib/selfdef/escalations.sqlite"
+            mode             = "audit"
+            profile          = "fast-rollout"
+            panic_floor      = "critical"
+
+            [notifier.ntfy]
+            url        = "https://ntfy.example.org"
+            topic      = "selfdef-alerts"
+            token_file = "/etc/selfdef/ntfy.token"
+
+            [notifier.subscriptions.discord]
+            severity_floor = "high"
+            event_kinds    = ["security", "detection"]
+
+            [[notifier.profiles.fast-rollout.rungs]]
+            channels         = ["wall"]
+            ack_window_secs  = 30
+
+            [[notifier.profiles.fast-rollout.rungs]]
+            channels         = ["wall", "ntfy"]
+            ack_window_secs  = 120
+            "#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+
+        // Top-level dispatcher knobs.
+        assert_eq!(
+            cfg.notifier.escalations_path.as_deref(),
+            Some(std::path::Path::new("/var/lib/selfdef/escalations.sqlite")),
+        );
+        assert_eq!(cfg.notifier.mode, "audit");
+        assert_eq!(cfg.notifier.profile, "fast-rollout");
+        assert_eq!(cfg.notifier.panic_floor.as_deref(), Some("critical"));
+
+        // Channel section.
+        assert_eq!(cfg.notifier.ntfy.url, "https://ntfy.example.org");
+        assert_eq!(cfg.notifier.ntfy.topic, "selfdef-alerts");
+        assert_eq!(
+            cfg.notifier.ntfy.token_file.as_deref(),
+            Some(std::path::Path::new("/etc/selfdef/ntfy.token")),
+        );
+
+        // Per-channel subscription.
+        let sub = cfg
+            .notifier
+            .subscriptions
+            .get("discord")
+            .expect("discord subscription parsed");
+        assert_eq!(sub.severity_floor.as_deref(), Some("high"));
+        assert_eq!(sub.event_kinds, vec!["security", "detection"]);
+
+        // Custom profile with per-rung filter (D-6c).
+        let prof = cfg
+            .notifier
+            .profiles
+            .get("fast-rollout")
+            .expect("fast-rollout profile parsed");
+        assert_eq!(prof.rungs.len(), 2);
+        assert_eq!(prof.rungs[0].channels, vec!["wall"]);
+        assert_eq!(prof.rungs[0].ack_window_secs, 30);
+        assert_eq!(prof.rungs[1].channels, vec!["wall", "ntfy"]);
+        assert_eq!(prof.rungs[1].ack_window_secs, 120);
+    }
+
+    /// Phase 6 integration explorer: pin the unset-defaults contract
+    /// for the SDD-008 surface. When the operator omits every
+    /// `[notifier].*` knob, defaults must produce the legacy fire-
+    /// and-forget chain path (`escalations_path = None`), with
+    /// builder-default `mode = "enforce"` and `profile = "auto"`.
+    #[test]
+    fn sdd_008_notifier_surface_defaults_when_unset() {
+        let cfg = Config::load(None).unwrap();
+        assert!(
+            cfg.notifier.escalations_path.is_none(),
+            "default omits escalations_path → legacy chain path",
+        );
+        assert_eq!(cfg.notifier.mode, "enforce");
+        assert_eq!(cfg.notifier.profile, "auto");
+        assert!(cfg.notifier.panic_floor.is_none());
+        assert!(cfg.notifier.profiles.is_empty());
+        assert!(cfg.notifier.subscriptions.is_empty());
+    }
+
     /// F-2029-005 + F-2029-006: pin the default-when-unset
     /// contract. When the TOML omits the cap fields entirely,
     /// `ApiConfig::default()` yields `None` for both; the
