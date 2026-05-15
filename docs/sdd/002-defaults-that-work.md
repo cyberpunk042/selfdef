@@ -517,7 +517,11 @@ naturally.
 
 ## Open questions
 
-- **Q-A** — Drop-in support in `selfdef-config`. The
+- **Q-A** — Drop-in support in `selfdef-config`.
+  **Answered (D-010, 2026-05-15)** — no; the snippet goes in
+  `/etc/selfdef/selfdef.toml`. A drop-in directory would be a
+  separate SDD if it gains traction. _Original framing for
+  history_: The
   conservative answer is "no, the snippet goes in
   `/etc/selfdef/selfdef.toml`". A future drop-in directory
   (matching systemd's pattern) would let
@@ -525,12 +529,15 @@ naturally.
   Worth a separate SDD if it gains traction.
 - **Q-B** — Does `[daemon_requires]` need to support
   *removal* (`enabled = false` precludes other defaults)?
-  Not for v1.
+  **Answered (D-011, 2026-05-15)** — no, not for v1.
+  _Original framing for history_: Not for v1.
 - **Q-C** — `selfdefctl modules apply --auto-fix` that
-  rewrites `selfdef.toml` directly. Tempting but requires a
+  rewrites `selfdef.toml` directly. **Answered (D-012, 2026-05-15)** —
+  out of scope. _Original framing for history_: Tempting but requires a
   comment-preserving TOML editor. Out of scope.
 - **Q-D** — Should the validator run on every `selfdefctl
-  modules check` too? Default yes — `check` is read-only and
+  modules check` too? **Answered (D-013, 2026-05-15)** — yes (default).
+  _Original framing for history_: Default yes — `check` is read-only and
   it's strictly better to surface daemon-config drift before
   apply.
 

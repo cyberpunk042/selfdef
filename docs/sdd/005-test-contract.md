@@ -451,16 +451,25 @@ The SDD's own contract:
 ## Open questions
 
 - **Q-A** — Should the contract require both a pipeline
-  test AND a seam test for every new module? Probably yes
+  test AND a seam test for every new module?
+  **Answered (D-016, 2026-05-15)** — yes for modules
+  introducing a new event source; no for purely passive
+  modules (e.g. a future `host-baseline`). _Original framing
+  for history_: Probably yes
   for modules that introduce a new event source; no for
   modules that don't (e.g. a future `host-baseline`
   module that's pure passive observation).
 - **Q-B** — Does the test-contract doc go under
   `docs/src/dev/` (visible in mdbook to contributors) or
   under `docs/sdd/` (alongside the SDDs as design context)?
-  Today: dev. Both is also fine.
+  **Answered (D-017, 2026-05-15)** — `docs/src/dev/`
+  (mdbook-visible to contributors); both is also acceptable.
+  _Original framing for history_: Today: dev. Both is also fine.
 - **Q-C** — How do we keep the contract from going stale?
-  Suggestion: every Phase-N audit (yearly) re-asks "do
+  **Answered (D-018, 2026-05-15)** — every Phase-N audit
+  re-asks "do these categories still match the codebase?" and
+  surfaces contract drift as findings. _Original framing for
+  history_: Suggestion: every Phase-N audit (yearly) re-asks "do
   these categories still match the codebase?" The current
   audit at `docs/review/` is Phase 1; future Phases re-run
   the seven explorers against an updated inventory and
