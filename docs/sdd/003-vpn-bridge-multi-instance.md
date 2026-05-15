@@ -600,10 +600,12 @@ No daemon-binary changes. Entirely a `selfdef-cli` + manifest
 - **Q-C** — Naming convention for the WG interface
   (`selfdef-${INST}`). **Answered (D-005, 2026-05-15)**: `apply.sh`
   refuses cleanly with an explicit operator-facing error when the
-  instance id exceeds 8 characters. _Original framing for history_:
-  Linux interface names are limited to
+  instance id exceeds **7** characters (`selfdef-` prefix is 8 chars;
+  Linux IFNAMSIZ is 15; max INST = 15 − 8 = 7). _Original framing for
+  history_: Linux interface names are limited to
   15 characters; `selfdef-${INST}` accommodates instance
-  ids up to 8 chars. Document the limit in the README. If
+  ids up to 8 chars (_note: this was an off-by-one in the original
+  framing — the math gives 7, not 8_). Document the limit in the README. If
   an operator picks a longer instance id, the apply.sh
   should refuse cleanly. **Worth adding to D-4** — track in
   implementation PR.

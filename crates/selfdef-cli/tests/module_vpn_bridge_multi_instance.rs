@@ -282,3 +282,94 @@ fn cli_resolver_refuses_singleton_profile_with_instance_suffix() {
         "expected SDD-003 refusal; stderr: {stderr}",
     );
 }
+
+#[test]
+fn relay_apply_refuses_when_instance_id_exceeds_seven_chars() {
+    // SDD-003 Q-C / D-005: the WireGuard interface name 'selfdef-${INST}'
+    // must fit Linux's 15-char IFNAMSIZ. 'selfdef-' is 8 chars, so INST
+    // caps at 7. An 8-char id ('toolong1' below) overflows; apply must
+    // refuse cleanly with an explicit operator-facing error rather than
+    // letting 'ip link add' silently truncate or fail downstream.
+    let stubs = relay_stub_path();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let wg_dir = scratch.path().join("wireguard");
+    std::fs::create_dir_all(&wg_dir).unwrap();
+
+    let cfg = write_config(
+        "profile        = \"relay-via-server\"\nrole           = \"endpoint\"\nforward_to_lan = \"\"\n",
+    );
+
+    let module = module_dir();
+    let nft_dest = scratch.path().join("nft.conf");
+    let out = Command::new("bash")
+        .arg(module.join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_INSTANCE_ID", "toolong1") // 8 chars — one over
+        .env("SELFDEF_VPN_BRIDGE_CONFIG", cfg.path())
+        .env("SELFDEF_VPN_BRIDGE_TEMPLATES", module.join("templates"))
+        .env("SELFDEF_VPN_BRIDGE_NFT_PATH", &nft_dest)
+        .env("SELFDEF_VPN_BRIDGE_WG_DIR", &wg_dir)
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn apply.sh");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "apply should fail when instance id > 7 chars; stdout: {stdout}\nstderr: {stderr}",
+    );
+    // die() emits a JSON {"status":"failed","message":...} to stdout via
+    // packaging/lib/module-lib.sh::emit_status; the message field carries
+    // the explicit error.
+    assert!(
+        stdout.contains("SELFDEF_INSTANCE_ID too long"),
+        "expected explicit length-error message; stdout: {stdout}\nstderr: {stderr}",
+    );
+    assert!(
+        stdout.contains("IFNAMSIZ"),
+        "error should reference the Linux limit by name; stdout: {stdout}",
+    );
+}
+
+#[test]
+fn relay_apply_accepts_seven_char_instance_id() {
+    // Boundary case: 7 chars is the documented max — must succeed.
+    let stubs = relay_stub_path();
+    let scratch = tempfile::tempdir().expect("scratch");
+    let wg_dir = scratch.path().join("wireguard");
+    std::fs::create_dir_all(&wg_dir).unwrap();
+    // Per-instance wg.conf for the 7-char id.
+    std::fs::write(wg_dir.join("selfdef-edgex999.conf"), "# placeholder\n").ok(); // 8-char filename for the 7-char id
+    std::fs::write(wg_dir.join("selfdef-edgex77.conf"), "# placeholder\n").unwrap();
+
+    let cfg = write_config(
+        "profile        = \"relay-via-server\"\nrole           = \"endpoint\"\nforward_to_lan = \"\"\n",
+    );
+
+    let module = module_dir();
+    let nft_dest = scratch.path().join("nft.conf");
+    let out = Command::new("bash")
+        .arg(module.join("install/apply.sh"))
+        .env("SELFDEF_DRY_RUN", "1")
+        .env("SELFDEF_INSTANCE_ID", "edgex77") // exactly 7 chars
+        .env("SELFDEF_VPN_BRIDGE_CONFIG", cfg.path())
+        .env("SELFDEF_VPN_BRIDGE_TEMPLATES", module.join("templates"))
+        .env("SELFDEF_VPN_BRIDGE_NFT_PATH", &nft_dest)
+        .env("SELFDEF_VPN_BRIDGE_WG_DIR", &wg_dir)
+        .env("PATH", prepended_path(stubs.path()))
+        .output()
+        .expect("spawn apply.sh");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "apply should succeed for exactly 7-char instance id; stdout: {}\nstderr: {stderr}",
+        String::from_utf8_lossy(&out.stdout),
+    );
+    let line = last_stdout_line(&out);
+    assert!(
+        line.contains("\"status\":\"ok\""),
+        "expected ok status; line: {line}\nstderr: {stderr}",
+    );
+}
