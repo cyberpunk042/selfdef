@@ -8,8 +8,11 @@
 
 ## Implementation status
 
-**All design points D-1..D-8 shipped** during the Phase-6 cycle
-(PRs `#109`..`#130`). D-9 (dashboard) remains explicitly
+**All design points D-1..D-8 + D-5e + D-4 HTTP ack shipped**;
+the original D-1..D-8 cycle ran as PRs `#109`..`#130` under
+Phase 6; D-5e + D-4 HTTP-ack + the four Q-G adapter
+pattern-instances shipped post-Phase-6 as PRs `#140`..`#146`.
+D-9 (dashboard) remains explicitly
 deferred — separate design conversation. The Phase 6
 closure-cycle audit (`docs/review/phase-6/`) walks the
 implementation; findings raised under that audit are tracked
@@ -24,12 +27,12 @@ Per-D status:
 | D-2b | `selfdef-integration-ntfy` carve | shipped | #112 |
 | D-2c | `selfdef-integration-signal` carve | shipped | #113 |
 | D-3 | Per-channel subscription model | shipped (legacy chain path) | #115 + #117 |
-| D-5e | Subscription filter on engine path | shipped (closes Phase 6 F-2031-009) | post-Phase-6 PR |
-| D-4 HTTP ack | `GET /notify/ack/<token>` endpoint + ack_token column + ack_link rendering | shipped (Phase 6 "remaining backlog" item from charter) | post-D-4 PR |
-| Q-G PagerDuty | Events API v2 channel (`selfdef-integration-pagerduty`) | shipped | post-D-4 PR |
-| Q-G Loki | Grafana Loki push-API channel (`selfdef-integration-loki`) | shipped | post-D-4 PR |
-| Q-G OpenSearch | OpenSearch / Elasticsearch document-index channel (`selfdef-integration-opensearch`) | shipped | post-D-4 PR |
-| Q-G TheHive | TheHive alert-API channel (`selfdef-integration-thehive`) | shipped (**all Q-G adapters complete**) | this PR |
+| D-5e | Subscription filter on engine path | shipped (closes Phase 6 F-2031-009) | #140 |
+| D-4 HTTP ack | `GET /notify/ack/<token>` endpoint + ack_token column + ack_link rendering | shipped | #142 |
+| Q-G PagerDuty | Events API v2 channel (`selfdef-integration-pagerduty`) | shipped | #143 |
+| Q-G Loki | Grafana Loki push-API channel (`selfdef-integration-loki`) | shipped | #144 |
+| Q-G OpenSearch | OpenSearch / Elasticsearch document-index channel (`selfdef-integration-opensearch`) | shipped | #145 |
+| Q-G TheHive | TheHive alert-API channel (`selfdef-integration-thehive`) | shipped (**all Q-G adapters complete**) | #146 |
 | D-4 | `selfdefctl notify {ack,forget,list}` | shipped | #123 |
 | D-5a | `EscalationEngine` persistent layer | shipped | #118 |
 | D-5b | `PayloadDispatcher` façade | shipped | #119 |
@@ -534,7 +537,56 @@ commit graph, the disambiguation below is exhaustive:
   The D-8 label dominates because the design point is
   load-bearing for the operator-discovery story.
 
+### Post-Phase-6 cycle commits (Phase 7 audit window)
+
+> Background: Phase 7 recent-PRs explorer (F-2032-003)
+> extends the label-disambiguation concern to the four Q-G
+> adapter commits, all titled `feat(sdd-008): Q-G —
+> <service> integration`. `Q-G` is an **open question
+> identifier** in this SDD (not a design point); casual
+> readers might confuse the prefix for D-N-shaped naming.
+
+The post-Phase-6-wrap cycle (PRs `#140`..`#146`) extended
+SDD-008 with one new design point (D-4 HTTP ack) plus four
+Q-G adapter ideas + two seam closures. Disambiguation:
+
+- **`feat(sdd-008): D-5e — subscription filter on the
+  engine path` (PR #140)** — D-5e was minted as a follow-up
+  to D-5 + D-3 during Phase 6 (F-2031-009 closure). The
+  Implementation-status table above lists D-5e canonically.
+- **`test(sdd-005): daemon-level pipeline tests for engine
+  path` (PR #141)** — under **SDD-005**'s D-3
+  implementation-PR pattern, not SDD-008 directly. Closes
+  the F-2031-013 daemon-pipeline-test gap that the Phase 6
+  tests explorer raised.
+- **`feat(sdd-008): D-4 HTTP ack endpoint — GET
+  /notify/ack/<token>` (PR #142)** — D-4's HTTP complement.
+  D-4 originally shipped under PR #123 (`selfdefctl notify
+  {ack,forget,list}`) as the CLI half; the HTTP half had
+  been "open follow-up" since Phase 6 charter.
+- **`feat(sdd-008): Q-G — PagerDuty Events API v2
+  integration` (PR #143)**, **`Q-G — Grafana Loki push-API`
+  (PR #144)**, **`Q-G — OpenSearch / Elasticsearch
+  document-index` (PR #145)**, **`Q-G — TheHive
+  incident-management` (PR #146)** — these are **D-2
+  pattern instances** serving the **Q-G open question**
+  ("future channels: OpenSearch, Loki, PagerDuty,
+  TheHive"). The `Q-G` prefix is technically accurate as
+  the question id; a reader skimming for D-N labels won't
+  find them and may need this appendix to map their actual
+  design point. No new D-N was minted for any of the four
+  adapters — they are pattern instances under the existing
+  D-2 framework.
+
+The shorthand for future cycles:
+
+- **D-N** prefix on a commit = touches design point D-N.
+- **Q-X** prefix = pattern instance serving open question
+  Q-X, **typically** as a D-2 channel-adapter carve.
+- **No prefix** (rare, e.g. PR #121 Discord) = pure D-2
+  pattern instance with no Q-letter mapping.
+
 If SDD-008 is ever published externally, this appendix should
 be moved up into the design-point cross-reference. For now,
-the audit programme's recent-PRs ledger (Phase 6, F-2031-001)
-is the authoritative cross-reference.
+the audit programme's recent-PRs ledgers (Phase 6 F-2031-001
++ Phase 7 F-2032-003) are the authoritative cross-references.
