@@ -418,6 +418,9 @@ pub struct NotifierConfig {
     /// SDD-008 Q-G: PagerDuty Events API v2 channel. Missing
     /// `routing_key_file` keeps the channel disabled.
     pub pagerduty: PagerDutyConfig,
+    /// SDD-008 Q-G: Grafana Loki push-API channel. Empty
+    /// `endpoint` keeps the channel disabled.
+    pub loki: LokiConfig,
     /// SDD-008 D-8: wall(1) session-attention channel. Broadcasts
     /// to every logged-in TTY when a high-severity event fires —
     /// the operator's "talk to the bash session" surface. Default
@@ -517,6 +520,7 @@ impl Default for NotifierConfig {
             slack: SlackConfig::default(),
             discord: DiscordConfig::default(),
             pagerduty: PagerDutyConfig::default(),
+            loki: LokiConfig::default(),
             wall: WallConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
@@ -563,6 +567,40 @@ pub struct DiscordConfig {
     pub webhook_url_file: Option<PathBuf>,
     /// Display name for posts. Defaults to `"selfdef"` when blank.
     pub username: String,
+}
+
+/// SDD-008 Q-G: Grafana Loki push-API channel config.
+///
+/// Default `endpoint = ""` keeps the channel disabled. Set to a
+/// Loki push endpoint (typically
+/// `https://logs-prod.grafana.net/loki/api/v1/push` for Grafana
+/// Cloud, or `https://loki.internal/loki/api/v1/push` for
+/// self-hosted).
+///
+/// Auth model:
+/// - Self-hosted single-tenant: leave `tenant_id` empty, no
+///   `auth_token_file`.
+/// - Self-hosted multi-tenant: set `tenant_id` (sent as
+///   `X-Scope-OrgID`).
+/// - Grafana Cloud: set both `tenant_id` (your stack id) and
+///   `auth_token_file` (your API key — sent as Bearer).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct LokiConfig {
+    /// Loki push endpoint URL. Empty = channel disabled. Must be
+    /// `https://` (defensive — we refuse to ship bearer tokens
+    /// over plaintext).
+    pub endpoint: String,
+    /// `X-Scope-OrgID` header value. Empty = header not sent
+    /// (single-tenant). Grafana Cloud uses the stack id here.
+    pub tenant_id: String,
+    /// Path to a file containing the bearer token. Empty / None =
+    /// no `Authorization` header. The file's contents are sent
+    /// verbatim (trimmed) as `Bearer <contents>`.
+    pub auth_token_file: Option<PathBuf>,
+    /// Source identifier surfaced as the `host` label in Loki.
+    /// Defaults to `"selfdef"` when blank.
+    pub source: String,
 }
 
 /// SDD-008 Q-G: PagerDuty Events API v2 channel config.

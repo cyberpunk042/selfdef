@@ -2348,6 +2348,7 @@ dependencies = [
  "selfdef-correlator",
  "selfdef-ebpf-common",
  "selfdef-integration-discord",
+ "selfdef-integration-loki",
  "selfdef-integration-ntfy",
  "selfdef-integration-pagerduty",
  "selfdef-integration-signal",
@@ -2382,6 +2383,25 @@ dependencies = [
 
 [[package]]
 name = "selfdef-integration-discord"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-loki"
 version = "0.1.0"
 dependencies = [
  "async-trait",
