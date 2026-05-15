@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **open** — 5 explorers landed (inventory, recent-PRs, crate, module, integration); 3 pending.
+> Status: **open** — 6 explorers landed (inventory, recent-PRs, crate, module, integration, docs); 2 pending.
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -30,7 +30,7 @@ design-shaped.
 
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
-| F-2031-001 | nice | docs (SDD-008) | PR #114's commit title labels the SMTP integration crate as `D-7` even though SDD-008's D-7 is the panic floor (which shipped under PR #127 with the correct label). Pre-history label collision. | Phase 6 docs explorer to decide on SDD-008 "PR labels" appendix. |
+| F-2031-001 | nice (closed) | docs (SDD-008) | PR #114's commit title labels the SMTP integration crate as `D-7` even though SDD-008's D-7 is the panic floor (which shipped under PR #127 with the correct label). Pre-history label collision. | **Closed by Phase 6 docs explorer** — SDD-008 gains a "PR labels — appendix" disambiguating exhaustively, plus an "Implementation status" table mapping each D → PR. |
 | F-2031-002 | nice (closed) | crate (ntfy + signal) | Ntfy (4 tests) and Signal (3 tests) integration crates lack the wiremock / subprocess-exec end-to-end coverage that the later channel crates adopted (twilio, slack, discord, wall: 12–16 tests each). Coverage parity gap. | **Closed by Phase 6 crate explorer** — both crates raised to 7+ tests (ntfy at 9, signal at 7) with wiremock + coreutils stand-ins exercising the `post()` / subprocess paths. |
 | F-2031-003 | nice | supply-chain (deny.toml) | `0BSD` was added to `deny.toml`'s `licenses.allow` to permit `quoted_printable` 0.5.2 (transitive via `lettre`). Documented in-line, but should be re-audited end-to-end. | Phase 6 security explorer. |
 | F-2031-004 | demoted | tooling (rustfmt) | PR #127 needed a `chore(fmt)` fix-up commit (`3b80a85`) to satisfy CI's rustfmt 1.88.0 chain-collapse on the panic-floor parsing path. Local rustfmt produced different output. Single observed incident; CI caught it before merge. | None — re-flag if a second occurrence appears in a future cycle. |
@@ -40,6 +40,8 @@ design-shaped.
 | F-2031-008 | nice (closed) | module (wake_task) | `wake_task::run` doc-comment referenced the legacy `MAX_RUNG` constant, `dispatch_payload` (no-rung-filter), and `RUNG_INTERVAL` — all replaced by `profile.max_rung()`, `dispatch_payload_for_rung`, and `profile.ack_window_for`. Doc-vs-code drift. | **Closed by Phase 6 module explorer** — doc-comment rewritten to match D-6b/D-6c shipping shape. |
 | F-2031-009 | **important** (SDD-debt, stopgap shipped) | module (dispatcher path) | Per-channel subscription filter (D-3: `[notifier.subscriptions.<channel>]`) silently stops being applied when the operator switches to the engine path (`escalations_path` set). `build_channel_set` strips subscription metadata; `fire_channels_filtered` walks every configured channel regardless. Silent broadening of channel firing on the operator's principal noise-reduction lever. | **Stopgap shipped by Phase 6 integration explorer** — startup warn fires when `[notifier.subscriptions]` is non-empty on engine path. Principled fix defers to SDD-008 D-5e follow-up PR. |
 | F-2031-010 | nice (closed) | integration (config parse) | `parse_dispatcher_profile` silently mapped any non-positive `ack_window_secs` in a custom profile rung to 300 — operator typos like `ack_window_secs = 0` or `-60` produced 5-minute waits with no indication anything was wrong. | **Closed by Phase 6 integration explorer** — invalid values now log a structured `warn!` naming the profile, rung index, configured value, and fallback. |
+| F-2031-011 | nice (closed) | docs (SDD-008) | SDD-008's "Implementation status" said "Charter only. No implementation has shipped." (stale — D-1..D-8 all shipped). Two open-question working assumptions (Q-C "deferred channels", Q-G `[notifications]` namespace) were revised by reality during implementation, not just confirmed; the doc kept them as live questions. | **Closed by Phase 6 docs explorer** — Implementation-status table with per-D shipping PRs; each open question annotated `→ confirmed` / `→ revised on implementation` with the shipped behaviour. |
+| F-2031-012 | nice (closed) | docs (init.rs STARTER_CONFIG) | STARTER_CONFIG documents per-channel subscription filters in detail but never mentions F-2031-009 — operators following the starter config faithfully would set both `escalations_path` and `[notifier.subscriptions.*]` and silently get every event on every channel. The daemon-side stopgap warning (PR #135) catches this at runtime; the operator should learn about the gap at config-write time. Also: D-6c past-tense "lands in follow-up Ds" was stale (D-6c has shipped). | **Closed by Phase 6 docs explorer** — subscription block carries the F-2031-009 caveat inline; D-6c reference fixed to present tense. |
 
 ## Status
 
@@ -48,21 +50,20 @@ design-shaped.
   the inventory of the 9 new crates / 22 PRs / 159 new tests
   / 13 new TOML surface elements, and the PR-by-PR audit
   raising 3 nice findings + 1 demoted observation.
-- Integration explorer landed (this PR ships
-  `50-integration-audit.md`), closes F-2031-010 in-place,
-  ships the F-2031-009 stopgap warning, adds the 2-test
-  SDD-008 TOML round-trip coverage (selfdef-config 4 → 6).
-- Three explorers remain (ship in follow-up PRs):
-  1. `60-docs-audit.md` — SDD-008, ARCHITECTURE.md, integrations
-     contributor doc, SECURITY.md additions, init.rs starter
-     config; address F-2031-001 (D-7 commit-title label
-     collision).
-  2. `70-tests-audit.md` — engine + dispatcher + wake-task +
+- Docs explorer landed (this PR ships `60-docs-audit.md`),
+  closes F-2031-001 + F-2031-011 + F-2031-012 in-place.
+  SDD-008 now reflects shipped state with an
+  Implementation-status table and PR-labels appendix;
+  init.rs STARTER_CONFIG carries the F-2031-009 operator-
+  discovery caveat at config-write time (paired with the
+  daemon-side warn shipped in PR #135).
+- Two explorers remain (ship in follow-up PRs):
+  1. `70-tests-audit.md` — engine + dispatcher + wake-task +
      channel-validation + profile tests; SDD-005 pipeline-
      determinism compliance.
-  3. `80-security-audit.md` — credentials, TTY broadcast, SQLite
-     injection surface, rung-advance race, TLS posture;
-     address F-2031-003 (0BSD allow-list re-audit).
+  2. `80-security-audit.md` — credentials, TTY broadcast,
+     SQLite injection surface, rung-advance race, TLS
+     posture; address F-2031-003 (0BSD allow-list re-audit).
 - Phase 6 closes when every important / blocker has either a
   "closed by <PR>" back-reference or a tracked SDD.
 
@@ -76,7 +77,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | **3 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | *pending* | *pending* | *pending* |
+| **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | *pending* | *pending* |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an

@@ -308,8 +308,8 @@ channels = []
 #                extra pages.
 #   patient    — 4 attempts at 10/30/60/120 min. Non-critical
 #                channels where rapid retries would just be noise.
-# Operator-defined profiles + per-rung channel filtering land in
-# follow-up Ds (D-6c).
+# Operator-defined profiles + per-rung channel filtering ship
+# under D-6c — see [notifier.profiles.*] below.
 #
 # profile = "auto"
 
@@ -358,6 +358,14 @@ channels = []
 #
 # Common posture: route High+ to SMS, Critical+ to phone, everything to
 # email, security findings only to ntfy.
+#
+# IMPORTANT (Phase 6 F-2031-009): in v1 these filters apply ONLY on
+# the legacy chain path (escalations_path unset). When the engine
+# path is enabled (escalations_path set above), every channel sees
+# every event regardless of [notifier.subscriptions.<ch>]. The
+# daemon warns at startup when both knobs are set together so the
+# misconfiguration is visible. Subscription-aware dispatching ships
+# under the SDD-008 D-5e follow-up PR.
 #
 # [notifier.subscriptions.twilio]
 # severity_floor = "critical"          # SMS for blockers only

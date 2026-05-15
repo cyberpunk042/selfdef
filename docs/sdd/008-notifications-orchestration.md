@@ -8,9 +8,39 @@
 
 ## Implementation status
 
-Charter only. No implementation has shipped. The Ds below name the
-shipping units; each will land as a separate PR once this charter is
-agreed.
+**All design points D-1..D-8 shipped** during the Phase-6 cycle
+(PRs `#109`..`#130`). D-9 (dashboard) remains explicitly
+deferred — separate design conversation. The Phase 6
+closure-cycle audit (`docs/review/phase-6/`) walks the
+implementation; findings raised under that audit are tracked
+in the F-2031-NNN ledger.
+
+Per-D status:
+
+| D | Title | Status | PR(s) |
+| --- | --- | --- | --- |
+| D-1 | Taxonomy: modules ≠ integrations | shipped | #110 |
+| D-2a | `selfdef-notifier-orchestrator` trait crate | shipped | #111 |
+| D-2b | `selfdef-integration-ntfy` carve | shipped | #112 |
+| D-2c | `selfdef-integration-signal` carve | shipped | #113 |
+| D-3 | Per-channel subscription model | shipped (engine path: see Phase 6 F-2031-009) | #115 + #117 |
+| D-4 | `selfdefctl notify {ack,forget,list}` | shipped | #123 |
+| D-5a | `EscalationEngine` persistent layer | shipped | #118 |
+| D-5b | `PayloadDispatcher` façade | shipped | #119 |
+| D-5c | Wake task + rung advancement | shipped | #122 |
+| D-5d | Daemon wiring | shipped | #124 |
+| D-6a | Operating modes (enforce / audit) | shipped | #125 |
+| D-6b | Named profiles (auto / aggressive / patient) | shipped | #126 |
+| D-6c | Per-rung channel filtering + custom profiles | shipped | #129 + #130 |
+| D-7 | Panic floor (audit-mode bypass) | shipped | #127 |
+| D-8 | wall(1) session-attention | shipped | #128 |
+| D-9 | Dashboard | **deferred** — separate SDD when scoped |
+
+Plus 4 channel crates ship under SDD-008 even though they
+landed under Q-letter open questions rather than numbered Ds:
+**smtp** (Q-E, PR #114), **twilio** (Q-D, PR #116),
+**slack** (Q-C, PR #120), **discord** (PR #121). See the
+"PR labels" appendix below.
 
 ## Why now
 
@@ -370,51 +400,75 @@ Mirrors SDD-005:
 
 ## Open questions
 
+> **Status note** (updated after Phase-6 cycle): each working
+> assumption below is annotated `→ confirmed` /
+> `→ revised`. Q-F remains the only one not exercised yet —
+> v1 wall(1) targets all TTYs.
+
 - **Q-A — Schema location.** New table `notification_escalations`
   in the existing SQLite store, or split into a new sqlite
   database (e.g. `notifications.sqlite`) so the main events store
-  stays focused? **Working assumption: same store.** Decision
-  needed before D-5 implementation.
+  stays focused? **Working assumption: same store.**
+  → **Revised on implementation**: shipped as a dedicated
+  database file at the operator-configured
+  `[notifier].escalations_path` (default unset → engine path
+  disabled). The events store stays focused; concurrent access
+  from the daemon writer + CLI reader uses SQLite WAL.
 
 - **Q-B — Signal ack mechanism.** Signal replies need a long-
   running signal-cli daemon to ingest them. We can either (a)
   run signal-cli in daemon-mode and parse JSONRPC replies, or
   (b) skip channel-native ack for Signal and rely on the
   HTTP click-link path. **Working assumption: (b) for v1**,
-  upgrade to (a) once daemon-mode is stable. Confirm.
+  upgrade to (a) once daemon-mode is stable. → **Confirmed**;
+  shipped as (b). `SignalCliNotifier::supports_ack_reply`
+  returns `false`.
 
 - **Q-C — Which channels in the first ship.** Charter assumes
   ntfy + Signal + one email channel land in the SDD-008
   implementation cycle. Twilio + Slack + Discord ship as
-  follow-up SDDs. Is that right, or should Slack land in v1 to
-  validate the interactive-component path?
+  follow-up SDDs. → **Revised on implementation**: all seven
+  channels (ntfy, signal, smtp, twilio, slack, discord,
+  wall) landed in the SDD-008 cycle. The "follow-up SDD" plan
+  was abandoned once the integration crate template
+  (`docs/dev/integrations.md`) made each new channel a
+  routine pattern instance.
 
 - **Q-D — Twilio inbound webhook reachability.** Twilio reply-
   based ack requires the daemon to expose an HTTP endpoint
   reachable from the public internet. Most selfdef deployments
-  are inside a trust boundary (no public IP). Three options:
-  (a) require operator to terminate Twilio webhook at a reverse
-  proxy and forward; (b) provide a Twilio-relay companion
-  service hosted elsewhere; (c) accept that Twilio ack is
-  click-link only. **Working assumption: (c) for v1.**
+  are inside a trust boundary (no public IP). **Working
+  assumption: (c) for v1** (click-link only). → **Confirmed**;
+  Twilio shipped with `supports_ack_reply = false`. The
+  `/notify/ack/<token>` daemon endpoint that backs the
+  click-link path is still an open follow-up (PR-level — not
+  blocking SDD-008 closure).
 
-- **Q-E — Email channel: SendGrid or SMTP?** SendGrid is an
-  external dependency (API key, vendor lock-in, costs). SMTP
-  via `lettre` works against any operator-controlled mail
-  relay. **Working assumption: SMTP via lettre is the first
-  email channel** (`selfdef-integration-smtp`); SendGrid ships
-  later as an alternative if operators ask.
+- **Q-E — Email channel: SendGrid or SMTP?** **Working
+  assumption: SMTP via lettre** (`selfdef-integration-smtp`);
+  SendGrid ships later as an alternative if operators ask.
+  → **Confirmed**; `selfdef-integration-smtp` shipped under
+  PR #114. SendGrid never asked for.
 
-- **Q-F — Session-attention multi-user.** If multiple users are
-  logged in concurrently, does session-attention broadcast to
-  all (`wall`) or target one (`write -t <tty>`)? **Working
+- **Q-F — Session-attention multi-user.** **Working
   assumption: per-user opt-in list in config**; only opted-in
-  users see broadcasts.
+  users see broadcasts. → **Revised on implementation**: v1
+  wall(1) broadcasts to every logged-in TTY (the default
+  Unix `wall` behaviour). Per-user opt-in is a future
+  refinement once a second session-attention transport (e.g.
+  `write(1)`) lands — see `crates/selfdef-integration-wall`
+  module rustdoc.
 
-- **Q-G — Config layout.** Top-level `[notifications]` section
-  vs extending `[notifier]` (existing). **Working assumption:
-  new `[notifications]` section**; the old `[notifier]` becomes
-  a deprecated alias for one release.
+- **Q-G — Config layout.** **Working assumption: new
+  `[notifications]` section**; the old `[notifier]` becomes
+  a deprecated alias for one release. → **Revised on
+  implementation**: kept the existing `[notifier]` namespace
+  and extended it with the new sub-keys (`escalations_path`,
+  `mode`, `profile`, `panic_floor`, `[notifier.profiles.*]`,
+  `[notifier.subscriptions.*]`, and the 7 channel sub-
+  sections). The rename was rejected as needless churn —
+  operators on existing `[notifier]` configs see zero break
+  on upgrade.
 
 ## Why a charter, not a single-shot PR
 
@@ -436,5 +490,45 @@ each PR merges.
 ## Naming
 
 Phase prefix for any findings raised during the implementation
-cycle: F-2031-NNN (one beyond Phase 5's F-2030-NNN). The closure-
-cycle audit programme picks up Phase 6 once material code lands.
+cycle: F-2031-NNN (one beyond Phase 5's F-2030-NNN). The
+closure-cycle audit programme is **active as Phase 6**;
+findings tracked under
+[`docs/review/phase-6/99-findings-ledger.md`](../review/phase-6/99-findings-ledger.md).
+
+## PR labels — appendix
+
+> Background: Phase 6 recent-PRs explorer (F-2031-001) found
+> that the SDD-008 implementation cycle reused the `D-7` label
+> on two PRs with different meanings — PR #114 titled
+> `feat(sdd-008): D-7 Q-E — selfdef-integration-smtp first
+> email channel` and PR #127 titled `feat(sdd-008): D-7 —
+> panic floor`. Only the second matches SDD-008's actual D-7.
+
+The cycle's commit-message D-N labels are not perfectly 1:1
+with the design points in this SDD. The authoritative mapping
+is the "Implementation status" table above. For navigating the
+commit graph, the disambiguation below is exhaustive:
+
+- **`feat(sdd-008): D-7 Q-E — selfdef-integration-smtp first
+  email channel` (PR #114)** — this is the **D-2 pattern**
+  (channel-adapter carve, like ntfy / signal under D-2b/c)
+  serving the **Q-E open question** (SMTP vs SendGrid). The
+  `D-7` in the title is a labeling slip; D-7 properly refers
+  to the panic floor.
+- **`feat(sdd-008): D-7 — panic floor` (PR #127)** — the true
+  D-7 implementation.
+- **`feat(sdd-008): Twilio` (PR #116), `Slack` (PR #120),
+  `Discord` (PR #121)** — each is the **D-2 pattern** serving
+  its Q-letter open question (Q-D / Q-C / no explicit Q for
+  Discord). No D-N number was minted; these crates are pattern
+  instances rather than design points.
+- **`feat(sdd-008): D-8 — wall(1) session-attention channel`
+  (PR #128)** — the wall(1) crate is **simultaneously** D-8
+  (session-attention responder) AND a D-2 pattern instance.
+  The D-8 label dominates because the design point is
+  load-bearing for the operator-discovery story.
+
+If SDD-008 is ever published externally, this appendix should
+be moved up into the design-point cross-reference. For now,
+the audit programme's recent-PRs ledger (Phase 6, F-2031-001)
+is the authoritative cross-reference.
