@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **open** — 6 explorers landed (inventory, recent-PRs, crate, module, integration, docs); 2 pending.
+> Status: **open** — 7 explorers landed (inventory, recent-PRs, crate, module, integration, docs, tests); 1 pending (security).
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -42,6 +42,8 @@ design-shaped.
 | F-2031-010 | nice (closed) | integration (config parse) | `parse_dispatcher_profile` silently mapped any non-positive `ack_window_secs` in a custom profile rung to 300 — operator typos like `ack_window_secs = 0` or `-60` produced 5-minute waits with no indication anything was wrong. | **Closed by Phase 6 integration explorer** — invalid values now log a structured `warn!` naming the profile, rung index, configured value, and fallback. |
 | F-2031-011 | nice (closed) | docs (SDD-008) | SDD-008's "Implementation status" said "Charter only. No implementation has shipped." (stale — D-1..D-8 all shipped). Two open-question working assumptions (Q-C "deferred channels", Q-G `[notifications]` namespace) were revised by reality during implementation, not just confirmed; the doc kept them as live questions. | **Closed by Phase 6 docs explorer** — Implementation-status table with per-D shipping PRs; each open question annotated `→ confirmed` / `→ revised on implementation` with the shipped behaviour. |
 | F-2031-012 | nice (closed) | docs (init.rs STARTER_CONFIG) | STARTER_CONFIG documents per-channel subscription filters in detail but never mentions F-2031-009 — operators following the starter config faithfully would set both `escalations_path` and `[notifier.subscriptions.*]` and silently get every event on every channel. The daemon-side stopgap warning (PR #135) catches this at runtime; the operator should learn about the gap at config-write time. Also: D-6c past-tense "lands in follow-up Ds" was stale (D-6c has shipped). | **Closed by Phase 6 docs explorer** — subscription block carries the F-2031-009 caveat inline; D-6c reference fixed to present tense. |
+| F-2031-013 | nice (SDD-debt) | tests (daemon integration) | The 22-PR SDD-008 cycle shipped 159 new tests but **zero Category-2 (pipeline) tests** for the engine path. Operator-visible promises ("an unacked notification re-fires at its rung deadline", "ack from a separate process stops further re-fires", "mode=audit honoured at daemon startup") lack daemon-level end-to-end coverage. Same pattern as F-2026-082 (the SDD-005 parent). | **Open — follow-up PR under SDD-005's implementation-PR pattern.** New `m_notify_engine.rs` + `EngineHarness` helper; needs `tokio::time::pause()` for deterministic wake-task driving. |
+| F-2031-014 | demoted | tests (wake_task) | `wake_task::run_exits_on_cancellation` uses `tokio::time::sleep(50ms)` to give the spawned task time to reach its `tokio::select` arm before cancelling. Initially flagged as SDD-005 pipeline-determinism concern. | Cross-checked: this is a Cat-4 seam test for cancellation propagation, not a pipeline test. The sleep is scheduler-jitter absorption with a 2s timeout absorbing scheduler stalls. Pattern-distinct from "pipeline tests must be deterministic". Demoted. |
 
 ## Status
 
@@ -50,18 +52,14 @@ design-shaped.
   the inventory of the 9 new crates / 22 PRs / 159 new tests
   / 13 new TOML surface elements, and the PR-by-PR audit
   raising 3 nice findings + 1 demoted observation.
-- Docs explorer landed (this PR ships `60-docs-audit.md`),
-  closes F-2031-001 + F-2031-011 + F-2031-012 in-place.
-  SDD-008 now reflects shipped state with an
-  Implementation-status table and PR-labels appendix;
-  init.rs STARTER_CONFIG carries the F-2031-009 operator-
-  discovery caveat at config-write time (paired with the
-  daemon-side warn shipped in PR #135).
-- Two explorers remain (ship in follow-up PRs):
-  1. `70-tests-audit.md` — engine + dispatcher + wake-task +
-     channel-validation + profile tests; SDD-005 pipeline-
-     determinism compliance.
-  2. `80-security-audit.md` — credentials, TTY broadcast,
+- Tests explorer landed (this PR ships `70-tests-audit.md`),
+  raises F-2031-013 (Category-2 pipeline-test gap) as
+  SDD-debt for SDD-005 implementation-PR follow-up; demotes
+  F-2031-014 on cross-check (50ms cancellation-propagation
+  sleep is not pipeline-determinism). Categories 1 + 4 of
+  SDD-005 audit clean for the 171-test SDD-008 surface.
+- One explorer remains (ships in follow-up PR):
+  1. `80-security-audit.md` — credentials, TTY broadcast,
      SQLite injection surface, rung-advance race, TLS
      posture; address F-2031-003 (0BSD allow-list re-audit).
 - Phase 6 closes when every important / blocker has either a
@@ -77,7 +75,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | *pending* | *pending* |
+| **Phase 6** | **2 nice (closed) + 1 nice + 1 demoted** | **1 important + 2 nice (all closed)** | **2 important + 1 nice (closed) + 1 important (SDD-debt stopgap)** | **1 nice (closed) + stopgap landed** | **3 nice (closed)** | **1 nice (SDD-debt) + 1 demoted** | *pending* |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an
