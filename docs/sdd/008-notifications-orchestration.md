@@ -12,11 +12,18 @@
 the original D-1..D-8 cycle ran as PRs `#109`..`#130` under
 Phase 6; D-5e + D-4 HTTP-ack + the four Q-G adapter
 pattern-instances shipped post-Phase-6 as PRs `#140`..`#146`.
-D-9 (dashboard) remains explicitly
-deferred — separate design conversation. The Phase 6
+Post-Phase-7: D-024 (`write(1)` per-user TTY — sibling of
+D-8 wall, realises D-004) shipped under PR `#170`, and the
+D-4 CLI surface gained a fourth verb `selfdefctl notify
+resend` under PR `#173`. **The channel-adapter set now stands
+at twelve crates** (ntfy, signal, slack, discord, smtp,
+twilio, pagerduty, loki, opensearch, thehive, wall, write).
+D-9 (dashboard) remains explicitly deferred — separate
+design conversation; requirements captured at
+[`docs/sdd/009-dashboard.md`](009-dashboard.md). The Phase 6
 closure-cycle audit (`docs/review/phase-6/`) walks the
-implementation; findings raised under that audit are tracked
-in the F-2031-NNN ledger.
+original implementation; findings raised under that audit
+are tracked in the F-2031-NNN ledger.
 
 Per-D status:
 
@@ -33,7 +40,7 @@ Per-D status:
 | Q-G Loki | Grafana Loki push-API channel (`selfdef-integration-loki`) | shipped | #144 |
 | Q-G OpenSearch | OpenSearch / Elasticsearch document-index channel (`selfdef-integration-opensearch`) | shipped | #145 |
 | Q-G TheHive | TheHive alert-API channel (`selfdef-integration-thehive`) | shipped (**all Q-G adapters complete**) | #146 |
-| D-4 | `selfdefctl notify {ack,forget,list}` | shipped | #123 |
+| D-4 | `selfdefctl notify {ack,forget,list,resend}` | shipped (resend added post-Phase-7) | #123 + #173 |
 | D-5a | `EscalationEngine` persistent layer | shipped | #118 |
 | D-5b | `PayloadDispatcher` façade | shipped | #119 |
 | D-5c | Wake task + rung advancement | shipped | #122 |
@@ -43,6 +50,7 @@ Per-D status:
 | D-6c | Per-rung channel filtering + custom profiles | shipped | #129 + #130 |
 | D-7 | Panic floor (audit-mode bypass) | shipped | #127 |
 | D-8 | wall(1) session-attention | shipped | #128 |
+| D-024 | write(1) per-user session-attention (sibling of D-8 wall) — realises D-004 | shipped | #170 |
 | D-9 | Dashboard | **requirements logged (D-001, 2026-05-15)** — comprehensive operator visibility (all modules, integrations, configurations, status, events, messages, operations); detailed design deferred to a separate SDD/design conversation. Requirements stub: [`docs/sdd/009-dashboard.md`](009-dashboard.md). |
 
 Plus 4 channel crates ship under SDD-008 even though they
