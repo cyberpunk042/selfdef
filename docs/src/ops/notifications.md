@@ -6,7 +6,7 @@ search index, and SOC/IR tooling. Every channel implements the
 same `Channel` trait and is wired through the orchestrator's
 escalation engine (SDD-008 D-5).
 
-> **Canonical reference**: [`docs/operator/channels.md`](../../operator/channels.md)
+> **Canonical reference**: [`docs/operator/channels.md`](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md)
 > is the source of truth for per-channel TOML blocks, auth secret
 > hygiene, wire-shape behavior, severity collapse tables, and
 > limitations. Each `crates/selfdef-integration-<name>/README.md`
@@ -93,18 +93,18 @@ reads with the daemon).
 For each channel: jump to the canonical operator reference for the
 TOML block, secret hygiene, wire behavior, and limitations.
 
-- **[ntfy](../../operator/channels.md#ntfy)** — self-hosted push via [ntfy.sh](https://docs.ntfy.sh/).
-- **[signal](../../operator/channels.md#signal)** — Signal IM via [`signal-cli`](https://github.com/AsamK/signal-cli) subprocess.
-- **[slack](../../operator/channels.md#slack)** — Slack incoming webhook.
-- **[discord](../../operator/channels.md#discord)** — Discord webhook (2000-char cap with truncation).
-- **[smtp](../../operator/channels.md#smtp)** — email via operator-controlled SMTP relay.
-- **[twilio](../../operator/channels.md#twilio)** — Twilio SMS REST API (send-only, any-success-wins multi-recipient).
-- **[pagerduty](../../operator/channels.md#pagerduty)** — PagerDuty Events API v2 (one incident per rung — unacked alerts page louder).
-- **[loki](../../operator/channels.md#loki)** — Grafana Loki push-API (three auth modes: single-tenant / multi-tenant / Grafana Cloud).
-- **[opensearch](../../operator/channels.md#opensearch)** — OpenSearch / Elasticsearch document index (three auth modes: none / basic / apikey; unknowns rejected at startup).
-- **[thehive](../../operator/channels.md#thehive)** — TheHive alert API (TLP=Amber by default).
-- **[wall](../../operator/channels.md#wall)** — broadcast `wall(1)` to every logged-in TTY.
-- **[write](../../operator/channels.md#write)** — per-user `write(1)` to an allowlist of operator accounts (D-024).
+- **[ntfy](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#ntfy)** — self-hosted push via [ntfy.sh](https://docs.ntfy.sh/).
+- **[signal](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#signal)** — Signal IM via [`signal-cli`](https://github.com/AsamK/signal-cli) subprocess.
+- **[slack](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#slack)** — Slack incoming webhook.
+- **[discord](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#discord)** — Discord webhook (2000-char cap with truncation).
+- **[smtp](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#smtp)** — email via operator-controlled SMTP relay.
+- **[twilio](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#twilio)** — Twilio SMS REST API (send-only, any-success-wins multi-recipient).
+- **[pagerduty](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#pagerduty)** — PagerDuty Events API v2 (one incident per rung — unacked alerts page louder).
+- **[loki](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#loki)** — Grafana Loki push-API (three auth modes: single-tenant / multi-tenant / Grafana Cloud).
+- **[opensearch](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#opensearch)** — OpenSearch / Elasticsearch document index (three auth modes: none / basic / apikey; unknowns rejected at startup).
+- **[thehive](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#thehive)** — TheHive alert API (TLP=Amber by default).
+- **[wall](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#wall)** — broadcast `wall(1)` to every logged-in TTY.
+- **[write](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md#write)** — per-user `write(1)` to an allowlist of operator accounts (D-024).
 
 For a copy-paste-ready starter config covering all 12 channels +
 the 5 cross-cutting knobs, see
@@ -154,7 +154,7 @@ shape for one test cycle, then revert.
 
 ## See also
 
-- **Per-channel canonical reference** ([`docs/operator/channels.md`](../../operator/channels.md)) — TOML blocks, secret hygiene, wire shape, limitations for each of the 12 channels.
+- **Per-channel canonical reference** ([`docs/operator/channels.md`](https://github.com/cyberpunk042/selfdef/blob/main/docs/operator/channels.md)) — TOML blocks, secret hygiene, wire shape, limitations for each of the 12 channels.
 - **Example config** ([`config/selfdef.toml.example`](https://github.com/cyberpunk042/selfdef/blob/main/config/selfdef.toml.example)) — copy-paste-ready blocks for every channel + the 5 `[notifier]` knobs.
 - **Orchestration design** ([`docs/sdd/008-notifications-orchestration.md`](https://github.com/cyberpunk042/selfdef/blob/main/docs/sdd/008-notifications-orchestration.md)) — SDD-008 defines `Channel`, the escalation engine, profiles, subscriptions, and ack flows.
 - **Architecture** ([`ARCHITECTURE.md`](https://github.com/cyberpunk042/selfdef/blob/main/ARCHITECTURE.md)) — where the integration layer sits relative to bus, store, correlator, responder, notifier-orchestrator.
