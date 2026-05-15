@@ -158,7 +158,12 @@ async fn handle_row(dispatcher: &PayloadDispatcher, row: PendingEscalation, now:
         severity: row.severity,
         ack_link: row.ack_link,
     };
-    let outcome = dispatcher.dispatch_payload(&payload).await;
+    // SDD-008 D-6c: respect the per-rung channel allow-list from
+    // the active profile. Empty allow-list = all channels (matches
+    // the pre-D-6c default).
+    let outcome = dispatcher
+        .dispatch_payload_for_rung(&payload, row.rung_index)
+        .await;
     info!(
         event_id = %row.event_id,
         rung = row.rung_index,

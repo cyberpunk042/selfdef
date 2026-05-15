@@ -45,7 +45,7 @@ mod dispatcher;
 mod profile;
 pub mod wake_task;
 pub use dispatcher::{DispatchOutcome, Mode, PayloadDispatcher};
-pub use profile::{Profile, Rung};
+pub use profile::{Profile, ProfileBuildError, Rung};
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
