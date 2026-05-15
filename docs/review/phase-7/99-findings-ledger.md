@@ -1,6 +1,6 @@
 # Phase 7 — findings ledger
 
-> Status: **open** — inventory + recent-PRs explorer landed; 6 explorers pending.
+> Status: **open** — inventory + recent-PRs + crate explorers landed; 5 explorers pending.
 > Vintage prefix: **F-2032-NNN**
 > Last updated: 2026-05-15
 
@@ -34,23 +34,20 @@ design-shaped.
 | F-2032-001 | nice | engine (schema v2 + v3 migration) | The v2 and v3 migration blocks in `EscalationEngine::migrate` run `ALTER TABLE` + back-fill (v3 only) + index + `user_version` bump as separate statements outside a transaction. If a step fails mid-block (e.g. disk-full on the back-fill UPDATE), `user_version` stays at the prior level and the next daemon restart re-runs the migration — but `ALTER TABLE ADD COLUMN` is non-idempotent in SQLite, so the retry errors with "duplicate column name" and refuses startup. | Integration + security explorers. Fix: wrap each `if current < N` block in `unchecked_transaction()`. |
 | F-2032-002 | referral | security (API auth surface) | PR #142 introduces `GET /notify/ack/:token` — the **first unauthenticated** API route selfdef ships. PR documents the "token IS the auth" model explicitly. Recompute the brute-force math; enumerate third-party-log-leak risk. | Security explorer (re-audit token-IS-auth model against SECURITY.md's four primary adversaries). |
 | F-2032-003 | nice | docs (SDD-008 PR labels) | The 4 Q-G commit titles use `feat(sdd-008): Q-G — <service> integration`. SDD-008's `Q-G` is an open-question identifier (not a design point); casual readers might confuse "Q-G" for D-N-shaped naming. Extends Phase 6's F-2031-001 family of "PR-label disambiguation" concerns. | Docs explorer (verify SDD-008's "PR labels — appendix" covers the Q-G commits cleanly). |
+| F-2032-004 | nice (closed) | crate (pagerduty) | PagerDuty's `from_config` duplicated the `Client::builder().timeout(10s)` block inline instead of routing through `Self::new` like the other 3 Q-G adapters do. Drift on a contract that's invisible until a future client-config change has to be applied twice. | **Closed by Phase 7 crate explorer** — `from_config` now returns `Self::new(routing_key, source).with_endpoint(endpoint)`. 12 existing tests still pass. |
 
 ## Status
 
-- Inventory + recent-PRs explorers landed (this PR), raising
-  3 findings: F-2032-001 (schema v2/v3 migration partial-
-  failure recovery, nice), F-2032-002 (security referral on
-  the first unauthenticated route), F-2032-003 (Q-G commit-
-  label pedantry, nice).
-- Six explorers remain (ship in follow-up PRs):
-  1. `30-crate-audit.md` — 4 new Q-G channel crates' shapes.
-  2. `40-module-audit.md` — D-4 HTTP ack flow end-to-end.
+- Inventory + recent-PRs + crate explorers landed. F-2032-004
+  (PagerDuty client-builder duplication) closed in-place.
+- Five explorers remain (ship in follow-up PRs):
+  1. `40-module-audit.md` — D-4 HTTP ack flow end-to-end.
   3. `50-integration-audit.md` — schema migrations on disk,
      ack_link_base round-trip, ApiState engine handle wiring.
   4. `60-docs-audit.md` — SDD-008 status table, STARTER_CONFIG
      5 new blocks, SECURITY.md row deltas.
   5. `70-tests-audit.md` — `EngineHarness` pattern, Q-G test
-     count variance.
+     count variance, schema-migration test coverage gap.
   6. `80-security-audit.md` — schema v2+v3 migration safety,
      new unauth `/notify/ack/:token` route, 4 new credential
      surfaces.
@@ -68,7 +65,7 @@ For context — full closure-cycle convergence to date:
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Phase 6 | 3 nice + 1 demoted | 1 important + 2 nice | 2 important + 1 nice + 1 SDD-debt | 1 nice + stopgap | 3 nice | 1 SDD-debt + 1 demoted | 1 important + 2 nice |
-| **Phase 7** | **2 nice + 1 referral** | *pending* | *pending* | *pending* | *pending* | *pending* | *pending* |
+| **Phase 7** | **2 nice + 1 referral** | **1 nice (closed)** | *pending* | *pending* | *pending* | *pending* | *pending* |
 
 Phase 6 audited a 22-PR / 9-new-crate feature cycle and
 caught 3 important production-relevant defects; Phase 7
