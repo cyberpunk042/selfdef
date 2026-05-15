@@ -115,10 +115,20 @@ async fn compute_sleep(dispatcher: &PayloadDispatcher) -> Duration {
 }
 
 /// Process whatever rows are due now. One iteration of the wake
-/// loop's body. Test-friendly: callers can drive it manually with a
-/// fixed `now`.
+/// loop's body using wall-clock `now`.
 async fn process_due(dispatcher: &PayloadDispatcher) {
-    let now = unix_now();
+    process_due_at(dispatcher, unix_now()).await;
+}
+
+/// Process whatever rows are due as of a specific `now` (unix
+/// seconds). Test-friendly: callers can drive it manually instead
+/// of spawning [`run`], side-stepping the `start_paused = true` +
+/// `spawn_blocking` interaction that lets virtual time advance
+/// while real-thread SQLite ops are still queued. Used by
+/// `crates/selfdef-daemon/tests/m_notify_engine.rs` (SDD-005
+/// implementation-PR pattern; closes F-2031-013). Production code
+/// uses [`process_due`].
+pub async fn process_due_at(dispatcher: &PayloadDispatcher, now: i64) {
     let due = match dispatcher.engine().take_due(now, TAKE_DUE_LIMIT).await {
         Ok(rows) => rows,
         Err(e) => {
