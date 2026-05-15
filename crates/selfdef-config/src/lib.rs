@@ -459,6 +459,26 @@ pub struct NotifierConfig {
     /// `critical` | `fatal`. Empty / unset = no floor (audit mode
     /// suppresses every severity).
     pub panic_floor: Option<String>,
+    /// SDD-008 D-6c: operator-defined custom escalation profiles
+    /// keyed by name. The active profile is picked by
+    /// `[notifier].profile`. When that name matches a key here,
+    /// the daemon constructs a custom [`Profile`] from this
+    /// configured rung sequence instead of falling back to the
+    /// three built-ins (`auto`/`aggressive`/`patient`).
+    ///
+    /// Example:
+    /// ```toml
+    /// [notifier.profiles.weekend]
+    /// rungs = [
+    ///     { channels = ["ntfy"],   ack_window_secs = 1800 },
+    ///     { channels = ["signal"], ack_window_secs = 3600 },
+    ///     { channels = [],         ack_window_secs = 600  },  # WUPHF
+    /// ]
+    /// ```
+    ///
+    /// Empty `channels` list at a rung = "fire all configured
+    /// channels" (WUPHF semantics).
+    pub profiles: HashMap<String, ProfileConfig>,
     /// SDD-008 D-3: per-channel subscription filters keyed by
     /// channel slug (`"ntfy"`, `"signal"`, `"smtp"`, `"twilio"`,
     /// …). Missing entry = accept every event (default). See
@@ -481,6 +501,7 @@ impl Default for NotifierConfig {
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
             panic_floor: None,
+            profiles: HashMap::new(),
             subscriptions: HashMap::new(),
         }
     }
@@ -539,6 +560,32 @@ pub struct WallConfig {
     /// the config at daemon start (the wall channel is disabled
     /// rather than firing on every event).
     pub severity_floor: String,
+}
+
+/// SDD-008 D-6c: operator-defined custom escalation profile shape.
+/// Mirrors `selfdef_notifier_engine::Profile`'s rung sequence with
+/// only the fields operators set in TOML; the daemon translates
+/// this into the typed `Profile` at startup.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct ProfileConfig {
+    /// Ordered rung sequence. Each rung is a (channels, ack_window)
+    /// pair. Empty `channels` at a rung = "all channels" (WUPHF).
+    /// Empty `rungs` list rejects the profile at daemon start; a
+    /// 0-rung profile would never fire.
+    pub rungs: Vec<RungConfig>,
+}
+
+/// SDD-008 D-6c: one rung of an operator-defined custom profile.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct RungConfig {
+    /// Channel allow-list for this rung. Empty = fire every
+    /// configured channel (WUPHF semantics).
+    pub channels: Vec<String>,
+    /// Seconds the wake task waits before advancing to the next
+    /// rung. Defaults to `300` (5 minutes) when unset / zero.
+    pub ack_window_secs: i64,
 }
 
 /// SDD-008 D-3: per-channel subscription filter.

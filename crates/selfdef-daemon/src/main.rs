@@ -780,7 +780,7 @@ fn build_notifier_path(
                 );
             }
             let mode = parse_dispatcher_mode(&cfg.notifier.mode);
-            let profile = parse_dispatcher_profile(&cfg.notifier.profile);
+            let profile = parse_dispatcher_profile(&cfg.notifier.profile, cfg);
             let panic_floor = cfg.notifier.panic_floor.as_deref().and_then(|raw| {
                 let parsed = parse_severity_floor(raw);
                 if parsed.is_none() {
@@ -1018,16 +1018,59 @@ fn parse_dispatcher_mode(raw: &str) -> Mode {
     }
 }
 
-/// SDD-008 D-6b: parse the `[notifier].profile` string into a
-/// typed [`Profile`]. Unknown strings log a warn and fall back to
-/// the default (`auto`).
-fn parse_dispatcher_profile(raw: &str) -> Profile {
+/// SDD-008 D-6b / D-6c: resolve `[notifier].profile` against a
+/// custom-profile table first, then fall back to the three built-
+/// ins. Unknown name + missing table entry logs a warn and falls
+/// back to the default (`auto`).
+///
+/// Lookup order:
+/// 1. Operator-defined `[notifier.profiles.<raw>]` (D-6c) — if the
+///    name matches a custom-profile key, build via
+///    [`Profile::custom`]. Empty rung list rejects the profile and
+///    falls through to step 2.
+/// 2. Built-in name parse (D-6b) — `auto` / `aggressive` /
+///    `patient`.
+/// 3. Default (`auto`) — logged warn.
+fn parse_dispatcher_profile(raw: &str, cfg: &Config) -> Profile {
+    // Step 1: operator-defined custom profile.
+    if let Some(custom_cfg) = cfg.notifier.profiles.get(raw) {
+        let rungs: Vec<selfdef_notifier_engine::Rung> = custom_cfg
+            .rungs
+            .iter()
+            .map(|r| {
+                let window = if r.ack_window_secs > 0 {
+                    r.ack_window_secs
+                } else {
+                    300
+                };
+                if r.channels.is_empty() {
+                    selfdef_notifier_engine::Rung::new(window)
+                } else {
+                    selfdef_notifier_engine::Rung::with_channels(window, r.channels.clone())
+                }
+            })
+            .collect();
+        match Profile::custom(raw, rungs) {
+            Ok(p) => {
+                info!(profile = raw, "loaded custom escalation profile");
+                return p;
+            }
+            Err(e) => {
+                warn!(
+                    profile = raw,
+                    error = %e,
+                    "custom [notifier.profiles.<name>] rejected; falling back to named built-in",
+                );
+            }
+        }
+    }
+    // Step 2: built-in name.
     match Profile::from_name(raw) {
         Some(p) => p,
         None => {
             warn!(
                 value = raw,
-                "ignoring unknown [notifier].profile; use one of auto|aggressive|patient; falling back to auto",
+                "ignoring unknown [notifier].profile; use one of auto|aggressive|patient or define one under [notifier.profiles.<name>]; falling back to auto",
             );
             Profile::default()
         }

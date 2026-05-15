@@ -313,6 +313,26 @@ channels = []
 #
 # profile = "auto"
 
+# SDD-008 D-6c: operator-defined custom escalation profiles.
+# Set [notifier].profile = "<name>" above to activate one defined
+# here. Each rung is (channels, ack_window_secs):
+#
+#   channels        — allow-list of channel slugs. Empty = fire all
+#                     configured channels (WUPHF semantics).
+#   ack_window_secs — wait before advancing to the next rung. The
+#                     wake task closes the row after the last rung's
+#                     window expires unacked.
+#
+# Example: route to ntfy first, escalate to Twilio + Signal after
+# 30 min, full WUPHF (every configured channel) after another hour.
+#
+# [notifier.profiles.weekend]
+# rungs = [
+#   { channels = ["ntfy"],              ack_window_secs = 1800 },
+#   { channels = ["twilio", "signal"],  ack_window_secs = 3600 },
+#   { channels = [],                    ack_window_secs = 600  },  # WUPHF
+# ]
+
 # SDD-008 D-7: severity threshold at or above which audit mode is
 # bypassed (channels fire for real). The escape hatch for
 # "operator misconfiguration cannot leave a blocker un-notified" —
