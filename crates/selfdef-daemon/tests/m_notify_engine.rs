@@ -124,6 +124,7 @@ impl EngineHarness {
             severity: event.severity_id,
             ack_link: None,
             event_kind: Some(event.class_uid.name().to_string()),
+            ack_token: None,
         };
         let deadline = now + self.dispatcher.profile().ack_window_for(0);
         let _ = self.dispatcher.submit(&payload, deadline, now).await;

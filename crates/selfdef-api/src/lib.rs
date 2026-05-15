@@ -114,6 +114,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/findings", get(handlers::findings))
         .route("/events/stream", get(handlers::events_stream))
         .route("/metrics", get(handlers::metrics))
+        // SDD-008 D-4 HTTP ack — open auth: the token in the URL
+        // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
+        // rides out-of-band over the operator-trusted channels).
+        .route("/notify/ack/:token", get(handlers::notify_ack))
         // ---- control endpoints ----
         // Each control verb checks for the relevant handle in ApiState
         // and returns 503 Service Unavailable when missing — so the

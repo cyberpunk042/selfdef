@@ -1424,3 +1424,120 @@ async fn metrics_allows_read_capability() {
         .unwrap_or_default();
     assert_eq!(ct, "text/plain; version=0.0.4; charset=utf-8");
 }
+
+// ---------------- SDD-008 D-4 HTTP ack tests
+
+#[tokio::test]
+async fn notify_ack_returns_503_when_engine_not_wired() {
+    // Default ApiState has no escalation engine — the route is
+    // present (operators can flip the knob on without a route-
+    // table change) but returns 503.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/notify/ack/any-token")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+async fn build_state_with_engine() -> (
+    ApiState,
+    std::sync::Arc<selfdef_notifier_engine::EscalationEngine>,
+    tempfile::TempDir,
+) {
+    use std::sync::Arc;
+    let (state, _bus, _store, dir) = build_state().await;
+    // Open the engine inside the same tempdir so it's cleaned up.
+    let engine_path = dir.path().join("escalations.sqlite");
+    let engine = Arc::new(selfdef_notifier_engine::EscalationEngine::open(&engine_path).unwrap());
+    let state = state.with_escalation_engine(Arc::clone(&engine));
+    (state, engine, dir)
+}
+
+async fn enqueue_for_token(
+    engine: &selfdef_notifier_engine::EscalationEngine,
+    token: &str,
+    title: &str,
+) -> selfdef_notifier_orchestrator::EventId {
+    use selfdef_notifier_orchestrator::{EventId, Payload, PayloadId};
+    let event_id = EventId(uuid::Uuid::now_v7());
+    let payload = Payload {
+        id: PayloadId::new(),
+        event_id: Some(event_id),
+        title: title.into(),
+        body: format!("body for {title}"),
+        severity: SeverityId::High,
+        ack_link: None,
+        event_kind: None,
+        ack_token: Some(token.to_string()),
+    };
+    engine.enqueue(&payload, 100, 0).await.unwrap();
+    event_id
+}
+
+#[tokio::test]
+async fn notify_ack_unknown_token_returns_404() {
+    let (state, _engine, _dir) = build_state_with_engine().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/notify/ack/this-token-was-never-enqueued")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn notify_ack_known_token_returns_200_and_acks() {
+    let (state, engine, _dir) = build_state_with_engine().await;
+    let _eid = enqueue_for_token(&engine, "happy-path-token", "ssh brute").await;
+
+    let app = app(state.clone());
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/notify/ack/happy-path-token")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = to_bytes(res.into_body(), 1_024).await.unwrap();
+    let body = std::str::from_utf8(&body_bytes).unwrap();
+    assert!(body.contains("Acknowledged"), "body: {body}");
+    assert!(body.contains("ssh brute"), "title in body: {body}");
+
+    // Verify the row IS acked in the engine.
+    let due = engine.take_due(1_000, 10).await.unwrap();
+    assert_eq!(due.len(), 0, "acked rows must not be take_due-able");
+}
+
+#[tokio::test]
+async fn notify_ack_idempotent_second_click_returns_404() {
+    // First click acks; second click can't distinguish "unknown"
+    // from "already acked" so it 404s. The handler doc-comment
+    // notes this is intentional for v1; a future revision could
+    // surface "already acked" as 200.
+    let (state, engine, _dir) = build_state_with_engine().await;
+    let _eid = enqueue_for_token(&engine, "double-click", "alert").await;
+
+    let app1 = app(state.clone());
+    let req1 = Request::builder()
+        .method(Method::GET)
+        .uri("/notify/ack/double-click")
+        .body(Body::empty())
+        .unwrap();
+    let res1 = app1.oneshot(req1).await.unwrap();
+    assert_eq!(res1.status(), StatusCode::OK);
+
+    let app2 = app(state);
+    let req2 = Request::builder()
+        .method(Method::GET)
+        .uri("/notify/ack/double-click")
+        .body(Body::empty())
+        .unwrap();
+    let res2 = app2.oneshot(req2).await.unwrap();
+    assert_eq!(res2.status(), StatusCode::NOT_FOUND);
+}

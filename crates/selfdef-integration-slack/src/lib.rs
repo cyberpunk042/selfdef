@@ -299,6 +299,7 @@ mod tests {
             severity: SeverityId::Critical,
             ack_link: Some("https://selfdef.example/ack/abc".into()),
             event_kind: None,
+            ack_token: None,
         }
     }
 

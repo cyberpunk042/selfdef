@@ -107,6 +107,9 @@ pub struct PendingEscalation {
     /// wake-task re-fire. `None` for rows enqueued before schema v2
     /// shipped or for orchestrator-internal payloads.
     pub event_kind: Option<String>,
+    /// HTTP ack token (UUIDv7 simple form). SDD-008 D-4 HTTP ack:
+    /// `/notify/ack/<token>` looks up by this column.
+    pub ack_token: String,
 }
 
 /// The schema version this crate writes. Bumped whenever a schema
@@ -115,7 +118,10 @@ pub struct PendingEscalation {
 /// - v1 (D-5a, initial ship)
 /// - v2 (D-5e) — adds nullable `event_kind` column for the
 ///   per-channel subscription filter that survives rung re-fires.
-pub const SCHEMA_VERSION: u32 = 2;
+/// - v3 (D-4 HTTP ack) — adds `ack_token TEXT NOT NULL UNIQUE`
+///   column. Migration backfills random tokens for any existing
+///   rows.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Persistent escalation engine backed by SQLite.
 pub struct EscalationEngine {
@@ -207,6 +213,41 @@ impl EscalationEngine {
             conn.pragma_update(None, "user_version", 2_i64)?;
             debug!("escalation schema migrated to v2 (event_kind column)");
         }
+        if current < 3 {
+            // D-4 HTTP ack: token-based ack endpoint. We add
+            // `ack_token` as a UNIQUE index so the API can look up
+            // by token in O(log n). Existing rows (from earlier
+            // schema versions) get a freshly minted token via the
+            // back-fill UPDATE — they were ack-able via the CLI
+            // (record_ack by event_id) before; they remain ack-able
+            // via the HTTP path after migration.
+            conn.execute_batch(
+                "ALTER TABLE notification_escalations ADD COLUMN ack_token TEXT NULL;",
+            )?;
+            // Back-fill: assign a UUIDv7-shaped random token to any
+            // pre-existing rows (none in fresh installs; one or two
+            // in upgraded daemons). We can't use the rusqlite
+            // randomblob shape directly here because the
+            // randomblob() output is binary; encode as hex via
+            // lower(hex(randomblob(16))) for the 32-char form that
+            // matches Uuid::simple().
+            conn.execute_batch(
+                "UPDATE notification_escalations \
+                    SET ack_token = lower(hex(randomblob(16))) \
+                  WHERE ack_token IS NULL;",
+            )?;
+            // Make NOT NULL + UNIQUE after the back-fill. SQLite
+            // doesn't support ALTER TABLE ADD CONSTRAINT directly;
+            // a partial-unique-index serves the same purpose and is
+            // honoured by INSERT OR REPLACE.
+            conn.execute_batch(
+                "CREATE UNIQUE INDEX IF NOT EXISTS \
+                    idx_escalations_ack_token \
+                  ON notification_escalations(ack_token);",
+            )?;
+            conn.pragma_update(None, "user_version", 3_i64)?;
+            debug!("escalation schema migrated to v3 (ack_token column + unique index)");
+        }
         Ok(())
     }
 
@@ -229,6 +270,14 @@ impl EscalationEngine {
         now: i64,
     ) -> Result<(), EngineError> {
         let event_id = payload.event_id.ok_or(EngineError::PayloadMissingEventId)?;
+        // D-4: the ack token is event-scoped (one token per event_id
+        // across all rungs). If the caller supplied one via
+        // `Payload.ack_token` (DispatcherAdapter does this when
+        // `[notifier].ack_link_base` is configured), use it; else
+        // mint one here so the column's NOT-NULL contract holds.
+        // The ON CONFLICT clause below preserves the *existing*
+        // row's token so URLs in already-sent notifications stay
+        // valid across re-submits.
         let row = StoredRow {
             event_id: event_id.0.to_string(),
             payload_id: payload.id.0.to_string(),
@@ -239,6 +288,10 @@ impl EscalationEngine {
             deadline_at,
             created_at: now,
             event_kind: payload.event_kind.clone(),
+            ack_token: payload
+                .ack_token
+                .clone()
+                .unwrap_or_else(|| Uuid::now_v7().simple().to_string()),
         };
         let conn = Arc::clone(&self.conn);
         tokio::task::spawn_blocking(move || -> Result<(), EngineError> {
@@ -247,9 +300,10 @@ impl EscalationEngine {
                 r#"
                 INSERT INTO notification_escalations (
                     event_id, payload_id, title, body, severity, ack_link,
-                    rung_index, deadline_at, acked_at, created_at, event_kind
+                    rung_index, deadline_at, acked_at, created_at, event_kind,
+                    ack_token
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, ?8, ?9)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, ?8, ?9, ?10)
                 ON CONFLICT(event_id) DO UPDATE SET
                     payload_id  = excluded.payload_id,
                     title       = excluded.title,
@@ -260,6 +314,9 @@ impl EscalationEngine {
                     deadline_at = excluded.deadline_at,
                     acked_at    = NULL,
                     event_kind  = excluded.event_kind
+                    -- ack_token deliberately NOT updated on conflict:
+                    -- URLs in already-sent notifications must keep
+                    -- working until the operator acks or closes.
                 "#,
                 params![
                     row.event_id,
@@ -271,6 +328,7 @@ impl EscalationEngine {
                     row.deadline_at,
                     row.created_at,
                     row.event_kind,
+                    row.ack_token,
                 ],
             )?;
             Ok(())
@@ -296,6 +354,61 @@ impl EscalationEngine {
         })
         .await??;
         Ok(changed > 0)
+    }
+
+    /// SDD-008 D-4 HTTP ack: mark the row owning `token` as acked.
+    /// Returns `Ok(Some((event_id, title)))` if a row was updated
+    /// (operator gets to see what they just acked), `Ok(None)` if
+    /// the token is unknown or the row was already acked
+    /// (idempotent — a second click on the same URL is a no-op,
+    /// not a failure).
+    ///
+    /// The HTTP handler hands this an opaque `&str` from the URL
+    /// path; we treat it as a regular `TEXT` column value (parameter-
+    /// bound, no SQL injection surface) and let SQLite do the
+    /// equality check via the partial unique index.
+    pub async fn record_ack_by_token(
+        &self,
+        token: &str,
+        acked_at: i64,
+    ) -> Result<Option<(EventId, String)>, EngineError> {
+        let token = token.to_string();
+        let conn = Arc::clone(&self.conn);
+        let result = tokio::task::spawn_blocking(
+            move || -> Result<Option<(String, String)>, EngineError> {
+                let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
+                // Two-step: first UPDATE returns the rowcount; then
+                // SELECT recovers the event_id + title so the
+                // handler can render a confirmation page. We do this
+                // in one transaction so a concurrent close_event
+                // can't tear the row out between the UPDATE and the
+                // SELECT.
+                let tx = guard.unchecked_transaction()?;
+                let changed = tx.execute(
+                    "UPDATE notification_escalations
+                       SET acked_at = ?1
+                     WHERE ack_token = ?2 AND acked_at IS NULL",
+                    params![acked_at, token],
+                )?;
+                if changed == 0 {
+                    tx.commit()?;
+                    return Ok(None);
+                }
+                let row: (String, String) = tx.query_row(
+                    "SELECT event_id, title FROM notification_escalations \
+                      WHERE ack_token = ?1",
+                    params![token],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                tx.commit()?;
+                Ok(Some(row))
+            },
+        )
+        .await??;
+        Ok(match result {
+            None => None,
+            Some((eid, title)) => Some((parse_uuid(&eid).map(EventId)?, title)),
+        })
     }
 
     /// Mark an event closed: remove the row entirely. Useful when
@@ -379,7 +492,7 @@ impl EscalationEngine {
                 let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
                 let mut stmt = guard.prepare(
                     "SELECT event_id, payload_id, title, body, severity, ack_link, \
-                            rung_index, deadline_at, event_kind
+                            rung_index, deadline_at, event_kind, ack_token
                      FROM notification_escalations
                      WHERE acked_at IS NULL AND deadline_at <= ?1
                      ORDER BY deadline_at ASC
@@ -396,6 +509,7 @@ impl EscalationEngine {
                         let rung_index: u32 = row.get(6)?;
                         let deadline_at: i64 = row.get(7)?;
                         let event_kind: Option<String> = row.get(8)?;
+                        let ack_token: String = row.get(9)?;
                         Ok((
                             event_id,
                             payload_id,
@@ -406,11 +520,12 @@ impl EscalationEngine {
                             rung_index,
                             deadline_at,
                             event_kind,
+                            ack_token,
                         ))
                     })?
                     .collect::<Result<Vec<_>, rusqlite::Error>>()?;
                 let mut out = Vec::with_capacity(mapped.len());
-                for (eid, pid, title, body, sev, ack, rung, deadline, kind) in mapped {
+                for (eid, pid, title, body, sev, ack, rung, deadline, kind, token) in mapped {
                     let event_id = parse_uuid(&eid).map(EventId)?;
                     let payload_id = parse_uuid(&pid).map(PayloadId)?;
                     let severity = severity_from_u32(sev)?;
@@ -424,6 +539,7 @@ impl EscalationEngine {
                         rung_index: rung,
                         deadline_at: deadline,
                         event_kind: kind,
+                        ack_token: token,
                     });
                 }
                 Ok(out)
@@ -459,6 +575,7 @@ struct StoredRow {
     deadline_at: i64,
     created_at: i64,
     event_kind: Option<String>,
+    ack_token: String,
 }
 
 fn parse_uuid(s: &str) -> Result<Uuid, rusqlite::Error> {
@@ -494,6 +611,7 @@ mod tests {
             severity,
             ack_link: Some(format!("https://selfdef.example/ack/{title}")),
             event_kind: None,
+            ack_token: None,
         }
     }
 
@@ -557,6 +675,120 @@ mod tests {
         let fake = EventId::from(Uuid::now_v7());
         let changed = eng.record_ack(fake, 100).await.expect("ack");
         assert!(!changed);
+    }
+
+    // ---------------- SDD-008 D-4 HTTP ack tests ----------------
+
+    #[tokio::test]
+    async fn enqueue_mints_ack_token_when_payload_has_none() {
+        let (eng, _dir) = fresh_engine().await;
+        let p = mk_payload("auto-token", SeverityId::High);
+        // Payload.ack_token is None — engine mints one.
+        eng.enqueue(&p, 100, 0).await.unwrap();
+        let due = eng.take_due(200, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        let token = &due[0].ack_token;
+        assert_eq!(token.len(), 32, "uuid simple form is 32 hex chars");
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()), "hex: {token}");
+    }
+
+    #[tokio::test]
+    async fn enqueue_preserves_payload_ack_token_when_supplied() {
+        let (eng, _dir) = fresh_engine().await;
+        let mut p = mk_payload("supplied", SeverityId::High);
+        p.ack_token = Some("operator-supplied-token-123".to_string());
+        eng.enqueue(&p, 100, 0).await.unwrap();
+        let due = eng.take_due(200, 10).await.unwrap();
+        assert_eq!(due[0].ack_token, "operator-supplied-token-123");
+    }
+
+    #[tokio::test]
+    async fn enqueue_preserves_existing_token_on_conflict() {
+        // F-2031-009-like contract: ack URLs in already-sent
+        // notifications must keep working across re-submits of the
+        // same event_id.
+        let (eng, _dir) = fresh_engine().await;
+        let mut p1 = mk_payload("first", SeverityId::High);
+        p1.ack_token = Some("original-token".to_string());
+        eng.enqueue(&p1, 100, 0).await.unwrap();
+        // Re-submit same event_id with a different token.
+        let mut p2 = Payload {
+            id: PayloadId::new(),
+            event_id: p1.event_id,
+            title: "second".into(),
+            body: "second".into(),
+            severity: SeverityId::High,
+            ack_link: None,
+            event_kind: None,
+            ack_token: Some("new-token-IGNORED".to_string()),
+        };
+        p2.ack_token = Some("new-token-IGNORED".to_string());
+        eng.enqueue(&p2, 200, 50).await.unwrap();
+        let due = eng.take_due(300, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(
+            due[0].ack_token, "original-token",
+            "token must NOT update on conflict; URLs in already-sent notifications must keep working",
+        );
+        assert_eq!(due[0].title, "second", "other fields DO update");
+    }
+
+    #[tokio::test]
+    async fn record_ack_by_token_acks_the_row() {
+        let (eng, _dir) = fresh_engine().await;
+        let mut p = mk_payload("token-ack", SeverityId::High);
+        p.ack_token = Some("the-token".to_string());
+        eng.enqueue(&p, 100, 0).await.unwrap();
+
+        let result = eng.record_ack_by_token("the-token", 50).await.expect("ack");
+        assert!(result.is_some());
+        let (event_id, title) = result.unwrap();
+        assert_eq!(event_id, p.event_id.unwrap());
+        assert_eq!(title, "token-ack");
+
+        // Subsequent take_due returns nothing (acked).
+        let due = eng.take_due(200, 10).await.unwrap();
+        assert_eq!(due.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn record_ack_by_token_is_idempotent_on_second_click() {
+        let (eng, _dir) = fresh_engine().await;
+        let mut p = mk_payload("idem", SeverityId::High);
+        p.ack_token = Some("once-only".to_string());
+        eng.enqueue(&p, 100, 0).await.unwrap();
+
+        // First click acks.
+        let first = eng.record_ack_by_token("once-only", 50).await.unwrap();
+        assert!(first.is_some());
+
+        // Second click is a no-op (acked_at IS NULL no longer
+        // matches). Distinct from "unknown token" — the row IS
+        // there, just already acked.
+        let second = eng.record_ack_by_token("once-only", 99).await.unwrap();
+        assert!(second.is_none());
+    }
+
+    #[tokio::test]
+    async fn record_ack_by_token_returns_none_for_unknown_token() {
+        let (eng, _dir) = fresh_engine().await;
+        let result = eng.record_ack_by_token("never-existed", 50).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn record_ack_by_token_after_close_returns_none() {
+        // Operator does `selfdefctl notify forget` then clicks the
+        // ack URL. The row is gone; the HTTP path returns None
+        // (handler will 404).
+        let (eng, _dir) = fresh_engine().await;
+        let mut p = mk_payload("forgotten", SeverityId::High);
+        p.ack_token = Some("zombie-token".to_string());
+        let eid = p.event_id.unwrap();
+        eng.enqueue(&p, 100, 0).await.unwrap();
+        eng.close_event(eid).await.unwrap();
+        let result = eng.record_ack_by_token("zombie-token", 50).await.unwrap();
+        assert!(result.is_none());
     }
 
     #[tokio::test]
@@ -635,6 +867,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         };
         let err = eng.enqueue(&p, 100, 0).await.expect_err("must reject");
         assert!(matches!(err, EngineError::PayloadMissingEventId));

@@ -7,6 +7,7 @@ use std::time::Instant;
 
 use selfdef_bus::{Bus, Publisher};
 use selfdef_correlator::Correlator;
+use selfdef_notifier_engine::EscalationEngine;
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
 
@@ -63,6 +64,12 @@ pub struct ApiState {
     /// token). Use [`Self::with_sse_caps`] to override at startup
     /// from the daemon config.
     pub(crate) sse_caps: SseCaps,
+    /// SDD-008 D-4 HTTP ack: handle to the escalation engine for
+    /// `GET /notify/ack/:token`. `None` when the operator hasn't
+    /// configured `[notifier].escalations_path` (legacy chain path);
+    /// the route returns 503 in that case. Wired in by the daemon
+    /// at startup when the engine path is active.
+    pub(crate) escalation_engine: Option<Arc<EscalationEngine>>,
 }
 
 /// SDD-007 D-4: operator-tunable SSE cap overrides. The daemon
@@ -93,7 +100,23 @@ impl ApiState {
             sse_subscribers: Arc::new(AtomicUsize::new(0)),
             sse_subscribers_per_token: Arc::new(Mutex::new(HashMap::new())),
             sse_caps: SseCaps::default(),
+            escalation_engine: None,
         }
+    }
+
+    /// SDD-008 D-4: install the escalation engine handle so the
+    /// `/notify/ack/:token` route can record acks. Daemon calls this
+    /// from `build_notifier_path` when `[notifier].escalations_path`
+    /// is set. Routes return 503 if this is `None`.
+    #[must_use]
+    pub fn with_escalation_engine(mut self, engine: Arc<EscalationEngine>) -> Self {
+        self.escalation_engine = Some(engine);
+        self
+    }
+
+    /// Engine accessor for handlers + tests.
+    pub(crate) fn escalation_engine(&self) -> Option<Arc<EscalationEngine>> {
+        self.escalation_engine.clone()
     }
 
     /// SDD-007 D-4: install operator-tuned SSE caps. Either field

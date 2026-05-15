@@ -215,6 +215,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         };
         rt.block_on(engine.enqueue(&payload, 100, 0)).unwrap();
         event_id

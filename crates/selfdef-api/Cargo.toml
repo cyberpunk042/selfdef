@@ -26,6 +26,8 @@ selfdef-bus = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
 selfdef-responder = { workspace = true }
+selfdef-notifier-engine = { workspace = true }
+selfdef-notifier-orchestrator = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }

@@ -118,6 +118,18 @@ pub struct Payload {
     /// `None` for orchestrator-internal payloads with no
     /// originating event.
     pub event_kind: Option<String>,
+    /// Per-event ack token (UUIDv7 simple form). SDD-008 D-4 HTTP
+    /// ack: a token-bearing URL is embedded in the channel
+    /// message (`ack_link`); clicking it hits
+    /// `/notify/ack/<ack_token>` on the daemon, which calls
+    /// `EscalationEngine::record_ack_by_token`. `None` for
+    /// orchestrator-internal payloads or when the operator hasn't
+    /// configured `[notifier].ack_link_base` (HTTP ack disabled;
+    /// CLI ack via `selfdefctl notify ack <event-id>` still
+    /// works). On the engine path, the token is preserved across
+    /// rung re-fires so URLs in already-sent notifications stay
+    /// valid until the row is acked or closed.
+    pub ack_token: Option<String>,
 }
 
 /// Per-channel subscription filter — SDD-008 D-3 + D-5e.
@@ -398,6 +410,7 @@ mod tests {
             severity: SeverityId::Informational,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         };
         let receipt = ch.send(&payload).await.expect("stub send succeeds");
         assert!(receipt.native_message_id.is_none());
@@ -415,6 +428,7 @@ mod tests {
             severity,
             ack_link: None,
             event_kind: event_kind.map(str::to_owned),
+            ack_token: None,
         }
     }
 

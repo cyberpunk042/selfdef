@@ -332,6 +332,7 @@ mod tests {
             severity,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         }
     }
 

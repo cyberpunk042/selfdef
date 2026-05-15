@@ -23,6 +23,7 @@ use selfdef_notifier::{Notifier, NotifierError, render_body, render_title};
 use selfdef_notifier_engine::{DispatchOutcome, PayloadDispatcher};
 use selfdef_notifier_orchestrator::{EventId, Payload, PayloadId};
 use tracing::debug;
+use uuid::Uuid;
 
 /// Wraps a [`PayloadDispatcher`] in the [`Notifier`] ABI so the
 /// existing responder + chain machinery can drive it without
@@ -38,12 +39,31 @@ use tracing::debug;
 /// deadline.
 pub(crate) struct DispatcherAdapter {
     dispatcher: Arc<PayloadDispatcher>,
+    /// SDD-008 D-4 HTTP ack: optional `https://daemon.example/notify/ack`
+    /// base URL. When `Some`, the adapter mints a UUIDv7 token per
+    /// payload and renders `ack_link = "<base>/<token>"`, then
+    /// passes the token through `Payload.ack_token` so the engine
+    /// persists it. When `None`, `ack_link` stays None and HTTP ack
+    /// is disabled (CLI ack via `selfdefctl notify ack <id>` still
+    /// works, since `record_ack` uses the event_id directly).
+    ack_link_base: Option<String>,
 }
 
 impl DispatcherAdapter {
     #[must_use]
     pub(crate) fn new(dispatcher: Arc<PayloadDispatcher>) -> Self {
-        Self { dispatcher }
+        Self {
+            dispatcher,
+            ack_link_base: None,
+        }
+    }
+
+    /// SDD-008 D-4: install the operator-configured ack-link base
+    /// URL. Empty / `None` disables HTTP ack (ack_link stays None).
+    #[must_use]
+    pub(crate) fn with_ack_link_base(mut self, base: Option<String>) -> Self {
+        self.ack_link_base = base.filter(|s| !s.trim().is_empty());
+        self
     }
 }
 
@@ -58,21 +78,32 @@ impl std::fmt::Debug for DispatcherAdapter {
 #[async_trait]
 impl Notifier for DispatcherAdapter {
     async fn notify(&self, event: &Event) -> Result<(), NotifierError> {
+        // SDD-008 D-4 HTTP ack: when the operator configured
+        // `[notifier].ack_link_base`, mint a per-event UUIDv7 token
+        // and render the click-link URL. The token is also passed
+        // through `Payload.ack_token` so the engine persists it for
+        // record_ack_by_token lookups.
+        let (ack_token, ack_link) = match &self.ack_link_base {
+            Some(base) => {
+                let token = Uuid::now_v7().simple().to_string();
+                let link = format!("{base}/{token}");
+                (Some(token), Some(link))
+            }
+            None => (None, None),
+        };
         let payload = Payload {
             id: PayloadId::new(),
             event_id: Some(EventId(event.id)),
             title: render_title(event),
             body: render_body(event),
             severity: event.severity_id,
-            // D-4 HTTP click-link ack arrives in a follow-up PR
-            // once the daemon exposes the /notify/ack endpoint.
-            // Today operators ack via `selfdefctl notify ack <id>`.
-            ack_link: None,
+            ack_link,
             // SDD-008 D-5e: populate event_kind from the originating
             // event so per-channel subscription filters
             // (`[notifier.subscriptions.<ch>].event_kinds`) apply
             // on the engine path.
             event_kind: Some(event.class_uid.name().to_string()),
+            ack_token,
         };
         let now = unix_now();
         // SDD-008 D-6b/D-6c: initial deadline derives from the
