@@ -29,6 +29,13 @@ _relay_inst_defaults() {
     INST="${SELFDEF_INSTANCE_ID:-}"
     if [[ -n "$INST" ]]; then
         safe_name "$INST" || die "SELFDEF_INSTANCE_ID has unsafe characters: '$INST' (allowed: [a-zA-Z0-9_./:-])"
+        # SDD-003 Q-C / D-005: WireGuard interface name 'selfdef-${INST}' must
+        # fit Linux's 15-char IFNAMSIZ limit. 'selfdef-' is 8 chars, so INST
+        # caps at 7. Refuse cleanly here rather than silently truncating at
+        # 'ip link add'.
+        if (( ${#INST} > 7 )); then
+            die "SELFDEF_INSTANCE_ID too long: '$INST' (${#INST} chars); max 7 chars so the WireGuard interface name 'selfdef-\${INST}' fits Linux's 15-char IFNAMSIZ limit"
+        fi
         DEFAULT_IFACE="selfdef-${INST}"
         DEFAULT_NFT_TABLE="selfdef_vpn_bridge_${INST}"
         DEFAULT_NFT_PATH="/etc/nftables.d/selfdef-vpn-bridge-${INST}.conf"
