@@ -14,7 +14,9 @@
 //!   operator opts in by editing the relevant section.
 //! - `init modules` — write a starter `modules.toml` listing
 //!   every shipped module commented out. The operator
-//!   uncomments the modules they want to activate.
+//!   uncomments the modules they want to activate. The on-disk
+//!   mirror of this constant lives at `config/modules.toml.example`
+//!   (kept in sync — both are derived from the same source content).
 //! - `init checklist` — print a first-run operator checklist
 //!   (install minisign, generate signing keys, deploy public
 //!   key, set up kubectl access, etc). Read-only.
@@ -722,3 +724,52 @@ You now have a deployment that opts into every audit-shipped
 security feature. Re-run `selfdefctl doctor` whenever you
 change config or rotate keys.
 "#;
+
+#[cfg(test)]
+mod sync_tests {
+    //! Drift guards: the embedded STARTER_* constants are mirrored
+    //! to `config/*.toml.example` on disk so operators can browse
+    //! the formats from the source tree without running `selfdefctl
+    //! init`. These tests fail loudly if either copy drifts.
+    //!
+    //! `CARGO_MANIFEST_DIR` resolves to `crates/selfdef-cli` at test
+    //! time; the workspace's `config/` sits two `..` up.
+    use super::{STARTER_CONFIG, STARTER_MODULES};
+    use std::path::PathBuf;
+
+    fn workspace_config(name: &str) -> PathBuf {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("..");
+        p.push("..");
+        p.push("config");
+        p.push(name);
+        p
+    }
+
+    #[test]
+    fn starter_modules_matches_disk_example() {
+        let on_disk = std::fs::read_to_string(workspace_config("modules.toml.example"))
+            .expect("config/modules.toml.example must exist (mirror of STARTER_MODULES)");
+        assert_eq!(
+            STARTER_MODULES, on_disk,
+            "STARTER_MODULES drifted from config/modules.toml.example — \
+             update both copies in the same PR."
+        );
+    }
+
+    #[test]
+    fn starter_config_disk_example_exists() {
+        // The selfdef.toml.example file predates this test and is
+        // intentionally NOT byte-identical with STARTER_CONFIG —
+        // STARTER_CONFIG is a minimal first-run config, whereas
+        // selfdef.toml.example is the comprehensive reference with
+        // every channel + every cross-cutting knob documented. The
+        // existence check guards against accidental deletion.
+        let _ = STARTER_CONFIG;
+        let p = workspace_config("selfdef.toml.example");
+        assert!(
+            p.exists(),
+            "config/selfdef.toml.example must exist (operator-facing reference)"
+        );
+    }
+}
