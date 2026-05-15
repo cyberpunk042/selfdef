@@ -1,170 +1,249 @@
 ---
 name: view
-description: Project command-center view. Detects project shape and renders a structured snapshot — trajectory, current position, open/closed items, unanswered questions, way forward. Use when the user types /view, asks "where are we?", "what's left?", "what's the status?", or otherwise asks for a high-level project read.
+description: Project command center — Progress, Position, Done, TODO, Questions (answered + unanswered with options & recommendations), Way forward. Each section is augmented with reasoning, tradeoffs, and concrete next steps. Use when the user types /view or asks orientation questions ("where are we?", "what's the status?", "what's left?", "how far have we come?", "what's the way forward?").
 ---
 
-# /view — project command center
+# /view — augmented project command center
 
-Render a **command-center view** of the current project: where it's been,
-where it is, where it's going. Designed to orient a session quickly without
-forcing the user to scroll through ledgers.
+Render seven sections, **each substantially augmented** with reasoning,
+options, tradeoffs, and concrete next steps. The render is the deliverable —
+the user is using it to decide what to do next. Thin renders fail the job.
+
+```
+1. PROGRESS     — trajectory + trend analysis + what the trend predicts
+2. POSITION     — current state + what it enables + what to watch
+3. DONE         — shipped items, grouped, with significance + what each unlocked
+4. TODO         — remaining work with priority + effort + blockers + dependencies
+5. QUESTIONS    — ★ ANSWERED (decision + rationale + when) ★
+                  ★ UNANSWERED (details + options + tradeoffs + recommendation) ★
+6. WAY FORWARD  — threads with concrete first step + effort + tradeoff vs others
+7. SIGNPOSTS    — where to find what (always include)
+```
+
+The **Unanswered** subsection is the most-augmented part of the entire view.
+Treat every unanswered question as a mini-RFC: state the question, explain why
+it's open, list options with explicit tradeoffs, name a recommendation with
+reasoning, and identify what unblocks the decision. **Never list an unanswered
+question with just a one-line gloss.**
 
 ## When to invoke
 
 - User typed `/view`.
-- User asked an orientation question: "where are we?", "what's the status?",
-  "what's left?", "what's open?", "what should I work on next?".
-- Cold-start of a session where the user wants a lay-of-the-land before
-  picking a thread.
+- Orientation questions: "where are we?", "what's the status?", "what's left?",
+  "how far have we come?", "what's the way forward?", "what's pending?",
+  "what's done?", "what's next?".
+- Cold-start of a session where the user wants the lay of the land.
 
-## Detection: figure out what kind of project this is
+## Project-shape detection
 
-Before rendering, run these checks **in parallel** to detect the project's
-shape:
+Run these checks **in parallel** at the start:
 
-1. `ls docs/handoff/*.md 2>/dev/null | sort | tail -3` — recent handoff?
-2. `ls docs/review/phase-*/99-findings-ledger.md 2>/dev/null` — audit ledgers?
-3. `ls docs/sdd/*.md 2>/dev/null` — SDD design docs?
-4. `ls ARCHITECTURE.md SECURITY.md README.md 2>/dev/null` — root signposts?
-5. `git log --oneline -20 2>/dev/null` — recent commit cadence.
-6. `git branch --show-current && git status --short 2>/dev/null` — current branch + WIP.
+1. `ls docs/handoff/*.md 2>/dev/null | sort | tail -3` — recent handoffs
+2. `ls docs/review/phase-*/99-findings-ledger.md 2>/dev/null` — audit ledgers
+3. `ls docs/sdd/*.md docs/plan/*.md docs/rfc/*.md 2>/dev/null` — design docs
+4. `ls ARCHITECTURE.md SECURITY.md README.md ROADMAP.md TODO.md CHANGELOG.md 2>/dev/null`
+5. `git log --oneline -25` — recent commit cadence
+6. `git branch --show-current && git status --short` — current branch + WIP
+7. `rg -i 'TODO|FIXME|XXX' -n -g '!target' -g '!node_modules' | head -50` — in-code TODOs
+8. Open GitHub issues if a `cyberpunk042/<repo>` is in MCP scope
 
-### Shape A — full audit-programme project (selfdef-shape)
+Detect one of:
 
-Detection: **at least one** of `docs/review/phase-*/99-findings-ledger.md`
-exists AND `docs/sdd/*.md` exists.
+- **Shape A**: audit ledgers + SDDs both present (e.g. selfdef)
+- **Shape B**: design docs only (SDDs / RFCs, no audit ledgers)
+- **Shape C**: TODO.md / ROADMAP.md driven, no SDDs
+- **Shape D**: vanilla git repo
+- **Shape E**: not a git repo at all — synthesize from filesystem
 
-Read the most recent handoff first (`docs/handoff/<latest>.md`) if any —
-it's the canonical entry-point and will tell you the rest. Then read the
-latest phase ledger, the most-recently-updated SDD, and the root signposts
-(ARCHITECTURE.md, SECURITY.md). Render the **rich view** (below).
-
-### Shape B — design-doc project (SDDs without audit ledgers)
-
-Detection: `docs/sdd/*.md` exists but no `docs/review/phase-*/` directory.
-
-Read the SDD index + the most recent few SDDs. Render the **design view**:
-SDD list with status, recent commits referencing each, open questions.
-
-### Shape C — vanilla git project
-
-Detection: none of the above match.
-
-Render the **synthesis view**: branch state, last 20 commits grouped by
-theme, open TODOs in code (`rg -i 'TODO|FIXME|XXX'` capped to ~30 hits),
-test/CI signals if a workflow file exists.
+The seven sections render for every shape. Only the **sources** vary.
 
 ---
 
-## Rich view (Shape A) — layout
+## Section-by-section augmentation spec
 
-Render the following sections, in order. Use strong ASCII headings, not
-meek single-line bullets. The user has explicitly asked for visually
-substantial renders; small renders feel evasive.
+### 1. PROGRESS
 
-### 1. Trajectory
+Wide trajectory table or timeline + a **trend annotation paragraph**.
 
-A table of every audit phase shipped, drawn from
-`docs/review/phase-*/99-findings-ledger.md` files (look for the cumulative
-trajectory table inside the latest phase ledger — that table is canonical
-and already aggregated). Render as a wide markdown table:
+Trend annotation must answer:
+- Is the cadence accelerating, decelerating, or steady?
+- What's the dominant work-type (features / fixes / audit / refactor)?
+- What does the trajectory **predict** — convergence, expansion, plateau?
+
+Source by shape:
+- **A**: cumulative trajectory table from the latest phase ledger.
+- **B**: SDD-by-SDD status table + last-touched.
+- **C**: TODO sections grouped done/in-progress/not-started.
+- **D**: `git log --pretty='%s'` themed by commit-prefix; bucket by month.
+- **E**: filesystem tree + modification-date histogram.
+
+### 2. POSITION
+
+Concrete facts table + **two augmentations**:
+
+1. **What this state enables** — what becomes possible now that wasn't before?
+2. **What to watch** — what's fragile, what's drifting, what could regress?
+
+Always include: branch, status-short, last commit subject/age, open-PR status,
+the single most-important fact.
+
+### 3. DONE
+
+Grouped punch list of shipped items. **Each group gets a one-line significance
+note**: why did this batch matter; what did it unlock for downstream work.
+
+Render as either:
+- A progress-bar block (`━━━━━━━━━━ 100% — N items`) for natural categories, OR
+- A table with `Item | Source | Significance` columns
+
+Sources by shape:
+- **A**: rows marked `shipped`/`closed` in SDD impl-status tables; closed
+  findings in the latest phase ledger.
+- **B**: SDDs marked `shipped`/`approved`.
+- **C**: TODO checkboxes already checked.
+- **D/E**: recent merged PRs / commits.
+
+### 4. TODO
+
+Punch list with **four augmentation columns**:
+
+| Item | Priority | Effort | Blocker | Pointer |
+
+- **Priority**: `★ now` / `near` / `later` / `someday`
+- **Effort**: `S` (≤1 PR) / `M` (≤3 PRs) / `L` (own SDD/cycle)
+- **Blocker**: who/what gates it; `—` if nothing
+- **Pointer**: file:line so the user can navigate
+
+After the table, render a **dependency note** — which items unblock others.
+
+Sources:
+- Phase ledger rows not `(closed)`
+- SDD rows marked `deferred`/`open`/`pending`
+- TODO/ROADMAP unchecked items
+- In-code `TODO`/`FIXME`/`XXX` (capped to ~15)
+- Open GitHub issues if accessible
+
+### 5. QUESTIONS — answered + unanswered
+
+#### 5a. ANSWERED — decisions made
+
+Table with **four columns**:
+
+| Question | Decision | Rationale | When/where |
+
+`Rationale` is **mandatory** — never just the decision. Explain *why* this
+answer over alternatives. `When/where` cites the PR / SDD section / handoff
+section that captured the decision.
+
+Source: SDD Q-X rows marked `answered`/`closed`/`shipped`; decisions captured
+in handoff docs; resolved issues with their resolution.
+
+#### 5b. UNANSWERED — decisions pending  ★ HIGH-DEPTH ★
+
+**Every unanswered question is a mini-RFC.** Render each as:
 
 ```
-| Phase | Cycle audited           | Findings | Important | Closed | SDD-debt | Demoted |
-| ...   | ...                     | ...      | ...       | ...    | ...      | ...     |
+### Q-N: <Question stated as a question>
+
+**Status**: <open / deferred / blocked / waiting on user>
+**Why it's open**: <2-3 sentences — deferred because X / unclear because Y /
+                   waiting on Z>
+**What it gates**: <what's blocked downstream / what can't ship until this lands>
+**Stakes**: <low / medium / high — and a sentence on why>
+
+**Options**:
+
+  A) <Option name — concrete approach>
+     • What it looks like: <one line>
+     • Pros: <upside>
+     • Cons: <downside>
+     • Effort: <S / M / L>
+     • Risk: <low / medium / high>
+
+  B) <Option name>
+     ...
+
+  (Render 2-4 options. If only one option exists, name that explicitly and
+  explain why no alternatives — sometimes the design space is genuinely narrow.)
+
+**Recommendation**: <Option X — one sentence on why this beats the others>
+**What unblocks the decision**: <user input on X / a spike to measure Y /
+                                 the prerequisite SDD landing / time>
 ```
 
-### 2. Current position
+Source-walk for each question:
+- SDD `Q-X` rows not yet answered → read the SDD's "Open questions" section
+  for the actual question text + author's framing.
+- "Deferred" rows in SDD impl-status tables → read the surrounding context.
+- "Way forward" / "TBD" / "Out of scope (deferred to future SDD)" markers.
+- Items the latest handoff flagged as needing user input.
 
-Pull from the latest phase ledger's `Status` section. Specifically:
+If a question's options aren't already enumerated in the SDD, **synthesize
+them** from the surrounding context. State that the options are synthesized
+rather than quoted, so the user can correct.
 
-- **Phase status** (open / wrapped / draft).
-- **Phase findings counters** (raised / closed / open / demoted / SDD-debt).
-- **Important finding(s)** from this phase — what they were and how they
-  closed.
-- **Branch state**: current branch name + `git status --short` summary.
+### 6. WAY FORWARD
 
-### 3. Open items
-
-What's not done. Walk these sources in order:
-
-- **Phase ledger**: any row whose severity is not "(closed)".
-- **SDD impl-status tables**: rows marked `deferred`, `open`, or `pending`.
-- **SDD open questions**: `Q-X` rows whose status is not "(answered)".
-- **Recent issues**: `gh issue list --state open` if `gh` available;
-  otherwise use `mcp__github__list_issues` if the repo is in scope.
-
-Render as a punch list with file:line pointers so the user can navigate.
-
-### 4. Answered questions (recent)
-
-Pull `Q-X` or open-question rows from the most recent SDDs that have been
-**answered** (status: answered / closed / shipped). One line each with the
-PR or SDD section that closed them.
-
-### 5. Way forward
-
-Read the latest handoff's "what to ask first" / "next threads" section if
-present. Otherwise synthesize from:
-
-- SDD-008 D-N status table — what's next.
-- "Deferred" rows in any ledger or SDD.
-- TODO/FIXME comments in code (capped, low-noise).
-
-Render as 2-4 candidate threads the user could pick up, each with a 1-line
-description and a pointer.
-
-### 6. Signposts
-
-A small reference list — where to find what:
+2-5 candidate threads. **Each thread is augmented** with:
 
 ```
-- Audit programme:  docs/review/phase-N/...
-- Design docs:      docs/sdd/...
-- Handoff (latest): docs/handoff/<latest>.md
-- Root context:     ARCHITECTURE.md, SECURITY.md, README.md
-- Recent commits:   git log --oneline -20
+N. <Thread name>
+   Concrete first step: <one specific command/file/action>
+   Effort: <S / M / L>
+   Prerequisites: <none / Q-X answered / Y shipped>
+   Tradeoff vs other threads: <why pick this over thread N+1>
+   My read: <recommended / optional / wait>
 ```
 
----
+Pull from the latest handoff's "what to ask first" if present — that's
+authoritative. Augment any thread the handoff mentions with the above shape.
 
-## Design view (Shape B) — layout
+### 7. SIGNPOSTS
 
-1. **SDD index**: number / title / status / last-touched commit.
-2. **Open questions across all SDDs**: Q-X identifiers + which SDD they're in.
-3. **Recent design-relevant commits**: `git log --oneline -20 -- docs/sdd/`.
-4. **Way forward**: synthesize from SDD content.
+Compact reference table. Always include:
 
-## Synthesis view (Shape C) — layout
-
-1. **Branch + WIP**: current branch, modified files, ahead/behind upstream.
-2. **Recent activity**: last 20 commits, themed if a pattern emerges
-   (group by `git log --pretty='%s'` prefix).
-3. **In-code TODOs**: `rg -i 'TODO|FIXME|XXX' -n` capped to ~30 lines.
-4. **Test/CI signals**: `.github/workflows/*.yml` summary if present.
-5. **Open issues / PRs**: via gh CLI or MCP if available.
+```
+Handoff (latest)      docs/handoff/<latest>.md
+Audit programme       docs/review/phase-N/...        (if Shape A)
+Design docs           docs/sdd/...                   (if A or B)
+Root context          ARCHITECTURE.md · SECURITY.md · README.md · CHANGELOG.md
+Recent commits        git log --oneline -20
+Open PRs / issues     <github URL>
+```
 
 ---
 
 ## Style rules
 
-- Render strong, large ASCII tables and headings — not single-line
-  apologetic bullets. The user explicitly wants substantial visual output.
-- File:line references (e.g. `docs/sdd/008-notifications-orchestration.md:142`)
-  wherever a fact comes from a specific source — the user navigates by them.
-- Do not invent status. If a section has no data, say so explicitly
-  ("No open findings.") rather than padding with prose.
-- Cap the whole render at roughly one screen of dense content. The point
-  is orientation, not a re-read of the ledgers.
-- Do not edit any files. `/view` is read-only.
+- **Generous ASCII**: wide tables, strong headings (`##`), monospace blocks
+  for trees/lists, box-drawing for the title line. User has explicitly asked
+  for visually substantial renders.
+- **File:line pointers** for every fact (`docs/sdd/008.md:142`). User
+  navigates by them.
+- **Don't invent status.** Empty sections render `_(none — nothing to report)_`.
+- **Mark synthesis explicitly.** If options/recommendations are *your* synthesis
+  rather than quoted from a doc, say so: "(options synthesized; correct me if
+  you'd frame them differently)".
+- **Skip the explanation-of-what-you're-doing meta.** Render the view; the
+  user will react.
+- **No clarifying questions before rendering.** The user typed /view to get a
+  view; follow-ups come after they see it.
+- **Cap at ~2 screens of dense content.** The augmentation makes this longer
+  than a thin render; that's intended.
+
+## Read-only
+
+`/view` never edits files. Pure read + synthesis + render.
 
 ## Failure modes to avoid
 
-- **Don't ask clarifying questions before rendering.** The user typed
-  `/view` to get a view; ask follow-ups (if needed) after.
-- **Don't summarize the summary.** If the latest handoff exists, lean on
-  it — quote pointers verbatim, don't re-paraphrase.
-- **Don't omit the trajectory table** on Shape-A projects. The
-  multi-phase comparison is the most-requested view.
-- **Don't claim something is "done" or "closed" without a source.** Tag
-  every claim with the file or commit it came from.
+- Rendering Unanswered as a one-line bullet list. **Every unanswered question
+  needs the mini-RFC treatment.**
+- Listing decisions in the Answered table without the **Rationale** column.
+- Rendering DONE as just counts; always include significance.
+- Rendering TODO without priority / effort / blocker columns.
+- Skipping the trend annotation under PROGRESS.
+- Skipping "what it gates" on unanswered questions — that's the load-bearing
+  field for deciding whether to answer it now or wait.
+- Audit-programme framing leaking into non-audit projects. Detect the shape
+  first; map sources to the same seven sections.
