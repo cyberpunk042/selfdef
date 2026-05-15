@@ -598,7 +598,10 @@ No daemon-binary changes. Entirely a `selfdef-cli` + manifest
   profiles.details.<profile>")? Probably yes — operator
   ergonomics. Implementation detail.
 - **Q-C** — Naming convention for the WG interface
-  (`selfdef-${INST}`). Linux interface names are limited to
+  (`selfdef-${INST}`). **Answered (D-005, 2026-05-15)**: `apply.sh`
+  refuses cleanly with an explicit operator-facing error when the
+  instance id exceeds 8 characters. _Original framing for history_:
+  Linux interface names are limited to
   15 characters; `selfdef-${INST}` accommodates instance
   ids up to 8 chars. Document the limit in the README. If
   an operator picks a longer instance id, the apply.sh

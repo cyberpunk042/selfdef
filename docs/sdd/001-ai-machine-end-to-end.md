@@ -559,12 +559,17 @@ end-to-end claim from a single PR.
   upstream Tetragon exposes annotations.
 - **Q-C** — Do we wire the responder's `KillPidAction` to
   agent-guard findings (i.e. "the kernel killed the process;
-  the responder reaps the cgroup")? Out of scope for this
+  the responder reaps the cgroup")? **Answered (D-006, 2026-05-15)** —
+  keep deferred to its own SDD (responder cgroup-reaping). _Original
+  framing for history_: Out of scope for this
   SDD; the kernel already killed via Tetragon. KillPidAction
   is for cases where the correlator promotes and *then* asks
   user-space to kill. Belongs to a separate SDD if desired.
 - **Q-D** — Does the integration test (D-4) need a real NATS
-  broker to also assert multi-host propagation? Out of scope
+  broker to also assert multi-host propagation? **Answered
+  (D-007, 2026-05-15)** — keep deferred; SDD-001 stays
+  single-host (scope discipline). _Original framing for history_:
+  Out of scope
   here; SDD-001 stays single-host.
 
 ## Appendix — alternatives in detail

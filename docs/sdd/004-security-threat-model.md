@@ -51,7 +51,11 @@ drift surface.
 - **Q-B** (cluster control plane in trust assumptions): added.
   The Trust assumptions section now lists "the cluster control
   plane is trusted to enforce RBAC" for k8s deployments.
-- **Q-C** (TracingPolicy signing shape): deferred. Tracked as
+- **Q-C** (TracingPolicy signing shape): **answered (D-003, 2026-05-15)** —
+  working hypothesis: inline detached signatures + bundled CA
+  (filesystem-native, offline-capable); detailed shape scoped in the
+  F-2026-024 follow-up SDD when it lands. _Original framing for history_:
+  deferred. Tracked as
   the F-2026-024 follow-up known gap; a future SDD scopes the
   shared signing machinery between sigma rules and
   TracingPolicies.
