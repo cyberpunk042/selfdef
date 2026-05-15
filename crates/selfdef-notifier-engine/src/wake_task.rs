@@ -66,9 +66,11 @@ pub const TAKE_DUE_LIMIT: usize = 100;
 ///    deadline)`. If `None`, sleep [`IDLE_POLL_INTERVAL_SECS`].
 /// 2. On wake: `take_due(now, TAKE_DUE_LIMIT)` claims due rows.
 /// 3. For each row:
-///    - If `rung_index >= MAX_RUNG`: close (max attempts hit).
-///    - Else: re-fire via `dispatcher.dispatch_payload`, then
-///      `engine.advance_rung(rung_index + 1, now + RUNG_INTERVAL)`.
+///    - If `rung_index >= profile.max_rung()`: close.
+///    - Else: re-fire via `dispatcher.dispatch_payload_for_rung`
+///      (D-6c: applies the per-rung channel allow-list), then
+///      `engine.advance_rung(rung_index + 1,
+///      now + profile.ack_window_for(rung_index + 1))`.
 /// 4. Loop. Cancellation short-circuits the sleep.
 pub async fn run(dispatcher: Arc<PayloadDispatcher>, cancel: CancellationToken) {
     info!(
