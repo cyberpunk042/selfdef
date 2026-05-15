@@ -672,6 +672,26 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "pagerduty" if cfg.notifier.pagerduty.routing_key_file.is_some() => {
+                let Some(key_path) = cfg.notifier.pagerduty.routing_key_file.as_ref() else {
+                    continue;
+                };
+                match selfdef_integration_pagerduty::PagerDutyNotifier::from_config(
+                    key_path,
+                    &cfg.notifier.pagerduty.endpoint,
+                    &cfg.notifier.pagerduty.source,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "pagerduty channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
                 let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
                     // Unreachable given the guard above, but keep
@@ -933,6 +953,24 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "discord engine-channel skipped");
+                    }
+                }
+            }
+            "pagerduty" if cfg.notifier.pagerduty.routing_key_file.is_some() => {
+                let Some(key_path) = cfg.notifier.pagerduty.routing_key_file.as_ref() else {
+                    continue;
+                };
+                match selfdef_integration_pagerduty::PagerDutyNotifier::from_config(
+                    key_path,
+                    &cfg.notifier.pagerduty.endpoint,
+                    &cfg.notifier.pagerduty.source,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "pagerduty engine-channel skipped");
                     }
                 }
             }

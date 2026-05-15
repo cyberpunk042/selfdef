@@ -108,6 +108,7 @@ selfdef-integration-twilio = { path = "crates/selfdef-integration-twilio" }
 selfdef-integration-wall = { path = "crates/selfdef-integration-wall" }
 selfdef-integration-slack = { path = "crates/selfdef-integration-slack" }
 selfdef-integration-discord = { path = "crates/selfdef-integration-discord" }
+selfdef-integration-pagerduty = { path = "crates/selfdef-integration-pagerduty" }
 selfdef-responder = { path = "crates/selfdef-responder" }
 selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
 selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }
