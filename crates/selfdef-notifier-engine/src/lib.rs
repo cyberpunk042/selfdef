@@ -177,8 +177,23 @@ impl EscalationEngine {
                 supported: SCHEMA_VERSION,
             });
         }
+        // Phase 7 F-2032-001 closure: each `if current < N` block
+        // runs inside an explicit transaction so a mid-block failure
+        // (disk-full on the back-fill UPDATE, corrupted lockfile,
+        // …) rolls back atomically. Without the transaction, an
+        // ALTER could land + the back-fill could fail + user_version
+        // stays at the prior level — and the next daemon restart
+        // would re-attempt the ALTER, which is non-idempotent in
+        // SQLite ("duplicate column name") and refuses startup.
+        //
+        // We use `unchecked_transaction` because the borrowed
+        // `&Connection` here doesn't own the connection; the engine
+        // holds an `Arc<Mutex<Connection>>` and this `migrate` runs
+        // on the still-construction-time guard before the engine
+        // returns to callers. No async boundary inside.
         if current < 1 {
-            conn.execute_batch(
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(
                 r#"
                 CREATE TABLE IF NOT EXISTS notification_escalations (
                     event_id    TEXT PRIMARY KEY,
@@ -197,7 +212,8 @@ impl EscalationEngine {
                   WHERE acked_at IS NULL;
                 "#,
             )?;
-            conn.pragma_update(None, "user_version", 1_i64)?;
+            tx.pragma_update(None, "user_version", 1_i64)?;
+            tx.commit()?;
             debug!("escalation schema migrated to v1");
         }
         if current < 2 {
@@ -207,10 +223,12 @@ impl EscalationEngine {
             // dispatcher treats `event_kind = NULL` conservatively
             // (drops the row from any subscription with a non-empty
             // event_kinds filter).
-            conn.execute_batch(
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(
                 "ALTER TABLE notification_escalations ADD COLUMN event_kind TEXT NULL;",
             )?;
-            conn.pragma_update(None, "user_version", 2_i64)?;
+            tx.pragma_update(None, "user_version", 2_i64)?;
+            tx.commit()?;
             debug!("escalation schema migrated to v2 (event_kind column)");
         }
         if current < 3 {
@@ -221,7 +239,8 @@ impl EscalationEngine {
             // back-fill UPDATE — they were ack-able via the CLI
             // (record_ack by event_id) before; they remain ack-able
             // via the HTTP path after migration.
-            conn.execute_batch(
+            let tx = conn.unchecked_transaction()?;
+            tx.execute_batch(
                 "ALTER TABLE notification_escalations ADD COLUMN ack_token TEXT NULL;",
             )?;
             // Back-fill: assign a UUIDv7-shaped random token to any
@@ -231,7 +250,7 @@ impl EscalationEngine {
             // randomblob() output is binary; encode as hex via
             // lower(hex(randomblob(16))) for the 32-char form that
             // matches Uuid::simple().
-            conn.execute_batch(
+            tx.execute_batch(
                 "UPDATE notification_escalations \
                     SET ack_token = lower(hex(randomblob(16))) \
                   WHERE ack_token IS NULL;",
@@ -240,12 +259,13 @@ impl EscalationEngine {
             // doesn't support ALTER TABLE ADD CONSTRAINT directly;
             // a partial-unique-index serves the same purpose and is
             // honoured by INSERT OR REPLACE.
-            conn.execute_batch(
+            tx.execute_batch(
                 "CREATE UNIQUE INDEX IF NOT EXISTS \
                     idx_escalations_ack_token \
                   ON notification_escalations(ack_token);",
             )?;
-            conn.pragma_update(None, "user_version", 3_i64)?;
+            tx.pragma_update(None, "user_version", 3_i64)?;
+            tx.commit()?;
             debug!("escalation schema migrated to v3 (ack_token column + unique index)");
         }
         Ok(())
@@ -672,6 +692,46 @@ mod tests {
         let (eng, _dir) = fresh_engine().await;
         assert_eq!(eng.row_count().await.unwrap(), 0);
         assert!(eng.next_pending_at().await.unwrap().is_none());
+    }
+
+    // ---------------- F-2032-001: migration idempotency ----------------
+
+    #[tokio::test]
+    async fn migration_idempotent_when_re_opening_at_current_version() {
+        // Open + close + re-open the same file. The migrate() path
+        // sees user_version = SCHEMA_VERSION on the second open and
+        // skips every `if current < N` block — the post-Phase-7-fix
+        // transactional wrap shouldn't make this regress.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let _eng1 = EscalationEngine::open(&path).expect("first open");
+        drop(_eng1);
+        let _eng2 = EscalationEngine::open(&path).expect("second open should succeed");
+        // If we got here, the migration was idempotent.
+    }
+
+    #[tokio::test]
+    async fn migration_handles_existing_rows_during_v3_backfill() {
+        // Round-trip: open at v3, enqueue a row, close, re-open
+        // (still v3 — migration skips the v3 block but the row
+        // survives). The v3 back-fill UPDATE has WHERE ack_token
+        // IS NULL — re-running with all-NULL-already-set rows is
+        // a no-op. The transactional wrap means even if we'd
+        // re-run, it'd commit cleanly.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        {
+            let eng = EscalationEngine::open(&path).unwrap();
+            let mut p = mk_payload("survives-restart", SeverityId::High);
+            p.ack_token = Some("explicit-token".into());
+            eng.enqueue(&p, 100, 0).await.unwrap();
+        }
+        // Re-open: existing v3 migration skips. Row should still
+        // be there with its token intact.
+        let eng = EscalationEngine::open(&path).unwrap();
+        let due = eng.take_due(1_000, 10).await.unwrap();
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].ack_token, "explicit-token");
     }
 
     #[tokio::test]

@@ -1162,6 +1162,101 @@ mod tests {
         assert!(cfg.notifier.subscriptions.is_empty());
     }
 
+    /// Phase 7 integration explorer: pin the post-Phase-6
+    /// notifier-surface additions — `ack_link_base` (D-4) and the
+    /// 4 Q-G channel blocks (PagerDuty, Loki, OpenSearch, TheHive).
+    /// Any future schema refactor that drops a `#[serde(default)]`
+    /// or renames a key in these blocks gets caught at parse time.
+    #[test]
+    fn sdd_008_post_phase_6_surface_round_trips_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier]
+            ack_link_base = "https://selfdef.example/notify/ack"
+
+            [notifier.pagerduty]
+            routing_key_file = "/etc/selfdef/pd.key"
+            endpoint         = "https://events.pagerduty.example/v2/enqueue"
+            source           = "host-1"
+
+            [notifier.loki]
+            endpoint         = "https://logs.example/loki/api/v1/push"
+            tenant_id        = "tenant-42"
+            auth_token_file  = "/etc/selfdef/loki.token"
+            source           = "host-1"
+
+            [notifier.opensearch]
+            endpoint         = "https://os.example:9200"
+            index            = "selfdef-events"
+            auth_kind        = "basic"
+            username         = "selfdef"
+            auth_token_file  = "/etc/selfdef/os.password"
+            source           = "host-1"
+
+            [notifier.thehive]
+            endpoint     = "https://hive.example:9000"
+            api_key_file = "/etc/selfdef/hive.key"
+            source       = "host-1"
+            alert_type   = "selfdef-detection"
+            "#,
+        )
+        .unwrap();
+
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+
+        assert_eq!(
+            cfg.notifier.ack_link_base.as_deref(),
+            Some("https://selfdef.example/notify/ack"),
+        );
+
+        assert_eq!(
+            cfg.notifier.pagerduty.routing_key_file.as_deref(),
+            Some(std::path::Path::new("/etc/selfdef/pd.key")),
+        );
+        assert_eq!(
+            cfg.notifier.pagerduty.endpoint,
+            "https://events.pagerduty.example/v2/enqueue",
+        );
+        assert_eq!(cfg.notifier.pagerduty.source, "host-1");
+
+        assert_eq!(
+            cfg.notifier.loki.endpoint,
+            "https://logs.example/loki/api/v1/push",
+        );
+        assert_eq!(cfg.notifier.loki.tenant_id, "tenant-42");
+        assert_eq!(
+            cfg.notifier.loki.auth_token_file.as_deref(),
+            Some(std::path::Path::new("/etc/selfdef/loki.token")),
+        );
+
+        assert_eq!(cfg.notifier.opensearch.endpoint, "https://os.example:9200");
+        assert_eq!(cfg.notifier.opensearch.index, "selfdef-events");
+        assert_eq!(cfg.notifier.opensearch.auth_kind, "basic");
+        assert_eq!(cfg.notifier.opensearch.username, "selfdef");
+
+        assert_eq!(cfg.notifier.thehive.endpoint, "https://hive.example:9000");
+        assert_eq!(
+            cfg.notifier.thehive.api_key_file.as_deref(),
+            Some(std::path::Path::new("/etc/selfdef/hive.key")),
+        );
+        assert_eq!(cfg.notifier.thehive.alert_type, "selfdef-detection");
+    }
+
+    /// Phase 7 integration explorer: pin the defaults — every
+    /// Q-G config block defaults to disabled when no operator
+    /// content is present.
+    #[test]
+    fn sdd_008_post_phase_6_surface_defaults_when_unset() {
+        let cfg = Config::load(None).unwrap();
+        assert!(cfg.notifier.ack_link_base.is_none());
+        assert!(cfg.notifier.pagerduty.routing_key_file.is_none());
+        assert!(cfg.notifier.loki.endpoint.is_empty());
+        assert!(cfg.notifier.opensearch.endpoint.is_empty());
+        assert!(cfg.notifier.thehive.endpoint.is_empty());
+    }
+
     /// F-2029-005 + F-2029-006: pin the default-when-unset
     /// contract. When the TOML omits the cap fields entirely,
     /// `ApiConfig::default()` yields `None` for both; the
