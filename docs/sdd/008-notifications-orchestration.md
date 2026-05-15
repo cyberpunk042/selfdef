@@ -43,7 +43,7 @@ Per-D status:
 | D-6c | Per-rung channel filtering + custom profiles | shipped | #129 + #130 |
 | D-7 | Panic floor (audit-mode bypass) | shipped | #127 |
 | D-8 | wall(1) session-attention | shipped | #128 |
-| D-9 | Dashboard | **requirements logged (D-001, 2026-05-15)** — comprehensive operator visibility (all modules, integrations, configurations, status, events, messages, operations); detailed design deferred to a separate SDD/design conversation |
+| D-9 | Dashboard | **requirements logged (D-001, 2026-05-15)** — comprehensive operator visibility (all modules, integrations, configurations, status, events, messages, operations); detailed design deferred to a separate SDD/design conversation. Requirements stub: [`docs/sdd/009-dashboard.md`](009-dashboard.md). |
 
 Plus 4 channel crates ship under SDD-008 even though they
 landed under Q-letter open questions rather than numbered Ds:
