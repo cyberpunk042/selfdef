@@ -22,3 +22,5 @@
   - [Building from source](./dev/build.md)
   - [Adding a collector](./dev/collector.md)
   - [eBPF programs](./dev/ebpf.md)
+  - [Test contract](./dev/test-contract.md)
+  - [Shared module-script helpers](./dev/module-helpers.md)
