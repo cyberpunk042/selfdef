@@ -424,6 +424,9 @@ pub struct NotifierConfig {
     /// SDD-008 Q-G: OpenSearch / Elasticsearch document-index
     /// channel. Empty `endpoint` keeps the channel disabled.
     pub opensearch: OpenSearchConfig,
+    /// SDD-008 Q-G: TheHive incident-management alert channel.
+    /// Empty `endpoint` keeps the channel disabled.
+    pub thehive: TheHiveConfig,
     /// SDD-008 D-8: wall(1) session-attention channel. Broadcasts
     /// to every logged-in TTY when a high-severity event fires —
     /// the operator's "talk to the bash session" surface. Default
@@ -525,6 +528,7 @@ impl Default for NotifierConfig {
             pagerduty: PagerDutyConfig::default(),
             loki: LokiConfig::default(),
             opensearch: OpenSearchConfig::default(),
+            thehive: TheHiveConfig::default(),
             wall: WallConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
@@ -645,6 +649,29 @@ pub struct OpenSearchConfig {
     /// Surfaced as the `host` field on each document. Defaults to
     /// `"selfdef"` when empty.
     pub source: String,
+}
+
+/// SDD-008 Q-G: TheHive incident-management alert-API channel
+/// config.
+///
+/// Default `endpoint = ""` keeps the channel disabled. Set to a
+/// TheHive instance (typically `https://hive.internal:9000`); the
+/// channel POSTs each event to `<endpoint>/api/v1/alert`.
+///
+/// `api_key_file` holds the Bearer API key (one line); mode
+/// `0600`. The key IS the auth.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct TheHiveConfig {
+    /// TheHive base URL. Empty = channel disabled. Must be
+    /// `https://`.
+    pub endpoint: String,
+    /// Path to a file containing the Bearer API key. Required.
+    pub api_key_file: Option<PathBuf>,
+    /// Alert `source` field. Defaults to `"selfdef"`.
+    pub source: String,
+    /// Alert `type` field. Defaults to `"selfdef"`.
+    pub alert_type: String,
 }
 
 /// SDD-008 Q-G: PagerDuty Events API v2 channel config.

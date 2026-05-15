@@ -2355,6 +2355,7 @@ dependencies = [
  "selfdef-integration-signal",
  "selfdef-integration-slack",
  "selfdef-integration-smtp",
+ "selfdef-integration-thehive",
  "selfdef-integration-twilio",
  "selfdef-integration-wall",
  "selfdef-nats",
@@ -2521,6 +2522,26 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "selfdef-integration-thehive"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
 ]
 
 [[package]]
