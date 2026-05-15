@@ -6,6 +6,98 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — `selfdef-integration-write` per-user TTY channel; `selfdefctl notify resend`
+
+Two operator-facing additions completing the SDD-008 channel set + escalation triage surface.
+
+#### What shipped
+
+- **`selfdef-integration-write` crate** (PR #170) — `write(1)` per-user TTY session-attention. Sibling of `selfdef-integration-wall` (broadcast) for per-user targeting: each name in `[notifier.write].users` receives a per-user `write <username>` invocation. Username allowlist regex-validated at config-load (`[a-zA-Z0-9._-]+`) — shell metacharacters reject startup. **Realises D-024** in `docs/decisions.md` (the realization of D-004 — `wall(1)` has no native per-user filter; the right per-user transport is its own channel). +20 tests covering the username validator, severity-floor enforcement, per-user spawn loop, and the "user not logged in is OK" non-error path.
+- **`selfdefctl notify resend <event_id>`** (PR #173) — fourth CLI verb against the persistent escalation engine, alongside `ack` / `forget` / `list`. Sets the row's `deadline_at = now` so the wake task fires the current rung's channels at its next poll (≤ `IDLE_POLL_INTERVAL_SECS`). Does **not** reset rung state and does **not** touch acked rows (`WHERE acked_at IS NULL`). Engine surface: new `EscalationEngine::reschedule_now(event_id, now) -> Result<bool>`. +3 CLI tests.
+
+#### Channel inventory (12 total, all wired into the daemon)
+
+```
+ntfy (D-2b)         signal (D-2c)       slack (Q-C)         discord
+smtp (D-7 Q-E)      twilio (Q-D)        pagerduty (Q-G)     loki (Q-G)
+opensearch (Q-G)    thehive (Q-G)       wall (D-8)          write (D-024)
+```
+
+#### Status
+
+Closes the SDD-008 channel-adapter set. No required-by-design channel is missing.
+
+### Documentation — Channel-set operator-facing completion
+
+Five PRs landed the operator-facing surface that PR #170's code addition implied: per-channel reference + crate READMEs + mdbook landing + threat-model rows + README freshness + published-link correctness.
+
+#### What shipped
+
+- **Operator canonical reference + 12 per-crate READMEs** (PR #174) — `docs/operator/channels.md` (~375 lines): at-a-glance table, cross-cutting `[notifier]` knobs, operator triage table, per-channel sections (40-60 lines each covering TOML block, auth secret hygiene, wire shape, severity collapse, limitations). Each `crates/selfdef-integration-*/README.md` (12 files, 30-50 lines each) mirrors a slice + cross-links to the canonical reference.
+- **mdbook landing refresh** (PR #175) — `docs/src/ops/notifications.md` rewritten from 91-line 2-channel stale to 155-line 12-channel reference + `[notifier]` knobs + triage table + per-channel quick-links into the canonical reference.
+- **Security model + modules example** (PR #176) — `SECURITY.md` two threat-model rows updated (TTY-broadcast row now covers both `wall` + `write`; HTTP ack URL leakage map 5 → 6 outbound channels). New `config/modules.toml.example` (76 lines) mirrors the embedded `STARTER_MODULES` constant. Drift-guard tests in `crates/selfdef-cli/src/init.rs` fail loudly if either example file diverges from its const.
+- **README refresh** (PR #177) — top-level `README.md` Layout section: crate listing 1 stale line → 15-line per-integration entry; `docs/sdd/` "six Phase-1 SDDs" → "nine SDDs"; `docs/review/` "Phase-1 audit" → "Phase 2..8 ledgers (Phase 8 deferred)"; new rows for `docs/operator/`, `docs/decisions.md`, `docs/handoff/`.
+- **mdbook link correctness** (PR #178) — `docs/src/ops/notifications.md`: 14 relative `../../operator/channels.md` links would 404 on a published mdbook (per `book.toml`: `src = "src"`; the canonical doc lives outside `src/`). Normalised to absolute github.com URLs matching the page's existing pattern.
+
+#### By the numbers
+
+~1,100 net lines of operator-facing documentation across 14 files. No code change in this slice.
+
+#### Operator promise
+
+Every channel the daemon wires (ntfy / signal / slack / discord / smtp / twilio / pagerduty / loki / opensearch / thehive / wall / write) is reachable from the starter config, the canonical operator reference, a per-crate README, the published mdbook, the threat model in `SECURITY.md`, the workspace README, and `docs/decisions.md`'s D-NNN audit log. An operator unfamiliar with selfdef can pick a channel and configure it without reading Rust source.
+
+### Documentation — SDD-009 dashboard requirements stub (no design)
+
+**PR #171** lands `docs/sdd/009-dashboard.md` as an intentionally-thin requirements-only SDD per operator direction (D-001).
+
+#### What's in the stub
+
+- **Required coverage** (7 areas operator-named): modules · integrations · configurations · status · events · messages · operations.
+- **Non-goals (this SDD)**: explicit list of design decisions this SDD does NOT make — auth model / hosting / UI tech / ack flow / bulk ops / refresh model / multi-host scope.
+- **Open questions Q-A..Q-G**: each non-goal as an explicit open question for the design chat.
+- **Way forward**: separate design conversation → successor SDD with D-1..D-N design points → impl cycle per the established cadence.
+
+#### Realises
+
+D-001 in `docs/decisions.md` ("Dashboard scope: comprehensive operator visibility — design deferred"). SDD-008's D-9 impl-status row cross-references the new stub.
+
+### Documentation — Phase 8 audit deferred (deferral charter)
+
+**PR #172** lands `docs/review/phase-8/00-charter.md` + `99-findings-ledger.md` as an explicit non-run.
+
+#### Why deferral, not a thin audit
+
+The cycle Phase 8 would audit (PRs #156-#171) has two structural defects:
+
+1. **Authorship bias** — 16 of 16 selfdef PRs in the cycle were authored by the same agent who would run the audit. Self-audit produces no triangulation; "0 findings" reads as QA when it's actually false-positive signal.
+2. **Cycle composition** — 13 of 16 PRs are docs / skill / decisions-log work. 6 of the 7 audit-programme explorers presuppose code surface that doesn't exist on this cycle.
+
+#### Four trigger conditions for opening Phase 8 for real
+
+1. A non-author auditor or rater is available.
+2. A code-shaped cycle (≥ 5 PRs touching Rust) accumulates after this session.
+3. A production-relevant defect is reported against #156-#171's output.
+4. The dashboard impl cycle ships (post-SDD-009 design).
+
+#### Reserves
+
+The `F-2033-NNN` findings prefix for whenever Phase 8 (or successor) opens for real. The cycle inventory in the charter is the starting baseline.
+
+#### Trajectory table after deferral
+
+```
+┌───────┬────────────────────────────────────────┬───────────────────────────────────┐
+│ Phase │ Cycle audited                          │ Outcome                           │
+├───────┼────────────────────────────────────────┼───────────────────────────────────┤
+│   6   │ SDD-008 cycle (22 PRs / 9 crates)      │ 16 findings, 14 closed, 2 demoted │
+│   7   │ post-Phase-6 cycle (7 PRs / 4 crates)  │ 6 findings, all closed            │
+│ ⏸ 8 ⏸ │ post-Phase-7 cycle (16 PRs / 1 crate)  │ deferred (this PR)                │
+└───────┴────────────────────────────────────────┴───────────────────────────────────┘
+```
+
+"Deferred" is explicitly **not** a zero-finding pass — the audit programme honestly examined the cycle and concluded it isn't audit-ready under the current author-bias + composition constraints.
+
 ### Documentation — Phase 5 docs explorer (**0 findings**; fifth consecutive clean explorer)
 
 Fifth of seven Phase 5 explorers. Audits the documentation surface from the Phase 4 closure cycle.
