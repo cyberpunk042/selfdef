@@ -1,6 +1,6 @@
 # Phase 6 — findings ledger
 
-> Status: **open** — charter just landed; explorers pending.
+> Status: **open** — inventory + recent-PRs explorer landed; 5 explorers pending.
 > Vintage prefix: **F-2031-NNN**
 > Last updated: 2026-05-15
 
@@ -28,29 +28,32 @@ design-shaped.
 
 ## Findings
 
-*(none yet — explorers run in follow-up PRs.)*
-
 | id | severity | surface | summary | next phase |
 | --- | --- | --- | --- | --- |
+| F-2031-001 | nice | docs (SDD-008) | PR #114's commit title labels the SMTP integration crate as `D-7` even though SDD-008's D-7 is the panic floor (which shipped under PR #127 with the correct label). Pre-history label collision. | Phase 6 docs explorer to decide on SDD-008 "PR labels" appendix. |
+| F-2031-002 | nice | crate (ntfy + signal) | Ntfy (4 tests) and Signal (3 tests) integration crates lack the wiremock / subprocess-exec end-to-end coverage that the later channel crates adopted (twilio, slack, discord, wall: 12–16 tests each). Coverage parity gap. | Phase 6 crate + tests explorers. |
+| F-2031-003 | nice | supply-chain (deny.toml) | `0BSD` was added to `deny.toml`'s `licenses.allow` to permit `quoted_printable` 0.5.2 (transitive via `lettre`). Documented in-line, but should be re-audited end-to-end. | Phase 6 security explorer. |
+| F-2031-004 | demoted | tooling (rustfmt) | PR #127 needed a `chore(fmt)` fix-up commit (`3b80a85`) to satisfy CI's rustfmt 1.88.0 chain-collapse on the panic-floor parsing path. Local rustfmt produced different output. Single observed incident; CI caught it before merge. | None — re-flag if a second occurrence appears in a future cycle. |
 
 ## Status
 
-- Charter landed; this is the empty ledger template.
-- Inventory + seven explorers ship in follow-up PRs:
-  1. `10-inventory.md` — structured catalog of what was added
-     during the SDD-008 cycle (9 new crates, 22 PRs).
-  2. `20-recent-prs-audit.md` — PR-by-PR audit of `#109`..`#130`.
-  3. `30-crate-audit.md` — 9 new crates' shapes + invariants.
-  4. `40-module-audit.md` — dispatcher path + daemon wiring +
+- Charter (PR #131) landed.
+- This PR ships `10-inventory.md` + `20-recent-prs-audit.md` —
+  the inventory of the 9 new crates / 22 PRs / 159 new tests
+  / 13 new TOML surface elements, and the PR-by-PR audit
+  raising 3 nice findings + 1 demoted observation.
+- Five explorers remain (ship in follow-up PRs):
+  1. `30-crate-audit.md` — 9 new crates' shapes + invariants.
+  2. `40-module-audit.md` — dispatcher path + daemon wiring +
      event-to-payload bridge.
-  5. `50-integration-audit.md` — startup wiring, config round-trip,
+  3. `50-integration-audit.md` — startup wiring, config round-trip,
      wake-task lifecycle.
-  6. `60-docs-audit.md` — SDD-008, ARCHITECTURE.md, integrations
+  4. `60-docs-audit.md` — SDD-008, ARCHITECTURE.md, integrations
      contributor doc, SECURITY.md additions, init.rs starter
      config.
-  7. `70-tests-audit.md` — engine + dispatcher + wake-task +
+  5. `70-tests-audit.md` — engine + dispatcher + wake-task +
      channel-validation + profile tests.
-  8. `80-security-audit.md` — credentials, TTY broadcast, SQLite
+  6. `80-security-audit.md` — credentials, TTY broadcast, SQLite
      injection surface, rung-advance race, TLS posture.
 - Phase 6 closes when every important / blocker has either a
   "closed by <PR>" back-reference or a tracked SDD.
@@ -65,7 +68,7 @@ For context — full closure-cycle convergence to date:
 | Phase 3 | 4 nice | 10 mixed | 1 important | 4 nice | 5 mixed | 5 mixed | 3 nice |
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Phase 6** | *pending* | *pending* | *pending* | *pending* | *pending* | *pending* | *pending* |
+| **Phase 6** | **3 nice + 1 demoted** | *pending* | *pending* | *pending* | *pending* | *pending* | *pending* |
 
 Phase 5's zero-finding result reflected its audit surface (a
 documentation-heavy closure cycle); Phase 6 audits an
