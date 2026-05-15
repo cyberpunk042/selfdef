@@ -2350,6 +2350,7 @@ dependencies = [
  "selfdef-integration-discord",
  "selfdef-integration-loki",
  "selfdef-integration-ntfy",
+ "selfdef-integration-opensearch",
  "selfdef-integration-pagerduty",
  "selfdef-integration-signal",
  "selfdef-integration-slack",
@@ -2430,6 +2431,26 @@ dependencies = [
  "selfdef-notifier-orchestrator",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+ "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-opensearch"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
  "tokio",
  "tracing",
  "uuid",

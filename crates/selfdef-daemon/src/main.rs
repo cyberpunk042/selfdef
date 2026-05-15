@@ -710,6 +710,26 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "opensearch" if !cfg.notifier.opensearch.endpoint.is_empty() => {
+                match selfdef_integration_opensearch::OpenSearchNotifier::from_config(
+                    &cfg.notifier.opensearch.endpoint,
+                    &cfg.notifier.opensearch.index,
+                    &cfg.notifier.opensearch.auth_kind,
+                    &cfg.notifier.opensearch.username,
+                    cfg.notifier.opensearch.auth_token_file.as_ref(),
+                    &cfg.notifier.opensearch.source,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "opensearch channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
                 let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
                     // Unreachable given the guard above, but keep
@@ -1005,6 +1025,24 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "loki engine-channel skipped");
+                    }
+                }
+            }
+            "opensearch" if !cfg.notifier.opensearch.endpoint.is_empty() => {
+                match selfdef_integration_opensearch::OpenSearchNotifier::from_config(
+                    &cfg.notifier.opensearch.endpoint,
+                    &cfg.notifier.opensearch.index,
+                    &cfg.notifier.opensearch.auth_kind,
+                    &cfg.notifier.opensearch.username,
+                    cfg.notifier.opensearch.auth_token_file.as_ref(),
+                    &cfg.notifier.opensearch.source,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "opensearch engine-channel skipped");
                     }
                 }
             }

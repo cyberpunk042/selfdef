@@ -27,7 +27,8 @@ Per-D status:
 | D-5e | Subscription filter on engine path | shipped (closes Phase 6 F-2031-009) | post-Phase-6 PR |
 | D-4 HTTP ack | `GET /notify/ack/<token>` endpoint + ack_token column + ack_link rendering | shipped (Phase 6 "remaining backlog" item from charter) | post-D-4 PR |
 | Q-G PagerDuty | Events API v2 channel (`selfdef-integration-pagerduty`) | shipped | post-D-4 PR |
-| Q-G Loki | Grafana Loki push-API channel (`selfdef-integration-loki`) | shipped | this PR |
+| Q-G Loki | Grafana Loki push-API channel (`selfdef-integration-loki`) | shipped | post-D-4 PR |
+| Q-G OpenSearch | OpenSearch / Elasticsearch document-index channel (`selfdef-integration-opensearch`) | shipped | this PR |
 | D-4 | `selfdefctl notify {ack,forget,list}` | shipped | #123 |
 | D-5a | `EscalationEngine` persistent layer | shipped | #118 |
 | D-5b | `PayloadDispatcher` façade | shipped | #119 |
