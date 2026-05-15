@@ -421,6 +421,9 @@ pub struct NotifierConfig {
     /// SDD-008 Q-G: Grafana Loki push-API channel. Empty
     /// `endpoint` keeps the channel disabled.
     pub loki: LokiConfig,
+    /// SDD-008 Q-G: OpenSearch / Elasticsearch document-index
+    /// channel. Empty `endpoint` keeps the channel disabled.
+    pub opensearch: OpenSearchConfig,
     /// SDD-008 D-8: wall(1) session-attention channel. Broadcasts
     /// to every logged-in TTY when a high-severity event fires —
     /// the operator's "talk to the bash session" surface. Default
@@ -521,6 +524,7 @@ impl Default for NotifierConfig {
             discord: DiscordConfig::default(),
             pagerduty: PagerDutyConfig::default(),
             loki: LokiConfig::default(),
+            opensearch: OpenSearchConfig::default(),
             wall: WallConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
@@ -600,6 +604,46 @@ pub struct LokiConfig {
     pub auth_token_file: Option<PathBuf>,
     /// Source identifier surfaced as the `host` label in Loki.
     /// Defaults to `"selfdef"` when blank.
+    pub source: String,
+}
+
+/// SDD-008 Q-G: OpenSearch / Elasticsearch document-index channel
+/// config.
+///
+/// Default `endpoint = ""` keeps the channel disabled. Set to an
+/// OS / ES cluster's REST API endpoint (typically
+/// `https://opensearch.internal:9200`). Each event becomes one
+/// document indexed at `<endpoint>/<index>/_doc`.
+///
+/// Auth model:
+/// - `auth_kind = "none"`: no `Authorization` header. Use when the
+///   cluster is gated by network ACLs only.
+/// - `auth_kind = "basic"`: HTTP Basic. Requires `username` and
+///   `auth_token_file` (the latter holds the password).
+/// - `auth_kind = "apikey"`: AWS-OpenSearch / Elastic Cloud API
+///   key. Requires `auth_token_file`; `username` is ignored.
+///
+/// Unknown auth_kind strings are rejected at startup so operators
+/// see the misconfig.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct OpenSearchConfig {
+    /// OpenSearch / Elasticsearch REST API endpoint. Empty =
+    /// channel disabled. Must be `https://`.
+    pub endpoint: String,
+    /// Target index name (e.g. `"selfdef-events"`). Required when
+    /// `endpoint` is set.
+    pub index: String,
+    /// One of `"none" | "basic" | "apikey"`. Empty parses as
+    /// `none`.
+    pub auth_kind: String,
+    /// Username for Basic auth. Ignored when `auth_kind` ≠ basic.
+    pub username: String,
+    /// Path to a file containing the Basic password OR the API
+    /// key. Required for basic/apikey, ignored for none.
+    pub auth_token_file: Option<PathBuf>,
+    /// Surfaced as the `host` field on each document. Defaults to
+    /// `"selfdef"` when empty.
     pub source: String,
 }
 

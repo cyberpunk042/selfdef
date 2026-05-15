@@ -303,6 +303,30 @@ channels = []
 # auth_token_file  = "/etc/selfdef/loki.token"  # optional, mode 0600
 # source           = ""              # empty = "selfdef" (default)
 
+# SDD-008 Q-G: commented [notifier.opensearch] example. OpenSearch
+# / Elasticsearch document-index channel — useful for operators
+# already running OS/ES as their SIEM or log store. Each event
+# becomes one document at <endpoint>/<index>/_doc.
+# Auth (auth_kind):
+#   "none"   — no Authorization header. Cluster gated by network
+#              ACLs only.
+#   "basic"  — HTTP Basic. Set `username` and `auth_token_file`
+#              (the latter holds the password).
+#   "apikey" — AWS-OpenSearch / Elastic Cloud API key. Set
+#              `auth_token_file`; `username` is ignored.
+# Unknown auth_kind strings are rejected at startup — operators
+# see the misconfig instead of accidentally sending unauthenticated.
+# Endpoint must be https://; we refuse to ship credentials over
+# plaintext.
+#
+# [notifier.opensearch]
+# endpoint        = "https://opensearch.internal:9200"
+# index           = "selfdef-events"
+# auth_kind       = "basic"          # "none" | "basic" | "apikey"
+# username        = "selfdef"        # only used for auth_kind=basic
+# auth_token_file = "/etc/selfdef/opensearch.password"  # mode 0600
+# source          = ""               # empty = "selfdef" (default)
+
 # SDD-008 D-8: wall(1) session-attention channel. Broadcasts a
 # one-line attention banner to every logged-in TTY when a
 # high-severity event fires — the "talk to the bash session" path
