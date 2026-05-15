@@ -318,18 +318,58 @@ Current list:
 - remote attestation
 - rule signing
 
-Add:
-- TracingPolicy signing (analogous to rule signing): the
-  daemon trusts every YAML in the policy dir as if signed
-  by the operator. Future SDD: per-policy cosign + a
-  startup-time verifier in `tetragon` apply.sh.
-- Eventstream JSONL integrity: every line is trusted by the
-  collector. Future SDD: daemon-side ownership / mode
-  verification at parse time, plus an optional per-line HMAC.
-- Metrics-token rotation: today a daemon restart is the only
+Add (status as of 2026-05-15 — all four shipped as opt-in features
+per the `selfdefctl init checklist`; see SECURITY.md "Known gaps"
+section for the runbook of each):
+
+- **TracingPolicy signing** — **shipped** as F-2026-024 follow-up.
+  The `tetragon` module's `apply.sh` and `check.sh` re-use
+  `selfdefctl keys verify` against `.minisig` siblings of each
+  policy file; turn on via `require_signed_policies = true` in
+  `/etc/selfdef/modules/tetragon.toml`. Caveat: agent-guard
+  renders policies at runtime; that output isn't pre-signed
+  (intentional, documented). Implementation departed from the
+  original "cosign" framing in favor of minisign for filesystem-
+  native distribution. See SECURITY.md:244.
+  _Original framing (2026 pre-shipping)_: daemon trusts every
+  YAML in the policy dir as if signed by the operator. Future
+  SDD: per-policy cosign + a startup-time verifier in `tetragon`
+  apply.sh.
+- **Eventstream JSONL integrity** — **shipped (opt-in)** as
+  F-2026-026 follow-up. Set
+  `[collectors.eventstream].integrity_check = true` and the
+  daemon refuses to tail any path that is world-writable or
+  owned by a UID outside `{daemon-effective-uid, root} ∪
+  allowed_owners`. Disabled by default to preserve operator-
+  owned emitters like `~/.local/share/selfdef/ssh-wrap.jsonl`.
+  Per-line HMAC (the second half of the original "Future SDD"
+  vision) is **not** shipped — owner/mode verification was
+  sufficient for the threat profile. See SECURITY.md:214.
+  _Original framing_: every line is trusted by the collector.
+  Future SDD: daemon-side ownership / mode verification at
+  parse time, plus an optional per-line HMAC.
+- **Metrics-token rotation** — **shipped** as F-2026-023
+  follow-up. `selfdefctl api rotate-token` ships in this
+  release: generates a fresh 32-byte token, writes it
+  atomically to `[api].token_file`, optionally signals the
+  running daemon (`--pid <pid>` or `--pid auto`). SIGUSR2
+  triggers re-read under the shared `Arc<RwLock<>>` backing
+  the bearer middleware — in-flight requests authenticate
+  against the new token without dropping. See SECURITY.md:256.
+  _Original framing_: today a daemon restart is the only
   rotation point. Future SDD: a `selfdefctl api rotate-token`
   verb plus daemon SIGUSR2 handling.
-- k8s label-RBAC posture: the `pod-label` scope assumes the
+- **k8s label-RBAC posture** — **shipped** as F-2026-025
+  follow-up. `selfdefctl rbac check` prints the recommended
+  posture + `kubectl auth can-i` commands; with `--probe` it
+  executes those commands for a fixed subject set
+  (`system:authenticated`, `system:unauthenticated`, plus any
+  operator-supplied `--as`) and exits non-zero if any subject
+  can PATCH pod labels. Documentation + spot-checking on a
+  fixed subject set, not cluster-wide enumeration; operators
+  needing exhaustive analysis run `rbac-tool` or
+  `kubectl-who-can` separately. See SECURITY.md:272.
+  _Original framing_: the `pod-label` scope assumes the
   cluster RBAC posture is documented. A `selfdefctl modules
   check` integration that reads the cluster's RBAC and
   warns on overly-permissive PATCH rights is desirable but
