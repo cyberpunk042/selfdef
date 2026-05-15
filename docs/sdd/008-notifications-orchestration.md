@@ -43,7 +43,7 @@ Per-D status:
 | D-6c | Per-rung channel filtering + custom profiles | shipped | #129 + #130 |
 | D-7 | Panic floor (audit-mode bypass) | shipped | #127 |
 | D-8 | wall(1) session-attention | shipped | #128 |
-| D-9 | Dashboard | **deferred** — separate SDD when scoped |
+| D-9 | Dashboard | **requirements logged (D-001, 2026-05-15)** — comprehensive operator visibility (all modules, integrations, configurations, status, events, messages, operations); detailed design deferred to a separate SDD/design conversation |
 
 Plus 4 channel crates ship under SDD-008 even though they
 landed under Q-letter open questions rather than numbered Ds:
@@ -466,7 +466,10 @@ Mirrors SDD-005:
   Unix `wall` behaviour). Per-user opt-in is a future
   refinement once a second session-attention transport (e.g.
   `write(1)`) lands — see `crates/selfdef-integration-wall`
-  module rustdoc.
+  module rustdoc. → **Answered (D-004, 2026-05-15)**: per-user
+  opt-in will land as a `[notifier.wall].users = [...]` allowlist
+  in config; ship paired with the `write(1)` transport so the
+  design touch on wall amortizes.
 
 - **Q-G — Config layout.** **Working assumption: new
   `[notifications]` section**; the old `[notifier]` becomes

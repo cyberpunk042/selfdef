@@ -24,7 +24,7 @@ Shipped in the SDD-007 implementation PR. D-1 + D-2 + D-3 + D-5
   increment. `SubscriberGuard::Drop` decrements both counters and
   prunes the HashMap entry when the per-token count hits zero
   (no leak across rotations).
-- **D-3 — Revocation interaction**: deliberately deferred. Rotating
+- **D-3 — Revocation interaction**: **answered (D-002, 2026-05-15)** — keep current behavior; the F-2027-062 slow-client timeout is the documented upper bound on the leak window. _Original framing for history_: deliberately deferred. Rotating
   a token blocks *new* connections immediately (bearer-auth
   refuses); existing connections drain via the F-2027-062 slow-
   client timeout + normal client-disconnect paths. Future
