@@ -415,6 +415,9 @@ pub struct NotifierConfig {
     /// SDD-008: Discord webhook outbound channel. Missing
     /// `webhook_url_file` keeps the channel disabled.
     pub discord: DiscordConfig,
+    /// SDD-008 Q-G: PagerDuty Events API v2 channel. Missing
+    /// `routing_key_file` keeps the channel disabled.
+    pub pagerduty: PagerDutyConfig,
     /// SDD-008 D-8: wall(1) session-attention channel. Broadcasts
     /// to every logged-in TTY when a high-severity event fires —
     /// the operator's "talk to the bash session" surface. Default
@@ -513,6 +516,7 @@ impl Default for NotifierConfig {
             twilio: TwilioConfig::default(),
             slack: SlackConfig::default(),
             discord: DiscordConfig::default(),
+            pagerduty: PagerDutyConfig::default(),
             wall: WallConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
@@ -559,6 +563,31 @@ pub struct DiscordConfig {
     pub webhook_url_file: Option<PathBuf>,
     /// Display name for posts. Defaults to `"selfdef"` when blank.
     pub username: String,
+}
+
+/// SDD-008 Q-G: PagerDuty Events API v2 channel config.
+///
+/// Default `routing_key_file = None` keeps the channel disabled.
+/// Set to a path containing the 32-char hex integration key
+/// (per-service routing identifier from PagerDuty's UI).
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PagerDutyConfig {
+    /// Path to a file containing the PagerDuty Events API v2
+    /// routing key. The key IS the auth — store the file at
+    /// mode `0600`.
+    pub routing_key_file: Option<PathBuf>,
+    /// PagerDuty Events API v2 endpoint. Empty = use the default
+    /// global US endpoint (`https://events.pagerduty.com/v2/enqueue`).
+    /// Set this for staging / EU-only PD instances or for testing
+    /// against a local mock server.
+    pub endpoint: String,
+    /// Source identifier surfaced in PagerDuty's UI as the
+    /// alerting entity. Defaults to `"selfdef"` when blank;
+    /// operators with multiple selfdef daemons feeding the same
+    /// PagerDuty service usually want to set this to the host
+    /// name so they can tell incidents apart.
+    pub source: String,
 }
 
 /// SDD-008 D-8: wall(1) session-attention channel config.

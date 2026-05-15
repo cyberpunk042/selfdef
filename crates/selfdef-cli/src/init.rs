@@ -252,6 +252,31 @@ channels = []
 # webhook_url_file = "/etc/selfdef/discord.webhook.url"
 # username         = "selfdef"
 
+# SDD-008 Q-G: commented [notifier.pagerduty] example. PagerDuty's
+# Events API v2 routes incidents to whichever on-call schedule the
+# operator has wired on the PD side. The routing_key is per-service
+# (32-char hex from the PagerDuty UI → Services → Integrations) and
+# is itself the auth.
+# To enable:
+#   1. Create a service in PagerDuty with the "Events API v2"
+#      integration type. Copy the routing key.
+#   2. Write the routing key (one line, no trailing whitespace)
+#      to /etc/selfdef/pagerduty.routing_key, mode 0600, owned by
+#      the daemon user.
+#   3. Uncomment the block below; flip channels above to include
+#      "pagerduty".
+# Severity mapping (OCSF → PD): info/low→info, medium→warning,
+# high→error, critical/fatal→critical.
+# Each rung re-fire mints a fresh dedup_key, so an unacked alert
+# pages louder by triggering a NEW PagerDuty incident per rung.
+# A future revision could thread EventId as the dedup_key to use
+# PD's native incident-update flow instead.
+#
+# [notifier.pagerduty]
+# routing_key_file = "/etc/selfdef/pagerduty.routing_key"
+# endpoint         = ""            # empty = global US default
+# source           = ""            # empty = "selfdef" (default)
+
 # SDD-008 D-8: wall(1) session-attention channel. Broadcasts a
 # one-line attention banner to every logged-in TTY when a
 # high-severity event fires — the "talk to the bash session" path

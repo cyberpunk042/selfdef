@@ -29,6 +29,7 @@ selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-integration-signal = { workspace = true }
 selfdef-integration-discord = { workspace = true }
+selfdef-integration-pagerduty = { workspace = true }
 selfdef-integration-slack = { workspace = true }
 selfdef-integration-smtp = { workspace = true }
 selfdef-integration-twilio = { workspace = true }
