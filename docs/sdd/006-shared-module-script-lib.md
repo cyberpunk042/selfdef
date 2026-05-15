@@ -520,17 +520,24 @@ without coordinating with other SDDs.
 
 - **Q-A** — Should the shared lib live in `packaging/lib/`
   (alongside other deb-distributed assets) or in a new
-  top-level `share/selfdef-lib/`? The packaging path is
+  top-level `share/selfdef-lib/`? **Answered (D-019, 2026-05-15)** —
+  `packaging/lib/` (alongside other deb-distributed assets).
+  _Original framing for history_: The packaging path is
   what the daemon ships today; reuse it unless a
   cross-package concern emerges.
 - **Q-B** — Should `module-helpers.md` go under
   `docs/src/dev/` (visible to contributors writing
   modules) or under `docs/sdd/` (alongside design docs)?
-  Suggestion: dev, with a back-reference from the SDD.
+  **Answered (D-020, 2026-05-15)** — `docs/src/dev/` with
+  back-reference from the SDD. _Original framing for
+  history_: Suggestion: dev, with a back-reference from the SDD.
 - **Q-C** — Future v2 of the shared lib for YAML editing:
   bring `yq` in as a `requires` for affected modules, or
-  ship a small in-house YAML editor in bash / python? Out
-  of scope here; tracked.
+  ship a small in-house YAML editor in bash / python?
+  **Answered (D-021, 2026-05-15)** — out of scope for v1;
+  tracked. Decision deferred to a future v2 SDD when YAML-
+  editing modules need it. _Original framing for history_:
+  Out of scope here; tracked.
 
 ## Appendix — interaction with other SDDs
 

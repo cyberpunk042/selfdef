@@ -116,3 +116,131 @@ canonical source of truth; this log gives the chronological view.
 **Affected items**: Future multi-host SDD if scoped
 **Reversibility**: fully-reversible
 **Linked**: PR (this PR)
+
+## D-008 — 2026-05-15 — agent_guard_observed.yml Post-mode rule: don't ship for v1
+
+**Decision**: Do not ship the `agent_guard_observed.yml` Post-mode rule alongside the v1 agent-guard module. Revisit after operator feedback in production.
+**Question**: Do we ship the `agent_guard_observed.yml` Post-mode rule alongside?
+**Source**: `docs/sdd/001-ai-machine-end-to-end.md`:549 (Q-A row)
+**Rationale**: Every audit-mode policy fire would create an `Informational` finding, which clutters the store. Conservative default until operator demand surfaces; cheap to add later.
+**Affected items**: `modules/agent-guard/` (policy YAMLs); future operator-feedback cycle
+**Reversibility**: fully-reversible
+**Linked**: PR (this PR)
+
+## D-009 — 2026-05-15 — sigma rule level: literal `high`
+
+**Decision**: Sigma rules for agent-guard findings use a literal `level: high`, not a per-policy mapping from the YAML's `selfdef.io/severity` annotation. D-1b leaves room for per-policy mapping once upstream Tetragon exposes annotations in events.
+**Question**: Should the sigma rule's `level` be a literal `high`, or should it map per-policy from the YAML's `selfdef.io/severity` annotation?
+**Source**: `docs/sdd/001-ai-machine-end-to-end.md`:554 (Q-B row)
+**Rationale**: Annotations aren't in the Tetragon event today; literal works without upstream changes. Per-policy mapping is the cleaner end-state once annotations land.
+**Affected items**: agent-guard sigma rule generator
+**Reversibility**: fully-reversible
+**Linked**: PR (this PR)
+
+## D-010 — 2026-05-15 — Drop-in support in selfdef-config: no for v1
+
+**Decision**: No drop-in directory in `selfdef-config` for v1. The configuration snippet goes in `/etc/selfdef/selfdef.toml`. A drop-in directory matching systemd's pattern would be a separate SDD if it gains traction.
+**Question**: Drop-in support in `selfdef-config`?
+**Source**: `docs/sdd/002-defaults-that-work.md`:520 (Q-A row)
+**Rationale**: Conservative posture — the single-file config is simpler to reason about, and `--write-snippets` mode can produce non-clobbering files via a future drop-in directory if operators ask.
+**Affected items**: `selfdef-config` crate; future drop-in SDD if scoped
+**Reversibility**: fully-reversible
+
+## D-011 — 2026-05-15 — [daemon_requires] removal: not for v1
+
+**Decision**: `[daemon_requires]` does not support negative dependencies (`enabled = false` preventing other defaults) in v1.
+**Question**: Does `[daemon_requires]` need to support removal?
+**Source**: `docs/sdd/002-defaults-that-work.md`:526 (Q-B row)
+**Rationale**: Scope discipline — v1 covers the positive case; negative dependencies are a separate concern that hasn't surfaced as needed.
+**Affected items**: `selfdef-config` `[daemon_requires]` schema
+**Reversibility**: fully-reversible
+
+## D-012 — 2026-05-15 — selfdefctl modules apply --auto-fix: out of scope
+
+**Decision**: `selfdefctl modules apply --auto-fix` (rewriting `selfdef.toml` directly to resolve detected gaps) is out of scope for v1.
+**Question**: Should `selfdefctl modules apply --auto-fix` rewrite `selfdef.toml` directly?
+**Source**: `docs/sdd/002-defaults-that-work.md`:529 (Q-C row)
+**Rationale**: Requires a comment-preserving TOML editor. Substantial tooling cost; the validator already surfaces the gap; operator can fix manually with the suggested diff.
+**Affected items**: `selfdefctl modules apply` (no behavior change in v1)
+**Reversibility**: fully-reversible
+
+## D-013 — 2026-05-15 — Validator runs on selfdefctl modules check: yes (default)
+
+**Decision**: The daemon-config validator runs on every `selfdefctl modules check` invocation (default yes). `check` is read-only and surfacing daemon-config drift before apply is strictly better than waiting until apply-time.
+**Question**: Should the validator run on every `selfdefctl modules check` too?
+**Source**: `docs/sdd/002-defaults-that-work.md`:532 (Q-D row)
+**Rationale**: Read-only command, so surfacing extra issues is pure information gain; operators benefit from seeing drift before they reach apply.
+**Affected items**: `selfdefctl modules check`
+**Reversibility**: fully-reversible
+
+## D-014 — 2026-05-15 — Per-profile metadata table: out of scope for SDD-003
+
+**Decision**: Per-profile metadata table does not gain extra fields (e.g. per-profile `phase` overrides, per-profile `requires`) in SDD-003. The schema in D-1 is already extensible; add fields when a concrete operator need surfaces.
+**Question**: Should the per-profile metadata table support more fields than `instanced`?
+**Source**: `docs/sdd/003-vpn-bridge-multi-instance.md`:592 (Q-A row)
+**Rationale**: Adding speculative fields adds maintenance cost without addressing a stated need; the schema is forward-compatible by design.
+**Affected items**: SDD-003 D-1 schema (no change)
+**Reversibility**: fully-reversible
+
+## D-015 — 2026-05-15 — Resolver error message includes suggested fix: yes
+
+**Decision**: The vpn-bridge profile resolver's error message includes the suggested fix ("declare `instanced=true` in `profiles.details.<profile>`") when an operator hits the singleton-profile guard with a non-empty instance suffix.
+**Question**: Should the resolver error message include the suggested fix?
+**Source**: `docs/sdd/003-vpn-bridge-multi-instance.md`:596 (Q-B row)
+**Rationale**: Operator-ergonomics improvement at zero design cost. Tracked as an implementation-PR follow-up if the resolver's current message doesn't already include it.
+**Affected items**: `selfdef-cli` profile resolver error path
+**Reversibility**: fully-reversible
+
+## D-016 — 2026-05-15 — Pipeline + seam test requirement: yes for event-source modules
+
+**Decision**: The test contract requires both a pipeline test AND a seam test for modules that introduce a new event source. Purely passive modules (e.g. a future `host-baseline` observation module) are exempt.
+**Question**: Should the contract require both a pipeline test AND a seam test for every new module?
+**Source**: `docs/sdd/005-test-contract.md`:453 (Q-A row)
+**Rationale**: Pipeline + seam tests are load-bearing for modules that introduce events into the bus. Pure observers don't need them; over-applying would create test-debt for low-risk additions.
+**Affected items**: SDD-005 test-contract spec; future module-introduction PRs
+**Reversibility**: fully-reversible
+
+## D-017 — 2026-05-15 — Test-contract doc location: docs/src/dev/
+
+**Decision**: The test-contract doc lives under `docs/src/dev/` (mdbook-visible to contributors). Cross-publishing under `docs/sdd/` is acceptable but not required.
+**Question**: Where does the test-contract doc go?
+**Source**: `docs/sdd/005-test-contract.md`:458 (Q-B row)
+**Rationale**: Contributors discover test-contract guidance through dev docs; placing it there matches the audience.
+**Affected items**: `docs/src/dev/` (test-contract publication)
+**Reversibility**: fully-reversible
+
+## D-018 — 2026-05-15 — Keep test contract from going stale: per-Phase audit re-validation
+
+**Decision**: Every Phase-N audit re-asks "do these test-contract categories still match the codebase?" Contract drift surfaces as audit findings, just like any other drift signal.
+**Question**: How do we keep the test contract from going stale?
+**Source**: `docs/sdd/005-test-contract.md`:462 (Q-C row)
+**Rationale**: Leverages the existing closure-cycle audit cadence — no new process needed. The seven explorers already inventory the codebase; contract-drift is a natural finding category.
+**Affected items**: Future Phase-N audit charters (test-contract drift check)
+**Reversibility**: fully-reversible
+
+## D-019 — 2026-05-15 — Shared lib location: packaging/lib/
+
+**Decision**: The shared module-script library lives at `packaging/lib/` (alongside other deb-distributed assets). No top-level `share/selfdef-lib/` directory.
+**Question**: Where does the shared module-script lib live?
+**Source**: `docs/sdd/006-shared-module-script-lib.md`:521 (Q-A row)
+**Rationale**: `packaging/lib/` matches what the daemon ships today; reusing it avoids a new top-level path unless a cross-package concern emerges.
+**Affected items**: `packaging/lib/` (SDD-006 implementation)
+**Reversibility**: fully-reversible
+
+## D-020 — 2026-05-15 — module-helpers.md location: docs/src/dev/
+
+**Decision**: `module-helpers.md` lives under `docs/src/dev/` (visible to contributors writing modules), with a back-reference from SDD-006.
+**Question**: Where does `module-helpers.md` go?
+**Source**: `docs/sdd/006-shared-module-script-lib.md`:526 (Q-B row)
+**Rationale**: Audience-matched placement — contributors writing modules read dev docs, not SDDs.
+**Affected items**: `docs/src/dev/module-helpers.md`; SDD-006 cross-reference
+**Reversibility**: fully-reversible
+
+## D-021 — 2026-05-15 — v2 shared lib for YAML editing: out of scope for v1
+
+**Decision**: v2 of the shared lib for YAML editing (whether via `yq` as a module `requires` or an in-house bash/python editor) is out of scope for v1. Tracked for future scoping when YAML-editing modules need it.
+**Question**: Future v2 of the shared lib for YAML editing: `yq` as `requires`, or in-house editor?
+**Source**: `docs/sdd/006-shared-module-script-lib.md`:530 (Q-C row)
+**Rationale**: Premature commitment without a YAML-editing module that needs the helper; deferring keeps v1 scope tight.
+**Affected items**: Future v2 SDD for YAML-editing helpers
+**Reversibility**: fully-reversible

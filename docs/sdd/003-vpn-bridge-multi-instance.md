@@ -590,12 +590,18 @@ No daemon-binary changes. Entirely a `selfdef-cli` + manifest
 ## Open questions
 
 - **Q-A** — Should the per-profile metadata table support
-  more fields than `instanced`? Yes plausibly (e.g.
+  more fields than `instanced`? **Answered (D-014, 2026-05-15)** —
+  out of scope for SDD-003; the schema in D-1 is already
+  extensible, add fields when a concrete need arises.
+  _Original framing for history_: Yes plausibly (e.g.
   per-profile `phase` overrides, per-profile `requires`).
   Out of scope for SDD-003; the schema in D-1 is extensible.
 - **Q-B** — Should the resolver error message include the
   suggested fix ("declare instanced=true in
-  profiles.details.<profile>")? Probably yes — operator
+  profiles.details.<profile>")? **Answered (D-015, 2026-05-15)** —
+  yes; operator-ergonomics improvement, tracked as an
+  implementation-PR follow-up. _Original framing for
+  history_: Probably yes — operator
   ergonomics. Implementation detail.
 - **Q-C** — Naming convention for the WG interface
   (`selfdef-${INST}`). **Answered (D-005, 2026-05-15)**: `apply.sh`

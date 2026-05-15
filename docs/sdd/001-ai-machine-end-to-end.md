@@ -547,13 +547,18 @@ end-to-end claim from a single PR.
 ## Open questions
 
 - **Q-A** — Do we ship the `agent_guard_observed.yml`
-  Post-mode rule alongside? Pro: full audit-mode visibility.
+  Post-mode rule alongside? **Answered (D-008, 2026-05-15)** — no
+  for v1; revisit after operator feedback. _Original framing for
+  history_: Pro: full audit-mode visibility.
   Con: every audit-mode policy fire creates an `Informational`
   finding, which clutters the store. Defaulting to "no" for
   the first cut; revisit after operator feedback.
 - **Q-B** — Should the sigma rule's `level` be a literal
   `high`, or should it map per-policy from the YAML's
-  `selfdef.io/severity` annotation? D-1's recommendation is
+  `selfdef.io/severity` annotation? **Answered (D-009, 2026-05-15)** —
+  literal `high`; D-1b leaves room for per-policy mapping once
+  upstream Tetragon exposes annotations. _Original framing for
+  history_: D-1's recommendation is
   literal-`high` because annotations aren't in the event
   today; D-1b leaves room for per-policy mapping once
   upstream Tetragon exposes annotations.
