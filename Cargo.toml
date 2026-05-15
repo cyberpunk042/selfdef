@@ -111,6 +111,7 @@ selfdef-integration-discord = { path = "crates/selfdef-integration-discord" }
 selfdef-integration-pagerduty = { path = "crates/selfdef-integration-pagerduty" }
 selfdef-integration-loki = { path = "crates/selfdef-integration-loki" }
 selfdef-integration-opensearch = { path = "crates/selfdef-integration-opensearch" }
+selfdef-integration-thehive = { path = "crates/selfdef-integration-thehive" }
 selfdef-responder = { path = "crates/selfdef-responder" }
 selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
 selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }

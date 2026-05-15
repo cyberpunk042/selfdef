@@ -327,6 +327,23 @@ channels = []
 # auth_token_file = "/etc/selfdef/opensearch.password"  # mode 0600
 # source          = ""               # empty = "selfdef" (default)
 
+# SDD-008 Q-G: commented [notifier.thehive] example. Forwards each
+# event as a TheHive Alert via POST /api/v1/alert. Analysts triage
+# from TheHive's UI; promote to a Case if it warrants investigation.
+# Severity (OCSF 6-level → TheHive 1-4):
+#   info/low → 1, medium → 2, high → 3, critical/fatal → 4.
+# TLP defaults to Amber (2) — selfdef findings are SOC-internal.
+# To enable:
+#   1. Create an API key in TheHive UI → User profile → API keys.
+#   2. Write the key to api_key_file (mode 0600).
+#   3. Uncomment the block; flip channels above to include "thehive".
+#
+# [notifier.thehive]
+# endpoint     = "https://hive.internal:9000"
+# api_key_file = "/etc/selfdef/thehive.api_key"
+# source       = ""              # empty = "selfdef" (alert.source field)
+# alert_type   = ""              # empty = "selfdef" (alert.type field)
+
 # SDD-008 D-8: wall(1) session-attention channel. Broadcasts a
 # one-line attention banner to every logged-in TTY when a
 # high-severity event fires — the "talk to the bash session" path

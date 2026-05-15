@@ -32,6 +32,7 @@ selfdef-integration-discord = { workspace = true }
 selfdef-integration-pagerduty = { workspace = true }
 selfdef-integration-loki = { workspace = true }
 selfdef-integration-opensearch = { workspace = true }
+selfdef-integration-thehive = { workspace = true }
 selfdef-integration-slack = { workspace = true }
 selfdef-integration-smtp = { workspace = true }
 selfdef-integration-twilio = { workspace = true }
