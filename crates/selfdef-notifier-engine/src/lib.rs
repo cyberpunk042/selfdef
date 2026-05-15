@@ -411,6 +411,51 @@ impl EscalationEngine {
         })
     }
 
+    /// SDD-008 D-4 HTTP ack — F-2032-005 closure: return the
+    /// canonical `ack_token` for `event_id`, minting a fresh one
+    /// when no row exists. Designed for the `DispatcherAdapter`
+    /// flow:
+    ///
+    /// 1. Adapter calls `lookup_or_mint_token(event_id)` to learn
+    ///    what token the channels' URLs should carry.
+    /// 2. Adapter constructs the `Payload` with the returned token
+    ///    in both `ack_token` and (via `<base>/<token>`) `ack_link`.
+    /// 3. Adapter calls `dispatcher.submit(&payload, ...)` which
+    ///    persists (ON CONFLICT preserves the existing token —
+    ///    matches what we just looked up) then fires channels with
+    ///    the bytewise-correct URL.
+    ///
+    /// Without step 1, the adapter would mint a new UUIDv7 on every
+    /// `notify()` call and the engine's ON-CONFLICT-preserve clause
+    /// would silently keep the old token; channels then sent URLs
+    /// containing the new token while the engine looked up by the
+    /// old one → resubmits produced 404-on-click.
+    ///
+    /// The mint side uses `Uuid::now_v7().simple()` for the same
+    /// 32-hex-char shape `enqueue` uses when minting locally, so
+    /// downstream HTTP-handler regexes never have to special-case.
+    pub async fn lookup_or_mint_token(&self, event_id: EventId) -> Result<String, EngineError> {
+        let event_id = event_id.0.to_string();
+        let conn = Arc::clone(&self.conn);
+        let token = tokio::task::spawn_blocking(move || -> Result<String, EngineError> {
+            let guard = conn.lock().unwrap_or_else(|p| p.into_inner());
+            let existing: Option<String> = guard
+                .query_row(
+                    "SELECT ack_token FROM notification_escalations \
+                      WHERE event_id = ?1",
+                    params![event_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            Ok(match existing {
+                Some(t) => t,
+                None => Uuid::now_v7().simple().to_string(),
+            })
+        })
+        .await??;
+        Ok(token)
+    }
+
     /// Mark an event closed: remove the row entirely. Useful when
     /// the operator dismisses without acknowledging (e.g. via a CLI
     /// `selfdefctl notify forget <event_id>` verb).
@@ -789,6 +834,40 @@ mod tests {
         eng.close_event(eid).await.unwrap();
         let result = eng.record_ack_by_token("zombie-token", 50).await.unwrap();
         assert!(result.is_none());
+    }
+
+    // ---------------- F-2032-005: token stability across re-submits ----------------
+
+    #[tokio::test]
+    async fn lookup_or_mint_token_returns_existing_when_row_present() {
+        let (eng, _dir) = fresh_engine().await;
+        let mut p = mk_payload("stable", SeverityId::High);
+        p.ack_token = Some("the-original-token".into());
+        let eid = p.event_id.unwrap();
+        eng.enqueue(&p, 100, 0).await.unwrap();
+        let canonical = eng.lookup_or_mint_token(eid).await.unwrap();
+        assert_eq!(canonical, "the-original-token");
+    }
+
+    #[tokio::test]
+    async fn lookup_or_mint_token_mints_fresh_when_no_row() {
+        let (eng, _dir) = fresh_engine().await;
+        let fake = EventId::from(Uuid::now_v7());
+        let token = eng.lookup_or_mint_token(fake).await.unwrap();
+        // UUIDv7 simple form: 32 hex chars.
+        assert_eq!(token.len(), 32, "got: {token}");
+        assert!(token.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[tokio::test]
+    async fn lookup_or_mint_token_mints_are_unique_across_calls() {
+        // Two unknown event_ids → two distinct minted tokens.
+        let (eng, _dir) = fresh_engine().await;
+        let a = EventId::from(Uuid::now_v7());
+        let b = EventId::from(Uuid::now_v7());
+        let ta = eng.lookup_or_mint_token(a).await.unwrap();
+        let tb = eng.lookup_or_mint_token(b).await.unwrap();
+        assert_ne!(ta, tb);
     }
 
     #[tokio::test]

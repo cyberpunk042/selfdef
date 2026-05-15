@@ -1,6 +1,6 @@
 # Phase 7 — findings ledger
 
-> Status: **open** — inventory + recent-PRs + crate explorers landed; 5 explorers pending.
+> Status: **open** — 4 explorers landed (inventory, recent-PRs, crate, module); 4 explorers pending.
 > Vintage prefix: **F-2032-NNN**
 > Last updated: 2026-05-15
 
@@ -35,14 +35,15 @@ design-shaped.
 | F-2032-002 | referral | security (API auth surface) | PR #142 introduces `GET /notify/ack/:token` — the **first unauthenticated** API route selfdef ships. PR documents the "token IS the auth" model explicitly. Recompute the brute-force math; enumerate third-party-log-leak risk. | Security explorer (re-audit token-IS-auth model against SECURITY.md's four primary adversaries). |
 | F-2032-003 | nice | docs (SDD-008 PR labels) | The 4 Q-G commit titles use `feat(sdd-008): Q-G — <service> integration`. SDD-008's `Q-G` is an open-question identifier (not a design point); casual readers might confuse "Q-G" for D-N-shaped naming. Extends Phase 6's F-2031-001 family of "PR-label disambiguation" concerns. | Docs explorer (verify SDD-008's "PR labels — appendix" covers the Q-G commits cleanly). |
 | F-2032-004 | nice (closed) | crate (pagerduty) | PagerDuty's `from_config` duplicated the `Client::builder().timeout(10s)` block inline instead of routing through `Self::new` like the other 3 Q-G adapters do. Drift on a contract that's invisible until a future client-config change has to be applied twice. | **Closed by Phase 7 crate explorer** — `from_config` now returns `Self::new(routing_key, source).with_endpoint(endpoint)`. 12 existing tests still pass. |
+| F-2032-005 | **important** (closed) | module (dispatcher_adapter + engine) | DispatcherAdapter mints a fresh UUIDv7 ack_token on every `notify()` call; engine's `enqueue` ON-CONFLICT-preserve clause keeps the OLD token. On re-submits of the same event_id, the channel fires with URL containing T2 but the engine has T1 → click → 404 silently. Operator-visible correctness defect on D-4 HTTP ack. | **Closed by Phase 7 module explorer** — new `EscalationEngine::lookup_or_mint_token` API; adapter calls it before constructing payload so the URL bytes match the engine's canonical state. 4 new tests pin the contract. |
 
 ## Status
 
-- Inventory + recent-PRs + crate explorers landed. F-2032-004
-  (PagerDuty client-builder duplication) closed in-place.
-- Five explorers remain (ship in follow-up PRs):
-  1. `40-module-audit.md` — D-4 HTTP ack flow end-to-end.
-  3. `50-integration-audit.md` — schema migrations on disk,
+- Module explorer landed; closes F-2032-005 in-place
+  (important — D-4 HTTP ack token-stability bug). Inventory,
+  recent-PRs, crate explorers shipped previously.
+- Four explorers remain (ship in follow-up PRs):
+  1. `50-integration-audit.md` — schema migrations on disk,
      ack_link_base round-trip, ApiState engine handle wiring.
   4. `60-docs-audit.md` — SDD-008 status table, STARTER_CONFIG
      5 new blocks, SECURITY.md row deltas.
@@ -65,7 +66,7 @@ For context — full closure-cycle convergence to date:
 | Phase 4 | 1 demoted | 2 nice | 1 nice | 2 nice | 1 nice | 1 demoted | 1 demoted |
 | Phase 5 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | Phase 6 | 3 nice + 1 demoted | 1 important + 2 nice | 2 important + 1 nice + 1 SDD-debt | 1 nice + stopgap | 3 nice | 1 SDD-debt + 1 demoted | 1 important + 2 nice |
-| **Phase 7** | **2 nice + 1 referral** | **1 nice (closed)** | *pending* | *pending* | *pending* | *pending* | *pending* |
+| **Phase 7** | **2 nice + 1 referral** | **1 nice (closed)** | **1 important (closed)** | *pending* | *pending* | *pending* | *pending* |
 
 Phase 6 audited a 22-PR / 9-new-crate feature cycle and
 caught 3 important production-relevant defects; Phase 7
