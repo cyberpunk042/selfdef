@@ -692,6 +692,24 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "loki" if !cfg.notifier.loki.endpoint.is_empty() => {
+                match selfdef_integration_loki::LokiNotifier::from_config(
+                    &cfg.notifier.loki.endpoint,
+                    &cfg.notifier.loki.tenant_id,
+                    cfg.notifier.loki.auth_token_file.as_ref(),
+                    &cfg.notifier.loki.source,
+                ) {
+                    Ok(n) => {
+                        inner.push((Box::new(n), build_subscription(channel, cfg)));
+                        info!(channel, "notifier channel enabled");
+                    }
+                    Err(e) => warn!(
+                        channel,
+                        error = %e,
+                        "loki channel skipped (config rejected by builder)",
+                    ),
+                }
+            }
             "slack" if cfg.notifier.slack.webhook_url_file.is_some() => {
                 let Some(url_path) = cfg.notifier.slack.webhook_url_file.as_ref() else {
                     // Unreachable given the guard above, but keep
@@ -971,6 +989,22 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "pagerduty engine-channel skipped");
+                    }
+                }
+            }
+            "loki" if !cfg.notifier.loki.endpoint.is_empty() => {
+                match selfdef_integration_loki::LokiNotifier::from_config(
+                    &cfg.notifier.loki.endpoint,
+                    &cfg.notifier.loki.tenant_id,
+                    cfg.notifier.loki.auth_token_file.as_ref(),
+                    &cfg.notifier.loki.source,
+                ) {
+                    Ok(n) => {
+                        channels.push(Arc::new(n));
+                        info!(channel, "engine-channel enabled");
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "loki engine-channel skipped");
                     }
                 }
             }

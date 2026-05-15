@@ -277,6 +277,32 @@ channels = []
 # endpoint         = ""            # empty = global US default
 # source           = ""            # empty = "selfdef" (default)
 
+# SDD-008 Q-G: commented [notifier.loki] example. Grafana Loki
+# push-API channel for forwarding selfdef events to an operator's
+# log-aggregation stack. Useful as an "everything-to-Loki" channel
+# (subscription_floor = "informational") alongside human-facing
+# channels like ntfy or PagerDuty.
+# To enable:
+#   1. Find your Loki push endpoint:
+#        - Grafana Cloud: https://logs-prod-<region>.grafana.net/loki/api/v1/push
+#        - Self-hosted: https://loki.internal/loki/api/v1/push
+#      Must be https:// (we refuse to ship bearer tokens over plain HTTP).
+#   2. Multi-tenant deployments: set tenant_id (sent as X-Scope-OrgID).
+#      Grafana Cloud: use your stack id as tenant_id.
+#   3. Bearer auth: write the token to a file, mode 0600, and point
+#      auth_token_file at it. Grafana Cloud: the API key goes here.
+#   4. Uncomment the block; flip channels above to include "loki".
+# Loki receives one line per event; label set is service / severity /
+# host / kind (OCSF class_uid name). v1 doesn't expose label-template
+# configuration; operators wanting per-rule labels can land that
+# under a future SDD.
+#
+# [notifier.loki]
+# endpoint         = "https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
+# tenant_id        = ""              # e.g. Grafana Cloud stack id
+# auth_token_file  = "/etc/selfdef/loki.token"  # optional, mode 0600
+# source           = ""              # empty = "selfdef" (default)
+
 # SDD-008 D-8: wall(1) session-attention channel. Broadcasts a
 # one-line attention banner to every logged-in TTY when a
 # high-severity event fires — the "talk to the bash session" path
