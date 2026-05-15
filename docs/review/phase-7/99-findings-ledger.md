@@ -1,6 +1,6 @@
 # Phase 7 — findings ledger
 
-> Status: **ready-to-wrap** — all 8 explorers landed (inventory, recent-PRs, crate, module, integration, docs, tests, security).
+> Status: **wrapped** — all 7 explorers complete, 6 findings raised, 6 closed in-place (incl. 1 referral-via-docs), 0 open, 0 demoted, 0 SDD-debt.
 > Vintage prefix: **F-2032-NNN**
 > Last updated: 2026-05-15
 
@@ -40,16 +40,64 @@ design-shaped.
 
 ## Status
 
-- **All 7 explorers landed.** Security explorer closes
-  F-2032-002 (referral) via re-audit + SECURITY.md
-  addendum documenting third-party-log-leakage map.
-  6 of 6 findings now closed. Phase 7 ready to wrap.
-- The wrap PR flips this ledger's Status line from
-  `ready-to-wrap` → `wrapped` and adds the cumulative-
-  trajectory + closure summary mirroring Phase 6's wrap.
-     surfaces.
-- Phase 7 closes when every important / blocker has either a
-  "closed by <PR>" back-reference or a tracked SDD.
+**WRAPPED.** The Phase 7 closure-cycle audit programme has
+completed all seven explorers over the post-Phase-6 cycle
+(7 PRs `#140`..`#146` shipping D-5e + SDD-005 impl-PR + D-4
+HTTP ack + the 4 Q-G adapter pattern-instances).
+
+### Closure summary
+
+- **6 findings raised** (F-2032-001 through F-2032-006).
+- **6 closed**, all in-place during the audit cycle:
+  - F-2032-001 (schema v2 + v3 migration transactional wrap)
+  - F-2032-002 (token-IS-auth audit + SECURITY.md addendum)
+  - F-2032-003 (SDD-008 PR-labels appendix extension)
+  - F-2032-004 (PagerDuty client-builder uniformity)
+  - F-2032-005 (D-4 ack-token resubmit-stability) — **important**
+  - F-2032-006 (schema-migration upgrade-path test coverage)
+- **0 open**, **0 demoted**, **0 SDD-debt**.
+
+### The important finding — Phase 7's catch
+
+**F-2032-005**: DispatcherAdapter minted a fresh UUIDv7
+ack_token on every `notify()`; engine's ON-CONFLICT-preserve
+clause kept the OLD token; on re-submits of the same
+event_id, the channel fired with a URL containing T2 while
+the engine had T1 — clicking the URL returned 404 silently.
+Operator-visible D-4 correctness defect.
+
+**Closed**: new `EscalationEngine::lookup_or_mint_token`
+API; adapter calls it before constructing the Payload so
+the channel URL matches the engine's canonical state. 4 new
+tests pin the contract.
+
+### Cumulative trajectory (Phases 2–7)
+
+| Phase | Cycle audited | Findings | Important | Closed | SDD-debt | Demoted |
+| --- | --- | --- | --- | --- | --- | --- |
+| Phase 2 | Phase 1 closure cycle | 64 | 3 | 60 | 1 | — |
+| Phase 3 | Phase 2 closure cycle | 39 | 2 | 16 | 1 | — |
+| Phase 4 | Phase 3 closure cycle | 9 | 0 | 5 | 0 | 0 |
+| Phase 5 | Phase 4 closure cycle | 0 | 0 | 0 | 0 | 0 |
+| Phase 6 | SDD-008 cycle (22 PRs / 9 crates) | 16 | 3 | 14 | 2 (both closed) | 2 |
+| **Phase 7** | **post-Phase-6 cycle (7 PRs / 4 crates)** | **6** | **1** | **6** | **0** | **0** |
+
+Phase 7's all-in-place closure rate (6/6) reflects the
+smaller, denser surface vs. Phase 6: 7 PRs (4 pattern-
+instance Q-G crates + 2 substantial seam changes + 1 test
+implementation PR) where most of the audit work was
+verification-shaped rather than discovery-shaped.
+
+### Open SDD-debt (none — none carried forward)
+
+Phase 6 had two open SDD-debt items at wrap (F-2031-009
+D-5e subscription wiring, F-2031-013 SDD-005 daemon-pipeline
+tests). Both closed via PRs #140 and #141 during the
+post-Phase-6 cycle — which is precisely the cycle Phase 7
+audited.
+
+**Phase 7 closes with 0 open SDD-debt.** Future phases pick
+up new code when it lands.
 
 ## Trajectory snapshot
 
@@ -66,9 +114,13 @@ For context — full closure-cycle convergence to date:
 
 Phase 6 audited a 22-PR / 9-new-crate feature cycle and
 caught 3 important production-relevant defects; Phase 7
-audits a 7-PR / 4-new-crate **pattern-instance + 2-seam**
-cycle, where most of the surface is variations on a known
-template. Realistic outcome: 3-8 findings, mostly nice.
+audited a 7-PR / 4-new-crate **pattern-instance + 2-seam**
+cycle and caught 1 important defect (F-2032-005, D-4
+token-stability). The smaller surface produced a tighter
+finding distribution: 6 findings total, all in-place
+closure, no SDD-debt, no demotions. Outcome matches the
+Phase 7 charter's prediction (3-8 findings, mostly nice,
+0-2 important).
 
 ## Phase 1 / 2 / 3 / 4 / 5 / 6 references
 
