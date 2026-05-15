@@ -22,7 +22,7 @@ use selfdef_integration_ntfy::NtfyNotifier;
 use selfdef_integration_signal::SignalCliNotifier;
 use selfdef_notifier::{Notifier, NotifierChain, Subscription};
 use selfdef_notifier_engine::{EscalationEngine, Mode, PayloadDispatcher, Profile, wake_task};
-use selfdef_notifier_orchestrator::Channel;
+use selfdef_notifier_orchestrator::{Channel, Subscription as OrchestratorSubscription};
 use selfdef_responder::Responder;
 use selfdef_store::SqliteStore;
 use tokio::signal::unix::{SignalKind, signal};
@@ -779,19 +779,15 @@ fn build_notifier_path(
                      wake task will run and clean up timed-out rows)",
                 );
             }
-            // SDD-008 F-2031-009 stopgap: the engine path doesn't
-            // currently consult [notifier.subscriptions.<channel>]
-            // filters (D-3 only applies on the legacy chain path).
-            // Until the D-5e follow-up wires SubscriptionConfig
-            // through PayloadDispatcher, warn the operator loudly
-            // so they don't assume the filter is being enforced.
-            if !cfg.notifier.subscriptions.is_empty() {
-                warn!(
-                    subscription_channels = ?cfg.notifier.subscriptions.keys().collect::<Vec<_>>(),
-                    "[notifier.subscriptions] is configured but ignored on the engine path \
-                     (escalations_path set). Per-channel severity_floor + event_kinds \
-                     filters apply only on the legacy chain path until SDD-008 D-5e ships. \
-                     See docs/review/phase-6/40-module-audit.md F-2031-009.",
+            // SDD-008 D-5e: per-channel subscription filter now
+            // applies on the engine path too. The pre-D-5e stopgap
+            // warn (F-2031-009) is removed; the dispatcher consults
+            // build_channel_subscriptions() before each channel.send.
+            let channel_subscriptions = build_channel_subscriptions(cfg);
+            if !channel_subscriptions.is_empty() {
+                info!(
+                    subscription_channels = ?channel_subscriptions.keys().collect::<Vec<_>>(),
+                    "per-channel subscription filters loaded (D-5e)",
                 );
             }
             let mode = parse_dispatcher_mode(&cfg.notifier.mode);
@@ -810,7 +806,8 @@ fn build_notifier_path(
             });
             let mut dispatcher_builder = PayloadDispatcher::new(engine, channels)
                 .with_mode(mode)
-                .with_profile(profile.clone());
+                .with_profile(profile.clone())
+                .with_subscriptions(channel_subscriptions);
             if let Some(floor) = panic_floor {
                 dispatcher_builder = dispatcher_builder.with_panic_floor(floor);
             }
@@ -853,11 +850,11 @@ fn build_notifier_path(
 /// constructs the orchestrator-shaped trait objects instead of the
 /// legacy chain.
 ///
-/// Per-channel subscription filtering (D-3) is **not** applied
-/// here in v1 — the dispatcher fires every channel in operator-
-/// supplied order. Subscription-aware dispatching lands in a
-/// follow-up D-5e / D-6 once `PayloadDispatcher::new` grows a
-/// subscription-pair input.
+/// Per-channel subscription filtering (D-3) is **applied** as of
+/// D-5e: [`build_channel_subscriptions`] converts
+/// `[notifier.subscriptions.<channel>]` config entries into the
+/// `HashMap<String, Subscription>` that the dispatcher consults
+/// before each `channel.send`.
 fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
     let mut channels: Vec<Arc<dyn Channel>> = Vec::new();
     for channel in &cfg.notifier.channels {
@@ -993,6 +990,42 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
         }
     }
     channels
+}
+
+/// SDD-008 D-5e: collect every `[notifier.subscriptions.<channel>]`
+/// entry from the config into the dispatcher's `HashMap<String,
+/// Subscription>` keyed by channel name. Channels without an entry
+/// are absent from the map, which the dispatcher treats as
+/// "no filter → fire on every event" (legacy behaviour).
+///
+/// Unknown `severity_floor` strings log a warn and parse as `None`,
+/// matching `build_subscription`'s posture on the legacy chain path.
+fn build_channel_subscriptions(
+    cfg: &Config,
+) -> std::collections::HashMap<String, OrchestratorSubscription> {
+    let mut map = std::collections::HashMap::new();
+    for (channel, sc) in &cfg.notifier.subscriptions {
+        let severity_floor = sc.severity_floor.as_deref().and_then(|raw| {
+            let parsed = parse_severity_floor(raw);
+            if parsed.is_none() {
+                warn!(
+                    channel,
+                    value = raw,
+                    "ignoring unknown severity_floor in [notifier.subscriptions] (engine path); \
+                     use one of informational|low|medium|high|critical|fatal",
+                );
+            }
+            parsed
+        });
+        map.insert(
+            channel.clone(),
+            OrchestratorSubscription {
+                severity_floor,
+                event_kinds: sc.event_kinds.clone(),
+            },
+        );
+    }
+    map
 }
 
 fn build_subscription(channel: &str, cfg: &Config) -> Subscription {

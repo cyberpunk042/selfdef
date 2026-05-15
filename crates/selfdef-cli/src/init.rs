@@ -345,9 +345,9 @@ channels = []
 #
 # panic_floor = "critical"
 
-# SDD-008 D-3: per-channel subscription filters. Without these
-# blocks every channel sees every event (the M4 behaviour). Add a
-# block per channel you want filtered:
+# SDD-008 D-3 + D-5e: per-channel subscription filters. Without
+# these blocks every channel sees every event (the M4 behaviour).
+# Add a block per channel you want filtered:
 #
 #   severity_floor — one of informational|low|medium|high|critical|fatal.
 #                    Events below this severity skip the channel.
@@ -359,13 +359,10 @@ channels = []
 # Common posture: route High+ to SMS, Critical+ to phone, everything to
 # email, security findings only to ntfy.
 #
-# IMPORTANT (Phase 6 F-2031-009): in v1 these filters apply ONLY on
-# the legacy chain path (escalations_path unset). When the engine
-# path is enabled (escalations_path set above), every channel sees
-# every event regardless of [notifier.subscriptions.<ch>]. The
-# daemon warns at startup when both knobs are set together so the
-# misconfiguration is visible. Subscription-aware dispatching ships
-# under the SDD-008 D-5e follow-up PR.
+# As of D-5e (Phase 6 F-2031-009 closure) these filters apply on
+# BOTH the legacy chain path AND the engine path (escalations_path
+# set). Per-channel routing behaviour is identical regardless of
+# which path the daemon uses.
 #
 # [notifier.subscriptions.twilio]
 # severity_floor = "critical"          # SMS for blockers only

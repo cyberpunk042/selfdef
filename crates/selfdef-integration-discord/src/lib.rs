@@ -289,6 +289,7 @@ mod tests {
             body: "body line\nmore body".into(),
             severity: SeverityId::High,
             ack_link: Some("https://selfdef.example/ack/abc".into()),
+            event_kind: None,
         }
     }
 
@@ -426,6 +427,7 @@ mod tests {
             body: huge_body,
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         };
         let r = <DiscordNotifier as Channel>::send(&n, &p).await;
         assert!(r.is_ok(), "{r:?}");

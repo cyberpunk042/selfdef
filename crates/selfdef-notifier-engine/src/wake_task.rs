@@ -159,6 +159,7 @@ async fn handle_row(dispatcher: &PayloadDispatcher, row: PendingEscalation, now:
         body: row.body,
         severity: row.severity,
         ack_link: row.ack_link,
+        event_kind: row.event_kind,
     };
     // SDD-008 D-6c: respect the per-rung channel allow-list from
     // the active profile. Empty allow-list = all channels (matches
@@ -282,6 +283,7 @@ mod tests {
             body: format!("body for {title}"),
             severity: SeverityId::High,
             ack_link: None,
+            event_kind: None,
         }
     }
 

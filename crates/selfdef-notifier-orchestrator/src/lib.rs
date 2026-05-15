@@ -110,6 +110,67 @@ pub struct Payload {
     /// native replies (Signal text, Slack button) or that don't
     /// support acks at all.
     pub ack_link: Option<String>,
+    /// Event-kind name (e.g. `"Security Finding"`, `"Detection
+    /// Finding"`), copied from the originating
+    /// `Event::class_uid::name()`. SDD-008 D-5e:
+    /// [`Subscription::matches`] consults this together with
+    /// `severity` to gate per-channel filtering on the engine path.
+    /// `None` for orchestrator-internal payloads with no
+    /// originating event.
+    pub event_kind: Option<String>,
+}
+
+/// Per-channel subscription filter — SDD-008 D-3 + D-5e.
+///
+/// Operators express filters as `[notifier.subscriptions.<channel>]`
+/// in `selfdef.toml`. The daemon converts each
+/// `selfdef_config::SubscriptionConfig` into one of these and hands
+/// the resulting `HashMap<channel_name, Subscription>` to
+/// [`PayloadDispatcher::with_subscriptions`].
+///
+/// `Default` accepts every event (no filtering); a channel without
+/// a `[notifier.subscriptions.<channel>]` entry runs unfiltered.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Subscription {
+    /// Minimum severity to forward. Events below this are dropped
+    /// before the channel sees them. `None` = accept all severities.
+    pub severity_floor: Option<SeverityId>,
+    /// Allowed event-kind substrings (matched case-insensitively
+    /// against [`Payload::event_kind`]). Empty = accept all kinds.
+    /// e.g. `["security", "detection"]` matches both "Security
+    /// Finding" and "Detection Finding".
+    pub event_kinds: Vec<String>,
+}
+
+impl Subscription {
+    /// Returns `true` when `payload` should be forwarded to the
+    /// channel under this subscription. Conservative on missing
+    /// metadata: a payload with `event_kind = None` passes the
+    /// `event_kinds` filter only if the filter is empty (operator
+    /// asked for "any kind"); otherwise it's dropped because we
+    /// can't prove it matches.
+    #[must_use]
+    pub fn matches(&self, payload: &Payload) -> bool {
+        if let Some(floor) = self.severity_floor
+            && (payload.severity as u32) < (floor as u32)
+        {
+            return false;
+        }
+        if !self.event_kinds.is_empty() {
+            let Some(kind) = payload.event_kind.as_ref() else {
+                return false;
+            };
+            let class = kind.to_ascii_lowercase();
+            if !self
+                .event_kinds
+                .iter()
+                .any(|k| class.contains(&k.to_ascii_lowercase()))
+            {
+                return false;
+            }
+        }
+        true
+    }
 }
 
 /// What a [`Channel::send`] hands back on successful delivery.
@@ -336,11 +397,82 @@ mod tests {
             body: "test body".into(),
             severity: SeverityId::Informational,
             ack_link: None,
+            event_kind: None,
         };
         let receipt = ch.send(&payload).await.expect("stub send succeeds");
         assert!(receipt.native_message_id.is_none());
         assert!(!ch.supports_ack_reply());
         assert!(ch.ack_reply_format().is_none());
         assert_eq!(ch.name(), "stub");
+    }
+
+    fn mk_payload(severity: SeverityId, event_kind: Option<&str>) -> Payload {
+        Payload {
+            id: PayloadId::new(),
+            event_id: None,
+            title: "t".into(),
+            body: "b".into(),
+            severity,
+            ack_link: None,
+            event_kind: event_kind.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn subscription_default_accepts_everything() {
+        let s = Subscription::default();
+        assert!(s.matches(&mk_payload(SeverityId::Informational, None)));
+        assert!(s.matches(&mk_payload(SeverityId::Critical, Some("Security Finding"))));
+    }
+
+    #[test]
+    fn subscription_severity_floor_blocks_below() {
+        let s = Subscription {
+            severity_floor: Some(SeverityId::High),
+            event_kinds: vec![],
+        };
+        assert!(!s.matches(&mk_payload(SeverityId::Medium, None)));
+        assert!(s.matches(&mk_payload(SeverityId::High, None)));
+        assert!(s.matches(&mk_payload(SeverityId::Critical, None)));
+    }
+
+    #[test]
+    fn subscription_event_kinds_substring_case_insensitive() {
+        let s = Subscription {
+            severity_floor: None,
+            event_kinds: vec!["security".into(), "detection".into()],
+        };
+        assert!(s.matches(&mk_payload(SeverityId::Low, Some("Security Finding"))));
+        assert!(s.matches(&mk_payload(SeverityId::Low, Some("DETECTION finding"))));
+        assert!(!s.matches(&mk_payload(SeverityId::Low, Some("Process Activity"))));
+    }
+
+    #[test]
+    fn subscription_event_kinds_with_none_payload_kind_drops_when_filter_present() {
+        let s = Subscription {
+            severity_floor: None,
+            event_kinds: vec!["security".into()],
+        };
+        // Conservative: missing metadata + non-empty filter → drop.
+        assert!(!s.matches(&mk_payload(SeverityId::Low, None)));
+    }
+
+    #[test]
+    fn subscription_event_kinds_with_none_payload_kind_passes_when_filter_empty() {
+        let s = Subscription::default();
+        assert!(s.matches(&mk_payload(SeverityId::Low, None)));
+    }
+
+    #[test]
+    fn subscription_combined_severity_and_kind_must_both_pass() {
+        let s = Subscription {
+            severity_floor: Some(SeverityId::High),
+            event_kinds: vec!["security".into()],
+        };
+        assert!(s.matches(&mk_payload(SeverityId::High, Some("Security Finding"))));
+        // High but wrong kind → drop.
+        assert!(!s.matches(&mk_payload(SeverityId::High, Some("Process Activity"))));
+        // Right kind but low severity → drop.
+        assert!(!s.matches(&mk_payload(SeverityId::Low, Some("Security Finding"))));
     }
 }
