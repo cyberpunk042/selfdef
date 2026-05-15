@@ -484,6 +484,23 @@ pub struct NotifierConfig {
     /// …). Missing entry = accept every event (default). See
     /// [`SubscriptionConfig`] for the per-channel field shape.
     pub subscriptions: HashMap<String, SubscriptionConfig>,
+    /// SDD-008 D-4 HTTP ack: optional base URL for the
+    /// click-link ack endpoint. When `Some("https://daemon.example/notify/ack")`,
+    /// the dispatcher mints a per-event UUIDv7 token, appends it to
+    /// this base (`<base>/<token>`), and embeds the result in each
+    /// outbound payload's `ack_link`. Operators click the link →
+    /// daemon's `GET /notify/ack/:token` handler records the ack.
+    ///
+    /// `None` (the default) disables HTTP ack: the dispatcher
+    /// leaves `ack_link = None`, channels render no clickable URL,
+    /// and ack is CLI-only (`selfdefctl notify ack <event-id>`).
+    /// The daemon's `/notify/ack` route still exists in this mode
+    /// and returns 503 — operators can flip the knob on without a
+    /// route-table change.
+    ///
+    /// The base should NOT have a trailing slash; the dispatcher
+    /// appends `/<token>` exactly.
+    pub ack_link_base: Option<String>,
 }
 
 impl Default for NotifierConfig {
@@ -503,6 +520,7 @@ impl Default for NotifierConfig {
             panic_floor: None,
             profiles: HashMap::new(),
             subscriptions: HashMap::new(),
+            ack_link_base: None,
         }
     }
 }

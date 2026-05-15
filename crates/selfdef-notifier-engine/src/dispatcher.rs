@@ -567,6 +567,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         }
     }
 
@@ -664,6 +665,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         };
         let outcome = dispatcher.submit(&payload, 100, 0).await;
         match outcome {
@@ -861,6 +863,7 @@ mod tests {
             severity,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         }
     }
 
@@ -1134,6 +1137,7 @@ mod tests {
             severity,
             ack_link: None,
             event_kind: event_kind.map(str::to_owned),
+            ack_token: None,
         }
     }
 

@@ -132,7 +132,8 @@ async fn main() -> Result<()> {
     // The responder gets a DispatcherAdapter (impl Notifier) so
     // existing call sites are unchanged. When unset, we fall back
     // to the M4 NotifierChain — no persistence, no escalation.
-    let (notifier_arc, wake_task_handle) = build_notifier_path(&cfg, &shutdown);
+    let (notifier_arc, wake_task_handle, escalation_engine_for_api) =
+        build_notifier_path(&cfg, &shutdown);
     let actions: Vec<Arc<dyn selfdef_responder::actions::Action>> = vec![
         Arc::new(selfdef_responder::actions::NotifyAction::new(notifier_arc)),
         Arc::new(selfdef_responder::actions::SnapshotProcAction::new(
@@ -208,6 +209,14 @@ async fn main() -> Result<()> {
             state = state.with_correlator(c);
         }
         state = state.with_responder(Arc::clone(&responder));
+        // SDD-008 D-4 HTTP ack: thread the escalation engine handle
+        // into ApiState so `/notify/ack/:token` can record acks.
+        // When the daemon is on the legacy chain path (no
+        // escalations_path), the handle is None and the route
+        // returns 503.
+        if let Some(engine) = escalation_engine_for_api.clone() {
+            state = state.with_escalation_engine(engine);
+        }
         let server = ApiServer::new(state, cfg_api);
         // SDD-004 F-2026-023 follow-up: stash the reloader so SIGUSR2
         // can hot-rotate tokens. The reloader's Arc<RwLock<>> is
@@ -754,24 +763,27 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
 ///   sees an `Arc<dyn Notifier>` regardless.
 /// - Path set, engine fails to open → log + fall back to M4. Daemon
 ///   startup never fails on a notifier misconfiguration.
+#[allow(clippy::type_complexity)]
 fn build_notifier_path(
     cfg: &Config,
     shutdown: &tokio_util::sync::CancellationToken,
 ) -> (
     Arc<dyn selfdef_notifier::Notifier>,
     Option<tokio::task::JoinHandle<()>>,
+    Option<Arc<EscalationEngine>>,
 ) {
     let Some(escalations_path) = cfg.notifier.escalations_path.as_ref() else {
         let chain = build_notifier_chain(cfg);
         if chain.is_empty() {
             warn!("no notification channels configured");
         }
-        return (Arc::new(chain), None);
+        return (Arc::new(chain), None, None);
     };
 
     match EscalationEngine::open(escalations_path) {
         Ok(engine) => {
             let engine = Arc::new(engine);
+            let engine_for_api = Arc::clone(&engine);
             let channels = build_channel_set(cfg);
             if channels.is_empty() {
                 warn!(
@@ -826,9 +838,11 @@ fn build_notifier_path(
                 let sd = shutdown.clone();
                 async move { wake_task::run(d, sd).await }
             });
-            let adapter: Arc<dyn selfdef_notifier::Notifier> =
-                Arc::new(dispatcher_adapter::DispatcherAdapter::new(dispatcher));
-            (adapter, Some(wake_handle))
+            let adapter: Arc<dyn selfdef_notifier::Notifier> = Arc::new(
+                dispatcher_adapter::DispatcherAdapter::new(dispatcher)
+                    .with_ack_link_base(cfg.notifier.ack_link_base.clone()),
+            );
+            (adapter, Some(wake_handle), Some(engine_for_api))
         }
         Err(e) => {
             error!(
@@ -840,7 +854,7 @@ fn build_notifier_path(
             if chain.is_empty() {
                 warn!("no notification channels configured");
             }
-            (Arc::new(chain), None)
+            (Arc::new(chain), None, None)
         }
     }
 }

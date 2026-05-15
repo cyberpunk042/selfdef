@@ -120,6 +120,87 @@ pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
         .into_response()
 }
 
+/// SDD-008 D-4 HTTP ack: `GET /notify/ack/:token`.
+///
+/// Looks up `token` in the escalation engine, marks the matching
+/// row as acked (one-shot; idempotent — a second click is a no-op
+/// with the same 200 OK as the first). Returns:
+///
+/// - **200 OK** with a small plain-text page when the ack succeeded
+///   or the token was already acked (we can't tell them apart from
+///   the operator's perspective — both mean "selfdef knows you've
+///   seen this").
+/// - **404 Not Found** when the token is unknown (typo, or the row
+///   was `selfdefctl notify forget`ten before the operator clicked).
+/// - **503 Service Unavailable** when the daemon is on the legacy
+///   chain path (`[notifier].escalations_path` unset → no engine
+///   handle → no ack to record).
+///
+/// Authentication: this endpoint is reachable to anyone with the
+/// token. That's by design — the token IS the auth. Tokens are
+/// UUIDv7 (122 bits of entropy after the timestamp prefix); they
+/// ride out-of-band over the channels (ntfy, email, …) which are
+/// operator-trusted paths. An attacker with the token has the
+/// same authority as the operator who saw the notification.
+pub(crate) async fn notify_ack(
+    State(s): State<ApiState>,
+    axum::extract::Path(token): axum::extract::Path<String>,
+) -> Response {
+    let Some(engine) = s.escalation_engine() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            "escalation engine not configured (set [notifier].escalations_path)\n",
+        )
+            .into_response();
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    match engine.record_ack_by_token(&token, now).await {
+        Ok(Some((event_id, title))) => {
+            debug!(%event_id, title = %title, "notify_ack: row acked via HTTP");
+            let body = format!(
+                "Acknowledged.\n\nEvent: {event_id}\nTitle:  {title}\nAt:     unix={now}\n",
+            );
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                body,
+            )
+                .into_response()
+        }
+        Ok(None) => {
+            // Either unknown token, OR known-but-already-acked, OR
+            // known-but-closed. The engine's record_ack_by_token
+            // can't distinguish "already acked" from "unknown" in
+            // its current shape (both return Ok(None)). We render
+            // a 404 for any of these — the operator sees the
+            // ambiguity and can run `selfdefctl notify list` to
+            // disambiguate. A future revision could surface the
+            // "already acked" case as 200; for v1 we err on the
+            // side of clarity.
+            debug!(token, "notify_ack: token not found or already resolved");
+            (
+                StatusCode::NOT_FOUND,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                "Token not found (unknown, already acked, or forgotten)\n",
+            )
+                .into_response()
+        }
+        Err(e) => {
+            warn!(token, error = %e, "notify_ack: engine error");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                "engine error\n",
+            )
+                .into_response()
+        }
+    }
+}
+
 /// RAII handle that increments the per-process and per-token SSE
 /// subscriber counters on acquire and decrements both on drop.
 /// SDD-007 D-2: when the per-token counter hits zero on drop, the

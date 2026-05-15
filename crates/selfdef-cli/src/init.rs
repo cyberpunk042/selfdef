@@ -345,6 +345,25 @@ channels = []
 #
 # panic_floor = "critical"
 
+# SDD-008 D-4 HTTP ack: base URL for click-link acknowledgements.
+# When set, the dispatcher mints a UUIDv7 token per event and
+# embeds <ack_link_base>/<token> in each outbound payload's
+# ack_link. Clicking the link hits the daemon's
+# GET /notify/ack/<token> endpoint, which records the ack.
+#
+# Auth: the token IS the auth (UUIDv7, ~122 bits of post-timestamp
+# entropy). Tokens ride out-of-band over the channels (ntfy,
+# email, …) which are operator-trusted paths.
+#
+# Default unset → HTTP ack disabled. Operators can still ack via
+# `selfdefctl notify ack <event-id>` (CLI path; opens the engine
+# directly via WAL).
+#
+# The base should NOT have a trailing slash; the dispatcher
+# appends /<token> exactly.
+#
+# ack_link_base = "https://selfdef.example/notify/ack"
+
 # SDD-008 D-3 + D-5e: per-channel subscription filters. Without
 # these blocks every channel sees every event (the M4 behaviour).
 # Add a block per channel you want filtered:

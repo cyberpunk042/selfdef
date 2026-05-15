@@ -212,6 +212,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         };
         let result = <SignalCliNotifier as Channel>::send(&n, &payload).await;
         assert!(matches!(result, Err(ChannelError::Other(_))));
@@ -243,6 +244,7 @@ mod tests {
             severity: SeverityId::High,
             ack_link: None,
             event_kind: None,
+            ack_token: None,
         }
     }
 
