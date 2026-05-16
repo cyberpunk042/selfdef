@@ -80,6 +80,14 @@ pub(crate) struct ModuleManifest {
     pub(crate) consumes: Vec<String>,
     #[serde(default)]
     pub(crate) requires: Vec<Requirement>,
+    /// SD-R14: hardware requirements gate. Module is SKIPPED at
+    /// apply-time when any declared requirement isn't met. Empty
+    /// (default) means the module is always applied.
+    ///
+    /// Operator-stable; consumed by `cmd_apply` via
+    /// [`hardware_requirements_met`].
+    #[serde(default)]
+    pub(crate) requires_hardware: HardwareRequirements,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -148,6 +156,103 @@ impl DaemonRequirement {
 pub(crate) struct Requirement {
     pub(crate) kind: String,
     pub(crate) value: String,
+}
+
+/// SD-R14: hardware-aware module gating.
+///
+/// A module's `[requires_hardware]` table declares minimum host
+/// hardware. The apply path skips modules that don't meet the bar
+/// with a clear log line; operators can override with
+/// `--ignore-hardware` (future round) or by editing the module manifest.
+#[derive(Debug, Default, Deserialize, Clone)]
+pub(crate) struct HardwareRequirements {
+    /// When set, requires `cpu.avx512_vnni = true` in the host's
+    /// HardwareCapabilities. Match for ternary-inference fast path
+    /// modules (master spec § 16).
+    #[serde(default)]
+    pub(crate) avx512_vnni: bool,
+
+    /// When set, requires `cpu.avx512_bf16 = true`. Match for
+    /// BitNet acceleration modules.
+    #[serde(default)]
+    pub(crate) avx512_bf16: bool,
+
+    /// Minimum memory in GiB.
+    #[serde(default)]
+    pub(crate) memory_gib_min: u64,
+
+    /// Minimum count of NVIDIA GPUs. 0 disables the gate.
+    #[serde(default)]
+    pub(crate) gpu_count_min: u32,
+
+    /// Required Sain01Match verdict, when set:
+    /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
+    /// would be weird — operator should rarely use it).
+    #[serde(default)]
+    pub(crate) sain01_verdict_min: String,
+}
+
+impl HardwareRequirements {
+    /// Returns Ok iff every set requirement passes; Err with a list
+    /// of unmet predicates otherwise.
+    pub(crate) fn evaluate(
+        &self,
+        caps: &selfdef_hardware::HardwareCapabilities,
+    ) -> Result<(), Vec<String>> {
+        let mut unmet = Vec::new();
+        if self.avx512_vnni && !caps.cpu.avx512vnni {
+            unmet.push("avx512_vnni required (host lacks AVX-512 VNNI)".into());
+        }
+        if self.avx512_bf16 && !caps.cpu.avx512bf16 {
+            unmet.push("avx512_bf16 required (host lacks AVX-512 BF16)".into());
+        }
+        if self.memory_gib_min > 0 {
+            let host_gib = caps.memory.total_bytes / (1024 * 1024 * 1024);
+            if host_gib < self.memory_gib_min {
+                unmet.push(format!(
+                    "memory_gib_min = {} (host has {} GiB)",
+                    self.memory_gib_min, host_gib,
+                ));
+            }
+        }
+        if self.gpu_count_min > 0 && caps.gpu.device_count < self.gpu_count_min {
+            unmet.push(format!(
+                "gpu_count_min = {} (host has {} GPU(s))",
+                self.gpu_count_min, caps.gpu.device_count,
+            ));
+        }
+        if !self.sain01_verdict_min.is_empty() {
+            let actual = match caps.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            let rank = |s: &str| match s {
+                "FullMatch" => 3,
+                "PartialMatch" => 2,
+                "NoMatch" => 1,
+                _ => 0,
+            };
+            if rank(actual) < rank(&self.sain01_verdict_min) {
+                unmet.push(format!(
+                    "sain01_verdict_min = {} (host verdict = {})",
+                    self.sain01_verdict_min, actual,
+                ));
+            }
+        }
+        if unmet.is_empty() { Ok(()) } else { Err(unmet) }
+    }
+
+    /// Returns true if NO requirement is set (the manifest has no
+    /// `[requires_hardware]` block, or it has only zero/false fields).
+    /// Used to skip the probe entirely on hardware-agnostic modules.
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.avx512_vnni
+            && !self.avx512_bf16
+            && self.memory_gib_min == 0
+            && self.gpu_count_min == 0
+            && self.sain01_verdict_min.is_empty()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -755,6 +860,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         instanced: m.instanced,
         phase: m.phase,
         daemon_requires: m.daemon_requires.clone(),
+        requires_hardware: m.requires_hardware.clone(),
     }
 }
 
@@ -1220,6 +1326,57 @@ pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
 }
 
+/// SD-R14: hardware-aware module gate.
+///
+/// Probes the host once + drops modules whose `[requires_hardware]`
+/// block isn't satisfied. Skipped modules log a single line citing
+/// the unmet predicates so operators understand WHY their module
+/// didn't apply. The probe failure (e.g. on minimal hosts) is silent
+/// for modules that DON'T declare hardware requirements; modules
+/// that DO declare them are skipped with a clear log.
+fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "SD-R14: hardware probe failed; modules with [requires_hardware] will be skipped"
+            );
+            None
+        }
+    };
+    let mut kept = Vec::with_capacity(active.len());
+    let mut skipped = Vec::new();
+    for m in active {
+        if m.manifest.requires_hardware.is_empty() {
+            kept.push(m);
+            continue;
+        }
+        match &caps {
+            Some(c) => match m.manifest.requires_hardware.evaluate(c) {
+                Ok(()) => kept.push(m),
+                Err(unmet) => skipped.push((m.display_name(), unmet)),
+            },
+            None => skipped.push((m.display_name(), vec!["hardware probe unavailable".into()])),
+        }
+    }
+    if !skipped.is_empty() {
+        eprintln!(
+            "# SD-R14 hardware-aware module gate — skipping {} module(s):",
+            skipped.len()
+        );
+        for (name, reasons) in &skipped {
+            eprintln!("  - {name}:");
+            for r in reasons {
+                eprintln!("      ✗ {r}");
+            }
+        }
+        eprintln!("# To force-apply, remove [requires_hardware] from the module's module.toml");
+        eprintln!("# or upgrade the host to meet the requirements.");
+    }
+    kept
+}
+
 /// SDD-015 § 4 + § 6 pre-apply gate. Reads the daemon config to
 /// resolve `[perimeter] check_overlap_on_apply` + `policies_dir` +
 /// `overlap_warn_only`. Loads policies, runs overlap detection, and:
@@ -1387,6 +1544,19 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     let (host_path, mut active) = prepare(opts)?;
     if policy.reverse_order {
         active.reverse();
+    }
+    // SD-R14: hardware-aware module gate. On Apply / Check, probe
+    // the host hardware once + filter out modules whose
+    // [requires_hardware] block isn't met. The unmet modules surface
+    // as a single warning block before apply; the filtered set
+    // proceeds. Uninstall skips this — tearing a module down doesn't
+    // care whether the hardware now matches.
+    if matches!(action, Action::Apply | Action::Check)
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        active = apply_hardware_gate(active);
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
@@ -1578,6 +1748,7 @@ mod tests {
             instanced,
             phase,
             daemon_requires: BTreeMap::new(),
+            requires_hardware: HardwareRequirements::default(),
         }
     }
 
@@ -2446,5 +2617,249 @@ mod sdd_015_apply_gate_tests {
         );
         let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
         assert_eq!(code, 0, "missing policies dir → graceful pass");
+    }
+}
+
+#[cfg(test)]
+mod sdr14_hardware_gate_tests {
+    //! SD-R14: hardware-aware module gating.
+    //!
+    //! [`HardwareRequirements::evaluate`] is the pure decision function;
+    //! [`apply_hardware_gate`] wraps it with the partition + skip-block
+    //! logging. Tests here pin each predicate branch in isolation and
+    //! then exercise the gate against a synthesized [`HardwareCapabilities`].
+    //!
+    //! These are the operator-stable surface for the
+    //! `[requires_hardware]` block in `module.toml` — every assertion
+    //! reads as "what an operator declares == what gets enforced".
+    use super::*;
+    use selfdef_hardware::{
+        CpuCapabilities, GpuCapabilities, HardwareCapabilities, MemoryCapabilities,
+        PcieCapabilities, Sain01Match, Sain01Verdict,
+    };
+
+    fn caps_with(
+        avx512_vnni: bool,
+        avx512_bf16: bool,
+        mem_gib: u64,
+        gpu_count: u32,
+        verdict: Sain01Verdict,
+    ) -> HardwareCapabilities {
+        HardwareCapabilities {
+            schema_version: "1".into(),
+            probed_at: "1970-01-01T00:00:00Z".into(),
+            host_tag: None,
+            cpu: CpuCapabilities {
+                avx512vnni: avx512_vnni,
+                avx512bf16: avx512_bf16,
+                ..Default::default()
+            },
+            memory: MemoryCapabilities {
+                total_bytes: mem_gib * 1024 * 1024 * 1024,
+                at_least_256gb: mem_gib >= 256,
+                at_least_512gb: mem_gib >= 512,
+            },
+            gpu: GpuCapabilities {
+                device_count: gpu_count,
+                device_nodes: Vec::new(),
+            },
+            pcie: PcieCapabilities::default(),
+            sain01_match: Sain01Match {
+                overall: verdict,
+                cpu_avx512_vnni: avx512_vnni,
+                cpu_avx512_bf16: avx512_bf16,
+                memory_at_least_256gb: mem_gib >= 256,
+                gpu_count_at_least_2: gpu_count >= 2,
+                motherboard_proart_x870e: None,
+                pcie_dual_x8_present: false,
+            },
+        }
+    }
+
+    fn full_match_sain01() -> HardwareCapabilities {
+        caps_with(true, true, 256, 2, Sain01Verdict::FullMatch)
+    }
+
+    fn minimal_host() -> HardwareCapabilities {
+        caps_with(false, false, 16, 0, Sain01Verdict::NoMatch)
+    }
+
+    #[test]
+    fn sdr14_evaluate_empty_passes_any_caps() {
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        assert!(req.evaluate(&minimal_host()).is_ok());
+        assert!(req.evaluate(&full_match_sain01()).is_ok());
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_passes_on_match() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(unmet[0].contains("avx512_vnni"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_bf16_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_bf16: true,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("avx512_bf16"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_memory_threshold_enforced() {
+        let req = HardwareRequirements {
+            memory_gib_min: 128,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 32, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("memory_gib_min = 128"), "got: {unmet:?}");
+        assert!(unmet[0].contains("32 GiB"), "got: {unmet:?}");
+        // Exactly at threshold → passes.
+        req.evaluate(&caps_with(false, false, 128, 0, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_gpu_count_min_enforced() {
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 1, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("gpu_count_min = 2"), "got: {unmet:?}");
+        // 2 GPUs → passes.
+        req.evaluate(&caps_with(false, false, 16, 2, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_rank_ordering() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "PartialMatch".into(),
+            ..Default::default()
+        };
+        // NoMatch < PartialMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("PartialMatch"), "got: {unmet:?}");
+        // PartialMatch == PartialMatch → pass.
+        req.evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap();
+        // FullMatch > PartialMatch → pass.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_full_match_required() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "FullMatch".into(),
+            ..Default::default()
+        };
+        // PartialMatch < FullMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("FullMatch"), "got: {unmet:?}");
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_multiple_failures_listed_together() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            avx512_bf16: true,
+            memory_gib_min: 256,
+            gpu_count_min: 2,
+            sain01_verdict_min: "FullMatch".into(),
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        // Every predicate fails on a minimal host: 5 lines.
+        assert_eq!(unmet.len(), 5, "got: {unmet:?}");
+    }
+
+    // -- apply_hardware_gate ----------------------------------------
+
+    fn am_with_req(slug: &str, req: HardwareRequirements) -> ActiveModule {
+        let manifest = ModuleManifest {
+            name: slug.to_string(),
+            version: "0.0.0".into(),
+            summary: "sdr14 fixture".into(),
+            category: "test".into(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            requires: Vec::new(),
+            requires_hardware: req,
+            install: None,
+            profiles: None,
+            instanced: false,
+            phase: Phase::Main,
+            daemon_requires: BTreeMap::new(),
+        };
+        ActiveModule {
+            slug: slug.into(),
+            instance: None,
+            module_root: PathBuf::from("/tmp/nonexistent-test-root"),
+            config_path: PathBuf::from("/tmp/nonexistent-test-cfg"),
+            manifest,
+        }
+    }
+
+    #[test]
+    fn sdr14_apply_hardware_gate_keeps_unrestricted_modules() {
+        // Hardware-agnostic modules are kept regardless of host caps.
+        // The gate must NEVER drop a module whose [requires_hardware]
+        // block is empty — that's the contract operators rely on for
+        // the 90% of modules that don't care about the host.
+        let active = vec![
+            am_with_req("alpha", HardwareRequirements::default()),
+            am_with_req("beta", HardwareRequirements::default()),
+        ];
+        let kept = apply_hardware_gate(active);
+        let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn sdr14_filter_active_respects_requires_hardware_field() {
+        // Sanity check: the field round-trips through clone_manifest.
+        // (Touched in this round; if the new field is forgotten there
+        // the gate silently misbehaves for instanced modules.)
+        let am = am_with_req(
+            "needs-vnni",
+            HardwareRequirements {
+                avx512_vnni: true,
+                ..Default::default()
+            },
+        );
+        let cloned = clone_manifest(&am.manifest);
+        assert!(cloned.requires_hardware.avx512_vnni);
+        assert!(!cloned.requires_hardware.is_empty());
     }
 }
