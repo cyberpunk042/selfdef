@@ -73,6 +73,105 @@ pub(crate) fn run_thermals(json: bool) -> Result<i32> {
     Ok(0)
 }
 
+/// SD-R19: `selfdefctl hardware tune` — emit host-tuned compile
+/// flags in the requested format. Direct enabler for Wasm-AOT +
+/// bitnet.cpp builds: operators run
+///   `source <(selfdefctl hardware tune --format sh)`
+/// before invoking the build pipeline + the compiler picks up
+/// MARCH / CFLAGS / KCFLAGS reflecting this host's actual feature
+/// set (znver5 + AVX-512 VNNI/BF16/FP16/VBMI/VBMI2 on a SAIN-01 box).
+pub(crate) fn run_tune(format: &str, output: Option<std::path::PathBuf>) -> Result<i32> {
+    let snap = selfdef_hardware::probe()?;
+    let caps = selfdef_hardware::derive_capabilities(&snap);
+    let body = render_tune(&caps, format)?;
+    match output {
+        None => {
+            print!("{body}");
+            Ok(0)
+        }
+        Some(p) => {
+            if let Some(parent) = p.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)?;
+                }
+            }
+            let mut tmp = p.as_os_str().to_owned();
+            tmp.push(".tmp");
+            let tmp_path: std::path::PathBuf = tmp.into();
+            std::fs::write(&tmp_path, &body)?;
+            std::fs::rename(&tmp_path, &p)?;
+            println!("wrote {}", p.display());
+            Ok(0)
+        }
+    }
+}
+
+/// Pure renderer for [`run_tune`] — pinned by unit tests.
+pub(crate) fn render_tune(
+    caps: &selfdef_hardware::HardwareCapabilities,
+    format: &str,
+) -> Result<String> {
+    let march = &caps.cpu.recommended_march;
+    let cflags = caps.cpu.recommended_compile_flags.join(" ");
+    // KCFLAGS gets the same flag set; the kernel build picks up -march
+    // via CFLAGS_KCFLAGS in newer kbuild, but operators commonly
+    // export both.
+    let zmm_extra = if caps.cpu.avx512f {
+        // Enable full 512-bit ZMM register pressure (the operator's
+        // directive: "A single 512-bit ZMM vector register can hold
+        // and manipulate...").
+        " -mprefer-vector-width=512"
+    } else {
+        ""
+    };
+    Ok(match format {
+        "sh" => format!(
+            "# selfdefctl hardware tune --format sh (SD-R19)\n\
+             # source <(selfdefctl hardware tune --format sh) before invoking your build pipeline.\n\
+             export SELFDEF_HARDWARE_MARCH={march}\n\
+             export SELFDEF_HARDWARE_CFLAGS=\"-march={march}{zmm_extra} {cflags}\"\n\
+             export SELFDEF_HARDWARE_KCFLAGS=\"-march={march}{zmm_extra} {cflags}\"\n\
+             export SELFDEF_HARDWARE_AVX512_VNNI={vnni}\n\
+             export SELFDEF_HARDWARE_AVX512_BF16={bf16}\n",
+            vnni = caps.cpu.avx512vnni,
+            bf16 = caps.cpu.avx512bf16,
+        ),
+        "env-file" => format!(
+            "SELFDEF_HARDWARE_MARCH={march}\n\
+             SELFDEF_HARDWARE_CFLAGS=-march={march}{zmm_extra} {cflags}\n\
+             SELFDEF_HARDWARE_KCFLAGS=-march={march}{zmm_extra} {cflags}\n\
+             SELFDEF_HARDWARE_AVX512_VNNI={vnni}\n\
+             SELFDEF_HARDWARE_AVX512_BF16={bf16}\n",
+            vnni = caps.cpu.avx512vnni,
+            bf16 = caps.cpu.avx512bf16,
+        ),
+        "make" => format!(
+            "# selfdefctl hardware tune --format make (SD-R19)\n\
+             # include this file from your Makefile to pick up host-tuned flags.\n\
+             SELFDEF_HARDWARE_MARCH := {march}\n\
+             SELFDEF_HARDWARE_CFLAGS := -march={march}{zmm_extra} {cflags}\n\
+             SELFDEF_HARDWARE_KCFLAGS := -march={march}{zmm_extra} {cflags}\n\
+             SELFDEF_HARDWARE_AVX512_VNNI := {vnni}\n\
+             SELFDEF_HARDWARE_AVX512_BF16 := {bf16}\n",
+            vnni = caps.cpu.avx512vnni,
+            bf16 = caps.cpu.avx512bf16,
+        ),
+        "json" => serde_json::to_string_pretty(&serde_json::json!({
+            "schema_version": "1.0.0",
+            "march": march,
+            "cflags": format!("-march={march}{zmm_extra} {cflags}"),
+            "kcflags": format!("-march={march}{zmm_extra} {cflags}"),
+            "avx512_vnni": caps.cpu.avx512vnni,
+            "avx512_bf16": caps.cpu.avx512bf16,
+            "compile_flag_list": caps.cpu.recommended_compile_flags,
+            "zmm_512_preferred": caps.cpu.avx512f,
+        }))?,
+        other => {
+            anyhow::bail!("unknown --format {other:?}; expected one of: sh, env-file, make, json")
+        }
+    })
+}
+
 /// `selfdefctl hardware match` — verdict only.
 pub(crate) fn run_match() -> Result<i32> {
     let snap = selfdef_hardware::probe()?;
@@ -381,5 +480,117 @@ mod tests {
                 "exported JSON must carry top-level {key}: {body}"
             );
         }
+    }
+
+    // ----- SD-R19 tune renderer -------------------------------------
+
+    fn synth_caps() -> selfdef_hardware::HardwareCapabilities {
+        let (snap, _) = synth();
+        selfdef_hardware::derive_capabilities(&snap)
+    }
+
+    #[test]
+    fn sdr19_render_tune_sh_format_emits_exports() {
+        let caps = synth_caps();
+        let out = render_tune(&caps, "sh").unwrap();
+        // The synth box is Zen 5 with VNNI + BF16 → znver5 march.
+        assert!(
+            out.contains("export SELFDEF_HARDWARE_MARCH=znver5"),
+            "got: {out}"
+        );
+        // CFLAGS exposes the canonical compile flags + zmm width.
+        assert!(out.contains("-mavx512vnni"), "got: {out}");
+        assert!(out.contains("-mavx512bf16"), "got: {out}");
+        assert!(
+            out.contains("-mprefer-vector-width=512"),
+            "ZMM hint missing: {out}"
+        );
+        assert!(
+            out.contains("source <("),
+            "must include `source <(...)` hint"
+        );
+        assert!(out.contains("SELFDEF_HARDWARE_AVX512_VNNI=true"));
+        assert!(out.contains("SELFDEF_HARDWARE_AVX512_BF16=true"));
+    }
+
+    #[test]
+    fn sdr19_render_tune_env_file_format_has_no_export_prefix() {
+        let caps = synth_caps();
+        let out = render_tune(&caps, "env-file").unwrap();
+        // systemd EnvironmentFile= rejects `export KEY=...` syntax.
+        for line in out.lines() {
+            assert!(
+                !line.starts_with("export "),
+                "env-file must not contain 'export', got: {line}"
+            );
+        }
+        assert!(out.contains("SELFDEF_HARDWARE_MARCH=znver5"), "got: {out}");
+    }
+
+    #[test]
+    fn sdr19_render_tune_make_format_emits_make_assignments() {
+        let caps = synth_caps();
+        let out = render_tune(&caps, "make").unwrap();
+        assert!(
+            out.contains("SELFDEF_HARDWARE_MARCH := znver5"),
+            "got: {out}"
+        );
+        assert!(out.contains("-mprefer-vector-width=512"));
+    }
+
+    #[test]
+    fn sdr19_render_tune_json_format_parses_and_carries_fields() {
+        let caps = synth_caps();
+        let out = render_tune(&caps, "json").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["schema_version"], "1.0.0");
+        assert_eq!(parsed["march"], "znver5");
+        assert_eq!(parsed["avx512_vnni"], true);
+        assert_eq!(parsed["avx512_bf16"], true);
+        assert_eq!(parsed["zmm_512_preferred"], true);
+        assert!(parsed["cflags"].as_str().unwrap().contains("-mavx512vnni"));
+        assert!(parsed["compile_flag_list"].is_array());
+    }
+
+    #[test]
+    fn sdr19_render_tune_rejects_unknown_format() {
+        let caps = synth_caps();
+        let err = render_tune(&caps, "perl-mongers-format").unwrap_err();
+        assert!(err.to_string().contains("unknown --format"), "got: {err}");
+    }
+
+    #[test]
+    fn sdr19_render_tune_omits_zmm_hint_when_no_avx512() {
+        // A non-AVX-512 host (e.g. an old Ryzen 1900X) should NOT get
+        // -mprefer-vector-width=512 — it's a no-op or worse there.
+        let mut snap_lo = synth().0;
+        snap_lo.cpu.features.clear();
+        snap_lo.cpu.features.insert("avx2".into());
+        snap_lo.cpu.features.insert("sse4_2".into());
+        snap_lo.cpu.avx512_present = false;
+        snap_lo.cpu.avx512_vnni = false;
+        snap_lo.cpu.avx512_bf16 = false;
+        let caps_lo = selfdef_hardware::derive_capabilities(&snap_lo);
+        let out = render_tune(&caps_lo, "sh").unwrap();
+        assert!(
+            !out.contains("-mprefer-vector-width=512"),
+            "ZMM hint must not fire on non-AVX-512 host: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr19_run_tune_writes_to_output_path_atomically() {
+        // The function does a real selfdef_hardware::probe() — but
+        // since run_tune writes whatever's there into the path, we
+        // only assert the file exists + is non-empty + parses under
+        // the requested format.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("tune.env");
+        let _exit = run_tune("env-file", Some(path.clone())).unwrap();
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert!(body.contains("SELFDEF_HARDWARE_MARCH="));
+        // Atomic write contract: no leftover .tmp suffix file.
+        let tmp = dir.path().join("tune.env.tmp");
+        assert!(!tmp.exists(), "tempfile should have been renamed away");
     }
 }

@@ -182,6 +182,23 @@ enum HardwareAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R19: emit host-specific compile flags (CFLAGS / KCFLAGS /
+    /// `-march=`) in a format the operator can `source` or `eval`
+    /// before invoking their build pipeline. Direct enabler for the
+    /// Wasm-to-AVX-512 AOT + bitnet.cpp paths.
+    Tune {
+        /// Output format. `sh` (default) emits POSIX shell assignments
+        /// suitable for `source <(...)`. `env-file` emits the same
+        /// without the `export` prefix (for systemd EnvironmentFile=).
+        /// `make` emits Makefile assignments. `json` emits a structured
+        /// document with each field as a key.
+        #[arg(long, default_value = "sh")]
+        format: String,
+        /// Optional output path. When set, writes atomically to the
+        /// file (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -753,6 +770,9 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Match) => hardware::run_match()?,
                 Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
                 Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
+                Some(HardwareAction::Tune { format, output }) => {
+                    hardware::run_tune(&format, output)?
+                }
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
