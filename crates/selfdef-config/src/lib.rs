@@ -52,6 +52,14 @@ pub struct Config {
     /// channel, perimeter coexistence). Default is `Generic`; existing
     /// configs that don't carry a `[deployment]` block parse unchanged.
     pub deployment: DeploymentConfig,
+    /// SD-R21 (SDD-018 follow-up): periodic hardware probe + thermal
+    /// thresholds. Default is fully disabled — operators opt in by
+    /// setting `[hardware_probe].enabled = true`. When enabled, the
+    /// daemon re-probes every `interval_seconds`; when
+    /// `emit_thermal_events = true`, sensors crossing the configured
+    /// critical threshold emit OCSF Detection Findings to the bus.
+    #[serde(default)]
+    pub hardware_probe: HardwareProbeConfig,
     /// SDD-015: Tetragon perimeter coexistence config — controls the
     /// boundary check between selfdef-authored agent-guard policies
     /// and sovereign-os's `sovereign-kernel-fence.yaml`. When
@@ -96,6 +104,79 @@ pub struct DeploymentConfig {
     /// agent-guard policies. Atomic tempfile+rename. Empty = disabled.
     /// Default: empty.
     pub hardware_capabilities_path: String,
+}
+
+/// SD-R21: periodic hardware probe + thermal threshold config.
+///
+/// All fields default to disabled / safe values — an operator who
+/// doesn't add a `[hardware_probe]` block gets the same behavior as
+/// today (single probe at startup, no periodic re-probe, no event
+/// emission). Operators opt in by setting `enabled = true`.
+///
+/// Thermal thresholds mirror the sovereign-os R172 defaults for the
+/// `sain-01` profile (warn ≥ 85 °C, critical ≥ 95 °C). NVIDIA GPU
+/// sensors are gated through the same thresholds — operators tune
+/// per-host via the `gpu_critical_celsius` override when needed.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct HardwareProbeConfig {
+    /// Master switch. When false, the daemon probes once at startup
+    /// (existing behavior) and never re-probes.
+    pub enabled: bool,
+    /// Re-probe cadence in seconds. Default 300 (5 minutes).
+    /// Below 30 is rejected at validation time (probe I/O is cheap
+    /// but not free — sub-30s cadence yields no operator value).
+    pub interval_seconds: u64,
+    /// When true AND `enabled` is true, sensors crossing the
+    /// critical threshold emit an OCSF Detection Finding
+    /// (category_uid=2, class_uid=2004, severity=Critical) to the
+    /// bus on the probe tick. Default false.
+    pub emit_thermal_events: bool,
+    /// Warn threshold in °C. Default 85 (sain-01 profile baseline).
+    pub thermal_warn_celsius: i32,
+    /// Critical threshold in °C. Default 95.
+    pub thermal_critical_celsius: i32,
+    /// Override for GPU sensors (sensors whose source starts with
+    /// `nvidia-gpu-`). 0 means "use the same critical threshold as
+    /// other sensors". Default 0 (no override).
+    pub gpu_critical_celsius: i32,
+}
+
+impl Default for HardwareProbeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_seconds: 300,
+            emit_thermal_events: false,
+            thermal_warn_celsius: 85,
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 0,
+        }
+    }
+}
+
+/// SD-R21: pure classification of a single thermal reading against
+/// the configured thresholds. Returns `"ok"`, `"warn"`, or `"critical"`.
+/// GPU sensors honor `gpu_critical_celsius` when set.
+#[must_use]
+pub fn classify_thermal_reading(
+    cfg: &HardwareProbeConfig,
+    source: &str,
+    celsius: i32,
+) -> &'static str {
+    let is_gpu = source.starts_with("nvidia-gpu-");
+    let critical = if is_gpu && cfg.gpu_critical_celsius > 0 {
+        cfg.gpu_critical_celsius
+    } else {
+        cfg.thermal_critical_celsius
+    };
+    if celsius >= critical {
+        "critical"
+    } else if celsius >= cfg.thermal_warn_celsius {
+        "warn"
+    } else {
+        "ok"
+    }
 }
 
 /// SDD-013: target enum. New variants land via additional SDDs.
@@ -1432,6 +1513,114 @@ mod tests {
         assert_eq!(cfg.bus.backend, "inproc");
         assert_eq!(cfg.daemon.log_level, "info");
         assert!(!cfg.collectors.auditd.enabled);
+    }
+
+    // ----- SD-R21 hardware-probe config -----------------------------
+
+    #[test]
+    fn sdr21_hardware_probe_defaults_are_disabled() {
+        let cfg = HardwareProbeConfig::default();
+        assert!(!cfg.enabled, "must be opt-in");
+        assert!(!cfg.emit_thermal_events);
+        assert_eq!(cfg.interval_seconds, 300);
+        assert_eq!(cfg.thermal_warn_celsius, 85);
+        assert_eq!(cfg.thermal_critical_celsius, 95);
+        assert_eq!(cfg.gpu_critical_celsius, 0);
+    }
+
+    #[test]
+    fn sdr21_hardware_probe_block_parses_when_set() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [hardware_probe]
+            enabled = true
+            interval_seconds = 60
+            emit_thermal_events = true
+            thermal_warn_celsius = 75
+            thermal_critical_celsius = 90
+            gpu_critical_celsius = 95
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.hardware_probe.enabled);
+        assert_eq!(cfg.hardware_probe.interval_seconds, 60);
+        assert!(cfg.hardware_probe.emit_thermal_events);
+        assert_eq!(cfg.hardware_probe.thermal_warn_celsius, 75);
+        assert_eq!(cfg.hardware_probe.thermal_critical_celsius, 90);
+        assert_eq!(cfg.hardware_probe.gpu_critical_celsius, 95);
+    }
+
+    #[test]
+    fn sdr21_classify_below_warn_returns_ok() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 60), "ok");
+    }
+
+    #[test]
+    fn sdr21_classify_at_warn_returns_warn() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 85), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 94), "warn");
+    }
+
+    #[test]
+    fn sdr21_classify_at_critical_returns_critical() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(
+            classify_thermal_reading(&cfg, "k10temp/Tctl", 95),
+            "critical"
+        );
+        assert_eq!(
+            classify_thermal_reading(&cfg, "k10temp/Tctl", 110),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_gpu_uses_gpu_threshold_when_set() {
+        let cfg = HardwareProbeConfig {
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 85,
+            ..Default::default()
+        };
+        // CPU sensor: 90 → warn (under critical 95)
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 90), "warn");
+        // GPU sensor: 90 → critical (under default critical 95 but
+        // over GPU-specific 85).
+        assert_eq!(
+            classify_thermal_reading(&cfg, "nvidia-gpu-0", 90),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_gpu_falls_back_when_override_zero() {
+        let cfg = HardwareProbeConfig {
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 0, // disabled
+            ..Default::default()
+        };
+        assert_eq!(classify_thermal_reading(&cfg, "nvidia-gpu-0", 90), "warn");
+        assert_eq!(
+            classify_thermal_reading(&cfg, "nvidia-gpu-0", 95),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_handles_custom_thresholds() {
+        let cfg = HardwareProbeConfig {
+            thermal_warn_celsius: 50,
+            thermal_critical_celsius: 70,
+            ..Default::default()
+        };
+        assert_eq!(classify_thermal_reading(&cfg, "x", 49), "ok");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 50), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 69), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 70), "critical");
     }
 
     #[test]
