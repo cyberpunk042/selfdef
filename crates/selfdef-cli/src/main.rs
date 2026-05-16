@@ -544,6 +544,13 @@ enum ModulesAction {
         /// Emit JSON instead of human-readable output.
         #[arg(long)]
         json: bool,
+        /// SD-R38: dry-run the gate against a SAVED capabilities
+        /// JSON instead of probing the local host. Lets operators
+        /// preview "would this catalog land on a SAIN-01 box?" from
+        /// a dev workstation. The file shape matches the SD-R10
+        /// `selfdefctl hardware export --output <path>` output.
+        #[arg(long, value_name = "PATH")]
+        caps: Option<PathBuf>,
     },
     /// SD-R36: emit the active modules' dependency graph in
     /// Graphviz DOT format. Operators pipe to `dot -Tsvg` for a
@@ -1144,13 +1151,14 @@ async fn main() -> Result<()> {
                 host_config,
                 dir,
                 json,
+                caps,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
                     ..Default::default()
                 };
-                let code = modules::cmd_check_hardware(&opts, json)?;
+                let code = modules::cmd_check_hardware_with_caps(&opts, json, caps.as_deref())?;
                 if code != 0 {
                     std::process::exit(code);
                 }

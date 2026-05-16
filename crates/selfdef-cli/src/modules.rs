@@ -1665,11 +1665,40 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
 /// SD-R15: dry-run the SD-R14 [requires_hardware] gate without
 /// touching any module scripts. Operators planning an install on a
 /// new host run this BEFORE `apply` to see which modules will skip.
+#[cfg(test)]
 pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32> {
+    cmd_check_hardware_with_caps(opts, json, None)
+}
+
+/// SD-R38: dry-run the gate against a saved capabilities JSON
+/// instead of probing the host. When `caps_path` is None this is
+/// equivalent to `cmd_check_hardware` (live probe).
+pub(crate) fn cmd_check_hardware_with_caps(
+    opts: &LifecycleOpts,
+    json: bool,
+    caps_path: Option<&Path>,
+) -> Result<i32> {
     let (_host_path, active) = prepare(opts)?;
-    let caps = match selfdef_hardware::probe() {
-        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
-        Err(_) => None,
+    let caps = if let Some(p) = caps_path {
+        match std::fs::read_to_string(p) {
+            Ok(body) => match serde_json::from_str::<selfdef_hardware::HardwareCapabilities>(&body)
+            {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps JSON unreadable");
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps file unreadable");
+                None
+            }
+        }
+    } else {
+        match selfdef_hardware::probe() {
+            Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+            Err(_) => None,
+        }
     };
     let mut kept: Vec<(String, String)> = Vec::new(); // (name, reason)
     let mut skipped: Vec<(String, Vec<String>)> = Vec::new();

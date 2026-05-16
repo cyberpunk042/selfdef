@@ -406,6 +406,88 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R38: `selfdefctl modules check-hardware --caps <path>` reads
+/// a saved HardwareCapabilities JSON instead of probing. Operators
+/// preview "would this catalog land on a SAIN-01 box?" from a dev
+/// workstation.
+#[test]
+fn sdr38_check_hardware_with_caps_dry_runs_against_saved_snapshot() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "needs-big-vram", &[], stub);
+    let m_toml = catalog.join("needs-big-vram/module.toml");
+    let mut manifest = std::fs::read_to_string(&m_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\ngpu_vram_gib_min = 64\n");
+    std::fs::write(&m_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.needs-big-vram]\n").unwrap();
+
+    // Synthesized SAIN-01-shaped caps: RTX PRO 6000 with 98 GiB
+    // VRAM passes the gate.
+    let caps_path = root.path().join("sain01.caps.json");
+    std::fs::write(
+        &caps_path,
+        r#"{
+            "schema_version": "1.2.0",
+            "probed_at": "2026-05-16T00:00:00Z",
+            "host_tag": null,
+            "cpu": {"vendor":"AuthenticAMD","model_name":"AMD Ryzen 9 9900X",
+              "physical_cores":12,"logical_threads":24,
+              "sse4_2":true,"avx":true,"avx2":true,"fma":true,
+              "avx512f":true,"avx512dq":true,"avx512bw":true,"avx512vl":true,
+              "avx512vnni":true,"avx512bf16":true,"avx512fp16":true,
+              "avx512vbmi":true,"avx512vbmi2":true,
+              "recommended_march":"znver5","recommended_compile_flags":[]},
+            "memory":{"total_bytes":274877906944,"at_least_256gb":true,"at_least_512gb":false},
+            "gpu":{"device_count":1,"device_nodes":[],"devices":[
+              {"vram_bytes":105226698752,"power_limit_watts":600,"power_draw_watts":275,
+               "model_hint":"NVIDIA RTX PRO 6000 Blackwell"}
+            ]},
+            "pcie":{"gen4_or_higher_x8_slot_count":2,"dual_x8_present":true},
+            "sain01_match":{"overall":"FullMatch","cpu_avx512_vnni":true,
+              "cpu_avx512_bf16":true,"memory_at_least_256gb":true,
+              "gpu_count_at_least_2":false,"motherboard_proart_x870e":null,
+              "pcie_dual_x8_present":true},
+            "wasm_aot":{"target_triple":"x86_64-unknown-linux-gnu","target_cpu":"znver5",
+              "target_features":"+avx512f,+avx2,+fma","compile_command_hint":""}
+        }"#,
+    )
+    .unwrap();
+
+    // With --caps: SAIN-01 snapshot → module passes.
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "check-hardware",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--caps",
+            caps_path.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("WOULD APPLY"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("needs-big-vram"),
+        "module name missing: {stdout}"
+    );
+    assert!(
+        !stdout.contains("WOULD SKIP"),
+        "module should pass under saved SAIN-01 caps: {stdout}"
+    );
+    // HOST SNAPSHOT block reflects the loaded JSON, not the test
+    // runner's actual host.
+    assert!(stdout.contains("AMD Ryzen 9 9900X"), "{stdout}");
+    assert!(stdout.contains("256 GiB"), "{stdout}");
+}
+
 /// SD-R36: `selfdefctl modules graph` emits Graphviz DOT.
 /// Plain mode (no --with-hardware-gate): nodes have just a label,
 /// dependency arrows draw active dep edges only.
