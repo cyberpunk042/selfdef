@@ -491,6 +491,14 @@ enum ModulesAction {
         /// you know what you're doing.
         #[arg(long)]
         ignore_daemon_requires: bool,
+        /// SDD-018 D-2 (SD-R42): force-apply gated modules even
+        /// when their `[requires_hardware]` predicates fail on
+        /// this host. Equivalent to deleting the
+        /// `[requires_hardware]` block from each manifest, but
+        /// without editing files. Use for one-off testing on
+        /// near-match hosts. Production should rely on the gate.
+        #[arg(long)]
+        ignore_hardware: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -1120,6 +1128,7 @@ async fn main() -> Result<()> {
                 only,
                 except,
                 ignore_daemon_requires,
+                ignore_hardware,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -1128,6 +1137,7 @@ async fn main() -> Result<()> {
                     except,
                     dry_run,
                     ignore_daemon_requires,
+                    ignore_hardware,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
@@ -1149,6 +1159,7 @@ async fn main() -> Result<()> {
                     except,
                     dry_run: false,
                     ignore_daemon_requires,
+                    ignore_hardware: false,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;

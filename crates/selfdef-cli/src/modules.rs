@@ -1363,6 +1363,11 @@ pub(crate) struct LifecycleOpts {
     /// `/etc/selfdef/selfdef.toml` halts the apply with exit 2
     /// and a copy-pasteable snippet.
     pub(crate) ignore_daemon_requires: bool,
+    /// SD-R42 (SDD-018 D-2 operator override): bypass the SD-R14
+    /// `[requires_hardware]` gate. Modules whose predicates would
+    /// fail still apply. `selfdefctl modules apply --ignore-hardware`
+    /// sets this. Default false → gate enforced normally.
+    pub(crate) ignore_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -2191,11 +2196,27 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     // proceeds. Uninstall skips this — tearing a module down doesn't
     // care whether the hardware now matches.
     if matches!(action, Action::Apply | Action::Check)
+        && !opts.ignore_hardware
         && active
             .iter()
             .any(|a| !a.manifest.requires_hardware.is_empty())
     {
         active = apply_hardware_gate(active);
+    } else if opts.ignore_hardware
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        // SD-R42: operator explicitly suppressed the gate. Emit a
+        // warning so the operator sees this on every run — the
+        // override is sharp-edged and should not be silent.
+        eprintln!(
+            "# SD-R42: --ignore-hardware set — gate suppressed, {} gated module(s) will be force-applied",
+            active
+                .iter()
+                .filter(|a| !a.manifest.requires_hardware.is_empty())
+                .count()
+        );
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
@@ -3064,6 +3085,7 @@ mod sdd_015_apply_gate_tests {
             except: Vec::new(),
             dry_run: false,
             ignore_daemon_requires: false,
+            ignore_hardware: false,
             daemon_config_path: Some(daemon_config_path),
         }
     }
@@ -3232,6 +3254,7 @@ mod sdd_015_apply_gate_tests {
             except: Vec::new(),
             dry_run: false,
             ignore_daemon_requires: false,
+            ignore_hardware: false,
             daemon_config_path: None,
         };
         let code = pre_apply_perimeter_check(&opts).unwrap();
