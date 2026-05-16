@@ -196,6 +196,18 @@ pub(crate) struct HardwareRequirements {
     #[serde(default)]
     pub(crate) gpu_vram_gib_min: u64,
 
+    /// SD-R51 (closes SDD-019 T-1): ALL-semantics companion to
+    /// `gpu_vram_gib_min`. Every GPU in
+    /// HardwareCapabilities.gpu.devices must report vram_bytes ≥
+    /// this. Use case: fleet-uniformity modules (e.g. a tensor-
+    /// parallel inference module that splits a model across BOTH
+    /// GPUs and needs each card to host an equal slice). 0 disables.
+    ///
+    /// Fail-closed when the per-device list is empty (no probe data
+    /// → can't prove ALL GPUs satisfy → fail).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_each_min: u64,
+
     /// SD-R26: minimum total power headroom (watts) across ALL GPUs.
     /// Headroom for one GPU = power_limit - power_draw; we sum
     /// across the fleet. Gate disabled when 0. When set, requires
@@ -287,6 +299,36 @@ impl HardwareRequirements {
                 ));
             }
         }
+        if self.gpu_vram_gib_each_min > 0 {
+            // SD-R51 ALL-semantics. Every GPU must report
+            // vram_bytes ≥ this. Empty per-device list → fail (we
+            // can't prove ALL are big enough).
+            let want_bytes = self
+                .gpu_vram_gib_each_min
+                .saturating_mul(1024 * 1024 * 1024);
+            let all_big_enough = !caps.gpu.devices.is_empty()
+                && caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .all(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !all_big_enough {
+                let worst_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .min()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_each_min = {} (host worst is {} GiB across {} GPU(s))",
+                    self.gpu_vram_gib_each_min,
+                    worst_gib,
+                    caps.gpu.devices.len()
+                ));
+            }
+        }
         if self.gpu_power_headroom_watts_min > 0 {
             let mut total_headroom: u32 = 0;
             let mut telemetry_complete = !caps.gpu.devices.is_empty();
@@ -371,6 +413,7 @@ impl HardwareRequirements {
             && self.memory_gib_min == 0
             && self.gpu_count_min == 0
             && self.gpu_vram_gib_min == 0
+            && self.gpu_vram_gib_each_min == 0
             && self.gpu_power_headroom_watts_min == 0
             && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
@@ -547,6 +590,7 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
             "memory_gib_min": rh.memory_gib_min,
             "gpu_count_min": rh.gpu_count_min,
             "gpu_vram_gib_min": rh.gpu_vram_gib_min,
+            "gpu_vram_gib_each_min": rh.gpu_vram_gib_each_min,
             "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
             "wasm_aot_features_required": rh.wasm_aot_features_required,
             "sain01_verdict_min": rh.sain01_verdict_min,
@@ -791,6 +835,9 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
         }
         if rh.gpu_vram_gib_min > 0 {
             println!("  - gpu_vram_gib_min = {}", rh.gpu_vram_gib_min);
+        }
+        if rh.gpu_vram_gib_each_min > 0 {
+            println!("  - gpu_vram_gib_each_min = {}", rh.gpu_vram_gib_each_min);
         }
         if rh.gpu_power_headroom_watts_min > 0 {
             println!(
@@ -3678,6 +3725,7 @@ mod sdr14_hardware_gate_tests {
             memory_gib_min: 256,
             gpu_count_min: 2,
             gpu_vram_gib_min: 0,
+            gpu_vram_gib_each_min: 0,
             gpu_power_headroom_watts_min: 0,
             wasm_aot_features_required: String::new(),
             sain01_verdict_min: "FullMatch".into(),
@@ -3905,6 +3953,121 @@ mod sdr14_hardware_gate_tests {
             unmet.iter().any(|u| u.contains("gpu_count_min")),
             "got: {unmet:?}"
         );
+    }
+
+    // -- SD-R51: gpu_vram_gib_each_min (ALL-semantics) ---------------
+
+    #[test]
+    fn sdr51_vram_each_passes_when_all_gpus_meet_bar() {
+        // Two identical 80 GiB GPUs (hypothetical) → every-GPU bar
+        // of 64 GiB passes.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_on_mixed_sain01_dual_gpu() {
+        // SAIN-01 has RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        // A module wanting 64 GiB EACH would fail — the 3090 lags.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("host worst is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_closed_on_empty_devices() {
+        // No per-device data → can't prove ALL satisfy → fail.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 8,
+            ..Default::default()
+        };
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 8"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_vram_min_and_each_min_compose_naturally() {
+        // ANY ≥ 80 + EACH ≥ 16: SAIN-01 (98+24) passes both.
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            gpu_vram_gib_each_min: 16,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Same predicates against 1×98 + 1×4: ANY passes (98 ≥ 80)
+        // but EACH fails (4 < 16).
+        let caps_skewed = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(4 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps_skewed).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_vram_gib_each_min")),
+            "got: {unmet:?}"
+        );
+        assert!(
+            !unmet.iter().any(|u| u.contains("gpu_vram_gib_min")),
+            "ANY predicate should NOT fail when biggest GPU meets it: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_is_empty_recognises_each_field() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 1,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
     }
 
     #[test]
