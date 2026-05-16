@@ -633,8 +633,8 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
 
 /// SD-R55 (closes SDD-020 V-5): module manifest signing gate.
 /// When [signing].required = false (informational), apply proceeds
-/// + logs a notice. When required = true, apply refuses without
-/// a valid .minisig.
+/// and logs a notice. When required = true, apply refuses without a
+/// valid .minisig.
 #[test]
 fn sdr55_signing_required_false_is_informational_only() {
     let root = tempfile::tempdir().unwrap();
