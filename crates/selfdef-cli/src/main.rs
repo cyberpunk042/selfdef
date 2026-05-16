@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod hardware;
 mod init;
+mod models;
 mod modules;
 mod notify;
 mod paths;
@@ -72,6 +73,13 @@ enum Command {
     Modules {
         #[command(subcommand)]
         action: ModulesAction,
+    },
+    /// SD-R34: 1-bit / ternary / quantised model registry. List
+    /// registered models or dry-run "would this land on THIS
+    /// host?" via the SD-R14 + SD-R26 + SD-R32 predicate engine.
+    Models {
+        #[command(subcommand)]
+        action: ModelsAction,
     },
     /// Manage the API surface (token rotation, etc).
     Api {
@@ -410,6 +418,25 @@ enum NotifyAction {
     Resend {
         /// Event ID (UUID) to resend.
         event_id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ModelsAction {
+    /// SD-R34: list every model.toml under the registry dir.
+    List {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// SD-R34: dry-run the hardware gate on this host — shows
+    /// which registered models WOULD apply and which WOULD SKIP.
+    /// Read-only.
+    CheckHardware {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1004,6 +1031,20 @@ async fn main() -> Result<()> {
                 let action = ForensicsBundleAction::new(cfg.responder.forensics_dir.clone());
                 let outcome = action.execute(&event, /* dry_run */ false).await?;
                 println!("{}", outcome.notes);
+            }
+        },
+        Command::Models { action } => match action {
+            ModelsAction::List { dir } => {
+                let code = models::cmd_list(dir.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModelsAction::CheckHardware { dir, json } => {
+                let code = models::cmd_check_hardware(dir.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
             }
         },
         Command::Modules { action } => match action {
