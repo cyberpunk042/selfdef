@@ -512,8 +512,10 @@ mod tests {
         assert!(path.exists());
         let body = std::fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed["schema_version"], "1.0.0");
-        for key in ["cpu", "memory", "gpu", "pcie", "sain01_match"] {
+        // SD-R30 bumped the schema (1.0.0 → 1.1.0 was SD-R25 conceptually
+        // but not yet emitted; this round formalises it to 1.2.0).
+        assert_eq!(parsed["schema_version"], "1.2.0");
+        for key in ["cpu", "memory", "gpu", "pcie", "sain01_match", "wasm_aot"] {
             assert!(
                 !parsed[key].is_null(),
                 "exported JSON must carry top-level {key}: {body}"

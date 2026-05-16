@@ -805,6 +805,39 @@ pub struct HardwareCapabilities {
     pub gpu: GpuCapabilities,
     pub pcie: PcieCapabilities,
     pub sain01_match: Sain01Match,
+    /// SD-R30: Wasm-AOT compilation hints derived from the host's
+    /// CPU feature set. Lets sovereign-os scripts/pulse/wasm-aot.sh
+    /// (and any other AOT pipeline) source canonical wasmtime
+    /// `--target-feature` flags + a recommended target CPU without
+    /// re-deriving them from raw features. Default (empty struct)
+    /// is forward-compat with existing capabilities JSON files.
+    #[serde(default)]
+    pub wasm_aot: WasmAotCapabilities,
+}
+
+/// SD-R30: Pre-computed Wasm-AOT compilation hints.
+///
+/// Sourced into sovereign-os pulse/wasm-aot.sh + any other host
+/// that wants to AOT-compile .wasm into a native shared lib. The
+/// `wasmtime_target_features` string is a comma-separated list with
+/// `+feature` syntax (wasmtime / LLVM convention); ready to pass
+/// to `wasmtime compile --target-feature ${features}`.
+///
+/// All fields default to empty strings when the host doesn't expose
+/// the relevant capabilities — the consumer either falls back to
+/// `native` or skips the AOT hint entirely.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WasmAotCapabilities {
+    /// LLVM target triple (e.g. `x86_64-unknown-linux-gnu`).
+    pub target_triple: String,
+    /// `-target-cpu` token (e.g. `znver5`, `znver4`, `native`).
+    pub target_cpu: String,
+    /// Comma-separated `+feature` list for `--target-feature`.
+    /// Empty when the host lacks AVX-512.
+    pub target_features: String,
+    /// Worked `wasmtime compile` example command (operator
+    /// copy/pasteable). Empty when AOT isn't recommended.
+    pub compile_command_hint: String,
 }
 
 /// CPU instruction-family availability + recommended flags for
@@ -946,8 +979,12 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         gen4_or_higher_x8_slot_count: snap.pcie.gen4_or_higher_x8_slot_count,
         dual_x8_present: snap.pcie.gen4_or_higher_x8_slot_count >= 2,
     };
+    let wasm_aot = derive_wasm_aot_capabilities(&cpu);
     HardwareCapabilities {
-        schema_version: "1.0.0".into(),
+        // SD-R30: bumped to 1.2.0 alongside the wasm_aot addition.
+        // 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices; 1.2.0 =
+        // SD-R30 wasm_aot field.
+        schema_version: "1.2.0".into(),
         probed_at: snap.probed_at.clone(),
         host_tag: None,
         cpu,
@@ -955,6 +992,78 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         gpu,
         pcie,
         sain01_match: matches_sain01(snap),
+        wasm_aot,
+    }
+}
+
+/// SD-R30: derive the Wasm-AOT hint block from a probed CpuCapabilities.
+/// Pure function — no I/O. Tests pin every feature combination.
+#[must_use]
+pub fn derive_wasm_aot_capabilities(cpu: &CpuCapabilities) -> WasmAotCapabilities {
+    // x86_64 only for now — aarch64 / RISC-V hosts get empty hints
+    // (operator can override per build pipeline).
+    let target_triple = "x86_64-unknown-linux-gnu".to_string();
+    let target_cpu = if cpu.recommended_march.is_empty() {
+        "native".to_string()
+    } else {
+        cpu.recommended_march.clone()
+    };
+
+    // Build the comma-separated +feature list. Order matches the
+    // SAIN-01 hot path: AVX-512 family first (these unlock the
+    // 512-bit ZMM register pressure), then AVX2/FMA fallbacks.
+    let mut features: Vec<&'static str> = Vec::new();
+    if cpu.avx512f {
+        features.push("+avx512f");
+    }
+    if cpu.avx512dq {
+        features.push("+avx512dq");
+    }
+    if cpu.avx512bw {
+        features.push("+avx512bw");
+    }
+    if cpu.avx512vl {
+        features.push("+avx512vl");
+    }
+    if cpu.avx512vnni {
+        features.push("+avx512vnni");
+    }
+    if cpu.avx512bf16 {
+        features.push("+avx512bf16");
+    }
+    if cpu.avx512fp16 {
+        features.push("+avx512fp16");
+    }
+    if cpu.avx512vbmi {
+        features.push("+avx512vbmi");
+    }
+    if cpu.avx512vbmi2 {
+        features.push("+avx512vbmi2");
+    }
+    if cpu.avx2 {
+        features.push("+avx2");
+    }
+    if cpu.fma {
+        features.push("+fma");
+    }
+    let target_features = features.join(",");
+
+    // Worked example. Empty when no AVX-512 — on those hosts
+    // operator should just use `native` and skip the explicit
+    // feature list to avoid pinning wasmtime to a stale view.
+    let compile_command_hint = if cpu.avx512f {
+        format!(
+            "wasmtime compile --target {target_triple} --target-feature {target_features} module.wasm -o module.cwasm"
+        )
+    } else {
+        String::new()
+    };
+
+    WasmAotCapabilities {
+        target_triple,
+        target_cpu,
+        target_features,
+        compile_command_hint,
     }
 }
 
@@ -2093,7 +2202,7 @@ mod tests {
     fn capabilities_schema_version_pinned() {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.0.0");
+        assert_eq!(c.schema_version, "1.2.0");
     }
 
     #[test]
@@ -2108,9 +2217,13 @@ mod tests {
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed.schema_version, "1.0.0");
+        assert_eq!(parsed.schema_version, "1.2.0");
         assert_eq!(parsed.cpu.recommended_march, "znver5");
         assert!(parsed.cpu.avx512vnni);
+        // SD-R30: wasm_aot block round-trips with the expected feature
+        // string on the Zen 5 + AVX-512 synth snapshot.
+        assert_eq!(parsed.wasm_aot.target_cpu, "znver5");
+        assert!(parsed.wasm_aot.target_features.contains("+avx512vnni"));
         // Tempfile must be cleaned up.
         let mut tmp = path.as_os_str().to_owned();
         tmp.push(".tmp");
@@ -2713,6 +2826,88 @@ malformed,line\n\
         assert_eq!(flags.len(), 2);
         assert_eq!(flags[0], "-gencode arch=compute_120,code=sm_120");
         assert_eq!(flags[1], "-gencode arch=compute_86,code=sm_86");
+    }
+
+    // ----- SD-R30: wasm-AOT hint derivation -------------------------
+
+    #[test]
+    fn sdr30_wasm_aot_empty_features_when_no_avx512() {
+        let cpu = CpuCapabilities {
+            recommended_march: "native".into(),
+            avx2: true,
+            fma: true,
+            ..Default::default()
+        };
+        let w = derive_wasm_aot_capabilities(&cpu);
+        assert_eq!(w.target_cpu, "native");
+        assert_eq!(w.target_features, "+avx2,+fma");
+        assert!(
+            w.compile_command_hint.is_empty(),
+            "no AVX-512 → no hint command"
+        );
+    }
+
+    #[test]
+    fn sdr30_wasm_aot_full_sain01_feature_string() {
+        // Zen 5 + every AVX-512 family bit the SAIN-01 9900X exposes.
+        let cpu = CpuCapabilities {
+            recommended_march: "znver5".into(),
+            avx2: true,
+            fma: true,
+            avx512f: true,
+            avx512dq: true,
+            avx512bw: true,
+            avx512vl: true,
+            avx512vnni: true,
+            avx512bf16: true,
+            avx512vbmi: true,
+            avx512vbmi2: true,
+            ..Default::default()
+        };
+        let w = derive_wasm_aot_capabilities(&cpu);
+        assert_eq!(w.target_cpu, "znver5");
+        // AVX-512 family in order, then AVX2/FMA fallbacks.
+        assert!(
+            w.target_features.starts_with("+avx512f,"),
+            "AVX-512 first: {}",
+            w.target_features
+        );
+        assert!(w.target_features.contains("+avx512vnni"));
+        assert!(w.target_features.contains("+avx512bf16"));
+        assert!(w.target_features.ends_with(",+avx2,+fma"));
+        // Worked example present.
+        assert!(w.compile_command_hint.contains("wasmtime compile"));
+        assert!(w.compile_command_hint.contains("--target-feature"));
+        assert!(w.compile_command_hint.contains("+avx512f"));
+    }
+
+    #[test]
+    fn sdr30_wasm_aot_target_triple_is_x86_64_linux() {
+        let w = derive_wasm_aot_capabilities(&CpuCapabilities::default());
+        assert_eq!(w.target_triple, "x86_64-unknown-linux-gnu");
+    }
+
+    #[test]
+    fn sdr30_capabilities_schema_bumped_to_1_2_0() {
+        let snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        let c = derive_capabilities(&snap);
+        assert_eq!(c.schema_version, "1.2.0");
+    }
+
+    #[test]
+    fn sdr30_capabilities_carries_wasm_aot_block_in_json() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let c = derive_capabilities(&snap);
+        let json = serde_json::to_string(&c).expect("serializes");
+        assert!(
+            json.contains("\"wasm_aot\""),
+            "wasm_aot field missing: {json}"
+        );
+        assert!(json.contains("\"target_features\":\"+avx512f"));
+        assert!(json.contains("\"compile_command_hint\""));
     }
 
     #[test]

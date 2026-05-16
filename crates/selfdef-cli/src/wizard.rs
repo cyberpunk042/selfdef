@@ -362,6 +362,7 @@ mod tests {
                 motherboard_proart_x870e: None,
                 pcie_dual_x8_present: pcie_dual_x8,
             },
+            wasm_aot: Default::default(),
         }
     }
 

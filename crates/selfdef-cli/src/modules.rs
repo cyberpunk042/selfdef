@@ -2900,6 +2900,7 @@ mod sdr14_hardware_gate_tests {
                 motherboard_proart_x870e: None,
                 pcie_dual_x8_present: false,
             },
+            wasm_aot: Default::default(),
         }
     }
 
