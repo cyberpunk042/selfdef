@@ -481,6 +481,19 @@ enum ModulesAction {
         #[arg(long)]
         dir: Option<PathBuf>,
     },
+    /// SD-R15: dry-run the SD-R14 hardware gate on this host —
+    /// shows which active modules WOULD apply and which WOULD SKIP
+    /// based on each manifest's `[requires_hardware]` block.
+    /// Read-only; no module scripts run.
+    CheckHardware {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1038,6 +1051,21 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 };
                 let code = modules::cmd_show_requires(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::CheckHardware {
+                host_config,
+                dir,
+                json,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = modules::cmd_check_hardware(&opts, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }

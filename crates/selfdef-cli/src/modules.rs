@@ -1495,6 +1495,86 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R15: dry-run the SD-R14 [requires_hardware] gate without
+/// touching any module scripts. Operators planning an install on a
+/// new host run this BEFORE `apply` to see which modules will skip.
+pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let mut kept: Vec<(String, String)> = Vec::new(); // (name, reason)
+    let mut skipped: Vec<(String, Vec<String>)> = Vec::new();
+    let mut probe_ok = caps.is_some();
+    for am in &active {
+        let name = am.display_name();
+        if am.manifest.requires_hardware.is_empty() {
+            kept.push((name, "no [requires_hardware] block".into()));
+            continue;
+        }
+        match &caps {
+            Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                Ok(()) => kept.push((name, "all hardware requirements met".into())),
+                Err(unmet) => skipped.push((name, unmet)),
+            },
+            None => {
+                probe_ok = false;
+                skipped.push((name, vec!["hardware probe unavailable".into()]));
+            }
+        }
+    }
+    if json {
+        let total = kept.len() + skipped.len();
+        let kept_json: Vec<String> = kept
+            .iter()
+            .map(|(n, r)| format!(r#"{{"module":"{n}","reason":"{r}"}}"#))
+            .collect();
+        let skipped_json: Vec<String> = skipped
+            .iter()
+            .map(|(n, reasons)| {
+                let r = reasons
+                    .iter()
+                    .map(|s| format!(r#""{}""#, s.replace('"', "\\\"")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(r#"{{"module":"{n}","unmet":[{r}]}}"#)
+            })
+            .collect();
+        println!(
+            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}]}}"#,
+            probe_ok,
+            total,
+            kept_json.join(","),
+            skipped_json.join(","),
+        );
+    } else {
+        println!("# SD-R15 hardware gate dry-run");
+        if !probe_ok {
+            println!("# (hardware probe unavailable — gated modules will be skipped)");
+        }
+        println!("# {} active module(s):", kept.len() + skipped.len());
+        if !kept.is_empty() {
+            println!();
+            println!("WOULD APPLY ({}):", kept.len());
+            for (name, reason) in &kept {
+                println!("  ✓ {name}  ({reason})");
+            }
+        }
+        if !skipped.is_empty() {
+            println!();
+            println!("WOULD SKIP ({}):", skipped.len());
+            for (name, reasons) in &skipped {
+                println!("  ✗ {name}");
+                for r in reasons {
+                    println!("      - {r}");
+                }
+            }
+        }
+    }
+    Ok(0)
+}
+
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();
@@ -2844,6 +2924,43 @@ mod sdr14_hardware_gate_tests {
         let kept = apply_hardware_gate(active);
         let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn sdr15_check_hardware_runs_against_fixture_catalog() {
+        // SD-R15: `selfdefctl modules check-hardware` is read-only;
+        // make sure the entry point completes with rc=0 against a
+        // catalog where one module is unrestricted and one has a
+        // mem-threshold gate. We can't pin exact stdout (the test
+        // host's caps vary across CI / dev boxes), but the function
+        // must succeed without panicking.
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let cat = dir.path().join("catalog");
+        std::fs::create_dir_all(cat.join("alpha")).unwrap();
+        std::fs::create_dir_all(cat.join("beta")).unwrap();
+        std::fs::write(
+            cat.join("alpha/module.toml"),
+            "name = \"alpha\"\nversion = \"0.0.0\"\nsummary = \"unrestricted\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            cat.join("beta/module.toml"),
+            "name = \"beta\"\nversion = \"0.0.0\"\nsummary = \"hardware-gated\"\n\
+             [requires_hardware]\nmemory_gib_min = 9999999\n",
+        )
+        .unwrap();
+        let host = dir.path().join("modules.toml");
+        std::fs::write(&host, "[modules.alpha]\n[modules.beta]\n").unwrap();
+        let opts = LifecycleOpts {
+            host_config: Some(host),
+            dir: Some(cat),
+            ..Default::default()
+        };
+        let rc = cmd_check_hardware(&opts, false).unwrap();
+        assert_eq!(rc, 0);
+        let rc_json = cmd_check_hardware(&opts, true).unwrap();
+        assert_eq!(rc_json, 0);
     }
 
     #[test]
