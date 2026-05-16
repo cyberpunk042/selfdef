@@ -420,17 +420,17 @@ fn check_rbac_posture(_cfg: &Config) -> Vec<CheckResult> {
 ///
 /// - `target = "sain01"` but `/mnt/vault/` doesn't exist
 ///   → WARN: operator probably forgot to set up ZFS / mount the dataset
-///     before starting the daemon; the daemon will fail to write state.
+///   before starting the daemon; the daemon will fail to write state.
 /// - `target = "generic"` but `/mnt/vault/context/selfdef-*` exists
 ///   → WARN: state-fork hazard — operator likely flipped from sain01
-///     back to generic without migrating files (Q13-C).
+///   back to generic without migrating files (Q13-C).
 ///
 /// Both are non-blocking (WARN, not FAIL): doctor surfaces the
 /// inconsistency; the operator decides whether the state is intentional
 /// (mid-migration) or a bug. The daemon's own Q13-C check ENFORCES
 /// the same invariant at startup with a hard refusal.
 fn check_deployment_target(cfg: &Config) -> Vec<CheckResult> {
-    use selfdef_config::{state_dir, DeploymentTarget};
+    use selfdef_config::{DeploymentTarget, state_dir};
 
     let target = cfg.deployment.target;
     let mut out = Vec::new();
@@ -476,10 +476,8 @@ fn check_deployment_target(cfg: &Config) -> Vec<CheckResult> {
             // to generic without migrating state (state-fork hazard).
             let sain_state_dir = Path::new("/mnt/vault/context");
             if sain_state_dir.exists() {
-                let sain_audit =
-                    sain_state_dir.join("selfdef-audit.jsonl");
-                let sain_esc =
-                    sain_state_dir.join("selfdef-escalations.sqlite");
+                let sain_audit = sain_state_dir.join("selfdef-audit.jsonl");
+                let sain_esc = sain_state_dir.join("selfdef-escalations.sqlite");
                 if sain_audit.exists() || sain_esc.exists() {
                     out.push(CheckResult {
                         category: "deployment".into(),
@@ -603,10 +601,7 @@ mod sdd_013_tests {
             || (!sain_state.join("selfdef-audit.jsonl").exists()
                 && !sain_state.join("selfdef-escalations.sqlite").exists())
         {
-            assert!(
-                hazard.is_none(),
-                "no hazard row on clean host"
-            );
+            assert!(hazard.is_none(), "no hazard row on clean host");
         }
     }
 
