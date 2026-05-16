@@ -7,6 +7,7 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 mod dispatcher_adapter;
+mod hardware_probe_loop;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -175,6 +176,31 @@ async fn main() -> Result<()> {
         let sd = shutdown.clone();
         let s = Arc::clone(&store);
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
+    };
+
+    // SD-R22: periodic hardware probe + thermal-event emission loop.
+    // Opt-in via [hardware_probe].enabled. The task lives for the
+    // daemon's lifetime + observes the same shutdown signal as the
+    // other background tasks.
+    let _hardware_probe_task = if cfg.hardware_probe.enabled {
+        let metrics_path: Option<std::path::PathBuf> =
+            if cfg.deployment.hardware_metrics_path.is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(
+                    &cfg.deployment.hardware_metrics_path,
+                ))
+            };
+        let probe_cfg = cfg.hardware_probe.clone();
+        let pubr = publisher.clone();
+        let sd = shutdown.clone();
+        let ht = host_tag.clone();
+        Some(tokio::spawn(async move {
+            hardware_probe_loop::run_hardware_probe_loop(probe_cfg, metrics_path, pubr, ht, sd)
+                .await
+        }))
+    } else {
+        None
     };
 
     // ---- correlator ----
