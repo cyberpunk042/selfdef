@@ -16,6 +16,7 @@ mod modules;
 mod notify;
 mod paths;
 mod perimeter;
+mod wizard;
 
 use std::path::PathBuf;
 
@@ -131,6 +132,15 @@ enum Command {
     Perimeter {
         #[command(subcommand)]
         action: PerimeterAction,
+    },
+    /// SD-R11: first-time-operator setup walkthrough — probes
+    /// hardware, surfaces Sain01Match verdict, recommends a config
+    /// snippet, prints next-step commands. Pure-read; never writes
+    /// config (operator copy-pastes — authority always wins).
+    Wizard {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
     },
     /// SDD-017: SAIN-01 hardware inventory + Sain01Match verdict.
     /// Probes the host for CPU features, memory, GPU device nodes,
@@ -710,6 +720,14 @@ async fn main() -> Result<()> {
                 std::process::exit(exit);
             }
         },
+        Command::Wizard { json } => {
+            let exit = if json {
+                wizard::run_json()?
+            } else {
+                wizard::run_human()?
+            };
+            std::process::exit(exit);
+        }
         Command::Hardware { action, json } => {
             let exit = match action {
                 Some(HardwareAction::Match) => hardware::run_match()?,
