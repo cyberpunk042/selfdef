@@ -858,6 +858,32 @@ pub struct MemoryCapabilities {
 pub struct GpuCapabilities {
     pub device_count: u32,
     pub device_nodes: Vec<PathBuf>,
+    /// SD-R25: per-GPU detail map — model hint, VRAM, power draw,
+    /// power limit. Index matches `device_nodes[i]` 1:1. Lets
+    /// cross-repo consumers (sovereign-os wasm-aot, build-bitnet,
+    /// scheduling heuristics) see WHICH GPU has WHICH headroom
+    /// instead of just a count. Empty when no GPUs detected.
+    #[serde(default)]
+    pub devices: Vec<GpuDeviceCapabilities>,
+}
+
+/// SD-R25: per-GPU detail surfaced through HardwareCapabilities JSON.
+/// All fields Option-typed so the schema remains forward-compatible
+/// when probe sources vary (nvidia-smi vs lspci vs AMD ROCm).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GpuDeviceCapabilities {
+    /// `/dev/nvidia<N>` style device node when known.
+    pub device_node: Option<PathBuf>,
+    /// PCI BDF (e.g. "0000:01:00.0") when lspci enrichment ran.
+    pub pci_address: Option<String>,
+    /// SD-R13 — nvidia-smi name (e.g. "NVIDIA RTX PRO 6000 Blackwell").
+    pub model_hint: Option<String>,
+    /// SD-R13 — total VRAM in bytes.
+    pub vram_bytes: Option<u64>,
+    /// SD-R24 — instantaneous power draw, whole watts.
+    pub power_draw_watts: Option<u32>,
+    /// SD-R24 — nominal power limit, whole watts.
+    pub power_limit_watts: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -902,6 +928,19 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
     let gpu = GpuCapabilities {
         device_count: u32::try_from(snap.gpus.len()).unwrap_or(u32::MAX),
         device_nodes: snap.gpus.iter().map(|g| g.device_node.clone()).collect(),
+        // SD-R25: per-GPU detail rows. Index-aligned with device_nodes.
+        devices: snap
+            .gpus
+            .iter()
+            .map(|g| GpuDeviceCapabilities {
+                device_node: Some(g.device_node.clone()),
+                pci_address: g.pci_address.clone(),
+                model_hint: g.model_hint.clone(),
+                vram_bytes: g.vram_bytes,
+                power_draw_watts: g.power_draw_watts,
+                power_limit_watts: g.power_limit_watts,
+            })
+            .collect(),
     };
     let pcie = PcieCapabilities {
         gen4_or_higher_x8_slot_count: snap.pcie.gen4_or_higher_x8_slot_count,
@@ -2144,6 +2183,106 @@ malformed,line\n\
         assert_eq!(gpus[0].power_limit_watts, Some(600));
         assert_eq!(gpus[1].power_draw_watts, Some(180));
         assert_eq!(gpus[1].power_limit_watts, Some(350));
+    }
+
+    #[test]
+    fn sdr25_derive_capabilities_populates_per_gpu_devices() {
+        // Two GPUs (mirror the SAIN-01 dual-GPU pair) with distinct
+        // model_hint + vram + power readings. Capabilities export
+        // must surface every per-device field — that's the
+        // load-bearing contract for cross-repo schedulers that need
+        // to pick the right GPU.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: Some("0000:01:00.0".into()),
+                    model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: Some("0000:02:00.0".into()),
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.gpu.device_count, 2);
+        assert_eq!(caps.gpu.devices.len(), 2);
+        // SAIN-01 primary GPU.
+        let g0 = &caps.gpu.devices[0];
+        assert_eq!(g0.device_node, Some(PathBuf::from("/dev/nvidia0")));
+        assert_eq!(g0.pci_address.as_deref(), Some("0000:01:00.0"));
+        assert_eq!(
+            g0.model_hint.as_deref(),
+            Some("NVIDIA RTX PRO 6000 Blackwell")
+        );
+        assert_eq!(g0.vram_bytes, Some(98 * 1024 * 1024 * 1024));
+        assert_eq!(g0.power_draw_watts, Some(275));
+        assert_eq!(g0.power_limit_watts, Some(600));
+        // Secondary GPU.
+        let g1 = &caps.gpu.devices[1];
+        assert_eq!(g1.model_hint.as_deref(), Some("NVIDIA GeForce RTX 3090"));
+        assert_eq!(g1.power_draw_watts, Some(180));
+        assert_eq!(g1.power_limit_watts, Some(350));
+    }
+
+    #[test]
+    fn sdr25_capabilities_serializes_devices_into_json() {
+        // The forward-compat contract: capabilities.gpu.devices is in
+        // the emitted JSON so sovereign-os scripts/hardware/
+        // selfdef-modules-gate.py (R170) + future schedulers see it.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                power_draw_watts: Some(275),
+                power_limit_watts: Some(600),
+            }],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(json.contains("\"devices\""), "json: {json}");
+        assert!(json.contains("\"model_hint\":"), "json: {json}");
+        assert!(json.contains("RTX PRO 6000 Blackwell"), "json: {json}");
+        assert!(json.contains("\"power_draw_watts\":275"), "json: {json}");
+        assert!(json.contains("\"power_limit_watts\":600"), "json: {json}");
+    }
+
+    #[test]
+    fn sdr25_capabilities_devices_empty_when_no_gpus() {
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.gpu.device_count, 0);
+        assert!(caps.gpu.devices.is_empty());
     }
 
     #[test]

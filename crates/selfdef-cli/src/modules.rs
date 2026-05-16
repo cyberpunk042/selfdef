@@ -2742,6 +2742,7 @@ mod sdr14_hardware_gate_tests {
             gpu: GpuCapabilities {
                 device_count: gpu_count,
                 device_nodes: Vec::new(),
+                devices: Vec::new(),
             },
             pcie: PcieCapabilities::default(),
             sain01_match: Sain01Match {

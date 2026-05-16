@@ -347,6 +347,7 @@ mod tests {
                 device_nodes: (0..gpu_count)
                     .map(|i| std::path::PathBuf::from(format!("/dev/nvidia{i}")))
                     .collect(),
+                devices: Vec::new(),
             },
             pcie: PcieCapabilities {
                 gen4_or_higher_x8_slot_count: if pcie_dual_x8 { 2 } else { 0 },
