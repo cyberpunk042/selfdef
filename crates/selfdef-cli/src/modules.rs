@@ -557,6 +557,69 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
     Ok(())
 }
 
+/// SD-R50: pretty-print the SD-R47 audit JSONL stream. Operator
+/// runs `selfdefctl modules audit-log` to see recent gate
+/// overrides on this host. Read-only.
+pub(crate) fn cmd_audit_log(audit_path: &Path, n: usize, json: bool) -> Result<i32> {
+    if !audit_path.exists() {
+        println!(
+            "(no audit log at {} — no overrides recorded yet)",
+            audit_path.display()
+        );
+        return Ok(0);
+    }
+    let body = std::fs::read_to_string(audit_path)
+        .with_context(|| format!("reading {}", audit_path.display()))?;
+    let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
+    let total = lines.len();
+    let start = total.saturating_sub(n);
+    let recent = &lines[start..];
+
+    if json {
+        for line in recent {
+            println!("{line}");
+        }
+        return Ok(0);
+    }
+
+    println!("# SD-R50: selfdefctl modules audit-log");
+    println!(
+        "# {} total entries; showing last {} (path: {})",
+        total,
+        recent.len(),
+        audit_path.display()
+    );
+    if recent.is_empty() {
+        println!("# (no entries to show)");
+        return Ok(0);
+    }
+    println!();
+    for line in recent {
+        match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(v) => {
+                let ts = v["timestamp"].as_str().unwrap_or("(no timestamp)");
+                let category = v["category"].as_str().unwrap_or("(no category)");
+                let flag = v["flag"].as_str().unwrap_or("");
+                let host = v["host_tag"].as_str().unwrap_or("(no host)");
+                let empty: Vec<serde_json::Value> = Vec::new();
+                let mods = v["gated_modules"].as_array().unwrap_or(&empty);
+                let mod_list: Vec<String> = mods
+                    .iter()
+                    .filter_map(|m| m.as_str().map(String::from))
+                    .collect();
+                println!("  {ts}  host={host}  {category}  {flag}");
+                if !mod_list.is_empty() {
+                    println!("    gated_modules: {}", mod_list.join(", "));
+                }
+            }
+            Err(_) => {
+                println!("  (malformed entry skipped: {line})");
+            }
+        }
+    }
+    Ok(0)
+}
+
 /// SD-R47 (closes SDD-019 T-2): append an OCSF-shaped JSONL line
 /// to the operator-configured audit path when `--ignore-hardware`
 /// fires. Operators wanting fleet-alert visibility on gate

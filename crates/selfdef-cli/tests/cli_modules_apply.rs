@@ -513,6 +513,124 @@ fn sdr39_modules_info_with_host_status_surfaces_gate_verdict() {
     );
 }
 
+/// SD-R50: `selfdefctl modules audit-log` pretty-prints the
+/// SD-R47 audit JSONL stream.
+#[test]
+fn sdr50_audit_log_pretty_prints_recent_entries() {
+    let root = tempfile::tempdir().unwrap();
+    let audit = root.path().join("audit.jsonl");
+    std::fs::write(
+        &audit,
+        r#"{"schema_version":"1.0.0","timestamp":"2026-05-16T10:00:00Z","category":"selfdef.modules.override","severity":"medium","source":"selfdefctl","flag":"--ignore-hardware","host_tag":"prod-01","gated_modules":["bitnet-gpu-inference"]}
+{"schema_version":"1.0.0","timestamp":"2026-05-16T15:00:00Z","category":"selfdef.modules.override","severity":"medium","source":"selfdefctl","flag":"--ignore-hardware","host_tag":"prod-01","gated_modules":["a","b"]}
+"#,
+    )
+    .unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "audit-log",
+            "--audit-path",
+            audit.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("# SD-R50"), "header missing: {stdout}");
+    assert!(stdout.contains("2 total entries"), "{stdout}");
+    assert!(stdout.contains("2026-05-16T10:00:00Z"), "{stdout}");
+    assert!(stdout.contains("2026-05-16T15:00:00Z"), "{stdout}");
+    assert!(stdout.contains("--ignore-hardware"), "{stdout}");
+    assert!(stdout.contains("host=prod-01"), "{stdout}");
+    assert!(stdout.contains("bitnet-gpu-inference"), "{stdout}");
+}
+
+#[test]
+fn sdr50_audit_log_n_flag_caps_output() {
+    let root = tempfile::tempdir().unwrap();
+    let audit = root.path().join("audit.jsonl");
+    let mut body = String::new();
+    for i in 0..5 {
+        body.push_str(&format!(
+            r#"{{"schema_version":"1.0.0","timestamp":"2026-05-16T{i:02}:00:00Z","category":"selfdef.modules.override","severity":"medium","source":"selfdefctl","flag":"--ignore-hardware","host_tag":"h","gated_modules":["m{i}"]}}
+"#
+        ));
+    }
+    std::fs::write(&audit, body).unwrap();
+
+    // -n 2 → show last 2 entries only.
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "audit-log",
+            "--audit-path",
+            audit.to_str().unwrap(),
+            "-n",
+            "2",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("5 total entries"), "stdout: {stdout}");
+    assert!(stdout.contains("showing last 2"), "stdout: {stdout}");
+    assert!(stdout.contains("m4"), "newest entry m4 must show: {stdout}");
+    assert!(stdout.contains("m3"), "newest-1 m3 must show: {stdout}");
+    assert!(
+        !stdout.contains("m0"),
+        "oldest m0 should be capped out: {stdout}"
+    );
+}
+
+#[test]
+fn sdr50_audit_log_missing_file_is_friendly_message() {
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "audit-log",
+            "--audit-path",
+            "/tmp/no-such-audit-file.jsonl",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("no audit log at"),
+        "missing file should print friendly message: {stdout}"
+    );
+}
+
+#[test]
+fn sdr50_audit_log_json_mode_emits_raw_lines() {
+    let root = tempfile::tempdir().unwrap();
+    let audit = root.path().join("audit.jsonl");
+    std::fs::write(
+        &audit,
+        r#"{"schema_version":"1.0.0","timestamp":"2026-05-16T10:00:00Z","category":"selfdef.modules.override","severity":"medium","source":"selfdefctl","flag":"--ignore-hardware","host_tag":"h","gated_modules":["x"]}
+"#,
+    )
+    .unwrap();
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "audit-log",
+            "--audit-path",
+            audit.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert_eq!(lines.len(), 1, "should emit one JSONL line: {stdout}");
+    let v: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+    assert_eq!(v["host_tag"], "h");
+}
+
 /// SD-R47 (closes SDD-019 T-2): `--ignore-hardware` writes an
 /// OCSF-shaped audit-trail JSONL when SELFDEF_MODULES_AUDIT_PATH
 /// is set in env.

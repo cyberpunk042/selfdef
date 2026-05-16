@@ -610,6 +610,22 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R50: pretty-print the SD-R47 `--ignore-hardware` audit
+    /// trail (one operator-readable line per recorded override).
+    /// Reads the file at SELFDEF_MODULES_AUDIT_PATH or --audit-path.
+    AuditLog {
+        /// Path to the audit JSONL file. Defaults to
+        /// $SELFDEF_MODULES_AUDIT_PATH if set, else
+        /// /var/log/selfdef/modules-audit.jsonl.
+        #[arg(long)]
+        audit_path: Option<PathBuf>,
+        /// Show the last N entries (default: 20).
+        #[arg(short, long, default_value_t = 20)]
+        n: usize,
+        /// Emit raw JSONL instead of the human-readable form.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1250,6 +1266,23 @@ async fn main() -> Result<()> {
                 } else {
                     modules::cmd_graph(&opts, with_hardware_gate)?
                 };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::AuditLog {
+                audit_path,
+                n,
+                json,
+            } => {
+                let resolved = audit_path
+                    .or_else(|| {
+                        std::env::var("SELFDEF_MODULES_AUDIT_PATH")
+                            .ok()
+                            .map(PathBuf::from)
+                    })
+                    .unwrap_or_else(|| PathBuf::from("/var/log/selfdef/modules-audit.jsonl"));
+                let code = modules::cmd_audit_log(&resolved, n, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
