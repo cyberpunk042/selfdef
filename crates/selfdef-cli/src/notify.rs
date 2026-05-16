@@ -1,4 +1,4 @@
-//! `selfdefctl notify {ack,forget,list}` — SDD-008 D-4.
+//! `selfdefctl notify {ack,forget,list,resend}` — SDD-008 D-4.
 //!
 //! Operator-facing CLI verbs for the persistent escalation engine.
 //! Talks directly to the `[notifier].escalations_path` SQLite file;
@@ -8,6 +8,11 @@
 //! - `forget <event_id>` → DELETE the row entirely (audit trail
 //!   reflects "operator suppressed"; not the same as ack).
 //! - `list [--limit N] [--json]` → print pending escalations.
+//! - `resend <event_id>` → pull the next wake-task action forward to
+//!   "right now" by setting `deadline_at = now` on an unacked row.
+//!   The wake task then fires the current rung's channels (or closes
+//!   if already at max rung). Does NOT reset rung state or bypass
+//!   profile limits — only collapses the wait.
 
 use std::time::SystemTime;
 
@@ -28,6 +33,34 @@ pub(crate) fn ack(cfg: &Config, event_id_raw: &str) -> Result<()> {
     let acked = rt.block_on(engine.record_ack(event_id, now))?;
     if acked {
         println!("ok: acked event {event_id_raw} at unix={now}");
+    } else {
+        println!("noop: event {event_id_raw} unknown or already acked (no row changed)");
+    }
+    Ok(())
+}
+
+/// `selfdefctl notify resend <event_id>`.
+///
+/// Sets the row's `deadline_at` to "now" so the daemon's wake task
+/// fires the current rung's channels at its next poll iteration
+/// (typically within `IDLE_POLL_INTERVAL_SECS`). The rung state
+/// machine is preserved: if the row is already at the active
+/// profile's max rung, the wake task closes it (the natural max-
+/// rung action); otherwise it re-fires + advances. Resend does NOT
+/// reset the rung counter and does NOT touch acked rows.
+pub(crate) fn resend(cfg: &Config, event_id_raw: &str) -> Result<()> {
+    let path = require_path(cfg)?;
+    let event_id = parse_event_id(event_id_raw)?;
+    let engine =
+        EscalationEngine::open(&path).with_context(|| format!("opening {}", path.display()))?;
+    let now = unix_now();
+    let rt = tokio_rt()?;
+    let rescheduled = rt.block_on(engine.reschedule_now(event_id, now))?;
+    if rescheduled {
+        println!(
+            "ok: rescheduled event {event_id_raw} to fire at unix={now} \
+             (wake task will pick it up on its next poll)"
+        );
     } else {
         println!("noop: event {event_id_raw} unknown or already acked (no row changed)");
     }
@@ -261,6 +294,51 @@ mod tests {
         let fake = Uuid::now_v7().to_string();
         // Unknown id is a no-op, not a failure.
         ack(&cfg, &fake).expect("unknown event ack is noop, not error");
+    }
+
+    #[test]
+    fn resend_changes_row_for_existing_unacked() {
+        let (_dir, path) = fresh_engine();
+        let eid = enqueue_test_row(&path, "to-be-resent");
+        let cfg = cfg_with_path(path.clone());
+        // Resend on an unacked row: must not error.
+        resend(&cfg, &eid.0.to_string()).expect("resend ok");
+        // After resend, the row's deadline_at should be <= now: a
+        // subsequent take_due(now, _) call must claim it.
+        let rt = tokio_rt().unwrap();
+        let engine = EscalationEngine::open(&path).unwrap();
+        let due = rt.block_on(engine.take_due(unix_now(), 10)).unwrap();
+        assert_eq!(
+            due.len(),
+            1,
+            "row should be due immediately after resend; got {due:?}"
+        );
+        assert_eq!(due[0].event_id, eid);
+    }
+
+    #[test]
+    fn resend_is_noop_for_unknown_event() {
+        let (_dir, path) = fresh_engine();
+        let cfg = cfg_with_path(path);
+        let fake = Uuid::now_v7().to_string();
+        // Unknown id is a no-op, not a failure.
+        resend(&cfg, &fake).expect("unknown event resend is noop, not error");
+    }
+
+    #[test]
+    fn resend_is_noop_for_acked_event() {
+        let (_dir, path) = fresh_engine();
+        let eid = enqueue_test_row(&path, "already-acked");
+        let cfg = cfg_with_path(path.clone());
+        // Ack first, then attempt to resend — the WHERE acked_at IS NULL
+        // guard must reject.
+        ack(&cfg, &eid.0.to_string()).expect("ack ok");
+        resend(&cfg, &eid.0.to_string()).expect("resend on acked is noop, not error");
+        // No row should be due (it was acked).
+        let rt = tokio_rt().unwrap();
+        let engine = EscalationEngine::open(&path).unwrap();
+        let due = rt.block_on(engine.take_due(unix_now(), 10)).unwrap();
+        assert_eq!(due.len(), 0, "acked row must not become due");
     }
 
     #[test]
