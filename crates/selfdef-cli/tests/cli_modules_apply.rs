@@ -513,6 +513,102 @@ fn sdr39_modules_info_with_host_status_surfaces_gate_verdict() {
     );
 }
 
+/// SD-R44: `selfdefctl modules apply --strict-hardware` refuses to
+/// proceed when any module would silently skip due to unmet
+/// [requires_hardware] predicates. Production discipline — operator
+/// wants apply to fail loudly if the host doesn't fully match.
+#[test]
+fn sdr44_apply_strict_hardware_fails_when_any_module_skips() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body_a =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    let body_b =
+        "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], body_a);
+    write_module(&catalog, "beta", &[], body_b);
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+            "--strict-hardware",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Exit non-zero (gate-skip → fail).
+    assert!(
+        !out.status.success(),
+        "should fail; stderr: {stderr}\nstdout: {stdout}"
+    );
+    assert!(
+        stderr.contains("SD-R44: --strict-hardware set — refusing to proceed"),
+        "missing strict banner: {stderr}"
+    );
+    assert!(
+        stderr.contains("1 gated module(s) skipped"),
+        "should cite count: {stderr}"
+    );
+    // Alpha's apply should NOT have run (because we exited early).
+    assert!(
+        !stdout.contains("alpha [apply]"),
+        "should not have run apply: {stdout}"
+    );
+}
+
+/// SD-R44 + SD-R42: the two flags are mutually exclusive (clap
+/// `conflicts_with`). Passing both → rc=2.
+#[test]
+fn sdr44_strict_and_ignore_hardware_are_mutually_exclusive() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    write_module(
+        &catalog,
+        "alpha",
+        &[],
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n",
+    );
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+            "--ignore-hardware",
+            "--strict-hardware",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(!out.status.success(), "should refuse conflicting flags");
+    assert_eq!(out.status.code(), Some(2), "clap rejects with rc=2");
+    assert!(
+        stderr.contains("cannot be used with"),
+        "missing clap conflict message: {stderr}"
+    );
+}
+
 /// SD-R42: `selfdefctl modules apply --ignore-hardware` force-applies
 /// gated modules even when their predicates fail. Operator override
 /// per SDD-018 D-2 (the gate is INFO-level, not FAIL-level).

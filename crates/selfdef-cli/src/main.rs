@@ -497,8 +497,17 @@ enum ModulesAction {
         /// `[requires_hardware]` block from each manifest, but
         /// without editing files. Use for one-off testing on
         /// near-match hosts. Production should rely on the gate.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "strict_hardware")]
         ignore_hardware: bool,
+        /// SD-R44 (companion to --ignore-hardware): turn gate-SKIP
+        /// into gate-FAIL. When any module would silently skip due
+        /// to unmet `[requires_hardware]` predicates, apply EXITS
+        /// non-zero with the unmet predicate list. Use on SAIN-01
+        /// production to refuse incomplete installs. Cannot be
+        /// combined with --ignore-hardware (the two flags express
+        /// opposite intents).
+        #[arg(long, conflicts_with = "ignore_hardware")]
+        strict_hardware: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -1129,6 +1138,7 @@ async fn main() -> Result<()> {
                 except,
                 ignore_daemon_requires,
                 ignore_hardware,
+                strict_hardware,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -1138,6 +1148,7 @@ async fn main() -> Result<()> {
                     dry_run,
                     ignore_daemon_requires,
                     ignore_hardware,
+                    strict_hardware,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
@@ -1160,6 +1171,7 @@ async fn main() -> Result<()> {
                     dry_run: false,
                     ignore_daemon_requires,
                     ignore_hardware: false,
+                    strict_hardware: false,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;

@@ -1368,6 +1368,11 @@ pub(crate) struct LifecycleOpts {
     /// fail still apply. `selfdefctl modules apply --ignore-hardware`
     /// sets this. Default false → gate enforced normally.
     pub(crate) ignore_hardware: bool,
+    /// SD-R44 (production discipline): turn gate-SKIP into gate-FAIL.
+    /// When any module would silently skip due to unmet
+    /// `[requires_hardware]`, run_lifecycle exits non-zero. Set by
+    /// `selfdefctl modules apply --strict-hardware`.
+    pub(crate) strict_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -2201,7 +2206,20 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
             .iter()
             .any(|a| !a.manifest.requires_hardware.is_empty())
     {
+        let pre_count = active.len();
         active = apply_hardware_gate(active);
+        let post_count = active.len();
+        // SD-R44 (--strict-hardware): if any modules were filtered
+        // out, exit non-zero. The SD-R14 skip block already landed
+        // on stderr (apply_hardware_gate printed it); we just add
+        // the strict-mode rejection banner + return.
+        if opts.strict_hardware && post_count < pre_count {
+            eprintln!(
+                "# SD-R44: --strict-hardware set — refusing to proceed; {} gated module(s) skipped",
+                pre_count - post_count
+            );
+            return Ok(1);
+        }
     } else if opts.ignore_hardware
         && active
             .iter()
@@ -3086,6 +3104,7 @@ mod sdd_015_apply_gate_tests {
             dry_run: false,
             ignore_daemon_requires: false,
             ignore_hardware: false,
+            strict_hardware: false,
             daemon_config_path: Some(daemon_config_path),
         }
     }
@@ -3255,6 +3274,7 @@ mod sdd_015_apply_gate_tests {
             dry_run: false,
             ignore_daemon_requires: false,
             ignore_hardware: false,
+            strict_hardware: false,
             daemon_config_path: None,
         };
         let code = pre_apply_perimeter_check(&opts).unwrap();
