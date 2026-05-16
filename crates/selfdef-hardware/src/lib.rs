@@ -1005,6 +1005,92 @@ fn recommended_compile_flags(feats: &HashSet<String>) -> Vec<String> {
     out
 }
 
+/// SD-R29: map an nvidia-smi `model_hint` string to a CUDA SM
+/// architecture (e.g. "sm_120" for Blackwell, "sm_86" for RTX 3090
+/// Ampere). Pure function — driven purely by substring matching on
+/// the model name. Returns `None` when the model is unknown or the
+/// hint is empty.
+///
+/// Reference (NVIDIA Architecture → SM mapping):
+///   Blackwell (RTX PRO 6000, B100, B200) → sm_120
+///   Hopper    (H100, H200)                → sm_90
+///   Ada       (RTX 4090, L40, L40S)       → sm_89
+///   Ampere    (RTX 3090, A100)            → sm_86 / sm_80
+///   Turing    (RTX 2080 Ti)               → sm_75
+///
+/// The SAIN-01 case (RTX PRO 6000 + RTX 3090) needs sm_120 + sm_86
+/// for fat-binary builds. NVCC accepts these via
+/// `-gencode arch=compute_<n>,code=sm_<n>`.
+#[must_use]
+pub fn nvidia_sm_for_model(model_hint: &str) -> Option<&'static str> {
+    let m = model_hint.to_ascii_lowercase();
+    // Blackwell: SAIN-01 primary (RTX PRO 6000 Blackwell), B100/B200.
+    if m.contains("blackwell")
+        || m.contains("rtx pro 6000")
+        || m.contains("b100")
+        || m.contains("b200")
+    {
+        return Some("sm_120");
+    }
+    // Hopper datacenter.
+    if m.contains("h100") || m.contains("h200") || m.contains("hopper") {
+        return Some("sm_90");
+    }
+    // Ada Lovelace: RTX 40-series, L40 / L40S.
+    if m.contains("rtx 4090")
+        || m.contains("rtx 4080")
+        || m.contains("rtx 4070")
+        || m.contains("rtx 4060")
+        || m.contains("l40s")
+        || m.contains("l40")
+        || m.contains("ada")
+    {
+        return Some("sm_89");
+    }
+    // Ampere datacenter: A100 (sm_80) — distinct from A30/A40 (sm_80
+    // too) and consumer Ampere RTX 30-series (sm_86).
+    if m.contains("a100") {
+        return Some("sm_80");
+    }
+    // Ampere consumer: SAIN-01 secondary (RTX 3090).
+    if m.contains("rtx 3090")
+        || m.contains("rtx 3080")
+        || m.contains("rtx 3070")
+        || m.contains("rtx 3060")
+        || m.contains("ampere")
+    {
+        return Some("sm_86");
+    }
+    // Turing.
+    if m.contains("rtx 2080") || m.contains("rtx 2070") || m.contains("turing") {
+        return Some("sm_75");
+    }
+    None
+}
+
+/// SD-R29: build the NVCC `-gencode` flag list for a host's GPU
+/// fleet. Each detected GPU contributes one `-gencode` entry; unknown
+/// models are skipped silently (operator gets a build that targets
+/// what we DO know about, plus a JIT fallback at runtime).
+///
+/// Result is deduplicated (a SAIN-01-style pair of identical cards
+/// only emits one entry). Order preserved by first appearance.
+#[must_use]
+pub fn gencode_flags_for_gpus(caps: &HardwareCapabilities) -> Vec<String> {
+    let mut seen: HashSet<&'static str> = HashSet::new();
+    let mut out = Vec::new();
+    for d in &caps.gpu.devices {
+        if let Some(hint) = d.model_hint.as_deref() {
+            if let Some(sm) = nvidia_sm_for_model(hint) {
+                if seen.insert(sm) {
+                    out.push(format!("-gencode arch=compute_{},code={}", &sm[3..], sm,));
+                }
+            }
+        }
+    }
+    out
+}
+
 /// SDD-017 § 7 (SD-R10): write the capabilities JSON to `path`
 /// atomically (tempfile + rename). Pretty-printed for operator
 /// readability; matches the `selfdefctl hardware export` CLI output.
@@ -2515,5 +2601,139 @@ malformed,line\n\
         // Mobo None → bonus dim drops out; the 4 base dims + bf16 bonus
         // all hit on this synth snapshot → FullMatch.
         assert_eq!(c.sain01_match.overall, Sain01Verdict::FullMatch);
+    }
+
+    // ----- SD-R29: per-GPU NVCC arch derivation ---------------------
+
+    #[test]
+    fn sdr29_nvidia_sm_recognises_sain01_pair() {
+        assert_eq!(
+            nvidia_sm_for_model("NVIDIA RTX PRO 6000 Blackwell"),
+            Some("sm_120"),
+            "SAIN-01 primary GPU"
+        );
+        assert_eq!(
+            nvidia_sm_for_model("NVIDIA GeForce RTX 3090"),
+            Some("sm_86"),
+            "SAIN-01 secondary GPU"
+        );
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_handles_common_architectures() {
+        assert_eq!(nvidia_sm_for_model("NVIDIA H100"), Some("sm_90"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA L40S"), Some("sm_89"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA RTX 4090"), Some("sm_89"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA A100 80GB"), Some("sm_80"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA RTX 2080 Ti"), Some("sm_75"));
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_returns_none_on_unknown() {
+        assert_eq!(nvidia_sm_for_model(""), None);
+        assert_eq!(nvidia_sm_for_model("AMD Radeon RX 7900"), None);
+        assert_eq!(nvidia_sm_for_model("Intel Arc A770"), None);
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_is_case_insensitive() {
+        assert_eq!(
+            nvidia_sm_for_model("nvidia rtx pro 6000 blackwell"),
+            Some("sm_120")
+        );
+        assert_eq!(nvidia_sm_for_model("BLACKWELL B100"), Some("sm_120"));
+    }
+
+    #[test]
+    fn sdr29_gencode_emits_one_per_sm_dedup_pair_of_3090s() {
+        // Two identical RTX 3090s — single -gencode entry (sm_86).
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let flags = gencode_flags_for_gpus(&caps);
+        assert_eq!(flags.len(), 1);
+        assert_eq!(flags[0], "-gencode arch=compute_86,code=sm_86");
+    }
+
+    #[test]
+    fn sdr29_gencode_emits_both_for_sain01_pair() {
+        // SAIN-01 pair → sm_120 + sm_86, both ordered by appearance.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let flags = gencode_flags_for_gpus(&caps);
+        assert_eq!(flags.len(), 2);
+        assert_eq!(flags[0], "-gencode arch=compute_120,code=sm_120");
+        assert_eq!(flags[1], "-gencode arch=compute_86,code=sm_86");
+    }
+
+    #[test]
+    fn sdr29_gencode_empty_when_no_known_gpus() {
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: Some("AMD Radeon Pro W7900".into()),
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            }],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert!(gencode_flags_for_gpus(&caps).is_empty());
     }
 }

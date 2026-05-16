@@ -124,15 +124,42 @@ pub(crate) fn render_tune(
     } else {
         ""
     };
+    // SD-R29: build NVCC -gencode flags from the per-GPU
+    // SD-R25/SD-R13 model hints. Empty when no GPUs are recognised
+    // (operator falls back to NVCC defaults or PTX JIT).
+    let gencodes = selfdef_hardware::gencode_flags_for_gpus(caps);
+    let nvcc_flags = gencodes.join(" ");
+    // Sort numerically ascending — "86;120" not "120;86". CMake's
+    // CMAKE_CUDA_ARCHITECTURES expects this form.
+    let mut arches: Vec<u32> = caps
+        .gpu
+        .devices
+        .iter()
+        .filter_map(|d| {
+            d.model_hint
+                .as_deref()
+                .and_then(selfdef_hardware::nvidia_sm_for_model)
+                .and_then(|sm| sm.trim_start_matches("sm_").parse::<u32>().ok())
+        })
+        .collect();
+    arches.sort_unstable();
+    arches.dedup();
+    let cuda_arch_list = arches
+        .iter()
+        .map(u32::to_string)
+        .collect::<Vec<_>>()
+        .join(";");
     Ok(match format {
         "sh" => format!(
-            "# selfdefctl hardware tune --format sh (SD-R19)\n\
+            "# selfdefctl hardware tune --format sh (SD-R19 + SD-R29)\n\
              # source <(selfdefctl hardware tune --format sh) before invoking your build pipeline.\n\
              export SELFDEF_HARDWARE_MARCH={march}\n\
              export SELFDEF_HARDWARE_CFLAGS=\"-march={march}{zmm_extra} {cflags}\"\n\
              export SELFDEF_HARDWARE_KCFLAGS=\"-march={march}{zmm_extra} {cflags}\"\n\
              export SELFDEF_HARDWARE_AVX512_VNNI={vnni}\n\
-             export SELFDEF_HARDWARE_AVX512_BF16={bf16}\n",
+             export SELFDEF_HARDWARE_AVX512_BF16={bf16}\n\
+             export SELFDEF_HARDWARE_NVCC_FLAGS=\"{nvcc_flags}\"\n\
+             export SELFDEF_HARDWARE_CUDA_ARCH_LIST=\"{cuda_arch_list}\"\n",
             vnni = caps.cpu.avx512vnni,
             bf16 = caps.cpu.avx512bf16,
         ),
@@ -141,23 +168,27 @@ pub(crate) fn render_tune(
              SELFDEF_HARDWARE_CFLAGS=-march={march}{zmm_extra} {cflags}\n\
              SELFDEF_HARDWARE_KCFLAGS=-march={march}{zmm_extra} {cflags}\n\
              SELFDEF_HARDWARE_AVX512_VNNI={vnni}\n\
-             SELFDEF_HARDWARE_AVX512_BF16={bf16}\n",
+             SELFDEF_HARDWARE_AVX512_BF16={bf16}\n\
+             SELFDEF_HARDWARE_NVCC_FLAGS={nvcc_flags}\n\
+             SELFDEF_HARDWARE_CUDA_ARCH_LIST={cuda_arch_list}\n",
             vnni = caps.cpu.avx512vnni,
             bf16 = caps.cpu.avx512bf16,
         ),
         "make" => format!(
-            "# selfdefctl hardware tune --format make (SD-R19)\n\
+            "# selfdefctl hardware tune --format make (SD-R19 + SD-R29)\n\
              # include this file from your Makefile to pick up host-tuned flags.\n\
              SELFDEF_HARDWARE_MARCH := {march}\n\
              SELFDEF_HARDWARE_CFLAGS := -march={march}{zmm_extra} {cflags}\n\
              SELFDEF_HARDWARE_KCFLAGS := -march={march}{zmm_extra} {cflags}\n\
              SELFDEF_HARDWARE_AVX512_VNNI := {vnni}\n\
-             SELFDEF_HARDWARE_AVX512_BF16 := {bf16}\n",
+             SELFDEF_HARDWARE_AVX512_BF16 := {bf16}\n\
+             SELFDEF_HARDWARE_NVCC_FLAGS := {nvcc_flags}\n\
+             SELFDEF_HARDWARE_CUDA_ARCH_LIST := {cuda_arch_list}\n",
             vnni = caps.cpu.avx512vnni,
             bf16 = caps.cpu.avx512bf16,
         ),
         "json" => serde_json::to_string_pretty(&serde_json::json!({
-            "schema_version": "1.0.0",
+            "schema_version": "1.1.0",
             "march": march,
             "cflags": format!("-march={march}{zmm_extra} {cflags}"),
             "kcflags": format!("-march={march}{zmm_extra} {cflags}"),
@@ -165,6 +196,10 @@ pub(crate) fn render_tune(
             "avx512_bf16": caps.cpu.avx512bf16,
             "compile_flag_list": caps.cpu.recommended_compile_flags,
             "zmm_512_preferred": caps.cpu.avx512f,
+            // SD-R29: per-GPU CUDA arch derivation.
+            "nvcc_flags": nvcc_flags,
+            "cuda_arch_list": cuda_arch_list,
+            "nvcc_gencode_list": gencodes,
         }))?,
         other => {
             anyhow::bail!("unknown --format {other:?}; expected one of: sh, env-file, make, json")
@@ -547,13 +582,71 @@ mod tests {
         let caps = synth_caps();
         let out = render_tune(&caps, "json").unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
-        assert_eq!(parsed["schema_version"], "1.0.0");
+        // SD-R29 bumped the JSON schema to 1.1.0.
+        assert_eq!(parsed["schema_version"], "1.1.0");
         assert_eq!(parsed["march"], "znver5");
         assert_eq!(parsed["avx512_vnni"], true);
         assert_eq!(parsed["avx512_bf16"], true);
         assert_eq!(parsed["zmm_512_preferred"], true);
         assert!(parsed["cflags"].as_str().unwrap().contains("-mavx512vnni"));
         assert!(parsed["compile_flag_list"].is_array());
+        // SD-R29: NVCC fields land (empty when no GPUs in synth_caps).
+        assert!(parsed.get("nvcc_flags").is_some());
+        assert!(parsed.get("cuda_arch_list").is_some());
+        assert!(parsed["nvcc_gencode_list"].is_array());
+    }
+
+    /// SD-R29: synth a caps with the SAIN-01 dual-GPU pair and
+    /// verify the tune output carries both `-gencode` entries +
+    /// CUDA_ARCH_LIST="86;120" (semicolon sorted by BTreeSet).
+    #[test]
+    fn sdr29_render_tune_emits_per_gpu_nvcc_flags_for_sain01() {
+        use selfdef_hardware::GpuDeviceCapabilities;
+        let mut caps = synth_caps();
+        caps.gpu.device_count = 2;
+        caps.gpu.devices = vec![
+            GpuDeviceCapabilities {
+                device_node: Some(std::path::PathBuf::from("/dev/nvidia0")),
+                model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                power_draw_watts: Some(275),
+                power_limit_watts: Some(600),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                device_node: Some(std::path::PathBuf::from("/dev/nvidia1")),
+                model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                power_draw_watts: Some(180),
+                power_limit_watts: Some(350),
+                ..Default::default()
+            },
+        ];
+
+        let out = render_tune(&caps, "sh").unwrap();
+        assert!(
+            out.contains("SELFDEF_HARDWARE_NVCC_FLAGS="),
+            "missing NVCC_FLAGS var: {out}"
+        );
+        assert!(
+            out.contains("-gencode arch=compute_120,code=sm_120"),
+            "missing Blackwell gencode: {out}"
+        );
+        assert!(
+            out.contains("-gencode arch=compute_86,code=sm_86"),
+            "missing Ampere gencode: {out}"
+        );
+        // cuda_arch_list is BTreeSet-sorted ascending: "86;120".
+        assert!(
+            out.contains("SELFDEF_HARDWARE_CUDA_ARCH_LIST=\"86;120\""),
+            "missing arch list: {out}"
+        );
+
+        let out_json = render_tune(&caps, "json").unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out_json).unwrap();
+        let list = parsed["nvcc_gencode_list"].as_array().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(parsed["cuda_arch_list"], "86;120");
     }
 
     #[test]
