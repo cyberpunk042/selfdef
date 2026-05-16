@@ -406,6 +406,102 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R27: the human output of `modules check-hardware` carries a
+/// HOST SNAPSHOT block surfacing the probed CPU/memory/GPU/sain01
+/// figures so operators see WHY a gate fired without separately
+/// running `selfdefctl hardware probe`. JSON adds a `host_snapshot`
+/// field with the full HardwareCapabilities object.
+#[test]
+fn sdr27_check_hardware_human_includes_host_snapshot_block() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"a\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "check-hardware",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("HOST SNAPSHOT"),
+        "snapshot block missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("CPU      :"),
+        "CPU summary missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("Memory   :"),
+        "memory summary missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("GPUs     :"),
+        "GPU summary missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("Sain01   :"),
+        "Sain01 summary missing: {stdout}"
+    );
+}
+
+#[test]
+fn sdr27_check_hardware_json_carries_host_snapshot_field() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"a\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "check-hardware",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    // Parse to make sure it's valid JSON and carries the expected
+    // top-level keys.
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid JSON: {e}\n{stdout}"));
+    assert!(v.get("host_snapshot").is_some(), "missing host_snapshot");
+    let snap = &v["host_snapshot"];
+    assert!(snap.get("cpu").is_some(), "snapshot missing cpu");
+    assert!(snap.get("memory").is_some(), "snapshot missing memory");
+    assert!(snap.get("gpu").is_some(), "snapshot missing gpu");
+    assert!(
+        snap.get("sain01_match").is_some(),
+        "snapshot missing sain01_match"
+    );
+    // SD-R25 forward-compat: the per-device array shape lands inside.
+    assert!(
+        snap["gpu"].get("devices").is_some(),
+        "snapshot.gpu missing devices array"
+    );
+}
+
 #[test]
 fn apply_rejects_instance_keys_against_non_instanced_module() {
     let root = tempfile::tempdir().unwrap();

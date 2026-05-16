@@ -1601,6 +1601,11 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
         }
     }
     if json {
+        // SD-R27: emit the full HardwareCapabilities as the
+        // `host_snapshot` field so machine consumers can correlate
+        // skip reasons with actual host values without re-probing.
+        // serde_json gives us the canonical shape — no hand-rolled
+        // JSON for the inner snapshot.
         let total = kept.len() + skipped.len();
         let kept_json: Vec<String> = kept
             .iter()
@@ -1617,18 +1622,83 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
                 format!(r#"{{"module":"{n}","unmet":[{r}]}}"#)
             })
             .collect();
+        let snap_json = caps
+            .as_ref()
+            .and_then(|c| serde_json::to_string(c).ok())
+            .unwrap_or_else(|| "null".into());
         println!(
-            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}]}}"#,
+            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}],"host_snapshot":{}}}"#,
             probe_ok,
             total,
             kept_json.join(","),
             skipped_json.join(","),
+            snap_json,
         );
     } else {
         println!("# SD-R15 hardware gate dry-run");
         if !probe_ok {
             println!("# (hardware probe unavailable — gated modules will be skipped)");
         }
+        // SD-R27: host-snapshot block surfaces the actual probed
+        // values that the gate evaluates against. Operators see WHY
+        // a module skipped without separately running `selfdefctl
+        // hardware probe`.
+        if let Some(c) = &caps {
+            println!();
+            println!("HOST SNAPSHOT (what the gate sees):");
+            let avx_bits: Vec<&str> = [
+                ("avx512f", c.cpu.avx512f),
+                ("avx512vnni", c.cpu.avx512vnni),
+                ("avx512bf16", c.cpu.avx512bf16),
+                ("avx512fp16", c.cpu.avx512fp16),
+            ]
+            .iter()
+            .filter_map(|(name, present)| if *present { Some(*name) } else { None })
+            .collect();
+            let avx_summary = if avx_bits.is_empty() {
+                "none".to_string()
+            } else {
+                avx_bits.join(", ")
+            };
+            println!(
+                "  CPU      : {} ({})",
+                if c.cpu.model_name.is_empty() {
+                    "(unknown)"
+                } else {
+                    c.cpu.model_name.as_str()
+                },
+                avx_summary,
+            );
+            println!(
+                "  Memory   : {} GiB",
+                c.memory.total_bytes / (1024 * 1024 * 1024),
+            );
+            println!("  GPUs     : {} device(s)", c.gpu.device_count);
+            for (i, d) in c.gpu.devices.iter().enumerate() {
+                let model = d.model_hint.as_deref().unwrap_or("(unknown model)");
+                let vram = d
+                    .vram_bytes
+                    .map(|b| format!("{} GiB", b / (1024 * 1024 * 1024)))
+                    .unwrap_or_else(|| "?".to_string());
+                let pwr = match (d.power_draw_watts, d.power_limit_watts) {
+                    (Some(draw), Some(limit)) => {
+                        format!(
+                            "{draw}/{limit} W (headroom {} W)",
+                            limit.saturating_sub(draw)
+                        )
+                    }
+                    _ => "no telemetry".to_string(),
+                };
+                println!("    [{i}] {model} — vram {vram}, power {pwr}");
+            }
+            let verdict = match c.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            println!("  Sain01   : {verdict}");
+        }
+        println!();
         println!("# {} active module(s):", kept.len() + skipped.len());
         if !kept.is_empty() {
             println!();
