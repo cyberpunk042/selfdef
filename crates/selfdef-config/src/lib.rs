@@ -47,7 +47,117 @@ pub struct Config {
     /// signature-less workflow; closing the original
     /// rule-signing Known gap is opt-in.
     pub security: SecurityConfig,
+    /// SDD-013: deployment-target switch — gates all SAIN-01-specific
+    /// behavior (state paths, audit-summary channel, oracle-triage
+    /// channel, perimeter coexistence). Default is `Generic`; existing
+    /// configs that don't carry a `[deployment]` block parse unchanged.
+    pub deployment: DeploymentConfig,
 }
+
+// ---------------------------------------------------------------- deployment (SDD-013)
+
+/// SDD-013: deployment-target switch.
+///
+/// All SAIN-01-specific behavior in selfdef forks on this enum:
+/// state paths, audit-log paths, escalations DB path, the
+/// shared-audit-summary notifier channel (SDD-014), perimeter
+/// check-overlap (SDD-015), and the oracle-triage channel
+/// (SDD-016) all read [`Config::deployment`].
+///
+/// Default is [`DeploymentTarget::Generic`]. Existing operator configs
+/// that don't carry a `[deployment]` block parse unchanged.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DeploymentConfig {
+    pub target: DeploymentTarget,
+}
+
+/// SDD-013: target enum. New variants land via additional SDDs.
+///
+/// `#[serde(rename_all = "lowercase")]` so the TOML form is
+/// `target = "generic"` / `target = "sain01"` — operator-readable.
+/// Unknown values fail-loud at parse time (SDD-013 § Goals point 3).
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum DeploymentTarget {
+    /// Default — runs on any Debian/Ubuntu host without SAIN-01 hardware
+    /// or ZFS state-fabric. State paths under `/var/lib/selfdef`.
+    #[default]
+    Generic,
+    /// SAIN-01 AI workstation (per sovereign-os `profiles/sain-01.yaml`).
+    /// State paths under `/mnt/vault/context` (tank/context ZFS dataset
+    /// with `sync=always` + `copies=2` for durability).
+    Sain01,
+}
+
+impl DeploymentTarget {
+    /// Operator-readable token (matches the TOML serialization).
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::Sain01 => "sain01",
+        }
+    }
+}
+
+impl std::fmt::Display for DeploymentTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for DeploymentTarget {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "generic" => Ok(Self::Generic),
+            "sain01" => Ok(Self::Sain01),
+            other => Err(format!(
+                "unknown deployment.target {other:?}: expected 'generic' or 'sain01'"
+            )),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- path resolver (SDD-013)
+
+/// SDD-013 § 3: single source of truth for target-conditional state paths.
+///
+/// All callers — daemon, CLI, notifier, doctor — read paths through
+/// these helpers. No path string is duplicated across crates.
+///
+/// Generic: `/var/lib/selfdef` (FHS-standard system-state dir).
+/// SAIN-01: `/mnt/vault/context` (tank/context ZFS dataset; sync=always;
+/// copies=2 per sovereign-os `profiles/sain-01.yaml § hardware.storage`).
+pub fn state_dir(target: DeploymentTarget) -> &'static Path {
+    match target {
+        DeploymentTarget::Generic => Path::new("/var/lib/selfdef"),
+        DeploymentTarget::Sain01 => Path::new("/mnt/vault/context"),
+    }
+}
+
+/// Audit-log path (JSONL stream of all selfdef events). Caller appends.
+pub fn audit_log_path(target: DeploymentTarget) -> PathBuf {
+    state_dir(target).join("selfdef-audit.jsonl")
+}
+
+/// Escalations DB path (SQLite — operator-acknowledgements + escalation
+/// state machine per the notifier channels).
+pub fn escalations_path(target: DeploymentTarget) -> PathBuf {
+    state_dir(target).join("selfdef-escalations.sqlite")
+}
+
+/// Shared audit log per SDD-014. ONLY meaningful when target=Sain01;
+/// returns `None` on Generic deployments (no shared timeline exists).
+/// Path matches sovereign-os master spec § 10.1 + § 7.1 verbatim.
+pub fn shared_audit_log_path(target: DeploymentTarget) -> Option<PathBuf> {
+    match target {
+        DeploymentTarget::Generic => None,
+        DeploymentTarget::Sain01 => Some(PathBuf::from("/mnt/vault/context/security_audit.log")),
+    }
+}
+
+// ---------------------------------------------------------------- security
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -1315,5 +1425,192 @@ mod tests {
         assert!(cfg.api.enabled);
         assert_eq!(cfg.api.max_sse_subscribers, None);
         assert_eq!(cfg.api.max_sse_subscribers_per_token, None);
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-013 regression-prevention tests
+    // ----------------------------------------------------------------
+
+    /// SDD-013 § 6: target defaults to Generic when the [deployment]
+    /// block is absent. Existing operator configs must parse unchanged.
+    #[test]
+    fn sdd_013_target_defaults_to_generic_when_absent() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "").unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+    }
+
+    /// SDD-013 § 6: explicit `target = "generic"` parses to Generic.
+    #[test]
+    fn sdd_013_target_parses_generic() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "generic"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+    }
+
+    /// SDD-013 § 6: explicit `target = "sain01"` parses to Sain01.
+    #[test]
+    fn sdd_013_target_parses_sain01() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "sain01"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+    }
+
+    /// SDD-013 § Goals point 3: unknown values fail-loud at parse time.
+    /// No silent fallback — operator typos become hard errors.
+    #[test]
+    fn sdd_013_target_rejects_unknown_value() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "bogus"
+            "#,
+        )
+        .unwrap();
+        let r = Config::load(Some(tmp.path()));
+        assert!(r.is_err(), "unknown target value must fail-loud");
+    }
+
+    /// SDD-013 § 3: state_dir for Generic is FHS-standard.
+    #[test]
+    fn sdd_013_generic_target_uses_var_lib_selfdef() {
+        assert_eq!(
+            state_dir(DeploymentTarget::Generic),
+            Path::new("/var/lib/selfdef")
+        );
+    }
+
+    /// SDD-013 § 3: state_dir for SAIN-01 is the ZFS tank/context mount.
+    #[test]
+    fn sdd_013_sain01_target_uses_mnt_vault_context() {
+        assert_eq!(
+            state_dir(DeploymentTarget::Sain01),
+            Path::new("/mnt/vault/context")
+        );
+    }
+
+    /// SDD-013 § 3: audit_log_path threads through state_dir.
+    #[test]
+    fn sdd_013_audit_log_paths_match_target() {
+        assert_eq!(
+            audit_log_path(DeploymentTarget::Generic),
+            PathBuf::from("/var/lib/selfdef/selfdef-audit.jsonl")
+        );
+        assert_eq!(
+            audit_log_path(DeploymentTarget::Sain01),
+            PathBuf::from("/mnt/vault/context/selfdef-audit.jsonl")
+        );
+    }
+
+    /// SDD-013 § 3: escalations_path threads through state_dir.
+    #[test]
+    fn sdd_013_escalations_paths_match_target() {
+        assert_eq!(
+            escalations_path(DeploymentTarget::Generic),
+            PathBuf::from("/var/lib/selfdef/selfdef-escalations.sqlite")
+        );
+        assert_eq!(
+            escalations_path(DeploymentTarget::Sain01),
+            PathBuf::from("/mnt/vault/context/selfdef-escalations.sqlite")
+        );
+    }
+
+    /// SDD-014 wire: shared_audit_log_path returns Some only on SAIN-01.
+    /// Generic deployments have no shared timeline (selfdef alone owns
+    /// its audit log).
+    #[test]
+    fn sdd_013_shared_audit_log_is_sain01_only() {
+        assert!(shared_audit_log_path(DeploymentTarget::Generic).is_none());
+        assert_eq!(
+            shared_audit_log_path(DeploymentTarget::Sain01),
+            Some(PathBuf::from("/mnt/vault/context/security_audit.log"))
+        );
+    }
+
+    /// DeploymentTarget round-trips through TOML serialize/deserialize
+    /// (operator can write what they read; agent emitters round-trip).
+    #[test]
+    fn sdd_013_deployment_target_toml_roundtrip() {
+        for t in [DeploymentTarget::Generic, DeploymentTarget::Sain01] {
+            let cfg = Config {
+                deployment: DeploymentConfig { target: t },
+                ..Config::default()
+            };
+            let toml_str = toml::to_string(&cfg).unwrap();
+            let parsed: Config = toml::from_str(&toml_str).unwrap();
+            assert_eq!(parsed.deployment.target, t);
+        }
+    }
+
+    /// SDD-013 ergonomics: as_str matches the TOML serialization form
+    /// (operator tooling that prints the target uses one token).
+    #[test]
+    fn sdd_013_deployment_target_as_str_matches_serde() {
+        assert_eq!(DeploymentTarget::Generic.as_str(), "generic");
+        assert_eq!(DeploymentTarget::Sain01.as_str(), "sain01");
+        assert_eq!(format!("{}", DeploymentTarget::Sain01), "sain01");
+    }
+
+    /// FromStr parses both the canonical tokens; unknown is rejected.
+    #[test]
+    fn sdd_013_deployment_target_from_str() {
+        use std::str::FromStr;
+        assert_eq!(
+            DeploymentTarget::from_str("generic").unwrap(),
+            DeploymentTarget::Generic
+        );
+        assert_eq!(
+            DeploymentTarget::from_str("sain01").unwrap(),
+            DeploymentTarget::Sain01
+        );
+        assert!(DeploymentTarget::from_str("bogus").is_err());
+        assert!(DeploymentTarget::from_str("SAIN01").is_err()); // case-sensitive per serde rename_all
+    }
+
+    /// SDD-013 § Goals point 2 (zero regression): a fully-populated
+    /// pre-SDD-013 config (without [deployment]) loads identically to
+    /// before. Snapshot: the daemon paths reach the legacy Generic
+    /// values; no field other than `cfg.deployment` is touched.
+    #[test]
+    fn sdd_013_legacy_config_parses_with_generic_target_only() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [daemon]
+            log_level = "debug"
+
+            [api]
+            enabled = true
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.daemon.log_level, "debug");
+        assert!(cfg.api.enabled);
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+        assert_eq!(
+            state_dir(cfg.deployment.target),
+            Path::new("/var/lib/selfdef")
+        );
     }
 }

@@ -141,6 +141,13 @@ enum InitAction {
         /// refuses to clobber on-disk state.
         #[arg(long)]
         force: bool,
+        /// SDD-013: pin the deployment target in the generated
+        /// config. `generic` (default) uses /var/lib/selfdef paths;
+        /// `sain01` routes state to /mnt/vault/context per
+        /// sovereign-os `profiles/sain-01.yaml § hardware.storage`.
+        /// Operator typos fail-loud — no silent fallback.
+        #[arg(long, value_parser = parse_deployment_target, default_value = "generic")]
+        target: selfdef_config::DeploymentTarget,
     },
     /// Write a starter `modules.toml` listing every shipped
     /// module commented out with a short description.
@@ -626,9 +633,13 @@ async fn main() -> Result<()> {
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
-            InitAction::Config { output, force } => {
+            InitAction::Config {
+                output,
+                force,
+                target,
+            } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_DAEMON_CONFIG));
-                init::write_starter_config(&path, force)?;
+                init::write_starter_config_with_target(&path, force, target)?;
             }
             InitAction::Modules { output, force } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_MODULES_CONFIG));
@@ -1459,6 +1470,15 @@ fn rbac_check(
             );
         }
     }
+}
+
+/// SDD-013: clap value-parser for `--target`. Routes through
+/// [`DeploymentTarget::from_str`] so the CLI rejects unknown values
+/// fail-loud, matching the config-loader contract (no silent
+/// fallback, no case-insensitive variants).
+fn parse_deployment_target(s: &str) -> Result<selfdef_config::DeploymentTarget, String> {
+    use std::str::FromStr;
+    selfdef_config::DeploymentTarget::from_str(s)
 }
 
 /// Parse the agent-guard module config TOML for `scope`,

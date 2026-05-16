@@ -65,6 +65,23 @@ async fn main() -> Result<()> {
         "selfdefd starting"
     );
 
+    // SDD-013 § 5: surface the active deployment target + resolved state
+    // paths in a single greppable log line. Operators check posture via
+    // `journalctl -u selfdefd | grep deployment.target`.
+    let dep_target = cfg.deployment.target;
+    info!(
+        "deployment.target" = %dep_target,
+        state_dir = %selfdef_config::state_dir(dep_target).display(),
+        audit_log = %selfdef_config::audit_log_path(dep_target).display(),
+        escalations = %selfdef_config::escalations_path(dep_target).display(),
+        "deployment: target = {dep_target}; state paths resolved",
+    );
+    // SDD-013 § Q13-C: refuse to start when target mismatches state-dir
+    // contents — explicit operator migration is safer than silent fork.
+    if let Err(e) = check_q13c_state_fork(dep_target) {
+        return Err(e.context("Q13-C state-fork pre-flight"));
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 
@@ -515,6 +532,56 @@ async fn run_store_sink(
 /// the api crate consumes. Parse failures fall back to "transport not
 /// enabled" rather than crash the daemon — a typo in the TOML shouldn't
 /// take selfdef down.
+/// SDD-013 Q13-C pre-flight: refuse to start when the operator's
+/// chosen target mismatches what's on disk in either candidate
+/// state-dir. State-fork is a silent corruption hazard (two daemons
+/// writing two audit logs feels like everything works until the
+/// operator pulls one of them and discovers half the timeline is in
+/// the other). Fail-loud at startup with a clear migration directive.
+///
+/// Detects:
+/// - target = Generic but /mnt/vault/context/selfdef-audit.jsonl OR
+///   /mnt/vault/context/selfdef-escalations.sqlite exists
+/// - target = Sain01 but /var/lib/selfdef/selfdef-audit.jsonl OR
+///   /var/lib/selfdef/selfdef-escalations.sqlite exists
+///
+/// Operator must migrate state files (or rm them, with eyes open)
+/// before the daemon will start. No silent fork, no silent merge.
+fn check_q13c_state_fork(target: selfdef_config::DeploymentTarget) -> Result<()> {
+    use selfdef_config::DeploymentTarget;
+    let opposite = match target {
+        DeploymentTarget::Generic => DeploymentTarget::Sain01,
+        DeploymentTarget::Sain01 => DeploymentTarget::Generic,
+    };
+    let opposite_dir = selfdef_config::state_dir(opposite);
+    if !opposite_dir.exists() {
+        return Ok(());
+    }
+    let opposite_audit = selfdef_config::audit_log_path(opposite);
+    let opposite_esc = selfdef_config::escalations_path(opposite);
+    let mut conflicts: Vec<std::path::PathBuf> = Vec::new();
+    if opposite_audit.exists() {
+        conflicts.push(opposite_audit);
+    }
+    if opposite_esc.exists() {
+        conflicts.push(opposite_esc);
+    }
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+    let conflicts_str = conflicts
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    anyhow::bail!(
+        "SDD-013 Q13-C state-fork hazard detected:\n\
+         configured target = {target}, but selfdef state exists at the {opposite} location ({conflicts_str}).\n\
+         Migrate or remove the conflicting state file(s) before starting the daemon — silent state-fork can lose events.\n\
+         For migration guidance see docs/sdd/013-deployment-target-config.md § Q13-C.",
+    );
+}
+
 fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
     use selfdef_api::ApiConfig as Out;
     let unix_socket = if cfg.unix_socket.trim().is_empty() {

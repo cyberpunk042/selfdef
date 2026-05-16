@@ -27,6 +27,7 @@ use std::os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use selfdef_config::DeploymentTarget;
 
 use crate::paths;
 
@@ -38,11 +39,16 @@ pub(crate) const DEFAULT_DAEMON_CONFIG: &str = paths::DAEMON_CONFIG;
 /// Default target for `init modules` — same source.
 pub(crate) const DEFAULT_MODULES_CONFIG: &str = paths::MODULES_HOST_CONFIG;
 
-/// SDD-NA: write a starter `selfdef.toml` to `output_path`.
+/// SDD-013: write a starter `selfdef.toml` to `output_path`, embedding
+/// a `[deployment]` block that pins the target. On SAIN-01 the starter
+/// also pre-routes the audit log + escalations DB to `/mnt/vault/context/`.
+///
 /// Refuses to overwrite an existing file unless `force` is set.
-/// Mode set to 0644 (world-readable; the daemon needs read,
-/// operators inspect freely).
-pub(crate) fn write_starter_config(output_path: &Path, force: bool) -> Result<()> {
+pub(crate) fn write_starter_config_with_target(
+    output_path: &Path,
+    force: bool,
+    target: DeploymentTarget,
+) -> Result<()> {
     if output_path.exists() && !force {
         anyhow::bail!(
             "refusing to overwrite existing file: {}\n\
@@ -55,13 +61,61 @@ pub(crate) fn write_starter_config(output_path: &Path, force: bool) -> Result<()
             fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
         }
     }
-    write_with_mode(output_path, STARTER_CONFIG.as_bytes(), 0o644)?;
+    let body = render_starter_config_for_target(target);
+    write_with_mode(output_path, body.as_bytes(), 0o644)?;
     println!(
-        "wrote {} ({} bytes)",
+        "wrote {} ({} bytes, target={})",
         output_path.display(),
-        STARTER_CONFIG.len()
+        body.len(),
+        target,
     );
     Ok(())
+}
+
+/// SDD-013: compose the starter config string for a given target.
+///
+/// Generic uses the shipped template verbatim. SAIN-01 appends a
+/// `[deployment]` block + operator-visible commentary noting that the
+/// state paths resolve through [`selfdef_config::state_dir`] (single
+/// source of truth; no path string is hard-coded in the rendered
+/// config — the resolver owns it).
+///
+/// Path overrides in the rendered config are intentionally NOT
+/// emitted: they would duplicate the resolver's authority + risk
+/// drift if `state_dir` evolves. Operator reads the path via the
+/// daemon's startup log (SDD-013 § 5) or `selfdefctl doctor` (§ 6).
+pub(crate) fn render_starter_config_for_target(target: DeploymentTarget) -> String {
+    match target {
+        DeploymentTarget::Generic => STARTER_CONFIG.to_string(),
+        DeploymentTarget::Sain01 => {
+            let audit = selfdef_config::audit_log_path(target);
+            let escalations = selfdef_config::escalations_path(target);
+            let footer = format!(
+                "\n\n# --- SDD-013: SAIN-01 deployment --------------------------------------\n\
+                 #\n\
+                 # The [deployment] block below is the SINGLE switch that gates all\n\
+                 # SAIN-01-specific behavior in selfdef:\n\
+                 #   - State paths route to the tank/context ZFS dataset\n\
+                 #     (sync=always, copies=2 per sovereign-os profile § hardware.storage)\n\
+                 #   - audit_log = {audit_disp}\n\
+                 #   - escalations_path = {esc_disp}\n\
+                 #   - shared-audit-summary notifier channel becomes available (SDD-014)\n\
+                 #   - Tetragon perimeter check-overlap becomes available (SDD-015)\n\
+                 #   - oracle-triage notifier channel becomes available (SDD-016)\n\
+                 #\n\
+                 # To revert to a generic deployment, change to `target = \"generic\"`\n\
+                 # and migrate the state files at {audit_disp} + {esc_disp}\n\
+                 # to /var/lib/selfdef/ FIRST. The daemon refuses to start when target\n\
+                 # mismatches state contents (Q13-C, fail-loud) — explicit operator\n\
+                 # migration is required, never silent.\n\
+                 [deployment]\n\
+                 target = \"sain01\"\n",
+                audit_disp = audit.display(),
+                esc_disp = escalations.display(),
+            );
+            format!("{STARTER_CONFIG}{footer}")
+        }
+    }
 }
 
 /// SDD-NA: write a starter `modules.toml` to `output_path`.
@@ -770,6 +824,90 @@ mod sync_tests {
         assert!(
             p.exists(),
             "config/selfdef.toml.example must exist (operator-facing reference)"
+        );
+    }
+}
+
+#[cfg(test)]
+mod sdd_013_tests {
+    //! SDD-013: starter-config target-aware rendering.
+    use super::*;
+    use selfdef_config::{Config, DeploymentTarget};
+
+    /// Generic rendering matches the legacy STARTER_CONFIG byte-for-byte —
+    /// `init config` with no `--target` flag preserves the old default.
+    #[test]
+    fn generic_renders_legacy_starter_byte_for_byte() {
+        let rendered = render_starter_config_for_target(DeploymentTarget::Generic);
+        assert_eq!(rendered, STARTER_CONFIG);
+    }
+
+    /// SAIN-01 rendering appends a [deployment] target=sain01 block +
+    /// surfaces audit/escalations paths in operator-visible commentary.
+    /// Path strings appear in comments (operator-readable) but the
+    /// resolver remains the single source of truth at runtime.
+    #[test]
+    fn sain01_renders_with_deployment_block_and_path_commentary() {
+        let rendered = render_starter_config_for_target(DeploymentTarget::Sain01);
+        assert!(rendered.contains("[deployment]"));
+        assert!(rendered.contains("target = \"sain01\""));
+        assert!(rendered.contains("/mnt/vault/context/selfdef-audit.jsonl"));
+        assert!(rendered.contains("/mnt/vault/context/selfdef-escalations.sqlite"));
+        // The legacy template content stays at the top so module
+        // loaders + collectors still configure identically; the
+        // [deployment] block is the SUFFIX (no section duplication).
+        assert!(rendered.starts_with(STARTER_CONFIG));
+    }
+
+    /// The SAIN-01 rendering must produce a TOML document that the
+    /// config loader parses end-to-end and resolves to Sain01 target.
+    /// Round-trip: write → parse → assert.
+    #[test]
+    fn sain01_rendered_starter_parses_back_to_sain01() {
+        let rendered = render_starter_config_for_target(DeploymentTarget::Sain01);
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), rendered).unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+    }
+
+    /// The Generic rendering must NOT include a [deployment] block —
+    /// existing operators don't get a surprise new section in their
+    /// regenerated config.
+    #[test]
+    fn generic_rendered_starter_omits_deployment_block() {
+        let rendered = render_starter_config_for_target(DeploymentTarget::Generic);
+        assert!(!rendered.contains("[deployment]"));
+    }
+
+    /// write_starter_config_with_target writes a Generic-targeted file
+    /// by default; the parsed result is the Generic target with the
+    /// /var/lib/selfdef paths.
+    #[test]
+    fn write_starter_with_generic_target_resolves_to_var_lib() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("selfdef.toml");
+        write_starter_config_with_target(&path, false, DeploymentTarget::Generic).unwrap();
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+        assert_eq!(
+            selfdef_config::state_dir(cfg.deployment.target),
+            Path::new("/var/lib/selfdef")
+        );
+    }
+
+    /// write_starter_config_with_target with --target=sain01 writes a
+    /// SAIN-01-targeted file; parsed result resolves /mnt/vault/context.
+    #[test]
+    fn write_starter_with_sain01_target_resolves_to_mnt_vault() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("selfdef.toml");
+        write_starter_config_with_target(&path, false, DeploymentTarget::Sain01).unwrap();
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+        assert_eq!(
+            selfdef_config::state_dir(cfg.deployment.target),
+            Path::new("/mnt/vault/context")
         );
     }
 }

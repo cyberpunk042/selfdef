@@ -61,6 +61,7 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     out.extend(check_api_token(cfg));
     out.extend(check_eventstream(cfg));
     out.extend(check_rbac_posture(cfg));
+    out.extend(check_deployment_target(cfg));
     out
 }
 
@@ -410,6 +411,96 @@ fn check_rbac_posture(_cfg: &Config) -> Vec<CheckResult> {
     }
 }
 
+// ---------------------------------------------------------------- deployment target (SDD-013)
+
+/// SDD-013 § 6: deployment-target sanity checks.
+///
+/// Surfaces likely-misconfigured deployments where the operator's
+/// `target` value and on-disk state disagree:
+///
+/// - `target = "sain01"` but `/mnt/vault/` doesn't exist
+///   → WARN: operator probably forgot to set up ZFS / mount the dataset
+///     before starting the daemon; the daemon will fail to write state.
+/// - `target = "generic"` but `/mnt/vault/context/selfdef-*` exists
+///   → WARN: state-fork hazard — operator likely flipped from sain01
+///     back to generic without migrating files (Q13-C).
+///
+/// Both are non-blocking (WARN, not FAIL): doctor surfaces the
+/// inconsistency; the operator decides whether the state is intentional
+/// (mid-migration) or a bug. The daemon's own Q13-C check ENFORCES
+/// the same invariant at startup with a hard refusal.
+fn check_deployment_target(cfg: &Config) -> Vec<CheckResult> {
+    use selfdef_config::{state_dir, DeploymentTarget};
+
+    let target = cfg.deployment.target;
+    let mut out = Vec::new();
+
+    // Always surface the active target — operators grep for this.
+    out.push(CheckResult {
+        category: "deployment".into(),
+        name: "deployment.target".into(),
+        status: CheckStatus::Ok,
+        detail: format!(
+            "target = \"{}\"; state_dir = {}",
+            target,
+            state_dir(target).display()
+        ),
+    });
+
+    match target {
+        DeploymentTarget::Sain01 => {
+            // SAIN-01 needs /mnt/vault present (the ZFS pool mountpoint).
+            let mnt_vault = Path::new("/mnt/vault");
+            if !mnt_vault.exists() {
+                out.push(CheckResult {
+                    category: "deployment".into(),
+                    name: "sain01 vault mountpoint".into(),
+                    status: CheckStatus::Warn,
+                    detail: "target=sain01 but /mnt/vault/ doesn't exist; \
+                             run sovereign-os scripts/hooks/during-install/zfs-datasets-create.sh \
+                             first (the daemon will fail to write state without it)"
+                        .into(),
+                });
+            } else {
+                out.push(CheckResult {
+                    category: "deployment".into(),
+                    name: "sain01 vault mountpoint".into(),
+                    status: CheckStatus::Ok,
+                    detail: "/mnt/vault/ present".into(),
+                });
+            }
+        }
+        DeploymentTarget::Generic => {
+            // Generic: warn if SAIN-01 state files are present in
+            // /mnt/vault/context — likely operator flipped target back
+            // to generic without migrating state (state-fork hazard).
+            let sain_state_dir = Path::new("/mnt/vault/context");
+            if sain_state_dir.exists() {
+                let sain_audit =
+                    sain_state_dir.join("selfdef-audit.jsonl");
+                let sain_esc =
+                    sain_state_dir.join("selfdef-escalations.sqlite");
+                if sain_audit.exists() || sain_esc.exists() {
+                    out.push(CheckResult {
+                        category: "deployment".into(),
+                        name: "generic state-fork hazard".into(),
+                        status: CheckStatus::Warn,
+                        detail: "target=generic but selfdef state files \
+                                 exist at /mnt/vault/context/; likely operator \
+                                 flipped target back without migrating. Run \
+                                 `selfdefctl init config --target=sain01 --force` \
+                                 OR migrate /mnt/vault/context/selfdef-* to \
+                                 /var/lib/selfdef/ before next daemon restart"
+                            .into(),
+                    });
+                }
+            }
+        }
+    }
+
+    out
+}
+
 /// Minimal TOML scalar reader: finds `<key> = "value"` (one per
 /// line, scalar string only). Used by the rbac check; the
 /// agent-guard config has a fixed flat shape so this is enough.
@@ -458,5 +549,95 @@ fn walk_yaml_files(root: &Path, visit: &mut dyn FnMut(&Path)) {
         if name.ends_with(".yml") || name.ends_with(".yaml") {
             visit(&path);
         }
+    }
+}
+
+#[cfg(test)]
+mod sdd_013_tests {
+    //! SDD-013 § 6 doctor checks.
+    use super::*;
+    use selfdef_config::{Config, DeploymentConfig, DeploymentTarget};
+
+    fn cfg_with_target(t: DeploymentTarget) -> Config {
+        Config {
+            deployment: DeploymentConfig { target: t },
+            ..Config::default()
+        }
+    }
+
+    /// Both targets always surface a deployment.target row so
+    /// operators grepping doctor output see the active posture.
+    #[test]
+    fn doctor_always_surfaces_active_target() {
+        for t in [DeploymentTarget::Generic, DeploymentTarget::Sain01] {
+            let cfg = cfg_with_target(t);
+            let results = check_deployment_target(&cfg);
+            let row = results
+                .iter()
+                .find(|r| r.name == "deployment.target")
+                .expect("deployment.target row must surface");
+            assert_eq!(row.status, CheckStatus::Ok);
+            assert!(row.detail.contains(&format!("target = \"{t}\"")));
+        }
+    }
+
+    /// Generic target on a host without /mnt/vault/ produces NO
+    /// state-fork hazard row (no /mnt/vault/context state files).
+    #[test]
+    fn doctor_generic_on_clean_host_no_warn() {
+        // We can't reliably control whether /mnt/vault/context exists
+        // on the test host, so we test the predicate: if the dir
+        // doesn't exist OR doesn't contain selfdef state, no warn row
+        // appears.
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = check_deployment_target(&cfg);
+        // The deployment.target row always exists; the hazard row
+        // only appears when state files are present in /mnt/vault/context.
+        // On the test runner with no such files, only the active-target
+        // row appears.
+        let hazard = results
+            .iter()
+            .find(|r| r.name == "generic state-fork hazard");
+        let sain_state = Path::new("/mnt/vault/context");
+        if !sain_state.exists()
+            || (!sain_state.join("selfdef-audit.jsonl").exists()
+                && !sain_state.join("selfdef-escalations.sqlite").exists())
+        {
+            assert!(
+                hazard.is_none(),
+                "no hazard row on clean host"
+            );
+        }
+    }
+
+    /// SAIN-01 target on a host without /mnt/vault/ warns about the
+    /// missing mountpoint.
+    #[test]
+    fn doctor_sain01_without_vault_warns() {
+        let cfg = cfg_with_target(DeploymentTarget::Sain01);
+        let results = check_deployment_target(&cfg);
+        let mount_row = results
+            .iter()
+            .find(|r| r.name == "sain01 vault mountpoint")
+            .expect("vault mountpoint row must surface for sain01");
+        let mnt = Path::new("/mnt/vault");
+        if mnt.exists() {
+            assert_eq!(mount_row.status, CheckStatus::Ok);
+        } else {
+            assert_eq!(mount_row.status, CheckStatus::Warn);
+            assert!(mount_row.detail.contains("zfs-datasets-create.sh"));
+        }
+    }
+
+    /// Doctor's main run() wires the deployment check in; results
+    /// include at least one "deployment" category row.
+    #[test]
+    fn doctor_run_includes_deployment_category() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = run(&cfg);
+        assert!(
+            results.iter().any(|r| r.category == "deployment"),
+            "doctor::run() must surface deployment checks"
+        );
     }
 }
