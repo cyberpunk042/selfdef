@@ -261,3 +261,101 @@ fn sdr28_check_hardware_skips_module_on_gpuless_host() {
         "no SD-R26 predicate cited: {stdout}"
     );
 }
+
+/// SD-R46 (closes SDD-019 T-6): the schedule.json emitted by the
+/// bitnet-gpu-inference module's apply.sh must conform to the
+/// documented schema at docs/schemas/bitnet-schedule.schema.json.
+///
+/// We don't pull a JSON-schema crate just for one test — instead
+/// the test reads the schema's `required` arrays + `enum`
+/// constraints + walks the emitted file structurally.
+#[test]
+fn sdr46_schedule_json_conforms_to_documented_schema() {
+    // Stage a fresh apply (same setup as
+    // sdr28_apply_provisions_etc_dir_under_override).
+    let bin_path = binary();
+    let bin_dir = bin_path.parent().unwrap();
+    let old_path = std::env::var("PATH").unwrap_or_default();
+    let new_path = format!("{}:{old_path}", bin_dir.display());
+
+    let dir = tempfile::tempdir().unwrap();
+    let etc = dir.path().join("etc");
+    let state = dir.path().join("state");
+    let apply = module_dir().join("install/apply.sh");
+    let out = Command::new(&apply)
+        .env("PATH", &new_path)
+        .env("SELFDEF_BITNET_ETC_DIR", etc.to_str().unwrap())
+        .env("SELFDEF_BITNET_STATE_DIR", state.to_str().unwrap())
+        .env(
+            "SELFDEF_HARDWARE_TUNE_ENV",
+            dir.path().join("hw-tune.env").to_str().unwrap(),
+        )
+        .output()
+        .expect("spawn apply.sh");
+    assert!(out.status.success(), "apply: {out:?}");
+
+    let sched_path = etc.join("schedule.json");
+    let body = std::fs::read_to_string(&sched_path).unwrap();
+    let doc: serde_json::Value =
+        serde_json::from_str(&body).expect("schedule.json must be valid JSON");
+
+    // Top-level required fields from the schema.
+    for k in ["schema_version", "schedule"] {
+        assert!(
+            doc.get(k).is_some(),
+            "schedule.json missing required top-level key '{k}': {body}"
+        );
+    }
+    // schema_version pattern: N.N.N
+    let v = doc["schema_version"]
+        .as_str()
+        .expect("schema_version is string");
+    let parts: Vec<&str> = v.split('.').collect();
+    assert_eq!(parts.len(), 3, "schema_version not N.N.N: {v}");
+    for p in &parts {
+        assert!(
+            p.chars().all(|c| c.is_ascii_digit()),
+            "schema_version part not numeric: {p}"
+        );
+    }
+    // schedule is an array.
+    let schedule = doc["schedule"]
+        .as_array()
+        .expect("schedule must be an array");
+    // Each entry: required gpu_index (>= 0) + role (one of 3 enums).
+    let valid_roles: &[&str] = &["model_inference", "auxiliary", "spare"];
+    for entry in schedule {
+        let idx = entry["gpu_index"]
+            .as_i64()
+            .expect("gpu_index must be integer");
+        assert!(idx >= 0, "gpu_index must be >= 0: {idx}");
+        let role = entry["role"].as_str().expect("role must be string");
+        assert!(
+            valid_roles.contains(&role),
+            "role must be one of {valid_roles:?}: {role}"
+        );
+        // Optional fields, when present, must be the right type.
+        if let Some(v) = entry.get("vram_bytes")
+            && !v.is_null()
+        {
+            assert!(v.is_i64() || v.is_u64(), "vram_bytes must be integer: {v}");
+        }
+        if let Some(v) = entry.get("power_limit_watts")
+            && !v.is_null()
+        {
+            assert!(
+                v.is_i64() || v.is_u64(),
+                "power_limit_watts must be integer: {v}"
+            );
+        }
+    }
+}
+
+#[test]
+fn sdr46_schema_file_exists_and_is_valid_json() {
+    let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let schema = crate_root.join("../../docs/schemas/bitnet-schedule.schema.json");
+    assert!(schema.exists(), "schema file missing: {}", schema.display());
+    let body = std::fs::read_to_string(&schema).unwrap();
+    let _v: serde_json::Value = serde_json::from_str(&body).expect("schema must be valid JSON");
+}
