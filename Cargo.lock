@@ -2352,6 +2352,7 @@ dependencies = [
  "selfdef-integration-loki",
  "selfdef-integration-ntfy",
  "selfdef-integration-opensearch",
+ "selfdef-integration-oracle-triage",
  "selfdef-integration-pagerduty",
  "selfdef-integration-shared-audit-summary",
  "selfdef-integration-signal",
@@ -2459,6 +2460,24 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-oracle-triage"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

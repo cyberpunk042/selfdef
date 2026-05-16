@@ -939,10 +939,76 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     "notifier channel enabled (SDD-014)"
                 );
             }
+            "oracle-triage" if cfg.notifier.oracle_triage.enabled => {
+                match build_oracle_triage_channel(cfg) {
+                    Ok(ch) => {
+                        inner.push((Box::new(ch), build_subscription(channel, cfg)));
+                        info!(
+                            channel,
+                            endpoint = %cfg.notifier.oracle_triage.endpoint,
+                            model = %cfg.notifier.oracle_triage.model,
+                            "notifier channel enabled (SDD-016)"
+                        );
+                    }
+                    Err(e) => warn!(channel, error = %e, "oracle-triage build failed"),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
     NotifierChain::with_subscriptions(inner)
+}
+
+/// SDD-016: build the oracle-triage Channel from [notifier.oracle_triage]
+/// config. Threads severity-floor parsing + env-var key loading.
+fn build_oracle_triage_channel(
+    cfg: &Config,
+) -> Result<selfdef_integration_oracle_triage::OracleTriageChannel, anyhow::Error> {
+    use selfdef_integration_oracle_triage::{OracleTriageChannel, OutputTarget, TriageFilter};
+    let c = &cfg.notifier.oracle_triage;
+    let min_severity = parse_severity_token(&c.filter.min_severity)
+        .unwrap_or(selfdef_core::severity::SeverityId::Medium);
+    let filter = TriageFilter {
+        min_severity,
+        kinds: c.filter.kinds.clone(),
+    };
+    let output_target = match c.output_target.as_str() {
+        "operator-dashboard" => OutputTarget::OperatorDashboard,
+        "shared-audit-summary" => OutputTarget::SharedAuditSummary,
+        "both" => OutputTarget::Both,
+        other => {
+            warn!(
+                output_target = other,
+                "oracle-triage: unknown output_target, defaulting to operator-dashboard"
+            );
+            OutputTarget::OperatorDashboard
+        }
+    };
+    OracleTriageChannel::from_config(
+        &c.endpoint,
+        &c.model,
+        c.timeout_seconds,
+        c.api_key_env.as_deref(),
+        filter,
+        output_target,
+        c.system_prompt_path.as_ref(),
+    )
+    .map_err(anyhow::Error::from)
+}
+
+/// SDD-016: parse the severity_floor token used by the oracle-triage
+/// filter. Returns None on unknown — caller falls back to Medium.
+fn parse_severity_token(token: &str) -> Option<selfdef_core::severity::SeverityId> {
+    use selfdef_core::severity::SeverityId;
+    match token.to_ascii_lowercase().as_str() {
+        "informational" | "info" => Some(SeverityId::Informational),
+        "low" => Some(SeverityId::Low),
+        "medium" | "warn" => Some(SeverityId::Medium),
+        "high" => Some(SeverityId::High),
+        "critical" | "error" => Some(SeverityId::Critical),
+        "fatal" => Some(SeverityId::Fatal),
+        _ => None,
+    }
 }
 
 /// SDD-008 D-3: build the [`Subscription`] for a channel slug by
@@ -1316,6 +1382,21 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     pointer = %pointer.display(),
                     "engine-channel enabled (SDD-014)"
                 );
+            }
+            "oracle-triage" if cfg.notifier.oracle_triage.enabled => {
+                match build_oracle_triage_channel(cfg) {
+                    Ok(ch) => {
+                        channels.push(Arc::new(ch));
+                        info!(
+                            channel,
+                            endpoint = %cfg.notifier.oracle_triage.endpoint,
+                            "engine-channel enabled (SDD-016)"
+                        );
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "oracle-triage engine-channel skipped");
+                    }
+                }
             }
             other => warn!(channel = other, "engine-channel skipped (missing config)"),
         }

@@ -562,6 +562,11 @@ pub struct NotifierConfig {
     /// operators can opt out via `enabled = false`. Never auto-
     /// enabled on generic deployments (Q-G honored).
     pub shared_audit_summary: SharedAuditSummaryConfig,
+    /// SDD-016: oracle-triage channel — dispatches event payloads
+    /// through the sovereign-os inference router for operator-reviewed
+    /// triage suggestions. NEVER auto-enabled, even on SAIN-01
+    /// (Q-D verbatim). Operator must explicitly set `enabled = true`.
+    pub oracle_triage: OracleTriageConfig,
     /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
     /// SQLite database. When set, the daemon opens this file at
     /// startup, persists outbound events in it, and runs the wake-
@@ -662,6 +667,7 @@ impl Default for NotifierConfig {
             wall: WallConfig::default(),
             write: WriteConfig::default(),
             shared_audit_summary: SharedAuditSummaryConfig::default(),
+            oracle_triage: OracleTriageConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
@@ -936,6 +942,78 @@ pub fn resolve_perimeter_check_overlap(cfg: &Config) -> bool {
         return v;
     }
     matches!(cfg.deployment.target, DeploymentTarget::Sain01)
+}
+
+// ---------------------------------------------------------------- oracle-triage (SDD-016)
+
+/// SDD-016: oracle-triage channel configuration.
+///
+/// NEVER auto-enabled — operator must set `enabled = true` explicitly,
+/// even on SAIN-01 (SDD-012 Q-D verbatim: "selfdef stays Oracle-Core-
+/// unaware in v1; opt-in `oracle-triage` notifier channel post-
+/// procurement"). On generic deployments the channel can still be
+/// enabled by pointing `endpoint` at a different inference router.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct OracleTriageConfig {
+    /// Opt-in flag. Default `false` — operator's explicit consent
+    /// required.
+    pub enabled: bool,
+    /// Inference-router endpoint. Default `http://127.0.0.1:8080`
+    /// matches sovereign-os SDD-011's router default.
+    pub endpoint: String,
+    /// Model token. `"auto"` (default) lets the router's classify()
+    /// pick per-request; operators can pin a specific model.
+    pub model: String,
+    /// Per-request timeout. Default 30s per SDD-016 § 2.
+    pub timeout_seconds: u64,
+    /// Env-var name carrying an optional bearer token. Empty/None =
+    /// no Authorization header. Operators NEVER write the secret
+    /// itself into selfdef.toml — only the variable name.
+    pub api_key_env: Option<String>,
+    /// Filter applied per event before dispatch (severity floor +
+    /// kind allowlist).
+    pub filter: OracleTriageFilterConfig,
+    /// Where the triage block lands.
+    /// `operator-dashboard` | `shared-audit-summary` | `both`.
+    pub output_target: String,
+    /// Optional path to a custom system prompt. None = use the
+    /// SDD-016 § 3 default.
+    pub system_prompt_path: Option<PathBuf>,
+}
+
+impl Default for OracleTriageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://127.0.0.1:8080".to_owned(),
+            model: "auto".to_owned(),
+            timeout_seconds: 30,
+            api_key_env: None,
+            filter: OracleTriageFilterConfig::default(),
+            output_target: "operator-dashboard".to_owned(),
+            system_prompt_path: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct OracleTriageFilterConfig {
+    /// Severity floor (token: `informational` / `low` / `medium` /
+    /// `high` / `critical` / `fatal`). Default `medium`.
+    pub min_severity: String,
+    /// Kind allowlist. Empty = all kinds pass.
+    pub kinds: Vec<String>,
+}
+
+impl Default for OracleTriageFilterConfig {
+    fn default() -> Self {
+        Self {
+            min_severity: "medium".to_owned(),
+            kinds: Vec::new(),
+        }
+    }
 }
 
 /// SDD-014: shared-audit-summary channel configuration.
@@ -1924,6 +2002,71 @@ mod tests {
         );
         assert!(!p.overlap_warn_only);
         assert!(p.check_overlap_on_apply.is_none());
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-016 oracle-triage config tests
+    // ----------------------------------------------------------------
+
+    /// SDD-016 § 2 + Q-D verbatim: channel is OFF by default, even
+    /// on SAIN-01. Opt-in is operator-explicit.
+    #[test]
+    fn sdd_016_oracle_triage_disabled_by_default() {
+        let cfg = Config::default();
+        assert!(!cfg.notifier.oracle_triage.enabled);
+        let s = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            ..Config::default()
+        };
+        assert!(!s.notifier.oracle_triage.enabled);
+    }
+
+    /// SDD-016 § 2: default endpoint matches SDD-011 router.
+    #[test]
+    fn sdd_016_default_endpoint_matches_sdd_011_router() {
+        let cfg = OracleTriageConfig::default();
+        assert_eq!(cfg.endpoint, "http://127.0.0.1:8080");
+        assert_eq!(cfg.model, "auto");
+        assert_eq!(cfg.timeout_seconds, 30);
+        assert!(cfg.api_key_env.is_none());
+        assert_eq!(cfg.output_target, "operator-dashboard");
+    }
+
+    /// SDD-016 § 2: configured via TOML; round-trip.
+    #[test]
+    fn sdd_016_config_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.oracle_triage]
+            enabled = true
+            endpoint = "http://10.0.100.50:8080"
+            model = "auto"
+            timeout_seconds = 45
+            output_target = "both"
+
+            [notifier.oracle_triage.filter]
+            min_severity = "high"
+            kinds = ["POLICY_VIOLATION", "CONN_ANOMALY"]
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.notifier.oracle_triage.enabled);
+        assert_eq!(
+            cfg.notifier.oracle_triage.endpoint,
+            "http://10.0.100.50:8080"
+        );
+        assert_eq!(cfg.notifier.oracle_triage.timeout_seconds, 45);
+        assert_eq!(cfg.notifier.oracle_triage.output_target, "both");
+        assert_eq!(cfg.notifier.oracle_triage.filter.min_severity, "high");
+        assert_eq!(
+            cfg.notifier.oracle_triage.filter.kinds,
+            vec!["POLICY_VIOLATION".to_owned(), "CONN_ANOMALY".to_owned()]
+        );
     }
 
     /// SDD-013 § Goals point 2 (zero regression): a fully-populated

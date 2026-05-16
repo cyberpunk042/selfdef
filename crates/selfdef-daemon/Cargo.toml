@@ -39,6 +39,7 @@ selfdef-integration-twilio = { workspace = true }
 selfdef-integration-wall = { workspace = true }
 selfdef-integration-write = { workspace = true }
 selfdef-integration-shared-audit-summary = { workspace = true }
+selfdef-integration-oracle-triage = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }
