@@ -208,10 +208,11 @@ pub fn probe_from_roots(
     let memory = read_meminfo(meminfo_path);
     let gpus = read_gpu_device_nodes(dev_dir);
     let motherboard = read_motherboard(dmi_dir);
-    // PCIe x8 detection is best-effort via lspci (subprocess) — not
-    // staged-fs-testable, so we default to 0 and let the operator run
-    // sovereign-os's friction-audit for the real PCIe verification.
-    let pcie = PcieInventory::default();
+    // SD-R12: PCIe x8 detection via lspci (subprocess). When lspci is
+    // unavailable or returns nothing parseable, falls back to 0 — the
+    // operator can still run sovereign-os friction-audit for the
+    // authoritative read.
+    let pcie = probe_pcie_via_lspci();
     let probed_at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Iso8601::DEFAULT)
         .map_err(|_| HardwareError::TimeFmt)?;
@@ -223,6 +224,57 @@ pub fn probe_from_roots(
         pcie,
         probed_at,
     })
+}
+
+// ---------------------------------------------------------------- PCIe (SD-R12)
+
+/// SD-R12: invoke `lspci -vv` and count slots that show
+/// `LnkSta: Speed (16|32)GT/s Width x8`. Best-effort — lspci absent /
+/// timed out / empty output → returns the default (count = 0).
+fn probe_pcie_via_lspci() -> PcieInventory {
+    let output = match std::process::Command::new("lspci")
+        .arg("-vv")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return PcieInventory::default(),
+    };
+    let body = String::from_utf8_lossy(&output.stdout);
+    PcieInventory {
+        gen4_or_higher_x8_slot_count: count_pcie_x8_gen4_plus(&body),
+    }
+}
+
+/// SD-R12: pure parser for `lspci -vv` output. Counts every line that
+/// matches `LnkSta:` AND `Width x8` AND `Speed (16|32)<...>GT/s`
+/// (Gen 4 = 16 GT/s, Gen 5 = 32 GT/s — both qualify for the SAIN-01
+/// "x8/x8 at Gen 4+" master spec § 1.2 invariant).
+///
+/// Pure function — tests pin every parsing edge case.
+#[must_use]
+pub fn count_pcie_x8_gen4_plus(lspci_vv_body: &str) -> u32 {
+    let mut count = 0_u32;
+    for line in lspci_vv_body.lines() {
+        let line = line.trim();
+        if !line.starts_with("LnkSta:") {
+            continue;
+        }
+        if !line.contains("Width x8") {
+            continue;
+        }
+        // Speed token: "Speed 16GT/s" or "Speed 32GT/s" — both Gen 4+.
+        // Accept the variations "Speed 16.0GT/s" too (older lspci).
+        let has_gen4_plus = line.contains("Speed 16GT/s")
+            || line.contains("Speed 32GT/s")
+            || line.contains("Speed 16.0GT/s")
+            || line.contains("Speed 32.0GT/s");
+        if has_gen4_plus {
+            count += 1;
+        }
+    }
+    count
 }
 
 // ---------------------------------------------------------------- /proc/cpuinfo
@@ -1387,6 +1439,92 @@ mod tests {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         write_capabilities_json(&path, &snap).unwrap();
         assert!(path.exists());
+    }
+
+    // ----- PCIe lspci parser (SD-R12) ------------------------------
+
+    #[test]
+    fn pcie_parser_counts_gen5_x8_slots() {
+        let body = "\
+01:00.0 VGA compatible controller: NVIDIA ...\n\
+\tLnkCap: Port #0, Speed 32GT/s, Width x16\n\
+\tLnkSta: Speed 32GT/s, Width x8\n\
+03:00.0 VGA compatible controller: NVIDIA ...\n\
+\tLnkSta: Speed 32GT/s, Width x8\n\
+";
+        assert_eq!(count_pcie_x8_gen4_plus(body), 2);
+    }
+
+    #[test]
+    fn pcie_parser_counts_gen4_x8_slots() {
+        let body = "\
+01:00.0 dev\n\
+\tLnkSta: Speed 16GT/s, Width x8\n\
+";
+        assert_eq!(count_pcie_x8_gen4_plus(body), 1);
+    }
+
+    #[test]
+    fn pcie_parser_ignores_x16_x4_x1_slots() {
+        let body = "\
+01:00.0 dev\n\
+\tLnkSta: Speed 32GT/s, Width x16\n\
+02:00.0 dev\n\
+\tLnkSta: Speed 16GT/s, Width x4\n\
+03:00.0 dev\n\
+\tLnkSta: Speed 32GT/s, Width x1\n\
+";
+        assert_eq!(count_pcie_x8_gen4_plus(body), 0);
+    }
+
+    #[test]
+    fn pcie_parser_ignores_gen3_x8_slots() {
+        // Gen 3 = 8GT/s. SAIN-01 master spec § 1.2 requires Gen 4+ —
+        // the Blackwell + 3090 pair only deliver full throughput at
+        // Gen 4 or Gen 5.
+        let body = "\
+01:00.0 dev\n\
+\tLnkSta: Speed 8GT/s, Width x8\n\
+";
+        assert_eq!(count_pcie_x8_gen4_plus(body), 0);
+    }
+
+    #[test]
+    fn pcie_parser_accepts_decimal_speed_tokens() {
+        // Older lspci versions render "Speed 16.0GT/s" with a trailing .0
+        let body = "\
+01:00.0 dev\n\
+\tLnkSta: Speed 16.0GT/s, Width x8\n\
+02:00.0 dev\n\
+\tLnkSta: Speed 32.0GT/s, Width x8\n\
+";
+        assert_eq!(count_pcie_x8_gen4_plus(body), 2);
+    }
+
+    #[test]
+    fn pcie_parser_empty_input() {
+        assert_eq!(count_pcie_x8_gen4_plus(""), 0);
+    }
+
+    #[test]
+    fn pcie_parser_mixed_realistic_sain01_topology() {
+        // Synthetic ProArt X870E lspci -vv output: 2× GPU at x8 Gen 5
+        // + 2× NVMe at x4 Gen 5 + 1× NIC at x4 Gen 4.
+        let body = "\
+01:00.0 VGA compatible controller: NVIDIA Blackwell\n\
+\tLnkCap: Port #0, Speed 32GT/s, Width x16\n\
+\tLnkSta: Speed 32GT/s, Width x8\n\
+03:00.0 VGA compatible controller: NVIDIA RTX 3090\n\
+\tLnkSta: Speed 32GT/s, Width x8\n\
+04:00.0 Non-Volatile memory controller: Samsung\n\
+\tLnkSta: Speed 32GT/s, Width x4\n\
+05:00.0 Non-Volatile memory controller: Samsung\n\
+\tLnkSta: Speed 32GT/s, Width x4\n\
+06:00.0 Ethernet controller: Aquantia AQC113C\n\
+\tLnkSta: Speed 16GT/s, Width x4\n\
+";
+        // 2 GPUs × x8 @ Gen 5 — exactly the SAIN-01 § 1.2 target.
+        assert_eq!(count_pcie_x8_gen4_plus(body), 2);
     }
 
     #[test]
