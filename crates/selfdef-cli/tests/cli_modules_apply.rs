@@ -631,6 +631,130 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
     assert_eq!(v["host_tag"], "h");
 }
 
+/// SD-R55 (closes SDD-020 V-5): module manifest signing gate.
+/// When [signing].required = false (informational), apply proceeds
+/// + logs a notice. When required = true, apply refuses without
+/// a valid .minisig.
+#[test]
+fn sdr55_signing_required_false_is_informational_only() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], body);
+    // Add [signing] block with required = false.
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str("\n[signing]\nrequired = false\n");
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "apply with informational signing should succeed: stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("SD-R55") && stderr.contains("required=false"),
+        "informational SD-R55 notice should fire: {stderr}"
+    );
+    assert!(
+        stdout.contains("alpha [apply]"),
+        "module should apply: {stdout}"
+    );
+}
+
+#[test]
+fn sdr55_signing_required_true_without_minisig_refuses_apply() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], body);
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    // Point trust_root at a nonexistent path so the verifier load
+    // fails (operator-readable error path).
+    let trust_root = root.path().join("nonexistent.pub");
+    manifest.push_str(&format!(
+        "\n[signing]\nrequired = true\ntrust_root = \"{}\"\n",
+        trust_root.display()
+    ));
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "apply with required signing + missing pubkey should fail: stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("SD-R55 module-signing gate"),
+        "gate banner should fire: {stderr}"
+    );
+    assert!(
+        stderr.contains("trust-root pubkey unreadable")
+            || stderr.contains("signature verification failed"),
+        "operator-readable error should cite trust-root issue: {stderr}"
+    );
+}
+
+#[test]
+fn sdr55_no_signing_block_proceeds_normally() {
+    // Modules WITHOUT a [signing] block should apply without any
+    // signing-related output (backward compat with cycle-1+2 modules).
+    let fx = fixture("[modules.alpha]\n");
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            fx.host_config.to_str().unwrap(),
+            "--dir",
+            fx.catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr: {stderr}");
+    assert!(
+        !stderr.contains("SD-R55"),
+        "SD-R55 banner should NOT fire on unsigned modules: {stderr}"
+    );
+}
+
 /// SD-R53 (closes SDD-020 V-1): `--strict-hardware` audit-trail.
 /// Same OCSF envelope as SD-R47 but distinct category prefix
 /// (selfdef.modules.skip-strict) so dashboards split kept vs

@@ -88,6 +88,13 @@ pub(crate) struct ModuleManifest {
     /// [`hardware_requirements_met`].
     #[serde(default)]
     pub(crate) requires_hardware: HardwareRequirements,
+    /// SD-R55 (closes SDD-020 V-5): supply-chain assurance. When
+    /// the operator pins this module's manifest as signed in the
+    /// `[signing]` block, apply refuses to land it unless
+    /// `module.toml.minisig` verifies against the operator's
+    /// trust-root pubkey. Empty (default) → no signing check.
+    #[serde(default)]
+    pub(crate) signing: Option<ModuleSigningSpec>,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -418,6 +425,36 @@ impl HardwareRequirements {
             && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
     }
+}
+
+/// SD-R55: optional `[signing]` block in module.toml. When present,
+/// apply (or any lifecycle action) verifies module.toml's detached
+/// minisig signature against the operator's trust-root pubkey
+/// BEFORE running any install/apply.sh.
+///
+/// Operator workflow:
+///   # author the manifest
+///   $ vim modules/bitnet-gpu-inference/module.toml
+///   # sign with the policy private key (already generated for SDD-006 rule signing)
+///   $ minisign -S -m modules/bitnet-gpu-inference/module.toml -s ~/.selfdef-policy.key
+///   # commit module.toml + module.toml.minisig together
+///
+/// The `required = true` field makes the gate fail-closed; without
+/// the .minisig file present + valid, apply refuses to proceed.
+/// `required = false` (default for the block when present but the
+/// operator hasn't enforced) is informational: warn-only.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleSigningSpec {
+    /// When true, apply REFUSES to land the module without a valid
+    /// signature. When false (or block omitted), the apply path
+    /// surfaces the signing posture but doesn't gate.
+    #[serde(default)]
+    pub(crate) required: bool,
+    /// Optional override of the trust-root public key path. When
+    /// unset, the verifier reads `/etc/selfdef/keys/policy.pub`
+    /// (same root as the existing SDD-006 rule signing).
+    #[serde(default)]
+    pub(crate) trust_root: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1335,6 +1372,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         phase: m.phase,
         daemon_requires: m.daemon_requires.clone(),
         requires_hardware: m.requires_hardware.clone(),
+        signing: m.signing.clone(),
     }
 }
 
@@ -1818,6 +1856,75 @@ pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
 /// didn't apply. The probe failure (e.g. on minimal hosts) is silent
 /// for modules that DON'T declare hardware requirements; modules
 /// that DO declare them are skipped with a clear log.
+/// SD-R55 (closes SDD-020 V-5): verify module.toml's detached
+/// minisig signature when the manifest declares `[signing]` with
+/// `required = true`. Returns Ok(()) when:
+///   - the module has no [signing] block
+///   - [signing].required = false (informational)
+///   - [signing].required = true AND the .minisig verifies
+///
+/// Returns Err with operator-readable detail when the gate fails.
+fn verify_module_signing(am: &ActiveModule) -> Result<(), String> {
+    let signing = match am.manifest.signing.as_ref() {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+    if !signing.required {
+        // Informational-only block; surface the posture as a notice
+        // but don't gate.
+        eprintln!(
+            "# SD-R55: module {} declares [signing] but required=false (informational only)",
+            am.display_name()
+        );
+        return Ok(());
+    }
+    let trust_root = signing
+        .trust_root
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("/etc/selfdef/keys/policy.pub"));
+    let verifier = selfdef_signing::Verifier::load(&trust_root).map_err(|e| {
+        format!(
+            "trust-root pubkey unreadable at {}: {e}",
+            trust_root.display()
+        )
+    })?;
+    let manifest_path = am.module_root.join("module.toml");
+    verifier.verify_detached_file(&manifest_path).map_err(|e| {
+        format!(
+            "signature verification failed for {}: {e}",
+            manifest_path.display()
+        )
+    })?;
+    Ok(())
+}
+
+/// SD-R55: apply the signing gate to every active module. Returns
+/// the kept set (modules whose signing posture passed). Failures
+/// on required=true surface as a stderr block + drop the module
+/// from the kept set; if no module remains required-and-failed,
+/// the caller proceeds normally.
+fn apply_signing_gate(active: Vec<ActiveModule>) -> (Vec<ActiveModule>, Vec<(String, String)>) {
+    let mut kept = Vec::with_capacity(active.len());
+    let mut failed: Vec<(String, String)> = Vec::new();
+    for am in active {
+        match verify_module_signing(&am) {
+            Ok(()) => kept.push(am),
+            Err(msg) => failed.push((am.display_name(), msg)),
+        }
+    }
+    if !failed.is_empty() {
+        eprintln!(
+            "# SD-R55 module-signing gate — {} module(s) failed signature verification:",
+            failed.len()
+        );
+        for (name, msg) in &failed {
+            eprintln!("  - {name}: {msg}");
+        }
+        eprintln!("# To proceed without signing, set [signing].required = false in module.toml");
+    }
+    (kept, failed)
+}
+
 fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
     let caps = match selfdef_hardware::probe() {
         Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
@@ -2471,6 +2578,21 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     }
     // SD-R14: hardware-aware module gate. On Apply / Check, probe
     // the host hardware once + filter out modules whose
+    // SD-R55 (closes SDD-020 V-5): module-manifest signing gate.
+    // For Apply + Check, refuse to land modules whose [signing]
+    // block declares required=true without a valid .minisig.
+    // Uninstall skips signing (tearing down doesn't require the
+    // operator to re-verify signatures).
+    if matches!(action, Action::Apply | Action::Check) {
+        let (kept, failed) = apply_signing_gate(active);
+        active = kept;
+        if !failed.is_empty() && matches!(action, Action::Apply) {
+            // Apply is destructive — fail loudly when ANY required
+            // signing check fails. Check is informational — just
+            // log + continue with the kept set.
+            return Ok(1);
+        }
+    }
     // [requires_hardware] block isn't met. The unmet modules surface
     // as a single warning block before apply; the filtered set
     // proceeds. Uninstall skips this — tearing a module down doesn't
@@ -2743,6 +2865,7 @@ mod tests {
             phase,
             daemon_requires: BTreeMap::new(),
             requires_hardware: HardwareRequirements::default(),
+            signing: None,
         }
     }
 
@@ -3821,6 +3944,7 @@ mod sdr14_hardware_gate_tests {
             consumes: Vec::new(),
             requires: Vec::new(),
             requires_hardware: req,
+            signing: None,
             install: None,
             profiles: None,
             instanced: false,
