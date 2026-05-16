@@ -1,0 +1,49 @@
+name        = "wasm-aot-cache"
+version     = "0.1.0"
+summary     = "Provision /var/lib/selfdef/wasm-aot/ for cached .cwasm artifacts produced by `wasmtime compile` against the SD-R30 target-feature surface (SD-R48)"
+category    = "inference"
+
+depends_on  = ["hardware-tune-cache"]
+conflicts   = []
+provides    = ["wasm-aot-cache-dir"]
+consumes    = ["hardware-tune-env"]
+
+requires    = [
+    { kind = "binary", value = "selfdefctl" },
+]
+
+# SD-R48 — the second real demonstrator of the cycle-2
+# [requires_hardware] surface. SD-R28 (bitnet-gpu-inference) showed
+# the 5-predicate combo; THIS module showcases the SD-R32 predicate:
+#
+#   wasm_aot_features_required
+#
+# Operator declares "I want wasmtime to AOT-compile against AT LEAST
+# these AVX-512 features"; the gate refuses to land the module on
+# hosts where SD-R30's wasm_aot.target_features doesn't include them.
+#
+# Combined with avx512_vnni + memory_gib_min, this module declares a
+# stable contract: it provisions a writeable cache for .cwasm files
+# only when the host can actually AOT-compile against the operator's
+# minimum feature surface.
+#
+# On the SAIN-01 9900X (avx512f + dq + bw + vl + vnni + bf16 + fp16),
+# this lands cleanly. On an Intel Cooper Lake (no bf16), the gate
+# refuses — operator gets a clear skip message.
+[requires_hardware]
+avx512_vnni                = true
+memory_gib_min             = 16
+# SD-R32 surface — the load-bearing predicate for this module.
+wasm_aot_features_required = "+avx512f,+avx512vnni,+avx512bf16"
+
+instanced = false
+
+# `pre` so the cache dir is in place before any module / build script
+# tries to write a .cwasm to it.
+phase = "pre"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
