@@ -2151,6 +2151,7 @@ dependencies = [
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-hardware",
  "selfdef-integration-ntfy",
  "selfdef-notifier",
  "selfdef-notifier-engine",
@@ -2348,6 +2349,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-ebpf-common",
+ "selfdef-hardware",
  "selfdef-integration-discord",
  "selfdef-integration-loki",
  "selfdef-integration-ntfy",
@@ -2385,6 +2387,18 @@ name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "selfdef-hardware"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tracing",
 ]
 
 [[package]]

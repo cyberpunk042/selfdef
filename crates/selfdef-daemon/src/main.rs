@@ -82,6 +82,32 @@ async fn main() -> Result<()> {
         return Err(e.context("Q13-C state-fork pre-flight"));
     }
 
+    // SDD-017: hardware probe at startup. Best-effort + informational
+    // — never blocks the daemon. Logs the Sain01Match verdict so
+    // operators see hardware drift in `journalctl -u selfdefd | grep
+    // sain01_match`.
+    match selfdef_hardware::probe() {
+        Ok(snap) => {
+            let m = selfdef_hardware::matches_sain01(&snap);
+            info!(
+                overall = ?m.overall,
+                cpu_avx512_vnni = m.cpu_avx512_vnni,
+                cpu_avx512_bf16 = m.cpu_avx512_bf16,
+                memory_at_least_256gb = m.memory_at_least_256gb,
+                gpu_count_at_least_2 = m.gpu_count_at_least_2,
+                pcie_dual_x8_present = m.pcie_dual_x8_present,
+                motherboard_proart_x870e = ?m.motherboard_proart_x870e,
+                logical_threads = snap.cpu.logical_threads,
+                memory_total_bytes = snap.memory.total_bytes,
+                gpu_count = snap.gpus.len(),
+                "sain01_match (SDD-017)",
+            );
+        }
+        Err(e) => {
+            warn!(error = %e, "hardware probe failed (SDD-017); daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 

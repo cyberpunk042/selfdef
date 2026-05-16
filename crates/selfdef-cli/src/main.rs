@@ -10,6 +10,7 @@
 mod doctor;
 mod emit;
 mod follow;
+mod hardware;
 mod init;
 mod modules;
 mod notify;
@@ -131,8 +132,29 @@ enum Command {
         #[command(subcommand)]
         action: PerimeterAction,
     },
+    /// SDD-017: SAIN-01 hardware inventory + Sain01Match verdict.
+    /// Probes the host for CPU features, memory, GPU device nodes,
+    /// motherboard ID + PCIe state, and compares to the SAIN-01
+    /// target. Read-only; safe on any host (graceful on missing
+    /// kernel surfaces).
+    Hardware {
+        #[command(subcommand)]
+        action: Option<HardwareAction>,
+        /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum HardwareAction {
+    /// Probe + render the full snapshot + Sain01Match verdict (default).
+    Probe,
+    /// Only render the Sain01Match verdict label (FullMatch /
+    /// PartialMatch / NoMatch). Exit code reflects verdict.
+    Match,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -678,6 +700,15 @@ async fn main() -> Result<()> {
                 std::process::exit(exit);
             }
         },
+        Command::Hardware { action, json } => {
+            let exit = match action {
+                Some(HardwareAction::Match) => hardware::run_match()?,
+                Some(HardwareAction::Probe) if json => hardware::run_json()?,
+                None if json => hardware::run_json()?,
+                _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let count = store.count().await.context("counting events")?;
