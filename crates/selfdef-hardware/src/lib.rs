@@ -213,6 +213,11 @@ pub fn probe_from_roots(
     // operator can still run sovereign-os friction-audit for the
     // authoritative read.
     let pcie = probe_pcie_via_lspci();
+    // SD-R13: enrich GPU entries with model_hint + vram_bytes via
+    // nvidia-smi (best-effort). Index-matched against the existing
+    // /dev/nvidia<N> device-node list. Failures are silent — the
+    // gpus vec keeps its device-node-only entries.
+    let gpus = enrich_gpus_via_nvidia_smi(gpus);
     let probed_at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Iso8601::DEFAULT)
         .map_err(|_| HardwareError::TimeFmt)?;
@@ -275,6 +280,79 @@ pub fn count_pcie_x8_gen4_plus(lspci_vv_body: &str) -> u32 {
         }
     }
     count
+}
+
+// ---------------------------------------------------------------- nvidia-smi (SD-R13)
+
+/// SD-R13: enrich `gpus` with model_hint + vram_bytes via
+/// `nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader,nounits`.
+/// Failures (nvidia-smi absent, non-zero exit, parse error) leave the
+/// existing entries unchanged — never panics, never loses GPUs.
+///
+/// Output match: by `index` to the existing vec position (nvidia-smi
+/// indexes match /dev/nvidia<N> order on a single-host).
+pub(crate) fn enrich_gpus_via_nvidia_smi(mut gpus: Vec<GpuInventory>) -> Vec<GpuInventory> {
+    if gpus.is_empty() {
+        return gpus;
+    }
+    let output = match std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=index,name,memory.total",
+            "--format=csv,noheader,nounits",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return gpus,
+    };
+    let body = String::from_utf8_lossy(&output.stdout);
+    let parsed = parse_nvidia_smi_csv(&body);
+    for (idx, model, vram) in parsed {
+        if let Some(g) = gpus.get_mut(idx) {
+            if g.model_hint.is_none() {
+                g.model_hint = Some(model);
+            }
+            if g.vram_bytes.is_none() {
+                g.vram_bytes = vram;
+            }
+        }
+    }
+    gpus
+}
+
+/// SD-R13: pure parser for `nvidia-smi --query-gpu=index,name,memory.total
+/// --format=csv,noheader,nounits` output. Returns Vec<(idx, name, vram_bytes)>.
+/// Trims whitespace; rejects malformed rows silently.
+///
+/// Example input:
+///   0, NVIDIA RTX PRO 6000 Blackwell, 98304
+///   1, NVIDIA GeForce RTX 3090, 24576
+#[must_use]
+pub fn parse_nvidia_smi_csv(body: &str) -> Vec<(usize, String, Option<u64>)> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let idx = match parts[0].parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let name = parts[1].to_owned();
+        if name.is_empty() {
+            continue;
+        }
+        // memory.total comes in MiB with --format=...,nounits.
+        let vram = parts[2]
+            .parse::<u64>()
+            .ok()
+            .map(|mib| mib.saturating_mul(1024 * 1024));
+        out.push((idx, name, vram));
+    }
+    out
 }
 
 // ---------------------------------------------------------------- /proc/cpuinfo
@@ -1439,6 +1517,119 @@ mod tests {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         write_capabilities_json(&path, &snap).unwrap();
         assert!(path.exists());
+    }
+
+    // ----- nvidia-smi CSV parser (SD-R13) --------------------------
+
+    #[test]
+    fn nvidia_smi_parses_sain01_dual_gpu_pair() {
+        let body = "\
+0, NVIDIA RTX PRO 6000 Blackwell, 98304\n\
+1, NVIDIA GeForce RTX 3090, 24576\n\
+";
+        let parsed = parse_nvidia_smi_csv(body);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, 0);
+        assert_eq!(parsed[0].1, "NVIDIA RTX PRO 6000 Blackwell");
+        assert_eq!(parsed[0].2, Some(98304_u64 * 1024 * 1024));
+        assert_eq!(parsed[1].0, 1);
+        assert_eq!(parsed[1].1, "NVIDIA GeForce RTX 3090");
+        assert_eq!(parsed[1].2, Some(24576_u64 * 1024 * 1024));
+    }
+
+    #[test]
+    fn nvidia_smi_parser_tolerates_whitespace_variations() {
+        let body = "0,NVIDIA Test GPU,8192\n";
+        let parsed = parse_nvidia_smi_csv(body);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].1, "NVIDIA Test GPU");
+    }
+
+    #[test]
+    fn nvidia_smi_parser_rejects_malformed_rows() {
+        let body = "\
+0, NVIDIA OK, 8192\n\
+1\n\
+malformed,line\n\
+2, NVIDIA Also OK, 24576\n\
+";
+        let parsed = parse_nvidia_smi_csv(body);
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, 0);
+        assert_eq!(parsed[1].0, 2);
+    }
+
+    #[test]
+    fn nvidia_smi_parser_rejects_empty_name() {
+        let body = "0, , 8192\n";
+        let parsed = parse_nvidia_smi_csv(body);
+        assert!(parsed.is_empty());
+    }
+
+    #[test]
+    fn nvidia_smi_parser_handles_missing_vram() {
+        let body = "0, NVIDIA No-VRAM Token, [Insufficient Permissions]\n";
+        let parsed = parse_nvidia_smi_csv(body);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].2, None);
+    }
+
+    #[test]
+    fn nvidia_smi_parser_empty_input() {
+        assert!(parse_nvidia_smi_csv("").is_empty());
+    }
+
+    #[test]
+    fn enrich_gpus_index_matches_device_node_order() {
+        // Simulate the enrichment without invoking the real
+        // nvidia-smi: build the parsed output directly + apply.
+        let mut gpus = [
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+            },
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia1"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+            },
+        ];
+        let parsed = vec![
+            (
+                0_usize,
+                "NVIDIA RTX PRO 6000 Blackwell".into(),
+                Some(98304_u64 * 1024 * 1024),
+            ),
+            (
+                1,
+                "NVIDIA GeForce RTX 3090".into(),
+                Some(24576_u64 * 1024 * 1024),
+            ),
+        ];
+        for (idx, model, vram) in parsed {
+            if let Some(g) = gpus.get_mut(idx) {
+                g.model_hint = Some(model);
+                g.vram_bytes = vram;
+            }
+        }
+        assert_eq!(
+            gpus[0].model_hint.as_deref(),
+            Some("NVIDIA RTX PRO 6000 Blackwell")
+        );
+        assert_eq!(gpus[0].vram_bytes, Some(98304_u64 * 1024 * 1024));
+        assert_eq!(
+            gpus[1].model_hint.as_deref(),
+            Some("NVIDIA GeForce RTX 3090")
+        );
+    }
+
+    #[test]
+    fn enrich_gpus_via_nvidia_smi_no_op_when_empty_input() {
+        let gpus = enrich_gpus_via_nvidia_smi(Vec::new());
+        assert!(gpus.is_empty());
     }
 
     // ----- PCIe lspci parser (SD-R12) ------------------------------
