@@ -631,6 +631,64 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
     assert_eq!(v["host_tag"], "h");
 }
 
+/// SD-R53 (closes SDD-020 V-1): `--strict-hardware` audit-trail.
+/// Same OCSF envelope as SD-R47 but distinct category prefix
+/// (selfdef.modules.skip-strict) so dashboards split kept vs
+/// refused. Opt-in via SELFDEF_MODULES_AUDIT_PATH env.
+#[test]
+fn sdr53_strict_hardware_writes_audit_trail_with_distinct_category() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    write_module(
+        &catalog,
+        "gated",
+        &[],
+        "#!/usr/bin/env bash\necho '{\"module\":\"gated\",\"status\":\"ok\",\"message\":\"\"}'\n",
+    );
+    let g_toml = catalog.join("gated/module.toml");
+    let mut manifest = std::fs::read_to_string(&g_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&g_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.gated]\n").unwrap();
+
+    let audit = root.path().join("audit.jsonl");
+    let out = Command::new(binary())
+        .arg("--config")
+        .arg("/dev/null")
+        .env("SELFDEF_MODULES_AUDIT_PATH", audit.to_str().unwrap())
+        .args([
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+            "--strict-hardware",
+        ])
+        .output()
+        .expect("spawn selfdefctl");
+    // Apply refused (rc=1).
+    assert!(
+        !out.status.success(),
+        "should refuse strict mode: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Audit file written.
+    assert!(audit.exists(), "audit file not written");
+    let body = std::fs::read_to_string(&audit).unwrap();
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    assert_eq!(v["category"], "selfdef.modules.skip-strict");
+    assert_eq!(v["flag"], "--strict-hardware");
+    let mods = v["gated_modules"].as_array().unwrap();
+    assert!(
+        mods.iter().any(|m| m == "gated"),
+        "gated module should appear: {mods:?}"
+    );
+}
+
 /// SD-R47 (closes SDD-019 T-2): `--ignore-hardware` writes an
 /// OCSF-shaped audit-trail JSONL when SELFDEF_MODULES_AUDIT_PATH
 /// is set in env.

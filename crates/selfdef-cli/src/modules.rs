@@ -664,6 +664,50 @@ pub(crate) fn cmd_audit_log(audit_path: &Path, n: usize, json: bool) -> Result<i
     Ok(0)
 }
 
+/// SD-R53 (closes SDD-020 V-1 — per-action audit prefixes): same
+/// OCSF envelope as SD-R47 but for the --strict-hardware refusal
+/// path. Distinct category prefix so dashboards can split
+/// override-fired vs strict-refusal events.
+pub(crate) fn sdr53_emit_strict_hardware_audit(
+    path: &Path,
+    skipped_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = skipped_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.skip-strict\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--strict-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
 /// SD-R47 (closes SDD-019 T-2): append an OCSF-shaped JSONL line
 /// to the operator-configured audit path when `--ignore-hardware`
 /// fires. Operators wanting fleet-alert visibility on gate
@@ -2449,6 +2493,33 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
                 "# SD-R44: --strict-hardware set — refusing to proceed; {} gated module(s) skipped",
                 pre_count - post_count
             );
+            // SD-R53 (closes SDD-020 V-1): audit-trail the strict-mode
+            // refusal as well. Same env opt-in as SD-R47 + a distinct
+            // category prefix so dashboards can split kept vs refused.
+            if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+                let audit_path = std::path::PathBuf::from(audit_path);
+                // Modules that WOULD have skipped (the ones we filtered
+                // out) are no longer in `active`; rerun the gate on a
+                // fresh load to recover their names.
+                let (_, fresh) = match prepare(opts) {
+                    Ok(p) => p,
+                    Err(_) => (std::path::PathBuf::new(), Vec::new()),
+                };
+                let skipped_names: Vec<String> = fresh
+                    .iter()
+                    .filter(|am| {
+                        !am.manifest.requires_hardware.is_empty()
+                            && !active.iter().any(|a| a.slug == am.slug)
+                    })
+                    .map(|am| am.display_name())
+                    .collect();
+                if let Err(e) = sdr53_emit_strict_hardware_audit(&audit_path, &skipped_names) {
+                    eprintln!(
+                        "# SD-R53: audit write failed: {e} (path: {})",
+                        audit_path.display()
+                    );
+                }
+            }
             return Ok(1);
         }
     } else if opts.ignore_hardware
