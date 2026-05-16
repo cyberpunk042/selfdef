@@ -306,3 +306,20 @@ canonical source of truth; this log gives the chronological view.
 **Affected items**: `docs/sdd/011-sovereign-os-arc-opening.md` (this PR); `docs/handoff/2026-05-16-sovereign-os-arc-opening.md` (this PR — supersedes 2026-05-16-end-of-stage2-anchor.md); future `cyberpunk042/sovereign-os` repo (pending operator-side bootstrap); SDD-010 Stage 2 reframed as downstream.
 **Reversibility**: fully-reversible at the architectural-decision level (new-repo direction can be revisited; alternative paths documented in handoff); locked at the Plan-adoption level only insofar as the 10-PR foundation phase is what the agent will execute when authorized.
 **Linked**: PR (this PR); paired with info-hub PR landing the L0 verbatim provenance.
+
+## D-027 — 2026-05-16 — Hardware-aware modules + tune surface (SDD-018; SD-R14..R19)
+
+**Decision**: Lock the operator-stable contracts shipped across SD-R14..R19 into doctrine via SDD-018. Five surfaces become forever-supported (with deprecation cycles for any future renames):
+
+1. `[requires_hardware]` block in module.toml (SD-R14): 5 predicates (avx512_vnni, avx512_bf16, memory_gib_min, gpu_count_min, sain01_verdict_min) AND-ed, gate runs at apply time, skipped modules log clear stderr.
+2. `selfdefctl modules check-hardware` (SD-R15): read-only dry-run; human + `--json` outputs.
+3. `selfdefctl hardware thermals` (SD-R17): per-sensor reads from /sys/class/hwmon + nvidia-smi; operator-stable source label format (`<hwmon-name>/<label-or-tempN>` and `nvidia-gpu-<index>`).
+4. `selfdefctl hardware tune` (SD-R19): host-tuned compile flags in 4 formats (sh / env-file / make / json); `SELFDEF_HARDWARE_*` env-var names operator-stable; `-mprefer-vector-width=512` gated on avx512f.
+5. `selfdefctl doctor hardware.thermals` row (SD-R18): target-aware severity (Warn only on sain01 + no sensors).
+
+**Question**: After 6 in-arc rounds (SD-R14..R19) + 3 cross-repo mirrors (sovereign-os R170, R172, R173), what doctrine commitments do we lock so future evolutions stay backward-compatible?
+**Source**: SD-R14..R19 commits on `claude/sain01-integration-arc` (PR #190); sovereign-os R170, R172, R173 commits on main; SDD-018 (this commit).
+**Rationale**: Operators are now writing/expecting these surfaces. Future renames break tooling silently; locking the names + semantics in a single SDD makes deprecation explicit (and reviewable). Cross-repo mirrors documented in one place keeps the bridge alignment legible.
+**Affected items**: `docs/sdd/018-hardware-aware-modules-and-tune-surface.md` (this commit); 6 in-arc selfdef commits; 3 sovereign-os commits; future selfdef rounds that touch the surface MUST cite this SDD.
+**Reversibility**: contracts are reversible but expensive — any rename requires a Stage-2+ deprecation cycle (parallel old+new names for ≥1 release).
+**Linked**: PR #190; sovereign-os main.

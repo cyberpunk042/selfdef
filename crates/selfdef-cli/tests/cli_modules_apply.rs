@@ -269,6 +269,143 @@ fn apply_runs_multiple_instances_of_a_multi_instance_module() {
     assert!(stdout.contains("Summary: 2 ok"), "stdout: {stdout}");
 }
 
+/// SD-R14 + SD-R16: end-to-end gate exercise via the CLI surface.
+///
+/// alpha is unrestricted, beta declares `memory_gib_min = 9_999_999`
+/// (no real host will ever have ~10 PiB of RAM). Apply must keep
+/// alpha and skip beta with the SD-R14 stderr block — and the apply
+/// summary must reflect 1 ok, not 2.
+#[test]
+fn sdr16_apply_skips_modules_unmet_hardware_requirements_e2e() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+
+    let body = "#!/usr/bin/env bash\necho '{\"module\":\"$slug\",\"status\":\"ok\",\"message\":\"applied\"}'\n";
+    let body_alpha = body.replace("$slug", "alpha");
+    let body_beta = body.replace("$slug", "beta");
+
+    // alpha: ordinary unrestricted stub.
+    write_module(&catalog, "alpha", &[], &body_alpha);
+
+    // beta: same shape but with an unmeetable [requires_hardware]
+    // block patched into module.toml after write_module's standard
+    // manifest write.
+    write_module(&catalog, "beta", &[], &body_beta);
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        out.status.success(),
+        "rc={:?}\nstdout: {stdout}\nstderr: {stderr}",
+        out.status.code(),
+    );
+    // The gate skip block lands on stderr (SD-R14 contract).
+    assert!(
+        stderr.contains("SD-R14 hardware-aware module gate"),
+        "gate banner missing on stderr: {stderr}"
+    );
+    assert!(
+        stderr.contains("beta"),
+        "beta should appear in skip block: {stderr}"
+    );
+    assert!(
+        stderr.contains("memory_gib_min = 9999999"),
+        "predicate citation missing: {stderr}"
+    );
+    // Apply path only runs the kept set.
+    assert!(
+        stdout.contains("alpha [apply]"),
+        "alpha must still apply: {stdout}"
+    );
+    assert!(
+        !stdout.contains("beta [apply]"),
+        "beta should not have applied: {stdout}"
+    );
+    assert!(
+        stdout.contains("Summary: 1 ok"),
+        "summary count wrong: {stdout}"
+    );
+}
+
+/// SD-R14 + SD-R15: `modules check-hardware` returns rc=0 and the
+/// human + JSON outputs partition correctly when invoked against the
+/// same hard-to-meet fixture used above.
+#[test]
+fn sdr16_check_hardware_e2e_human_and_json() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "beta", &[], stub);
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    // Human-readable.
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "check-hardware",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("WOULD APPLY"), "stdout: {stdout}");
+    assert!(stdout.contains("WOULD SKIP"), "stdout: {stdout}");
+    assert!(stdout.contains("alpha"), "stdout: {stdout}");
+    assert!(stdout.contains("beta"), "stdout: {stdout}");
+
+    // JSON.
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "check-hardware",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("\"kept\":"), "stdout: {stdout}");
+    assert!(stdout.contains("\"skipped\":"), "stdout: {stdout}");
+    assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
+}
+
 #[test]
 fn apply_rejects_instance_keys_against_non_instanced_module() {
     let root = tempfile::tempdir().unwrap();

@@ -113,6 +113,9 @@ selfdef-integration-pagerduty = { path = "crates/selfdef-integration-pagerduty" 
 selfdef-integration-loki = { path = "crates/selfdef-integration-loki" }
 selfdef-integration-opensearch = { path = "crates/selfdef-integration-opensearch" }
 selfdef-integration-thehive = { path = "crates/selfdef-integration-thehive" }
+selfdef-integration-shared-audit-summary = { path = "crates/selfdef-integration-shared-audit-summary" }
+selfdef-integration-oracle-triage = { path = "crates/selfdef-integration-oracle-triage" }
+selfdef-hardware = { path = "crates/selfdef-hardware" }
 selfdef-responder = { path = "crates/selfdef-responder" }
 selfdef-collector-auditd = { path = "crates/selfdef-collector-auditd" }
 selfdef-collector-journald = { path = "crates/selfdef-collector-journald" }

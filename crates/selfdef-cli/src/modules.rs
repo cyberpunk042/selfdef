@@ -80,6 +80,14 @@ pub(crate) struct ModuleManifest {
     pub(crate) consumes: Vec<String>,
     #[serde(default)]
     pub(crate) requires: Vec<Requirement>,
+    /// SD-R14: hardware requirements gate. Module is SKIPPED at
+    /// apply-time when any declared requirement isn't met. Empty
+    /// (default) means the module is always applied.
+    ///
+    /// Operator-stable; consumed by `cmd_apply` via
+    /// [`hardware_requirements_met`].
+    #[serde(default)]
+    pub(crate) requires_hardware: HardwareRequirements,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -148,6 +156,103 @@ impl DaemonRequirement {
 pub(crate) struct Requirement {
     pub(crate) kind: String,
     pub(crate) value: String,
+}
+
+/// SD-R14: hardware-aware module gating.
+///
+/// A module's `[requires_hardware]` table declares minimum host
+/// hardware. The apply path skips modules that don't meet the bar
+/// with a clear log line; operators can override with
+/// `--ignore-hardware` (future round) or by editing the module manifest.
+#[derive(Debug, Default, Deserialize, Clone)]
+pub(crate) struct HardwareRequirements {
+    /// When set, requires `cpu.avx512_vnni = true` in the host's
+    /// HardwareCapabilities. Match for ternary-inference fast path
+    /// modules (master spec § 16).
+    #[serde(default)]
+    pub(crate) avx512_vnni: bool,
+
+    /// When set, requires `cpu.avx512_bf16 = true`. Match for
+    /// BitNet acceleration modules.
+    #[serde(default)]
+    pub(crate) avx512_bf16: bool,
+
+    /// Minimum memory in GiB.
+    #[serde(default)]
+    pub(crate) memory_gib_min: u64,
+
+    /// Minimum count of NVIDIA GPUs. 0 disables the gate.
+    #[serde(default)]
+    pub(crate) gpu_count_min: u32,
+
+    /// Required Sain01Match verdict, when set:
+    /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
+    /// would be weird — operator should rarely use it).
+    #[serde(default)]
+    pub(crate) sain01_verdict_min: String,
+}
+
+impl HardwareRequirements {
+    /// Returns Ok iff every set requirement passes; Err with a list
+    /// of unmet predicates otherwise.
+    pub(crate) fn evaluate(
+        &self,
+        caps: &selfdef_hardware::HardwareCapabilities,
+    ) -> Result<(), Vec<String>> {
+        let mut unmet = Vec::new();
+        if self.avx512_vnni && !caps.cpu.avx512vnni {
+            unmet.push("avx512_vnni required (host lacks AVX-512 VNNI)".into());
+        }
+        if self.avx512_bf16 && !caps.cpu.avx512bf16 {
+            unmet.push("avx512_bf16 required (host lacks AVX-512 BF16)".into());
+        }
+        if self.memory_gib_min > 0 {
+            let host_gib = caps.memory.total_bytes / (1024 * 1024 * 1024);
+            if host_gib < self.memory_gib_min {
+                unmet.push(format!(
+                    "memory_gib_min = {} (host has {} GiB)",
+                    self.memory_gib_min, host_gib,
+                ));
+            }
+        }
+        if self.gpu_count_min > 0 && caps.gpu.device_count < self.gpu_count_min {
+            unmet.push(format!(
+                "gpu_count_min = {} (host has {} GPU(s))",
+                self.gpu_count_min, caps.gpu.device_count,
+            ));
+        }
+        if !self.sain01_verdict_min.is_empty() {
+            let actual = match caps.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            let rank = |s: &str| match s {
+                "FullMatch" => 3,
+                "PartialMatch" => 2,
+                "NoMatch" => 1,
+                _ => 0,
+            };
+            if rank(actual) < rank(&self.sain01_verdict_min) {
+                unmet.push(format!(
+                    "sain01_verdict_min = {} (host verdict = {})",
+                    self.sain01_verdict_min, actual,
+                ));
+            }
+        }
+        if unmet.is_empty() { Ok(()) } else { Err(unmet) }
+    }
+
+    /// Returns true if NO requirement is set (the manifest has no
+    /// `[requires_hardware]` block, or it has only zero/false fields).
+    /// Used to skip the probe entirely on hardware-agnostic modules.
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.avx512_vnni
+            && !self.avx512_bf16
+            && self.memory_gib_min == 0
+            && self.gpu_count_min == 0
+            && self.sain01_verdict_min.is_empty()
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -755,6 +860,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         instanced: m.instanced,
         phase: m.phase,
         daemon_requires: m.daemon_requires.clone(),
+        requires_hardware: m.requires_hardware.clone(),
     }
 }
 
@@ -1207,7 +1313,137 @@ fn render_requirements_snippet(unmet: &[UnmetByModule], daemon_config_path: &Pat
 }
 
 pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
+    // SDD-015 § 4: when [perimeter] check_overlap_on_apply is true
+    // (auto-true on Sain01 unless overridden), refuse to apply if any
+    // selfdef-authored policy would overlap with sovereign-os's
+    // host-scoped allowlist. The check runs BEFORE any apply.sh
+    // fires — operators don't get partial installs of conflicting
+    // policies.
+    let pre_code = pre_apply_perimeter_check(opts)?;
+    if pre_code != 0 {
+        return Ok(pre_code);
+    }
     run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
+}
+
+/// SD-R14: hardware-aware module gate.
+///
+/// Probes the host once + drops modules whose `[requires_hardware]`
+/// block isn't satisfied. Skipped modules log a single line citing
+/// the unmet predicates so operators understand WHY their module
+/// didn't apply. The probe failure (e.g. on minimal hosts) is silent
+/// for modules that DON'T declare hardware requirements; modules
+/// that DO declare them are skipped with a clear log.
+fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "SD-R14: hardware probe failed; modules with [requires_hardware] will be skipped"
+            );
+            None
+        }
+    };
+    let mut kept = Vec::with_capacity(active.len());
+    let mut skipped = Vec::new();
+    for m in active {
+        if m.manifest.requires_hardware.is_empty() {
+            kept.push(m);
+            continue;
+        }
+        match &caps {
+            Some(c) => match m.manifest.requires_hardware.evaluate(c) {
+                Ok(()) => kept.push(m),
+                Err(unmet) => skipped.push((m.display_name(), unmet)),
+            },
+            None => skipped.push((m.display_name(), vec!["hardware probe unavailable".into()])),
+        }
+    }
+    if !skipped.is_empty() {
+        eprintln!(
+            "# SD-R14 hardware-aware module gate — skipping {} module(s):",
+            skipped.len()
+        );
+        for (name, reasons) in &skipped {
+            eprintln!("  - {name}:");
+            for r in reasons {
+                eprintln!("      ✗ {r}");
+            }
+        }
+        eprintln!("# To force-apply, remove [requires_hardware] from the module's module.toml");
+        eprintln!("# or upgrade the host to meet the requirements.");
+    }
+    kept
+}
+
+/// SDD-015 § 4 + § 6 pre-apply gate. Reads the daemon config to
+/// resolve `[perimeter] check_overlap_on_apply` + `policies_dir` +
+/// `overlap_warn_only`. Loads policies, runs overlap detection, and:
+///   - returns 0 (no gate) when the check is disabled
+///   - returns 0 (passed) when no findings
+///   - returns 0 (warn-only mode) when findings exist but downgraded
+///   - returns 1 (blocked) when findings exist and not in warn-only
+fn pre_apply_perimeter_check(opts: &LifecycleOpts) -> Result<i32> {
+    let cfg_path = match &opts.daemon_config_path {
+        Some(p) => p,
+        None => return Ok(0), // no config supplied → no gate
+    };
+    let cfg = match selfdef_config::Config::load(Some(cfg_path)) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                config = %cfg_path.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — daemon config unloadable"
+            );
+            return Ok(0);
+        }
+    };
+    if !selfdef_config::resolve_perimeter_check_overlap(&cfg) {
+        return Ok(0);
+    }
+    let policies = match crate::perimeter::read_policies_dir(&cfg.perimeter.policies_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(
+                dir = %cfg.perimeter.policies_dir.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — policies dir unreadable"
+            );
+            return Ok(0);
+        }
+    };
+    let stance = cfg.perimeter.third_party_policy_stance.as_str();
+    let findings = crate::perimeter::check_overlap_with_stance(&policies, stance);
+    let blocking: Vec<_> = findings
+        .iter()
+        .filter(|f| crate::perimeter::finding_is_blocking(f))
+        .collect();
+    if blocking.is_empty() {
+        tracing::info!(
+            policies = policies.len(),
+            "modules apply: perimeter pre-check PASS (SDD-015)"
+        );
+        return Ok(0);
+    }
+    let (report, exit) = crate::perimeter::render_check_overlap_report(&policies, &findings);
+    eprintln!("# modules apply pre-check (SDD-015):\n");
+    eprintln!("{report}");
+    if cfg.perimeter.overlap_warn_only {
+        eprintln!(
+            "[perimeter] overlap_warn_only = true → proceeding with apply despite findings (Q15-B)."
+        );
+        return Ok(0);
+    }
+    eprintln!(
+        "Refusing to apply: {} blocking finding(s) detected (of {} total). \
+         Set `[perimeter] overlap_warn_only = true` to downgrade, or fix the \
+         FAIL violations above and re-run.",
+        blocking.len(),
+        findings.len(),
+    );
+    Ok(exit.max(1))
 }
 
 /// SDD-002 D-5: `selfdefctl modules show-requires` reads every
@@ -1259,6 +1495,86 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R15: dry-run the SD-R14 [requires_hardware] gate without
+/// touching any module scripts. Operators planning an install on a
+/// new host run this BEFORE `apply` to see which modules will skip.
+pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let mut kept: Vec<(String, String)> = Vec::new(); // (name, reason)
+    let mut skipped: Vec<(String, Vec<String>)> = Vec::new();
+    let mut probe_ok = caps.is_some();
+    for am in &active {
+        let name = am.display_name();
+        if am.manifest.requires_hardware.is_empty() {
+            kept.push((name, "no [requires_hardware] block".into()));
+            continue;
+        }
+        match &caps {
+            Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                Ok(()) => kept.push((name, "all hardware requirements met".into())),
+                Err(unmet) => skipped.push((name, unmet)),
+            },
+            None => {
+                probe_ok = false;
+                skipped.push((name, vec!["hardware probe unavailable".into()]));
+            }
+        }
+    }
+    if json {
+        let total = kept.len() + skipped.len();
+        let kept_json: Vec<String> = kept
+            .iter()
+            .map(|(n, r)| format!(r#"{{"module":"{n}","reason":"{r}"}}"#))
+            .collect();
+        let skipped_json: Vec<String> = skipped
+            .iter()
+            .map(|(n, reasons)| {
+                let r = reasons
+                    .iter()
+                    .map(|s| format!(r#""{}""#, s.replace('"', "\\\"")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(r#"{{"module":"{n}","unmet":[{r}]}}"#)
+            })
+            .collect();
+        println!(
+            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}]}}"#,
+            probe_ok,
+            total,
+            kept_json.join(","),
+            skipped_json.join(","),
+        );
+    } else {
+        println!("# SD-R15 hardware gate dry-run");
+        if !probe_ok {
+            println!("# (hardware probe unavailable — gated modules will be skipped)");
+        }
+        println!("# {} active module(s):", kept.len() + skipped.len());
+        if !kept.is_empty() {
+            println!();
+            println!("WOULD APPLY ({}):", kept.len());
+            for (name, reason) in &kept {
+                println!("  ✓ {name}  ({reason})");
+            }
+        }
+        if !skipped.is_empty() {
+            println!();
+            println!("WOULD SKIP ({}):", skipped.len());
+            for (name, reasons) in &skipped {
+                println!("  ✗ {name}");
+                for r in reasons {
+                    println!("      - {r}");
+                }
+            }
+        }
+    }
+    Ok(0)
+}
+
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();
@@ -1308,6 +1624,19 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     let (host_path, mut active) = prepare(opts)?;
     if policy.reverse_order {
         active.reverse();
+    }
+    // SD-R14: hardware-aware module gate. On Apply / Check, probe
+    // the host hardware once + filter out modules whose
+    // [requires_hardware] block isn't met. The unmet modules surface
+    // as a single warning block before apply; the filtered set
+    // proceeds. Uninstall skips this — tearing a module down doesn't
+    // care whether the hardware now matches.
+    if matches!(action, Action::Apply | Action::Check)
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        active = apply_hardware_gate(active);
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
@@ -1499,6 +1828,7 @@ mod tests {
             instanced,
             phase,
             daemon_requires: BTreeMap::new(),
+            requires_hardware: HardwareRequirements::default(),
         }
     }
 
@@ -2142,5 +2472,511 @@ mod tests {
         active.reverse();
         let order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(order, vec!["audit", "alpha", "guard"]);
+    }
+}
+
+#[cfg(test)]
+mod sdd_015_apply_gate_tests {
+    //! SDD-015 § 4 + § 6: pre-apply perimeter check.
+    //!
+    //! We construct a `LifecycleOpts` that points at a temp daemon
+    //! config file with explicit `[deployment] target = "sain01"` +
+    //! a `[perimeter] policies_dir = <tempdir>` pointing at our
+    //! synthesized policy files. Then we call
+    //! [`pre_apply_perimeter_check`] directly and assert the exit code.
+    //!
+    //! This validates the GATE in isolation; the full
+    //! `cmd_apply → run_lifecycle` path is exercised by the integration
+    //! test suite (no module fixtures wired here).
+
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn write_cfg(path: &std::path::Path, body: &str) {
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn opts(daemon_config_path: PathBuf) -> LifecycleOpts {
+        LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            daemon_config_path: Some(daemon_config_path),
+        }
+    }
+
+    /// SDD-015 § 4: on Generic target, the gate is auto-disabled —
+    /// returns 0 regardless of policies dir contents.
+    #[test]
+    fn sdd_015_apply_gate_skipped_on_generic_target() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Place a bad agent-guard policy that WOULD fail the check
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "generic"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "generic target → gate skipped");
+    }
+
+    /// SDD-015 § 4: on SAIN-01 target with a clean policies dir, gate
+    /// passes (returns 0).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_clean_sain01() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Only a properly-scoped agent-guard policy
+        std::fs::write(
+            pol_dir.join("agent-guard-shell-exec.yaml"),
+            "metadata:\n  name: agent-guard-shell-exec\nspec:\n  kprobes:\n    - call: sys_execve\n      selectors:\n        - matchNamespaces:\n            - operator: In\n              values: [container]\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "clean sain01 policies → gate passes");
+    }
+
+    /// SDD-015 § 4 + § 6: on SAIN-01 target with a host-scoped
+    /// agent-guard policy, gate BLOCKS apply (returns ≥1).
+    #[test]
+    fn sdd_015_apply_gate_blocks_on_host_scoped_agent_guard() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert!(code >= 1, "host-scoped agent-guard → blocked (got {code})");
+    }
+
+    /// SDD-015 § Q15-B: with `overlap_warn_only = true`, findings are
+    /// printed but the gate returns 0 (apply proceeds).
+    #[test]
+    fn sdd_015_apply_gate_warn_only_downgrades_to_zero() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                overlap_warn_only = true
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "warn-only → downgrade to 0 despite finding");
+    }
+
+    /// Explicit operator override: `check_overlap_on_apply = false` on
+    /// SAIN-01 disables the gate (operator-explicit opt-out path).
+    #[test]
+    fn sdd_015_apply_gate_explicit_disable_overrides_sain01_autoenable() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                check_overlap_on_apply = false
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "explicit disable wins over sain01 auto-enable");
+    }
+
+    /// No daemon config path supplied → gate is a no-op.
+    #[test]
+    fn sdd_015_apply_gate_noop_when_no_daemon_config_path() {
+        let opts = LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            daemon_config_path: None,
+        };
+        let code = pre_apply_perimeter_check(&opts).unwrap();
+        assert_eq!(code, 0, "no daemon config → gate skipped");
+    }
+
+    /// Missing policies dir → gate passes (operator without Tetragon
+    /// installed doesn't get blocked from running modules apply).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_missing_policies_dir() {
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            r#"
+            [deployment]
+            target = "sain01"
+
+            [perimeter]
+            policies_dir = "/nonexistent/path/xyz"
+            "#,
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "missing policies dir → graceful pass");
+    }
+}
+
+#[cfg(test)]
+mod sdr14_hardware_gate_tests {
+    //! SD-R14: hardware-aware module gating.
+    //!
+    //! [`HardwareRequirements::evaluate`] is the pure decision function;
+    //! [`apply_hardware_gate`] wraps it with the partition + skip-block
+    //! logging. Tests here pin each predicate branch in isolation and
+    //! then exercise the gate against a synthesized [`HardwareCapabilities`].
+    //!
+    //! These are the operator-stable surface for the
+    //! `[requires_hardware]` block in `module.toml` — every assertion
+    //! reads as "what an operator declares == what gets enforced".
+    use super::*;
+    use selfdef_hardware::{
+        CpuCapabilities, GpuCapabilities, HardwareCapabilities, MemoryCapabilities,
+        PcieCapabilities, Sain01Match, Sain01Verdict,
+    };
+
+    fn caps_with(
+        avx512_vnni: bool,
+        avx512_bf16: bool,
+        mem_gib: u64,
+        gpu_count: u32,
+        verdict: Sain01Verdict,
+    ) -> HardwareCapabilities {
+        HardwareCapabilities {
+            schema_version: "1".into(),
+            probed_at: "1970-01-01T00:00:00Z".into(),
+            host_tag: None,
+            cpu: CpuCapabilities {
+                avx512vnni: avx512_vnni,
+                avx512bf16: avx512_bf16,
+                ..Default::default()
+            },
+            memory: MemoryCapabilities {
+                total_bytes: mem_gib * 1024 * 1024 * 1024,
+                at_least_256gb: mem_gib >= 256,
+                at_least_512gb: mem_gib >= 512,
+            },
+            gpu: GpuCapabilities {
+                device_count: gpu_count,
+                device_nodes: Vec::new(),
+            },
+            pcie: PcieCapabilities::default(),
+            sain01_match: Sain01Match {
+                overall: verdict,
+                cpu_avx512_vnni: avx512_vnni,
+                cpu_avx512_bf16: avx512_bf16,
+                memory_at_least_256gb: mem_gib >= 256,
+                gpu_count_at_least_2: gpu_count >= 2,
+                motherboard_proart_x870e: None,
+                pcie_dual_x8_present: false,
+            },
+        }
+    }
+
+    fn full_match_sain01() -> HardwareCapabilities {
+        caps_with(true, true, 256, 2, Sain01Verdict::FullMatch)
+    }
+
+    fn minimal_host() -> HardwareCapabilities {
+        caps_with(false, false, 16, 0, Sain01Verdict::NoMatch)
+    }
+
+    #[test]
+    fn sdr14_evaluate_empty_passes_any_caps() {
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        assert!(req.evaluate(&minimal_host()).is_ok());
+        assert!(req.evaluate(&full_match_sain01()).is_ok());
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_passes_on_match() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(unmet[0].contains("avx512_vnni"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_bf16_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_bf16: true,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("avx512_bf16"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_memory_threshold_enforced() {
+        let req = HardwareRequirements {
+            memory_gib_min: 128,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 32, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("memory_gib_min = 128"), "got: {unmet:?}");
+        assert!(unmet[0].contains("32 GiB"), "got: {unmet:?}");
+        // Exactly at threshold → passes.
+        req.evaluate(&caps_with(false, false, 128, 0, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_gpu_count_min_enforced() {
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 1, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("gpu_count_min = 2"), "got: {unmet:?}");
+        // 2 GPUs → passes.
+        req.evaluate(&caps_with(false, false, 16, 2, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_rank_ordering() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "PartialMatch".into(),
+            ..Default::default()
+        };
+        // NoMatch < PartialMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("PartialMatch"), "got: {unmet:?}");
+        // PartialMatch == PartialMatch → pass.
+        req.evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap();
+        // FullMatch > PartialMatch → pass.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_full_match_required() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "FullMatch".into(),
+            ..Default::default()
+        };
+        // PartialMatch < FullMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("FullMatch"), "got: {unmet:?}");
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_multiple_failures_listed_together() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            avx512_bf16: true,
+            memory_gib_min: 256,
+            gpu_count_min: 2,
+            sain01_verdict_min: "FullMatch".into(),
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        // Every predicate fails on a minimal host: 5 lines.
+        assert_eq!(unmet.len(), 5, "got: {unmet:?}");
+    }
+
+    // -- apply_hardware_gate ----------------------------------------
+
+    fn am_with_req(slug: &str, req: HardwareRequirements) -> ActiveModule {
+        let manifest = ModuleManifest {
+            name: slug.to_string(),
+            version: "0.0.0".into(),
+            summary: "sdr14 fixture".into(),
+            category: "test".into(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            requires: Vec::new(),
+            requires_hardware: req,
+            install: None,
+            profiles: None,
+            instanced: false,
+            phase: Phase::Main,
+            daemon_requires: BTreeMap::new(),
+        };
+        ActiveModule {
+            slug: slug.into(),
+            instance: None,
+            module_root: PathBuf::from("/tmp/nonexistent-test-root"),
+            config_path: PathBuf::from("/tmp/nonexistent-test-cfg"),
+            manifest,
+        }
+    }
+
+    #[test]
+    fn sdr14_apply_hardware_gate_keeps_unrestricted_modules() {
+        // Hardware-agnostic modules are kept regardless of host caps.
+        // The gate must NEVER drop a module whose [requires_hardware]
+        // block is empty — that's the contract operators rely on for
+        // the 90% of modules that don't care about the host.
+        let active = vec![
+            am_with_req("alpha", HardwareRequirements::default()),
+            am_with_req("beta", HardwareRequirements::default()),
+        ];
+        let kept = apply_hardware_gate(active);
+        let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn sdr15_check_hardware_runs_against_fixture_catalog() {
+        // SD-R15: `selfdefctl modules check-hardware` is read-only;
+        // make sure the entry point completes with rc=0 against a
+        // catalog where one module is unrestricted and one has a
+        // mem-threshold gate. We can't pin exact stdout (the test
+        // host's caps vary across CI / dev boxes), but the function
+        // must succeed without panicking.
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let cat = dir.path().join("catalog");
+        std::fs::create_dir_all(cat.join("alpha")).unwrap();
+        std::fs::create_dir_all(cat.join("beta")).unwrap();
+        std::fs::write(
+            cat.join("alpha/module.toml"),
+            "name = \"alpha\"\nversion = \"0.0.0\"\nsummary = \"unrestricted\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            cat.join("beta/module.toml"),
+            "name = \"beta\"\nversion = \"0.0.0\"\nsummary = \"hardware-gated\"\n\
+             [requires_hardware]\nmemory_gib_min = 9999999\n",
+        )
+        .unwrap();
+        let host = dir.path().join("modules.toml");
+        std::fs::write(&host, "[modules.alpha]\n[modules.beta]\n").unwrap();
+        let opts = LifecycleOpts {
+            host_config: Some(host),
+            dir: Some(cat),
+            ..Default::default()
+        };
+        let rc = cmd_check_hardware(&opts, false).unwrap();
+        assert_eq!(rc, 0);
+        let rc_json = cmd_check_hardware(&opts, true).unwrap();
+        assert_eq!(rc_json, 0);
+    }
+
+    #[test]
+    fn sdr14_filter_active_respects_requires_hardware_field() {
+        // Sanity check: the field round-trips through clone_manifest.
+        // (Touched in this round; if the new field is forgotten there
+        // the gate silently misbehaves for instanced modules.)
+        let am = am_with_req(
+            "needs-vnni",
+            HardwareRequirements {
+                avx512_vnni: true,
+                ..Default::default()
+            },
+        );
+        let cloned = clone_manifest(&am.manifest);
+        assert!(cloned.requires_hardware.avx512_vnni);
+        assert!(!cloned.requires_hardware.is_empty());
     }
 }

@@ -1,0 +1,30 @@
+[package]
+name = "selfdef-integration-oracle-triage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Oracle-triage channel — dispatches selfdef events through the sovereign-os inference router for operator-reviewed triage suggestions (SDD-016)."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-core = { workspace = true }
+selfdef-notifier = { workspace = true }
+selfdef-notifier-orchestrator = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+uuid = { workspace = true }

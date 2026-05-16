@@ -7,6 +7,7 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 mod dispatcher_adapter;
+mod hardware_probe_loop;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -65,6 +66,101 @@ async fn main() -> Result<()> {
         "selfdefd starting"
     );
 
+    // SDD-013 § 5: surface the active deployment target + resolved state
+    // paths in a single greppable log line. Operators check posture via
+    // `journalctl -u selfdefd | grep deployment.target`.
+    let dep_target = cfg.deployment.target;
+    info!(
+        "deployment.target" = %dep_target,
+        state_dir = %selfdef_config::state_dir(dep_target).display(),
+        audit_log = %selfdef_config::audit_log_path(dep_target).display(),
+        escalations = %selfdef_config::escalations_path(dep_target).display(),
+        "deployment: target = {dep_target}; state paths resolved",
+    );
+    // SDD-013 § Q13-C: refuse to start when target mismatches state-dir
+    // contents — explicit operator migration is safer than silent fork.
+    if let Err(e) = check_q13c_state_fork(dep_target) {
+        return Err(e.context("Q13-C state-fork pre-flight"));
+    }
+
+    // SDD-017: hardware probe at startup. Best-effort + informational
+    // — never blocks the daemon unless [deployment].sain01_strict is
+    // set AND target=sain01 AND the verdict is not FullMatch. Logs the
+    // Sain01Match verdict so operators see hardware drift in
+    // `journalctl -u selfdefd | grep sain01_match`.
+    match selfdef_hardware::probe() {
+        Ok(snap) => {
+            let m = selfdef_hardware::matches_sain01(&snap);
+            info!(
+                overall = ?m.overall,
+                cpu_avx512_vnni = m.cpu_avx512_vnni,
+                cpu_avx512_bf16 = m.cpu_avx512_bf16,
+                memory_at_least_256gb = m.memory_at_least_256gb,
+                gpu_count_at_least_2 = m.gpu_count_at_least_2,
+                pcie_dual_x8_present = m.pcie_dual_x8_present,
+                motherboard_proart_x870e = ?m.motherboard_proart_x870e,
+                logical_threads = snap.cpu.logical_threads,
+                memory_total_bytes = snap.memory.total_bytes,
+                gpu_count = snap.gpus.len(),
+                "sain01_match (SDD-017)",
+            );
+            // SDD-017 § 6: Layer B textfile-collector emission.
+            if !cfg.deployment.hardware_metrics_path.is_empty() {
+                let p = std::path::Path::new(&cfg.deployment.hardware_metrics_path);
+                if let Err(e) = selfdef_hardware::write_layer_b_metrics(p, &snap, &m) {
+                    warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SDD-017 § 6: writing Layer B hardware metrics failed; continuing"
+                    );
+                } else {
+                    info!(
+                        path = %p.display(),
+                        "SDD-017 § 6: Layer B hardware metrics emitted"
+                    );
+                }
+            }
+            // SDD-017 § 7 (SD-R10): HardwareCapabilities JSON export.
+            // Consumed by sovereign-os Wasm-AOT pipeline + future
+            // hardware-aware policies. Atomic tempfile+rename inside
+            // the helper.
+            if !cfg.deployment.hardware_capabilities_path.is_empty() {
+                let p = std::path::Path::new(&cfg.deployment.hardware_capabilities_path);
+                if let Err(e) = selfdef_hardware::write_capabilities_json(p, &snap) {
+                    warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SDD-017 § 7 (SD-R10): writing HardwareCapabilities JSON failed; continuing"
+                    );
+                } else {
+                    info!(
+                        path = %p.display(),
+                        "SDD-017 § 7 (SD-R10): HardwareCapabilities JSON emitted"
+                    );
+                }
+            }
+            // SDD-017 § 5: strict-mode gate. Only fires when target=sain01
+            // AND sain01_strict=true AND overall != FullMatch.
+            if matches!(dep_target, selfdef_config::DeploymentTarget::Sain01)
+                && cfg.deployment.sain01_strict
+                && !matches!(m.overall, selfdef_hardware::Sain01Verdict::FullMatch)
+            {
+                anyhow::bail!(
+                    "SDD-017 § 5 sain01_strict: refusing to start — \
+                     deployment.target = sain01 + sain01_strict = true \
+                     but hardware verdict = {:?}. \
+                     Either fix the missing dimension(s), set sain01_strict = false \
+                     to downgrade to warn-only, or switch target = generic. \
+                     Run `selfdefctl hardware` for the per-dimension breakdown.",
+                    m.overall
+                );
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "hardware probe failed (SDD-017); daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 
@@ -80,6 +176,31 @@ async fn main() -> Result<()> {
         let sd = shutdown.clone();
         let s = Arc::clone(&store);
         tokio::spawn(async move { run_store_sink(s, store_sub, sd).await })
+    };
+
+    // SD-R22: periodic hardware probe + thermal-event emission loop.
+    // Opt-in via [hardware_probe].enabled. The task lives for the
+    // daemon's lifetime + observes the same shutdown signal as the
+    // other background tasks.
+    let _hardware_probe_task = if cfg.hardware_probe.enabled {
+        let metrics_path: Option<std::path::PathBuf> =
+            if cfg.deployment.hardware_metrics_path.is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(
+                    &cfg.deployment.hardware_metrics_path,
+                ))
+            };
+        let probe_cfg = cfg.hardware_probe.clone();
+        let pubr = publisher.clone();
+        let sd = shutdown.clone();
+        let ht = host_tag.clone();
+        Some(tokio::spawn(async move {
+            hardware_probe_loop::run_hardware_probe_loop(probe_cfg, metrics_path, pubr, ht, sd)
+                .await
+        }))
+    } else {
+        None
     };
 
     // ---- correlator ----
@@ -515,6 +636,56 @@ async fn run_store_sink(
 /// the api crate consumes. Parse failures fall back to "transport not
 /// enabled" rather than crash the daemon — a typo in the TOML shouldn't
 /// take selfdef down.
+/// SDD-013 Q13-C pre-flight: refuse to start when the operator's
+/// chosen target mismatches what's on disk in either candidate
+/// state-dir. State-fork is a silent corruption hazard (two daemons
+/// writing two audit logs feels like everything works until the
+/// operator pulls one of them and discovers half the timeline is in
+/// the other). Fail-loud at startup with a clear migration directive.
+///
+/// Detects:
+/// - target = Generic but /mnt/vault/context/selfdef-audit.jsonl OR
+///   /mnt/vault/context/selfdef-escalations.sqlite exists
+/// - target = Sain01 but /var/lib/selfdef/selfdef-audit.jsonl OR
+///   /var/lib/selfdef/selfdef-escalations.sqlite exists
+///
+/// Operator must migrate state files (or rm them, with eyes open)
+/// before the daemon will start. No silent fork, no silent merge.
+fn check_q13c_state_fork(target: selfdef_config::DeploymentTarget) -> Result<()> {
+    use selfdef_config::DeploymentTarget;
+    let opposite = match target {
+        DeploymentTarget::Generic => DeploymentTarget::Sain01,
+        DeploymentTarget::Sain01 => DeploymentTarget::Generic,
+    };
+    let opposite_dir = selfdef_config::state_dir(opposite);
+    if !opposite_dir.exists() {
+        return Ok(());
+    }
+    let opposite_audit = selfdef_config::audit_log_path(opposite);
+    let opposite_esc = selfdef_config::escalations_path(opposite);
+    let mut conflicts: Vec<std::path::PathBuf> = Vec::new();
+    if opposite_audit.exists() {
+        conflicts.push(opposite_audit);
+    }
+    if opposite_esc.exists() {
+        conflicts.push(opposite_esc);
+    }
+    if conflicts.is_empty() {
+        return Ok(());
+    }
+    let conflicts_str = conflicts
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    anyhow::bail!(
+        "SDD-013 Q13-C state-fork hazard detected:\n\
+         configured target = {target}, but selfdef state exists at the {opposite} location ({conflicts_str}).\n\
+         Migrate or remove the conflicting state file(s) before starting the daemon — silent state-fork can lose events.\n\
+         For migration guidance see docs/sdd/013-deployment-target-config.md § Q13-C.",
+    );
+}
+
 fn build_api_config(cfg: &selfdef_config::ApiConfig) -> selfdef_api::ApiConfig {
     use selfdef_api::ApiConfig as Out;
     let unix_socket = if cfg.unix_socket.trim().is_empty() {
@@ -848,10 +1019,103 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "shared-audit-summary" if selfdef_config::resolve_shared_audit_summary_enabled(cfg) => {
+                let Some(path) = selfdef_config::resolve_shared_audit_summary_path(cfg) else {
+                    warn!(
+                        channel,
+                        "shared-audit-summary channel needs a path; \
+                         disable explicitly via [notifier.shared_audit_summary] enabled=false \
+                         on generic deployments without an override"
+                    );
+                    continue;
+                };
+                let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let jsonl_twin = selfdef_config::resolve_shared_audit_summary_jsonl_twin(cfg);
+                let ch =
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+                        path.clone(),
+                        pointer.clone(),
+                        jsonl_twin,
+                    );
+                inner.push((Box::new(ch), build_subscription(channel, cfg)));
+                info!(
+                    channel,
+                    path = %path.display(),
+                    pointer = %pointer.display(),
+                    "notifier channel enabled (SDD-014)"
+                );
+            }
+            "oracle-triage" if cfg.notifier.oracle_triage.enabled => {
+                match build_oracle_triage_channel(cfg) {
+                    Ok(ch) => {
+                        inner.push((Box::new(ch), build_subscription(channel, cfg)));
+                        info!(
+                            channel,
+                            endpoint = %cfg.notifier.oracle_triage.endpoint,
+                            model = %cfg.notifier.oracle_triage.model,
+                            "notifier channel enabled (SDD-016)"
+                        );
+                    }
+                    Err(e) => warn!(channel, error = %e, "oracle-triage build failed"),
+                }
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
     NotifierChain::with_subscriptions(inner)
+}
+
+/// SDD-016: build the oracle-triage Channel from [notifier.oracle_triage]
+/// config. Threads severity-floor parsing + env-var key loading.
+fn build_oracle_triage_channel(
+    cfg: &Config,
+) -> Result<selfdef_integration_oracle_triage::OracleTriageChannel, anyhow::Error> {
+    use selfdef_integration_oracle_triage::{OracleTriageChannel, OutputTarget, TriageFilter};
+    let c = &cfg.notifier.oracle_triage;
+    let min_severity = parse_severity_token(&c.filter.min_severity)
+        .unwrap_or(selfdef_core::severity::SeverityId::Medium);
+    let filter = TriageFilter {
+        min_severity,
+        kinds: c.filter.kinds.clone(),
+    };
+    let output_target = match c.output_target.as_str() {
+        "operator-dashboard" => OutputTarget::OperatorDashboard,
+        "shared-audit-summary" => OutputTarget::SharedAuditSummary,
+        "both" => OutputTarget::Both,
+        other => {
+            warn!(
+                output_target = other,
+                "oracle-triage: unknown output_target, defaulting to operator-dashboard"
+            );
+            OutputTarget::OperatorDashboard
+        }
+    };
+    OracleTriageChannel::from_config(
+        &c.endpoint,
+        &c.model,
+        c.timeout_seconds,
+        c.api_key_env.as_deref(),
+        filter,
+        output_target,
+        c.system_prompt_path.as_ref(),
+        c.max_events_per_hour,
+    )
+    .map_err(anyhow::Error::from)
+}
+
+/// SDD-016: parse the severity_floor token used by the oracle-triage
+/// filter. Returns None on unknown — caller falls back to Medium.
+fn parse_severity_token(token: &str) -> Option<selfdef_core::severity::SeverityId> {
+    use selfdef_core::severity::SeverityId;
+    match token.to_ascii_lowercase().as_str() {
+        "informational" | "info" => Some(SeverityId::Informational),
+        "low" => Some(SeverityId::Low),
+        "medium" | "warn" => Some(SeverityId::Medium),
+        "high" => Some(SeverityId::High),
+        "critical" | "error" => Some(SeverityId::Critical),
+        "fatal" => Some(SeverityId::Fatal),
+        _ => None,
+    }
 }
 
 /// SDD-008 D-3: build the [`Subscription`] for a channel slug by
@@ -1201,6 +1465,45 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     }
                     Err(e) => {
                         warn!(channel, error = %e, "write engine-channel skipped");
+                    }
+                }
+            }
+            "shared-audit-summary" if selfdef_config::resolve_shared_audit_summary_enabled(cfg) => {
+                let Some(path) = selfdef_config::resolve_shared_audit_summary_path(cfg) else {
+                    warn!(
+                        channel,
+                        "shared-audit-summary enabled but no path resolvable (generic target without override?)"
+                    );
+                    continue;
+                };
+                let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let jsonl_twin = selfdef_config::resolve_shared_audit_summary_jsonl_twin(cfg);
+                let ch =
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+                        path.clone(),
+                        pointer.clone(),
+                        jsonl_twin,
+                    );
+                channels.push(Arc::new(ch));
+                info!(
+                    channel,
+                    path = %path.display(),
+                    pointer = %pointer.display(),
+                    "engine-channel enabled (SDD-014)"
+                );
+            }
+            "oracle-triage" if cfg.notifier.oracle_triage.enabled => {
+                match build_oracle_triage_channel(cfg) {
+                    Ok(ch) => {
+                        channels.push(Arc::new(ch));
+                        info!(
+                            channel,
+                            endpoint = %cfg.notifier.oracle_triage.endpoint,
+                            "engine-channel enabled (SDD-016)"
+                        );
+                    }
+                    Err(e) => {
+                        warn!(channel, error = %e, "oracle-triage engine-channel skipped");
                     }
                 }
             }

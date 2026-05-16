@@ -10,10 +10,13 @@
 mod doctor;
 mod emit;
 mod follow;
+mod hardware;
 mod init;
 mod modules;
 mod notify;
 mod paths;
+mod perimeter;
+mod wizard;
 
 use std::path::PathBuf;
 
@@ -122,8 +125,90 @@ enum Command {
         #[command(subcommand)]
         action: InitAction,
     },
+    /// SDD-015: Tetragon perimeter coexistence — inspect / verify
+    /// the boundary between selfdef-authored `agent-guard-*`
+    /// TracingPolicies and sovereign-os's host-scoped
+    /// `sovereign-kernel-fence.yaml`.
+    Perimeter {
+        #[command(subcommand)]
+        action: PerimeterAction,
+    },
+    /// SD-R11: first-time-operator setup walkthrough — probes
+    /// hardware, surfaces Sain01Match verdict, recommends a config
+    /// snippet, prints next-step commands. Pure-read; never writes
+    /// config (operator copy-pastes — authority always wins).
+    Wizard {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-017: SAIN-01 hardware inventory + Sain01Match verdict.
+    /// Probes the host for CPU features, memory, GPU device nodes,
+    /// motherboard ID + PCIe state, and compares to the SAIN-01
+    /// target. Read-only; safe on any host (graceful on missing
+    /// kernel surfaces).
+    Hardware {
+        #[command(subcommand)]
+        action: Option<HardwareAction>,
+        /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum HardwareAction {
+    /// Probe + render the full snapshot + Sain01Match verdict (default).
+    Probe,
+    /// Only render the Sain01Match verdict label (FullMatch /
+    /// PartialMatch / NoMatch). Exit code reflects verdict.
+    Match,
+    /// SD-R10: emit the HardwareCapabilities JSON to stdout (default)
+    /// or to `--output PATH` atomically. Consumed by sovereign-os
+    /// Wasm-AOT pipeline + future hardware-aware policies; schema is
+    /// operator-stable. Exit code reflects verdict.
+    Export {
+        /// Optional destination path. When set, the file is written
+        /// atomically (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// SD-R17: per-sensor temperature readout from /sys/class/hwmon
+    /// + nvidia-smi (GPU temps). Read-only. Exit code 0 always.
+    Thermals {
+        /// Output JSON instead of human-readable rows.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R19: emit host-specific compile flags (CFLAGS / KCFLAGS /
+    /// `-march=`) in a format the operator can `source` or `eval`
+    /// before invoking their build pipeline. Direct enabler for the
+    /// Wasm-to-AVX-512 AOT + bitnet.cpp paths.
+    Tune {
+        /// Output format. `sh` (default) emits POSIX shell assignments
+        /// suitable for `source <(...)`. `env-file` emits the same
+        /// without the `export` prefix (for systemd EnvironmentFile=).
+        /// `make` emits Makefile assignments. `json` emits a structured
+        /// document with each field as a key.
+        #[arg(long, default_value = "sh")]
+        format: String,
+        /// Optional output path. When set, writes atomically to the
+        /// file (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum PerimeterAction {
+    /// Inspect the cross-author overlap between selfdef + sovereign-os
+    /// Tetragon TracingPolicies. Exit 0 on pass, 1 on overlap.
+    CheckOverlap,
+    /// Show the coexistence configuration + per-author policy counts
+    /// on disk. Read-only.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -141,6 +226,13 @@ enum InitAction {
         /// refuses to clobber on-disk state.
         #[arg(long)]
         force: bool,
+        /// SDD-013: pin the deployment target in the generated
+        /// config. `generic` (default) uses /var/lib/selfdef paths;
+        /// `sain01` routes state to /mnt/vault/context per
+        /// sovereign-os `profiles/sain-01.yaml § hardware.storage`.
+        /// Operator typos fail-loud — no silent fallback.
+        #[arg(long, value_parser = parse_deployment_target, default_value = "generic")]
+        target: selfdef_config::DeploymentTarget,
     },
     /// Write a starter `modules.toml` listing every shipped
     /// module commented out with a short description.
@@ -413,6 +505,19 @@ enum ModulesAction {
         #[arg(long)]
         dir: Option<PathBuf>,
     },
+    /// SD-R15: dry-run the SD-R14 hardware gate on this host —
+    /// shows which active modules WOULD apply and which WOULD SKIP
+    /// based on each manifest's `[requires_hardware]` block.
+    /// Read-only; no module scripts run.
+    CheckHardware {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -626,9 +731,13 @@ async fn main() -> Result<()> {
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
-            InitAction::Config { output, force } => {
+            InitAction::Config {
+                output,
+                force,
+                target,
+            } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_DAEMON_CONFIG));
-                init::write_starter_config(&path, force)?;
+                init::write_starter_config_with_target(&path, force, target)?;
             }
             InitAction::Modules { output, force } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_MODULES_CONFIG));
@@ -638,6 +747,38 @@ async fn main() -> Result<()> {
                 init::print_checklist();
             }
         },
+        Command::Perimeter { action } => match action {
+            PerimeterAction::CheckOverlap => {
+                let exit = perimeter::run_check_overlap(&cfg).context("perimeter check-overlap")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::Status => {
+                let exit = perimeter::run_status(&cfg).context("perimeter status")?;
+                std::process::exit(exit);
+            }
+        },
+        Command::Wizard { json } => {
+            let exit = if json {
+                wizard::run_json()?
+            } else {
+                wizard::run_human()?
+            };
+            std::process::exit(exit);
+        }
+        Command::Hardware { action, json } => {
+            let exit = match action {
+                Some(HardwareAction::Match) => hardware::run_match()?,
+                Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
+                Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
+                Some(HardwareAction::Tune { format, output }) => {
+                    hardware::run_tune(&format, output)?
+                }
+                Some(HardwareAction::Probe) if json => hardware::run_json()?,
+                None if json => hardware::run_json()?,
+                _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let count = store.count().await.context("counting events")?;
@@ -938,6 +1079,21 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 };
                 let code = modules::cmd_show_requires(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::CheckHardware {
+                host_config,
+                dir,
+                json,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = modules::cmd_check_hardware(&opts, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
@@ -1459,6 +1615,15 @@ fn rbac_check(
             );
         }
     }
+}
+
+/// SDD-013: clap value-parser for `--target`. Routes through
+/// [`DeploymentTarget::from_str`] so the CLI rejects unknown values
+/// fail-loud, matching the config-loader contract (no silent
+/// fallback, no case-insensitive variants).
+fn parse_deployment_target(s: &str) -> Result<selfdef_config::DeploymentTarget, String> {
+    use std::str::FromStr;
+    selfdef_config::DeploymentTarget::from_str(s)
 }
 
 /// Parse the agent-guard module config TOML for `scope`,
