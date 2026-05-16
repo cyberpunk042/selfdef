@@ -454,6 +454,11 @@ enum ModulesAction {
         slug: String,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R39: probe the host and surface "gate verdict on THIS
+        /// host" inline (passes / unmet predicates). Same engine as
+        /// `modules check-hardware` but for one module.
+        #[arg(long)]
+        with_host_status: bool,
     },
     /// Apply every active module's install/apply.sh in dependency order.
     Apply {
@@ -1075,9 +1080,16 @@ async fn main() -> Result<()> {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 modules::cmd_list(&resolved)?;
             }
-            ModulesAction::Info { slug, dir } => {
+            ModulesAction::Info {
+                slug,
+                dir,
+                with_host_status,
+            } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 modules::cmd_info(&resolved, &slug)?;
+                if with_host_status {
+                    modules::cmd_info_host_status(&resolved, &slug)?;
+                }
             }
             ModulesAction::Apply {
                 host_config,

@@ -406,6 +406,67 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R39: `selfdefctl modules info <slug> --with-host-status`
+/// probes the host and surfaces the gate verdict inline.
+#[test]
+fn sdr39_modules_info_with_host_status_surfaces_gate_verdict() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "ungated", &[], stub);
+    write_module(&catalog, "gated-unmeetable", &[], stub);
+    let m_toml = catalog.join("gated-unmeetable/module.toml");
+    let mut manifest = std::fs::read_to_string(&m_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&m_toml, manifest).unwrap();
+
+    // Ungated module → "applies on any host" green tick
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "info",
+            "ungated",
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--with-host-status",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("host_status:"), "header missing: {stdout}");
+    assert!(
+        stdout.contains("applies on any host"),
+        "expected pass-through: {stdout}"
+    );
+
+    // Gated module with unmeetable predicate → "X predicate(s) unmet"
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "info",
+            "gated-unmeetable",
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--with-host-status",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(stdout.contains("host_status:"), "header missing: {stdout}");
+    assert!(
+        stdout.contains("predicate(s) unmet"),
+        "unmet count missing: {stdout}"
+    );
+    assert!(
+        stdout.contains("memory_gib_min = 9999999"),
+        "predicate detail missing: {stdout}"
+    );
+}
+
 /// SD-R38: `selfdefctl modules check-hardware --caps <path>` reads
 /// a saved HardwareCapabilities JSON instead of probing. Operators
 /// preview "would this catalog land on a SAIN-01 box?" from a dev

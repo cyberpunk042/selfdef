@@ -501,6 +501,43 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// SD-R39: probe the host + emit the gate verdict for one module
+/// as an inline addendum to cmd_info. Doesn't repeat the manifest
+/// body (cmd_info already printed it).
+pub(crate) fn cmd_info_host_status(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    println!();
+    println!("host_status:");
+    if m.requires_hardware.is_empty() {
+        println!("  ✓ no [requires_hardware] block — applies on any host");
+        return Ok(());
+    }
+    match &caps {
+        Some(c) => match m.requires_hardware.evaluate(c) {
+            Ok(()) => println!("  ✓ all hardware requirements met on this host"),
+            Err(unmet) => {
+                println!("  ✗ {} predicate(s) unmet:", unmet.len());
+                for u in &unmet {
+                    println!("      - {u}");
+                }
+            }
+        },
+        None => {
+            println!("  ? hardware probe unavailable — gate would skip this module");
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     let mods = load_all(dir)?;
     let m = mods
