@@ -47,7 +47,31 @@ pub struct HardwareSnapshot {
     pub gpus: Vec<GpuInventory>,
     pub motherboard: Option<MotherboardInventory>,
     pub pcie: PcieInventory,
+    /// SD-R17: best-effort thermal readings from /sys/class/hwmon
+    /// (CPU package, NVMe drives, motherboard sensors) plus
+    /// nvidia-smi temperature.gpu (per-GPU). Empty on hosts without
+    /// hwmon exposure. Surfaced as Layer B metrics for the
+    /// powerhouse-OS observability stack (the SAIN-01 9900X +
+    /// dual-GPU box benefits from continuous thermal visibility).
+    #[serde(default)]
+    pub thermals: Vec<ThermalReading>,
     pub probed_at: String,
+}
+
+/// A single named temperature reading. `celsius` is the measured
+/// temperature in degrees Celsius (hwmon stores millidegree integers;
+/// we divide by 1000 + round to nearest int). `source` identifies
+/// the sensor's hwmon `name` file or the nvidia-smi index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThermalReading {
+    /// Sensor identifier — e.g. `"k10temp/Tctl"` for the AMD Ryzen
+    /// package sensor, `"nvme/Composite"` for an NVMe controller,
+    /// `"nvidia-gpu-0"` for an NVIDIA GPU temperature reading.
+    pub source: String,
+    /// Temperature in degrees Celsius (whole number; sub-degree
+    /// precision is not stable across vendors and not load-bearing
+    /// for threshold-based monitoring).
+    pub celsius: i32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -218,6 +242,10 @@ pub fn probe_from_roots(
     // /dev/nvidia<N> device-node list. Failures are silent — the
     // gpus vec keeps its device-node-only entries.
     let gpus = enrich_gpus_via_nvidia_smi(gpus);
+    // SD-R17: thermals via /sys/class/hwmon + nvidia-smi. Best-effort:
+    // both sources may be empty on minimal hosts.
+    let thermals = read_thermals_from_hwmon(Path::new("/sys/class/hwmon"));
+    let thermals = enrich_thermals_via_nvidia_smi(thermals);
     let probed_at = time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Iso8601::DEFAULT)
         .map_err(|_| HardwareError::TimeFmt)?;
@@ -227,6 +255,7 @@ pub fn probe_from_roots(
         gpus,
         motherboard,
         pcie,
+        thermals,
         probed_at,
     })
 }
@@ -351,6 +380,144 @@ pub fn parse_nvidia_smi_csv(body: &str) -> Vec<(usize, String, Option<u64>)> {
             .ok()
             .map(|mib| mib.saturating_mul(1024 * 1024));
         out.push((idx, name, vram));
+    }
+    out
+}
+
+// ---------------------------------------------------------------- thermals (SD-R17)
+
+/// SD-R17: walk `/sys/class/hwmon/hwmonN/` reading each device's
+/// `name` file + every `temp<K>_input` file under it. Each temp file
+/// contains millidegree Celsius integers; we divide by 1000 and round
+/// to the nearest int.
+///
+/// Pure-fs reads — no subprocesses. Operator's threat model wants
+/// `/sys` reads to be lightweight and predictable.
+pub fn read_thermals_from_hwmon(dir: &Path) -> Vec<ThermalReading> {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+    let mut out = Vec::new();
+    // Collect (path, hwmon_index) so we can sort by hwmon index for
+    // stable output ordering (hwmon0, hwmon1, ...).
+    let mut hwmon_paths: Vec<(PathBuf, u32)> = Vec::new();
+    for ent in entries.flatten() {
+        let p = ent.path();
+        let fname = match p.file_name().and_then(|s| s.to_str()) {
+            Some(n) => n,
+            None => continue,
+        };
+        if let Some(rest) = fname.strip_prefix("hwmon") {
+            if let Ok(idx) = rest.parse::<u32>() {
+                hwmon_paths.push((p, idx));
+            }
+        }
+    }
+    hwmon_paths.sort_by_key(|(_, idx)| *idx);
+    for (hwmon_dir, _) in hwmon_paths {
+        let name = fs::read_to_string(hwmon_dir.join("name"))
+            .ok()
+            .map(|s| s.trim().to_owned())
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+        // Sort temp inputs by index for deterministic output.
+        let mut temp_files: Vec<(PathBuf, u32)> = Vec::new();
+        if let Ok(items) = fs::read_dir(&hwmon_dir) {
+            for f in items.flatten() {
+                let fname = match f.file_name().into_string() {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                if let Some(mid) = fname.strip_prefix("temp") {
+                    if let Some(idx_str) = mid.strip_suffix("_input") {
+                        if let Ok(idx) = idx_str.parse::<u32>() {
+                            temp_files.push((f.path(), idx));
+                        }
+                    }
+                }
+            }
+        }
+        temp_files.sort_by_key(|(_, idx)| *idx);
+        for (path, idx) in temp_files {
+            let body = match fs::read_to_string(&path) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let millideg = match body.trim().parse::<i64>() {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+            // Round half away from zero.
+            let celsius_i64 = (millideg + (if millideg >= 0 { 500 } else { -500 })) / 1000;
+            let celsius = i32::try_from(celsius_i64).unwrap_or(0);
+            // Try to read the per-sensor label (some kernels expose it).
+            let label_path = hwmon_dir.join(format!("temp{idx}_label"));
+            let label = fs::read_to_string(&label_path)
+                .ok()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty());
+            let source = match label {
+                Some(l) => format!("{name}/{l}"),
+                None => format!("{name}/temp{idx}"),
+            };
+            out.push(ThermalReading { source, celsius });
+        }
+    }
+    out
+}
+
+/// SD-R17: extend thermals with `nvidia-smi --query-gpu=index,temperature.gpu`
+/// readings. Source labels: `nvidia-gpu-<index>`. Best-effort:
+/// nvidia-smi absent / non-zero exit / parse error leaves the input
+/// `thermals` unchanged.
+pub(crate) fn enrich_thermals_via_nvidia_smi(
+    mut thermals: Vec<ThermalReading>,
+) -> Vec<ThermalReading> {
+    let output = match std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=index,temperature.gpu",
+            "--format=csv,noheader,nounits",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return thermals,
+    };
+    let body = String::from_utf8_lossy(&output.stdout);
+    for (idx, celsius) in parse_nvidia_smi_gpu_temp_csv(&body) {
+        let celsius = i32::try_from(celsius).unwrap_or(0);
+        thermals.push(ThermalReading {
+            source: format!("nvidia-gpu-{idx}"),
+            celsius,
+        });
+    }
+    thermals
+}
+
+/// SD-R17: pure parser for `nvidia-smi --query-gpu=index,temperature.gpu`
+/// CSV. Returns `(index, celsius)` pairs.
+#[must_use]
+pub fn parse_nvidia_smi_gpu_temp_csv(body: &str) -> Vec<(usize, i64)> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        let idx = match parts[0].parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let temp = match parts[1].parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        out.push((idx, temp));
     }
     out
 }
@@ -875,6 +1042,31 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
         "sovereign_os_selfdef_hardware_probed_at_unix {probed_unix}"
     )
     .unwrap();
+    // SD-R17: per-sensor temperature gauges. Only emitted when at
+    // least one thermal reading is present — keeps the textfile
+    // collector output empty-label-free on hosts without hwmon.
+    if !snap.thermals.is_empty() {
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_thermal_celsius Per-sensor temperature in degrees Celsius (SD-R17)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_thermal_celsius gauge"
+        )
+        .unwrap();
+        for t in &snap.thermals {
+            // Sanitize label: replace " characters in source.
+            let safe = t.source.replace('"', "\\\"");
+            writeln!(
+                &mut buf,
+                "sovereign_os_selfdef_hardware_thermal_celsius{{sensor=\"{}\"}} {}",
+                safe, t.celsius
+            )
+            .unwrap();
+        }
+    }
     buf
 }
 
@@ -920,6 +1112,138 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, body).unwrap();
+    }
+
+    // ----- SD-R17 thermals -----------------------------------------
+
+    fn write_thermal_fixture(root: &Path, hwmon_idx: u32, name: &str, temps: &[(u32, i64)]) {
+        let d = root.join(format!("hwmon{hwmon_idx}"));
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("name"), format!("{name}\n")).unwrap();
+        for (idx, millideg) in temps {
+            fs::write(d.join(format!("temp{idx}_input")), format!("{millideg}\n")).unwrap();
+        }
+    }
+
+    #[test]
+    fn sdr17_read_thermals_from_hwmon_empty_dir() {
+        let dir = tempdir().unwrap();
+        let out = read_thermals_from_hwmon(dir.path());
+        assert!(out.is_empty(), "empty hwmon root → no readings");
+    }
+
+    #[test]
+    fn sdr17_read_thermals_from_hwmon_nonexistent_path() {
+        let out = read_thermals_from_hwmon(Path::new("/this/path/does/not/exist/r17"));
+        assert!(out.is_empty(), "nonexistent path → no readings (no panic)");
+    }
+
+    #[test]
+    fn sdr17_read_thermals_from_hwmon_parses_k10temp_plus_nvme() {
+        let dir = tempdir().unwrap();
+        // hwmon0: k10temp (AMD Ryzen CPU package), with two temp inputs.
+        write_thermal_fixture(dir.path(), 0, "k10temp", &[(1, 52_300), (2, 61_700)]);
+        // hwmon1: nvme drive.
+        write_thermal_fixture(dir.path(), 1, "nvme", &[(1, 38_400)]);
+        // Add a per-sensor label on hwmon0 temp1 — common kernel exposure.
+        fs::write(dir.path().join("hwmon0/temp1_label"), "Tctl\n").unwrap();
+        let out = read_thermals_from_hwmon(dir.path());
+        assert_eq!(out.len(), 3, "got: {out:?}");
+        // Sorted by hwmon index, then temp index — stable output.
+        assert_eq!(out[0].source, "k10temp/Tctl");
+        assert_eq!(out[0].celsius, 52);
+        assert_eq!(out[1].source, "k10temp/temp2");
+        assert_eq!(out[1].celsius, 62); // round half away from zero
+        assert_eq!(out[2].source, "nvme/temp1");
+        assert_eq!(out[2].celsius, 38);
+    }
+
+    #[test]
+    fn sdr17_read_thermals_skips_hwmon_without_name() {
+        let dir = tempdir().unwrap();
+        let d = dir.path().join("hwmon0");
+        fs::create_dir_all(&d).unwrap();
+        // No `name` file → entire hwmon device is skipped.
+        fs::write(d.join("temp1_input"), "50000\n").unwrap();
+        let out = read_thermals_from_hwmon(dir.path());
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn sdr17_read_thermals_skips_malformed_temp_input() {
+        let dir = tempdir().unwrap();
+        let d = dir.path().join("hwmon0");
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("name"), "broken\n").unwrap();
+        fs::write(d.join("temp1_input"), "not-a-number\n").unwrap();
+        fs::write(d.join("temp2_input"), "45000\n").unwrap();
+        let out = read_thermals_from_hwmon(dir.path());
+        // temp1 dropped (parse error); temp2 kept.
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].source, "broken/temp2");
+        assert_eq!(out[0].celsius, 45);
+    }
+
+    #[test]
+    fn sdr17_parse_nvidia_smi_gpu_temp_csv() {
+        let body = "0, 47\n1, 62\n";
+        let out = parse_nvidia_smi_gpu_temp_csv(body);
+        assert_eq!(out, vec![(0, 47_i64), (1, 62_i64)]);
+    }
+
+    #[test]
+    fn sdr17_parse_nvidia_smi_gpu_temp_csv_rejects_malformed() {
+        let body = "alpha, 47\n2, beta\n3, 71\n";
+        let out = parse_nvidia_smi_gpu_temp_csv(body);
+        // First row: bad index → drop. Second row: bad temp → drop.
+        // Third row: valid → keep.
+        assert_eq!(out, vec![(3, 71_i64)]);
+    }
+
+    #[test]
+    fn sdr17_render_layer_b_emits_thermal_gauge_when_present() {
+        let mut snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        snap.thermals.push(ThermalReading {
+            source: "k10temp/Tctl".into(),
+            celsius: 53,
+        });
+        snap.thermals.push(ThermalReading {
+            source: "nvidia-gpu-0".into(),
+            celsius: 47,
+        });
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(out.contains("sovereign_os_selfdef_hardware_thermal_celsius"));
+        assert!(out.contains("sensor=\"k10temp/Tctl\"} 53"));
+        assert!(out.contains("sensor=\"nvidia-gpu-0\"} 47"));
+        assert!(out.contains("# TYPE sovereign_os_selfdef_hardware_thermal_celsius gauge"));
+    }
+
+    #[test]
+    fn sdr17_render_layer_b_omits_thermal_block_when_empty() {
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            !out.contains("hardware_thermal_celsius"),
+            "thermal block should be absent when no readings: {out}"
+        );
     }
 
     // ----- cpuinfo --------------------------------------------------
@@ -1090,6 +1414,7 @@ mod tests {
                 gen4_or_higher_x8_slot_count: pcie_x8,
             },
             probed_at: String::new(),
+            thermals: Vec::new(),
         }
     }
 
@@ -1355,6 +1680,7 @@ mod tests {
                 gen4_or_higher_x8_slot_count: 2,
             },
             probed_at: "2026-05-16T00:00:00.000000000Z".into(),
+            thermals: Vec::new(),
         }
     }
 

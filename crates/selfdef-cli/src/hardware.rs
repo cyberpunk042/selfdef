@@ -50,6 +50,29 @@ pub(crate) fn run_export(output: Option<std::path::PathBuf>) -> Result<i32> {
     }
 }
 
+/// SD-R17: `selfdefctl hardware thermals` — per-sensor temperatures
+/// from /sys/class/hwmon (CPU package, NVMe drives, motherboard
+/// sensors) plus nvidia-smi GPU temps when nvidia-smi is available.
+/// Read-only; exit code 0 always.
+pub(crate) fn run_thermals(json: bool) -> Result<i32> {
+    // Probe once — selfdef_hardware::probe wires the thermal reads
+    // into HardwareSnapshot.thermals.
+    let snap = selfdef_hardware::probe()?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&snap.thermals)?);
+        return Ok(0);
+    }
+    if snap.thermals.is_empty() {
+        println!("(no thermal sensors exposed — hwmon empty + nvidia-smi unavailable)");
+        return Ok(0);
+    }
+    println!("{:<28}  celsius", "sensor");
+    for t in &snap.thermals {
+        println!("{:<28}  {}", t.source, t.celsius);
+    }
+    Ok(0)
+}
+
 /// `selfdefctl hardware match` — verdict only.
 pub(crate) fn run_match() -> Result<i32> {
     let snap = selfdef_hardware::probe()?;
@@ -273,6 +296,7 @@ mod tests {
                 gen4_or_higher_x8_slot_count: 2,
             },
             probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
         };
         let m = selfdef_hardware::matches_sain01(&snap);
         (snap, m)
@@ -309,6 +333,7 @@ mod tests {
             motherboard: None,
             pcie: PcieInventory::default(),
             probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
         };
         let m = selfdef_hardware::matches_sain01(&snap);
         let out = render_human(&snap, &m);

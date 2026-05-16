@@ -175,6 +175,13 @@ enum HardwareAction {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// SD-R17: per-sensor temperature readout from /sys/class/hwmon
+    /// + nvidia-smi (GPU temps). Read-only. Exit code 0 always.
+    Thermals {
+        /// Output JSON instead of human-readable rows.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -745,6 +752,7 @@ async fn main() -> Result<()> {
             let exit = match action {
                 Some(HardwareAction::Match) => hardware::run_match()?,
                 Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
+                Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
