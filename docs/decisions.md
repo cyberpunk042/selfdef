@@ -40,7 +40,7 @@ canonical source of truth; this log gives the chronological view.
 
 - `/questions` skill: `.claude/skills/questions/SKILL.md`
 - `/view` orientation: `.claude/skills/view/SKILL.md`
-- SDD index: `docs/sdd/000-charter.md` + `001`..`008`
+- SDD index: `docs/sdd/000-charter.md` + `001`..`011`
 - Audit programme ledgers: `docs/review/phase-*/99-findings-ledger.md`
 
 ---
@@ -284,3 +284,25 @@ canonical source of truth; this log gives the chronological view.
 **Affected items**: `docs/sdd/010-selfdef-on-sain01.md` (new SDD, requirements-only stub); future Stage-2 design SDD (or major revision of SDD-010); future selfdef-side Stage-2 PRs.
 **Reversibility**: fully-reversible — requirements can be expanded, narrowed, or re-scoped when the design SDD lands. The stub commits to scope, not implementation.
 **Linked**: PR (this PR); related to info-hub PRs #2-#6 (the SAIN-01 ingestion arc).
+
+## D-026 — 2026-05-16 — Sovereign-os arc opening + Plan adoption + SFIF/IaC quality bar + Q-016 distro-base reconsideration
+
+**Decision**: The operator opened a substantially larger cross-repo arc via the 2026-05-16 `/goal` directive — building a complete OS-image generation + customization pipeline for the SAIN-01 AI workstation. After two rounds of framing-question answers and the Plan agent's macro-arc output, the following multi-part decision lands:
+
+1. **New repo**: `cyberpunk042/sovereign-os` (operator creates manually; agent's GitHub MCP scope must be expanded operator-side; requires a new session)
+2. **Visibility**: Public
+3. **License**: AGPL-3.0-or-later (mirrors selfdef per verified `cyberpunk042/selfdef/LICENSE`)
+4. **Plan adoption**: 10-PR foundation phase per Plan-agent output (preserved verbatim in info-hub `raw/dumps/2026-05-16-sovereign-os-macro-arc-plan.md`)
+5. **Substrate**: research-first (not committed; PR 4 surveys all 8 candidates plus distro-base reconsideration)
+6. **Profile shape**: schema-first, multi-profile from day 1 (default SAIN-01; alternate old-workstation)
+7. **SFIF discipline applies**: PRs 1-3 Scaffold; PRs 4-8 Foundation; PRs 9-10 begin Infrastructure; Stage 2+ Features
+8. **IaC quality bar**: tweakable + configurable + env-var-driven + restart-from-state + observable + operable (verbatim operator commitment)
+9. **"Debian as Ark" framing**: Debian 13 = starting boat, not destination; Q-016 distro-base reconsideration in substrate survey scope
+10. **Stage 2 (selfdef-on-SAIN-01, SDD-010) reframed**: downstream of sovereign-os; design conversation makes more sense once sovereign-os produces deployable images
+
+**Question**: How does selfdef respond to the operator's 2026-05-16 /goal directive opening the OS-build pipeline arc?
+**Source**: operator `/goal` directive (verbatim in info-hub `raw/notes/2026-05-16-user-directive-sovereign-os-arc-opening.md`); Plan-agent output (verbatim in info-hub `raw/dumps/2026-05-16-sovereign-os-macro-arc-plan.md`); SDD-011 (this PR's companion).
+**Rationale**: The new arc is architecturally upstream of selfdef and would represent scope creep if hosted in either selfdef or info-hub. New repo respects the cleanest separation principle: sovereign-os BUILDS the OS; selfdef RUNS on it; info-hub SYNTHESIZES knowledge. Plan-agent adoption + research-first substrate + schema-first profiles + SFIF + IaC bar all flow from the operator's "do not rush, do not minimize, think before we act" quality bar. The handoff mandate ("Dont even ask me question, just get to it") authorizes this PR's multi-document landing without further question-asking; subsequent execution gated on operator-side repo-creation + MCP-scope-expansion.
+**Affected items**: `docs/sdd/011-sovereign-os-arc-opening.md` (this PR); `docs/handoff/2026-05-16-sovereign-os-arc-opening.md` (this PR — supersedes 2026-05-16-end-of-stage2-anchor.md); future `cyberpunk042/sovereign-os` repo (pending operator-side bootstrap); SDD-010 Stage 2 reframed as downstream.
+**Reversibility**: fully-reversible at the architectural-decision level (new-repo direction can be revisited; alternative paths documented in handoff); locked at the Plan-adoption level only insofar as the 10-PR foundation phase is what the agent will execute when authorized.
+**Linked**: PR (this PR); paired with info-hub PR landing the L0 verbatim provenance.
