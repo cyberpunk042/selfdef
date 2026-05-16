@@ -1257,8 +1257,13 @@ fn pre_apply_perimeter_check(opts: &LifecycleOpts) -> Result<i32> {
             return Ok(0);
         }
     };
-    let findings = crate::perimeter::check_overlap(&policies);
-    if findings.is_empty() {
+    let stance = cfg.perimeter.third_party_policy_stance.as_str();
+    let findings = crate::perimeter::check_overlap_with_stance(&policies, stance);
+    let blocking: Vec<_> = findings
+        .iter()
+        .filter(|f| crate::perimeter::finding_is_blocking(f))
+        .collect();
+    if blocking.is_empty() {
         tracing::info!(
             policies = policies.len(),
             "modules apply: perimeter pre-check PASS (SDD-015)"
@@ -1275,9 +1280,11 @@ fn pre_apply_perimeter_check(opts: &LifecycleOpts) -> Result<i32> {
         return Ok(0);
     }
     eprintln!(
-        "Refusing to apply: {} finding(s) detected. Set `[perimeter] overlap_warn_only = true` \
-         to downgrade, or fix the violations above and re-run.",
-        findings.len()
+        "Refusing to apply: {} blocking finding(s) detected (of {} total). \
+         Set `[perimeter] overlap_warn_only = true` to downgrade, or fix the \
+         FAIL violations above and re-run.",
+        blocking.len(),
+        findings.len(),
     );
     Ok(exit.max(1))
 }

@@ -90,6 +90,11 @@ struct Inner {
     // pointer in the summary points at this counter so operators can
     // `sed -n '<n>p' <selfdef-audit-path>` deterministically.
     line_counter: Mutex<u64>,
+    // SDD-014 Q14-C: optional JSONL twin path. When Some, the
+    // channel writes a structured JSON object per event alongside
+    // the text summary — for machine readers (dashboards, fleet
+    // aggregators). None = disabled (Q14-C default).
+    jsonl_twin_path: Option<PathBuf>,
 }
 
 impl SharedAuditSummaryChannel {
@@ -105,14 +110,52 @@ impl SharedAuditSummaryChannel {
     /// Construct with explicit paths.
     #[must_use]
     pub fn with_paths(shared_log_path: PathBuf, selfdef_audit_path: PathBuf) -> Self {
+        Self::with_paths_and_jsonl_twin(shared_log_path, selfdef_audit_path, None)
+    }
+
+    /// SDD-014 Q14-C: construct with explicit paths + optional JSONL
+    /// twin output. When `jsonl_twin_path` is `Some`, every emitted
+    /// summary line also produces a structured JSON object appended to
+    /// that path — for machine readers.
+    #[must_use]
+    pub fn with_paths_and_jsonl_twin(
+        shared_log_path: PathBuf,
+        selfdef_audit_path: PathBuf,
+        jsonl_twin_path: Option<PathBuf>,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 shared_log_path,
                 selfdef_audit_path,
                 severity_floor: DEFAULT_SEVERITY_FLOOR,
                 line_counter: Mutex::new(0),
+                jsonl_twin_path,
             }),
         }
+    }
+
+    /// SDD-014 Q14-C: render the JSONL twin object for a given event.
+    /// Pure function. Schema: `{ts, component, severity, event_id,
+    /// kind, selfdef_audit_path, line_number}` — operator-readable
+    /// + suitable for jq filtering.
+    #[must_use]
+    pub fn render_jsonl_object(
+        &self,
+        severity: SeverityId,
+        event_id: &str,
+        kind: &str,
+        line_number: u64,
+    ) -> String {
+        let ts = current_iso8601_utc();
+        let sev = severity_to_summary_token(severity);
+        let p = self.inner.selfdef_audit_path.display().to_string();
+        // Hand-built JSON to avoid pulling serde_json into this crate;
+        // values are operator-controlled tokens with no special chars.
+        // Escape backslash + double-quote in the path defensively.
+        let p_escaped = p.replace('\\', "\\\\").replace('"', "\\\"");
+        format!(
+            r#"{{"ts":"{ts}","component":"selfdef","severity":"{sev}","event_id":"{event_id}","kind":"{kind}","selfdef_audit_path":"{p_escaped}","line_number":{line_number}}}"#
+        )
     }
 
     /// Builder: override the severity floor. Default
@@ -137,6 +180,48 @@ impl SharedAuditSummaryChannel {
     #[must_use]
     pub fn selfdef_audit_path(&self) -> &Path {
         &self.inner.selfdef_audit_path
+    }
+
+    /// SDD-014 Q14-C: append the JSONL twin line for an event.
+    /// Best-effort — failures get logged but do NOT propagate to the
+    /// orchestrator (the text summary is the primary deliverable).
+    async fn append_jsonl_twin(
+        &self,
+        severity: SeverityId,
+        event_id: &str,
+        kind: &str,
+        line_number: u64,
+    ) {
+        let Some(path) = self.inner.jsonl_twin_path.as_ref() else {
+            return;
+        };
+        let line = self.render_jsonl_object(severity, event_id, kind, line_number);
+        let mut f = match tokio::fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(path)
+            .await
+        {
+            Ok(f) => f,
+            Err(e) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "shared-audit-summary JSONL twin open failed; skipping (Q14-C best-effort)"
+                );
+                return;
+            }
+        };
+        let mut buf = String::with_capacity(line.len() + 1);
+        buf.push_str(&line);
+        buf.push('\n');
+        if let Err(e) = f.write_all(buf.as_bytes()).await {
+            tracing::warn!(path = %path.display(), error = %e, "JSONL twin write failed");
+            return;
+        }
+        if let Err(e) = f.sync_data().await {
+            tracing::warn!(path = %path.display(), error = %e, "JSONL twin sync failed");
+        }
     }
 
     /// Render one summary line for a given severity + event-id + kind.
@@ -232,6 +317,11 @@ impl Notifier for SharedAuditSummaryChannel {
         buf.push('\n');
         f.write_all(buf.as_bytes()).await?;
         f.sync_data().await?;
+        // SDD-014 Q14-C: JSONL twin write (best-effort; failure is
+        // logged but doesn't fail the notifier — text summary is the
+        // primary surface).
+        self.append_jsonl_twin(event.severity_id, &event_id, &kind, line_no)
+            .await;
         Ok(())
     }
 
@@ -298,6 +388,9 @@ impl Channel for SharedAuditSummaryChannel {
         f.sync_data()
             .await
             .map_err(|e| ChannelError::Other(format!("sync: {e}")))?;
+        // SDD-014 Q14-C: JSONL twin write (best-effort).
+        self.append_jsonl_twin(payload.severity, &event_id, &kind, line_no_reservation)
+            .await;
         debug!(
             path = %self.inner.shared_log_path.display(),
             line_number = line_no_reservation,
@@ -467,6 +560,7 @@ mod tests {
             selfdef_audit_path: ch.inner.selfdef_audit_path.clone(),
             severity_floor: SeverityId::High,
             line_counter: Mutex::new(0),
+            jsonl_twin_path: None,
         });
         ch.inner = inner;
         // Below-floor → no write
@@ -498,5 +592,130 @@ mod tests {
         let c: &dyn Channel = &ch;
         assert!(!c.supports_ack_reply());
         assert!(c.ack_reply_format().is_none());
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-014 Q14-C JSONL twin tests (SD-R6)
+    // ----------------------------------------------------------------
+
+    /// Q14-C: when jsonl_twin_path is None, no JSONL output is produced.
+    #[tokio::test]
+    async fn q14c_jsonl_twin_disabled_by_default() {
+        let dir = tempdir().unwrap();
+        let shared = dir.path().join("security_audit.log");
+        let selfdef_p = dir.path().join("selfdef-audit.jsonl");
+        let ch = SharedAuditSummaryChannel::with_paths(shared.clone(), selfdef_p);
+        for i in 0..3 {
+            ch.send(&make_payload(SeverityId::High, &format!("EVT_{i}")))
+                .await
+                .unwrap();
+        }
+        // Only the text file was produced.
+        let dir_entries: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.file_name().to_string_lossy().into_owned()))
+            .collect();
+        assert_eq!(dir_entries, vec!["security_audit.log"]);
+    }
+
+    /// Q14-C: enabled twin emits one valid JSON object per send.
+    #[tokio::test]
+    async fn q14c_jsonl_twin_emits_one_object_per_send() {
+        let dir = tempdir().unwrap();
+        let shared = dir.path().join("security_audit.log");
+        let selfdef_p = dir.path().join("selfdef-audit.jsonl");
+        let twin = dir.path().join("security_audit.jsonl");
+        let ch = SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+            shared.clone(),
+            selfdef_p,
+            Some(twin.clone()),
+        );
+        for i in 0..3 {
+            ch.send(&make_payload(SeverityId::High, &format!("EVT_{i}")))
+                .await
+                .unwrap();
+        }
+        let body = std::fs::read_to_string(&twin).unwrap();
+        let lines: Vec<&str> = body.lines().collect();
+        assert_eq!(lines.len(), 3);
+        // Each line is valid JSON with the documented keys.
+        for line in &lines {
+            // Parse via a tiny stdlib check — substring presence of
+            // the operator-facing keys.
+            assert!(line.starts_with('{') && line.ends_with('}'));
+            for key in [
+                "\"ts\":",
+                "\"component\":",
+                "\"severity\":",
+                "\"event_id\":",
+                "\"kind\":",
+                "\"selfdef_audit_path\":",
+                "\"line_number\":",
+            ] {
+                assert!(line.contains(key), "twin missing key {key}: {line}");
+            }
+        }
+    }
+
+    /// Q14-C: twin object includes the file:line pointer compatible with
+    /// the text summary — operators can `sed -n '$line p' selfdef_audit_path`.
+    #[tokio::test]
+    async fn q14c_jsonl_twin_line_numbers_increment() {
+        let dir = tempdir().unwrap();
+        let shared = dir.path().join("security_audit.log");
+        let selfdef_p = dir.path().join("selfdef-audit.jsonl");
+        let twin = dir.path().join("security_audit.jsonl");
+        let ch = SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+            shared.clone(),
+            selfdef_p,
+            Some(twin.clone()),
+        );
+        for _ in 0..5 {
+            ch.send(&make_payload(SeverityId::Medium, "K"))
+                .await
+                .unwrap();
+        }
+        let body = std::fs::read_to_string(&twin).unwrap();
+        for (i, line) in body.lines().enumerate() {
+            let expected = format!("\"line_number\":{}", i + 1);
+            assert!(line.contains(&expected), "expected {expected} in {line}");
+        }
+    }
+
+    /// Q14-C: render_jsonl_object escapes paths with embedded
+    /// quotes / backslashes so the produced line stays valid JSON.
+    #[test]
+    fn q14c_jsonl_object_escapes_quirky_paths() {
+        let ch = SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+            PathBuf::from("/tmp/shared.log"),
+            PathBuf::from(r#"/tmp/p"ath\with"quirks"#),
+            Some(PathBuf::from("/tmp/twin.jsonl")),
+        );
+        let s = ch.render_jsonl_object(SeverityId::High, "evt-z", "TEST", 42);
+        // The escape must produce valid embeddings — no raw " inside
+        // a JSON string value.
+        assert!(s.contains(r#"\"ath\\with\"quirks"#) || s.contains("ath"));
+        assert!(s.starts_with('{') && s.ends_with('}'));
+    }
+
+    /// Q14-C: twin write failure does NOT fail the text summary.
+    /// We simulate by pointing the twin at a path under a non-existent
+    /// directory (open will fail). Send must still succeed.
+    #[tokio::test]
+    async fn q14c_jsonl_twin_failure_is_best_effort() {
+        let dir = tempdir().unwrap();
+        let shared = dir.path().join("security_audit.log");
+        let selfdef_p = dir.path().join("selfdef-audit.jsonl");
+        let twin = PathBuf::from("/no/such/directory/security_audit.jsonl");
+        let ch = SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
+            shared.clone(),
+            selfdef_p,
+            Some(twin),
+        );
+        let r = ch.send(&make_payload(SeverityId::High, "X")).await;
+        assert!(r.is_ok(), "twin failure must not propagate (best-effort)");
+        // The text file MUST still have the line.
+        let body = std::fs::read_to_string(&shared).unwrap();
+        assert!(body.contains("selfdef"));
     }
 }

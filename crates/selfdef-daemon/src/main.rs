@@ -926,10 +926,12 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     continue;
                 };
                 let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let jsonl_twin = selfdef_config::resolve_shared_audit_summary_jsonl_twin(cfg);
                 let ch =
-                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths(
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
                         path.clone(),
                         pointer.clone(),
+                        jsonl_twin,
                     );
                 inner.push((Box::new(ch), build_subscription(channel, cfg)));
                 info!(
@@ -992,6 +994,7 @@ fn build_oracle_triage_channel(
         filter,
         output_target,
         c.system_prompt_path.as_ref(),
+        c.max_events_per_hour,
     )
     .map_err(anyhow::Error::from)
 }
@@ -1370,10 +1373,12 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                     continue;
                 };
                 let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let jsonl_twin = selfdef_config::resolve_shared_audit_summary_jsonl_twin(cfg);
                 let ch =
-                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths(
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths_and_jsonl_twin(
                         path.clone(),
                         pointer.clone(),
+                        jsonl_twin,
                     );
                 channels.push(Arc::new(ch));
                 info!(

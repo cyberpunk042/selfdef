@@ -918,6 +918,16 @@ pub struct PerimeterConfig {
     /// When true, overlap detection emits a WARN line but does NOT
     /// fail. Default false (block on overlap).
     pub overlap_warn_only: bool,
+    /// SDD-015 Q15-D: stance toward THIRD-PARTY Tetragon policies
+    /// (files not matching "sovereign-" or "agent-guard-" prefix).
+    /// One of:
+    ///   - "warn" (default): treat as opaque, log a WARN but do not
+    ///     block. Operator's discretion (per Q15-D recommendation).
+    ///   - "ignore": no warning, no block.
+    ///   - "block": treat third-party policies the same as
+    ///     agent-guard for the overlap check (refuse on host-scoped
+    ///     fenced syscalls). Stricter than the spec — operator opt-in.
+    pub third_party_policy_stance: String,
 }
 
 impl Default for PerimeterConfig {
@@ -929,6 +939,7 @@ impl Default for PerimeterConfig {
             ),
             policies_dir: PathBuf::from("/etc/tetragon/tracing-policies"),
             overlap_warn_only: false,
+            third_party_policy_stance: "warn".to_owned(),
         }
     }
 }
@@ -980,6 +991,12 @@ pub struct OracleTriageConfig {
     /// Optional path to a custom system prompt. None = use the
     /// SDD-016 § 3 default.
     pub system_prompt_path: Option<PathBuf>,
+    /// SDD-016 Q16-D: cost / token-budget rate limit. The channel
+    /// refuses to dispatch when it has already sent `max_events_per_hour`
+    /// requests in the trailing 60-minute window — protects operator
+    /// inference budgets from runaway event storms. Default 100 per
+    /// SDD-016 Q16-D recommendation. Set to 0 to disable.
+    pub max_events_per_hour: u32,
 }
 
 impl Default for OracleTriageConfig {
@@ -993,6 +1010,7 @@ impl Default for OracleTriageConfig {
             filter: OracleTriageFilterConfig::default(),
             output_target: "operator-dashboard".to_owned(),
             system_prompt_path: None,
+            max_events_per_hour: 100,
         }
     }
 }
@@ -1040,6 +1058,16 @@ pub struct SharedAuditSummaryConfig {
     /// Override selfdef-audit pointer target. `None` = use the
     /// resolver default (target-driven, per SDD-013).
     pub selfdef_audit_path: Option<PathBuf>,
+    /// SDD-014 Q14-C: emit a JSONL twin under
+    /// `/mnt/vault/context/security_audit.jsonl` alongside the text
+    /// summary. Machine readers (dashboards, fleet aggregators)
+    /// consume the JSONL; operators read the text log. Default false
+    /// — opt-in per Q14-C "DEFER" recommendation; operators enable
+    /// only when they have a machine reader.
+    pub jsonl_twin: bool,
+    /// Override JSONL twin path. `None` = derive from `path` by
+    /// swapping `.log` → `.jsonl`. Only used when `jsonl_twin = true`.
+    pub jsonl_twin_path: Option<PathBuf>,
 }
 
 /// SDD-014 § 2: resolve the effective enabled-state for the
@@ -1075,6 +1103,27 @@ pub fn resolve_shared_audit_summary_pointer(cfg: &Config) -> PathBuf {
         return p.clone();
     }
     audit_log_path(cfg.deployment.target)
+}
+
+/// SDD-014 Q14-C: resolve the effective JSONL twin path. Returns
+/// `None` when `jsonl_twin = false` (the Q14-C default). When enabled,
+/// returns either the explicit `jsonl_twin_path` override, or the
+/// shared-log path with `.log` swapped to `.jsonl`.
+#[must_use]
+pub fn resolve_shared_audit_summary_jsonl_twin(cfg: &Config) -> Option<PathBuf> {
+    if !cfg.notifier.shared_audit_summary.jsonl_twin {
+        return None;
+    }
+    if let Some(p) = &cfg.notifier.shared_audit_summary.jsonl_twin_path {
+        return Some(p.clone());
+    }
+    // Derive from shared-log path: foo/security_audit.log →
+    // foo/security_audit.jsonl. When the resolver returns None (generic
+    // target, no override), we have nothing to derive from.
+    let base = resolve_shared_audit_summary_path(cfg)?;
+    let mut s = base.clone();
+    s.set_extension("jsonl");
+    Some(s)
 }
 
 /// SDD-008 D-6c: operator-defined custom escalation profile shape.
@@ -1897,6 +1946,7 @@ mod tests {
                     enabled: Some(true),
                     path: Some(PathBuf::from("/var/log/custom-shared.log")),
                     selfdef_audit_path: None,
+                    ..SharedAuditSummaryConfig::default()
                 },
                 ..NotifierConfig::default()
             },
@@ -1920,6 +1970,7 @@ mod tests {
                     enabled: None,
                     path: None,
                     selfdef_audit_path: Some(PathBuf::from("/srv/audit.jsonl")),
+                    ..SharedAuditSummaryConfig::default()
                 },
                 ..NotifierConfig::default()
             },
@@ -2067,6 +2118,92 @@ mod tests {
             cfg.notifier.oracle_triage.filter.kinds,
             vec!["POLICY_VIOLATION".to_owned(), "CONN_ANOMALY".to_owned()]
         );
+    }
+
+    // ----------------------------------------------------------------
+    // SD-R6 follow-up tests (Q14-C JSONL twin, Q15-D third-party,
+    // Q16-D rate-limit)
+    // ----------------------------------------------------------------
+
+    /// SDD-014 Q14-C: jsonl_twin defaults to false (deferred per Q14-C
+    /// recommendation; opt-in only).
+    #[test]
+    fn sdd_014_jsonl_twin_defaults_false() {
+        let cfg = Config::default();
+        assert!(!cfg.notifier.shared_audit_summary.jsonl_twin);
+    }
+
+    /// SDD-014 Q14-C: jsonl_twin opt-in via TOML.
+    #[test]
+    fn sdd_014_jsonl_twin_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.shared_audit_summary]
+            jsonl_twin = true
+            jsonl_twin_path = "/var/log/custom.jsonl"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.notifier.shared_audit_summary.jsonl_twin);
+        assert_eq!(
+            cfg.notifier.shared_audit_summary.jsonl_twin_path,
+            Some(PathBuf::from("/var/log/custom.jsonl"))
+        );
+    }
+
+    /// SDD-015 Q15-D: third_party_policy_stance defaults to "warn".
+    #[test]
+    fn sdd_015_third_party_stance_defaults_to_warn() {
+        let p = PerimeterConfig::default();
+        assert_eq!(p.third_party_policy_stance, "warn");
+    }
+
+    /// SDD-015 Q15-D: third_party_policy_stance accepts "warn",
+    /// "ignore", "block" — operators express stricter postures
+    /// without changing the default.
+    #[test]
+    fn sdd_015_third_party_stance_parses_from_toml() {
+        for stance in ["warn", "ignore", "block"] {
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(
+                tmp.path(),
+                format!(
+                    r#"
+                    [perimeter]
+                    third_party_policy_stance = "{stance}"
+                    "#
+                ),
+            )
+            .unwrap();
+            let cfg = Config::load(Some(tmp.path())).unwrap();
+            assert_eq!(cfg.perimeter.third_party_policy_stance, stance);
+        }
+    }
+
+    /// SDD-016 Q16-D: max_events_per_hour defaults to 100.
+    #[test]
+    fn sdd_016_rate_limit_defaults_to_100() {
+        let cfg = OracleTriageConfig::default();
+        assert_eq!(cfg.max_events_per_hour, 100);
+    }
+
+    /// SDD-016 Q16-D: rate-limit configurable; 0 disables.
+    #[test]
+    fn sdd_016_rate_limit_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.oracle_triage]
+            max_events_per_hour = 0
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.notifier.oracle_triage.max_events_per_hour, 0);
     }
 
     /// SDD-013 § Goals point 2 (zero regression): a fully-populated

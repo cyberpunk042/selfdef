@@ -178,6 +178,23 @@ pub(crate) enum OverlapFinding {
         metadata_name: String,
         syscall: String,
     },
+    /// SDD-015 Q15-D: a third-party policy (neither selfdef- nor
+    /// sovereign-os-authored) was observed. Emitted at WARN severity
+    /// by default; promoted to FAIL when
+    /// [perimeter] third_party_policy_stance = "block".
+    ThirdPartyPolicyObserved {
+        filename: String,
+        metadata_name: String,
+    },
+    /// SDD-015 Q15-D + § 1: a third-party policy declares a
+    /// host-scoped kprobe on a fenced syscall. Same shape as
+    /// SelfdefHostScopedOnFencedSyscall but distinguished by author.
+    /// Emitted iff `third_party_policy_stance == "block"`.
+    ThirdPartyHostScopedOnFencedSyscall {
+        filename: String,
+        metadata_name: String,
+        syscall: String,
+    },
 }
 
 impl OverlapFinding {
@@ -197,6 +214,23 @@ impl OverlapFinding {
                 "{filename} ({metadata_name}) asserts on {syscall} without matchNamespaces=container scope — \
                  would conflict with sovereign-kernel-fence's host-wide allowlist. \
                  Fix: add 'matchNamespaces: {{ operator: In, values: [container] }}' to the selector"
+            ),
+            Self::ThirdPartyPolicyObserved {
+                filename,
+                metadata_name,
+            } => format!(
+                "third-party policy observed: {filename} ({metadata_name}) — \
+                 author is neither selfdef nor sovereign-os; \
+                 treating as opaque per [perimeter] third_party_policy_stance"
+            ),
+            Self::ThirdPartyHostScopedOnFencedSyscall {
+                filename,
+                metadata_name,
+                syscall,
+            } => format!(
+                "{filename} ({metadata_name}) is a third-party policy asserting on {syscall} host-wide — \
+                 [perimeter] third_party_policy_stance = \"block\" treats this as conflict. \
+                 Either scope to container, or set stance = \"warn\" (default) / \"ignore\""
             ),
         }
     }
@@ -293,7 +327,34 @@ fn classify_scope(k: &Kprobe) -> PolicyScope {
 /// - Duplicate `metadata.name`s across files
 /// - Selfdef-authored policies that declare a HOST-scoped kprobe on a
 ///   syscall sovereign-kernel-fence governs
+/// - Third-party policies are NOT flagged (use [`check_overlap_with_stance`]
+///   to handle them per Q15-D).
+///
+/// Kept as a backwards-compat shim around
+/// [`check_overlap_with_stance`] with `stance = "ignore"` — historical
+/// callers + tests that don't care about the third-party axis stay
+/// stable.
+#[allow(dead_code)]
 pub(crate) fn check_overlap(policies: &[PolicySummary]) -> Vec<OverlapFinding> {
+    check_overlap_with_stance(policies, "ignore")
+}
+
+/// SDD-015 Q15-D: like [`check_overlap`] but honors a third-party
+/// stance. `stance` ∈ {"warn", "ignore", "block"}:
+///   - `"ignore"` — third-party policies never produce findings.
+///   - `"warn"` (default) — emit a [`OverlapFinding::ThirdPartyPolicyObserved`]
+///     informational finding per third-party policy. The render layer
+///     treats these as WARN, not FAIL — operator's discretion.
+///   - `"block"` — third-party policies are subject to the same
+///     host-scoped-fenced-syscall check as selfdef policies, and the
+///     existence of one emits both
+///     [`OverlapFinding::ThirdPartyPolicyObserved`] (WARN) AND
+///     [`OverlapFinding::ThirdPartyHostScopedOnFencedSyscall`] (FAIL)
+///     when relevant.
+pub(crate) fn check_overlap_with_stance(
+    policies: &[PolicySummary],
+    stance: &str,
+) -> Vec<OverlapFinding> {
     let mut findings = Vec::new();
 
     // 1. Duplicate metadata.name
@@ -332,7 +393,49 @@ pub(crate) fn check_overlap(policies: &[PolicySummary]) -> Vec<OverlapFinding> {
         }
     }
 
+    // 3. SDD-015 Q15-D: third-party policy stance handling.
+    if stance != "ignore" {
+        for p in policies {
+            if p.author != "third-party" {
+                continue;
+            }
+            // Always emit the observation (warn-class) when stance != ignore.
+            findings.push(OverlapFinding::ThirdPartyPolicyObserved {
+                filename: p.filename.clone(),
+                metadata_name: p.metadata_name.clone(),
+            });
+            // Promote to host-scoped-block when stance == block.
+            if stance == "block" {
+                for kp in &p.kprobes {
+                    if kp.scope == PolicyScope::Host
+                        && HOST_SCOPED_SYSCALLS.contains(&kp.call.as_str())
+                    {
+                        findings.push(OverlapFinding::ThirdPartyHostScopedOnFencedSyscall {
+                            filename: p.filename.clone(),
+                            metadata_name: p.metadata_name.clone(),
+                            syscall: kp.call.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     findings
+}
+
+/// SDD-015 Q15-D: classify a finding as blocking (FAIL → exit 1) vs
+/// advisory (WARN → exit 0). Default `check_overlap` returns the
+/// blocking-only subset; `check_overlap_with_stance` may produce
+/// advisory findings (third-party observations under stance=warn).
+#[must_use]
+pub(crate) fn finding_is_blocking(f: &OverlapFinding) -> bool {
+    matches!(
+        f,
+        OverlapFinding::DuplicateMetadataName { .. }
+            | OverlapFinding::SelfdefHostScopedOnFencedSyscall { .. }
+            | OverlapFinding::ThirdPartyHostScopedOnFencedSyscall { .. }
+    )
 }
 
 // ---------------------------------------------------------------- rendering
@@ -373,16 +476,34 @@ pub(crate) fn render_check_overlap_report(
         .unwrap();
         (buf, 0)
     } else {
+        // SDD-015 Q15-D: split into WARN (advisory) + FAIL (blocking).
+        let mut blocking_count = 0usize;
         for f in findings {
-            writeln!(&mut buf, "  FAIL — {}", f.render()).unwrap();
+            if finding_is_blocking(f) {
+                blocking_count += 1;
+                writeln!(&mut buf, "  FAIL — {}", f.render()).unwrap();
+            } else {
+                writeln!(&mut buf, "  WARN — {}", f.render()).unwrap();
+            }
         }
         writeln!(&mut buf).unwrap();
-        writeln!(
-            &mut buf,
-            "Exit 1. Fix the violations above (or set `[perimeter] overlap_warn_only = true` to downgrade)."
-        )
-        .unwrap();
-        (buf, 1)
+        if blocking_count == 0 {
+            writeln!(
+                &mut buf,
+                "Exit 0. {} advisory finding(s); no blocking overlap.",
+                findings.len()
+            )
+            .unwrap();
+            (buf, 0)
+        } else {
+            writeln!(
+                &mut buf,
+                "Exit 1. {blocking_count} blocking finding(s). Fix the FAIL items \
+                 above, or set `[perimeter] overlap_warn_only = true` to downgrade."
+            )
+            .unwrap();
+            (buf, 1)
+        }
     }
 }
 
@@ -409,7 +530,8 @@ pub(crate) fn run_check_overlap(cfg: &selfdef_config::Config) -> Result<i32> {
     }
     let dir = &cfg.perimeter.policies_dir;
     let policies = read_policies_dir(dir).with_context(|| format!("reading {}", dir.display()))?;
-    let findings = check_overlap(&policies);
+    let stance = cfg.perimeter.third_party_policy_stance.as_str();
+    let findings = check_overlap_with_stance(&policies, stance);
 
     if !findings.is_empty() && cfg.perimeter.overlap_warn_only {
         // Q15-B: warn-only mode emits findings but exits 0.
@@ -716,5 +838,153 @@ spec:
         };
         let exit = run_check_overlap(&cfg).unwrap();
         assert_eq!(exit, 0, "warn-only mode must exit 0 despite findings");
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-015 Q15-D third-party stance tests (SD-R6)
+    // ----------------------------------------------------------------
+
+    const THIRD_PARTY_CONTAINER_SCOPED: &str = r#"
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: third-party-policy
+spec:
+  kprobes:
+    - call: sys_openat
+      selectors:
+        - matchNamespaces:
+            - operator: In
+              values: [container]
+"#;
+
+    const THIRD_PARTY_HOST_SCOPED_EXECVE: &str = r#"
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: third-party-bad
+spec:
+  kprobes:
+    - call: sys_execve
+"#;
+
+    /// Q15-D: ignore stance — no third-party findings, ever.
+    #[test]
+    fn q15d_third_party_stance_ignore_emits_nothing() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom-third.yaml"),
+            THIRD_PARTY_CONTAINER_SCOPED,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("custom-bad.yaml"),
+            THIRD_PARTY_HOST_SCOPED_EXECVE,
+        )
+        .unwrap();
+        let policies = read_policies_dir(dir.path()).unwrap();
+        let findings = check_overlap_with_stance(&policies, "ignore");
+        assert!(
+            findings.is_empty(),
+            "ignore stance must emit nothing for third-party: got {findings:?}"
+        );
+    }
+
+    /// Q15-D: warn stance (default) — third-party observation emitted
+    /// per file, NOT blocking. Render reports exit 0.
+    #[test]
+    fn q15d_third_party_stance_warn_emits_observation_non_blocking() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom-third.yaml"),
+            THIRD_PARTY_CONTAINER_SCOPED,
+        )
+        .unwrap();
+        let policies = read_policies_dir(dir.path()).unwrap();
+        let findings = check_overlap_with_stance(&policies, "warn");
+        // One ThirdPartyPolicyObserved, no blocking.
+        assert_eq!(findings.len(), 1);
+        assert!(matches!(
+            findings[0],
+            OverlapFinding::ThirdPartyPolicyObserved { .. }
+        ));
+        assert!(!finding_is_blocking(&findings[0]));
+        // Render reports exit 0 because no FAIL findings.
+        let (_text, exit) = render_check_overlap_report(&policies, &findings);
+        assert_eq!(exit, 0, "warn-only third-party → exit 0");
+    }
+
+    /// Q15-D: block stance — host-scoped third-party syscall is FAIL.
+    #[test]
+    fn q15d_third_party_stance_block_fails_on_host_scoped() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom-bad.yaml"),
+            THIRD_PARTY_HOST_SCOPED_EXECVE,
+        )
+        .unwrap();
+        let policies = read_policies_dir(dir.path()).unwrap();
+        let findings = check_overlap_with_stance(&policies, "block");
+        // Observation + host-scoped-block finding (2 findings).
+        assert_eq!(findings.len(), 2);
+        let has_block = findings.iter().any(|f| {
+            matches!(
+                f,
+                OverlapFinding::ThirdPartyHostScopedOnFencedSyscall { .. }
+            )
+        });
+        assert!(has_block);
+        let blocking_count = findings.iter().filter(|f| finding_is_blocking(f)).count();
+        assert_eq!(blocking_count, 1);
+        let (_text, exit) = render_check_overlap_report(&policies, &findings);
+        assert_eq!(exit, 1, "block stance + host-scoped third-party → exit 1");
+    }
+
+    /// Q15-D: block stance + container-scoped third-party syscall is
+    /// observation-only (no block).
+    #[test]
+    fn q15d_third_party_stance_block_allows_container_scoped() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("custom-third.yaml"),
+            THIRD_PARTY_CONTAINER_SCOPED,
+        )
+        .unwrap();
+        let policies = read_policies_dir(dir.path()).unwrap();
+        let findings = check_overlap_with_stance(&policies, "block");
+        // Just the observation (container-scoped is not a fence overlap).
+        assert_eq!(findings.len(), 1);
+        assert!(!finding_is_blocking(&findings[0]));
+    }
+
+    /// SDD-015: finding_is_blocking classifies findings correctly.
+    #[test]
+    fn q15d_finding_is_blocking_taxonomy() {
+        assert!(finding_is_blocking(
+            &OverlapFinding::DuplicateMetadataName {
+                name: "x".into(),
+                files: vec![],
+            }
+        ));
+        assert!(finding_is_blocking(
+            &OverlapFinding::SelfdefHostScopedOnFencedSyscall {
+                filename: "x".into(),
+                metadata_name: "x".into(),
+                syscall: "sys_execve".into(),
+            }
+        ));
+        assert!(finding_is_blocking(
+            &OverlapFinding::ThirdPartyHostScopedOnFencedSyscall {
+                filename: "x".into(),
+                metadata_name: "x".into(),
+                syscall: "sys_execve".into(),
+            }
+        ));
+        assert!(!finding_is_blocking(
+            &OverlapFinding::ThirdPartyPolicyObserved {
+                filename: "x".into(),
+                metadata_name: "x".into(),
+            }
+        ));
     }
 }
