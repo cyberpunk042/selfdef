@@ -1207,7 +1207,79 @@ fn render_requirements_snippet(unmet: &[UnmetByModule], daemon_config_path: &Pat
 }
 
 pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
+    // SDD-015 § 4: when [perimeter] check_overlap_on_apply is true
+    // (auto-true on Sain01 unless overridden), refuse to apply if any
+    // selfdef-authored policy would overlap with sovereign-os's
+    // host-scoped allowlist. The check runs BEFORE any apply.sh
+    // fires — operators don't get partial installs of conflicting
+    // policies.
+    let pre_code = pre_apply_perimeter_check(opts)?;
+    if pre_code != 0 {
+        return Ok(pre_code);
+    }
     run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
+}
+
+/// SDD-015 § 4 + § 6 pre-apply gate. Reads the daemon config to
+/// resolve `[perimeter] check_overlap_on_apply` + `policies_dir` +
+/// `overlap_warn_only`. Loads policies, runs overlap detection, and:
+///   - returns 0 (no gate) when the check is disabled
+///   - returns 0 (passed) when no findings
+///   - returns 0 (warn-only mode) when findings exist but downgraded
+///   - returns 1 (blocked) when findings exist and not in warn-only
+fn pre_apply_perimeter_check(opts: &LifecycleOpts) -> Result<i32> {
+    let cfg_path = match &opts.daemon_config_path {
+        Some(p) => p,
+        None => return Ok(0), // no config supplied → no gate
+    };
+    let cfg = match selfdef_config::Config::load(Some(cfg_path)) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                config = %cfg_path.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — daemon config unloadable"
+            );
+            return Ok(0);
+        }
+    };
+    if !selfdef_config::resolve_perimeter_check_overlap(&cfg) {
+        return Ok(0);
+    }
+    let policies = match crate::perimeter::read_policies_dir(&cfg.perimeter.policies_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(
+                dir = %cfg.perimeter.policies_dir.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — policies dir unreadable"
+            );
+            return Ok(0);
+        }
+    };
+    let findings = crate::perimeter::check_overlap(&policies);
+    if findings.is_empty() {
+        tracing::info!(
+            policies = policies.len(),
+            "modules apply: perimeter pre-check PASS (SDD-015)"
+        );
+        return Ok(0);
+    }
+    let (report, exit) = crate::perimeter::render_check_overlap_report(&policies, &findings);
+    eprintln!("# modules apply pre-check (SDD-015):\n");
+    eprintln!("{report}");
+    if cfg.perimeter.overlap_warn_only {
+        eprintln!(
+            "[perimeter] overlap_warn_only = true → proceeding with apply despite findings (Q15-B)."
+        );
+        return Ok(0);
+    }
+    eprintln!(
+        "Refusing to apply: {} finding(s) detected. Set `[perimeter] overlap_warn_only = true` \
+         to downgrade, or fix the violations above and re-run.",
+        findings.len()
+    );
+    Ok(exit.max(1))
 }
 
 /// SDD-002 D-5: `selfdefctl modules show-requires` reads every
@@ -2142,5 +2214,230 @@ mod tests {
         active.reverse();
         let order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(order, vec!["audit", "alpha", "guard"]);
+    }
+}
+
+#[cfg(test)]
+mod sdd_015_apply_gate_tests {
+    //! SDD-015 § 4 + § 6: pre-apply perimeter check.
+    //!
+    //! We construct a `LifecycleOpts` that points at a temp daemon
+    //! config file with explicit `[deployment] target = "sain01"` +
+    //! a `[perimeter] policies_dir = <tempdir>` pointing at our
+    //! synthesized policy files. Then we call
+    //! [`pre_apply_perimeter_check`] directly and assert the exit code.
+    //!
+    //! This validates the GATE in isolation; the full
+    //! `cmd_apply → run_lifecycle` path is exercised by the integration
+    //! test suite (no module fixtures wired here).
+
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn write_cfg(path: &std::path::Path, body: &str) {
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn opts(daemon_config_path: PathBuf) -> LifecycleOpts {
+        LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            daemon_config_path: Some(daemon_config_path),
+        }
+    }
+
+    /// SDD-015 § 4: on Generic target, the gate is auto-disabled —
+    /// returns 0 regardless of policies dir contents.
+    #[test]
+    fn sdd_015_apply_gate_skipped_on_generic_target() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Place a bad agent-guard policy that WOULD fail the check
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "generic"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "generic target → gate skipped");
+    }
+
+    /// SDD-015 § 4: on SAIN-01 target with a clean policies dir, gate
+    /// passes (returns 0).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_clean_sain01() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Only a properly-scoped agent-guard policy
+        std::fs::write(
+            pol_dir.join("agent-guard-shell-exec.yaml"),
+            "metadata:\n  name: agent-guard-shell-exec\nspec:\n  kprobes:\n    - call: sys_execve\n      selectors:\n        - matchNamespaces:\n            - operator: In\n              values: [container]\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "clean sain01 policies → gate passes");
+    }
+
+    /// SDD-015 § 4 + § 6: on SAIN-01 target with a host-scoped
+    /// agent-guard policy, gate BLOCKS apply (returns ≥1).
+    #[test]
+    fn sdd_015_apply_gate_blocks_on_host_scoped_agent_guard() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert!(code >= 1, "host-scoped agent-guard → blocked (got {code})");
+    }
+
+    /// SDD-015 § Q15-B: with `overlap_warn_only = true`, findings are
+    /// printed but the gate returns 0 (apply proceeds).
+    #[test]
+    fn sdd_015_apply_gate_warn_only_downgrades_to_zero() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                overlap_warn_only = true
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "warn-only → downgrade to 0 despite finding");
+    }
+
+    /// Explicit operator override: `check_overlap_on_apply = false` on
+    /// SAIN-01 disables the gate (operator-explicit opt-out path).
+    #[test]
+    fn sdd_015_apply_gate_explicit_disable_overrides_sain01_autoenable() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                check_overlap_on_apply = false
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "explicit disable wins over sain01 auto-enable");
+    }
+
+    /// No daemon config path supplied → gate is a no-op.
+    #[test]
+    fn sdd_015_apply_gate_noop_when_no_daemon_config_path() {
+        let opts = LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            daemon_config_path: None,
+        };
+        let code = pre_apply_perimeter_check(&opts).unwrap();
+        assert_eq!(code, 0, "no daemon config → gate skipped");
+    }
+
+    /// Missing policies dir → gate passes (operator without Tetragon
+    /// installed doesn't get blocked from running modules apply).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_missing_policies_dir() {
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            r#"
+            [deployment]
+            target = "sain01"
+
+            [perimeter]
+            policies_dir = "/nonexistent/path/xyz"
+            "#,
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "missing policies dir → graceful pass");
     }
 }
