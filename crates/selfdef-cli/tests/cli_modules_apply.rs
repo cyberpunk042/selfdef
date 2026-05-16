@@ -513,6 +513,112 @@ fn sdr39_modules_info_with_host_status_surfaces_gate_verdict() {
     );
 }
 
+/// SD-R47 (closes SDD-019 T-2): `--ignore-hardware` writes an
+/// OCSF-shaped audit-trail JSONL when SELFDEF_MODULES_AUDIT_PATH
+/// is set in env.
+#[test]
+fn sdr47_ignore_hardware_writes_audit_trail_when_env_set() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    let body_a = body.replace("x", "alpha");
+    let body_b = body.replace("x", "beta");
+    write_module(&catalog, "alpha", &[], &body_a);
+    write_module(&catalog, "beta", &[], &body_b);
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    let audit = root.path().join("audit.jsonl");
+    let out = Command::new(binary())
+        .arg("--config")
+        .arg("/dev/null")
+        .env("SELFDEF_MODULES_AUDIT_PATH", audit.to_str().unwrap())
+        .args([
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+            "--ignore-hardware",
+        ])
+        .output()
+        .expect("spawn selfdefctl");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stdout: {stdout}\nstderr: {stderr}");
+    // Audit file written.
+    assert!(audit.exists(), "audit file not written: {audit:?}");
+    let body = std::fs::read_to_string(&audit).unwrap();
+    // One JSONL line per invocation.
+    assert_eq!(body.lines().count(), 1, "expected single line: {body}");
+    let v: serde_json::Value = serde_json::from_str(body.trim()).unwrap();
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["category"], "selfdef.modules.override");
+    assert_eq!(v["severity"], "medium");
+    assert_eq!(v["flag"], "--ignore-hardware");
+    let mods = v["gated_modules"].as_array().unwrap();
+    assert_eq!(mods.len(), 1);
+    assert_eq!(mods[0], "beta");
+    assert!(v.get("timestamp").is_some());
+    assert!(v.get("host_tag").is_some());
+}
+
+#[test]
+fn sdr47_no_audit_write_when_env_unset() {
+    // SDD-019 T-2 contract: audit-trail is OPT-IN via env. When
+    // SELFDEF_MODULES_AUDIT_PATH is unset, no file is written.
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    write_module(
+        &catalog,
+        "alpha",
+        &[],
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n",
+    );
+    write_module(
+        &catalog,
+        "beta",
+        &[],
+        "#!/usr/bin/env bash\necho '{\"module\":\"beta\",\"status\":\"ok\",\"message\":\"\"}'\n",
+    );
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    // We don't set SELFDEF_MODULES_AUDIT_PATH — should be no audit write.
+    let would_be_audit = root.path().join("not-set-shouldnt-exist.jsonl");
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+            "--ignore-hardware",
+        ],
+    );
+    assert!(out.status.success(), "should succeed");
+    assert!(
+        !would_be_audit.exists(),
+        "no audit path env → no file should be written"
+    );
+}
+
 /// SD-R45: `selfdefctl modules status --json` emits a structured
 /// per-module status document with manifest summary + gate verdict.
 #[test]

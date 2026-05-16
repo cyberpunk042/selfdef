@@ -557,6 +557,66 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
     Ok(())
 }
 
+/// SD-R47 (closes SDD-019 T-2): append an OCSF-shaped JSONL line
+/// to the operator-configured audit path when `--ignore-hardware`
+/// fires. Operators wanting fleet-alert visibility on gate
+/// overrides set `SELFDEF_MODULES_AUDIT_PATH=/var/log/selfdef/audit.jsonl`
+/// before invoking `selfdefctl modules apply --ignore-hardware`.
+///
+/// Schema: minimal OCSF-style envelope —
+///   - schema_version: pinned to "1.0.0"
+///   - timestamp: ISO8601 UTC
+///   - category: "selfdef.modules.override"
+///   - severity: "medium" (operator action that bypasses safety gates)
+///   - source: "selfdefctl"
+///   - flag: "--ignore-hardware"
+///   - host_tag: from $HOSTNAME or /etc/hostname
+///   - gated_modules: array of slugs (or slug#instance)
+///
+/// Atomic append via O_APPEND. Failure surfaces as a banner on
+/// stderr (already printed) but doesn't abort the apply —
+/// audit-trail loss shouldn't block production overrides.
+pub(crate) fn sdr47_emit_ignore_hardware_audit(
+    path: &Path,
+    gated_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = gated_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.override\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--ignore-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    // O_APPEND atomic short-append (POSIX guarantees PIPE_BUF size).
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
 /// SD-R39: probe the host + emit the gate verdict for one module
 /// as an inline addendum to cmd_info. Doesn't repeat the manifest
 /// body (cmd_info already printed it).
@@ -2289,13 +2349,27 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
         // SD-R42: operator explicitly suppressed the gate. Emit a
         // warning so the operator sees this on every run — the
         // override is sharp-edged and should not be silent.
+        let gated_modules: Vec<String> = active
+            .iter()
+            .filter(|a| !a.manifest.requires_hardware.is_empty())
+            .map(|a| a.display_name())
+            .collect();
         eprintln!(
             "# SD-R42: --ignore-hardware set — gate suppressed, {} gated module(s) will be force-applied",
-            active
-                .iter()
-                .filter(|a| !a.manifest.requires_hardware.is_empty())
-                .count()
+            gated_modules.len()
         );
+        // SD-R47 (closes SDD-019 T-2): audit trail for the override.
+        // When SELFDEF_MODULES_AUDIT_PATH is set, append an OCSF-
+        // shaped JSONL line. Fleet alerting picks this up.
+        if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+            let audit_path = std::path::PathBuf::from(audit_path);
+            if let Err(e) = sdr47_emit_ignore_hardware_audit(&audit_path, &gated_modules) {
+                eprintln!(
+                    "# SD-R47: audit write failed: {e} (path: {})",
+                    audit_path.display()
+                );
+            }
+        }
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
