@@ -359,6 +359,40 @@ fn check_hardware(cfg: &Config) -> Vec<CheckResult> {
             },
         });
     }
+    // SD-R18: thermal posture surface. We don't classify on the
+    // selfdef side (sovereign-os R172 owns thresholds because they're
+    // profile-dependent), but we DO report whether the host exposes
+    // any thermal sensors at all. A FullMatch SAIN-01 box with zero
+    // hwmon readings is suspicious (k10temp may not be loaded; nvme
+    // controllers should always expose temp1_input).
+    let thermals = &snap.thermals;
+    let any_thermals = !thermals.is_empty();
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "thermals (SD-R17+R18)".into(),
+        // On sain01 with no thermals: Warn (degraded observability).
+        // Off-sain01 with no thermals: Skipped (informational).
+        // With thermals: Ok regardless.
+        status: if any_thermals {
+            CheckStatus::Ok
+        } else if on_sain01 {
+            CheckStatus::Warn
+        } else {
+            CheckStatus::Skipped
+        },
+        detail: if any_thermals {
+            let max_c = thermals.iter().map(|t| t.celsius).max().unwrap_or(0);
+            let min_c = thermals.iter().map(|t| t.celsius).min().unwrap_or(0);
+            format!(
+                "{} sensor(s); min={}°C max={}°C",
+                thermals.len(),
+                min_c,
+                max_c,
+            )
+        } else {
+            "no sensors exposed (hwmon empty + nvidia-smi unavailable)".into()
+        },
+    });
     out
 }
 
@@ -1076,6 +1110,53 @@ mod sdd_013_tests {
             assert!(
                 results.iter().any(|r| r.name == name),
                 "doctor must surface hardware.{name}"
+            );
+        }
+    }
+
+    /// SD-R18: hardware check surfaces a thermals row (status varies
+    /// with the test host, but the row must always be present).
+    #[test]
+    fn sdr18_hardware_check_surfaces_thermals_row() {
+        let cfg = Config::default();
+        let results = check_hardware(&cfg);
+        let row = results
+            .iter()
+            .find(|r| r.name.starts_with("thermals"))
+            .expect("thermals row missing");
+        // Status: Ok when any sensors exposed; Skipped when off-sain01
+        // host has none; Warn ONLY when target=sain01 + no sensors.
+        // The CI runner has no hwmon AND target defaults to Generic,
+        // so the row should never be Warn here.
+        assert!(
+            matches!(row.status, CheckStatus::Ok | CheckStatus::Skipped),
+            "got status {:?} detail {:?}",
+            row.status,
+            row.detail,
+        );
+    }
+
+    /// SD-R18: on target=sain01, missing thermals downgrades to Warn
+    /// (operator-degraded observability — the SAIN-01 box should expose
+    /// k10temp and nvme temps, and a stripped kernel without those is
+    /// a configuration smell).
+    #[test]
+    fn sdr18_hardware_check_thermals_warns_on_sain01_when_empty() {
+        // We can't synthesize an empty thermals vec via probe() — the
+        // runner host's hwmon is whatever it is. Instead we assert the
+        // logical contract: the row exists and (when status is Warn)
+        // the detail mentions "no sensors exposed".
+        let cfg = cfg_with_target(DeploymentTarget::Sain01);
+        let results = check_hardware(&cfg);
+        let row = results
+            .iter()
+            .find(|r| r.name.starts_with("thermals"))
+            .expect("thermals row missing");
+        if matches!(row.status, CheckStatus::Warn) {
+            assert!(
+                row.detail.contains("no sensors exposed"),
+                "warn must include explanation, got: {}",
+                row.detail
             );
         }
     }
