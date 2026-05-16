@@ -1451,6 +1451,66 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
             }
         }
     }
+    // SD-R31: WasmAotCapabilities scrape surface. Operator + fleet
+    // scrapers can see at-a-glance which AVX-512 feature set the host
+    // surfaced to wasmtime — confirms the cycle-2 SD-R30 bridge is
+    // doing what it's expected to.
+    let cpu_for_wasm = CpuCapabilities {
+        recommended_march: recommended_march_for(&snap.cpu.vendor, &snap.cpu.features),
+        avx2: snap.cpu.features.contains("avx2"),
+        fma: snap.cpu.features.contains("fma"),
+        avx512f: snap.cpu.features.contains("avx512f"),
+        avx512dq: snap.cpu.features.contains("avx512dq"),
+        avx512bw: snap.cpu.features.contains("avx512bw"),
+        avx512vl: snap.cpu.features.contains("avx512vl"),
+        avx512vnni: snap.cpu.features.contains("avx512_vnni"),
+        avx512bf16: snap.cpu.features.contains("avx512_bf16"),
+        avx512fp16: snap.cpu.features.contains("avx512_fp16"),
+        avx512vbmi: snap.cpu.features.contains("avx512_vbmi"),
+        avx512vbmi2: snap.cpu.features.contains("avx512_vbmi2"),
+        ..Default::default()
+    };
+    let wasm_aot = derive_wasm_aot_capabilities(&cpu_for_wasm);
+    if !wasm_aot.target_features.is_empty() {
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_wasm_aot_feature_count Number of AVX-512/AVX2 features surfaced to wasmtime (SD-R31)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_wasm_aot_feature_count gauge"
+        )
+        .unwrap();
+        let count = wasm_aot.target_features.split(',').count();
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_wasm_aot_feature_count {count}"
+        )
+        .unwrap();
+
+        // info-style metric carrying the target_cpu + target_features
+        // as labels (1.0 value, like cAdvisor's container_info pattern).
+        // Operators dashboard joins on this to surface the readable
+        // feature string + CPU name without parsing the JSON file.
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_wasm_aot_info Static labels carrying SD-R30 wasm_aot.target_cpu + target_features (SD-R31)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_wasm_aot_info gauge"
+        )
+        .unwrap();
+        let safe_features = wasm_aot.target_features.replace('"', "\\\"");
+        let safe_cpu = wasm_aot.target_cpu.replace('"', "\\\"");
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\"}} 1"
+        )
+        .unwrap();
+    }
     buf
 }
 
@@ -2908,6 +2968,69 @@ malformed,line\n\
         );
         assert!(json.contains("\"target_features\":\"+avx512f"));
         assert!(json.contains("\"compile_command_hint\""));
+    }
+
+    // ----- SD-R31: wasm-AOT Layer B metric --------------------------
+
+    #[test]
+    fn sdr31_layer_b_emits_wasm_aot_feature_count_when_avx512_present() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_feature_count"),
+            "missing feature_count gauge: {out}"
+        );
+        // The 5 features → 5 entries in target_features.
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_feature_count 5"),
+            "wrong feature count: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr31_layer_b_info_metric_carries_target_cpu_and_features_labels() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_info"),
+            "missing info metric: {out}"
+        );
+        // znver5 because vnni+bf16 both present on AuthenticAMD.
+        assert!(
+            out.contains("target_cpu=\"znver5\""),
+            "missing target_cpu label: {out}"
+        );
+        assert!(
+            out.contains("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma"),
+            "missing target_features label: {out}"
+        );
+        // info-metric value is always 1.
+        assert!(
+            out.contains("target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\"} 1"),
+            "info metric value not 1: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr31_layer_b_omits_wasm_aot_block_on_avx2_only_host() {
+        // No AVX-512 → target_features is "+avx2,+fma" — still non-empty.
+        // The metric block is gated on "non-empty" so AVX2-only hosts
+        // still emit. But truly empty (no features at all) → omit.
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            !out.contains("wasm_aot_feature_count"),
+            "feature_count should be omitted on empty-feature host: {out}"
+        );
     }
 
     #[test]
