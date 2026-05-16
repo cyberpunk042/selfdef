@@ -548,6 +548,14 @@ pub struct NotifierConfig {
     /// wall's broadcast-all-TTYs behavior. Empty `users` keeps the
     /// channel disabled.
     pub write: WriteConfig,
+    /// SDD-014: shared-audit-summary channel — when on a SAIN-01
+    /// deployment, selfdef appends an index line per event to
+    /// /mnt/vault/context/security_audit.log (the shared cross-
+    /// component operator timeline that sovereign-os guardian-core
+    /// also writes to). Auto-enabled when deployment.target=sain01;
+    /// operators can opt out via `enabled = false`. Never auto-
+    /// enabled on generic deployments (Q-G honored).
+    pub shared_audit_summary: SharedAuditSummaryConfig,
     /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
     /// SQLite database. When set, the daemon opens this file at
     /// startup, persists outbound events in it, and runs the wake-
@@ -647,6 +655,7 @@ impl Default for NotifierConfig {
             thehive: TheHiveConfig::default(),
             wall: WallConfig::default(),
             write: WriteConfig::default(),
+            shared_audit_summary: SharedAuditSummaryConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
@@ -863,6 +872,67 @@ pub struct WriteConfig {
     /// Usernames must match `[a-zA-Z0-9._-]+` — shell metacharacters
     /// are rejected at config-load time.
     pub users: Vec<String>,
+}
+
+/// SDD-014: shared-audit-summary channel configuration.
+///
+/// Most operators on SAIN-01 will leave this entirely default — the
+/// channel auto-enables at `deployment.target=sain01` (see
+/// [`resolve_shared_audit_summary_enabled`]) and routes to
+/// `/mnt/vault/context/security_audit.log`. The config block exists so
+/// operators can:
+///   - opt out with `enabled = false`
+///   - override the path for testing
+///   - override the selfdef-audit pointer target
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SharedAuditSummaryConfig {
+    /// Operator-explicit on/off. `None` = "use the SAIN-01 default"
+    /// (auto-enable on sain01, never on generic). `Some(true)` =
+    /// force-enable; `Some(false)` = force-disable (operator can opt
+    /// out on SAIN-01 with this).
+    pub enabled: Option<bool>,
+    /// Override path. `None` = use the resolver default
+    /// `/mnt/vault/context/security_audit.log` (SDD-014 § 2 default).
+    pub path: Option<PathBuf>,
+    /// Override selfdef-audit pointer target. `None` = use the
+    /// resolver default (target-driven, per SDD-013).
+    pub selfdef_audit_path: Option<PathBuf>,
+}
+
+/// SDD-014 § 2: resolve the effective enabled-state for the
+/// shared-audit-summary channel. Single source of truth for both the
+/// daemon's `build_channel_set` and `selfdefctl doctor`.
+///
+/// Logic:
+///   - generic target  → never auto-enable; respect explicit override
+///   - sain01 target   → auto-enable; respect explicit override
+#[must_use]
+pub fn resolve_shared_audit_summary_enabled(cfg: &Config) -> bool {
+    if let Some(v) = cfg.notifier.shared_audit_summary.enabled {
+        return v;
+    }
+    matches!(cfg.deployment.target, DeploymentTarget::Sain01)
+}
+
+/// SDD-014 § 2: resolve the effective shared-audit-log path.
+/// Override > resolver default (per target).
+#[must_use]
+pub fn resolve_shared_audit_summary_path(cfg: &Config) -> Option<PathBuf> {
+    if let Some(p) = &cfg.notifier.shared_audit_summary.path {
+        return Some(p.clone());
+    }
+    shared_audit_log_path(cfg.deployment.target)
+}
+
+/// SDD-014 § 2: resolve the effective selfdef-audit pointer target.
+/// Override > resolver default (per target).
+#[must_use]
+pub fn resolve_shared_audit_summary_pointer(cfg: &Config) -> PathBuf {
+    if let Some(p) = &cfg.notifier.shared_audit_summary.selfdef_audit_path {
+        return p.clone();
+    }
+    audit_log_path(cfg.deployment.target)
 }
 
 /// SDD-008 D-6c: operator-defined custom escalation profile shape.
@@ -1584,6 +1654,139 @@ mod tests {
         );
         assert!(DeploymentTarget::from_str("bogus").is_err());
         assert!(DeploymentTarget::from_str("SAIN01").is_err()); // case-sensitive per serde rename_all
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-014 resolver tests
+    // ----------------------------------------------------------------
+
+    /// SDD-014 § 2: on Generic, channel never auto-enables.
+    #[test]
+    fn sdd_014_generic_target_does_not_auto_enable_shared_audit_summary() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: on SAIN-01, channel auto-enables.
+    #[test]
+    fn sdd_014_sain01_target_auto_enables_shared_audit_summary() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            ..Config::default()
+        };
+        assert!(resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2 + Q14-B: explicit `enabled = false` overrides
+    /// the auto-enable on SAIN-01.
+    #[test]
+    fn sdd_014_explicit_disable_overrides_auto_enable_on_sain01() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(false),
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: explicit `enabled = true` force-enables on Generic
+    /// (operator override path — they get to opt-in to the shared log
+    /// even on a generic deployment if they really want).
+    #[test]
+    fn sdd_014_explicit_enable_overrides_auto_disable_on_generic() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(true),
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: path resolver — default routes to
+    /// /mnt/vault/context on SAIN-01, None on Generic.
+    #[test]
+    fn sdd_014_path_resolution() {
+        let g = Config::default();
+        assert!(resolve_shared_audit_summary_path(&g).is_none());
+        let s = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_path(&s),
+            Some(PathBuf::from("/mnt/vault/context/security_audit.log"))
+        );
+    }
+
+    /// SDD-014 § 2: operator-supplied path overrides the resolver.
+    #[test]
+    fn sdd_014_path_override_wins() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(true),
+                    path: Some(PathBuf::from("/var/log/custom-shared.log")),
+                    selfdef_audit_path: None,
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_path(&cfg),
+            Some(PathBuf::from("/var/log/custom-shared.log"))
+        );
+    }
+
+    /// SDD-014 § 2: selfdef-audit pointer override.
+    #[test]
+    fn sdd_014_pointer_override_wins() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: None,
+                    path: None,
+                    selfdef_audit_path: Some(PathBuf::from("/srv/audit.jsonl")),
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_pointer(&cfg),
+            PathBuf::from("/srv/audit.jsonl")
+        );
     }
 
     /// SDD-013 § Goals point 2 (zero regression): a fully-populated

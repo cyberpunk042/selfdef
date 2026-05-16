@@ -2352,6 +2352,7 @@ dependencies = [
  "selfdef-integration-ntfy",
  "selfdef-integration-opensearch",
  "selfdef-integration-pagerduty",
+ "selfdef-integration-shared-audit-summary",
  "selfdef-integration-signal",
  "selfdef-integration-slack",
  "selfdef-integration-smtp",
@@ -2476,6 +2477,22 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-shared-audit-summary"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

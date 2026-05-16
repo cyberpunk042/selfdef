@@ -915,6 +915,30 @@ fn build_notifier_chain(cfg: &Config) -> NotifierChain {
                     ),
                 }
             }
+            "shared-audit-summary" if selfdef_config::resolve_shared_audit_summary_enabled(cfg) => {
+                let Some(path) = selfdef_config::resolve_shared_audit_summary_path(cfg) else {
+                    warn!(
+                        channel,
+                        "shared-audit-summary channel needs a path; \
+                         disable explicitly via [notifier.shared_audit_summary] enabled=false \
+                         on generic deployments without an override"
+                    );
+                    continue;
+                };
+                let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let ch =
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths(
+                        path.clone(),
+                        pointer.clone(),
+                    );
+                inner.push((Box::new(ch), build_subscription(channel, cfg)));
+                info!(
+                    channel,
+                    path = %path.display(),
+                    pointer = %pointer.display(),
+                    "notifier channel enabled (SDD-014)"
+                );
+            }
             other => warn!(channel = other, "notifier channel skipped (missing config)"),
         }
     }
@@ -1270,6 +1294,28 @@ fn build_channel_set(cfg: &Config) -> Vec<Arc<dyn Channel>> {
                         warn!(channel, error = %e, "write engine-channel skipped");
                     }
                 }
+            }
+            "shared-audit-summary" if selfdef_config::resolve_shared_audit_summary_enabled(cfg) => {
+                let Some(path) = selfdef_config::resolve_shared_audit_summary_path(cfg) else {
+                    warn!(
+                        channel,
+                        "shared-audit-summary enabled but no path resolvable (generic target without override?)"
+                    );
+                    continue;
+                };
+                let pointer = selfdef_config::resolve_shared_audit_summary_pointer(cfg);
+                let ch =
+                    selfdef_integration_shared_audit_summary::SharedAuditSummaryChannel::with_paths(
+                        path.clone(),
+                        pointer.clone(),
+                    );
+                channels.push(Arc::new(ch));
+                info!(
+                    channel,
+                    path = %path.display(),
+                    pointer = %pointer.display(),
+                    "engine-channel enabled (SDD-014)"
+                );
             }
             other => warn!(channel = other, "engine-channel skipped (missing config)"),
         }
