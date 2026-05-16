@@ -828,6 +828,7 @@ spec:
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             perimeter: PerimeterConfig {
                 policies_dir: dir.path().to_path_buf(),

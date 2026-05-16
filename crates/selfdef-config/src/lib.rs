@@ -76,6 +76,19 @@ pub struct Config {
 #[serde(default)]
 pub struct DeploymentConfig {
     pub target: DeploymentTarget,
+    /// SDD-017 § 5: when `target = sain01` AND this flag is true,
+    /// the daemon refuses to start unless the hardware probe returns
+    /// `Sain01Verdict::FullMatch`. Default false (warn-only on
+    /// mismatch). Operators on the SAIN-01 hardware should enable
+    /// this once they trust the probe.
+    pub sain01_strict: bool,
+    /// SDD-017 § 6: when set, the daemon writes a Layer B textfile
+    /// collector .prom file at this path with the per-dimension
+    /// Sain01Match results. node_exporter's textfile collector picks
+    /// it up. Empty = disabled. Default empty (operators opt-in by
+    /// pointing at their node_exporter textfile dir, e.g.
+    /// /var/lib/node_exporter/textfile_collector/selfdef-hardware.prom).
+    pub hardware_metrics_path: String,
 }
 
 /// SDD-013: target enum. New variants land via additional SDDs.
@@ -1813,7 +1826,10 @@ mod tests {
     fn sdd_013_deployment_target_toml_roundtrip() {
         for t in [DeploymentTarget::Generic, DeploymentTarget::Sain01] {
             let cfg = Config {
-                deployment: DeploymentConfig { target: t },
+                deployment: DeploymentConfig {
+                    target: t,
+                    ..DeploymentConfig::default()
+                },
                 ..Config::default()
             };
             let toml_str = toml::to_string(&cfg).unwrap();
@@ -1857,6 +1873,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
             },
             ..Config::default()
         };
@@ -1869,6 +1886,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             ..Config::default()
         };
@@ -1882,6 +1900,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             notifier: NotifierConfig {
                 shared_audit_summary: SharedAuditSummaryConfig {
@@ -1903,6 +1922,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
             },
             notifier: NotifierConfig {
                 shared_audit_summary: SharedAuditSummaryConfig {
@@ -1925,6 +1945,7 @@ mod tests {
         let s = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             ..Config::default()
         };
@@ -1940,6 +1961,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
             },
             notifier: NotifierConfig {
                 shared_audit_summary: SharedAuditSummaryConfig {
@@ -1964,6 +1986,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             notifier: NotifierConfig {
                 shared_audit_summary: SharedAuditSummaryConfig {
@@ -1999,6 +2022,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             ..Config::default()
         };
@@ -2013,6 +2037,7 @@ mod tests {
         let cfg = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             perimeter: PerimeterConfig {
                 check_overlap_on_apply: Some(false),
@@ -2068,6 +2093,7 @@ mod tests {
         let s = Config {
             deployment: DeploymentConfig {
                 target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
             },
             ..Config::default()
         };
@@ -2188,6 +2214,57 @@ mod tests {
     fn sdd_016_rate_limit_defaults_to_100() {
         let cfg = OracleTriageConfig::default();
         assert_eq!(cfg.max_events_per_hour, 100);
+    }
+
+    /// SDD-017 § 5: sain01_strict defaults to false (warn-only).
+    #[test]
+    fn sdd_017_sain01_strict_defaults_false() {
+        let cfg = Config::default();
+        assert!(!cfg.deployment.sain01_strict);
+    }
+
+    /// SDD-017 § 5: explicit sain01_strict=true parses.
+    #[test]
+    fn sdd_017_sain01_strict_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "sain01"
+            sain01_strict = true
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+        assert!(cfg.deployment.sain01_strict);
+    }
+
+    /// SDD-017 § 6: hardware_metrics_path empty by default; opt-in
+    /// via config.
+    #[test]
+    fn sdd_017_hardware_metrics_path_defaults_empty() {
+        let cfg = Config::default();
+        assert!(cfg.deployment.hardware_metrics_path.is_empty());
+    }
+
+    #[test]
+    fn sdd_017_hardware_metrics_path_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            hardware_metrics_path = "/var/lib/node_exporter/textfile_collector/selfdef-hardware.prom"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(
+            cfg.deployment.hardware_metrics_path,
+            "/var/lib/node_exporter/textfile_collector/selfdef-hardware.prom"
+        );
     }
 
     /// SDD-016 Q16-D: rate-limit configurable; 0 disables.

@@ -83,9 +83,10 @@ async fn main() -> Result<()> {
     }
 
     // SDD-017: hardware probe at startup. Best-effort + informational
-    // — never blocks the daemon. Logs the Sain01Match verdict so
-    // operators see hardware drift in `journalctl -u selfdefd | grep
-    // sain01_match`.
+    // — never blocks the daemon unless [deployment].sain01_strict is
+    // set AND target=sain01 AND the verdict is not FullMatch. Logs the
+    // Sain01Match verdict so operators see hardware drift in
+    // `journalctl -u selfdefd | grep sain01_match`.
     match selfdef_hardware::probe() {
         Ok(snap) => {
             let m = selfdef_hardware::matches_sain01(&snap);
@@ -102,6 +103,38 @@ async fn main() -> Result<()> {
                 gpu_count = snap.gpus.len(),
                 "sain01_match (SDD-017)",
             );
+            // SDD-017 § 6: Layer B textfile-collector emission.
+            if !cfg.deployment.hardware_metrics_path.is_empty() {
+                let p = std::path::Path::new(&cfg.deployment.hardware_metrics_path);
+                if let Err(e) = selfdef_hardware::write_layer_b_metrics(p, &snap, &m) {
+                    warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SDD-017 § 6: writing Layer B hardware metrics failed; continuing"
+                    );
+                } else {
+                    info!(
+                        path = %p.display(),
+                        "SDD-017 § 6: Layer B hardware metrics emitted"
+                    );
+                }
+            }
+            // SDD-017 § 5: strict-mode gate. Only fires when target=sain01
+            // AND sain01_strict=true AND overall != FullMatch.
+            if matches!(dep_target, selfdef_config::DeploymentTarget::Sain01)
+                && cfg.deployment.sain01_strict
+                && !matches!(m.overall, selfdef_hardware::Sain01Verdict::FullMatch)
+            {
+                anyhow::bail!(
+                    "SDD-017 § 5 sain01_strict: refusing to start — \
+                     deployment.target = sain01 + sain01_strict = true \
+                     but hardware verdict = {:?}. \
+                     Either fix the missing dimension(s), set sain01_strict = false \
+                     to downgrade to warn-only, or switch target = generic. \
+                     Run `selfdefctl hardware` for the per-dimension breakdown.",
+                    m.overall
+                );
+            }
         }
         Err(e) => {
             warn!(error = %e, "hardware probe failed (SDD-017); daemon continues");

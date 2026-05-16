@@ -364,6 +364,198 @@ fn read_motherboard(dmi_dir: &Path) -> Option<MotherboardInventory> {
     })
 }
 
+// ---------------------------------------------------------------- Layer B metrics (SDD-017 § 6)
+
+/// SDD-017 § 6: render a Layer B textfile-collector body for a given
+/// snapshot + match. Pure function — no I/O. Operators consume this
+/// via node_exporter's textfile collector.
+///
+/// Metrics emitted:
+///   sovereign_os_selfdef_hardware_match{dimension="..."} 0|1
+///   sovereign_os_selfdef_hardware_match_overall{verdict="..."} 1
+///   sovereign_os_selfdef_hardware_cpu_logical_threads <n>
+///   sovereign_os_selfdef_hardware_cpu_physical_cores  <n>
+///   sovereign_os_selfdef_hardware_memory_total_bytes  <n>
+///   sovereign_os_selfdef_hardware_gpu_count           <n>
+///   sovereign_os_selfdef_hardware_probed_at_unix      <epoch>
+#[must_use]
+pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> String {
+    use std::fmt::Write as _;
+    let mut buf = String::new();
+
+    let bit = |b: bool| -> u8 { if b { 1 } else { 0 } };
+    let verdict_label = |v: Sain01Verdict| -> &'static str {
+        match v {
+            Sain01Verdict::FullMatch => "FullMatch",
+            Sain01Verdict::PartialMatch => "PartialMatch",
+            Sain01Verdict::NoMatch => "NoMatch",
+        }
+    };
+
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_match Per-dimension SAIN-01 fitness (1 = match, 0 = miss; missing dimension = absent label)"
+    )
+    .unwrap();
+    writeln!(&mut buf, "# TYPE sovereign_os_selfdef_hardware_match gauge").unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_match{{dimension=\"cpu_avx512_vnni\"}} {}",
+        bit(m.cpu_avx512_vnni)
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_match{{dimension=\"cpu_avx512_bf16\"}} {}",
+        bit(m.cpu_avx512_bf16)
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_match{{dimension=\"memory_at_least_256gb\"}} {}",
+        bit(m.memory_at_least_256gb)
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_match{{dimension=\"gpu_count_at_least_2\"}} {}",
+        bit(m.gpu_count_at_least_2)
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_match{{dimension=\"pcie_dual_x8_present\"}} {}",
+        bit(m.pcie_dual_x8_present)
+    )
+    .unwrap();
+    if let Some(mb) = m.motherboard_proart_x870e {
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_match{{dimension=\"motherboard_proart_x870e\"}} {}",
+            bit(mb)
+        )
+        .unwrap();
+    }
+    // motherboard_proart_x870e == None → omit label per Q17-A
+    // (operator can distinguish absent vs 0 via the missing time series).
+
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_match_overall Overall verdict (one label = 1)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_match_overall gauge"
+    )
+    .unwrap();
+    for v in [
+        Sain01Verdict::FullMatch,
+        Sain01Verdict::PartialMatch,
+        Sain01Verdict::NoMatch,
+    ] {
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_match_overall{{verdict=\"{}\"}} {}",
+            verdict_label(v),
+            bit(m.overall == v)
+        )
+        .unwrap();
+    }
+
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_cpu_logical_threads Logical thread count from /proc/cpuinfo"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_cpu_logical_threads gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_cpu_logical_threads {}",
+        snap.cpu.logical_threads
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_cpu_physical_cores gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_cpu_physical_cores {}",
+        snap.cpu.physical_cores
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_memory_total_bytes gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_memory_total_bytes {}",
+        snap.memory.total_bytes
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_gpu_count gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_gpu_count {}",
+        snap.gpus.len()
+    )
+    .unwrap();
+    let probed_unix = parse_iso8601_to_unix(&snap.probed_at).unwrap_or(0);
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_probed_at_unix gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_probed_at_unix {probed_unix}"
+    )
+    .unwrap();
+    buf
+}
+
+fn parse_iso8601_to_unix(s: &str) -> Option<i64> {
+    use time::OffsetDateTime;
+    use time::format_description::well_known::Iso8601;
+    OffsetDateTime::parse(s, &Iso8601::DEFAULT)
+        .ok()
+        .map(|d| d.unix_timestamp())
+}
+
+/// SDD-017 § 6: write the rendered Layer B metrics to `path` atomically
+/// (tempfile + rename, matching node_exporter's textfile collector
+/// recommendation that consumers see whole files only).
+pub fn write_layer_b_metrics(
+    path: &Path,
+    snap: &HardwareSnapshot,
+    m: &Sain01Match,
+) -> Result<(), HardwareError> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    let body = render_layer_b_metrics(snap, m);
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp_path = PathBuf::from(tmp);
+    fs::write(&tmp_path, body)?;
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------- tests
 
 #[cfg(test)]
@@ -668,5 +860,110 @@ mod tests {
         let snap = probe().unwrap();
         assert!(snap.cpu.logical_threads > 0);
         assert!(snap.memory.total_bytes > 0);
+    }
+
+    // ----- Layer B metrics (SDD-017 § 6) ---------------------------
+
+    #[test]
+    fn layer_b_metrics_render_includes_every_dimension() {
+        let snap = synth_snapshot(
+            true,
+            true,
+            BYTES_256_GB,
+            2,
+            2,
+            Some(("ASUSTeK COMPUTER INC.", "ProArt X870E-CREATOR WIFI")),
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        for s in [
+            "sovereign_os_selfdef_hardware_match{dimension=\"cpu_avx512_vnni\"} 1",
+            "sovereign_os_selfdef_hardware_match{dimension=\"cpu_avx512_bf16\"} 1",
+            "sovereign_os_selfdef_hardware_match{dimension=\"memory_at_least_256gb\"} 1",
+            "sovereign_os_selfdef_hardware_match{dimension=\"gpu_count_at_least_2\"} 1",
+            "sovereign_os_selfdef_hardware_match{dimension=\"pcie_dual_x8_present\"} 1",
+            "sovereign_os_selfdef_hardware_match{dimension=\"motherboard_proart_x870e\"} 1",
+            "sovereign_os_selfdef_hardware_match_overall{verdict=\"FullMatch\"} 1",
+            "sovereign_os_selfdef_hardware_match_overall{verdict=\"PartialMatch\"} 0",
+            "sovereign_os_selfdef_hardware_match_overall{verdict=\"NoMatch\"} 0",
+            "sovereign_os_selfdef_hardware_memory_total_bytes 274877906944",
+            "sovereign_os_selfdef_hardware_gpu_count 2",
+        ] {
+            assert!(out.contains(s), "missing metric line: {s}\nin:\n{out}");
+        }
+    }
+
+    #[test]
+    fn layer_b_metrics_omit_motherboard_when_dmi_unreadable() {
+        let snap = synth_snapshot(true, true, BYTES_256_GB, 2, 2, None);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        // Operator can distinguish "motherboard absent" (no time series)
+        // from "motherboard wrong" (=0). Q17-A safety.
+        assert!(!out.contains("motherboard_proart_x870e"));
+    }
+
+    #[test]
+    fn layer_b_metrics_partial_match_rendered() {
+        let snap = synth_snapshot(true, false, BYTES_256_GB, 1, 1, None);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_match_overall{verdict=\"PartialMatch\"} 1")
+        );
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_match_overall{verdict=\"FullMatch\"} 0")
+        );
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_match{dimension=\"cpu_avx512_bf16\"} 0")
+        );
+        assert!(
+            out.contains(
+                "sovereign_os_selfdef_hardware_match{dimension=\"gpu_count_at_least_2\"} 0"
+            )
+        );
+    }
+
+    #[test]
+    fn write_layer_b_metrics_atomically_writes_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("selfdef-hardware.prom");
+        let snap = synth_snapshot(true, true, BYTES_256_GB, 2, 2, None);
+        let m = matches_sain01(&snap);
+        write_layer_b_metrics(&path, &snap, &m).unwrap();
+        let body = fs::read_to_string(&path).unwrap();
+        assert!(body.contains("sovereign_os_selfdef_hardware_match"));
+        // The .tmp file MUST not survive the rename.
+        let mut tmp_name = path.as_os_str().to_owned();
+        tmp_name.push(".tmp");
+        let tmp_path = PathBuf::from(tmp_name);
+        assert!(!tmp_path.exists(), "tmp file must be renamed away");
+    }
+
+    #[test]
+    fn write_layer_b_metrics_creates_parent_dir() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("deep/nested/path/selfdef-hardware.prom");
+        let snap = synth_snapshot(true, true, BYTES_256_GB, 2, 2, None);
+        let m = matches_sain01(&snap);
+        write_layer_b_metrics(&path, &snap, &m).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn parse_iso8601_to_unix_roundtrips_current_time() {
+        let now = time::OffsetDateTime::now_utc();
+        let s = now
+            .format(&time::format_description::well_known::Iso8601::DEFAULT)
+            .unwrap();
+        let parsed = parse_iso8601_to_unix(&s).unwrap();
+        // Allow ±2 seconds for the formatting precision.
+        assert!((parsed - now.unix_timestamp()).abs() <= 2);
+    }
+
+    #[test]
+    fn parse_iso8601_to_unix_bad_input_returns_none() {
+        assert_eq!(parse_iso8601_to_unix("not a date"), None);
+        assert_eq!(parse_iso8601_to_unix(""), None);
     }
 }

@@ -558,7 +558,10 @@ mod sdd_013_tests {
 
     fn cfg_with_target(t: DeploymentTarget) -> Config {
         Config {
-            deployment: DeploymentConfig { target: t },
+            deployment: DeploymentConfig {
+                target: t,
+                ..DeploymentConfig::default()
+            },
             ..Config::default()
         }
     }
