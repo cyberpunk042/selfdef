@@ -1,10 +1,12 @@
-# SDD-018 — Hardware-aware module gating + tune surface (SD-R14..R19 arc)
+# SDD-018 — Hardware-aware module gating + tune surface (SD-R14..R32 arc)
 
-> Status: **review** — captures the SD-R14..R19 in-arc design + closes
+> Status: **review** — captures the SD-R14..R32 in-arc design + closes
 > the doctrine gap operators asked for ("research and continuously
-> evolving specs to drive and evolve the SDD and TDD").
+> evolving specs to drive and evolve the SDD and TDD"). Cycle 1
+> (SD-R1..R23) merged via PR #190 on 2026-05-16; cycle 2
+> (SD-R24..R32) accumulating in PR #191.
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-16 (cycle 2 amendment)
 > Builds on: SDD-017 (hardware inventory); sovereign-os R172 (thermal
 > classification + OCSF events); sovereign-os R173 (selfdef-tune.sh).
 
@@ -144,11 +146,29 @@ selfdef SD-R14        →  module.toml [requires_hardware]
 selfdef SD-R15        →  selfdefctl modules check-hardware (dry-run)
 selfdef SD-R17        →  selfdef-hardware ThermalReading
 selfdef SD-R19        →  selfdefctl hardware tune --format <fmt>
+selfdef SD-R24        →  GpuInventory.power_draw_watts + power_limit_watts
+selfdef SD-R25        →  HardwareCapabilities.gpu.devices (per-GPU detail)
+selfdef SD-R26        →  [requires_hardware] gpu_vram_gib_min
+                          + gpu_power_headroom_watts_min
+selfdef SD-R27        →  HOST SNAPSHOT block in check-hardware output
+selfdef SD-R28        →  modules/bitnet-gpu-inference/ (real 5-predicate
+                          demonstrator; emits schedule.json)
+selfdef SD-R29        →  selfdefctl hardware tune NVCC -gencode list
+                          (SAIN-01 dual-GPU → sm_120 + sm_86)
+selfdef SD-R30        →  HardwareCapabilities.wasm_aot block
+                          (target_triple, target_cpu, target_features)
+selfdef SD-R31        →  Layer B wasm-AOT scrape metrics
+selfdef SD-R32        →  [requires_hardware] wasm_aot_features_required
                           │
                           ▼
 sovereign-os R170     →  scripts/hardware/selfdef-modules-gate.py
 sovereign-os R172     →  scripts/hardware/thermal-watch.py (thresholds + OCSF events)
 sovereign-os R173     →  scripts/build/lib/selfdef-tune.sh (bridge to SD-R19)
+sovereign-os R177     →  selfdef-modules-gate mirror: SD-R25 + R26 predicates
+sovereign-os R178     →  scripts/inference/lib/pick-gpu.py (SD-R28 schedule consumer)
+sovereign-os R179     →  scripts/pulse/wasm-aot.sh consumes SD-R30 wasm_aot block
+sovereign-os R180     →  docs/observability/dashboards/sovereign-os-wasm-aot.json
+sovereign-os R181     →  selfdef-modules-gate mirror: SD-R32 predicate
 ```
 
 Every cross-repo consumer has a fallback so removing the selfdef
@@ -172,6 +192,38 @@ side never causes a hard break:
   sovereign-os R172, NOT selfdef — thresholds are profile-dependent.
 - **D-6** (SD-R19): ZMM hint gated on avx512f detection; the flag is
   not universally beneficial.
+- **D-7** (SD-R24, cycle 2): GPU power telemetry is OPTIONAL —
+  `power_draw_watts` + `power_limit_watts` are Option<u32>; hosts
+  without NVML get `None` + the Layer B metrics omit the gauge block.
+  Fail-soft is the contract — modules that depend on power telemetry
+  (SD-R26 `gpu_power_headroom_watts_min`) opt in explicitly and
+  fail-closed in that case.
+- **D-8** (SD-R25, cycle 2): `gpu.devices` is index-aligned with
+  `gpu.device_nodes` (same vec order). Downstream schedulers (R178
+  pick-gpu.py, SD-R28 schedule.json) rely on this invariant —
+  derive_capabilities preserves snap.gpus order.
+- **D-9** (SD-R26, cycle 2): `gpu_vram_gib_min` passes when ANY GPU
+  meets the bar (max semantics), not ALL — operators wanting an
+  all-GPUs-must-fit rule layer a separate `gpu_vram_gib_each_min`
+  predicate in a future round. Keep simple semantics primary;
+  layer specialised ones on demand.
+- **D-10** (SD-R26, cycle 2): `gpu_power_headroom_watts_min` is a
+  SUM across all GPUs (fleet headroom), not per-GPU. Saturating
+  arithmetic — never underflows on noisy telemetry. Fail-closed
+  on partial telemetry (any GPU missing power data → entire
+  predicate fails).
+- **D-11** (SD-R29, cycle 2): NVCC `-gencode` list is deduplicated +
+  ordered by first appearance in `gpu.devices`. `cuda_arch_list` is
+  ascending-numeric (`"86;120"` not `"120;86"`) to match CMake's
+  `CMAKE_CUDA_ARCHITECTURES` convention.
+- **D-12** (SD-R30, cycle 2): `wasm_aot.target_features` uses the
+  LLVM/wasmtime `+feature` convention, AVX-512 family first, AVX2
+  + FMA fallbacks last. Empty `compile_command_hint` on hosts
+  without AVX-512 (no AOT hint signaled).
+- **D-13** (SD-R32, cycle 2): `wasm_aot_features_required` set
+  semantics — ALL declared features must be present (strict AND).
+  Operator wanting OR-logic writes multiple modules each with one
+  feature + the operator picks which lands.
 
 ## Non-goals
 

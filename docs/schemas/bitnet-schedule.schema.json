@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/cyberpunk042/selfdef/docs/schemas/bitnet-schedule.schema.json",
+  "title": "selfdef bitnet schedule.json (SD-R28 + SD-R46)",
+  "description": "Per-GPU role assignment emitted by the bitnet-gpu-inference module's apply.sh. Consumed by sovereign-os scripts/inference/lib/pick-gpu.py (R178) to pin CUDA_VISIBLE_DEVICES per role. Closes SDD-019 T-6 (cycle-2 schedule.json schema gap).",
+  "type": "object",
+  "required": ["schema_version", "schedule"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Operator-stable schema version. Major bump on incompatible change; consumers refuse unknown majors.",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO8601 timestamp when this schedule was written.",
+      "format": "date-time"
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Operator-readable explanation of WHY this schedule was chosen (e.g. ranking criteria)."
+    },
+    "schedule": {
+      "type": "array",
+      "description": "Per-GPU role assignment, ordered by descending VRAM (largest-VRAM card gets 'model_inference').",
+      "items": {
+        "type": "object",
+        "required": ["gpu_index", "role"],
+        "additionalProperties": false,
+        "properties": {
+          "gpu_index": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "/dev/nvidia<gpu_index> — matches CUDA_VISIBLE_DEVICES."
+          },
+          "role": {
+            "type": "string",
+            "enum": ["model_inference", "auxiliary", "spare"],
+            "description": "Workload class this GPU hosts. model_inference = primary inference; auxiliary = tokenizer/embedding/TTS; spare = idle reserve."
+          },
+          "model_hint": {
+            "type": ["string", "null"],
+            "description": "nvidia-smi model name (e.g. 'NVIDIA RTX PRO 6000 Blackwell'). Optional — present when the SD-R13 enrichment ran."
+          },
+          "vram_bytes": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Total VRAM. Optional — present when nvidia-smi ran."
+          },
+          "power_limit_watts": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "description": "Nominal power cap in whole watts. Optional — present when NVML reported it (SD-R24)."
+          }
+        }
+      }
+    }
+  }
+}

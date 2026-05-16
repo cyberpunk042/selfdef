@@ -97,6 +97,19 @@ pub struct GpuInventory {
     pub pci_address: Option<String>,
     pub model_hint: Option<String>,
     pub vram_bytes: Option<u64>,
+    /// SD-R24: instantaneous power draw in watts (rounded to whole
+    /// watt). `None` when nvidia-smi can't report it (no NVML, GPU
+    /// in P-state that doesn't expose telemetry, etc.). Operators
+    /// running sustained inference workloads want this for
+    /// thermal-budget reasoning + cost tracking.
+    #[serde(default)]
+    pub power_draw_watts: Option<u32>,
+    /// SD-R24: nominal power limit in watts (the cap nvidia-smi
+    /// reports). `None` when unreadable. Pairs with
+    /// `power_draw_watts` so operators can compute headroom:
+    /// `limit - draw = remaining budget`.
+    #[serde(default)]
+    pub power_limit_watts: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,6 +255,11 @@ pub fn probe_from_roots(
     // /dev/nvidia<N> device-node list. Failures are silent — the
     // gpus vec keeps its device-node-only entries.
     let gpus = enrich_gpus_via_nvidia_smi(gpus);
+    // SD-R24: second nvidia-smi pass for power telemetry. Independent
+    // failure path from SD-R13; a host with model+vram exposed but
+    // without NVML power telemetry still gets model_hint + vram_bytes
+    // and just leaves power_*_watts as None.
+    let gpus = enrich_gpus_power_via_nvidia_smi(gpus);
     // SD-R17: thermals via /sys/class/hwmon + nvidia-smi. Best-effort:
     // both sources may be empty on minimal hosts.
     let thermals = read_thermals_from_hwmon(Path::new("/sys/class/hwmon"));
@@ -380,6 +398,88 @@ pub fn parse_nvidia_smi_csv(body: &str) -> Vec<(usize, String, Option<u64>)> {
             .ok()
             .map(|mib| mib.saturating_mul(1024 * 1024));
         out.push((idx, name, vram));
+    }
+    out
+}
+
+// ---------------------------------------------------------------- nvidia-smi power (SD-R24)
+
+/// SD-R24: enrich `gpus` with `power_draw_watts` + `power_limit_watts`
+/// via a second nvidia-smi invocation:
+///   `nvidia-smi --query-gpu=index,power.draw,power.limit --format=csv,noheader,nounits`.
+///
+/// nvidia-smi reports power as floats with one decimal (`"275.4"`);
+/// we round to nearest whole watt to match the operator-readable
+/// scale. Failures (nvidia-smi absent, NVML unavailable, `[N/A]`
+/// readings) leave the corresponding fields as `None`.
+///
+/// Kept as a separate query from the SD-R13 enrichment so the two
+/// paths can fail independently — a host with vRAM exposure but no
+/// NVML power telemetry still gets the model_hint + vram_bytes.
+pub(crate) fn enrich_gpus_power_via_nvidia_smi(mut gpus: Vec<GpuInventory>) -> Vec<GpuInventory> {
+    if gpus.is_empty() {
+        return gpus;
+    }
+    let output = match std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=index,power.draw,power.limit",
+            "--format=csv,noheader,nounits",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return gpus,
+    };
+    let body = String::from_utf8_lossy(&output.stdout);
+    for (idx, draw, limit) in parse_nvidia_smi_power_csv(&body) {
+        if let Some(g) = gpus.get_mut(idx) {
+            if g.power_draw_watts.is_none() {
+                g.power_draw_watts = draw;
+            }
+            if g.power_limit_watts.is_none() {
+                g.power_limit_watts = limit;
+            }
+        }
+    }
+    gpus
+}
+
+/// SD-R24: pure parser for `nvidia-smi --query-gpu=index,power.draw,
+/// power.limit --format=csv,noheader,nounits`. Returns
+/// `Vec<(index, draw_watts, limit_watts)>` where each watt field is
+/// `Some(u32)` when parseable, `None` when `[N/A]` / `Not Supported`
+/// / unparseable. Malformed rows (missing index) are dropped.
+///
+/// Example input:
+///   0, 275.4, 600.0
+///   1, [N/A], 350.0
+#[must_use]
+pub fn parse_nvidia_smi_power_csv(body: &str) -> Vec<(usize, Option<u32>, Option<u32>)> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let idx = match parts[0].parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let parse_watts = |s: &str| -> Option<u32> {
+            if s.is_empty()
+                || s == "[N/A]"
+                || s.eq_ignore_ascii_case("not supported")
+                || s.eq_ignore_ascii_case("n/a")
+            {
+                return None;
+            }
+            // nvidia-smi returns float watts with one decimal — round
+            // to nearest whole watt.
+            s.parse::<f64>().ok().map(|f| f.round().max(0.0) as u32)
+        };
+        out.push((idx, parse_watts(parts[1]), parse_watts(parts[2])));
     }
     out
 }
@@ -632,6 +732,8 @@ fn read_gpu_device_nodes(dev_dir: &Path) -> Vec<GpuInventory> {
             pci_address: None,
             model_hint: None,
             vram_bytes: None,
+            power_draw_watts: None,
+            power_limit_watts: None,
         });
     }
     out.sort_by(|a, b| a.device_node.cmp(&b.device_node));
@@ -703,6 +805,39 @@ pub struct HardwareCapabilities {
     pub gpu: GpuCapabilities,
     pub pcie: PcieCapabilities,
     pub sain01_match: Sain01Match,
+    /// SD-R30: Wasm-AOT compilation hints derived from the host's
+    /// CPU feature set. Lets sovereign-os scripts/pulse/wasm-aot.sh
+    /// (and any other AOT pipeline) source canonical wasmtime
+    /// `--target-feature` flags + a recommended target CPU without
+    /// re-deriving them from raw features. Default (empty struct)
+    /// is forward-compat with existing capabilities JSON files.
+    #[serde(default)]
+    pub wasm_aot: WasmAotCapabilities,
+}
+
+/// SD-R30: Pre-computed Wasm-AOT compilation hints.
+///
+/// Sourced into sovereign-os pulse/wasm-aot.sh + any other host
+/// that wants to AOT-compile .wasm into a native shared lib. The
+/// `wasmtime_target_features` string is a comma-separated list with
+/// `+feature` syntax (wasmtime / LLVM convention); ready to pass
+/// to `wasmtime compile --target-feature ${features}`.
+///
+/// All fields default to empty strings when the host doesn't expose
+/// the relevant capabilities — the consumer either falls back to
+/// `native` or skips the AOT hint entirely.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WasmAotCapabilities {
+    /// LLVM target triple (e.g. `x86_64-unknown-linux-gnu`).
+    pub target_triple: String,
+    /// `-target-cpu` token (e.g. `znver5`, `znver4`, `native`).
+    pub target_cpu: String,
+    /// Comma-separated `+feature` list for `--target-feature`.
+    /// Empty when the host lacks AVX-512.
+    pub target_features: String,
+    /// Worked `wasmtime compile` example command (operator
+    /// copy/pasteable). Empty when AOT isn't recommended.
+    pub compile_command_hint: String,
 }
 
 /// CPU instruction-family availability + recommended flags for
@@ -756,6 +891,32 @@ pub struct MemoryCapabilities {
 pub struct GpuCapabilities {
     pub device_count: u32,
     pub device_nodes: Vec<PathBuf>,
+    /// SD-R25: per-GPU detail map — model hint, VRAM, power draw,
+    /// power limit. Index matches `device_nodes[i]` 1:1. Lets
+    /// cross-repo consumers (sovereign-os wasm-aot, build-bitnet,
+    /// scheduling heuristics) see WHICH GPU has WHICH headroom
+    /// instead of just a count. Empty when no GPUs detected.
+    #[serde(default)]
+    pub devices: Vec<GpuDeviceCapabilities>,
+}
+
+/// SD-R25: per-GPU detail surfaced through HardwareCapabilities JSON.
+/// All fields Option-typed so the schema remains forward-compatible
+/// when probe sources vary (nvidia-smi vs lspci vs AMD ROCm).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GpuDeviceCapabilities {
+    /// `/dev/nvidia<N>` style device node when known.
+    pub device_node: Option<PathBuf>,
+    /// PCI BDF (e.g. "0000:01:00.0") when lspci enrichment ran.
+    pub pci_address: Option<String>,
+    /// SD-R13 — nvidia-smi name (e.g. "NVIDIA RTX PRO 6000 Blackwell").
+    pub model_hint: Option<String>,
+    /// SD-R13 — total VRAM in bytes.
+    pub vram_bytes: Option<u64>,
+    /// SD-R24 — instantaneous power draw, whole watts.
+    pub power_draw_watts: Option<u32>,
+    /// SD-R24 — nominal power limit, whole watts.
+    pub power_limit_watts: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -800,13 +961,30 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
     let gpu = GpuCapabilities {
         device_count: u32::try_from(snap.gpus.len()).unwrap_or(u32::MAX),
         device_nodes: snap.gpus.iter().map(|g| g.device_node.clone()).collect(),
+        // SD-R25: per-GPU detail rows. Index-aligned with device_nodes.
+        devices: snap
+            .gpus
+            .iter()
+            .map(|g| GpuDeviceCapabilities {
+                device_node: Some(g.device_node.clone()),
+                pci_address: g.pci_address.clone(),
+                model_hint: g.model_hint.clone(),
+                vram_bytes: g.vram_bytes,
+                power_draw_watts: g.power_draw_watts,
+                power_limit_watts: g.power_limit_watts,
+            })
+            .collect(),
     };
     let pcie = PcieCapabilities {
         gen4_or_higher_x8_slot_count: snap.pcie.gen4_or_higher_x8_slot_count,
         dual_x8_present: snap.pcie.gen4_or_higher_x8_slot_count >= 2,
     };
+    let wasm_aot = derive_wasm_aot_capabilities(&cpu);
     HardwareCapabilities {
-        schema_version: "1.0.0".into(),
+        // SD-R30: bumped to 1.2.0 alongside the wasm_aot addition.
+        // 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices; 1.2.0 =
+        // SD-R30 wasm_aot field.
+        schema_version: "1.2.0".into(),
         probed_at: snap.probed_at.clone(),
         host_tag: None,
         cpu,
@@ -814,6 +992,78 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         gpu,
         pcie,
         sain01_match: matches_sain01(snap),
+        wasm_aot,
+    }
+}
+
+/// SD-R30: derive the Wasm-AOT hint block from a probed CpuCapabilities.
+/// Pure function — no I/O. Tests pin every feature combination.
+#[must_use]
+pub fn derive_wasm_aot_capabilities(cpu: &CpuCapabilities) -> WasmAotCapabilities {
+    // x86_64 only for now — aarch64 / RISC-V hosts get empty hints
+    // (operator can override per build pipeline).
+    let target_triple = "x86_64-unknown-linux-gnu".to_string();
+    let target_cpu = if cpu.recommended_march.is_empty() {
+        "native".to_string()
+    } else {
+        cpu.recommended_march.clone()
+    };
+
+    // Build the comma-separated +feature list. Order matches the
+    // SAIN-01 hot path: AVX-512 family first (these unlock the
+    // 512-bit ZMM register pressure), then AVX2/FMA fallbacks.
+    let mut features: Vec<&'static str> = Vec::new();
+    if cpu.avx512f {
+        features.push("+avx512f");
+    }
+    if cpu.avx512dq {
+        features.push("+avx512dq");
+    }
+    if cpu.avx512bw {
+        features.push("+avx512bw");
+    }
+    if cpu.avx512vl {
+        features.push("+avx512vl");
+    }
+    if cpu.avx512vnni {
+        features.push("+avx512vnni");
+    }
+    if cpu.avx512bf16 {
+        features.push("+avx512bf16");
+    }
+    if cpu.avx512fp16 {
+        features.push("+avx512fp16");
+    }
+    if cpu.avx512vbmi {
+        features.push("+avx512vbmi");
+    }
+    if cpu.avx512vbmi2 {
+        features.push("+avx512vbmi2");
+    }
+    if cpu.avx2 {
+        features.push("+avx2");
+    }
+    if cpu.fma {
+        features.push("+fma");
+    }
+    let target_features = features.join(",");
+
+    // Worked example. Empty when no AVX-512 — on those hosts
+    // operator should just use `native` and skip the explicit
+    // feature list to avoid pinning wasmtime to a stale view.
+    let compile_command_hint = if cpu.avx512f {
+        format!(
+            "wasmtime compile --target {target_triple} --target-feature {target_features} module.wasm -o module.cwasm"
+        )
+    } else {
+        String::new()
+    };
+
+    WasmAotCapabilities {
+        target_triple,
+        target_cpu,
+        target_features,
+        compile_command_hint,
     }
 }
 
@@ -859,6 +1109,92 @@ fn recommended_compile_flags(feats: &HashSet<String>) -> Vec<String> {
     ] {
         if feats.contains(feat) {
             out.push(flag_name.to_string());
+        }
+    }
+    out
+}
+
+/// SD-R29: map an nvidia-smi `model_hint` string to a CUDA SM
+/// architecture (e.g. "sm_120" for Blackwell, "sm_86" for RTX 3090
+/// Ampere). Pure function — driven purely by substring matching on
+/// the model name. Returns `None` when the model is unknown or the
+/// hint is empty.
+///
+/// Reference (NVIDIA Architecture → SM mapping):
+///   Blackwell (RTX PRO 6000, B100, B200) → sm_120
+///   Hopper    (H100, H200)                → sm_90
+///   Ada       (RTX 4090, L40, L40S)       → sm_89
+///   Ampere    (RTX 3090, A100)            → sm_86 / sm_80
+///   Turing    (RTX 2080 Ti)               → sm_75
+///
+/// The SAIN-01 case (RTX PRO 6000 + RTX 3090) needs sm_120 + sm_86
+/// for fat-binary builds. NVCC accepts these via
+/// `-gencode arch=compute_<n>,code=sm_<n>`.
+#[must_use]
+pub fn nvidia_sm_for_model(model_hint: &str) -> Option<&'static str> {
+    let m = model_hint.to_ascii_lowercase();
+    // Blackwell: SAIN-01 primary (RTX PRO 6000 Blackwell), B100/B200.
+    if m.contains("blackwell")
+        || m.contains("rtx pro 6000")
+        || m.contains("b100")
+        || m.contains("b200")
+    {
+        return Some("sm_120");
+    }
+    // Hopper datacenter.
+    if m.contains("h100") || m.contains("h200") || m.contains("hopper") {
+        return Some("sm_90");
+    }
+    // Ada Lovelace: RTX 40-series, L40 / L40S.
+    if m.contains("rtx 4090")
+        || m.contains("rtx 4080")
+        || m.contains("rtx 4070")
+        || m.contains("rtx 4060")
+        || m.contains("l40s")
+        || m.contains("l40")
+        || m.contains("ada")
+    {
+        return Some("sm_89");
+    }
+    // Ampere datacenter: A100 (sm_80) — distinct from A30/A40 (sm_80
+    // too) and consumer Ampere RTX 30-series (sm_86).
+    if m.contains("a100") {
+        return Some("sm_80");
+    }
+    // Ampere consumer: SAIN-01 secondary (RTX 3090).
+    if m.contains("rtx 3090")
+        || m.contains("rtx 3080")
+        || m.contains("rtx 3070")
+        || m.contains("rtx 3060")
+        || m.contains("ampere")
+    {
+        return Some("sm_86");
+    }
+    // Turing.
+    if m.contains("rtx 2080") || m.contains("rtx 2070") || m.contains("turing") {
+        return Some("sm_75");
+    }
+    None
+}
+
+/// SD-R29: build the NVCC `-gencode` flag list for a host's GPU
+/// fleet. Each detected GPU contributes one `-gencode` entry; unknown
+/// models are skipped silently (operator gets a build that targets
+/// what we DO know about, plus a JIT fallback at runtime).
+///
+/// Result is deduplicated (a SAIN-01-style pair of identical cards
+/// only emits one entry). Order preserved by first appearance.
+#[must_use]
+pub fn gencode_flags_for_gpus(caps: &HardwareCapabilities) -> Vec<String> {
+    let mut seen: HashSet<&'static str> = HashSet::new();
+    let mut out = Vec::new();
+    for d in &caps.gpu.devices {
+        if let Some(hint) = d.model_hint.as_deref() {
+            if let Some(sm) = nvidia_sm_for_model(hint) {
+                if seen.insert(sm) {
+                    out.push(format!("-gencode arch=compute_{},code={}", &sm[3..], sm,));
+                }
+            }
         }
     }
     out
@@ -1066,6 +1402,114 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
             )
             .unwrap();
         }
+    }
+    // SD-R24: per-GPU power draw + limit gauges. Only emitted when at
+    // least one GPU has a parseable reading — hosts without NVML or
+    // without nvidia-smi don't pollute the textfile collector with
+    // empty labels.
+    let any_power = snap
+        .gpus
+        .iter()
+        .any(|g| g.power_draw_watts.is_some() || g.power_limit_watts.is_some());
+    if any_power {
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_gpu_power_draw_watts Per-GPU instantaneous power draw in watts (SD-R24)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_gpu_power_draw_watts gauge"
+        )
+        .unwrap();
+        for (idx, g) in snap.gpus.iter().enumerate() {
+            if let Some(w) = g.power_draw_watts {
+                writeln!(
+                    &mut buf,
+                    "sovereign_os_selfdef_hardware_gpu_power_draw_watts{{gpu=\"{idx}\"}} {w}"
+                )
+                .unwrap();
+            }
+        }
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_gpu_power_limit_watts Per-GPU nominal power limit in watts (SD-R24)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_gpu_power_limit_watts gauge"
+        )
+        .unwrap();
+        for (idx, g) in snap.gpus.iter().enumerate() {
+            if let Some(w) = g.power_limit_watts {
+                writeln!(
+                    &mut buf,
+                    "sovereign_os_selfdef_hardware_gpu_power_limit_watts{{gpu=\"{idx}\"}} {w}"
+                )
+                .unwrap();
+            }
+        }
+    }
+    // SD-R31: WasmAotCapabilities scrape surface. Operator + fleet
+    // scrapers can see at-a-glance which AVX-512 feature set the host
+    // surfaced to wasmtime — confirms the cycle-2 SD-R30 bridge is
+    // doing what it's expected to.
+    let cpu_for_wasm = CpuCapabilities {
+        recommended_march: recommended_march_for(&snap.cpu.vendor, &snap.cpu.features),
+        avx2: snap.cpu.features.contains("avx2"),
+        fma: snap.cpu.features.contains("fma"),
+        avx512f: snap.cpu.features.contains("avx512f"),
+        avx512dq: snap.cpu.features.contains("avx512dq"),
+        avx512bw: snap.cpu.features.contains("avx512bw"),
+        avx512vl: snap.cpu.features.contains("avx512vl"),
+        avx512vnni: snap.cpu.features.contains("avx512_vnni"),
+        avx512bf16: snap.cpu.features.contains("avx512_bf16"),
+        avx512fp16: snap.cpu.features.contains("avx512_fp16"),
+        avx512vbmi: snap.cpu.features.contains("avx512_vbmi"),
+        avx512vbmi2: snap.cpu.features.contains("avx512_vbmi2"),
+        ..Default::default()
+    };
+    let wasm_aot = derive_wasm_aot_capabilities(&cpu_for_wasm);
+    if !wasm_aot.target_features.is_empty() {
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_wasm_aot_feature_count Number of AVX-512/AVX2 features surfaced to wasmtime (SD-R31)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_wasm_aot_feature_count gauge"
+        )
+        .unwrap();
+        let count = wasm_aot.target_features.split(',').count();
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_wasm_aot_feature_count {count}"
+        )
+        .unwrap();
+
+        // info-style metric carrying the target_cpu + target_features
+        // as labels (1.0 value, like cAdvisor's container_info pattern).
+        // Operators dashboard joins on this to surface the readable
+        // feature string + CPU name without parsing the JSON file.
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_wasm_aot_info Static labels carrying SD-R30 wasm_aot.target_cpu + target_features (SD-R31)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_wasm_aot_info gauge"
+        )
+        .unwrap();
+        let safe_features = wasm_aot.target_features.replace('"', "\\\"");
+        let safe_cpu = wasm_aot.target_cpu.replace('"', "\\\"");
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\"}} 1"
+        )
+        .unwrap();
     }
     buf
 }
@@ -1392,6 +1836,8 @@ mod tests {
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             });
         }
         HardwareSnapshot {
@@ -1667,12 +2113,16 @@ mod tests {
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
                 GpuInventory {
                     device_node: PathBuf::from("/dev/nvidia1"),
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
             ],
             motherboard: None,
@@ -1812,7 +2262,7 @@ mod tests {
     fn capabilities_schema_version_pinned() {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.0.0");
+        assert_eq!(c.schema_version, "1.2.0");
     }
 
     #[test]
@@ -1827,9 +2277,13 @@ mod tests {
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed.schema_version, "1.0.0");
+        assert_eq!(parsed.schema_version, "1.2.0");
         assert_eq!(parsed.cpu.recommended_march, "znver5");
         assert!(parsed.cpu.avx512vnni);
+        // SD-R30: wasm_aot block round-trips with the expected feature
+        // string on the Zen 5 + AVX-512 synth snapshot.
+        assert_eq!(parsed.wasm_aot.target_cpu, "znver5");
+        assert!(parsed.wasm_aot.target_features.contains("+avx512vnni"));
         // Tempfile must be cleaned up.
         let mut tmp = path.as_os_str().to_owned();
         tmp.push(".tmp");
@@ -1905,6 +2359,268 @@ malformed,line\n\
         assert!(parse_nvidia_smi_csv("").is_empty());
     }
 
+    // ----- SD-R24 power-telemetry parser ----------------------------
+
+    #[test]
+    fn sdr24_power_parser_handles_sain01_dual_gpu() {
+        let body = "0, 275.4, 600.0\n1, 180.2, 350.0\n";
+        let out = parse_nvidia_smi_power_csv(body);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], (0, Some(275), Some(600)));
+        assert_eq!(out[1], (1, Some(180), Some(350)));
+    }
+
+    #[test]
+    fn sdr24_power_parser_rounds_half_away_from_zero() {
+        // 275.5 → 276 (round half away from zero per f64::round).
+        let out = parse_nvidia_smi_power_csv("0, 275.5, 350.0\n");
+        assert_eq!(out[0].1, Some(276));
+    }
+
+    #[test]
+    fn sdr24_power_parser_handles_na_readings() {
+        // [N/A] is what nvidia-smi reports when NVML can't provide it.
+        let out = parse_nvidia_smi_power_csv("0, [N/A], 350.0\n");
+        assert_eq!(out[0], (0, None, Some(350)));
+    }
+
+    #[test]
+    fn sdr24_power_parser_handles_not_supported() {
+        let out = parse_nvidia_smi_power_csv("0, Not Supported, Not Supported\n");
+        assert_eq!(out[0], (0, None, None));
+    }
+
+    #[test]
+    fn sdr24_power_parser_rejects_malformed_index() {
+        let out = parse_nvidia_smi_power_csv("alpha, 275.4, 600.0\n1, 180.2, 350.0\n");
+        // First row drops; second survives.
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, 1);
+    }
+
+    #[test]
+    fn sdr24_power_parser_clamps_negative_to_zero() {
+        // nvidia-smi shouldn't ever report negative watts, but if a
+        // future firmware bug does, the saturating cast keeps the
+        // metric non-negative.
+        let out = parse_nvidia_smi_power_csv("0, -5.0, 350.0\n");
+        assert_eq!(out[0].1, Some(0));
+    }
+
+    #[test]
+    fn sdr24_enrich_power_index_matches_device_node_order() {
+        // Round-trip the parser into the enrichment logic without
+        // invoking the real nvidia-smi.
+        let body = "0, 275.4, 600.0\n1, 180.2, 350.0\n";
+        let parsed = parse_nvidia_smi_power_csv(body);
+        let mut gpus = [
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            },
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia1"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            },
+        ]
+        .to_vec();
+        for (idx, draw, limit) in parsed {
+            if let Some(g) = gpus.get_mut(idx) {
+                g.power_draw_watts = draw;
+                g.power_limit_watts = limit;
+            }
+        }
+        assert_eq!(gpus[0].power_draw_watts, Some(275));
+        assert_eq!(gpus[0].power_limit_watts, Some(600));
+        assert_eq!(gpus[1].power_draw_watts, Some(180));
+        assert_eq!(gpus[1].power_limit_watts, Some(350));
+    }
+
+    #[test]
+    fn sdr25_derive_capabilities_populates_per_gpu_devices() {
+        // Two GPUs (mirror the SAIN-01 dual-GPU pair) with distinct
+        // model_hint + vram + power readings. Capabilities export
+        // must surface every per-device field — that's the
+        // load-bearing contract for cross-repo schedulers that need
+        // to pick the right GPU.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: Some("0000:01:00.0".into()),
+                    model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: Some("0000:02:00.0".into()),
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.gpu.device_count, 2);
+        assert_eq!(caps.gpu.devices.len(), 2);
+        // SAIN-01 primary GPU.
+        let g0 = &caps.gpu.devices[0];
+        assert_eq!(g0.device_node, Some(PathBuf::from("/dev/nvidia0")));
+        assert_eq!(g0.pci_address.as_deref(), Some("0000:01:00.0"));
+        assert_eq!(
+            g0.model_hint.as_deref(),
+            Some("NVIDIA RTX PRO 6000 Blackwell")
+        );
+        assert_eq!(g0.vram_bytes, Some(98 * 1024 * 1024 * 1024));
+        assert_eq!(g0.power_draw_watts, Some(275));
+        assert_eq!(g0.power_limit_watts, Some(600));
+        // Secondary GPU.
+        let g1 = &caps.gpu.devices[1];
+        assert_eq!(g1.model_hint.as_deref(), Some("NVIDIA GeForce RTX 3090"));
+        assert_eq!(g1.power_draw_watts, Some(180));
+        assert_eq!(g1.power_limit_watts, Some(350));
+    }
+
+    #[test]
+    fn sdr25_capabilities_serializes_devices_into_json() {
+        // The forward-compat contract: capabilities.gpu.devices is in
+        // the emitted JSON so sovereign-os scripts/hardware/
+        // selfdef-modules-gate.py (R170) + future schedulers see it.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                power_draw_watts: Some(275),
+                power_limit_watts: Some(600),
+            }],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(json.contains("\"devices\""), "json: {json}");
+        assert!(json.contains("\"model_hint\":"), "json: {json}");
+        assert!(json.contains("RTX PRO 6000 Blackwell"), "json: {json}");
+        assert!(json.contains("\"power_draw_watts\":275"), "json: {json}");
+        assert!(json.contains("\"power_limit_watts\":600"), "json: {json}");
+    }
+
+    #[test]
+    fn sdr25_capabilities_devices_empty_when_no_gpus() {
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.gpu.device_count, 0);
+        assert!(caps.gpu.devices.is_empty());
+    }
+
+    #[test]
+    fn sdr24_render_layer_b_emits_power_gauges_when_present() {
+        let mut snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(out.contains("sovereign_os_selfdef_hardware_gpu_power_draw_watts"));
+        assert!(out.contains("gpu=\"0\"} 275"));
+        assert!(out.contains("gpu=\"0\"} 600"));
+        assert!(out.contains("gpu=\"1\"} 180"));
+        assert!(out.contains("gpu=\"1\"} 350"));
+        // Both HELP+TYPE blocks present.
+        assert!(out.contains("# TYPE sovereign_os_selfdef_hardware_gpu_power_draw_watts gauge"));
+        assert!(out.contains("# TYPE sovereign_os_selfdef_hardware_gpu_power_limit_watts gauge"));
+
+        // Mutation guard: if no GPU has any power reading, block omitted.
+        for g in &mut snap.gpus {
+            g.power_draw_watts = None;
+            g.power_limit_watts = None;
+        }
+        let out2 = render_layer_b_metrics(&snap, &m);
+        assert!(!out2.contains("hardware_gpu_power_draw_watts"));
+        assert!(!out2.contains("hardware_gpu_power_limit_watts"));
+    }
+
+    #[test]
+    fn sdr24_enrich_power_preserves_existing_values() {
+        // Caller-set values aren't overwritten — same contract as
+        // SD-R13 model/vram enrichment.
+        let mut gpus = [GpuInventory {
+            device_node: PathBuf::from("/dev/nvidia0"),
+            pci_address: None,
+            model_hint: None,
+            vram_bytes: None,
+            power_draw_watts: Some(42),
+            power_limit_watts: Some(99),
+        }]
+        .to_vec();
+        let parsed = parse_nvidia_smi_power_csv("0, 275.4, 600.0\n");
+        for (idx, draw, limit) in parsed {
+            if let Some(g) = gpus.get_mut(idx) {
+                if g.power_draw_watts.is_none() {
+                    g.power_draw_watts = draw;
+                }
+                if g.power_limit_watts.is_none() {
+                    g.power_limit_watts = limit;
+                }
+            }
+        }
+        assert_eq!(gpus[0].power_draw_watts, Some(42));
+        assert_eq!(gpus[0].power_limit_watts, Some(99));
+    }
+
     #[test]
     fn enrich_gpus_index_matches_device_node_order() {
         // Simulate the enrichment without invoking the real
@@ -1915,12 +2631,16 @@ malformed,line\n\
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             },
             GpuInventory {
                 device_node: PathBuf::from("/dev/nvidia1"),
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             },
         ];
         let parsed = vec![
@@ -2054,5 +2774,284 @@ malformed,line\n\
         // Mobo None → bonus dim drops out; the 4 base dims + bf16 bonus
         // all hit on this synth snapshot → FullMatch.
         assert_eq!(c.sain01_match.overall, Sain01Verdict::FullMatch);
+    }
+
+    // ----- SD-R29: per-GPU NVCC arch derivation ---------------------
+
+    #[test]
+    fn sdr29_nvidia_sm_recognises_sain01_pair() {
+        assert_eq!(
+            nvidia_sm_for_model("NVIDIA RTX PRO 6000 Blackwell"),
+            Some("sm_120"),
+            "SAIN-01 primary GPU"
+        );
+        assert_eq!(
+            nvidia_sm_for_model("NVIDIA GeForce RTX 3090"),
+            Some("sm_86"),
+            "SAIN-01 secondary GPU"
+        );
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_handles_common_architectures() {
+        assert_eq!(nvidia_sm_for_model("NVIDIA H100"), Some("sm_90"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA L40S"), Some("sm_89"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA RTX 4090"), Some("sm_89"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA A100 80GB"), Some("sm_80"));
+        assert_eq!(nvidia_sm_for_model("NVIDIA RTX 2080 Ti"), Some("sm_75"));
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_returns_none_on_unknown() {
+        assert_eq!(nvidia_sm_for_model(""), None);
+        assert_eq!(nvidia_sm_for_model("AMD Radeon RX 7900"), None);
+        assert_eq!(nvidia_sm_for_model("Intel Arc A770"), None);
+    }
+
+    #[test]
+    fn sdr29_nvidia_sm_is_case_insensitive() {
+        assert_eq!(
+            nvidia_sm_for_model("nvidia rtx pro 6000 blackwell"),
+            Some("sm_120")
+        );
+        assert_eq!(nvidia_sm_for_model("BLACKWELL B100"), Some("sm_120"));
+    }
+
+    #[test]
+    fn sdr29_gencode_emits_one_per_sm_dedup_pair_of_3090s() {
+        // Two identical RTX 3090s — single -gencode entry (sm_86).
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let flags = gencode_flags_for_gpus(&caps);
+        assert_eq!(flags.len(), 1);
+        assert_eq!(flags[0], "-gencode arch=compute_86,code=sm_86");
+    }
+
+    #[test]
+    fn sdr29_gencode_emits_both_for_sain01_pair() {
+        // SAIN-01 pair → sm_120 + sm_86, both ordered by appearance.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA RTX PRO 6000 Blackwell".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("NVIDIA GeForce RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: None,
+                    power_limit_watts: None,
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        let flags = gencode_flags_for_gpus(&caps);
+        assert_eq!(flags.len(), 2);
+        assert_eq!(flags[0], "-gencode arch=compute_120,code=sm_120");
+        assert_eq!(flags[1], "-gencode arch=compute_86,code=sm_86");
+    }
+
+    // ----- SD-R30: wasm-AOT hint derivation -------------------------
+
+    #[test]
+    fn sdr30_wasm_aot_empty_features_when_no_avx512() {
+        let cpu = CpuCapabilities {
+            recommended_march: "native".into(),
+            avx2: true,
+            fma: true,
+            ..Default::default()
+        };
+        let w = derive_wasm_aot_capabilities(&cpu);
+        assert_eq!(w.target_cpu, "native");
+        assert_eq!(w.target_features, "+avx2,+fma");
+        assert!(
+            w.compile_command_hint.is_empty(),
+            "no AVX-512 → no hint command"
+        );
+    }
+
+    #[test]
+    fn sdr30_wasm_aot_full_sain01_feature_string() {
+        // Zen 5 + every AVX-512 family bit the SAIN-01 9900X exposes.
+        let cpu = CpuCapabilities {
+            recommended_march: "znver5".into(),
+            avx2: true,
+            fma: true,
+            avx512f: true,
+            avx512dq: true,
+            avx512bw: true,
+            avx512vl: true,
+            avx512vnni: true,
+            avx512bf16: true,
+            avx512vbmi: true,
+            avx512vbmi2: true,
+            ..Default::default()
+        };
+        let w = derive_wasm_aot_capabilities(&cpu);
+        assert_eq!(w.target_cpu, "znver5");
+        // AVX-512 family in order, then AVX2/FMA fallbacks.
+        assert!(
+            w.target_features.starts_with("+avx512f,"),
+            "AVX-512 first: {}",
+            w.target_features
+        );
+        assert!(w.target_features.contains("+avx512vnni"));
+        assert!(w.target_features.contains("+avx512bf16"));
+        assert!(w.target_features.ends_with(",+avx2,+fma"));
+        // Worked example present.
+        assert!(w.compile_command_hint.contains("wasmtime compile"));
+        assert!(w.compile_command_hint.contains("--target-feature"));
+        assert!(w.compile_command_hint.contains("+avx512f"));
+    }
+
+    #[test]
+    fn sdr30_wasm_aot_target_triple_is_x86_64_linux() {
+        let w = derive_wasm_aot_capabilities(&CpuCapabilities::default());
+        assert_eq!(w.target_triple, "x86_64-unknown-linux-gnu");
+    }
+
+    #[test]
+    fn sdr30_capabilities_schema_bumped_to_1_2_0() {
+        let snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        let c = derive_capabilities(&snap);
+        assert_eq!(c.schema_version, "1.2.0");
+    }
+
+    #[test]
+    fn sdr30_capabilities_carries_wasm_aot_block_in_json() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let c = derive_capabilities(&snap);
+        let json = serde_json::to_string(&c).expect("serializes");
+        assert!(
+            json.contains("\"wasm_aot\""),
+            "wasm_aot field missing: {json}"
+        );
+        assert!(json.contains("\"target_features\":\"+avx512f"));
+        assert!(json.contains("\"compile_command_hint\""));
+    }
+
+    // ----- SD-R31: wasm-AOT Layer B metric --------------------------
+
+    #[test]
+    fn sdr31_layer_b_emits_wasm_aot_feature_count_when_avx512_present() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_feature_count"),
+            "missing feature_count gauge: {out}"
+        );
+        // The 5 features → 5 entries in target_features.
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_feature_count 5"),
+            "wrong feature count: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr31_layer_b_info_metric_carries_target_cpu_and_features_labels() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_wasm_aot_info"),
+            "missing info metric: {out}"
+        );
+        // znver5 because vnni+bf16 both present on AuthenticAMD.
+        assert!(
+            out.contains("target_cpu=\"znver5\""),
+            "missing target_cpu label: {out}"
+        );
+        assert!(
+            out.contains("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma"),
+            "missing target_features label: {out}"
+        );
+        // info-metric value is always 1.
+        assert!(
+            out.contains("target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\"} 1"),
+            "info metric value not 1: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr31_layer_b_omits_wasm_aot_block_on_avx2_only_host() {
+        // No AVX-512 → target_features is "+avx2,+fma" — still non-empty.
+        // The metric block is gated on "non-empty" so AVX2-only hosts
+        // still emit. But truly empty (no features at all) → omit.
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            !out.contains("wasm_aot_feature_count"),
+            "feature_count should be omitted on empty-feature host: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr29_gencode_empty_when_no_known_gpus() {
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: Some("AMD Radeon Pro W7900".into()),
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            }],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let caps = derive_capabilities(&snap);
+        assert!(gencode_flags_for_gpus(&caps).is_empty());
     }
 }

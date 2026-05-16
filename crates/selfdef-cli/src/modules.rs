@@ -185,6 +185,59 @@ pub(crate) struct HardwareRequirements {
     #[serde(default)]
     pub(crate) gpu_count_min: u32,
 
+    /// SD-R26: minimum VRAM (GiB) on AT LEAST ONE GPU. Lets a module
+    /// declare "I need to fit a model that takes 80 GiB" — passes
+    /// when any GPU in HardwareCapabilities.gpu.devices reports
+    /// vram_bytes ≥ this. 0 disables the gate.
+    ///
+    /// Pairs naturally with `gpu_count_min`: combined "needs 2 GPUs
+    /// AND at least one with 80 GiB VRAM" lands inference modules
+    /// on the SAIN-01 dual-GPU rig (RTX PRO 6000 → 98 GiB).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_min: u64,
+
+    /// SD-R51 (closes SDD-019 T-1): ALL-semantics companion to
+    /// `gpu_vram_gib_min`. Every GPU in
+    /// HardwareCapabilities.gpu.devices must report vram_bytes ≥
+    /// this. Use case: fleet-uniformity modules (e.g. a tensor-
+    /// parallel inference module that splits a model across BOTH
+    /// GPUs and needs each card to host an equal slice). 0 disables.
+    ///
+    /// Fail-closed when the per-device list is empty (no probe data
+    /// → can't prove ALL GPUs satisfy → fail).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_each_min: u64,
+
+    /// SD-R26: minimum total power headroom (watts) across ALL GPUs.
+    /// Headroom for one GPU = power_limit - power_draw; we sum
+    /// across the fleet. Gate disabled when 0. When set, requires
+    /// every GPU to expose both `power_limit_watts` AND
+    /// `power_draw_watts` (else the predicate fails — modules
+    /// asking for headroom assurance must have telemetry).
+    ///
+    /// Use case: a sustained-load inference module declares
+    /// `gpu_power_headroom_watts_min = 200` and only applies on
+    /// hosts where adding ~200W won't blow the cap.
+    #[serde(default)]
+    pub(crate) gpu_power_headroom_watts_min: u32,
+
+    /// SD-R32: required wasm-AOT target features (comma-separated,
+    /// `+feature` syntax; sovereign-os pulse/wasm-aot.sh-compatible).
+    /// Empty disables the gate. Module passes when EVERY listed
+    /// feature appears in
+    /// HardwareCapabilities.wasm_aot.target_features.
+    ///
+    /// Examples (operator surface):
+    ///   wasm_aot_features_required = "+avx512f"
+    ///   wasm_aot_features_required = "+avx512vnni,+avx512bf16"
+    ///
+    /// Use case: an AOT-compiled inference module declares
+    /// "I need VNNI for INT8 matmul AND BF16 for the activation
+    /// reduction stage" — passes on the SAIN-01 9900X, fails on
+    /// 9700X (no BF16) before any compile happens.
+    #[serde(default)]
+    pub(crate) wasm_aot_features_required: String,
+
     /// Required Sain01Match verdict, when set:
     /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
     /// would be weird — operator should rarely use it).
@@ -221,6 +274,114 @@ impl HardwareRequirements {
                 self.gpu_count_min, caps.gpu.device_count,
             ));
         }
+        if self.gpu_vram_gib_min > 0 {
+            // Pass when ANY GPU meets the bar. Uses the SD-R25
+            // per-device caps surface; falls back to a fail if the
+            // per-device list is empty (probe didn't enrich).
+            let want_bytes = self.gpu_vram_gib_min.saturating_mul(1024 * 1024 * 1024);
+            let any_big_enough = caps
+                .gpu
+                .devices
+                .iter()
+                .any(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !any_big_enough {
+                let best_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .max()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_min = {} (host best is {} GiB)",
+                    self.gpu_vram_gib_min, best_gib,
+                ));
+            }
+        }
+        if self.gpu_vram_gib_each_min > 0 {
+            // SD-R51 ALL-semantics. Every GPU must report
+            // vram_bytes ≥ this. Empty per-device list → fail (we
+            // can't prove ALL are big enough).
+            let want_bytes = self
+                .gpu_vram_gib_each_min
+                .saturating_mul(1024 * 1024 * 1024);
+            let all_big_enough = !caps.gpu.devices.is_empty()
+                && caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .all(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !all_big_enough {
+                let worst_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .min()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_each_min = {} (host worst is {} GiB across {} GPU(s))",
+                    self.gpu_vram_gib_each_min,
+                    worst_gib,
+                    caps.gpu.devices.len()
+                ));
+            }
+        }
+        if self.gpu_power_headroom_watts_min > 0 {
+            let mut total_headroom: u32 = 0;
+            let mut telemetry_complete = !caps.gpu.devices.is_empty();
+            for d in &caps.gpu.devices {
+                match (d.power_limit_watts, d.power_draw_watts) {
+                    (Some(limit), Some(draw)) => {
+                        total_headroom = total_headroom.saturating_add(limit.saturating_sub(draw));
+                    }
+                    _ => {
+                        telemetry_complete = false;
+                    }
+                }
+            }
+            if !telemetry_complete {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host GPU(s) lack power telemetry — install nvidia-smi + NVML)",
+                    self.gpu_power_headroom_watts_min
+                ));
+            } else if total_headroom < self.gpu_power_headroom_watts_min {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host headroom is {} W)",
+                    self.gpu_power_headroom_watts_min, total_headroom
+                ));
+            }
+        }
+        if !self.wasm_aot_features_required.is_empty() {
+            // Build the actual host feature set from the SD-R30
+            // wasm_aot.target_features string. Both sides use the
+            // `+feature` convention (LLVM/wasmtime). Empty side =
+            // host hasn't enabled AOT → every required feature is
+            // missing.
+            let actual: std::collections::HashSet<&str> = caps
+                .wasm_aot
+                .target_features
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            let missing: Vec<&str> = self
+                .wasm_aot_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "wasm_aot_features_required = {:?} (host missing: {})",
+                    self.wasm_aot_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
         if !self.sain01_verdict_min.is_empty() {
             let actual = match caps.sain01_match.overall {
                 selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
@@ -251,6 +412,10 @@ impl HardwareRequirements {
             && !self.avx512_bf16
             && self.memory_gib_min == 0
             && self.gpu_count_min == 0
+            && self.gpu_vram_gib_min == 0
+            && self.gpu_vram_gib_each_min == 0
+            && self.gpu_power_headroom_watts_min == 0
+            && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
     }
 }
@@ -379,6 +544,267 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// SD-R40: emit the module manifest as structured JSON (with the
+/// SD-R39 host_status verdict inlined). Operator-stable schema for
+/// tooling consumers (sovereign-osctl, fleet dashboards, future
+/// model-fetcher scripts).
+pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let host_status_json = if m.requires_hardware.is_empty() {
+        serde_json::json!({"verdict": "applies-on-any-host", "unmet": []})
+    } else {
+        match &caps {
+            Some(c) => match m.requires_hardware.evaluate(c) {
+                Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                Err(unmet) => serde_json::json!({"verdict": "skipped", "unmet": unmet}),
+            },
+            None => serde_json::json!({"verdict": "probe-unavailable", "unmet": []}),
+        }
+    };
+    let rh = &m.requires_hardware;
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "name": m.name,
+        "version": m.version,
+        "summary": m.summary,
+        "category": m.category,
+        "depends_on": m.depends_on,
+        "conflicts": m.conflicts,
+        "provides": m.provides,
+        "consumes": m.consumes,
+        "instanced": m.instanced,
+        "phase": m.phase.as_str(),
+        "requires_hardware": {
+            "is_empty": rh.is_empty(),
+            "avx512_vnni": rh.avx512_vnni,
+            "avx512_bf16": rh.avx512_bf16,
+            "memory_gib_min": rh.memory_gib_min,
+            "gpu_count_min": rh.gpu_count_min,
+            "gpu_vram_gib_min": rh.gpu_vram_gib_min,
+            "gpu_vram_gib_each_min": rh.gpu_vram_gib_each_min,
+            "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
+            "wasm_aot_features_required": rh.wasm_aot_features_required,
+            "sain01_verdict_min": rh.sain01_verdict_min,
+        },
+        "host_status": host_status_json,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
+/// SD-R50: pretty-print the SD-R47 audit JSONL stream. Operator
+/// runs `selfdefctl modules audit-log` to see recent gate
+/// overrides on this host. Read-only.
+pub(crate) fn cmd_audit_log(audit_path: &Path, n: usize, json: bool) -> Result<i32> {
+    if !audit_path.exists() {
+        println!(
+            "(no audit log at {} — no overrides recorded yet)",
+            audit_path.display()
+        );
+        return Ok(0);
+    }
+    let body = std::fs::read_to_string(audit_path)
+        .with_context(|| format!("reading {}", audit_path.display()))?;
+    let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
+    let total = lines.len();
+    let start = total.saturating_sub(n);
+    let recent = &lines[start..];
+
+    if json {
+        for line in recent {
+            println!("{line}");
+        }
+        return Ok(0);
+    }
+
+    println!("# SD-R50: selfdefctl modules audit-log");
+    println!(
+        "# {} total entries; showing last {} (path: {})",
+        total,
+        recent.len(),
+        audit_path.display()
+    );
+    if recent.is_empty() {
+        println!("# (no entries to show)");
+        return Ok(0);
+    }
+    println!();
+    for line in recent {
+        match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(v) => {
+                let ts = v["timestamp"].as_str().unwrap_or("(no timestamp)");
+                let category = v["category"].as_str().unwrap_or("(no category)");
+                let flag = v["flag"].as_str().unwrap_or("");
+                let host = v["host_tag"].as_str().unwrap_or("(no host)");
+                let empty: Vec<serde_json::Value> = Vec::new();
+                let mods = v["gated_modules"].as_array().unwrap_or(&empty);
+                let mod_list: Vec<String> = mods
+                    .iter()
+                    .filter_map(|m| m.as_str().map(String::from))
+                    .collect();
+                println!("  {ts}  host={host}  {category}  {flag}");
+                if !mod_list.is_empty() {
+                    println!("    gated_modules: {}", mod_list.join(", "));
+                }
+            }
+            Err(_) => {
+                println!("  (malformed entry skipped: {line})");
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R53 (closes SDD-020 V-1 — per-action audit prefixes): same
+/// OCSF envelope as SD-R47 but for the --strict-hardware refusal
+/// path. Distinct category prefix so dashboards can split
+/// override-fired vs strict-refusal events.
+pub(crate) fn sdr53_emit_strict_hardware_audit(
+    path: &Path,
+    skipped_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = skipped_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.skip-strict\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--strict-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
+/// SD-R47 (closes SDD-019 T-2): append an OCSF-shaped JSONL line
+/// to the operator-configured audit path when `--ignore-hardware`
+/// fires. Operators wanting fleet-alert visibility on gate
+/// overrides set `SELFDEF_MODULES_AUDIT_PATH=/var/log/selfdef/audit.jsonl`
+/// before invoking `selfdefctl modules apply --ignore-hardware`.
+///
+/// Schema: minimal OCSF-style envelope —
+///   - schema_version: pinned to "1.0.0"
+///   - timestamp: ISO8601 UTC
+///   - category: "selfdef.modules.override"
+///   - severity: "medium" (operator action that bypasses safety gates)
+///   - source: "selfdefctl"
+///   - flag: "--ignore-hardware"
+///   - host_tag: from $HOSTNAME or /etc/hostname
+///   - gated_modules: array of slugs (or slug#instance)
+///
+/// Atomic append via O_APPEND. Failure surfaces as a banner on
+/// stderr (already printed) but doesn't abort the apply —
+/// audit-trail loss shouldn't block production overrides.
+pub(crate) fn sdr47_emit_ignore_hardware_audit(
+    path: &Path,
+    gated_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = gated_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.override\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--ignore-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    // O_APPEND atomic short-append (POSIX guarantees PIPE_BUF size).
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
+/// SD-R39: probe the host + emit the gate verdict for one module
+/// as an inline addendum to cmd_info. Doesn't repeat the manifest
+/// body (cmd_info already printed it).
+pub(crate) fn cmd_info_host_status(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    println!();
+    println!("host_status:");
+    if m.requires_hardware.is_empty() {
+        println!("  ✓ no [requires_hardware] block — applies on any host");
+        return Ok(());
+    }
+    match &caps {
+        Some(c) => match m.requires_hardware.evaluate(c) {
+            Ok(()) => println!("  ✓ all hardware requirements met on this host"),
+            Err(unmet) => {
+                println!("  ✗ {} predicate(s) unmet:", unmet.len());
+                for u in &unmet {
+                    println!("      - {u}");
+                }
+            }
+        },
+        None => {
+            println!("  ? hardware probe unavailable — gate would skip this module");
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     let mods = load_all(dir)?;
     let m = mods
@@ -430,6 +856,54 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     // "phase: main" for every module would just be noise.
     if m.phase != Phase::default() {
         println!("phase:    {}", m.phase.as_str());
+    }
+    // SD-R35: surface the [requires_hardware] block when non-empty.
+    // Operators inspecting a module via `selfdefctl modules info`
+    // should see every predicate the gate will enforce — same
+    // visibility as `modules check-hardware` but without running
+    // the probe.
+    let rh = &m.requires_hardware;
+    if !rh.is_empty() {
+        println!("requires_hardware:");
+        if rh.avx512_vnni {
+            println!("  - avx512_vnni = true");
+        }
+        if rh.avx512_bf16 {
+            println!("  - avx512_bf16 = true");
+        }
+        if rh.memory_gib_min > 0 {
+            println!("  - memory_gib_min = {}", rh.memory_gib_min);
+        }
+        if rh.gpu_count_min > 0 {
+            println!("  - gpu_count_min = {}", rh.gpu_count_min);
+        }
+        if rh.gpu_vram_gib_min > 0 {
+            println!("  - gpu_vram_gib_min = {}", rh.gpu_vram_gib_min);
+        }
+        if rh.gpu_vram_gib_each_min > 0 {
+            println!("  - gpu_vram_gib_each_min = {}", rh.gpu_vram_gib_each_min);
+        }
+        if rh.gpu_power_headroom_watts_min > 0 {
+            println!(
+                "  - gpu_power_headroom_watts_min = {}",
+                rh.gpu_power_headroom_watts_min
+            );
+        }
+        if !rh.wasm_aot_features_required.is_empty() {
+            println!(
+                "  - wasm_aot_features_required = \"{}\"",
+                rh.wasm_aot_features_required
+            );
+        }
+        if !rh.sain01_verdict_min.is_empty() {
+            println!("  - sain01_verdict_min = {}", rh.sain01_verdict_min);
+        }
+    }
+    if !m.daemon_requires.is_empty() {
+        println!("daemon_requires:");
+        for k in m.daemon_requires.keys() {
+            println!("  - {k}");
+        }
     }
     Ok(())
 }
@@ -1103,6 +1577,16 @@ pub(crate) struct LifecycleOpts {
     /// `/etc/selfdef/selfdef.toml` halts the apply with exit 2
     /// and a copy-pasteable snippet.
     pub(crate) ignore_daemon_requires: bool,
+    /// SD-R42 (SDD-018 D-2 operator override): bypass the SD-R14
+    /// `[requires_hardware]` gate. Modules whose predicates would
+    /// fail still apply. `selfdefctl modules apply --ignore-hardware`
+    /// sets this. Default false → gate enforced normally.
+    pub(crate) ignore_hardware: bool,
+    /// SD-R44 (production discipline): turn gate-SKIP into gate-FAIL.
+    /// When any module would silently skip due to unmet
+    /// `[requires_hardware]`, run_lifecycle exits non-zero. Set by
+    /// `selfdefctl modules apply --strict-hardware`.
+    pub(crate) strict_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -1498,11 +1982,40 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
 /// SD-R15: dry-run the SD-R14 [requires_hardware] gate without
 /// touching any module scripts. Operators planning an install on a
 /// new host run this BEFORE `apply` to see which modules will skip.
+#[cfg(test)]
 pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32> {
+    cmd_check_hardware_with_caps(opts, json, None)
+}
+
+/// SD-R38: dry-run the gate against a saved capabilities JSON
+/// instead of probing the host. When `caps_path` is None this is
+/// equivalent to `cmd_check_hardware` (live probe).
+pub(crate) fn cmd_check_hardware_with_caps(
+    opts: &LifecycleOpts,
+    json: bool,
+    caps_path: Option<&Path>,
+) -> Result<i32> {
     let (_host_path, active) = prepare(opts)?;
-    let caps = match selfdef_hardware::probe() {
-        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
-        Err(_) => None,
+    let caps = if let Some(p) = caps_path {
+        match std::fs::read_to_string(p) {
+            Ok(body) => match serde_json::from_str::<selfdef_hardware::HardwareCapabilities>(&body)
+            {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps JSON unreadable");
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps file unreadable");
+                None
+            }
+        }
+    } else {
+        match selfdef_hardware::probe() {
+            Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+            Err(_) => None,
+        }
     };
     let mut kept: Vec<(String, String)> = Vec::new(); // (name, reason)
     let mut skipped: Vec<(String, Vec<String>)> = Vec::new();
@@ -1525,6 +2038,11 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
         }
     }
     if json {
+        // SD-R27: emit the full HardwareCapabilities as the
+        // `host_snapshot` field so machine consumers can correlate
+        // skip reasons with actual host values without re-probing.
+        // serde_json gives us the canonical shape — no hand-rolled
+        // JSON for the inner snapshot.
         let total = kept.len() + skipped.len();
         let kept_json: Vec<String> = kept
             .iter()
@@ -1541,18 +2059,83 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
                 format!(r#"{{"module":"{n}","unmet":[{r}]}}"#)
             })
             .collect();
+        let snap_json = caps
+            .as_ref()
+            .and_then(|c| serde_json::to_string(c).ok())
+            .unwrap_or_else(|| "null".into());
         println!(
-            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}]}}"#,
+            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}],"host_snapshot":{}}}"#,
             probe_ok,
             total,
             kept_json.join(","),
             skipped_json.join(","),
+            snap_json,
         );
     } else {
         println!("# SD-R15 hardware gate dry-run");
         if !probe_ok {
             println!("# (hardware probe unavailable — gated modules will be skipped)");
         }
+        // SD-R27: host-snapshot block surfaces the actual probed
+        // values that the gate evaluates against. Operators see WHY
+        // a module skipped without separately running `selfdefctl
+        // hardware probe`.
+        if let Some(c) = &caps {
+            println!();
+            println!("HOST SNAPSHOT (what the gate sees):");
+            let avx_bits: Vec<&str> = [
+                ("avx512f", c.cpu.avx512f),
+                ("avx512vnni", c.cpu.avx512vnni),
+                ("avx512bf16", c.cpu.avx512bf16),
+                ("avx512fp16", c.cpu.avx512fp16),
+            ]
+            .iter()
+            .filter_map(|(name, present)| if *present { Some(*name) } else { None })
+            .collect();
+            let avx_summary = if avx_bits.is_empty() {
+                "none".to_string()
+            } else {
+                avx_bits.join(", ")
+            };
+            println!(
+                "  CPU      : {} ({})",
+                if c.cpu.model_name.is_empty() {
+                    "(unknown)"
+                } else {
+                    c.cpu.model_name.as_str()
+                },
+                avx_summary,
+            );
+            println!(
+                "  Memory   : {} GiB",
+                c.memory.total_bytes / (1024 * 1024 * 1024),
+            );
+            println!("  GPUs     : {} device(s)", c.gpu.device_count);
+            for (i, d) in c.gpu.devices.iter().enumerate() {
+                let model = d.model_hint.as_deref().unwrap_or("(unknown model)");
+                let vram = d
+                    .vram_bytes
+                    .map(|b| format!("{} GiB", b / (1024 * 1024 * 1024)))
+                    .unwrap_or_else(|| "?".to_string());
+                let pwr = match (d.power_draw_watts, d.power_limit_watts) {
+                    (Some(draw), Some(limit)) => {
+                        format!(
+                            "{draw}/{limit} W (headroom {} W)",
+                            limit.saturating_sub(draw)
+                        )
+                    }
+                    _ => "no telemetry".to_string(),
+                };
+                println!("    [{i}] {model} — vram {vram}, power {pwr}");
+            }
+            let verdict = match c.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            println!("  Sain01   : {verdict}");
+        }
+        println!();
         println!("# {} active module(s):", kept.len() + skipped.len());
         if !kept.is_empty() {
             println!();
@@ -1575,11 +2158,272 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
     Ok(0)
 }
 
+/// SD-R36: emit active modules as a Graphviz DOT digraph.
+/// Operator pipes to `dot -Tsvg > graph.svg` for a visual map of
+/// how their modules compose; the raw text is also operator-readable.
+///
+/// Edges:
+///   - `dependency` arrows: `A → B` means B depends on A (apply order)
+///   - `instance` dashed edges between multi-instance modules
+///
+/// When `with_hardware_gate=true`, nodes are coloured by SD-R14
+/// verdict (green = passes gate, red = skipped).
+/// SD-R41: structured JSON variant of cmd_graph. Same data shape
+/// (nodes + edges + per-node gate verdict) but machine-readable.
+pub(crate) fn cmd_graph_json(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+
+    let mut nodes: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let name = am.display_name();
+        let mut node = serde_json::json!({
+            "id": name,
+            "slug": am.slug,
+            "instance": am.instance,
+            "phase": am.manifest.phase.as_str(),
+        });
+        if with_hardware_gate {
+            let (verdict, unmet): (&str, Vec<String>) = if am.manifest.requires_hardware.is_empty()
+            {
+                ("ungated", Vec::new())
+            } else {
+                match &caps {
+                    Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                        Ok(()) => ("kept", Vec::new()),
+                        Err(u) => ("skipped", u),
+                    },
+                    None => ("probe-unavailable", Vec::new()),
+                }
+            };
+            node["gate"] = serde_json::json!({
+                "verdict": verdict,
+                "unmet": unmet,
+            });
+        }
+        nodes.push(node);
+    }
+
+    // Edges
+    let mut edges: Vec<serde_json::Value> = Vec::new();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                edges.push(serde_json::json!({
+                    "kind": "dependency",
+                    "from": dep,
+                    "to": am.display_name(),
+                }));
+            }
+        }
+    }
+    // Instance grouping
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            edges.push(serde_json::json!({
+                "kind": "instance-sibling",
+                "shared_slug": slug,
+                "from": instances[i].display_name(),
+                "to": instances[i + 1].display_name(),
+            }));
+        }
+    }
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "node_count": nodes.len(),
+        "edge_count": edges.len(),
+        "with_hardware_gate": with_hardware_gate,
+        "probe_ok": caps.is_some(),
+        "nodes": nodes,
+        "edges": edges,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+pub(crate) fn cmd_graph(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    println!("// SD-R36: selfdefctl modules graph");
+    println!("// {} active module(s)", active.len());
+    if with_hardware_gate {
+        println!("// SD-R14 hardware gate: ON (green=kept, red=skipped)");
+        if caps.is_none() {
+            println!("// (hardware probe unavailable — gates ignored, all nodes default)");
+        }
+    }
+    println!("digraph selfdef_modules {{");
+    println!("  rankdir=LR;");
+    println!("  node [shape=box, fontname=\"sans-serif\"];");
+
+    // Nodes
+    for am in &active {
+        let label = am.display_name();
+        let mut attrs = vec![format!("label=\"{label}\"")];
+        if with_hardware_gate {
+            let (style, color) = match &caps {
+                Some(c) => {
+                    if am.manifest.requires_hardware.is_empty() {
+                        ("filled", "lightblue")
+                    } else {
+                        match am.manifest.requires_hardware.evaluate(c) {
+                            Ok(()) => ("filled", "palegreen"),
+                            Err(_) => ("filled", "lightcoral"),
+                        }
+                    }
+                }
+                None => ("solid", "white"),
+            };
+            attrs.push(format!("style={style}"));
+            attrs.push(format!("fillcolor={color}"));
+            // Tooltip carries the unmet predicates list when skipped.
+            if let Some(c) = &caps {
+                if !am.manifest.requires_hardware.is_empty() {
+                    if let Err(unmet) = am.manifest.requires_hardware.evaluate(c) {
+                        let tip = unmet
+                            .iter()
+                            .map(|s| s.replace('"', "\\\""))
+                            .collect::<Vec<_>>()
+                            .join("\\n");
+                        attrs.push(format!("tooltip=\"{tip}\""));
+                    }
+                }
+            }
+        }
+        println!("  \"{label}\" [{}];", attrs.join(", "));
+    }
+
+    // Dependency edges (B → A means B depends_on A; we draw A → B
+    // to match apply-order direction).
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                println!(
+                    "  \"{dep}\" -> \"{name}\";",
+                    dep = dep,
+                    name = am.display_name()
+                );
+            }
+        }
+    }
+
+    // Instance grouping — dashed edges between instances of the
+    // same slug.
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            println!(
+                "  \"{a}\" -> \"{b}\" [style=dashed, arrowhead=none, color=gray, tooltip=\"shared slug: {slug}\"];",
+                a = instances[i].display_name(),
+                b = instances[i + 1].display_name(),
+            );
+        }
+    }
+
+    println!("}}");
+    Ok(0)
+}
+
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();
     o.dry_run = false;
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
+}
+
+/// SD-R45: structured JSON variant of cmd_status. Emits per-module
+/// rows with manifest summary + [requires_hardware] presence + the
+/// live gate verdict for each. Operator-stable schema for fleet
+/// dashboards + sovereign-osctl overview consumers.
+pub(crate) fn cmd_status_json(opts: &LifecycleOpts) -> Result<i32> {
+    let (host_path, active) = prepare(opts)?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let mut modules: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let gate = if am.manifest.requires_hardware.is_empty() {
+            serde_json::json!({"verdict": "ungated", "unmet": []})
+        } else {
+            match &caps {
+                Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                    Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                    Err(u) => serde_json::json!({"verdict": "skipped", "unmet": u}),
+                },
+                None => {
+                    serde_json::json!({"verdict": "probe-unavailable", "unmet": []})
+                }
+            }
+        };
+        modules.push(serde_json::json!({
+            "name": am.display_name(),
+            "slug": am.slug,
+            "instance": am.instance,
+            "version": am.manifest.version,
+            "category": am.manifest.category,
+            "summary": am.manifest.summary,
+            "phase": am.manifest.phase.as_str(),
+            "depends_on": am.manifest.depends_on,
+            "provides": am.manifest.provides,
+            "consumes": am.manifest.consumes,
+            "requires_hardware_present": !am.manifest.requires_hardware.is_empty(),
+            "gate": gate,
+        }));
+    }
+    let kept = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "passes" || m["gate"]["verdict"] == "ungated")
+        .count();
+    let skipped = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "skipped")
+        .count();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "host_config_path": host_path,
+        "probe_ok": caps.is_some(),
+        "module_count": modules.len(),
+        "would_apply": kept,
+        "would_skip": skipped,
+        "modules": modules,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
 }
 
 pub(crate) fn cmd_uninstall(opts: &LifecycleOpts) -> Result<i32> {
@@ -1632,11 +2476,81 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     // proceeds. Uninstall skips this — tearing a module down doesn't
     // care whether the hardware now matches.
     if matches!(action, Action::Apply | Action::Check)
+        && !opts.ignore_hardware
         && active
             .iter()
             .any(|a| !a.manifest.requires_hardware.is_empty())
     {
+        let pre_count = active.len();
         active = apply_hardware_gate(active);
+        let post_count = active.len();
+        // SD-R44 (--strict-hardware): if any modules were filtered
+        // out, exit non-zero. The SD-R14 skip block already landed
+        // on stderr (apply_hardware_gate printed it); we just add
+        // the strict-mode rejection banner + return.
+        if opts.strict_hardware && post_count < pre_count {
+            eprintln!(
+                "# SD-R44: --strict-hardware set — refusing to proceed; {} gated module(s) skipped",
+                pre_count - post_count
+            );
+            // SD-R53 (closes SDD-020 V-1): audit-trail the strict-mode
+            // refusal as well. Same env opt-in as SD-R47 + a distinct
+            // category prefix so dashboards can split kept vs refused.
+            if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+                let audit_path = std::path::PathBuf::from(audit_path);
+                // Modules that WOULD have skipped (the ones we filtered
+                // out) are no longer in `active`; rerun the gate on a
+                // fresh load to recover their names.
+                let (_, fresh) = match prepare(opts) {
+                    Ok(p) => p,
+                    Err(_) => (std::path::PathBuf::new(), Vec::new()),
+                };
+                let skipped_names: Vec<String> = fresh
+                    .iter()
+                    .filter(|am| {
+                        !am.manifest.requires_hardware.is_empty()
+                            && !active.iter().any(|a| a.slug == am.slug)
+                    })
+                    .map(|am| am.display_name())
+                    .collect();
+                if let Err(e) = sdr53_emit_strict_hardware_audit(&audit_path, &skipped_names) {
+                    eprintln!(
+                        "# SD-R53: audit write failed: {e} (path: {})",
+                        audit_path.display()
+                    );
+                }
+            }
+            return Ok(1);
+        }
+    } else if opts.ignore_hardware
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        // SD-R42: operator explicitly suppressed the gate. Emit a
+        // warning so the operator sees this on every run — the
+        // override is sharp-edged and should not be silent.
+        let gated_modules: Vec<String> = active
+            .iter()
+            .filter(|a| !a.manifest.requires_hardware.is_empty())
+            .map(|a| a.display_name())
+            .collect();
+        eprintln!(
+            "# SD-R42: --ignore-hardware set — gate suppressed, {} gated module(s) will be force-applied",
+            gated_modules.len()
+        );
+        // SD-R47 (closes SDD-019 T-2): audit trail for the override.
+        // When SELFDEF_MODULES_AUDIT_PATH is set, append an OCSF-
+        // shaped JSONL line. Fleet alerting picks this up.
+        if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+            let audit_path = std::path::PathBuf::from(audit_path);
+            if let Err(e) = sdr47_emit_ignore_hardware_audit(&audit_path, &gated_modules) {
+                eprintln!(
+                    "# SD-R47: audit write failed: {e} (path: {})",
+                    audit_path.display()
+                );
+            }
+        }
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
@@ -2505,6 +3419,8 @@ mod sdd_015_apply_gate_tests {
             except: Vec::new(),
             dry_run: false,
             ignore_daemon_requires: false,
+            ignore_hardware: false,
+            strict_hardware: false,
             daemon_config_path: Some(daemon_config_path),
         }
     }
@@ -2673,6 +3589,8 @@ mod sdd_015_apply_gate_tests {
             except: Vec::new(),
             dry_run: false,
             ignore_daemon_requires: false,
+            ignore_hardware: false,
+            strict_hardware: false,
             daemon_config_path: None,
         };
         let code = pre_apply_perimeter_check(&opts).unwrap();
@@ -2742,6 +3660,7 @@ mod sdr14_hardware_gate_tests {
             gpu: GpuCapabilities {
                 device_count: gpu_count,
                 device_nodes: Vec::new(),
+                devices: Vec::new(),
             },
             pcie: PcieCapabilities::default(),
             sain01_match: Sain01Match {
@@ -2753,6 +3672,7 @@ mod sdr14_hardware_gate_tests {
                 motherboard_proart_x870e: None,
                 pcie_dual_x8_present: false,
             },
+            wasm_aot: Default::default(),
         }
     }
 
@@ -2875,10 +3795,15 @@ mod sdr14_hardware_gate_tests {
             avx512_bf16: true,
             memory_gib_min: 256,
             gpu_count_min: 2,
+            gpu_vram_gib_min: 0,
+            gpu_vram_gib_each_min: 0,
+            gpu_power_headroom_watts_min: 0,
+            wasm_aot_features_required: String::new(),
             sain01_verdict_min: "FullMatch".into(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
-        // Every predicate fails on a minimal host: 5 lines.
+        // Every predicate fails on a minimal host: 5 lines (SD-R26
+        // gates only fire when their threshold > 0).
         assert_eq!(unmet.len(), 5, "got: {unmet:?}");
     }
 
@@ -2924,6 +3849,397 @@ mod sdr14_hardware_gate_tests {
         let kept = apply_hardware_gate(active);
         let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    // -- SD-R26: per-GPU VRAM + power-headroom gates -----------------
+
+    use selfdef_hardware::GpuDeviceCapabilities;
+
+    fn caps_with_gpu_devices(devs: Vec<GpuDeviceCapabilities>) -> HardwareCapabilities {
+        let mut c = caps_with(
+            false,
+            false,
+            0,
+            u32::try_from(devs.len()).unwrap_or(u32::MAX),
+            Sain01Verdict::PartialMatch,
+        );
+        c.gpu.devices = devs;
+        c
+    }
+
+    #[test]
+    fn sdr26_vram_gate_passes_when_at_least_one_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // SAIN-01 pair: RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // Two 24 GiB GPUs — neither big enough for 80.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("gpu_vram_gib_min = 80"), "got: {unmet:?}");
+        assert!(unmet[0].contains("host best is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_devices_reported() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // No per-device data (probe didn't enrich) — fail closed.
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("host best is 0 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_passes_when_sum_meets() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 400,
+            ..Default::default()
+        };
+        // GPU 0: 600 - 275 = 325 W. GPU 1: 350 - 180 = 170 W. Sum = 495 ≥ 400.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_sum_below_min() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 600,
+            ..Default::default()
+        };
+        // Sum = 495 W (same caps as above). 495 < 600 → fail.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_power_headroom_watts_min = 600"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("495 W"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_any_gpu_lacks_telemetry() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 100,
+            ..Default::default()
+        };
+        // Second GPU has no power telemetry — fail closed (operator
+        // asked for headroom guarantee + we can't compute it).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: None,
+                power_draw_watts: None,
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("lack power telemetry"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_combined_vram_and_count_gate_on_sain01_dual_gpu() {
+        // The canonical "needs the SAIN-01 dual-GPU rig with 80+ GiB
+        // headroom on at least one card" inference module gate.
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Single big GPU: passes vram gate but fails count.
+        let caps_single = caps_with_gpu_devices(vec![GpuDeviceCapabilities {
+            vram_bytes: Some(98 * 1024 * 1024 * 1024),
+            ..Default::default()
+        }]);
+        let unmet = req.evaluate(&caps_single).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_count_min")),
+            "got: {unmet:?}"
+        );
+    }
+
+    // -- SD-R51: gpu_vram_gib_each_min (ALL-semantics) ---------------
+
+    #[test]
+    fn sdr51_vram_each_passes_when_all_gpus_meet_bar() {
+        // Two identical 80 GiB GPUs (hypothetical) → every-GPU bar
+        // of 64 GiB passes.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_on_mixed_sain01_dual_gpu() {
+        // SAIN-01 has RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        // A module wanting 64 GiB EACH would fail — the 3090 lags.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("host worst is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_closed_on_empty_devices() {
+        // No per-device data → can't prove ALL satisfy → fail.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 8,
+            ..Default::default()
+        };
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 8"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_vram_min_and_each_min_compose_naturally() {
+        // ANY ≥ 80 + EACH ≥ 16: SAIN-01 (98+24) passes both.
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            gpu_vram_gib_each_min: 16,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Same predicates against 1×98 + 1×4: ANY passes (98 ≥ 80)
+        // but EACH fails (4 < 16).
+        let caps_skewed = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(4 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps_skewed).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_vram_gib_each_min")),
+            "got: {unmet:?}"
+        );
+        assert!(
+            !unmet.iter().any(|u| u.contains("gpu_vram_gib_min")),
+            "ANY predicate should NOT fail when biggest GPU meets it: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_is_empty_recognises_each_field() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 1,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+    }
+
+    #[test]
+    fn sdr26_is_empty_still_true_with_only_old_fields() {
+        // Adding new fields must not break the empty short-circuit.
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        // And asserting any new field flips it correctly.
+        let r2 = HardwareRequirements {
+            gpu_vram_gib_min: 1,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
+        let r3 = HardwareRequirements {
+            gpu_power_headroom_watts_min: 1,
+            ..Default::default()
+        };
+        assert!(!r3.is_empty());
+        // SD-R32: wasm_aot_features_required also flips is_empty.
+        let r4 = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        assert!(!r4.is_empty());
+    }
+
+    // -- SD-R32: wasm_aot_features_required gate ----------------------
+
+    use selfdef_hardware::WasmAotCapabilities;
+
+    fn caps_with_wasm_aot_features(features: &str) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 0, 0, Sain01Verdict::FullMatch);
+        c.wasm_aot = WasmAotCapabilities {
+            target_triple: "x86_64-unknown-linux-gnu".into(),
+            target_cpu: "znver5".into(),
+            target_features: features.into(),
+            compile_command_hint: String::new(),
+        };
+        c
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_passes_when_all_present() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_when_one_missing() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16,+avx512fp16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512fp16"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_on_empty_host_features() {
+        // Host has no wasm-AOT features at all → every required
+        // feature is "missing".
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512f"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_tolerates_whitespace_in_required_list() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: " +avx512vnni , +avx512bf16 ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_required_empty_is_no_op() {
+        // Empty string in the manifest disables the gate even when
+        // the host has no wasm-AOT data.
+        let req = HardwareRequirements {
+            wasm_aot_features_required: String::new(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        req.evaluate(&caps).unwrap();
     }
 
     #[test]

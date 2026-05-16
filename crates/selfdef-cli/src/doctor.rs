@@ -393,6 +393,97 @@ fn check_hardware(cfg: &Config) -> Vec<CheckResult> {
             "no sensors exposed (hwmon empty + nvidia-smi unavailable)".into()
         },
     });
+    // SD-R37: cycle-2 hardware visibility checks.
+    //   - GPU power telemetry (SD-R24)
+    //   - Per-GPU VRAM exposure (SD-R25)
+    //   - Wasm-AOT feature set surface (SD-R30)
+    // On sain01 the absence of any of these is a Warn; off-sain01
+    // it's Skipped (informational).
+    let gpus = &snap.gpus;
+    let any_gpus = !gpus.is_empty();
+    let any_power = gpus
+        .iter()
+        .any(|g| g.power_draw_watts.is_some() || g.power_limit_watts.is_some());
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "gpu_power_telemetry (SD-R24)".into(),
+        status: if any_power {
+            CheckStatus::Ok
+        } else if any_gpus && on_sain01 {
+            CheckStatus::Warn
+        } else {
+            CheckStatus::Skipped
+        },
+        detail: if any_power {
+            let drawn: u32 = gpus.iter().filter_map(|g| g.power_draw_watts).sum();
+            let cap: u32 = gpus.iter().filter_map(|g| g.power_limit_watts).sum();
+            format!(
+                "{}/{} W aggregate (headroom {} W)",
+                drawn,
+                cap,
+                cap.saturating_sub(drawn)
+            )
+        } else if any_gpus {
+            "GPUs present but no power telemetry (NVML unavailable?)".into()
+        } else {
+            "no GPUs detected".into()
+        },
+    });
+    let any_vram = gpus.iter().any(|g| g.vram_bytes.is_some());
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "gpu_vram_exposure (SD-R25)".into(),
+        status: if any_vram {
+            CheckStatus::Ok
+        } else if any_gpus && on_sain01 {
+            CheckStatus::Warn
+        } else {
+            CheckStatus::Skipped
+        },
+        detail: if any_vram {
+            let total: u64 = gpus.iter().filter_map(|g| g.vram_bytes).sum();
+            format!(
+                "{} GiB across {} GPU(s)",
+                total / (1024 * 1024 * 1024),
+                gpus.len()
+            )
+        } else if any_gpus {
+            "GPUs present but no VRAM reported (nvidia-smi unavailable?)".into()
+        } else {
+            "no GPUs detected".into()
+        },
+    });
+    // Wasm-AOT surface — derive from snap.cpu (avoid pulling
+    // HardwareCapabilities just for this one field).
+    let cpu_features = &snap.cpu.features;
+    let has_avx512 = cpu_features.contains("avx512f");
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "wasm_aot_features (SD-R30)".into(),
+        status: if has_avx512 {
+            CheckStatus::Ok
+        } else if on_sain01 {
+            CheckStatus::Warn
+        } else {
+            CheckStatus::Skipped
+        },
+        detail: if has_avx512 {
+            let count = [
+                "avx512f",
+                "avx512_vnni",
+                "avx512_bf16",
+                "avx512_fp16",
+                "avx512_vbmi",
+                "avx512_vbmi2",
+            ]
+            .iter()
+            .filter(|f| cpu_features.contains(**f))
+            .count();
+            format!("AVX-512 family on; {count} feature(s) available for wasmtime AOT")
+        } else {
+            "no AVX-512 — wasmtime AOT falls back to scalar/AVX2 codegen".into()
+        },
+    });
     out
 }
 
@@ -1106,6 +1197,24 @@ mod sdd_013_tests {
             "cpu_avx512_vnni",
             "memory_at_least_256gb",
             "gpu_count_at_least_2",
+        ] {
+            assert!(
+                results.iter().any(|r| r.name == name),
+                "doctor must surface hardware.{name}"
+            );
+        }
+    }
+
+    /// SD-R37 (cycle 2): doctor extends with three new visibility
+    /// rows surfacing the cycle-2 hardware additions.
+    #[test]
+    fn sdr37_hardware_check_surfaces_cycle2_rows() {
+        let cfg = Config::default();
+        let results = check_hardware(&cfg);
+        for name in [
+            "gpu_power_telemetry (SD-R24)",
+            "gpu_vram_exposure (SD-R25)",
+            "wasm_aot_features (SD-R30)",
         ] {
             assert!(
                 results.iter().any(|r| r.name == name),

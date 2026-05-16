@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod hardware;
 mod init;
+mod models;
 mod modules;
 mod notify;
 mod paths;
@@ -72,6 +73,13 @@ enum Command {
     Modules {
         #[command(subcommand)]
         action: ModulesAction,
+    },
+    /// SD-R34: 1-bit / ternary / quantised model registry. List
+    /// registered models or dry-run "would this land on THIS
+    /// host?" via the SD-R14 + SD-R26 + SD-R32 predicate engine.
+    Models {
+        #[command(subcommand)]
+        action: ModelsAction,
     },
     /// Manage the API surface (token rotation, etc).
     Api {
@@ -414,6 +422,25 @@ enum NotifyAction {
 }
 
 #[derive(Debug, Subcommand)]
+enum ModelsAction {
+    /// SD-R34: list every model.toml under the registry dir.
+    List {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// SD-R34: dry-run the hardware gate on this host — shows
+    /// which registered models WOULD apply and which WOULD SKIP.
+    /// Read-only.
+    CheckHardware {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum ModulesAction {
     /// List every module manifest found in the modules directory.
     List {
@@ -427,6 +454,19 @@ enum ModulesAction {
         slug: String,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R39: probe the host and surface "gate verdict on THIS
+        /// host" inline (passes / unmet predicates). Same engine as
+        /// `modules check-hardware` but for one module.
+        #[arg(long)]
+        with_host_status: bool,
+        /// SD-R40: emit the manifest as structured JSON instead of
+        /// the human-readable form. Tooling consumers
+        /// (sovereign-osctl, future fleet dashboards) parse this
+        /// directly without scraping. Implies `--with-host-status`
+        /// when set alongside; the gate verdict lands under
+        /// `host_status` in the JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Apply every active module's install/apply.sh in dependency order.
     Apply {
@@ -451,6 +491,23 @@ enum ModulesAction {
         /// you know what you're doing.
         #[arg(long)]
         ignore_daemon_requires: bool,
+        /// SDD-018 D-2 (SD-R42): force-apply gated modules even
+        /// when their `[requires_hardware]` predicates fail on
+        /// this host. Equivalent to deleting the
+        /// `[requires_hardware]` block from each manifest, but
+        /// without editing files. Use for one-off testing on
+        /// near-match hosts. Production should rely on the gate.
+        #[arg(long, conflicts_with = "strict_hardware")]
+        ignore_hardware: bool,
+        /// SD-R44 (companion to --ignore-hardware): turn gate-SKIP
+        /// into gate-FAIL. When any module would silently skip due
+        /// to unmet `[requires_hardware]` predicates, apply EXITS
+        /// non-zero with the unmet predicate list. Use on SAIN-01
+        /// production to refuse incomplete installs. Cannot be
+        /// combined with --ignore-hardware (the two flags express
+        /// opposite intents).
+        #[arg(long, conflicts_with = "ignore_hardware")]
+        strict_hardware: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -473,6 +530,12 @@ enum ModulesAction {
         host_config: Option<PathBuf>,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R45: emit a structured JSON document with per-module
+        /// status rows instead of the human-readable summary.
+        /// Tooling consumers (sovereign-osctl overview, fleet
+        /// dashboards) parse this directly.
+        #[arg(long)]
+        json: bool,
     },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
@@ -515,6 +578,51 @@ enum ModulesAction {
         #[arg(long)]
         dir: Option<PathBuf>,
         /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+        /// SD-R38: dry-run the gate against a SAVED capabilities
+        /// JSON instead of probing the local host. Lets operators
+        /// preview "would this catalog land on a SAIN-01 box?" from
+        /// a dev workstation. The file shape matches the SD-R10
+        /// `selfdefctl hardware export --output <path>` output.
+        #[arg(long, value_name = "PATH")]
+        caps: Option<PathBuf>,
+    },
+    /// SD-R36: emit the active modules' dependency graph in
+    /// Graphviz DOT format. Operators pipe to `dot -Tsvg` for a
+    /// visual layout, or read the text directly for a quick
+    /// audit of how modules compose. Read-only.
+    Graph {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Annotate node colour by SD-R14 gate verdict (green =
+        /// kept, red = skipped). Requires a hardware probe;
+        /// default is off (graph alone is operator-readable
+        /// without colour).
+        #[arg(long)]
+        with_hardware_gate: bool,
+        /// SD-R41: emit the graph as structured JSON (nodes +
+        /// edges) instead of DOT. Tooling consumers
+        /// (sovereign-osctl, fleet dashboards) consume this
+        /// directly without parsing DOT.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R50: pretty-print the SD-R47 `--ignore-hardware` audit
+    /// trail (one operator-readable line per recorded override).
+    /// Reads the file at SELFDEF_MODULES_AUDIT_PATH or --audit-path.
+    AuditLog {
+        /// Path to the audit JSONL file. Defaults to
+        /// $SELFDEF_MODULES_AUDIT_PATH if set, else
+        /// /var/log/selfdef/modules-audit.jsonl.
+        #[arg(long)]
+        audit_path: Option<PathBuf>,
+        /// Show the last N entries (default: 20).
+        #[arg(short, long, default_value_t = 20)]
+        n: usize,
+        /// Emit raw JSONL instead of the human-readable form.
         #[arg(long)]
         json: bool,
     },
@@ -1006,14 +1114,43 @@ async fn main() -> Result<()> {
                 println!("{}", outcome.notes);
             }
         },
+        Command::Models { action } => match action {
+            ModelsAction::List { dir } => {
+                let code = models::cmd_list(dir.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModelsAction::CheckHardware { dir, json } => {
+                let code = models::cmd_check_hardware(dir.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+        },
         Command::Modules { action } => match action {
             ModulesAction::List { dir } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 modules::cmd_list(&resolved)?;
             }
-            ModulesAction::Info { slug, dir } => {
+            ModulesAction::Info {
+                slug,
+                dir,
+                with_host_status,
+                json,
+            } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_info(&resolved, &slug)?;
+                if json {
+                    // SD-R40: --json implies host_status (the field
+                    // is cheap to compute + tooling almost always
+                    // wants both).
+                    modules::cmd_info_json(&resolved, &slug)?;
+                } else {
+                    modules::cmd_info(&resolved, &slug)?;
+                    if with_host_status {
+                        modules::cmd_info_host_status(&resolved, &slug)?;
+                    }
+                }
             }
             ModulesAction::Apply {
                 host_config,
@@ -1022,6 +1159,8 @@ async fn main() -> Result<()> {
                 only,
                 except,
                 ignore_daemon_requires,
+                ignore_hardware,
+                strict_hardware,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -1030,6 +1169,8 @@ async fn main() -> Result<()> {
                     except,
                     dry_run,
                     ignore_daemon_requires,
+                    ignore_hardware,
+                    strict_hardware,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
@@ -1051,6 +1192,8 @@ async fn main() -> Result<()> {
                     except,
                     dry_run: false,
                     ignore_daemon_requires,
+                    ignore_hardware: false,
+                    strict_hardware: false,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;
@@ -1058,7 +1201,11 @@ async fn main() -> Result<()> {
                     std::process::exit(code);
                 }
             }
-            ModulesAction::Status { host_config, dir } => {
+            ModulesAction::Status {
+                host_config,
+                dir,
+                json,
+            } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
@@ -1067,7 +1214,11 @@ async fn main() -> Result<()> {
                     dry_run: false,
                     ..Default::default()
                 };
-                let code = modules::cmd_status(&opts)?;
+                let code = if json {
+                    modules::cmd_status_json(&opts)?
+                } else {
+                    modules::cmd_status(&opts)?
+                };
                 if code != 0 {
                     std::process::exit(code);
                 }
@@ -1087,13 +1238,51 @@ async fn main() -> Result<()> {
                 host_config,
                 dir,
                 json,
+                caps,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
                     ..Default::default()
                 };
-                let code = modules::cmd_check_hardware(&opts, json)?;
+                let code = modules::cmd_check_hardware_with_caps(&opts, json, caps.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Graph {
+                host_config,
+                dir,
+                with_hardware_gate,
+                json,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = if json {
+                    modules::cmd_graph_json(&opts, with_hardware_gate)?
+                } else {
+                    modules::cmd_graph(&opts, with_hardware_gate)?
+                };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::AuditLog {
+                audit_path,
+                n,
+                json,
+            } => {
+                let resolved = audit_path
+                    .or_else(|| {
+                        std::env::var("SELFDEF_MODULES_AUDIT_PATH")
+                            .ok()
+                            .map(PathBuf::from)
+                    })
+                    .unwrap_or_else(|| PathBuf::from("/var/log/selfdef/modules-audit.jsonl"));
+                let code = modules::cmd_audit_log(&resolved, n, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
