@@ -62,6 +62,303 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     out.extend(check_eventstream(cfg));
     out.extend(check_rbac_posture(cfg));
     out.extend(check_deployment_target(cfg));
+    // SD-R9: extend doctor with checks for the SDD-014/016/017
+    // surfaces — operability + observability rolled into the existing
+    // health-check verb.
+    out.extend(check_shared_audit_summary(cfg));
+    out.extend(check_oracle_triage(cfg));
+    out.extend(check_hardware(cfg));
+    out
+}
+
+/// SD-R9 + SDD-014: check the shared-audit-summary channel's path is
+/// writable when the channel is enabled. Also surfaces the JSONL twin
+/// (Q14-C) path when enabled.
+fn check_shared_audit_summary(cfg: &Config) -> Vec<CheckResult> {
+    let mut out = Vec::new();
+    if !selfdef_config::resolve_shared_audit_summary_enabled(cfg) {
+        out.push(CheckResult {
+            category: "shared-audit-summary".into(),
+            name: "channel".into(),
+            status: CheckStatus::Skipped,
+            detail: "channel disabled (auto-disabled on generic; opt-out on sain01)".into(),
+        });
+        return out;
+    }
+    let path = selfdef_config::resolve_shared_audit_summary_path(cfg);
+    match path {
+        Some(p) => {
+            let dir_ok = p
+                .parent()
+                .filter(|d| !d.as_os_str().is_empty())
+                .map(|d| d.is_dir())
+                .unwrap_or(true);
+            if dir_ok {
+                out.push(CheckResult {
+                    category: "shared-audit-summary".into(),
+                    name: "shared log path".into(),
+                    status: CheckStatus::Ok,
+                    detail: format!("{}", p.display()),
+                });
+            } else {
+                out.push(CheckResult {
+                    category: "shared-audit-summary".into(),
+                    name: "shared log path".into(),
+                    status: CheckStatus::Warn,
+                    detail: format!(
+                        "parent dir of {} doesn't exist; daemon will fail on first event",
+                        p.display()
+                    ),
+                });
+            }
+        }
+        None => {
+            out.push(CheckResult {
+                category: "shared-audit-summary".into(),
+                name: "shared log path".into(),
+                status: CheckStatus::Warn,
+                detail: "channel enabled but no path resolved (generic target without override?)"
+                    .into(),
+            });
+        }
+    }
+    // SDD-014 Q14-C: JSONL twin
+    if let Some(twin) = selfdef_config::resolve_shared_audit_summary_jsonl_twin(cfg) {
+        let dir_ok = twin
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .map(|d| d.is_dir())
+            .unwrap_or(true);
+        out.push(CheckResult {
+            category: "shared-audit-summary".into(),
+            name: "jsonl twin (Q14-C)".into(),
+            status: if dir_ok {
+                CheckStatus::Ok
+            } else {
+                CheckStatus::Warn
+            },
+            detail: if dir_ok {
+                format!("enabled at {}", twin.display())
+            } else {
+                format!("parent dir of {} doesn't exist", twin.display())
+            },
+        });
+    } else {
+        out.push(CheckResult {
+            category: "shared-audit-summary".into(),
+            name: "jsonl twin (Q14-C)".into(),
+            status: CheckStatus::Skipped,
+            detail: "disabled (jsonl_twin = false; default)".into(),
+        });
+    }
+    out
+}
+
+/// SD-R9 + SDD-016: check the oracle-triage channel config when
+/// enabled. Endpoint shape, api_key_env presence, rate-limit value.
+/// Does NOT attempt a live HTTP probe (no network in doctor by
+/// design — keeps the check offline-fast).
+fn check_oracle_triage(cfg: &Config) -> Vec<CheckResult> {
+    let mut out = Vec::new();
+    let ot = &cfg.notifier.oracle_triage;
+    if !ot.enabled {
+        out.push(CheckResult {
+            category: "oracle-triage".into(),
+            name: "channel".into(),
+            status: CheckStatus::Skipped,
+            detail: "channel disabled (operator-explicit opt-in required per SDD-012 Q-D)".into(),
+        });
+        return out;
+    }
+    // Endpoint shape
+    let endpoint_ok = ot.endpoint.starts_with("http://") || ot.endpoint.starts_with("https://");
+    out.push(CheckResult {
+        category: "oracle-triage".into(),
+        name: "endpoint".into(),
+        status: if endpoint_ok {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::Fail
+        },
+        detail: if endpoint_ok {
+            ot.endpoint.clone()
+        } else {
+            format!(
+                "invalid endpoint: {:?} (must start with http:// or https://)",
+                ot.endpoint
+            )
+        },
+    });
+    // api_key_env (if configured, the variable must be set + non-empty)
+    if let Some(name) = ot.api_key_env.as_deref().filter(|s| !s.is_empty()) {
+        match std::env::var(name) {
+            Ok(v) if !v.is_empty() => {
+                out.push(CheckResult {
+                    category: "oracle-triage".into(),
+                    name: "api_key_env".into(),
+                    status: CheckStatus::Ok,
+                    // NEVER print the key value — only confirm presence.
+                    detail: format!("env var {name:?} is set"),
+                });
+            }
+            Ok(_) => {
+                out.push(CheckResult {
+                    category: "oracle-triage".into(),
+                    name: "api_key_env".into(),
+                    status: CheckStatus::Fail,
+                    detail: format!("env var {name:?} is set but empty"),
+                });
+            }
+            Err(_) => {
+                out.push(CheckResult {
+                    category: "oracle-triage".into(),
+                    name: "api_key_env".into(),
+                    status: CheckStatus::Fail,
+                    detail: format!(
+                        "env var {name:?} unset; daemon will refuse to construct the channel"
+                    ),
+                });
+            }
+        }
+    }
+    // Rate-limit (Q16-D)
+    out.push(CheckResult {
+        category: "oracle-triage".into(),
+        name: "rate_limit (Q16-D)".into(),
+        status: CheckStatus::Ok,
+        detail: if ot.max_events_per_hour == 0 {
+            "max_events_per_hour = 0 (disabled — runaway protection OFF)".into()
+        } else {
+            format!("max_events_per_hour = {}", ot.max_events_per_hour)
+        },
+    });
+    out
+}
+
+/// SD-R9 + SDD-017: surface the Sain01Match verdict + per-dimension
+/// hits. Cross-cutting hardware health visible from `selfdefctl doctor`
+/// without the operator having to remember the dedicated subverb.
+fn check_hardware(cfg: &Config) -> Vec<CheckResult> {
+    let mut out = Vec::new();
+    let snap = match selfdef_hardware::probe() {
+        Ok(s) => s,
+        Err(e) => {
+            out.push(CheckResult {
+                category: "hardware".into(),
+                name: "probe".into(),
+                status: CheckStatus::Warn,
+                detail: format!("probe failed: {e}"),
+            });
+            return out;
+        }
+    };
+    let m = selfdef_hardware::matches_sain01(&snap);
+    // IMPORTANT: per-dimension miss severity depends on the operator's
+    // declared deployment.target. On target=sain01, misses are real
+    // concerns (Warn). On target=generic, misses are EXPECTED — the
+    // operator isn't claiming SAIN-01 hardware — so we surface them
+    // as Skipped (informational, doesn't pollute the warn count).
+    let on_sain01 = matches!(
+        cfg.deployment.target,
+        selfdef_config::DeploymentTarget::Sain01
+    );
+    let miss_status = if on_sain01 {
+        CheckStatus::Warn
+    } else {
+        CheckStatus::Skipped
+    };
+    let verdict_label = match m.overall {
+        selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+        selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+        selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+    };
+    let verdict_status = match (m.overall, on_sain01) {
+        (selfdef_hardware::Sain01Verdict::FullMatch, _) => CheckStatus::Ok,
+        (selfdef_hardware::Sain01Verdict::PartialMatch, true) => CheckStatus::Warn,
+        (selfdef_hardware::Sain01Verdict::PartialMatch, false) => CheckStatus::Ok,
+        (selfdef_hardware::Sain01Verdict::NoMatch, _) => CheckStatus::Skipped,
+    };
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "sain01_match.overall".into(),
+        status: verdict_status,
+        detail: verdict_label.into(),
+    });
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "cpu_avx512_vnni".into(),
+        status: if m.cpu_avx512_vnni {
+            CheckStatus::Ok
+        } else {
+            miss_status.clone()
+        },
+        detail: format!("{}", m.cpu_avx512_vnni),
+    });
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "memory_at_least_256gb".into(),
+        status: if m.memory_at_least_256gb {
+            CheckStatus::Ok
+        } else {
+            miss_status.clone()
+        },
+        detail: format!(
+            "total_bytes = {} ({})",
+            snap.memory.total_bytes,
+            if m.memory_at_least_256gb {
+                "≥256 GiB"
+            } else {
+                "<256 GiB"
+            }
+        ),
+    });
+    out.push(CheckResult {
+        category: "hardware".into(),
+        name: "gpu_count_at_least_2".into(),
+        status: if m.gpu_count_at_least_2 {
+            CheckStatus::Ok
+        } else {
+            miss_status
+        },
+        detail: format!("count = {}", snap.gpus.len()),
+    });
+    // SDD-017 § 5 + § 6: report sain01_strict + metrics path posture
+    if cfg.deployment.sain01_strict {
+        out.push(CheckResult {
+            category: "hardware".into(),
+            name: "sain01_strict".into(),
+            status: if matches!(m.overall, selfdef_hardware::Sain01Verdict::FullMatch) {
+                CheckStatus::Ok
+            } else {
+                CheckStatus::Fail
+            },
+            detail: format!(
+                "enabled; daemon refuses to start at non-FullMatch (current: {verdict_label})"
+            ),
+        });
+    }
+    if !cfg.deployment.hardware_metrics_path.is_empty() {
+        let p = std::path::Path::new(&cfg.deployment.hardware_metrics_path);
+        let dir_ok = p
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .map(|d| d.is_dir())
+            .unwrap_or(true);
+        out.push(CheckResult {
+            category: "hardware".into(),
+            name: "metrics_path (§ 6)".into(),
+            status: if dir_ok {
+                CheckStatus::Ok
+            } else {
+                CheckStatus::Warn
+            },
+            detail: if dir_ok {
+                format!("{}", p.display())
+            } else {
+                format!("parent dir of {} doesn't exist", p.display())
+            },
+        });
+    }
     out
 }
 
@@ -637,5 +934,186 @@ mod sdd_013_tests {
             results.iter().any(|r| r.category == "deployment"),
             "doctor::run() must surface deployment checks"
         );
+    }
+
+    // ----------------------------------------------------------------
+    // SD-R9 doctor extension tests
+    // ----------------------------------------------------------------
+
+    /// SD-R9: shared-audit-summary check skips on Generic by default.
+    #[test]
+    fn sdr9_shared_audit_summary_skipped_on_generic() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = check_shared_audit_summary(&cfg);
+        assert!(
+            results.iter().any(|r| {
+                r.category == "shared-audit-summary" && r.status == CheckStatus::Skipped
+            })
+        );
+    }
+
+    /// SD-R9: shared-audit-summary check surfaces an OK row on Sain01
+    /// (because resolver auto-enables) + a Skipped jsonl-twin row
+    /// (default false).
+    #[test]
+    fn sdr9_shared_audit_summary_active_on_sain01() {
+        let cfg = cfg_with_target(DeploymentTarget::Sain01);
+        let results = check_shared_audit_summary(&cfg);
+        let path_row = results
+            .iter()
+            .find(|r| r.name == "shared log path")
+            .expect("shared log path row");
+        // Without /mnt/vault on the test host, parent dir may not
+        // exist → either Ok or Warn; both are acceptable.
+        assert!(matches!(
+            path_row.status,
+            CheckStatus::Ok | CheckStatus::Warn
+        ));
+        let twin_row = results
+            .iter()
+            .find(|r| r.name == "jsonl twin (Q14-C)")
+            .expect("jsonl twin row");
+        assert_eq!(twin_row.status, CheckStatus::Skipped);
+    }
+
+    /// SD-R9: oracle-triage skipped when disabled (default).
+    #[test]
+    fn sdr9_oracle_triage_skipped_when_disabled() {
+        let cfg = Config::default();
+        let results = check_oracle_triage(&cfg);
+        let channel_row = results.iter().find(|r| r.name == "channel").unwrap();
+        assert_eq!(channel_row.status, CheckStatus::Skipped);
+        assert!(channel_row.detail.contains("Q-D"));
+    }
+
+    /// SD-R9: oracle-triage with bad endpoint shape → Fail.
+    #[test]
+    fn sdr9_oracle_triage_rejects_bad_endpoint() {
+        let cfg = Config {
+            notifier: selfdef_config::NotifierConfig {
+                oracle_triage: selfdef_config::OracleTriageConfig {
+                    enabled: true,
+                    endpoint: "ftp://router".into(),
+                    ..selfdef_config::OracleTriageConfig::default()
+                },
+                ..selfdef_config::NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        let results = check_oracle_triage(&cfg);
+        let row = results.iter().find(|r| r.name == "endpoint").unwrap();
+        assert_eq!(row.status, CheckStatus::Fail);
+        assert!(row.detail.contains("invalid"));
+    }
+
+    /// SD-R9: oracle-triage rate-limit reported.
+    #[test]
+    fn sdr9_oracle_triage_rate_limit_surfaced() {
+        let cfg = Config {
+            notifier: selfdef_config::NotifierConfig {
+                oracle_triage: selfdef_config::OracleTriageConfig {
+                    enabled: true,
+                    max_events_per_hour: 250,
+                    ..selfdef_config::OracleTriageConfig::default()
+                },
+                ..selfdef_config::NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        let results = check_oracle_triage(&cfg);
+        let row = results
+            .iter()
+            .find(|r| r.name == "rate_limit (Q16-D)")
+            .unwrap();
+        assert_eq!(row.status, CheckStatus::Ok);
+        assert!(row.detail.contains("250"));
+    }
+
+    /// SD-R9: rate-limit = 0 surfaces the "runaway protection OFF"
+    /// warning detail.
+    #[test]
+    fn sdr9_oracle_triage_rate_limit_zero_warns() {
+        let cfg = Config {
+            notifier: selfdef_config::NotifierConfig {
+                oracle_triage: selfdef_config::OracleTriageConfig {
+                    enabled: true,
+                    max_events_per_hour: 0,
+                    ..selfdef_config::OracleTriageConfig::default()
+                },
+                ..selfdef_config::NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        let results = check_oracle_triage(&cfg);
+        let row = results
+            .iter()
+            .find(|r| r.name == "rate_limit (Q16-D)")
+            .unwrap();
+        assert!(row.detail.contains("runaway protection OFF"));
+    }
+
+    /// SD-R9: hardware check produces sain01_match.overall row +
+    /// per-dimension rows. The verdict on the test host is variable —
+    /// we just verify the rows exist.
+    #[test]
+    fn sdr9_hardware_check_surfaces_match_rows() {
+        let cfg = Config::default();
+        let results = check_hardware(&cfg);
+        let overall = results
+            .iter()
+            .find(|r| r.name == "sain01_match.overall")
+            .expect("overall row");
+        // Verdict label is one of the three.
+        assert!(matches!(
+            overall.detail.as_str(),
+            "FullMatch" | "PartialMatch" | "NoMatch"
+        ));
+        for name in [
+            "cpu_avx512_vnni",
+            "memory_at_least_256gb",
+            "gpu_count_at_least_2",
+        ] {
+            assert!(
+                results.iter().any(|r| r.name == name),
+                "doctor must surface hardware.{name}"
+            );
+        }
+    }
+
+    /// SD-R9: sain01_strict row appears only when configured.
+    #[test]
+    fn sdr9_hardware_strict_row_only_when_configured() {
+        let cfg_off = Config::default();
+        let results_off = check_hardware(&cfg_off);
+        assert!(!results_off.iter().any(|r| r.name == "sain01_strict"));
+
+        let cfg_on = Config {
+            deployment: selfdef_config::DeploymentConfig {
+                sain01_strict: true,
+                ..selfdef_config::DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        let results_on = check_hardware(&cfg_on);
+        let row = results_on
+            .iter()
+            .find(|r| r.name == "sain01_strict")
+            .expect("strict row");
+        // Status is either Ok (verdict FullMatch — unlikely on test host)
+        // or Fail (otherwise).
+        assert!(matches!(row.status, CheckStatus::Ok | CheckStatus::Fail));
+    }
+
+    /// SD-R9: doctor::run() wires every new category.
+    #[test]
+    fn sdr9_doctor_run_includes_all_new_categories() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = run(&cfg);
+        for cat in ["shared-audit-summary", "oracle-triage", "hardware"] {
+            assert!(
+                results.iter().any(|r| r.category == cat),
+                "doctor::run() must surface {cat} category"
+            );
+        }
     }
 }
