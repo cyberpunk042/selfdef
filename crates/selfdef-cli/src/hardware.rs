@@ -379,12 +379,16 @@ mod tests {
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
                 GpuInventory {
                     device_node: PathBuf::from("/dev/nvidia1"),
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
             ],
             motherboard: Some(MotherboardInventory {

@@ -97,6 +97,19 @@ pub struct GpuInventory {
     pub pci_address: Option<String>,
     pub model_hint: Option<String>,
     pub vram_bytes: Option<u64>,
+    /// SD-R24: instantaneous power draw in watts (rounded to whole
+    /// watt). `None` when nvidia-smi can't report it (no NVML, GPU
+    /// in P-state that doesn't expose telemetry, etc.). Operators
+    /// running sustained inference workloads want this for
+    /// thermal-budget reasoning + cost tracking.
+    #[serde(default)]
+    pub power_draw_watts: Option<u32>,
+    /// SD-R24: nominal power limit in watts (the cap nvidia-smi
+    /// reports). `None` when unreadable. Pairs with
+    /// `power_draw_watts` so operators can compute headroom:
+    /// `limit - draw = remaining budget`.
+    #[serde(default)]
+    pub power_limit_watts: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -242,6 +255,11 @@ pub fn probe_from_roots(
     // /dev/nvidia<N> device-node list. Failures are silent — the
     // gpus vec keeps its device-node-only entries.
     let gpus = enrich_gpus_via_nvidia_smi(gpus);
+    // SD-R24: second nvidia-smi pass for power telemetry. Independent
+    // failure path from SD-R13; a host with model+vram exposed but
+    // without NVML power telemetry still gets model_hint + vram_bytes
+    // and just leaves power_*_watts as None.
+    let gpus = enrich_gpus_power_via_nvidia_smi(gpus);
     // SD-R17: thermals via /sys/class/hwmon + nvidia-smi. Best-effort:
     // both sources may be empty on minimal hosts.
     let thermals = read_thermals_from_hwmon(Path::new("/sys/class/hwmon"));
@@ -380,6 +398,88 @@ pub fn parse_nvidia_smi_csv(body: &str) -> Vec<(usize, String, Option<u64>)> {
             .ok()
             .map(|mib| mib.saturating_mul(1024 * 1024));
         out.push((idx, name, vram));
+    }
+    out
+}
+
+// ---------------------------------------------------------------- nvidia-smi power (SD-R24)
+
+/// SD-R24: enrich `gpus` with `power_draw_watts` + `power_limit_watts`
+/// via a second nvidia-smi invocation:
+///   `nvidia-smi --query-gpu=index,power.draw,power.limit --format=csv,noheader,nounits`.
+///
+/// nvidia-smi reports power as floats with one decimal (`"275.4"`);
+/// we round to nearest whole watt to match the operator-readable
+/// scale. Failures (nvidia-smi absent, NVML unavailable, `[N/A]`
+/// readings) leave the corresponding fields as `None`.
+///
+/// Kept as a separate query from the SD-R13 enrichment so the two
+/// paths can fail independently — a host with vRAM exposure but no
+/// NVML power telemetry still gets the model_hint + vram_bytes.
+pub(crate) fn enrich_gpus_power_via_nvidia_smi(mut gpus: Vec<GpuInventory>) -> Vec<GpuInventory> {
+    if gpus.is_empty() {
+        return gpus;
+    }
+    let output = match std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-gpu=index,power.draw,power.limit",
+            "--format=csv,noheader,nounits",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        Ok(o) if o.status.success() => o,
+        _ => return gpus,
+    };
+    let body = String::from_utf8_lossy(&output.stdout);
+    for (idx, draw, limit) in parse_nvidia_smi_power_csv(&body) {
+        if let Some(g) = gpus.get_mut(idx) {
+            if g.power_draw_watts.is_none() {
+                g.power_draw_watts = draw;
+            }
+            if g.power_limit_watts.is_none() {
+                g.power_limit_watts = limit;
+            }
+        }
+    }
+    gpus
+}
+
+/// SD-R24: pure parser for `nvidia-smi --query-gpu=index,power.draw,
+/// power.limit --format=csv,noheader,nounits`. Returns
+/// `Vec<(index, draw_watts, limit_watts)>` where each watt field is
+/// `Some(u32)` when parseable, `None` when `[N/A]` / `Not Supported`
+/// / unparseable. Malformed rows (missing index) are dropped.
+///
+/// Example input:
+///   0, 275.4, 600.0
+///   1, [N/A], 350.0
+#[must_use]
+pub fn parse_nvidia_smi_power_csv(body: &str) -> Vec<(usize, Option<u32>, Option<u32>)> {
+    let mut out = Vec::new();
+    for line in body.lines() {
+        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let idx = match parts[0].parse::<usize>() {
+            Ok(n) => n,
+            Err(_) => continue,
+        };
+        let parse_watts = |s: &str| -> Option<u32> {
+            if s.is_empty()
+                || s == "[N/A]"
+                || s.eq_ignore_ascii_case("not supported")
+                || s.eq_ignore_ascii_case("n/a")
+            {
+                return None;
+            }
+            // nvidia-smi returns float watts with one decimal — round
+            // to nearest whole watt.
+            s.parse::<f64>().ok().map(|f| f.round().max(0.0) as u32)
+        };
+        out.push((idx, parse_watts(parts[1]), parse_watts(parts[2])));
     }
     out
 }
@@ -632,6 +732,8 @@ fn read_gpu_device_nodes(dev_dir: &Path) -> Vec<GpuInventory> {
             pci_address: None,
             model_hint: None,
             vram_bytes: None,
+            power_draw_watts: None,
+            power_limit_watts: None,
         });
     }
     out.sort_by(|a, b| a.device_node.cmp(&b.device_node));
@@ -1067,6 +1169,54 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
             .unwrap();
         }
     }
+    // SD-R24: per-GPU power draw + limit gauges. Only emitted when at
+    // least one GPU has a parseable reading — hosts without NVML or
+    // without nvidia-smi don't pollute the textfile collector with
+    // empty labels.
+    let any_power = snap
+        .gpus
+        .iter()
+        .any(|g| g.power_draw_watts.is_some() || g.power_limit_watts.is_some());
+    if any_power {
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_gpu_power_draw_watts Per-GPU instantaneous power draw in watts (SD-R24)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_gpu_power_draw_watts gauge"
+        )
+        .unwrap();
+        for (idx, g) in snap.gpus.iter().enumerate() {
+            if let Some(w) = g.power_draw_watts {
+                writeln!(
+                    &mut buf,
+                    "sovereign_os_selfdef_hardware_gpu_power_draw_watts{{gpu=\"{idx}\"}} {w}"
+                )
+                .unwrap();
+            }
+        }
+        writeln!(
+            &mut buf,
+            "# HELP sovereign_os_selfdef_hardware_gpu_power_limit_watts Per-GPU nominal power limit in watts (SD-R24)"
+        )
+        .unwrap();
+        writeln!(
+            &mut buf,
+            "# TYPE sovereign_os_selfdef_hardware_gpu_power_limit_watts gauge"
+        )
+        .unwrap();
+        for (idx, g) in snap.gpus.iter().enumerate() {
+            if let Some(w) = g.power_limit_watts {
+                writeln!(
+                    &mut buf,
+                    "sovereign_os_selfdef_hardware_gpu_power_limit_watts{{gpu=\"{idx}\"}} {w}"
+                )
+                .unwrap();
+            }
+        }
+    }
     buf
 }
 
@@ -1392,6 +1542,8 @@ mod tests {
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             });
         }
         HardwareSnapshot {
@@ -1667,12 +1819,16 @@ mod tests {
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
                 GpuInventory {
                     device_node: PathBuf::from("/dev/nvidia1"),
                     pci_address: None,
                     model_hint: None,
                     vram_bytes: None,
+                    power_draw_watts: None,
+                    power_limit_watts: None,
                 },
             ],
             motherboard: None,
@@ -1905,6 +2061,168 @@ malformed,line\n\
         assert!(parse_nvidia_smi_csv("").is_empty());
     }
 
+    // ----- SD-R24 power-telemetry parser ----------------------------
+
+    #[test]
+    fn sdr24_power_parser_handles_sain01_dual_gpu() {
+        let body = "0, 275.4, 600.0\n1, 180.2, 350.0\n";
+        let out = parse_nvidia_smi_power_csv(body);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0], (0, Some(275), Some(600)));
+        assert_eq!(out[1], (1, Some(180), Some(350)));
+    }
+
+    #[test]
+    fn sdr24_power_parser_rounds_half_away_from_zero() {
+        // 275.5 → 276 (round half away from zero per f64::round).
+        let out = parse_nvidia_smi_power_csv("0, 275.5, 350.0\n");
+        assert_eq!(out[0].1, Some(276));
+    }
+
+    #[test]
+    fn sdr24_power_parser_handles_na_readings() {
+        // [N/A] is what nvidia-smi reports when NVML can't provide it.
+        let out = parse_nvidia_smi_power_csv("0, [N/A], 350.0\n");
+        assert_eq!(out[0], (0, None, Some(350)));
+    }
+
+    #[test]
+    fn sdr24_power_parser_handles_not_supported() {
+        let out = parse_nvidia_smi_power_csv("0, Not Supported, Not Supported\n");
+        assert_eq!(out[0], (0, None, None));
+    }
+
+    #[test]
+    fn sdr24_power_parser_rejects_malformed_index() {
+        let out = parse_nvidia_smi_power_csv("alpha, 275.4, 600.0\n1, 180.2, 350.0\n");
+        // First row drops; second survives.
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].0, 1);
+    }
+
+    #[test]
+    fn sdr24_power_parser_clamps_negative_to_zero() {
+        // nvidia-smi shouldn't ever report negative watts, but if a
+        // future firmware bug does, the saturating cast keeps the
+        // metric non-negative.
+        let out = parse_nvidia_smi_power_csv("0, -5.0, 350.0\n");
+        assert_eq!(out[0].1, Some(0));
+    }
+
+    #[test]
+    fn sdr24_enrich_power_index_matches_device_node_order() {
+        // Round-trip the parser into the enrichment logic without
+        // invoking the real nvidia-smi.
+        let body = "0, 275.4, 600.0\n1, 180.2, 350.0\n";
+        let parsed = parse_nvidia_smi_power_csv(body);
+        let mut gpus = [
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia0"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            },
+            GpuInventory {
+                device_node: PathBuf::from("/dev/nvidia1"),
+                pci_address: None,
+                model_hint: None,
+                vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
+            },
+        ]
+        .to_vec();
+        for (idx, draw, limit) in parsed {
+            if let Some(g) = gpus.get_mut(idx) {
+                g.power_draw_watts = draw;
+                g.power_limit_watts = limit;
+            }
+        }
+        assert_eq!(gpus[0].power_draw_watts, Some(275));
+        assert_eq!(gpus[0].power_limit_watts, Some(600));
+        assert_eq!(gpus[1].power_draw_watts, Some(180));
+        assert_eq!(gpus[1].power_limit_watts, Some(350));
+    }
+
+    #[test]
+    fn sdr24_render_layer_b_emits_power_gauges_when_present() {
+        let mut snap = HardwareSnapshot {
+            cpu: CpuInventory::default(),
+            memory: MemoryInventory::default(),
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(out.contains("sovereign_os_selfdef_hardware_gpu_power_draw_watts"));
+        assert!(out.contains("gpu=\"0\"} 275"));
+        assert!(out.contains("gpu=\"0\"} 600"));
+        assert!(out.contains("gpu=\"1\"} 180"));
+        assert!(out.contains("gpu=\"1\"} 350"));
+        // Both HELP+TYPE blocks present.
+        assert!(out.contains("# TYPE sovereign_os_selfdef_hardware_gpu_power_draw_watts gauge"));
+        assert!(out.contains("# TYPE sovereign_os_selfdef_hardware_gpu_power_limit_watts gauge"));
+
+        // Mutation guard: if no GPU has any power reading, block omitted.
+        for g in &mut snap.gpus {
+            g.power_draw_watts = None;
+            g.power_limit_watts = None;
+        }
+        let out2 = render_layer_b_metrics(&snap, &m);
+        assert!(!out2.contains("hardware_gpu_power_draw_watts"));
+        assert!(!out2.contains("hardware_gpu_power_limit_watts"));
+    }
+
+    #[test]
+    fn sdr24_enrich_power_preserves_existing_values() {
+        // Caller-set values aren't overwritten — same contract as
+        // SD-R13 model/vram enrichment.
+        let mut gpus = [GpuInventory {
+            device_node: PathBuf::from("/dev/nvidia0"),
+            pci_address: None,
+            model_hint: None,
+            vram_bytes: None,
+            power_draw_watts: Some(42),
+            power_limit_watts: Some(99),
+        }]
+        .to_vec();
+        let parsed = parse_nvidia_smi_power_csv("0, 275.4, 600.0\n");
+        for (idx, draw, limit) in parsed {
+            if let Some(g) = gpus.get_mut(idx) {
+                if g.power_draw_watts.is_none() {
+                    g.power_draw_watts = draw;
+                }
+                if g.power_limit_watts.is_none() {
+                    g.power_limit_watts = limit;
+                }
+            }
+        }
+        assert_eq!(gpus[0].power_draw_watts, Some(42));
+        assert_eq!(gpus[0].power_limit_watts, Some(99));
+    }
+
     #[test]
     fn enrich_gpus_index_matches_device_node_order() {
         // Simulate the enrichment without invoking the real
@@ -1915,12 +2233,16 @@ malformed,line\n\
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             },
             GpuInventory {
                 device_node: PathBuf::from("/dev/nvidia1"),
                 pci_address: None,
                 model_hint: None,
                 vram_bytes: None,
+                power_draw_watts: None,
+                power_limit_watts: None,
             },
         ];
         let parsed = vec![
