@@ -459,6 +459,14 @@ enum ModulesAction {
         /// `modules check-hardware` but for one module.
         #[arg(long)]
         with_host_status: bool,
+        /// SD-R40: emit the manifest as structured JSON instead of
+        /// the human-readable form. Tooling consumers
+        /// (sovereign-osctl, future fleet dashboards) parse this
+        /// directly without scraping. Implies `--with-host-status`
+        /// when set alongside; the gate verdict lands under
+        /// `host_status` in the JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Apply every active module's install/apply.sh in dependency order.
     Apply {
@@ -1084,11 +1092,19 @@ async fn main() -> Result<()> {
                 slug,
                 dir,
                 with_host_status,
+                json,
             } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_info(&resolved, &slug)?;
-                if with_host_status {
-                    modules::cmd_info_host_status(&resolved, &slug)?;
+                if json {
+                    // SD-R40: --json implies host_status (the field
+                    // is cheap to compute + tooling almost always
+                    // wants both).
+                    modules::cmd_info_json(&resolved, &slug)?;
+                } else {
+                    modules::cmd_info(&resolved, &slug)?;
+                    if with_host_status {
+                        modules::cmd_info_host_status(&resolved, &slug)?;
+                    }
                 }
             }
             ModulesAction::Apply {

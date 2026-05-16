@@ -406,6 +406,52 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R40: `selfdefctl modules info <slug> --json` emits a
+/// structured manifest with the SD-R39 host_status verdict inlined.
+#[test]
+fn sdr40_modules_info_json_carries_manifest_and_host_status() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "gated", &[], stub);
+    let m_toml = catalog.join("gated/module.toml");
+    let mut manifest = std::fs::read_to_string(&m_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\ngpu_vram_gib_min = 99\n");
+    std::fs::write(&m_toml, manifest).unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "info",
+            "gated",
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid JSON: {e}\n{stdout}"));
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["name"], "gated");
+    assert_eq!(v["requires_hardware"]["memory_gib_min"], 9_999_999u64);
+    assert_eq!(v["requires_hardware"]["gpu_vram_gib_min"], 99u64);
+    // host_status: skipped on this host (mem requirement too high).
+    assert_eq!(v["host_status"]["verdict"], "skipped");
+    let unmet = v["host_status"]["unmet"].as_array().unwrap();
+    assert!(!unmet.is_empty(), "unmet should not be empty");
+    assert!(
+        unmet
+            .iter()
+            .any(|u| u.as_str().unwrap().contains("memory_gib_min = 9999999")),
+        "unmet should cite memory: {unmet:?}"
+    );
+}
+
 /// SD-R39: `selfdefctl modules info <slug> --with-host-status`
 /// probes the host and surfaces the gate verdict inline.
 #[test]

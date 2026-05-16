@@ -501,6 +501,62 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// SD-R40: emit the module manifest as structured JSON (with the
+/// SD-R39 host_status verdict inlined). Operator-stable schema for
+/// tooling consumers (sovereign-osctl, fleet dashboards, future
+/// model-fetcher scripts).
+pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let host_status_json = if m.requires_hardware.is_empty() {
+        serde_json::json!({"verdict": "applies-on-any-host", "unmet": []})
+    } else {
+        match &caps {
+            Some(c) => match m.requires_hardware.evaluate(c) {
+                Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                Err(unmet) => serde_json::json!({"verdict": "skipped", "unmet": unmet}),
+            },
+            None => serde_json::json!({"verdict": "probe-unavailable", "unmet": []}),
+        }
+    };
+    let rh = &m.requires_hardware;
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "name": m.name,
+        "version": m.version,
+        "summary": m.summary,
+        "category": m.category,
+        "depends_on": m.depends_on,
+        "conflicts": m.conflicts,
+        "provides": m.provides,
+        "consumes": m.consumes,
+        "instanced": m.instanced,
+        "phase": m.phase.as_str(),
+        "requires_hardware": {
+            "is_empty": rh.is_empty(),
+            "avx512_vnni": rh.avx512_vnni,
+            "avx512_bf16": rh.avx512_bf16,
+            "memory_gib_min": rh.memory_gib_min,
+            "gpu_count_min": rh.gpu_count_min,
+            "gpu_vram_gib_min": rh.gpu_vram_gib_min,
+            "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
+            "wasm_aot_features_required": rh.wasm_aot_features_required,
+            "sain01_verdict_min": rh.sain01_verdict_min,
+        },
+        "host_status": host_status_json,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
 /// SD-R39: probe the host + emit the gate verdict for one module
 /// as an inline addendum to cmd_info. Doesn't repeat the manifest
 /// body (cmd_info already printed it).
