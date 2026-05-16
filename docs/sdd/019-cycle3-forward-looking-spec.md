@@ -1,10 +1,34 @@
 # SDD-019 — Cycle 3 forward-looking spec (post-PR-#191 horizons)
 
-> Status: **draft** — captures learnings from the cycle-2 arc (SD-R24..R42
+> Status: **draft** — captures learnings from the cycle-2 arc (SD-R24..R48
 > in PR #191) + lays out vectors operators may ratify for cycle 3.
 > Owner: operator-supervised; agent-authored.
-> Last updated: 2026-05-16 (cycle 2 in flight).
+> Last updated: 2026-05-16 (cycle 2 amendment — 5/6 tensions closed
+> in same cycle).
 > Builds on: SDD-018 (cycle-1 + cycle-2 module gate doctrine).
+
+## In-cycle tension closures (R43 SDD authoring → R48)
+
+The forward-looking nature of this SDD turned out to be FASTER than
+expected: 5 of 6 identified tensions closed in cycle 2 itself rather
+than waiting for cycle 3.
+
+| Tension | Cycle | Round | Status |
+|---------|-------|-------|--------|
+| T-1 (ANY-vs-ALL semantics) | open | — | YAGNI; deferred |
+| T-2 (override audit trail) | cycle 2 | SD-R47 | ✓ closed |
+| T-3 (model artifact verification) | cycle 2 | R190 (verify) | ⏸ partial (fetch-side cycle 3) |
+| T-4 (cross-repo schema drift) | cycle 2 | R189 | ✓ closed |
+| T-5 (recommendation matrix dup) | cycle 2 | R188 | ✓ closed |
+| T-6 (schedule.json schema) | cycle 2 | SD-R46 | ✓ closed |
+
+This is the "continuous evolution" pattern operating at sub-cycle
+granularity: the doctrine layer (forward-looking spec) moves at the
+same tempo as the code, not as an afterthought delayed by one cycle.
+
+The remaining open vectors for cycle 3 are: T-1 (YAGNI — wait for a
+real module to need it) and T-3 fetch-side (HTTP + token plumbing
+— bigger lift, deserves dedicated round).
 
 ## Why this SDD exists
 
