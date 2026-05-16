@@ -209,6 +209,23 @@ pub(crate) struct HardwareRequirements {
     #[serde(default)]
     pub(crate) gpu_power_headroom_watts_min: u32,
 
+    /// SD-R32: required wasm-AOT target features (comma-separated,
+    /// `+feature` syntax; sovereign-os pulse/wasm-aot.sh-compatible).
+    /// Empty disables the gate. Module passes when EVERY listed
+    /// feature appears in
+    /// HardwareCapabilities.wasm_aot.target_features.
+    ///
+    /// Examples (operator surface):
+    ///   wasm_aot_features_required = "+avx512f"
+    ///   wasm_aot_features_required = "+avx512vnni,+avx512bf16"
+    ///
+    /// Use case: an AOT-compiled inference module declares
+    /// "I need VNNI for INT8 matmul AND BF16 for the activation
+    /// reduction stage" — passes on the SAIN-01 9900X, fails on
+    /// 9700X (no BF16) before any compile happens.
+    #[serde(default)]
+    pub(crate) wasm_aot_features_required: String,
+
     /// Required Sain01Match verdict, when set:
     /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
     /// would be weird — operator should rarely use it).
@@ -295,6 +312,34 @@ impl HardwareRequirements {
                 ));
             }
         }
+        if !self.wasm_aot_features_required.is_empty() {
+            // Build the actual host feature set from the SD-R30
+            // wasm_aot.target_features string. Both sides use the
+            // `+feature` convention (LLVM/wasmtime). Empty side =
+            // host hasn't enabled AOT → every required feature is
+            // missing.
+            let actual: std::collections::HashSet<&str> = caps
+                .wasm_aot
+                .target_features
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            let missing: Vec<&str> = self
+                .wasm_aot_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "wasm_aot_features_required = {:?} (host missing: {})",
+                    self.wasm_aot_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
         if !self.sain01_verdict_min.is_empty() {
             let actual = match caps.sain01_match.overall {
                 selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
@@ -327,6 +372,7 @@ impl HardwareRequirements {
             && self.gpu_count_min == 0
             && self.gpu_vram_gib_min == 0
             && self.gpu_power_headroom_watts_min == 0
+            && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
     }
 }
@@ -3025,6 +3071,7 @@ mod sdr14_hardware_gate_tests {
             gpu_count_min: 2,
             gpu_vram_gib_min: 0,
             gpu_power_headroom_watts_min: 0,
+            wasm_aot_features_required: String::new(),
             sain01_verdict_min: "FullMatch".into(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
@@ -3268,6 +3315,89 @@ mod sdr14_hardware_gate_tests {
             ..Default::default()
         };
         assert!(!r3.is_empty());
+        // SD-R32: wasm_aot_features_required also flips is_empty.
+        let r4 = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        assert!(!r4.is_empty());
+    }
+
+    // -- SD-R32: wasm_aot_features_required gate ----------------------
+
+    use selfdef_hardware::WasmAotCapabilities;
+
+    fn caps_with_wasm_aot_features(features: &str) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 0, 0, Sain01Verdict::FullMatch);
+        c.wasm_aot = WasmAotCapabilities {
+            target_triple: "x86_64-unknown-linux-gnu".into(),
+            target_cpu: "znver5".into(),
+            target_features: features.into(),
+            compile_command_hint: String::new(),
+        };
+        c
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_passes_when_all_present() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_when_one_missing() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16,+avx512fp16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512fp16"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_on_empty_host_features() {
+        // Host has no wasm-AOT features at all → every required
+        // feature is "missing".
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512f"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_tolerates_whitespace_in_required_list() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: " +avx512vnni , +avx512bf16 ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_required_empty_is_no_op() {
+        // Empty string in the manifest disables the gate even when
+        // the host has no wasm-AOT data.
+        let req = HardwareRequirements {
+            wasm_aot_features_required: String::new(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        req.evaluate(&caps).unwrap();
     }
 
     #[test]
