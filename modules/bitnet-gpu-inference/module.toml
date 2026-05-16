@@ -1,0 +1,53 @@
+name        = "bitnet-gpu-inference"
+version     = "0.1.0"
+summary     = "Provision the host for GPU-side BitNet ternary inference — runtime dir + env file + per-GPU schedule hints (SD-R28)"
+category    = "inference"
+
+depends_on  = ["hardware-tune-cache"]
+conflicts   = []
+provides    = ["bitnet-gpu-runtime"]
+consumes    = ["hardware-tune-env"]
+
+requires    = [
+    { kind = "binary", value = "selfdefctl" },
+]
+
+# SD-R26 — this module demonstrates the full power of the cycle-2
+# [requires_hardware] surface. It only lands on hosts where GPU-side
+# ternary inference will actually run well:
+#
+#   - avx512_bf16: BitNet kernels use BF16 for activation reduction
+#   - memory_gib_min: model staging + tokenizer requires headroom
+#   - gpu_count_min: at least one NVIDIA GPU available
+#   - gpu_vram_gib_min: the smallest BitNet checkpoints worth running
+#     end-to-end take >= 8 GiB; smaller GPUs are CPU-fallback territory
+#   - gpu_power_headroom_watts_min: leave a 100 W cushion for the
+#     scheduler — sustained loads on the SAIN-01 RTX PRO 6000 + RTX
+#     3090 pair commonly run at 60-80% of cap so this passes; on a
+#     1-card box under load it correctly fails to land
+#
+# On a SAIN-01 box (RTX PRO 6000 98 GiB + RTX 3090 24 GiB) all five
+# predicates pass, and the apply.sh below pins a per-GPU schedule
+# JSON into /etc/selfdef/bitnet/schedule.json (largest-VRAM GPU
+# gets the model, secondary handles tokenization).
+#
+# On a 24-GiB-only host (RTX 3090) the vram + headroom gates still
+# pass (single 24 GiB > 8 GiB), so it lands with the model on GPU 0.
+[requires_hardware]
+avx512_bf16                  = true
+memory_gib_min               = 32
+gpu_count_min                = 1
+gpu_vram_gib_min             = 8
+gpu_power_headroom_watts_min = 100
+
+instanced = false
+
+# `main` phase — hardware-tune-cache (pre-phase) has already populated
+# /etc/selfdef/hardware-tune.env by the time we run.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
