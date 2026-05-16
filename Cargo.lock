@@ -2160,6 +2160,7 @@ dependencies = [
  "selfdef-store",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
  "tempfile",
  "time",
  "tokio",

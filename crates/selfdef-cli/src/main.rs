@@ -14,6 +14,7 @@ mod init;
 mod modules;
 mod notify;
 mod paths;
+mod perimeter;
 
 use std::path::PathBuf;
 
@@ -122,8 +123,26 @@ enum Command {
         #[command(subcommand)]
         action: InitAction,
     },
+    /// SDD-015: Tetragon perimeter coexistence — inspect / verify
+    /// the boundary between selfdef-authored `agent-guard-*`
+    /// TracingPolicies and sovereign-os's host-scoped
+    /// `sovereign-kernel-fence.yaml`.
+    Perimeter {
+        #[command(subcommand)]
+        action: PerimeterAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum PerimeterAction {
+    /// Inspect the cross-author overlap between selfdef + sovereign-os
+    /// Tetragon TracingPolicies. Exit 0 on pass, 1 on overlap.
+    CheckOverlap,
+    /// Show the coexistence configuration + per-author policy counts
+    /// on disk. Read-only.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -647,6 +666,16 @@ async fn main() -> Result<()> {
             }
             InitAction::Checklist => {
                 init::print_checklist();
+            }
+        },
+        Command::Perimeter { action } => match action {
+            PerimeterAction::CheckOverlap => {
+                let exit = perimeter::run_check_overlap(&cfg).context("perimeter check-overlap")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::Status => {
+                let exit = perimeter::run_status(&cfg).context("perimeter status")?;
+                std::process::exit(exit);
             }
         },
         Command::Status => {

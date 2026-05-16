@@ -52,6 +52,12 @@ pub struct Config {
     /// channel, perimeter coexistence). Default is `Generic`; existing
     /// configs that don't carry a `[deployment]` block parse unchanged.
     pub deployment: DeploymentConfig,
+    /// SDD-015: Tetragon perimeter coexistence config — controls the
+    /// boundary check between selfdef-authored agent-guard policies
+    /// and sovereign-os's `sovereign-kernel-fence.yaml`. When
+    /// `deployment.target = sain01`, `check_overlap_on_apply` defaults
+    /// to true. When `target = generic`, this block is ignored.
+    pub perimeter: PerimeterConfig,
 }
 
 // ---------------------------------------------------------------- deployment (SDD-013)
@@ -872,6 +878,64 @@ pub struct WriteConfig {
     /// Usernames must match `[a-zA-Z0-9._-]+` — shell metacharacters
     /// are rejected at config-load time.
     pub users: Vec<String>,
+}
+
+// ---------------------------------------------------------------- perimeter (SDD-015)
+
+/// SDD-015: Tetragon perimeter coexistence configuration.
+///
+/// When `deployment.target = sain01`, selfdef and sovereign-os both
+/// author Tetragon TracingPolicy YAMLs into
+/// `/etc/tetragon/tracing-policies/`. This config gates the boundary
+/// enforcement that prevents a selfdef-authored `agent-guard-*` policy
+/// from overlapping with sovereign-os's `sovereign-kernel-fence.yaml`
+/// host-scoped allowlist.
+///
+/// On `deployment.target = generic`, this block is IGNORED entirely —
+/// the boundary doesn't apply (no sovereign-os assumption).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PerimeterConfig {
+    /// When true (default on sain01, false on generic),
+    /// `selfdefctl modules apply` runs `perimeter check-overlap`
+    /// before installing any new TracingPolicy file. Refuses to apply
+    /// if overlap is detected (unless `overlap_warn_only = true`).
+    pub check_overlap_on_apply: Option<bool>,
+    /// Path to sovereign-os's host-scoped allowlist. selfdef reads
+    /// this to know what NOT to overlap with. Empty path is treated
+    /// as "no peer policy author" (overlap check vacuously passes).
+    pub sovereign_kernel_fence_path: PathBuf,
+    /// Directory holding all Tetragon TracingPolicy YAMLs (both
+    /// authors). Default `/etc/tetragon/tracing-policies` matches
+    /// Tetragon's stock load path.
+    pub policies_dir: PathBuf,
+    /// When true, overlap detection emits a WARN line but does NOT
+    /// fail. Default false (block on overlap).
+    pub overlap_warn_only: bool,
+}
+
+impl Default for PerimeterConfig {
+    fn default() -> Self {
+        Self {
+            check_overlap_on_apply: None, // resolves via target at use-site
+            sovereign_kernel_fence_path: PathBuf::from(
+                "/etc/tetragon/tracing-policies/sovereign-kernel-fence.yaml",
+            ),
+            policies_dir: PathBuf::from("/etc/tetragon/tracing-policies"),
+            overlap_warn_only: false,
+        }
+    }
+}
+
+/// SDD-015 § 4: resolve effective `check_overlap_on_apply` —
+/// auto-true on sain01 unless explicitly overridden; auto-false on
+/// generic unless explicitly overridden.
+#[must_use]
+pub fn resolve_perimeter_check_overlap(cfg: &Config) -> bool {
+    if let Some(v) = cfg.perimeter.check_overlap_on_apply {
+        return v;
+    }
+    matches!(cfg.deployment.target, DeploymentTarget::Sain01)
 }
 
 /// SDD-014: shared-audit-summary channel configuration.
@@ -1787,6 +1851,79 @@ mod tests {
             resolve_shared_audit_summary_pointer(&cfg),
             PathBuf::from("/srv/audit.jsonl")
         );
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-015 perimeter coexistence resolver tests
+    // ----------------------------------------------------------------
+
+    /// SDD-015 § 4: on Generic, check_overlap_on_apply auto-false.
+    #[test]
+    fn sdd_015_generic_target_check_overlap_off_by_default() {
+        let cfg = Config::default();
+        assert!(!resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: on SAIN-01, check_overlap_on_apply auto-true.
+    #[test]
+    fn sdd_015_sain01_target_check_overlap_on_by_default() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            ..Config::default()
+        };
+        assert!(resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: explicit Some(false) on SAIN-01 disables the check
+    /// (operator opt-out path — e.g. they're maintaining the boundary
+    /// by hand during migration).
+    #[test]
+    fn sdd_015_explicit_disable_overrides_auto_enable_on_sain01() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+            },
+            perimeter: PerimeterConfig {
+                check_overlap_on_apply: Some(false),
+                ..PerimeterConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: explicit Some(true) on Generic enables the check
+    /// (operator override path — e.g. multi-author Tetragon setup not
+    /// involving sovereign-os).
+    #[test]
+    fn sdd_015_explicit_enable_overrides_auto_disable_on_generic() {
+        let cfg = Config {
+            perimeter: PerimeterConfig {
+                check_overlap_on_apply: Some(true),
+                ..PerimeterConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: default perimeter paths point at the Tetragon
+    /// stock load directory.
+    #[test]
+    fn sdd_015_default_perimeter_paths() {
+        let p = PerimeterConfig::default();
+        assert_eq!(
+            p.policies_dir,
+            PathBuf::from("/etc/tetragon/tracing-policies")
+        );
+        assert_eq!(
+            p.sovereign_kernel_fence_path,
+            PathBuf::from("/etc/tetragon/tracing-policies/sovereign-kernel-fence.yaml")
+        );
+        assert!(!p.overlap_warn_only);
+        assert!(p.check_overlap_on_apply.is_none());
     }
 
     /// SDD-013 § Goals point 2 (zero regression): a fully-populated
