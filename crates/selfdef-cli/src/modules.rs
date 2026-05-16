@@ -1944,6 +1944,97 @@ pub(crate) fn cmd_check_hardware_with_caps(
 ///
 /// When `with_hardware_gate=true`, nodes are coloured by SD-R14
 /// verdict (green = passes gate, red = skipped).
+/// SD-R41: structured JSON variant of cmd_graph. Same data shape
+/// (nodes + edges + per-node gate verdict) but machine-readable.
+pub(crate) fn cmd_graph_json(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+
+    let mut nodes: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let name = am.display_name();
+        let mut node = serde_json::json!({
+            "id": name,
+            "slug": am.slug,
+            "instance": am.instance,
+            "phase": am.manifest.phase.as_str(),
+        });
+        if with_hardware_gate {
+            let (verdict, unmet): (&str, Vec<String>) = if am.manifest.requires_hardware.is_empty()
+            {
+                ("ungated", Vec::new())
+            } else {
+                match &caps {
+                    Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                        Ok(()) => ("kept", Vec::new()),
+                        Err(u) => ("skipped", u),
+                    },
+                    None => ("probe-unavailable", Vec::new()),
+                }
+            };
+            node["gate"] = serde_json::json!({
+                "verdict": verdict,
+                "unmet": unmet,
+            });
+        }
+        nodes.push(node);
+    }
+
+    // Edges
+    let mut edges: Vec<serde_json::Value> = Vec::new();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                edges.push(serde_json::json!({
+                    "kind": "dependency",
+                    "from": dep,
+                    "to": am.display_name(),
+                }));
+            }
+        }
+    }
+    // Instance grouping
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            edges.push(serde_json::json!({
+                "kind": "instance-sibling",
+                "shared_slug": slug,
+                "from": instances[i].display_name(),
+                "to": instances[i + 1].display_name(),
+            }));
+        }
+    }
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "node_count": nodes.len(),
+        "edge_count": edges.len(),
+        "with_hardware_gate": with_hardware_gate,
+        "probe_ok": caps.is_some(),
+        "nodes": nodes,
+        "edges": edges,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
 pub(crate) fn cmd_graph(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
     let (_host_path, active) = prepare(opts)?;
     let caps = if with_hardware_gate {

@@ -580,6 +580,12 @@ enum ModulesAction {
         /// without colour).
         #[arg(long)]
         with_hardware_gate: bool,
+        /// SD-R41: emit the graph as structured JSON (nodes +
+        /// edges) instead of DOT. Tooling consumers
+        /// (sovereign-osctl, fleet dashboards) consume this
+        /// directly without parsing DOT.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1195,13 +1201,18 @@ async fn main() -> Result<()> {
                 host_config,
                 dir,
                 with_hardware_gate,
+                json,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
                     ..Default::default()
                 };
-                let code = modules::cmd_graph(&opts, with_hardware_gate)?;
+                let code = if json {
+                    modules::cmd_graph_json(&opts, with_hardware_gate)?
+                } else {
+                    modules::cmd_graph(&opts, with_hardware_gate)?
+                };
                 if code != 0 {
                     std::process::exit(code);
                 }

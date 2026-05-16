@@ -628,6 +628,67 @@ fn sdr36_modules_graph_emits_valid_dot_dependencies() {
     );
 }
 
+/// SD-R41: `--json` variant of `modules graph` emits a structured
+/// node/edge document instead of DOT.
+#[test]
+fn sdr41_modules_graph_json_emits_nodes_and_edges_with_gate_verdict() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "beta", &["alpha"], stub);
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "graph",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--with-hardware-gate",
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid JSON: {e}\n{stdout}"));
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["node_count"], 2);
+    assert_eq!(v["edge_count"], 1);
+    assert_eq!(v["with_hardware_gate"], true);
+    let nodes = v["nodes"].as_array().unwrap();
+    let names: Vec<&str> = nodes.iter().map(|n| n["id"].as_str().unwrap()).collect();
+    assert!(names.contains(&"alpha"));
+    assert!(names.contains(&"beta"));
+    // alpha: no requires_hardware → ungated
+    let alpha = nodes.iter().find(|n| n["id"] == "alpha").unwrap();
+    assert_eq!(alpha["gate"]["verdict"], "ungated");
+    // beta: gate fires (mem too high)
+    let beta = nodes.iter().find(|n| n["id"] == "beta").unwrap();
+    assert_eq!(beta["gate"]["verdict"], "skipped");
+    let unmet = beta["gate"]["unmet"].as_array().unwrap();
+    assert!(!unmet.is_empty());
+    // Dependency edge: alpha → beta (because beta depends on alpha)
+    let edges = v["edges"].as_array().unwrap();
+    let dep_edge = edges
+        .iter()
+        .find(|e| e["kind"] == "dependency")
+        .expect("dependency edge");
+    assert_eq!(dep_edge["from"], "alpha");
+    assert_eq!(dep_edge["to"], "beta");
+}
+
 /// SD-R36 with --with-hardware-gate: nodes get fillcolor by SD-R14
 /// verdict; unmeetable predicates become tooltips.
 #[test]
