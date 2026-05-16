@@ -2151,6 +2151,67 @@ pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R45: structured JSON variant of cmd_status. Emits per-module
+/// rows with manifest summary + [requires_hardware] presence + the
+/// live gate verdict for each. Operator-stable schema for fleet
+/// dashboards + sovereign-osctl overview consumers.
+pub(crate) fn cmd_status_json(opts: &LifecycleOpts) -> Result<i32> {
+    let (host_path, active) = prepare(opts)?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let mut modules: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let gate = if am.manifest.requires_hardware.is_empty() {
+            serde_json::json!({"verdict": "ungated", "unmet": []})
+        } else {
+            match &caps {
+                Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                    Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                    Err(u) => serde_json::json!({"verdict": "skipped", "unmet": u}),
+                },
+                None => {
+                    serde_json::json!({"verdict": "probe-unavailable", "unmet": []})
+                }
+            }
+        };
+        modules.push(serde_json::json!({
+            "name": am.display_name(),
+            "slug": am.slug,
+            "instance": am.instance,
+            "version": am.manifest.version,
+            "category": am.manifest.category,
+            "summary": am.manifest.summary,
+            "phase": am.manifest.phase.as_str(),
+            "depends_on": am.manifest.depends_on,
+            "provides": am.manifest.provides,
+            "consumes": am.manifest.consumes,
+            "requires_hardware_present": !am.manifest.requires_hardware.is_empty(),
+            "gate": gate,
+        }));
+    }
+    let kept = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "passes" || m["gate"]["verdict"] == "ungated")
+        .count();
+    let skipped = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "skipped")
+        .count();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "host_config_path": host_path,
+        "probe_ok": caps.is_some(),
+        "module_count": modules.len(),
+        "would_apply": kept,
+        "would_skip": skipped,
+        "modules": modules,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
 pub(crate) fn cmd_uninstall(opts: &LifecycleOpts) -> Result<i32> {
     // Tear-down order is the inverse of apply order: any module that
     // depended on `X` must come down before `X` does. Modules that

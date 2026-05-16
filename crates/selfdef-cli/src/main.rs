@@ -530,6 +530,12 @@ enum ModulesAction {
         host_config: Option<PathBuf>,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R45: emit a structured JSON document with per-module
+        /// status rows instead of the human-readable summary.
+        /// Tooling consumers (sovereign-osctl overview, fleet
+        /// dashboards) parse this directly.
+        #[arg(long)]
+        json: bool,
     },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
@@ -1179,7 +1185,11 @@ async fn main() -> Result<()> {
                     std::process::exit(code);
                 }
             }
-            ModulesAction::Status { host_config, dir } => {
+            ModulesAction::Status {
+                host_config,
+                dir,
+                json,
+            } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
@@ -1188,7 +1198,11 @@ async fn main() -> Result<()> {
                     dry_run: false,
                     ..Default::default()
                 };
-                let code = modules::cmd_status(&opts)?;
+                let code = if json {
+                    modules::cmd_status_json(&opts)?
+                } else {
+                    modules::cmd_status(&opts)?
+                };
                 if code != 0 {
                     std::process::exit(code);
                 }

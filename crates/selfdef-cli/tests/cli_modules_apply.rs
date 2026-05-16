@@ -513,6 +513,63 @@ fn sdr39_modules_info_with_host_status_surfaces_gate_verdict() {
     );
 }
 
+/// SD-R45: `selfdefctl modules status --json` emits a structured
+/// per-module status document with manifest summary + gate verdict.
+#[test]
+fn sdr45_modules_status_json_emits_per_module_rows_with_gate_verdicts() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"a\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "gated", &[], stub);
+    let g_toml = catalog.join("gated/module.toml");
+    let mut manifest = std::fs::read_to_string(&g_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&g_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.gated]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "status",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let v: serde_json::Value =
+        serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("invalid JSON: {e}\n{stdout}"));
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["module_count"], 2);
+    assert_eq!(v["would_apply"], 1);
+    assert_eq!(v["would_skip"], 1);
+    let modules = v["modules"].as_array().unwrap();
+    assert_eq!(modules.len(), 2);
+    // alpha → ungated
+    let alpha = modules.iter().find(|m| m["name"] == "alpha").unwrap();
+    assert_eq!(alpha["gate"]["verdict"], "ungated");
+    assert_eq!(alpha["requires_hardware_present"], false);
+    // gated → skipped
+    let gated = modules.iter().find(|m| m["name"] == "gated").unwrap();
+    assert_eq!(gated["gate"]["verdict"], "skipped");
+    assert_eq!(gated["requires_hardware_present"], true);
+    let unmet = gated["gate"]["unmet"].as_array().unwrap();
+    assert!(
+        unmet
+            .iter()
+            .any(|u| u.as_str().unwrap().contains("memory_gib_min")),
+        "unmet should cite memory: {unmet:?}"
+    );
+}
+
 /// SD-R44: `selfdefctl modules apply --strict-hardware` refuses to
 /// proceed when any module would silently skip due to unmet
 /// [requires_hardware] predicates. Production discipline — operator
