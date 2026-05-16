@@ -185,6 +185,30 @@ pub(crate) struct HardwareRequirements {
     #[serde(default)]
     pub(crate) gpu_count_min: u32,
 
+    /// SD-R26: minimum VRAM (GiB) on AT LEAST ONE GPU. Lets a module
+    /// declare "I need to fit a model that takes 80 GiB" — passes
+    /// when any GPU in HardwareCapabilities.gpu.devices reports
+    /// vram_bytes ≥ this. 0 disables the gate.
+    ///
+    /// Pairs naturally with `gpu_count_min`: combined "needs 2 GPUs
+    /// AND at least one with 80 GiB VRAM" lands inference modules
+    /// on the SAIN-01 dual-GPU rig (RTX PRO 6000 → 98 GiB).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_min: u64,
+
+    /// SD-R26: minimum total power headroom (watts) across ALL GPUs.
+    /// Headroom for one GPU = power_limit - power_draw; we sum
+    /// across the fleet. Gate disabled when 0. When set, requires
+    /// every GPU to expose both `power_limit_watts` AND
+    /// `power_draw_watts` (else the predicate fails — modules
+    /// asking for headroom assurance must have telemetry).
+    ///
+    /// Use case: a sustained-load inference module declares
+    /// `gpu_power_headroom_watts_min = 200` and only applies on
+    /// hosts where adding ~200W won't blow the cap.
+    #[serde(default)]
+    pub(crate) gpu_power_headroom_watts_min: u32,
+
     /// Required Sain01Match verdict, when set:
     /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
     /// would be weird — operator should rarely use it).
@@ -221,6 +245,56 @@ impl HardwareRequirements {
                 self.gpu_count_min, caps.gpu.device_count,
             ));
         }
+        if self.gpu_vram_gib_min > 0 {
+            // Pass when ANY GPU meets the bar. Uses the SD-R25
+            // per-device caps surface; falls back to a fail if the
+            // per-device list is empty (probe didn't enrich).
+            let want_bytes = self.gpu_vram_gib_min.saturating_mul(1024 * 1024 * 1024);
+            let any_big_enough = caps
+                .gpu
+                .devices
+                .iter()
+                .any(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !any_big_enough {
+                let best_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .max()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_min = {} (host best is {} GiB)",
+                    self.gpu_vram_gib_min, best_gib,
+                ));
+            }
+        }
+        if self.gpu_power_headroom_watts_min > 0 {
+            let mut total_headroom: u32 = 0;
+            let mut telemetry_complete = !caps.gpu.devices.is_empty();
+            for d in &caps.gpu.devices {
+                match (d.power_limit_watts, d.power_draw_watts) {
+                    (Some(limit), Some(draw)) => {
+                        total_headroom = total_headroom.saturating_add(limit.saturating_sub(draw));
+                    }
+                    _ => {
+                        telemetry_complete = false;
+                    }
+                }
+            }
+            if !telemetry_complete {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host GPU(s) lack power telemetry — install nvidia-smi + NVML)",
+                    self.gpu_power_headroom_watts_min
+                ));
+            } else if total_headroom < self.gpu_power_headroom_watts_min {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host headroom is {} W)",
+                    self.gpu_power_headroom_watts_min, total_headroom
+                ));
+            }
+        }
         if !self.sain01_verdict_min.is_empty() {
             let actual = match caps.sain01_match.overall {
                 selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
@@ -251,6 +325,8 @@ impl HardwareRequirements {
             && !self.avx512_bf16
             && self.memory_gib_min == 0
             && self.gpu_count_min == 0
+            && self.gpu_vram_gib_min == 0
+            && self.gpu_power_headroom_watts_min == 0
             && self.sain01_verdict_min.is_empty()
     }
 }
@@ -2876,10 +2952,13 @@ mod sdr14_hardware_gate_tests {
             avx512_bf16: true,
             memory_gib_min: 256,
             gpu_count_min: 2,
+            gpu_vram_gib_min: 0,
+            gpu_power_headroom_watts_min: 0,
             sain01_verdict_min: "FullMatch".into(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
-        // Every predicate fails on a minimal host: 5 lines.
+        // Every predicate fails on a minimal host: 5 lines (SD-R26
+        // gates only fire when their threshold > 0).
         assert_eq!(unmet.len(), 5, "got: {unmet:?}");
     }
 
@@ -2925,6 +3004,199 @@ mod sdr14_hardware_gate_tests {
         let kept = apply_hardware_gate(active);
         let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    // -- SD-R26: per-GPU VRAM + power-headroom gates -----------------
+
+    use selfdef_hardware::GpuDeviceCapabilities;
+
+    fn caps_with_gpu_devices(devs: Vec<GpuDeviceCapabilities>) -> HardwareCapabilities {
+        let mut c = caps_with(
+            false,
+            false,
+            0,
+            u32::try_from(devs.len()).unwrap_or(u32::MAX),
+            Sain01Verdict::PartialMatch,
+        );
+        c.gpu.devices = devs;
+        c
+    }
+
+    #[test]
+    fn sdr26_vram_gate_passes_when_at_least_one_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // SAIN-01 pair: RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // Two 24 GiB GPUs — neither big enough for 80.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("gpu_vram_gib_min = 80"), "got: {unmet:?}");
+        assert!(unmet[0].contains("host best is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_devices_reported() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // No per-device data (probe didn't enrich) — fail closed.
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("host best is 0 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_passes_when_sum_meets() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 400,
+            ..Default::default()
+        };
+        // GPU 0: 600 - 275 = 325 W. GPU 1: 350 - 180 = 170 W. Sum = 495 ≥ 400.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_sum_below_min() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 600,
+            ..Default::default()
+        };
+        // Sum = 495 W (same caps as above). 495 < 600 → fail.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_power_headroom_watts_min = 600"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("495 W"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_any_gpu_lacks_telemetry() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 100,
+            ..Default::default()
+        };
+        // Second GPU has no power telemetry — fail closed (operator
+        // asked for headroom guarantee + we can't compute it).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: None,
+                power_draw_watts: None,
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("lack power telemetry"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_combined_vram_and_count_gate_on_sain01_dual_gpu() {
+        // The canonical "needs the SAIN-01 dual-GPU rig with 80+ GiB
+        // headroom on at least one card" inference module gate.
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Single big GPU: passes vram gate but fails count.
+        let caps_single = caps_with_gpu_devices(vec![GpuDeviceCapabilities {
+            vram_bytes: Some(98 * 1024 * 1024 * 1024),
+            ..Default::default()
+        }]);
+        let unmet = req.evaluate(&caps_single).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_count_min")),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr26_is_empty_still_true_with_only_old_fields() {
+        // Adding new fields must not break the empty short-circuit.
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        // And asserting any new field flips it correctly.
+        let r2 = HardwareRequirements {
+            gpu_vram_gib_min: 1,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
+        let r3 = HardwareRequirements {
+            gpu_power_headroom_watts_min: 1,
+            ..Default::default()
+        };
+        assert!(!r3.is_empty());
     }
 
     #[test]
