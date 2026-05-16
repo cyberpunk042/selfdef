@@ -406,6 +406,79 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R35: `selfdefctl modules info <slug>` prints the
+/// [requires_hardware] block when present — operators inspecting a
+/// module see EVERY predicate the gate will enforce, without
+/// running the probe.
+#[test]
+fn sdr35_modules_info_surfaces_requires_hardware_block() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(catalog.join("hw-gated")).unwrap();
+    std::fs::create_dir_all(catalog.join("plain")).unwrap();
+    // hw-gated declares 4 predicates; plain has no block.
+    std::fs::write(
+        catalog.join("hw-gated/module.toml"),
+        r#"
+name = "hw-gated"
+version = "0.0.0"
+summary = "fixture with hardware gate"
+category = "test"
+[requires_hardware]
+avx512_vnni                = true
+avx512_bf16                = true
+gpu_vram_gib_min           = 8
+wasm_aot_features_required = "+avx512vnni"
+"#,
+    )
+    .unwrap();
+    std::fs::write(
+        catalog.join("plain/module.toml"),
+        "name = \"plain\"\nversion = \"0.0.0\"\nsummary = \"no gate\"\n",
+    )
+    .unwrap();
+
+    // hw-gated → block present, every set predicate cited
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "info",
+            "hw-gated",
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("requires_hardware:"),
+        "missing header: {stdout}"
+    );
+    assert!(stdout.contains("avx512_vnni = true"), "{stdout}");
+    assert!(stdout.contains("avx512_bf16 = true"), "{stdout}");
+    assert!(stdout.contains("gpu_vram_gib_min = 8"), "{stdout}");
+    assert!(stdout.contains("wasm_aot_features_required"), "{stdout}");
+
+    // plain → no block, no header
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "info",
+            "plain",
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("requires_hardware:"),
+        "block should be omitted on plain module: {stdout}"
+    );
+}
+
 /// SD-R27: the human output of `modules check-hardware` carries a
 /// HOST SNAPSHOT block surfacing the probed CPU/memory/GPU/sain01
 /// figures so operators see WHY a gate fired without separately

@@ -553,6 +553,51 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     if m.phase != Phase::default() {
         println!("phase:    {}", m.phase.as_str());
     }
+    // SD-R35: surface the [requires_hardware] block when non-empty.
+    // Operators inspecting a module via `selfdefctl modules info`
+    // should see every predicate the gate will enforce — same
+    // visibility as `modules check-hardware` but without running
+    // the probe.
+    let rh = &m.requires_hardware;
+    if !rh.is_empty() {
+        println!("requires_hardware:");
+        if rh.avx512_vnni {
+            println!("  - avx512_vnni = true");
+        }
+        if rh.avx512_bf16 {
+            println!("  - avx512_bf16 = true");
+        }
+        if rh.memory_gib_min > 0 {
+            println!("  - memory_gib_min = {}", rh.memory_gib_min);
+        }
+        if rh.gpu_count_min > 0 {
+            println!("  - gpu_count_min = {}", rh.gpu_count_min);
+        }
+        if rh.gpu_vram_gib_min > 0 {
+            println!("  - gpu_vram_gib_min = {}", rh.gpu_vram_gib_min);
+        }
+        if rh.gpu_power_headroom_watts_min > 0 {
+            println!(
+                "  - gpu_power_headroom_watts_min = {}",
+                rh.gpu_power_headroom_watts_min
+            );
+        }
+        if !rh.wasm_aot_features_required.is_empty() {
+            println!(
+                "  - wasm_aot_features_required = \"{}\"",
+                rh.wasm_aot_features_required
+            );
+        }
+        if !rh.sain01_verdict_min.is_empty() {
+            println!("  - sain01_verdict_min = {}", rh.sain01_verdict_min);
+        }
+    }
+    if !m.daemon_requires.is_empty() {
+        println!("daemon_requires:");
+        for k in m.daemon_requires.keys() {
+            println!("  - {k}");
+        }
+    }
     Ok(())
 }
 
