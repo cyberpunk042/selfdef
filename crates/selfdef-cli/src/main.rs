@@ -155,6 +155,16 @@ enum HardwareAction {
     /// Only render the Sain01Match verdict label (FullMatch /
     /// PartialMatch / NoMatch). Exit code reflects verdict.
     Match,
+    /// SD-R10: emit the HardwareCapabilities JSON to stdout (default)
+    /// or to `--output PATH` atomically. Consumed by sovereign-os
+    /// Wasm-AOT pipeline + future hardware-aware policies; schema is
+    /// operator-stable. Exit code reflects verdict.
+    Export {
+        /// Optional destination path. When set, the file is written
+        /// atomically (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -703,6 +713,7 @@ async fn main() -> Result<()> {
         Command::Hardware { action, json } => {
             let exit = match action {
                 Some(HardwareAction::Match) => hardware::run_match()?,
+                Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,

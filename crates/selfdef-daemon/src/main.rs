@@ -119,6 +119,25 @@ async fn main() -> Result<()> {
                     );
                 }
             }
+            // SDD-017 § 7 (SD-R10): HardwareCapabilities JSON export.
+            // Consumed by sovereign-os Wasm-AOT pipeline + future
+            // hardware-aware policies. Atomic tempfile+rename inside
+            // the helper.
+            if !cfg.deployment.hardware_capabilities_path.is_empty() {
+                let p = std::path::Path::new(&cfg.deployment.hardware_capabilities_path);
+                if let Err(e) = selfdef_hardware::write_capabilities_json(p, &snap) {
+                    warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SDD-017 § 7 (SD-R10): writing HardwareCapabilities JSON failed; continuing"
+                    );
+                } else {
+                    info!(
+                        path = %p.display(),
+                        "SDD-017 § 7 (SD-R10): HardwareCapabilities JSON emitted"
+                    );
+                }
+            }
             // SDD-017 § 5: strict-mode gate. Only fires when target=sain01
             // AND sain01_strict=true AND overall != FullMatch.
             if matches!(dep_target, selfdef_config::DeploymentTarget::Sain01)

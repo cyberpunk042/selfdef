@@ -89,6 +89,13 @@ pub struct DeploymentConfig {
     /// pointing at their node_exporter textfile dir, e.g.
     /// /var/lib/node_exporter/textfile_collector/selfdef-hardware.prom).
     pub hardware_metrics_path: String,
+
+    /// SDD-017 § 7 (SD-R10): when set, the daemon writes the
+    /// HardwareCapabilities JSON to this path at startup. Consumed
+    /// by sovereign-os Wasm-AOT pipeline + future hardware-aware
+    /// agent-guard policies. Atomic tempfile+rename. Empty = disabled.
+    /// Default: empty.
+    pub hardware_capabilities_path: String,
 }
 
 /// SDD-013: target enum. New variants land via additional SDDs.
@@ -2247,6 +2254,32 @@ mod tests {
     fn sdd_017_hardware_metrics_path_defaults_empty() {
         let cfg = Config::default();
         assert!(cfg.deployment.hardware_metrics_path.is_empty());
+    }
+
+    /// SDD-017 § 7 (SD-R10): hardware_capabilities_path defaults to empty.
+    #[test]
+    fn sdr10_hardware_capabilities_path_defaults_empty() {
+        let cfg = Config::default();
+        assert!(cfg.deployment.hardware_capabilities_path.is_empty());
+    }
+
+    /// SDD-017 § 7 (SD-R10): hardware_capabilities_path TOML parse.
+    #[test]
+    fn sdr10_hardware_capabilities_path_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            hardware_capabilities_path = "/var/lib/selfdef/hardware-capabilities.json"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(
+            cfg.deployment.hardware_capabilities_path,
+            "/var/lib/selfdef/hardware-capabilities.json"
+        );
     }
 
     #[test]

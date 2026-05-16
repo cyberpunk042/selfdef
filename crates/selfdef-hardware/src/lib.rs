@@ -364,9 +364,231 @@ fn read_motherboard(dmi_dir: &Path) -> Option<MotherboardInventory> {
     })
 }
 
+// ---------------------------------------------------------------- HardwareCapabilities (SDD-017 § 7 — added SD-R10)
+
+/// Structured hardware-capabilities map intended for tool consumption.
+///
+/// Distinct from [`HardwareSnapshot`] (raw introspection) and
+/// [`Sain01Match`] (SAIN-01-fitness verdict): this is the JSON
+/// artifact that DOWNSTREAM tooling reads to decide what to do.
+/// Canonical consumers:
+///
+/// 1. **sovereign-os `scripts/pulse/wasm-aot.sh`** — decides which
+///    AVX-512 instruction families to enable when compiling Wasm to
+///    native AVX-512. Without the capabilities file the script falls
+///    back to safe defaults; with it, the script can enable
+///    `-mavx512vnni` / `-mavx512bf16` / `-mavx512fp16` exactly when
+///    the host supports them.
+/// 2. **selfdef agent-guard** — future hardware-aware policy DSL can
+///    read the capabilities at apply-time to opt-in policies to
+///    features only when the underlying hardware supports them
+///    (e.g., GPU memory bomb assertion only when 2+ GPUs present).
+/// 3. **Fleet aggregators** — Loki / OpenSearch consumers can ingest
+///    the JSON directly to surface fleet-wide hardware drift.
+///
+/// Schema is OPERATOR-STABLE — the operator wants endless flexibility
+/// and configuration; downstream tooling should depend on field names
+/// and semantics, not internal Sain01Match logic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HardwareCapabilities {
+    /// Schema version for the JSON file. Operators bump this when
+    /// adding incompatible changes; consumers refuse unknown majors.
+    pub schema_version: String,
+
+    /// ISO8601 timestamp when this capabilities snapshot was taken.
+    pub probed_at: String,
+
+    /// Hostname tag (matches selfdef daemon's host_tag when set).
+    pub host_tag: Option<String>,
+
+    pub cpu: CpuCapabilities,
+    pub memory: MemoryCapabilities,
+    pub gpu: GpuCapabilities,
+    pub pcie: PcieCapabilities,
+    pub sain01_match: Sain01Match,
+}
+
+/// CPU instruction-family availability + recommended flags for
+/// AOT compilation. These are the load-bearing fields for the
+/// Wasm-to-AVX-512 AOT pipeline + future bitnet.cpp builds.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CpuCapabilities {
+    pub vendor: String,
+    pub model_name: String,
+    pub physical_cores: u32,
+    pub logical_threads: u32,
+
+    // SSE / AVX baseline
+    pub sse4_2: bool,
+    pub avx: bool,
+    pub avx2: bool,
+    pub fma: bool,
+
+    // AVX-512 family — the load-bearing set for AVX-512 AOT compile
+    // recommendations (sovereign-os Wasm-AOT + bitnet.cpp consume
+    // these directly).
+    pub avx512f: bool,
+    pub avx512dq: bool,
+    pub avx512bw: bool,
+    pub avx512vl: bool,
+    pub avx512vnni: bool,
+    pub avx512bf16: bool,
+    pub avx512fp16: bool,
+    pub avx512vbmi: bool,
+    pub avx512vbmi2: bool,
+
+    /// Convenience: the recommended `-march=` token for GCC/clang when
+    /// compiling for this CPU. `znver5` on Zen 5 + AVX-512 hosts;
+    /// `native` on others. Operators can override at build time.
+    pub recommended_march: String,
+
+    /// Convenience: ordered list of `-m<feature>` flags to add to
+    /// CFLAGS / KCFLAGS when compiling targeted at this CPU. Only
+    /// flags whose underlying feature is present are emitted.
+    pub recommended_compile_flags: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct MemoryCapabilities {
+    pub total_bytes: u64,
+    pub at_least_256gb: bool,
+    pub at_least_512gb: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct GpuCapabilities {
+    pub device_count: u32,
+    pub device_nodes: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PcieCapabilities {
+    pub gen4_or_higher_x8_slot_count: u32,
+    pub dual_x8_present: bool,
+}
+
+/// SDD-017 § 7 (SD-R10): derive the capabilities map from a probed
+/// snapshot. Pure function — no I/O. Tests pin every recommended
+/// compile flag against synthetic feature sets.
+#[must_use]
+pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
+    let feats = &snap.cpu.features;
+    let has = |f: &str| feats.contains(f);
+    let cpu = CpuCapabilities {
+        vendor: snap.cpu.vendor.clone(),
+        model_name: snap.cpu.model_name.clone(),
+        physical_cores: snap.cpu.physical_cores,
+        logical_threads: snap.cpu.logical_threads,
+        sse4_2: has("sse4_2"),
+        avx: has("avx"),
+        avx2: has("avx2"),
+        fma: has("fma"),
+        avx512f: has("avx512f"),
+        avx512dq: has("avx512dq"),
+        avx512bw: has("avx512bw"),
+        avx512vl: has("avx512vl"),
+        avx512vnni: has("avx512_vnni"),
+        avx512bf16: has("avx512_bf16"),
+        avx512fp16: has("avx512_fp16"),
+        avx512vbmi: has("avx512_vbmi"),
+        avx512vbmi2: has("avx512_vbmi2"),
+        recommended_march: recommended_march_for(&snap.cpu.vendor, feats),
+        recommended_compile_flags: recommended_compile_flags(feats),
+    };
+    let memory = MemoryCapabilities {
+        total_bytes: snap.memory.total_bytes,
+        at_least_256gb: snap.memory.total_bytes >= 256 * 1024 * 1024 * 1024,
+        at_least_512gb: snap.memory.total_bytes >= 512 * 1024 * 1024 * 1024,
+    };
+    let gpu = GpuCapabilities {
+        device_count: u32::try_from(snap.gpus.len()).unwrap_or(u32::MAX),
+        device_nodes: snap.gpus.iter().map(|g| g.device_node.clone()).collect(),
+    };
+    let pcie = PcieCapabilities {
+        gen4_or_higher_x8_slot_count: snap.pcie.gen4_or_higher_x8_slot_count,
+        dual_x8_present: snap.pcie.gen4_or_higher_x8_slot_count >= 2,
+    };
+    HardwareCapabilities {
+        schema_version: "1.0.0".into(),
+        probed_at: snap.probed_at.clone(),
+        host_tag: None,
+        cpu,
+        memory,
+        gpu,
+        pcie,
+        sain01_match: matches_sain01(snap),
+    }
+}
+
+/// Recommend a `-march=` token. Zen 5 + AVX-512 → `znver5`; AuthenticAMD
+/// + AVX-512 but not Zen 5 → `znver4`; anything else → `native`.
+fn recommended_march_for(vendor: &str, feats: &HashSet<String>) -> String {
+    if feats.contains("avx512_vnni") && feats.contains("avx512_bf16") {
+        // Zen 5 + AVX-512 VNNI + BF16 → the SAIN-01 target.
+        // sovereign-os master spec § 16 calls for -march=znver5.
+        if vendor == "AuthenticAMD" {
+            return "znver5".to_string();
+        }
+        // Intel hosts with the same family — Sapphire Rapids has
+        // VNNI + BF16; recommend the generic AVX-512 token.
+        return "x86-64-v4".to_string();
+    }
+    if feats.contains("avx512f") && vendor == "AuthenticAMD" {
+        // Zen 4 has AVX-512F but not VNNI/BF16 in the same matrix.
+        return "znver4".to_string();
+    }
+    "native".to_string()
+}
+
+/// Ordered list of `-m<feature>` flags appropriate for the host.
+/// Mirrors sovereign-os `scripts/pulse/build-bitnet.sh`'s flag list +
+/// adds anything else the host actually has.
+fn recommended_compile_flags(feats: &HashSet<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for (flag_name, feat) in [
+        ("-msse4.2", "sse4_2"),
+        ("-mavx", "avx"),
+        ("-mavx2", "avx2"),
+        ("-mfma", "fma"),
+        ("-mavx512f", "avx512f"),
+        ("-mavx512dq", "avx512dq"),
+        ("-mavx512bw", "avx512bw"),
+        ("-mavx512vl", "avx512vl"),
+        ("-mavx512vnni", "avx512_vnni"),
+        ("-mavx512bf16", "avx512_bf16"),
+        ("-mavx512fp16", "avx512_fp16"),
+        ("-mavx512vbmi", "avx512_vbmi"),
+        ("-mavx512vbmi2", "avx512_vbmi2"),
+    ] {
+        if feats.contains(feat) {
+            out.push(flag_name.to_string());
+        }
+    }
+    out
+}
+
+/// SDD-017 § 7 (SD-R10): write the capabilities JSON to `path`
+/// atomically (tempfile + rename). Pretty-printed for operator
+/// readability; matches the `selfdefctl hardware export` CLI output.
+pub fn write_capabilities_json(path: &Path, snap: &HardwareSnapshot) -> Result<(), HardwareError> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent)?;
+        }
+    }
+    let caps = derive_capabilities(snap);
+    let body = serde_json::to_string_pretty(&caps)
+        .map_err(|e| HardwareError::Io(std::io::Error::other(e.to_string())))?;
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp_path = PathBuf::from(tmp);
+    fs::write(&tmp_path, body)?;
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------- Layer B metrics (SDD-017 § 6)
 
-/// SDD-017 § 6: render a Layer B textfile-collector body for a given
 /// snapshot + match. Pure function — no I/O. Operators consume this
 /// via node_exporter's textfile collector.
 ///
@@ -965,5 +1187,217 @@ mod tests {
     fn parse_iso8601_to_unix_bad_input_returns_none() {
         assert_eq!(parse_iso8601_to_unix("not a date"), None);
         assert_eq!(parse_iso8601_to_unix(""), None);
+    }
+
+    // ----- HardwareCapabilities derivation (SD-R10) ---------------
+
+    fn snap_with_features(vendor: &str, features: &[&str]) -> HardwareSnapshot {
+        HardwareSnapshot {
+            cpu: CpuInventory {
+                vendor: vendor.to_string(),
+                model_name: "test cpu".into(),
+                physical_cores: 12,
+                logical_threads: 24,
+                features: features.iter().map(|s| s.to_string()).collect(),
+                avx512_present: features.iter().any(|f| f.starts_with("avx512")),
+                avx512_vnni: features.contains(&"avx512_vnni"),
+                avx512_bf16: features.contains(&"avx512_bf16"),
+            },
+            memory: MemoryInventory {
+                total_bytes: BYTES_256_GB,
+            },
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: None,
+                    vram_bytes: None,
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory {
+                gen4_or_higher_x8_slot_count: 2,
+            },
+            probed_at: "2026-05-16T00:00:00.000000000Z".into(),
+        }
+    }
+
+    #[test]
+    fn capabilities_recommend_znver5_on_zen5_amd() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &[
+                "avx",
+                "avx2",
+                "fma",
+                "avx512f",
+                "avx512dq",
+                "avx512bw",
+                "avx512vl",
+                "avx512_vnni",
+                "avx512_bf16",
+            ],
+        );
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.cpu.recommended_march, "znver5");
+        assert!(
+            caps.cpu
+                .recommended_compile_flags
+                .contains(&"-mavx512vnni".to_string())
+        );
+        assert!(
+            caps.cpu
+                .recommended_compile_flags
+                .contains(&"-mavx512bf16".to_string())
+        );
+        assert!(caps.cpu.avx512vnni);
+        assert!(caps.cpu.avx512bf16);
+    }
+
+    #[test]
+    fn capabilities_recommend_znver4_on_zen4_amd_no_vnni() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &[
+                "avx", "avx2", "fma", "avx512f", "avx512dq", "avx512bw", "avx512vl",
+            ],
+        );
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.cpu.recommended_march, "znver4");
+        assert!(!caps.cpu.avx512vnni);
+        assert!(!caps.cpu.avx512bf16);
+        assert!(
+            caps.cpu
+                .recommended_compile_flags
+                .contains(&"-mavx512f".to_string())
+        );
+        assert!(
+            !caps
+                .cpu
+                .recommended_compile_flags
+                .contains(&"-mavx512vnni".to_string())
+        );
+    }
+
+    #[test]
+    fn capabilities_recommend_x86_64_v4_on_intel_with_avx512_vnni() {
+        let snap = snap_with_features(
+            "GenuineIntel",
+            &["avx", "avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        // Intel + VNNI + BF16 → portable AVX-512 token, not znver5.
+        assert_eq!(caps.cpu.recommended_march, "x86-64-v4");
+    }
+
+    #[test]
+    fn capabilities_recommend_native_on_legacy_host() {
+        let snap = snap_with_features("AuthenticAMD", &["sse4_2", "avx", "avx2"]);
+        let caps = derive_capabilities(&snap);
+        assert_eq!(caps.cpu.recommended_march, "native");
+        assert!(
+            caps.cpu
+                .recommended_compile_flags
+                .contains(&"-mavx2".to_string())
+        );
+        assert!(
+            !caps
+                .cpu
+                .recommended_compile_flags
+                .iter()
+                .any(|f| f.starts_with("-mavx512"))
+        );
+    }
+
+    #[test]
+    fn capabilities_memory_thresholds() {
+        let mut snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        snap.memory.total_bytes = 128 * 1024 * 1024 * 1024;
+        let c = derive_capabilities(&snap);
+        assert!(!c.memory.at_least_256gb);
+        assert!(!c.memory.at_least_512gb);
+        snap.memory.total_bytes = BYTES_256_GB;
+        let c = derive_capabilities(&snap);
+        assert!(c.memory.at_least_256gb);
+        assert!(!c.memory.at_least_512gb);
+        snap.memory.total_bytes = 512 * 1024 * 1024 * 1024;
+        let c = derive_capabilities(&snap);
+        assert!(c.memory.at_least_256gb);
+        assert!(c.memory.at_least_512gb);
+    }
+
+    #[test]
+    fn capabilities_gpu_count_reflects_snapshot() {
+        let snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        let c = derive_capabilities(&snap);
+        assert_eq!(c.gpu.device_count, 2);
+        assert_eq!(c.gpu.device_nodes.len(), 2);
+        assert_eq!(c.gpu.device_nodes[0], PathBuf::from("/dev/nvidia0"));
+    }
+
+    #[test]
+    fn capabilities_pcie_dual_x8_derived() {
+        let mut snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        snap.pcie.gen4_or_higher_x8_slot_count = 1;
+        let c = derive_capabilities(&snap);
+        assert!(!c.pcie.dual_x8_present);
+        snap.pcie.gen4_or_higher_x8_slot_count = 2;
+        let c = derive_capabilities(&snap);
+        assert!(c.pcie.dual_x8_present);
+    }
+
+    #[test]
+    fn capabilities_schema_version_pinned() {
+        let snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        let c = derive_capabilities(&snap);
+        assert_eq!(c.schema_version, "1.0.0");
+    }
+
+    #[test]
+    fn write_capabilities_json_round_trips() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("hardware-capabilities.json");
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        write_capabilities_json(&path, &snap).unwrap();
+        assert!(path.exists());
+        let body = fs::read_to_string(&path).unwrap();
+        let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed.schema_version, "1.0.0");
+        assert_eq!(parsed.cpu.recommended_march, "znver5");
+        assert!(parsed.cpu.avx512vnni);
+        // Tempfile must be cleaned up.
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(".tmp");
+        assert!(!PathBuf::from(tmp).exists());
+    }
+
+    #[test]
+    fn write_capabilities_json_creates_parent_dir() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("deep/nested/hardware-capabilities.json");
+        let snap = snap_with_features("AuthenticAMD", &["avx2"]);
+        write_capabilities_json(&path, &snap).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn capabilities_includes_sain01_match() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let c = derive_capabilities(&snap);
+        // Mobo None → bonus dim drops out; the 4 base dims + bf16 bonus
+        // all hit on this synth snapshot → FullMatch.
+        assert_eq!(c.sain01_match.overall, Sain01Verdict::FullMatch);
     }
 }

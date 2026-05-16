@@ -29,6 +29,27 @@ pub(crate) fn run_json() -> Result<i32> {
     Ok(verdict_exit(m.overall))
 }
 
+/// SD-R10: `selfdefctl hardware export` — emit the
+/// HardwareCapabilities JSON to stdout (default) or to `--output PATH`.
+/// Consumed by sovereign-os Wasm-AOT pipeline + future hardware-aware
+/// agent-guard policies.
+pub(crate) fn run_export(output: Option<std::path::PathBuf>) -> Result<i32> {
+    let snap = selfdef_hardware::probe()?;
+    match output {
+        None => {
+            let caps = selfdef_hardware::derive_capabilities(&snap);
+            println!("{}", serde_json::to_string_pretty(&caps)?);
+            Ok(verdict_exit(caps.sain01_match.overall))
+        }
+        Some(p) => {
+            selfdef_hardware::write_capabilities_json(&p, &snap)?;
+            println!("wrote {}", p.display());
+            let m = selfdef_hardware::matches_sain01(&snap);
+            Ok(verdict_exit(m.overall))
+        }
+    }
+}
+
 /// `selfdefctl hardware match` — verdict only.
 pub(crate) fn run_match() -> Result<i32> {
     let snap = selfdef_hardware::probe()?;
@@ -312,5 +333,28 @@ mod tests {
         assert_eq!(verdict_exit(Sain01Verdict::FullMatch), 0);
         assert_eq!(verdict_exit(Sain01Verdict::PartialMatch), 0);
         assert_eq!(verdict_exit(Sain01Verdict::NoMatch), 2);
+    }
+
+    // ----- run_export to file roundtrip (SD-R10) -------------------
+
+    #[test]
+    fn sdr10_run_export_to_file_writes_capabilities_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("hardware-capabilities.json");
+        // run_export probes the test host's real /proc/*; we just
+        // verify the file lands + parses + carries the load-bearing
+        // top-level keys (schema_version + cpu + memory + gpu + pcie +
+        // sain01_match).
+        let _exit = run_export(Some(path.clone())).unwrap();
+        assert!(path.exists());
+        let body = std::fs::read_to_string(&path).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(parsed["schema_version"], "1.0.0");
+        for key in ["cpu", "memory", "gpu", "pcie", "sain01_match"] {
+            assert!(
+                !parsed[key].is_null(),
+                "exported JSON must carry top-level {key}: {body}"
+            );
+        }
     }
 }
