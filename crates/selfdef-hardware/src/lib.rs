@@ -1511,6 +1511,79 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
         )
         .unwrap();
     }
+    // SD-R54 (closes SDD-020 V-2): per-predicate-name capability
+    // gauges. For each named hardware predicate operators might
+    // gate on (from SD-R14 + SD-R26 + SD-R32 + SD-R51), emit a
+    // 0/1 indicator of whether THIS host satisfies a reasonable
+    // baseline value. Fleet dashboards compute pass-rate via:
+    //   sum by (predicate)(sovereign_os_selfdef_hardware_gate_capable)
+    //     / count(sovereign_os_selfdef_hardware_gate_capable)
+    let cpu_features = &snap.cpu.features;
+    let gpus = &snap.gpus;
+    let predicates: Vec<(&str, u8)> = vec![
+        (
+            "avx512_vnni",
+            u8::from(cpu_features.contains("avx512_vnni")),
+        ),
+        (
+            "avx512_bf16",
+            u8::from(cpu_features.contains("avx512_bf16")),
+        ),
+        (
+            "avx512_fp16",
+            u8::from(cpu_features.contains("avx512_fp16")),
+        ),
+        (
+            "memory_at_least_64gib",
+            u8::from(snap.memory.total_bytes >= 64 * 1024 * 1024 * 1024),
+        ),
+        (
+            "memory_at_least_256gib",
+            u8::from(snap.memory.total_bytes >= 256 * 1024 * 1024 * 1024),
+        ),
+        ("gpu_count_at_least_1", u8::from(!gpus.is_empty())),
+        ("gpu_count_at_least_2", u8::from(gpus.len() >= 2)),
+        (
+            "any_gpu_vram_at_least_24gib",
+            u8::from(
+                gpus.iter()
+                    .any(|g| g.vram_bytes.is_some_and(|b| b >= 24 * 1024 * 1024 * 1024)),
+            ),
+        ),
+        (
+            "any_gpu_vram_at_least_80gib",
+            u8::from(
+                gpus.iter()
+                    .any(|g| g.vram_bytes.is_some_and(|b| b >= 80 * 1024 * 1024 * 1024)),
+            ),
+        ),
+        (
+            "all_gpus_have_power_telemetry",
+            u8::from(
+                !gpus.is_empty()
+                    && gpus
+                        .iter()
+                        .all(|g| g.power_draw_watts.is_some() && g.power_limit_watts.is_some()),
+            ),
+        ),
+    ];
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_gate_capable Per-predicate-name capability flag — does this host satisfy the named baseline? Fleet dashboards compute pass-rate via sum-by-predicate / count (SD-R54)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_gate_capable gauge"
+    )
+    .unwrap();
+    for (name, value) in &predicates {
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_gate_capable{{predicate=\"{name}\"}} {value}"
+        )
+        .unwrap();
+    }
     buf
 }
 
@@ -2971,6 +3044,115 @@ malformed,line\n\
     }
 
     // ----- SD-R31: wasm-AOT Layer B metric --------------------------
+
+    #[test]
+    fn sdr54_layer_b_emits_per_predicate_capability_gauges() {
+        // SAIN-01-flavored synth snap: avx512_vnni + bf16 + 256 GiB
+        // + 2 GPUs (one 98 GiB, one 24 GiB), both with power telemetry.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory {
+                vendor: "AuthenticAMD".into(),
+                model_name: "AMD Ryzen 9 9900X".into(),
+                physical_cores: 12,
+                logical_threads: 24,
+                features: ["avx2", "avx512f", "avx512_vnni", "avx512_bf16"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                avx512_present: true,
+                avx512_vnni: true,
+                avx512_bf16: true,
+            },
+            memory: MemoryInventory {
+                total_bytes: 256 * 1024 * 1024 * 1024,
+            },
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("RTX PRO 6000".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        // Section header present
+        assert!(
+            out.contains("# TYPE sovereign_os_selfdef_hardware_gate_capable gauge"),
+            "type line missing: {out}"
+        );
+        // Every named predicate has a row with value 1 on this SAIN-01 host.
+        for needle in [
+            r#"predicate="avx512_vnni"} 1"#,
+            r#"predicate="avx512_bf16"} 1"#,
+            r#"predicate="memory_at_least_256gib"} 1"#,
+            r#"predicate="gpu_count_at_least_2"} 1"#,
+            r#"predicate="any_gpu_vram_at_least_80gib"} 1"#,
+            r#"predicate="all_gpus_have_power_telemetry"} 1"#,
+        ] {
+            assert!(
+                out.contains(needle),
+                "missing predicate row '{needle}': {out}"
+            );
+        }
+        // fp16 is absent on this synth → value 0.
+        assert!(
+            out.contains(r#"predicate="avx512_fp16"} 0"#),
+            "fp16 row missing: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr54_layer_b_emits_zeros_on_minimal_host() {
+        // True minimal host: no AVX-512, 8 GiB RAM, no GPUs.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory {
+                vendor: "GenuineIntel".into(),
+                model_name: "Old Xeon".into(),
+                physical_cores: 4,
+                logical_threads: 8,
+                features: std::collections::HashSet::new(),
+                avx512_present: false,
+                avx512_vnni: false,
+                avx512_bf16: false,
+            },
+            memory: MemoryInventory {
+                total_bytes: 8 * 1024 * 1024 * 1024,
+            },
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        for needle in [
+            r#"predicate="avx512_vnni"} 0"#,
+            r#"predicate="avx512_bf16"} 0"#,
+            r#"predicate="memory_at_least_256gib"} 0"#,
+            r#"predicate="gpu_count_at_least_1"} 0"#,
+            r#"predicate="any_gpu_vram_at_least_80gib"} 0"#,
+            r#"predicate="all_gpus_have_power_telemetry"} 0"#,
+        ] {
+            assert!(out.contains(needle), "missing zero row '{needle}': {out}");
+        }
+    }
 
     #[test]
     fn sdr31_layer_b_emits_wasm_aot_feature_count_when_avx512_present() {
