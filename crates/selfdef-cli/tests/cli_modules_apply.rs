@@ -406,6 +406,94 @@ fn sdr16_check_hardware_e2e_human_and_json() {
     assert!(stdout.contains("\"beta\""), "stdout: {stdout}");
 }
 
+/// SD-R36: `selfdefctl modules graph` emits Graphviz DOT.
+/// Plain mode (no --with-hardware-gate): nodes have just a label,
+/// dependency arrows draw active dep edges only.
+#[test]
+fn sdr36_modules_graph_emits_valid_dot_dependencies() {
+    let fx = fixture("[modules.alpha]\n[modules.beta]\n");
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "graph",
+            "--host-config",
+            fx.host_config.to_str().unwrap(),
+            "--dir",
+            fx.catalog.to_str().unwrap(),
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("// SD-R36: selfdefctl modules graph"),
+        "header missing: {stdout}"
+    );
+    assert!(stdout.contains("digraph selfdef_modules {"), "{stdout}");
+    assert!(stdout.contains("\"alpha\""), "{stdout}");
+    assert!(stdout.contains("\"beta\""), "{stdout}");
+    // beta depends on alpha in fixture() → DOT direction alpha → beta.
+    assert!(
+        stdout.contains("\"alpha\" -> \"beta\""),
+        "dependency arrow missing: {stdout}"
+    );
+}
+
+/// SD-R36 with --with-hardware-gate: nodes get fillcolor by SD-R14
+/// verdict; unmeetable predicates become tooltips.
+#[test]
+fn sdr36_modules_graph_with_hardware_gate_color_codes_nodes() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "beta", &[], stub);
+    // beta declares an unmeetable mem requirement.
+    let beta_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&beta_toml).unwrap();
+    manifest.push_str("\n[requires_hardware]\nmemory_gib_min = 9999999\n");
+    std::fs::write(&beta_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n[modules.beta]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "graph",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--with-hardware-gate",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    assert!(
+        stdout.contains("SD-R14 hardware gate: ON"),
+        "gate banner missing: {stdout}"
+    );
+    // alpha has no [requires_hardware] → lightblue (default keep
+    // colour for ungated modules).
+    assert!(
+        stdout.contains("\"alpha\" [label=\"alpha\", style=filled, fillcolor=lightblue"),
+        "alpha colour wrong: {stdout}"
+    );
+    // beta requires 10 PiB → lightcoral (skipped).
+    assert!(
+        stdout.contains("\"beta\" [label=\"beta\", style=filled, fillcolor=lightcoral"),
+        "beta colour wrong: {stdout}"
+    );
+    // Tooltip carries the predicate.
+    assert!(
+        stdout.contains("tooltip=\"memory_gib_min = 9999999"),
+        "tooltip missing: {stdout}"
+    );
+}
+
 /// SD-R35: `selfdefctl modules info <slug>` prints the
 /// [requires_hardware] block when present — operators inspecting a
 /// module see EVERY predicate the gate will enforce, without

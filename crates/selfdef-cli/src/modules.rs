@@ -1812,6 +1812,115 @@ pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32
     Ok(0)
 }
 
+/// SD-R36: emit active modules as a Graphviz DOT digraph.
+/// Operator pipes to `dot -Tsvg > graph.svg` for a visual map of
+/// how their modules compose; the raw text is also operator-readable.
+///
+/// Edges:
+///   - `dependency` arrows: `A → B` means B depends on A (apply order)
+///   - `instance` dashed edges between multi-instance modules
+///
+/// When `with_hardware_gate=true`, nodes are coloured by SD-R14
+/// verdict (green = passes gate, red = skipped).
+pub(crate) fn cmd_graph(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    println!("// SD-R36: selfdefctl modules graph");
+    println!("// {} active module(s)", active.len());
+    if with_hardware_gate {
+        println!("// SD-R14 hardware gate: ON (green=kept, red=skipped)");
+        if caps.is_none() {
+            println!("// (hardware probe unavailable — gates ignored, all nodes default)");
+        }
+    }
+    println!("digraph selfdef_modules {{");
+    println!("  rankdir=LR;");
+    println!("  node [shape=box, fontname=\"sans-serif\"];");
+
+    // Nodes
+    for am in &active {
+        let label = am.display_name();
+        let mut attrs = vec![format!("label=\"{label}\"")];
+        if with_hardware_gate {
+            let (style, color) = match &caps {
+                Some(c) => {
+                    if am.manifest.requires_hardware.is_empty() {
+                        ("filled", "lightblue")
+                    } else {
+                        match am.manifest.requires_hardware.evaluate(c) {
+                            Ok(()) => ("filled", "palegreen"),
+                            Err(_) => ("filled", "lightcoral"),
+                        }
+                    }
+                }
+                None => ("solid", "white"),
+            };
+            attrs.push(format!("style={style}"));
+            attrs.push(format!("fillcolor={color}"));
+            // Tooltip carries the unmet predicates list when skipped.
+            if let Some(c) = &caps {
+                if !am.manifest.requires_hardware.is_empty() {
+                    if let Err(unmet) = am.manifest.requires_hardware.evaluate(c) {
+                        let tip = unmet
+                            .iter()
+                            .map(|s| s.replace('"', "\\\""))
+                            .collect::<Vec<_>>()
+                            .join("\\n");
+                        attrs.push(format!("tooltip=\"{tip}\""));
+                    }
+                }
+            }
+        }
+        println!("  \"{label}\" [{}];", attrs.join(", "));
+    }
+
+    // Dependency edges (B → A means B depends_on A; we draw A → B
+    // to match apply-order direction).
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                println!(
+                    "  \"{dep}\" -> \"{name}\";",
+                    dep = dep,
+                    name = am.display_name()
+                );
+            }
+        }
+    }
+
+    // Instance grouping — dashed edges between instances of the
+    // same slug.
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            println!(
+                "  \"{a}\" -> \"{b}\" [style=dashed, arrowhead=none, color=gray, tooltip=\"shared slug: {slug}\"];",
+                a = instances[i].display_name(),
+                b = instances[i + 1].display_name(),
+            );
+        }
+    }
+
+    println!("}}");
+    Ok(0)
+}
+
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();

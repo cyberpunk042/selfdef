@@ -545,6 +545,22 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R36: emit the active modules' dependency graph in
+    /// Graphviz DOT format. Operators pipe to `dot -Tsvg` for a
+    /// visual layout, or read the text directly for a quick
+    /// audit of how modules compose. Read-only.
+    Graph {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Annotate node colour by SD-R14 gate verdict (green =
+        /// kept, red = skipped). Requires a hardware probe;
+        /// default is off (graph alone is operator-readable
+        /// without colour).
+        #[arg(long)]
+        with_hardware_gate: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1135,6 +1151,21 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 };
                 let code = modules::cmd_check_hardware(&opts, json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Graph {
+                host_config,
+                dir,
+                with_hardware_gate,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = modules::cmd_graph(&opts, with_hardware_gate)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
