@@ -95,8 +95,13 @@ fn sdr91_tools_list_exposes_only_read_only_tools() {
 
 #[test]
 fn sdr91_tools_call_dispatches_to_selfdefctl_subprocess() {
+    // Use selfdef.repl.tier2_examples — it's a pure CLI verb (no host
+    // probing) so rc is deterministic across runners. The
+    // selfdef.hardware.posture tool can rc=2 (NoMatch) on hosts
+    // without AVX-512 (typical CI runner), which would surface as an
+    // MCP error rather than the success path this test exercises.
     let resps = rpc_exchange(&[
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"selfdef.hardware.posture","arguments":{"json":true}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"selfdef.repl.tier2_examples","arguments":{"json":true}}}"#,
     ]);
     let r = &resps[0];
     assert_eq!(r["id"], 3);
@@ -106,14 +111,10 @@ fn sdr91_tools_call_dispatches_to_selfdefctl_subprocess() {
     assert_eq!(content.len(), 1);
     assert_eq!(content[0]["type"], "text");
     let text = content[0]["text"].as_str().expect("text");
-    // posture --json returns JSON; verify it parses + has the
-    // expected SD-R67 shape.
-    let posture: serde_json::Value = serde_json::from_str(text).expect("posture JSON");
-    // posture --json carries sain01_match + ternary_aot_capable etc.
-    assert!(
-        posture["sain01_match"].is_string() || posture["ternary_aot_capable"].is_boolean(),
-        "{posture}"
-    );
+    // tier2_examples --json returns the inventory with stable shape.
+    let inv: serde_json::Value = serde_json::from_str(text).expect("examples JSON");
+    assert_eq!(inv["round"], "SD-R90");
+    assert!(inv["examples"].is_array());
     assert_eq!(result["isError"], false);
     assert_eq!(result["exit_code"], 0);
 }
@@ -165,10 +166,12 @@ fn sdr91_parse_error_returns_dash_32700() {
 
 #[test]
 fn sdr91_handles_multiple_requests_in_one_session() {
+    // tier2_examples is deterministic across runners; use it instead
+    // of hardware.posture which can rc=2 on non-AVX-512 hosts.
     let resps = rpc_exchange(&[
         r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#,
         r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#,
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"selfdef.hardware.posture","arguments":{"json":true}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"selfdef.repl.tier2_examples","arguments":{"json":true}}}"#,
         r#"{"jsonrpc":"2.0","id":4,"method":"shutdown","params":{}}"#,
     ]);
     assert_eq!(resps.len(), 4);
