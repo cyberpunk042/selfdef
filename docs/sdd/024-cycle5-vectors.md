@@ -66,10 +66,30 @@ Operators have asked for OR semantics: "VNNI on the CPU OR
 gpu_count_min ≥ 1" — meaning the module lands when either path is
 viable. Today operators must split into two near-identical modules.
 
-  - Recommendation: extend the TOML schema with an optional
-    `[[requires_hardware.any_of]]` array — list of inner predicate
-    blocks; module passes if ANY block fully evaluates. Existing
-    flat predicates stay AND-composed at the root.
+  - **Decision (SD-R77, 2026-05-17)** — landed in cycle-5 PR #194.
+    `HardwareRequirements` gains a `Vec<HardwareRequirements>
+    any_of` field (recursive, `#[serde(default)]`). The TOML surface
+    is the standard array-of-tables shape:
+
+    ```toml
+    [requires_hardware]
+    memory_gib_min = 8       # root AND-predicate
+
+    [[requires_hardware.any_of]]
+    avx512_vnni = true       # SAIN-01 path
+    ternary_aot_capable_required = true
+
+    [[requires_hardware.any_of]]
+    gpu_count_min = 1        # GPU fallback path
+    gpu_vram_gib_min = 24
+    ```
+
+    Evaluation rule: module passes iff root predicates ALL pass AND
+    (any_of empty OR at least ONE inner block fully passes). When
+    every any_of branch fails, the unmet list contains an
+    operator-readable "any_of: NONE of N OR-branch(es) passed"
+    header followed by per-branch failure recaps. Empty `any_of` =
+    pass-through (back-compat with cycle 1-4 manifests).
 
 ### X-2 — Cross-module dependency negotiation (`depends_optional`)
 
@@ -114,9 +134,18 @@ The hardware gate evaluates against a cached capabilities snapshot
 the operator changes BIOS settings (enables AVX-512, swaps a GPU
 in), the cached snapshot diverges from reality.
 
-  - Recommendation: `selfdefctl modules apply --reprobe-hardware`
-    flag forces a fresh probe before the gate runs. Operator-friendly
-    safety knob; defaults to using the cache.
+  - **Decision (SD-R76, 2026-05-17)** — landed in cycle-5 PR. The
+    flag is wired through `ModulesAction::Apply` →
+    `LifecycleOpts.reprobe_hardware` → `apply_hardware_gate_with_opts()`
+    and emits a visible `# SD-R76 (--reprobe-hardware): forcing
+    fresh hardware probe; ignoring any daemon-cached capabilities
+    snapshot` stderr banner. Current selfdef-hardware `probe()` is
+    already fresh per-invocation, so the flag is a no-op at the
+    probe layer in cycle 5 — but the operator-CLI surface +
+    LifecycleOpts plumbing + stderr-banner contract are pinned so a
+    future round can short-circuit reading a daemon-cached
+    `/var/lib/selfdef/hardware-capabilities.json` when the flag is
+    set without changing the operator CLI.
 
 ### X-6 — Module-class taxonomy (parallel to R212 model class)
 

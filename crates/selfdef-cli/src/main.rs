@@ -565,6 +565,16 @@ enum ModulesAction {
         /// opposite intents).
         #[arg(long, conflicts_with = "ignore_hardware")]
         strict_hardware: bool,
+        /// SD-R76 (SDD-024 X-5): force a FRESH hardware probe
+        /// before the `[requires_hardware]` gate evaluates, instead
+        /// of using the cached selfdef-hardware snapshot. Use when
+        /// the operator has changed BIOS settings (enabled AVX-512,
+        /// swapped GPUs in/out) and the cached snapshot diverges
+        /// from physical reality. Default OFF — most apply runs
+        /// happen on a stable host where the cached snapshot is
+        /// current.
+        #[arg(long)]
+        reprobe_hardware: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -1247,6 +1257,7 @@ async fn main() -> Result<()> {
                 ignore_daemon_requires,
                 ignore_hardware,
                 strict_hardware,
+                reprobe_hardware,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -1257,6 +1268,7 @@ async fn main() -> Result<()> {
                     ignore_daemon_requires,
                     ignore_hardware,
                     strict_hardware,
+                    reprobe_hardware,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
@@ -1280,6 +1292,7 @@ async fn main() -> Result<()> {
                     ignore_daemon_requires,
                     ignore_hardware: false,
                     strict_hardware: false,
+                    reprobe_hardware: false,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;

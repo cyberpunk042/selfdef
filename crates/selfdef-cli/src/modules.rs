@@ -290,6 +290,32 @@ pub(crate) struct HardwareRequirements {
     /// SD-R68 `cpu.extended_features` array.
     #[serde(default)]
     pub(crate) host_features_required: String,
+
+    /// SD-R77 (SDD-024 X-1): composable OR-predicates. Root-level
+    /// predicates above stay AND-composed. Each entry in `any_of`
+    /// is a nested HardwareRequirements block; the module passes
+    /// iff the root predicates pass AND at least ONE any_of block
+    /// passes.
+    ///
+    /// Operator syntax in module.toml:
+    ///
+    /// ```toml
+    /// [requires_hardware]
+    /// memory_gib_min = 8           # root AND-predicate
+    ///
+    /// [[requires_hardware.any_of]]
+    /// avx512_vnni = true           # SAIN-01 path
+    /// ternary_aot_capable_required = true
+    ///
+    /// [[requires_hardware.any_of]]
+    /// gpu_count_min = 1            # GPU fallback path
+    /// gpu_vram_gib_min = 24
+    /// ```
+    ///
+    /// Empty `any_of` array = no OR-constraint (the original
+    /// AND-only behavior; default).
+    #[serde(default)]
+    pub(crate) any_of: Vec<HardwareRequirements>,
 }
 
 impl HardwareRequirements {
@@ -495,6 +521,32 @@ impl HardwareRequirements {
                 ));
             }
         }
+        // SD-R77 (SDD-024 X-1): OR-composition. After the root
+        // predicates have been collected, evaluate `any_of` — module
+        // passes iff at least ONE inner block fully evaluates clean.
+        // Empty `any_of` = no OR-constraint (pass-through).
+        if !self.any_of.is_empty() {
+            let mut any_passed = false;
+            let mut per_branch_failures: Vec<Vec<String>> = Vec::new();
+            for branch in &self.any_of {
+                match branch.evaluate(caps) {
+                    Ok(()) => {
+                        any_passed = true;
+                        break;
+                    }
+                    Err(branch_unmet) => per_branch_failures.push(branch_unmet),
+                }
+            }
+            if !any_passed {
+                unmet.push(format!(
+                    "any_of: NONE of {} OR-branch(es) passed",
+                    self.any_of.len()
+                ));
+                for (i, branch_unmet) in per_branch_failures.iter().enumerate() {
+                    unmet.push(format!("  any_of[{}]: {}", i, branch_unmet.join(" | ")));
+                }
+            }
+        }
         if unmet.is_empty() { Ok(()) } else { Err(unmet) }
     }
 
@@ -514,6 +566,8 @@ impl HardwareRequirements {
             && !self.ternary_aot_capable_required
             && self.zmm_int8_lanes_min == 0
             && self.host_features_required.is_empty()
+            // SD-R77 — any_of is part of the gate surface.
+            && self.any_of.is_empty()
     }
 }
 
@@ -1887,6 +1941,12 @@ pub(crate) struct LifecycleOpts {
     /// `[requires_hardware]`, run_lifecycle exits non-zero. Set by
     /// `selfdefctl modules apply --strict-hardware`.
     pub(crate) strict_hardware: bool,
+    /// SD-R76 (SDD-024 X-5 operator safety knob): force a fresh
+    /// hardware probe before the `[requires_hardware]` gate
+    /// evaluates, instead of reading the cached selfdef-hardware
+    /// snapshot. Set by `selfdefctl modules apply --reprobe-hardware`.
+    /// Default false → use the cached snapshot like every prior round.
+    pub(crate) reprobe_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -2239,7 +2299,29 @@ fn apply_signing_gate(active: Vec<ActiveModule>) -> (Vec<ActiveModule>, Vec<(Str
     (kept, failed)
 }
 
+#[cfg(test)]
 fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
+    apply_hardware_gate_with_opts(active, false)
+}
+
+/// SD-R76 (SDD-024 X-5): variant that records whether the operator
+/// forced a fresh reprobe via `--reprobe-hardware`. The selfdef-
+/// hardware probe() call is ALREADY fresh per-invocation in cycle
+/// 5; the flag is plumbed so the operator gets a visible "[SD-R76]
+/// forced hardware reprobe" stderr line + so a future round that
+/// introduces a daemon-emitted cache path can short-circuit
+/// reading the cache when the flag is set, without changing the
+/// operator-facing CLI surface.
+fn apply_hardware_gate_with_opts(
+    active: Vec<ActiveModule>,
+    reprobe_hardware: bool,
+) -> Vec<ActiveModule> {
+    if reprobe_hardware {
+        eprintln!(
+            "# SD-R76 (--reprobe-hardware): forcing fresh hardware probe; \
+             ignoring any daemon-cached capabilities snapshot"
+        );
+    }
     let caps = match selfdef_hardware::probe() {
         Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
         Err(e) => {
@@ -2918,7 +3000,7 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
             .any(|a| !a.manifest.requires_hardware.is_empty())
     {
         let pre_count = active.len();
-        active = apply_hardware_gate(active);
+        active = apply_hardware_gate_with_opts(active, opts.reprobe_hardware);
         let post_count = active.len();
         // SD-R44 (--strict-hardware): if any modules were filtered
         // out, exit non-zero. The SD-R14 skip block already landed
@@ -3859,6 +3941,7 @@ mod sdd_015_apply_gate_tests {
             ignore_daemon_requires: false,
             ignore_hardware: false,
             strict_hardware: false,
+            reprobe_hardware: false,
             daemon_config_path: Some(daemon_config_path),
         }
     }
@@ -4029,6 +4112,7 @@ mod sdd_015_apply_gate_tests {
             ignore_daemon_requires: false,
             ignore_hardware: false,
             strict_hardware: false,
+            reprobe_hardware: false,
             daemon_config_path: None,
         };
         let code = pre_apply_perimeter_check(&opts).unwrap();
@@ -4247,6 +4331,7 @@ mod sdr14_hardware_gate_tests {
             ternary_aot_capable_required: false,
             zmm_int8_lanes_min: 0,
             host_features_required: String::new(),
+            any_of: Vec::new(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
         // Every predicate fails on a minimal host: 5 lines (SD-R26
@@ -4408,6 +4493,151 @@ mod sdr14_hardware_gate_tests {
             ..Default::default()
         };
         assert!(!req.is_empty());
+    }
+
+    // ---- SD-R77: composable any_of OR-predicates -------------------
+
+    #[test]
+    fn sdr77_any_of_passes_when_first_branch_matches() {
+        // Branch 1 demands VNNI (SAIN-01 has it); branch 2 demands
+        // FullMatch verdict (also true). First match wins; gate passes.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    sain01_verdict_min: "FullMatch".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(!req.is_empty(), "any_of should mark gate non-empty");
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_any_of_passes_when_only_second_branch_matches() {
+        // Branch 1 demands FP16 (not present on minimal); branch 2 is
+        // a trivially-empty block (passes vacuously). Module passes
+        // via branch 2.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    host_features_required: "avx512_fp16".into(),
+                    ..Default::default()
+                },
+                HardwareRequirements::default(), // empty branch — always passes
+            ],
+            ..Default::default()
+        };
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_any_of_fails_when_every_branch_fails() {
+        // Two impossible branches on a minimal host.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    avx512_bf16: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        // Operator-readable error: "any_of: NONE of N OR-branch(es)
+        // passed" + per-branch failure recap.
+        assert!(
+            unmet
+                .iter()
+                .any(|u| u.starts_with("any_of: NONE of 2 OR-branch")),
+            "expected NONE-of-N marker: {unmet:?}"
+        );
+        assert!(
+            unmet.iter().any(|u| u.contains("any_of[0]")),
+            "expected per-branch recap: {unmet:?}"
+        );
+        assert!(
+            unmet.iter().any(|u| u.contains("any_of[1]")),
+            "expected per-branch recap: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr77_root_predicate_failure_fails_even_when_any_of_passes() {
+        // Root demands 256 GiB RAM (minimal has 16). any_of contains a
+        // trivially-passing branch — should not rescue the root failure.
+        let req = HardwareRequirements {
+            memory_gib_min: 256,
+            any_of: vec![HardwareRequirements::default()],
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("memory_gib_min")),
+            "root memory predicate must still fail: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr77_empty_any_of_is_pass_through() {
+        // Behavior parity with pre-SD-R77 (no OR-block declared).
+        let req = HardwareRequirements {
+            memory_gib_min: 8,
+            any_of: Vec::new(),
+            ..Default::default()
+        };
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_is_empty_false_when_any_of_set() {
+        let req = HardwareRequirements {
+            any_of: vec![HardwareRequirements {
+                avx512_vnni: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(!req.is_empty(), "any_of must mark gate non-empty");
+    }
+
+    #[test]
+    fn sdr77_parses_from_toml_array_of_tables() {
+        // Validate the operator-facing TOML surface — the
+        // [[requires_hardware.any_of]] array-of-tables syntax must
+        // serde-deserialize into Vec<HardwareRequirements>.
+        let toml_str = r#"
+[requires_hardware]
+memory_gib_min = 8
+
+[[requires_hardware.any_of]]
+avx512_vnni = true
+ternary_aot_capable_required = true
+
+[[requires_hardware.any_of]]
+gpu_count_min = 1
+gpu_vram_gib_min = 24
+"#;
+        #[derive(serde::Deserialize)]
+        struct Wrap {
+            requires_hardware: HardwareRequirements,
+        }
+        let parsed: Wrap = toml::from_str(toml_str).unwrap();
+        assert_eq!(parsed.requires_hardware.memory_gib_min, 8);
+        assert_eq!(parsed.requires_hardware.any_of.len(), 2);
+        assert!(parsed.requires_hardware.any_of[0].avx512_vnni);
+        assert!(parsed.requires_hardware.any_of[0].ternary_aot_capable_required);
+        assert_eq!(parsed.requires_hardware.any_of[1].gpu_count_min, 1);
+        assert_eq!(parsed.requires_hardware.any_of[1].gpu_vram_gib_min, 24);
     }
 
     #[test]
