@@ -110,6 +110,27 @@ pub(crate) fn tools() -> Vec<McpTool> {
             category: "read-only",
         },
         McpTool {
+            name: "selfdef.modules.install_options",
+            description: "SD-R86 (SDD-026 Z-13): surface uninstalled-but-available \
+                 catalog modules with operator-actionable recommendations \
+                 (ready / blocked-by-hardware / blocked-by-missing-deps / \
+                 needs-review). Drives the dashboard's 'Install options' tab. \
+                 Operator-named 'modules options-to-install'. Read-only.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "host_config": { "type": "string" },
+                    "dir": { "type": "string" },
+                    "category": { "type": "string" },
+                    "only_ready": { "type": "boolean", "default": false },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl modules install-options [--host-config P] [--dir D] [--category C] [--only-ready] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.modules.info",
             description: "Print full module manifest. With --resolved, evaluate \
                  the gate against this host and surface which any_of OR-\

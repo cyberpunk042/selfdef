@@ -709,6 +709,30 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R86 (SDD-026 Z-13): surface uninstalled-but-available
+    /// catalog modules with operator-actionable recommendations.
+    ///
+    /// Walks the AVAILABLE partition from `modules diff` and decorates
+    /// each row with hardware-gate verdict, per-dependency installed
+    /// flag, and a roll-up `recommendation` field (ready /
+    /// blocked-by-hardware / blocked-by-missing-deps / needs-review).
+    /// The dashboard's "Install options" tab consumes the JSON
+    /// directly. Operator-named "modules options-to-install".
+    InstallOptions {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Show only `recommendation = "ready"` rows.
+        #[arg(long)]
+        only_ready: bool,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
     /// Destructive: requires `--confirm <hostname>` matching this host
@@ -1470,6 +1494,26 @@ async fn main() -> Result<()> {
                 let host_path = modules::resolve_host_config_path(host_config.as_deref());
                 let dir_path = modules::resolve_dir(dir.as_deref());
                 let code = modules::cmd_diff(&host_path, &dir_path, json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallOptions {
+                host_config,
+                dir,
+                category,
+                only_ready,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_install_options(
+                    &host_path,
+                    &dir_path,
+                    json,
+                    category.as_deref(),
+                    only_ready,
+                )?;
                 if code != 0 {
                     std::process::exit(code);
                 }

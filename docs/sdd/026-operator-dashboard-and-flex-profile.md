@@ -308,6 +308,22 @@ hidden — they're separately discoverable.
     tab directly. Operator-actionable hint surfaces when orphans
     are present. The dashboard side lands when Z-1 ships.
 
+  - **Decision (SD-R86, 2026-05-17, install-options surface)** —
+    cycle-8 PR grows the operator-decision side: `selfdefctl modules
+    install-options` walks the SD-R83 AVAILABLE partition and
+    decorates each row with operator-actionable recommendations:
+      ready                       — hardware gate passes + deps present
+      blocked-by-hardware         — gate fails (unmet predicates listed)
+      blocked-by-missing-deps     — depends_on chain incomplete
+      needs-review                — hardware probe unavailable
+    `--category`, `--only-ready` filters compose with the JSON output
+    so the dashboard's "Install options" tab renders the ready set
+    by default + lets the operator drill into blocked rows. Closes
+    the "Dont mix uninstalled and installed Module" operator
+    requirement (verbatim). Also exposed as Tier 1 REPL callable
+    `modules_install_options(host_config=..., dir=..., category=...,
+    only_ready=False)` + MCP tool `selfdef.modules.install_options`.
+
 ## Cycle-7+ priority ranking
 
 | Priority | Vector | Effort | Rationale |

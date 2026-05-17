@@ -104,6 +104,7 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "models()",
                 "mcp_tools()",
                 "modules_diff(host_config=None, dir=None)",
+                "modules_install_options(host_config=None, dir=None, category=None, only_ready=False)",
                 "lora_list(state=None)",
             ],
         },
@@ -246,6 +247,24 @@ def modules_diff(host_config=None, dir=None):
         args += ["--dir", dir]
     return _ctl(*args)
 
+def modules_install_options(host_config=None, dir=None, category=None, only_ready=False):
+    """selfdefctl modules install-options --json [--category C] [--only-ready]
+
+    SD-R86 (SDD-026 Z-13): surface uninstalled-but-available catalog
+    modules with operator-actionable recommendations (ready /
+    blocked-by-hardware / blocked-by-missing-deps / needs-review).
+    """
+    args = ["modules", "install-options", "--json"]
+    if host_config:
+        args += ["--host-config", host_config]
+    if dir:
+        args += ["--dir", dir]
+    if category:
+        args += ["--category", category]
+    if only_ready:
+        args.append("--only-ready")
+    return _ctl(*args)
+
 def models(dir=None):
     """selfdefctl models list (table)"""
     args = ["models", "list"]
@@ -272,6 +291,7 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  modules(category=..., phase=...) -> dict")
     print("  modules_info(slug, resolved=False)")
     print("  modules_diff(host_config=..., dir=...)")
+    print("  modules_install_options(host_config=..., category=..., only_ready=False)")
     print("  models()           -> str    (table)")
     print("  lora_list(state=...)")
     print("  mcp_tools()        -> dict   (manifest)")
@@ -293,6 +313,7 @@ mod tests {
         assert!(s.contains("def posture"));
         assert!(s.contains("def modules"));
         assert!(s.contains("def modules_diff"));
+        assert!(s.contains("def modules_install_options"));
         assert!(s.contains("def lora_list"));
         assert!(s.contains("def mcp_tools"));
     }

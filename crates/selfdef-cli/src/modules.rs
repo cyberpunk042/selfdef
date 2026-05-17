@@ -3133,6 +3133,214 @@ pub(crate) fn cmd_diff(host_path: &Path, dir: &Path, json: bool) -> Result<i32> 
     Ok(0)
 }
 
+/// SD-R86 (SDD-026 Z-13): surface UNINSTALLED-but-AVAILABLE catalog
+/// modules with operator-actionable recommendations.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "modules
+/// options-to-install ([…] Dont mix uninstalled and installed Module)".
+///
+/// SD-R83 modules diff partitions catalog vs host_config into
+/// installed / available / orphaned. SD-R86 walks the AVAILABLE
+/// partition and decorates each row with:
+///
+///   hardware_gate    passes / blocked / ungated / probe-unavailable
+///   depends_on       per-dep installed flag
+///   phase            ordering hint
+///   category         filter hint
+///   summary          manifest one-liner
+///   recommendation   ready / blocked-by-hardware / blocked-by-missing-deps
+///
+/// The dashboard's "Install options" tab renders this directly.
+/// Exit code: 0 always (informational).
+pub(crate) fn cmd_install_options(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+    only_ready: bool,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    // host-config keys: split `slug#instance` and keep the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+
+    // Probe hardware once; reused for every gate evaluation.
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    let mut counts_ready: usize = 0;
+    let mut counts_blocked_hw: usize = 0;
+    let mut counts_blocked_deps: usize = 0;
+    let mut counts_probe_unavail: usize = 0;
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue; // installed — skip
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+
+        // Hardware gate
+        let (gate_verdict, gate_unmet): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+
+        // depends_on resolution against host installed set.
+        let mut deps: Vec<serde_json::Value> = Vec::new();
+        let mut all_deps_present = true;
+        for dep in &m.depends_on {
+            let installed = host_slugs.contains(dep);
+            if !installed {
+                all_deps_present = false;
+            }
+            deps.push(serde_json::json!({
+                "slug": dep,
+                "installed": installed,
+            }));
+        }
+
+        // Recommendation:
+        let recommendation = match (gate_verdict, all_deps_present) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+
+        match recommendation {
+            "ready" => counts_ready += 1,
+            "blocked-by-hardware" => counts_blocked_hw += 1,
+            "blocked-by-missing-deps" => counts_blocked_deps += 1,
+            "needs-review" => counts_probe_unavail += 1,
+            _ => {}
+        }
+
+        if only_ready && recommendation != "ready" {
+            continue;
+        }
+
+        rows.push(serde_json::json!({
+            "slug": slug,
+            "name": m.name,
+            "version": m.version,
+            "category": m.category,
+            "summary": m.summary,
+            "phase": m.phase.as_str(),
+            "depends_on": deps,
+            "hardware_gate": {
+                "verdict": gate_verdict,
+                "unmet": gate_unmet,
+            },
+            "recommendation": recommendation,
+        }));
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R86",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": {
+                "category": category,
+                "only_ready": only_ready,
+            },
+            "probe_ok": caps.is_some(),
+            "counts": {
+                "total": rows.len(),
+                "ready": counts_ready,
+                "blocked_by_hardware": counts_blocked_hw,
+                "blocked_by_missing_deps": counts_blocked_deps,
+                "needs_review": counts_probe_unavail,
+            },
+            "options": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+
+    println!("── SD-R86 selfdefctl modules install-options (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    if only_ready {
+        println!("  filter:      only-ready");
+    }
+    println!(
+        "  totals:      ready={counts_ready}  blocked-by-hw={counts_blocked_hw}  \
+         blocked-by-deps={counts_blocked_deps}  needs-review={counts_probe_unavail}"
+    );
+    println!();
+    if rows.is_empty() {
+        println!("  (no available modules match the filter)");
+        return Ok(0);
+    }
+    for r in &rows {
+        let slug = r["slug"].as_str().unwrap_or("?");
+        let rec = r["recommendation"].as_str().unwrap_or("?");
+        let cat = r["category"].as_str().unwrap_or("?");
+        let phase = r["phase"].as_str().unwrap_or("?");
+        let summ = r["summary"].as_str().unwrap_or("");
+        let glyph = match rec {
+            "ready" => "✓",
+            "blocked-by-hardware" => "⛔",
+            "blocked-by-missing-deps" => "⤴",
+            "needs-review" => "?",
+            _ => "·",
+        };
+        println!("  {glyph} {slug}  [{cat} / {phase}]  → {rec}");
+        if !summ.is_empty() {
+            println!("      {summ}");
+        }
+        // Show blocking reason.
+        let hw = &r["hardware_gate"];
+        if hw["verdict"] == "blocked" {
+            if let Some(u) = hw["unmet"].as_array() {
+                let joined: Vec<String> = u
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+                if !joined.is_empty() {
+                    println!("      hardware unmet: {}", joined.join(", "));
+                }
+            }
+        }
+        if let Some(deps) = r["depends_on"].as_array() {
+            let missing: Vec<String> = deps
+                .iter()
+                .filter(|d| d["installed"] == false)
+                .filter_map(|d| d["slug"].as_str().map(String::from))
+                .collect();
+            if !missing.is_empty() {
+                println!("      missing deps: {}", missing.join(", "));
+            }
+        }
+    }
+    Ok(0)
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet
