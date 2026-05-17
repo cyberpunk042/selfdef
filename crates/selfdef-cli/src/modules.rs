@@ -676,20 +676,48 @@ pub(crate) fn load_all(dir: &Path) -> Result<Vec<(String, ModuleManifest)>> {
     Ok(out)
 }
 
-pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
+/// SD-R75 (SDD-024 X-6): operator-facing filtered list. When
+/// `category` or `phase` is set, only modules whose corresponding
+/// field exactly matches are emitted. Empty / non-matching catalogs
+/// print the operator-readable "(no modules match)" so callers can
+/// detect zero-match runs without scraping the table header.
+pub(crate) fn cmd_list_filtered(
+    dir: &Path,
+    category: Option<&str>,
+    phase: Option<&str>,
+) -> Result<()> {
     let mods = load_all(dir)?;
     if mods.is_empty() {
         println!("(no modules in {})", dir.display());
         return Ok(());
     }
-    println!(
-        "{:<20}  {:<10}  {:<14}  summary",
-        "name", "version", "category"
-    );
-    for (_, m) in &mods {
+    let filtered: Vec<_> = mods
+        .iter()
+        .filter(|(_, m)| {
+            category.is_none_or(|c| m.category == c) && phase.is_none_or(|p| m.phase.as_str() == p)
+        })
+        .collect();
+    if filtered.is_empty() {
         println!(
-            "{:<20}  {:<10}  {:<14}  {}",
-            m.name, m.version, m.category, m.summary
+            "(no modules match: category={:?} phase={:?} in {})",
+            category,
+            phase,
+            dir.display()
+        );
+        return Ok(());
+    }
+    println!(
+        "{:<24}  {:<10}  {:<14}  {:<14}  summary",
+        "name", "version", "category", "phase"
+    );
+    for (_, m) in &filtered {
+        println!(
+            "{:<24}  {:<10}  {:<14}  {:<14}  {}",
+            m.name,
+            m.version,
+            m.category,
+            m.phase.as_str(),
+            m.summary
         );
     }
     Ok(())
@@ -699,10 +727,21 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
 /// gap on the modules surface). Mirrors `models list --json` pattern
 /// from SD-R34 + `modules info --json` from SD-R40 — same schema_version
 /// + per-entry shape.
-pub(crate) fn cmd_list_json(dir: &Path) -> Result<()> {
+///
+/// SD-R75 (SDD-024 X-6): JSON list with `category` + `phase`
+/// filters. Matches `cmd_list_filtered` semantics — empty filter
+/// → all modules; one or both filters → exact match.
+pub(crate) fn cmd_list_json_filtered(
+    dir: &Path,
+    category: Option<&str>,
+    phase: Option<&str>,
+) -> Result<()> {
     let mods = load_all(dir)?;
     let entries: Vec<serde_json::Value> = mods
         .iter()
+        .filter(|(_, m)| {
+            category.is_none_or(|c| m.category == c) && phase.is_none_or(|p| m.phase.as_str() == p)
+        })
         .map(|(slug, m)| {
             serde_json::json!({
                 "slug": slug,
@@ -724,6 +763,10 @@ pub(crate) fn cmd_list_json(dir: &Path) -> Result<()> {
     let doc = serde_json::json!({
         "schema_version": "1.0.0",
         "modules_dir": dir.display().to_string(),
+        "filter": {
+            "category": category,
+            "phase": phase,
+        },
         "total": entries.len(),
         "modules": entries,
     });

@@ -493,6 +493,18 @@ enum ModulesAction {
         /// SD-R63: machine-readable JSON instead of the tabular view.
         #[arg(long)]
         json: bool,
+        /// SD-R75 (SDD-024 X-6): filter to modules whose `category`
+        /// field matches exactly. Operator-stable string;
+        /// currently in use: hardening / inference / network /
+        /// detection / hardware / observability.
+        #[arg(long)]
+        category: Option<String>,
+        /// SD-R75 (SDD-024 X-6): filter to modules whose `phase`
+        /// field matches exactly. Operator-stable string;
+        /// currently in use: pre-install / during-install /
+        /// post-install / main / recurrent.
+        #[arg(long)]
+        phase: Option<String>,
     },
     /// Show the full manifest for one module by slug.
     Info {
@@ -1190,12 +1202,21 @@ async fn main() -> Result<()> {
             }
         },
         Command::Modules { action } => match action {
-            ModulesAction::List { dir, json } => {
+            ModulesAction::List {
+                dir,
+                json,
+                category,
+                phase,
+            } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 if json {
-                    modules::cmd_list_json(&resolved)?;
+                    modules::cmd_list_json_filtered(
+                        &resolved,
+                        category.as_deref(),
+                        phase.as_deref(),
+                    )?;
                 } else {
-                    modules::cmd_list(&resolved)?;
+                    modules::cmd_list_filtered(&resolved, category.as_deref(), phase.as_deref())?;
                 }
             }
             ModulesAction::Info {
