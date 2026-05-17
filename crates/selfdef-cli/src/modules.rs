@@ -1965,20 +1965,72 @@ fn verify_module_signing(am: &ActiveModule) -> Result<(), String> {
         .trust_root
         .clone()
         .unwrap_or_else(|| PathBuf::from("/etc/selfdef/keys/policy.pub"));
-    let verifier = selfdef_signing::Verifier::load(&trust_root).map_err(|e| {
-        format!(
-            "trust-root pubkey unreadable at {}: {e}",
-            trust_root.display()
-        )
-    })?;
     let manifest_path = am.module_root.join("module.toml");
-    verifier.verify_detached_file(&manifest_path).map_err(|e| {
-        format!(
-            "signature verification failed for {}: {e}",
-            manifest_path.display()
-        )
-    })?;
-    Ok(())
+    // SD-R62 (closes SDD-021 W-2): keyring rotation. If trust_root
+    // is a DIRECTORY, load every *.pub file inside as a candidate
+    // pubkey; verification passes if ANY pubkey accepts the sig.
+    // If it's a regular file, behave as cycle-3 SD-R55 (single key).
+    let verifiers = load_trust_roots(&trust_root)?;
+    if verifiers.is_empty() {
+        return Err(format!(
+            "trust-root {} resolved to zero pubkeys",
+            trust_root.display()
+        ));
+    }
+    let mut last_err: Option<String> = None;
+    for v in &verifiers {
+        match v.verify_detached_file(&manifest_path) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(format!("key {}: {e}", v.source().display()));
+            }
+        }
+    }
+    Err(format!(
+        "signature verification failed for {} (tried {} pubkey(s); last error: {})",
+        manifest_path.display(),
+        verifiers.len(),
+        last_err.unwrap_or_else(|| "<none>".into())
+    ))
+}
+
+/// SD-R62: load trust roots from a path. If path is a directory,
+/// every `*.pub` file in it becomes a candidate verifier (operator-
+/// stable rotation surface: deploy the new key alongside the old,
+/// re-sign at leisure, remove the old key after the migration).
+fn load_trust_roots(path: &Path) -> Result<Vec<selfdef_signing::Verifier>, String> {
+    if path.is_dir() {
+        let mut entries: Vec<_> = std::fs::read_dir(path)
+            .map_err(|e| format!("reading keyring dir {}: {e}", path.display()))?
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pub"))
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        let mut verifiers = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let p = entry.path();
+            match selfdef_signing::Verifier::load(&p) {
+                Ok(v) => verifiers.push(v),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SD-R62: skipping unparseable pubkey in keyring"
+                    );
+                }
+            }
+        }
+        Ok(verifiers)
+    } else if path.is_file() {
+        let v = selfdef_signing::Verifier::load(path)
+            .map_err(|e| format!("trust-root pubkey unreadable at {}: {e}", path.display()))?;
+        Ok(vec![v])
+    } else {
+        Err(format!(
+            "trust-root path {} doesn't exist (or isn't a file/dir)",
+            path.display()
+        ))
+    }
 }
 
 /// SD-R55: apply the signing gate to every active module. Returns
