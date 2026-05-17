@@ -631,6 +631,104 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
     assert_eq!(v["host_tag"], "h");
 }
 
+/// SD-R61 (closes SDD-021 W-6): per-module [resources] quotas
+/// surface as SELFDEF_RESOURCE_* env vars to apply.sh.
+#[test]
+fn sdr61_resources_block_surfaces_as_env_vars_to_apply_sh() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    // apply.sh writes env vars to a side-file so we can assert
+    // independently of the runner's stdout parsing.
+    let probe_file = root.path().join("env-probe.txt");
+    let body = format!(
+        "#!/usr/bin/env bash\n\
+         {{\n\
+           printf 'CPU=%s\\n' \"${{SELFDEF_RESOURCE_CPU_MAX:-unset}}\"\n\
+           printf 'MEM=%s\\n' \"${{SELFDEF_RESOURCE_MEMORY_MAX:-unset}}\"\n\
+           printf 'IO=%s\\n' \"${{SELFDEF_RESOURCE_IO_WEIGHT:-unset}}\"\n\
+           printf 'TIME=%s\\n' \"${{SELFDEF_RESOURCE_TIME_MAX_SECONDS:-unset}}\"\n\
+         }} > '{}'\n\
+         echo '{{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}}'\n",
+        probe_file.display()
+    );
+    write_module(&catalog, "alpha", &[], &body);
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str(
+        "\n[resources]\ncpu_max = \"1.5\"\nmemory_max = \"512M\"\nio_weight = 200\ntime_max_seconds = 30\n",
+    );
+    std::fs::write(&a_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let probe = std::fs::read_to_string(&probe_file).unwrap();
+    assert!(probe.contains("CPU=1.5"), "cpu_max not propagated: {probe}");
+    assert!(
+        probe.contains("MEM=512M"),
+        "memory_max not propagated: {probe}"
+    );
+    assert!(
+        probe.contains("IO=200"),
+        "io_weight not propagated: {probe}"
+    );
+    assert!(
+        probe.contains("TIME=30"),
+        "time_max_seconds not propagated: {probe}"
+    );
+}
+
+#[test]
+fn sdr61_no_resources_block_means_empty_env_vars() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let probe_file = root.path().join("env-probe.txt");
+    let body = format!(
+        "#!/usr/bin/env bash\n\
+         printf 'CPU=%s\\n' \"${{SELFDEF_RESOURCE_CPU_MAX:-unset}}\" > '{}'\n\
+         echo '{{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}}'\n",
+        probe_file.display()
+    );
+    write_module(&catalog, "alpha", &[], &body);
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success());
+    let probe = std::fs::read_to_string(&probe_file).unwrap();
+    assert!(
+        probe.contains("CPU=unset"),
+        "expected unset on missing [resources] block: {probe}"
+    );
+}
+
 /// SD-R56: `modules info --json` includes a `signing` block that
 /// summarises the SD-R55 posture — state, required flag,
 /// minisig_present, trust_root. Tooling complement to the R195

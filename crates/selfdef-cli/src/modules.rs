@@ -95,6 +95,11 @@ pub(crate) struct ModuleManifest {
     /// trust-root pubkey. Empty (default) → no signing check.
     #[serde(default)]
     pub(crate) signing: Option<ModuleSigningSpec>,
+    /// SD-R61 (closes SDD-021 W-6): optional per-module resource
+    /// quotas applied to install scripts. Defense in depth — a
+    /// bad apply.sh shouldn't be able to OOM the host.
+    #[serde(default)]
+    pub(crate) resources: Option<ModuleResourceSpec>,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -455,6 +460,30 @@ pub(crate) struct ModuleSigningSpec {
     /// (same root as the existing SDD-006 rule signing).
     #[serde(default)]
     pub(crate) trust_root: Option<PathBuf>,
+}
+
+/// SD-R61 (closes SDD-021 W-6): optional per-module resource quotas.
+/// Surface is operator-stable but ENFORCEMENT is currently advisory
+/// — the runner exports the quotas as SELFDEF_RESOURCE_* env vars
+/// for apply.sh / check.sh / uninstall.sh to honor via `ulimit` or
+/// `systemd-run --user`. Future round can wrap the subprocess in
+/// systemd-run automatically.
+///
+/// Operator-stable fields (all optional — empty = unlimited):
+///   cpu_max          fractional CPUs (e.g. "1.5" means 150% of a core)
+///   memory_max       human-readable size (e.g. "512M", "2G")
+///   io_weight        cgroup IOWeight in [1, 10000] (default 100)
+///   time_max_seconds wall-clock cap on the apply subprocess
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleResourceSpec {
+    #[serde(default)]
+    pub(crate) cpu_max: Option<String>,
+    #[serde(default)]
+    pub(crate) memory_max: Option<String>,
+    #[serde(default)]
+    pub(crate) io_weight: Option<u32>,
+    #[serde(default)]
+    pub(crate) time_max_seconds: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1408,6 +1437,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         daemon_requires: m.daemon_requires.clone(),
         requires_hardware: m.requires_hardware.clone(),
         signing: m.signing.clone(),
+        resources: m.resources.clone(),
     }
 }
 
@@ -1576,6 +1606,24 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     // default sensibly.
     if let Some(inst) = &active.instance {
         cmd.env("SELFDEF_INSTANCE_ID", inst);
+    }
+    // SD-R61 (closes SDD-021 W-6): surface resource quotas to
+    // apply.sh / check.sh / uninstall.sh as SELFDEF_RESOURCE_*
+    // env vars. Scripts honor via `ulimit` or `systemd-run --user`
+    // wrappers; future round can wrap the subprocess automatically.
+    if let Some(res) = &active.manifest.resources {
+        if let Some(v) = res.cpu_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_CPU_MAX", v);
+        }
+        if let Some(v) = res.memory_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_MEMORY_MAX", v);
+        }
+        if let Some(v) = res.io_weight {
+            cmd.env("SELFDEF_RESOURCE_IO_WEIGHT", v.to_string());
+        }
+        if let Some(v) = res.time_max_seconds {
+            cmd.env("SELFDEF_RESOURCE_TIME_MAX_SECONDS", v.to_string());
+        }
     }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -2901,6 +2949,7 @@ mod tests {
             daemon_requires: BTreeMap::new(),
             requires_hardware: HardwareRequirements::default(),
             signing: None,
+            resources: None,
         }
     }
 
@@ -3980,6 +4029,7 @@ mod sdr14_hardware_gate_tests {
             requires: Vec::new(),
             requires_hardware: req,
             signing: None,
+            resources: None,
             install: None,
             profiles: None,
             instanced: false,
