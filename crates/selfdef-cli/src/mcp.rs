@@ -300,6 +300,260 @@ pub(crate) fn render_tools_human() -> String {
     buf
 }
 
+// ============================================================
+// SD-R91: line-delimited JSON-RPC MCP server (stdio).
+// ============================================================
+
+/// SD-R91 (SDD-026 Z-11 closure): stdio JSON-RPC MCP server.
+///
+/// Wire format: line-delimited JSON-RPC 2.0. Read one request per
+/// line from stdin, write one response per line to stdout. Real MCP
+/// clients use Content-Length framing; a small shim can wrap this
+/// for those clients, but the LINE-DELIMITED form is what we ship
+/// in cycle 8 — it's testable + scriptable + composable with `jq`.
+///
+/// Supported methods:
+///   initialize       → returns serverInfo + capabilities
+///   tools/list       → returns the SD-R84 tools (only category=read-only)
+///   tools/call       → dispatches to selfdefctl subprocess
+///                      params: { name: "<tool>", arguments: {...} }
+///   shutdown         → no-op (returns null), client should close stdin
+///
+/// All other methods return JSON-RPC error -32601 (Method not found).
+/// Write-category tools (cycle-8 doctrine forbids these via MCP) are
+/// NOT in `tools/list` output and return -32601 on `tools/call`.
+///
+/// exit_after: when Some(N), serve exits cleanly after handling N
+/// requests (test fixture; production uses None = until stdin closes).
+pub(crate) fn serve_stdio(exit_after: Option<u32>) -> anyhow::Result<i32> {
+    use std::io::{BufRead, Write};
+    let stdin = std::io::stdin();
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    let mut handled: u32 = 0;
+    for line in stdin.lock().lines() {
+        let line = match line {
+            Ok(l) => l,
+            Err(_) => break,
+        };
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let resp = handle_jsonrpc_line(trimmed);
+        writeln!(out, "{resp}")?;
+        out.flush()?;
+        handled += 1;
+        if let Some(n) = exit_after {
+            if handled >= n {
+                break;
+            }
+        }
+    }
+    Ok(0)
+}
+
+fn handle_jsonrpc_line(line: &str) -> String {
+    let req: serde_json::Value = match serde_json::from_str(line) {
+        Ok(v) => v,
+        Err(e) => {
+            return error_response(
+                serde_json::Value::Null,
+                -32700,
+                &format!("Parse error: {e}"),
+            );
+        }
+    };
+    let id = req.get("id").cloned().unwrap_or(serde_json::Value::Null);
+    let method = match req.get("method").and_then(|m| m.as_str()) {
+        Some(m) => m,
+        None => return error_response(id, -32600, "Invalid Request: missing 'method'"),
+    };
+    let params = req.get("params").cloned().unwrap_or(serde_json::json!({}));
+    let result: Result<serde_json::Value, (i64, String)> = match method {
+        "initialize" => Ok(serde_json::json!({
+            "protocolVersion": "2024-11-05",
+            "serverInfo": {
+                "name": "selfdefctl-mcp",
+                "version": env!("CARGO_PKG_VERSION"),
+            },
+            "capabilities": {
+                "tools": { "listChanged": false },
+            },
+        })),
+        "tools/list" => Ok(serde_json::json!({
+            "tools": tools()
+                .into_iter()
+                .filter(|t| t.category == "read-only")
+                .map(|t| serde_json::json!({
+                    "name": t.name,
+                    "description": t.description,
+                    "inputSchema": t.input_schema,
+                }))
+                .collect::<Vec<_>>(),
+        })),
+        "tools/call" => handle_tools_call(&params),
+        "shutdown" => Ok(serde_json::Value::Null),
+        _ => Err((-32601, format!("Method not found: {method}"))),
+    };
+    match result {
+        Ok(v) => success_response(id, v),
+        Err((code, msg)) => error_response(id, code, &msg),
+    }
+}
+
+fn success_response(id: serde_json::Value, result: serde_json::Value) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "result": result,
+    }))
+    .unwrap_or_else(|_| String::from("{}"))
+}
+
+fn error_response(id: serde_json::Value, code: i64, message: &str) -> String {
+    serde_json::to_string(&serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": code, "message": message },
+    }))
+    .unwrap_or_else(|_| String::from("{}"))
+}
+
+fn handle_tools_call(params: &serde_json::Value) -> Result<serde_json::Value, (i64, String)> {
+    let name = params
+        .get("name")
+        .and_then(|n| n.as_str())
+        .ok_or((-32602, "Invalid params: missing 'name'".to_string()))?;
+    let tool = tools()
+        .into_iter()
+        .find(|t| t.name == name && t.category == "read-only")
+        .ok_or((-32601, format!("tool not exposed: {name}")))?;
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or(serde_json::json!({}));
+    // Build subprocess argv from the backing_cli template + arguments.
+    let argv = build_subprocess_argv(&tool, &arguments)?;
+    // Spawn selfdefctl with the resolved argv.
+    let exe = std::env::current_exe().map_err(|e| (-32603, format!("locating selfdefctl: {e}")))?;
+    let output = std::process::Command::new(&exe)
+        .arg("--config")
+        .arg("/dev/null")
+        .args(&argv)
+        .output()
+        .map_err(|e| (-32603, format!("spawn selfdefctl: {e}")))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+    let exit_code = output.status.code().unwrap_or(-1);
+    if exit_code != 0 && exit_code != 1 {
+        // rc 0 + 1 are both "data emitted" cases; only ≥2 is a real
+        // tool error from the MCP caller's perspective.
+        return Err((
+            -32000,
+            format!("tool exit_code={exit_code}: {}", stderr.trim()),
+        ));
+    }
+    Ok(serde_json::json!({
+        "content": [
+            { "type": "text", "text": stdout }
+        ],
+        "isError": exit_code != 0,
+        "exit_code": exit_code,
+    }))
+}
+
+fn build_subprocess_argv(
+    tool: &McpTool,
+    arguments: &serde_json::Value,
+) -> Result<Vec<String>, (i64, String)> {
+    // The backing_cli string is "selfdefctl <verb> [args]"; we want
+    // just the args after "selfdefctl". Tools follow a stable pattern:
+    // every tool's backing_cli starts with "selfdefctl ", and the
+    // command shape mirrors the JSON schema property names: positional
+    // args first, then --flag values. We re-derive argv from the
+    // schema rather than parsing the backing_cli — schema is authoritative.
+    let cli = tool.backing_cli;
+    let cli_tail = cli.strip_prefix("selfdefctl ").unwrap_or(cli);
+    // Verb words (everything before the first `[` or `<`).
+    let mut verb_words: Vec<String> = Vec::new();
+    for w in cli_tail.split_whitespace() {
+        if w.starts_with('[') || w.starts_with('<') || w.starts_with("--") {
+            break;
+        }
+        verb_words.push(w.to_string());
+    }
+    let obj = arguments
+        .as_object()
+        .ok_or((-32602, "arguments must be object".to_string()))?;
+
+    // Positional args: pull each `<NAME>` from the cli template (in
+    // order) and substitute from arguments by that name. Required
+    // positionals are declared in `schema.required`.
+    let schema = &tool.input_schema;
+    let required = schema
+        .get("required")
+        .and_then(|r| r.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    // Extract positional placeholder names from cli (e.g. <slug>, <adapter_id>).
+    let positional_names: Vec<String> = cli_tail
+        .split_whitespace()
+        .filter_map(|w| {
+            let w = w.trim_matches(|c| c == ',');
+            if let Some(stripped) = w.strip_prefix('<') {
+                stripped.strip_suffix('>').map(|s| s.replace('-', "_"))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let mut argv = verb_words.clone();
+    for pname in &positional_names {
+        match obj.get(pname.as_str()) {
+            Some(v) => argv.push(scalar_to_string(v)?),
+            None => {
+                if required.contains(pname) {
+                    return Err((-32602, format!("missing required arg: {pname}")));
+                }
+            }
+        }
+    }
+    // Optional named flags: every property in arguments that isn't a
+    // positional becomes --kebab-case <value> (or just --kebab when
+    // boolean true). Booleans-false and nulls are skipped.
+    for (k, v) in obj {
+        if positional_names.contains(k) {
+            continue;
+        }
+        let flag = format!("--{}", k.replace('_', "-"));
+        match v {
+            serde_json::Value::Bool(true) => argv.push(flag),
+            serde_json::Value::Bool(false) | serde_json::Value::Null => {}
+            _ => {
+                argv.push(flag);
+                argv.push(scalar_to_string(v)?);
+            }
+        }
+    }
+    Ok(argv)
+}
+
+fn scalar_to_string(v: &serde_json::Value) -> Result<String, (i64, String)> {
+    match v {
+        serde_json::Value::String(s) => Ok(s.clone()),
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        serde_json::Value::Bool(b) => Ok(b.to_string()),
+        _ => Err((-32602, format!("non-scalar argument: {v}"))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

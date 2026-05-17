@@ -199,6 +199,21 @@ enum McpAction {
         #[arg(long)]
         human: bool,
     },
+    /// SD-R91 (SDD-026 Z-11 closure): stdio JSON-RPC MCP server that
+    /// exposes the SD-R84 read-only tool manifest. Implements
+    /// `initialize`, `tools/list`, `tools/call`. Each `tools/call`
+    /// invokes the matching `selfdefctl …` subprocess + returns its
+    /// JSON output as a single text content block.
+    ///
+    /// Wire format: line-delimited JSON-RPC 2.0 (one request per
+    /// line, one response per line). Cycle-8 read-only doctrine:
+    /// only tools with `category == "read-only"` are callable;
+    /// requests for write tools return JSON-RPC error -32601.
+    Serve {
+        /// Handle exactly N requests then exit (used by L3 tests).
+        #[arg(long)]
+        exit_after: Option<u32>,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1063,6 +1078,12 @@ async fn main() -> Result<()> {
                     print!("{}", mcp::render_tools_human());
                 } else {
                     println!("{}", mcp::render_tools_json());
+                }
+            }
+            McpAction::Serve { exit_after } => {
+                let code = mcp::serve_stdio(exit_after)?;
+                if code != 0 {
+                    std::process::exit(code);
                 }
             }
         },
