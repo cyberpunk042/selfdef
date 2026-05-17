@@ -123,14 +123,21 @@ in), the cached snapshot diverges from reality.
 R212 + SD-R71 carry the MODEL class taxonomy. Cycle 5: extend the
 same idea to MODULES. Tag each module with a `category` ENUM
 (observability / hardening / inference / network / supply-chain /
-storage / lifecycle) + a `lifecycle_phase` (pre-install /
-during-install / post-install / recurrent — already encoded in
-SD-R23 `phase` field). Then `selfdefctl modules list` gains
-`--category` + `--phase` filters that mirror sovereign-os
+storage / lifecycle / hardware / detection — current in-use set) +
+a `phase` ENUM (pre / main / post — already encoded in SD-R23
+`phase` field on ModuleManifest). Then `selfdefctl modules list`
+gains `--category` + `--phase` filters that mirror sovereign-os
 `models query`.
 
-  - Recommendation: low-effort field add + UI surface; high-value
-    for fleets with dozens of modules.
+  - **Decision (SD-R75, 2026-05-17)** — landed in cycle-4 PR #193.
+    `selfdefctl modules list --category C --phase P` filters
+    compose with AND-semantics. Both `--category` and `--phase` are
+    free-string exact-match against the ModuleManifest fields (no
+    closed-set enforcement; selfdef stays permissive per SDD-023
+    cross-repo doctrine). JSON output gains a `filter` block
+    echoing the operator's inputs. Zero-match runs print the
+    operator-readable "(no modules match: category=… phase=…)"
+    marker.
 
 ## Cycle-5 priority ranking
 
