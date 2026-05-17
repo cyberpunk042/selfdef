@@ -18,6 +18,7 @@ mod modules;
 mod notify;
 mod paths;
 mod perimeter;
+mod repl;
 mod wizard;
 
 use std::path::PathBuf;
@@ -171,6 +172,18 @@ enum Command {
         #[command(subcommand)]
         action: McpAction,
     },
+    /// SD-R85 (SDD-026 Z-12 foundation): operator-facing REPL surface.
+    /// Multi-tier programming layer per the operator directive:
+    ///   Tier 0  Programming        (Rust crates linked to selfdef-core)
+    ///   Tier 1  Proto-Programming  (Python REPL atop selfdef-cli verbs;
+    ///                               THIS round seeds Tier 1)
+    ///   Tier 2  Proto-Proto-Prog   (operator-defined macros + custom CoT
+    ///                               loops compiling to Tier 1 calls;
+    ///                               future round)
+    Repl {
+        #[command(subcommand)]
+        action: ReplAction,
+    },
     /// Print version and build info.
     Version,
 }
@@ -183,6 +196,23 @@ enum McpAction {
     Tools {
         /// Emit machine-readable JSON (default) or human-readable
         /// table.
+        #[arg(long)]
+        human: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum ReplAction {
+    /// SD-R85: print the REPL bootstrap script the operator dumps
+    /// into their Python session (or `python3 -i -c "$(selfdefctl
+    /// repl bootstrap)"`). Imports the selfdef-cli subprocess
+    /// wrappers + sets up the operator namespace. Tier 1
+    /// (Proto-Programming) seed.
+    Bootstrap,
+    /// SD-R85: print the manifest describing the REPL tiers + which
+    /// callables each tier exposes. JSON by default; --human for
+    /// banner.
+    Tiers {
         #[arg(long)]
         human: bool,
     },
@@ -917,6 +947,18 @@ async fn main() -> Result<()> {
                     print!("{}", mcp::render_tools_human());
                 } else {
                     println!("{}", mcp::render_tools_json());
+                }
+            }
+        },
+        Command::Repl { action } => match action {
+            ReplAction::Bootstrap => {
+                print!("{}", repl::bootstrap_script());
+            }
+            ReplAction::Tiers { human } => {
+                if human {
+                    print!("{}", repl::render_tiers_human());
+                } else {
+                    println!("{}", repl::render_tiers_json());
                 }
             }
         },

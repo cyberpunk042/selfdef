@@ -277,9 +277,17 @@ Python REPL ON TOP OF selfdef state:
     Saves tokens; eliminates wasted paths; the "deeper" layer the
     operator named.
 
-  - Recommendation: pyo3 bindings on the Rust side; Jupyter-style
-    notebook surface in the dashboard for Tier 1+2 sessions; state
-    persistence per-operator-session.
+  - **Decision (SD-R85, 2026-05-17, foundation)** — cycle-8 PR seeds
+    Tier 1 via subprocess wrappers (not pyo3 yet — that's a future
+    round). `selfdefctl repl bootstrap` emits the Python script the
+    operator pastes into `python3 -i -c "$(...)"`. Eight callables:
+      hardware() / posture() / modules(category=..., phase=...) /
+      modules_info(slug, resolved=...) / modules_diff(...) /
+      models() / lora_list(state=...) / mcp_tools()
+    `selfdefctl repl tiers` prints the manifest (3 tiers) — JSON
+    default, --human for terminal banner. Tier 2 is the operator-
+    extension surface (we ship Tier 1 + the named callables; the
+    operator owns the custom CoT / token-saving aliases on top).
 
 ### Z-13 — Module options-to-install surface
 
