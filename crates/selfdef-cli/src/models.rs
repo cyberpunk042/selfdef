@@ -558,6 +558,7 @@ mod tests {
                 target_cpu: "znver5".into(),
                 target_features: "+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma".into(),
                 compile_command_hint: String::new(),
+                ternary_kernel_hint: String::new(),
             },
         }
     }

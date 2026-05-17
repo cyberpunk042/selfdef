@@ -838,6 +838,26 @@ pub struct WasmAotCapabilities {
     /// Worked `wasmtime compile` example command (operator
     /// copy/pasteable). Empty when AOT isn't recommended.
     pub compile_command_hint: String,
+
+    /// SD-R66: operator-readable string describing which INT8
+    /// dot-product / ternary kernel path the host can run, tying
+    /// SD-R64's `ternary_aot_capable` + `zmm_int8_lane_capacity`
+    /// into a single human-meaningful hint.
+    ///
+    /// Examples:
+    ///   - `"bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)"`
+    ///     on SAIN-01 (AVX-512 VNNI + BF16/FP16).
+    ///   - `"bitnet.cpp/VPMADDUBSW: 32×INT8 per YMM (AVX2 fallback)"` on
+    ///     AVX2-only hosts.
+    ///   - `"bitnet.cpp/PMADDUBSW: 16×INT8 per XMM (SSSE3 fallback)"` on
+    ///     SSSE3-only hosts.
+    ///   - `""` on pre-SSSE3 hosts (no INT8 SIMD path).
+    ///
+    /// `#[serde(default)]` for forward-compat with pre-SD-R66 dumps —
+    /// the hint reads empty, which the consumer treats as "no
+    /// ternary kernel guidance available."
+    #[serde(default)]
+    pub ternary_kernel_hint: String,
 }
 
 /// CPU instruction-family availability + recommended flags for
@@ -1016,10 +1036,11 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
     };
     let wasm_aot = derive_wasm_aot_capabilities(&cpu);
     HardwareCapabilities {
-        // SD-R30: bumped to 1.2.0 alongside the wasm_aot addition.
-        // 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices; 1.2.0 =
-        // SD-R30 wasm_aot field.
-        schema_version: "1.2.0".into(),
+        // SD-R66: bumped to 1.3.0 alongside the wasm_aot.ternary_kernel_hint
+        // addition. 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices;
+        // 1.2.0 = SD-R30 wasm_aot field; 1.3.0 = SD-R66 ternary
+        // kernel hint + SD-R64 derived cpu fields.
+        schema_version: "1.3.0".into(),
         probed_at: snap.probed_at.clone(),
         host_tag: None,
         cpu,
@@ -1094,11 +1115,39 @@ pub fn derive_wasm_aot_capabilities(cpu: &CpuCapabilities) -> WasmAotCapabilitie
         String::new()
     };
 
+    // SD-R66: derive the operator-readable ternary kernel hint.
+    // Composes with SD-R64 (ternary_aot_capable + lane width).
+    let ternary_kernel_hint = derive_ternary_kernel_hint(cpu);
+
     WasmAotCapabilities {
         target_triple,
         target_cpu,
         target_features,
         compile_command_hint,
+        ternary_kernel_hint,
+    }
+}
+
+/// SD-R66: pick the operator-readable ternary-kernel hint based on
+/// the widest INT8 dispatch path the CPU can execute. Pure function;
+/// tests pin every reachable branch.
+///
+/// On SAIN-01 (master spec § 16 hot path) returns the VPDPBUSD/ZMM
+/// path; AVX2/SSSE3 hosts get the explicit fallback string so
+/// operators reading `selfdefctl hardware export` JSON know which
+/// kernel will execute (the host info command surfaces this directly).
+#[must_use]
+fn derive_ternary_kernel_hint(cpu: &CpuCapabilities) -> String {
+    if cpu.avx512vnni {
+        "bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)".to_string()
+    } else if cpu.avx2 {
+        "bitnet.cpp/VPMADDUBSW: 32×INT8 per YMM (AVX2 fallback)".to_string()
+    } else if cpu.sse4_2 {
+        // SSE 4.2 implies SSSE3 (the actual gate for PMADDUBSW) on
+        // every realistic x86_64 host we'll target.
+        "bitnet.cpp/PMADDUBSW: 16×INT8 per XMM (SSSE3 fallback)".to_string()
+    } else {
+        String::new()
     }
 }
 
@@ -2438,7 +2487,7 @@ mod tests {
     fn capabilities_schema_version_pinned() {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.2.0");
+        assert_eq!(c.schema_version, "1.3.0");
     }
 
     #[test]
@@ -2453,9 +2502,15 @@ mod tests {
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed.schema_version, "1.2.0");
+        assert_eq!(parsed.schema_version, "1.3.0");
         assert_eq!(parsed.cpu.recommended_march, "znver5");
         assert!(parsed.cpu.avx512vnni);
+        // SD-R66: ternary kernel hint round-trips on SAIN-01 features.
+        assert!(
+            parsed.wasm_aot.ternary_kernel_hint.contains("VPDPBUSD"),
+            "expected VPDPBUSD hint, got: {:?}",
+            parsed.wasm_aot.ternary_kernel_hint
+        );
         // SD-R30: wasm_aot block round-trips with the expected feature
         // string on the Zen 5 + AVX-512 synth snapshot.
         assert_eq!(parsed.wasm_aot.target_cpu, "znver5");
@@ -3124,10 +3179,13 @@ malformed,line\n\
     }
 
     #[test]
-    fn sdr30_capabilities_schema_bumped_to_1_2_0() {
+    fn sdr66_capabilities_schema_bumped_to_1_3_0() {
+        // SD-R66: 1.2.0 → 1.3.0 alongside wasm_aot.ternary_kernel_hint
+        // + SD-R64 derived cpu fields. Cross-repo R189 lockstep
+        // mirror in sovereign-os updates in the same arc.
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.2.0");
+        assert_eq!(c.schema_version, "1.3.0");
     }
 
     #[test]
@@ -3452,6 +3510,83 @@ malformed,line\n\
         assert!(
             out.contains(r#"predicate="ternary_aot_capable"} 0"#),
             "expected ternary_aot_capable=0 on minimal host: {out}"
+        );
+    }
+
+    // ---- SD-R66: ternary kernel hint -----------------------------
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_picks_vpdpbusd_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("VPDPBUSD"),
+            "SAIN-01 must select VPDPBUSD hot path: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("§ 16"),
+            "hint must cite master spec § 16: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_falls_back_to_vpmaddubsw_on_avx2_host() {
+        let snap = snap_with_features("GenuineIntel", &["sse4_2", "avx", "avx2", "fma"]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("VPMADDUBSW"),
+            "AVX2-only host must pick VPMADDUBSW: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("AVX2 fallback"),
+            "must label as fallback: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_falls_back_to_pmaddubsw_on_ssse3_host() {
+        let snap = snap_with_features("GenuineIntel", &["sse4_2"]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("PMADDUBSW"),
+            "SSSE3-only host must pick PMADDUBSW: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_empty_on_pre_ssse3_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.is_empty(),
+            "pre-SSSE3 host must report empty hint: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_capabilities_json_carries_ternary_kernel_hint_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"ternary_kernel_hint\""),
+            "ternary_kernel_hint field missing in JSON: {json}"
+        );
+        assert!(
+            json.contains("VPDPBUSD"),
+            "VPDPBUSD substring missing in JSON: {json}"
         );
     }
 

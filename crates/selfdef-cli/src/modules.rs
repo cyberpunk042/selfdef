@@ -4630,6 +4630,7 @@ mod sdr14_hardware_gate_tests {
             target_cpu: "znver5".into(),
             target_features: features.into(),
             compile_command_hint: String::new(),
+            ternary_kernel_hint: String::new(),
         };
         c
     }
