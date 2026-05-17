@@ -99,12 +99,59 @@ get a fleet-thermal-trend dashboard alarm before the hard limit.
   - Recommendation: ONLY emit the trend when ≥3 datapoints in the
     last hour — otherwise noisy.
 
+## Mid-cycle emergence: V-7 (post-hoc) — hardware-exploitation rollup
+
+SD-R64 (added mid-cycle-3) introduced a vector the original V-1..V-6
+list did not anticipate: an operator-readable hardware-exploitation
+rollup that surfaces the master spec § 15-16 ternary fast path
+geometry WITHOUT the operator having to mentally map ISA flags to
+vector lane widths.
+
+Two new derived fields on `CpuCapabilities`:
+
+- `ternary_aot_capable: bool` — true when AVX-512 VNNI is present
+  AND at least one of BF16/FP16 (the bitnet.cpp / Wasm-AOT ternary
+  hot path requirement, master spec § 16).
+- `zmm_int8_lane_capacity: u32` — widest INT8 lane count the host
+  can multiply-accumulate per dispatch: 64 (AVX-512 VNNI VPDPBUSD on
+  ZMM/512-bit), 32 (AVX2 VPMADDUBSW on YMM), 16 (SSSE3 PMADDUBSW on
+  XMM), 0 (no INT8 SIMD).
+
+Two new predicates on `HardwareRequirements`:
+
+- `ternary_aot_capable_required: bool` — gates 1-bit / ternary
+  inference modules onto hosts that can actually run them at the
+  hot-path lane width.
+- `zmm_int8_lanes_min: u32` — operator-readable hardware-exploitation
+  knob (set to 64 to require AVX-512 VNNI, lower for fallback
+  acceptance).
+
+Two new Layer B exports:
+
+- `sovereign_os_selfdef_hardware_gate_capable{predicate="ternary_aot_capable"}`
+  (rides the SD-R54 per-predicate map; gauges 0/1).
+- `sovereign_os_selfdef_hardware_zmm_int8_lanes` (numeric gauge,
+  0-64).
+
+Rationale for the emergence: the operator directive explicitly named
+"Wasm-to-AVX-512 AOT" + "A single 512-bit ZMM vector register can
+hold and manipulate" + "1-bit models" as the load-bearing
+hardware-exploit surface. Reading these as design constraints (not
+as code commentary) revealed that selfdef had the raw ISA flags but
+no operator-readable rollup. V-7 closes that gap.
+
+JSON forward-compat: both new `CpuCapabilities` fields carry
+`#[serde(default)]` so pre-SD-R64 capability dumps deserialize
+cleanly (ternary reads `false`, lane count reads `0` — safe
+fail-closed defaults for gating).
+
 ## Cycle-3 priority ranking
 
 | Priority | Vector | Effort | Rationale |
 |----------|--------|--------|-----------|
 | HIGH     | T-3 fetch | medium | Closes the model-registry loop (SDD-019 carry-over) |
 | HIGH     | V-1 audit | small  | Cheap extension of SD-R47; closes operator-action observability |
+| HIGH     | V-7 hw-exploit rollup | small | SD-R64 — operator-named master spec § 16 surface; CLOSED |
 | MEDIUM   | V-2 metrics | small | Operator fleet-uniformity tool |
 | MEDIUM   | V-5 signing | medium | Supply-chain assurance |
 | LOW      | V-3 custom predicates | medium | YAGNI; wait for a real need |

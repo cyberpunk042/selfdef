@@ -255,6 +255,24 @@ pub(crate) struct HardwareRequirements {
     /// would be weird — operator should rarely use it).
     #[serde(default)]
     pub(crate) sain01_verdict_min: String,
+
+    /// SD-R64: ternary AOT readiness predicate. When `true`, the
+    /// module requires the CPU to expose the bitnet.cpp / Wasm-AOT
+    /// ternary fast path (AVX-512 VNNI + (BF16 or FP16)). Operators
+    /// use this to gate 1-bit / ternary inference modules onto hosts
+    /// that can actually run them at single-cycle ZMM-register lane
+    /// width per master spec § 16. Default `false` disables.
+    #[serde(default)]
+    pub(crate) ternary_aot_capable_required: bool,
+
+    /// SD-R64: minimum widest INT8 dot-product lane count the CPU
+    /// must expose (master spec § 16: a single 512-bit ZMM register
+    /// holds 64 INT8 lanes via VPDPBUSD). 0 disables the gate. Set
+    /// to 64 to require the AVX-512 VNNI hot path; 32 accepts AVX2
+    /// fallback; 16 accepts SSSE3 fallback. Operator-readable
+    /// hardware-exploitation knob.
+    #[serde(default)]
+    pub(crate) zmm_int8_lanes_min: u32,
 }
 
 impl HardwareRequirements {
@@ -413,6 +431,28 @@ impl HardwareRequirements {
                 ));
             }
         }
+        // SD-R64: ternary AOT readiness predicate. Operator declares
+        // "I need the bitnet.cpp hot path" and the gate evaluates
+        // against the SD-R64 derived flag on CpuCapabilities.
+        if self.ternary_aot_capable_required && !caps.cpu.ternary_aot_capable {
+            unmet.push(
+                "ternary_aot_capable required (host lacks AVX-512 VNNI \
+                 + (BF16 or FP16) — bitnet.cpp ternary hot path \
+                 unavailable per master spec § 16)"
+                    .into(),
+            );
+        }
+        // SD-R64: ZMM INT8 lane width gate. Operator declares "I need
+        // ≥N INT8 lanes in the widest dispatch" and the gate evaluates
+        // against the SD-R64 derived lane count.
+        if self.zmm_int8_lanes_min > 0
+            && caps.cpu.zmm_int8_lane_capacity < self.zmm_int8_lanes_min
+        {
+            unmet.push(format!(
+                "zmm_int8_lanes_min = {} (host max = {})",
+                self.zmm_int8_lanes_min, caps.cpu.zmm_int8_lane_capacity,
+            ));
+        }
         if unmet.is_empty() { Ok(()) } else { Err(unmet) }
     }
 
@@ -429,6 +469,8 @@ impl HardwareRequirements {
             && self.gpu_power_headroom_watts_min == 0
             && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
+            && !self.ternary_aot_capable_required
+            && self.zmm_int8_lanes_min == 0
     }
 }
 
@@ -696,6 +738,8 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
             "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
             "wasm_aot_features_required": rh.wasm_aot_features_required,
             "sain01_verdict_min": rh.sain01_verdict_min,
+            "ternary_aot_capable_required": rh.ternary_aot_capable_required,
+            "zmm_int8_lanes_min": rh.zmm_int8_lanes_min,
         },
         "signing": signing_status_json(m, dir, slug),
         "host_status": host_status_json,
@@ -1034,6 +1078,12 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
         }
         if !rh.sain01_verdict_min.is_empty() {
             println!("  - sain01_verdict_min = {}", rh.sain01_verdict_min);
+        }
+        if rh.ternary_aot_capable_required {
+            println!("  - ternary_aot_capable_required = true");
+        }
+        if rh.zmm_int8_lanes_min > 0 {
+            println!("  - zmm_int8_lanes_min = {}", rh.zmm_int8_lanes_min);
         }
     }
     if !m.daemon_requires.is_empty() {
@@ -3945,6 +3995,12 @@ mod sdr14_hardware_gate_tests {
             cpu: CpuCapabilities {
                 avx512vnni: avx512_vnni,
                 avx512bf16: avx512_bf16,
+                // SD-R64: derived fields mirror the production logic
+                // in derive_capabilities so test caps reflect reality.
+                // Ternary capable = VNNI + (BF16 or FP16); lanes = 64
+                // on VNNI hosts.
+                ternary_aot_capable: avx512_vnni && avx512_bf16,
+                zmm_int8_lane_capacity: if avx512_vnni { 64 } else { 0 },
                 ..Default::default()
             },
             memory: MemoryCapabilities {
@@ -4095,11 +4151,113 @@ mod sdr14_hardware_gate_tests {
             gpu_power_headroom_watts_min: 0,
             wasm_aot_features_required: String::new(),
             sain01_verdict_min: "FullMatch".into(),
+            ternary_aot_capable_required: false,
+            zmm_int8_lanes_min: 0,
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
         // Every predicate fails on a minimal host: 5 lines (SD-R26
         // gates only fire when their threshold > 0).
         assert_eq!(unmet.len(), 5, "got: {unmet:?}");
+    }
+
+    // ---- SD-R64: ternary + ZMM lane gate ---------------------------
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_passes_on_sain01() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        // full_match_sain01 has vnni + bf16 → derived ternary = true.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_on_minimal_host() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("bitnet.cpp"),
+            "remediation hint must mention bitnet.cpp hot path: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_when_only_vnni_present() {
+        // vnni=true, bf16=false → derived ternary = false even though
+        // VNNI alone is present. Predicate must reject.
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let caps = caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_64_passes_on_sain01() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_fails_when_host_lacks_avx512_vnni() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        // minimal_host has vnni=false → derived lanes = 0.
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert!(
+            unmet[0].contains("zmm_int8_lanes_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("host max = 0"),
+            "must cite actual host lane count: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_zero_disables_gate() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 0,
+            ..Default::default()
+        };
+        // is_empty must remain true with both gates disabled.
+        assert!(req.is_empty());
+        // And evaluate is a no-op.
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_is_empty_false_when_either_sdr64_gate_set() {
+        let r1 = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!r1.is_empty());
+        let r2 = HardwareRequirements {
+            zmm_int8_lanes_min: 16,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
     }
 
     // -- apply_hardware_gate ----------------------------------------

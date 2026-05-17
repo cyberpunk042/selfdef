@@ -869,6 +869,35 @@ pub struct CpuCapabilities {
     pub avx512vbmi: bool,
     pub avx512vbmi2: bool,
 
+    /// SD-R64: hardware-exploitation summary — true when the CPU can
+    /// run the bitnet.cpp / Wasm-AOT ternary fast path efficiently.
+    /// Requires `avx512_vnni` (VPDPBUSD INT8 dot product, single-cycle
+    /// 64×INT8 per 512-bit ZMM register per master spec § 16) plus at
+    /// least one small-FP path (`avx512_bf16` or `avx512_fp16`) for
+    /// the activation reduction stage. Operator-readable: "yes, this
+    /// box runs 1-bit models at the hot-path lane width."
+    ///
+    /// `#[serde(default)]` keeps the JSON schema forward-compatible:
+    /// pre-SD-R64 capability dumps deserialize cleanly (the flag
+    /// reads `false`, which is the safe default for hardware-gating).
+    #[serde(default)]
+    pub ternary_aot_capable: bool,
+
+    /// SD-R64: max INT8 lanes the CPU can multiply-accumulate per
+    /// single dispatch using the widest available vector ISA.
+    ///
+    /// - 64 when VPDPBUSD (AVX-512 VNNI on ZMM/512-bit) is available
+    ///   (master spec § 16: 64×INT8 per ZMM register).
+    /// - 32 when AVX2 VPMADDUBSW fallback applies (256-bit YMM).
+    /// - 16 when SSSE3 PMADDUBSW only.
+    /// - 0 when no INT8 SIMD path detected.
+    ///
+    /// Operators reading this know the bitnet.cpp inner-loop lane
+    /// width WITHOUT having to map ISA flags to vector geometry.
+    /// `#[serde(default)]` for forward-compat with pre-SD-R64 dumps.
+    #[serde(default)]
+    pub zmm_int8_lane_capacity: u32,
+
     /// Convenience: the recommended `-march=` token for GCC/clang when
     /// compiling for this CPU. `znver5` on Zen 5 + AVX-512 hosts;
     /// `native` on others. Operators can override at build time.
@@ -950,6 +979,12 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         avx512fp16: has("avx512_fp16"),
         avx512vbmi: has("avx512_vbmi"),
         avx512vbmi2: has("avx512_vbmi2"),
+        // SD-R64: derived hardware-exploitation summary fields. The
+        // closures below build them from the raw flags so a single
+        // snapshot probe produces both the granular ISA truth + the
+        // operator-readable rollup.
+        ternary_aot_capable: derive_ternary_aot_capable(feats),
+        zmm_int8_lane_capacity: derive_zmm_int8_lane_capacity(feats),
         recommended_march: recommended_march_for(&snap.cpu.vendor, feats),
         recommended_compile_flags: recommended_compile_flags(feats),
     };
@@ -1064,6 +1099,47 @@ pub fn derive_wasm_aot_capabilities(cpu: &CpuCapabilities) -> WasmAotCapabilitie
         target_cpu,
         target_features,
         compile_command_hint,
+    }
+}
+
+/// SD-R64: derive `ternary_aot_capable` from the raw cpuinfo feature
+/// set. The bitnet.cpp + Wasm-AOT ternary hot path needs:
+///   - `avx512_vnni` for VPDPBUSD (64×INT8 dot product per ZMM register)
+///   - `avx512_bf16` OR `avx512_fp16` for the small-FP activation
+///     reduction stage (BitNet maps {-1,0,+1} weights × INT8
+///     activations → BF16/FP16 accumulator).
+///
+/// Pure function. Tests pin every meaningful combination.
+#[must_use]
+fn derive_ternary_aot_capable(feats: &HashSet<String>) -> bool {
+    let vnni = feats.contains("avx512_vnni");
+    let small_fp = feats.contains("avx512_bf16") || feats.contains("avx512_fp16");
+    vnni && small_fp
+}
+
+/// SD-R64: derive the operator-readable INT8 lane width for the widest
+/// dot-product ISA available on this host. Master spec § 16 motivates
+/// the 64-lane reading: "A single 512-bit ZMM register can hold and
+/// manipulate 64 INT8 values."
+///
+/// Returns the lane count by widest available path:
+///   - 64 when AVX-512 VNNI (VPDPBUSD on ZMM, 512-bit)
+///   - 32 when AVX2 (VPMADDUBSW on YMM, 256-bit) — fallback path
+///   - 16 when SSSE3 only (PMADDUBSW on XMM, 128-bit)
+///   - 0 when no INT8 SIMD detected (unlikely on x86_64 — SSSE3 is
+///     pre-2008)
+///
+/// Pure function.
+#[must_use]
+fn derive_zmm_int8_lane_capacity(feats: &HashSet<String>) -> u32 {
+    if feats.contains("avx512_vnni") {
+        64
+    } else if feats.contains("avx2") {
+        32
+    } else if feats.contains("ssse3") {
+        16
+    } else {
+        0
     }
 }
 
@@ -1566,6 +1642,11 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
                         .all(|g| g.power_draw_watts.is_some() && g.power_limit_watts.is_some()),
             ),
         ),
+        // SD-R64: hardware-exploitation rollup.
+        (
+            "ternary_aot_capable",
+            u8::from(derive_ternary_aot_capable(cpu_features)),
+        ),
     ];
     writeln!(
         &mut buf,
@@ -1584,6 +1665,28 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
         )
         .unwrap();
     }
+
+    // SD-R64: ZMM INT8 lane width gauge. Numeric (not 0/1), so it
+    // gets its own metric instead of riding the per-predicate map.
+    // Master spec § 16 motivates the 64-lane reading for the SAIN-01
+    // bitnet.cpp hot path.
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_zmm_int8_lanes Widest INT8 dot-product lane count available on this CPU (64 = AVX-512 VNNI, 32 = AVX2, 16 = SSSE3, 0 = none). Master spec § 16 (SD-R64)."
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_zmm_int8_lanes gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_zmm_int8_lanes {}",
+        derive_zmm_int8_lane_capacity(cpu_features),
+    )
+    .unwrap();
+
     buf
 }
 
@@ -3235,5 +3338,128 @@ malformed,line\n\
         };
         let caps = derive_capabilities(&snap);
         assert!(gencode_flags_for_gpus(&caps).is_empty());
+    }
+
+    // ---- SD-R64: hardware-exploitation rollup ---------------------
+
+    fn feats(items: &[&str]) -> HashSet<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_requires_vnni_plus_small_fp() {
+        // SAIN-01 — VNNI + BF16 → true.
+        assert!(derive_ternary_aot_capable(&feats(&[
+            "avx512_vnni",
+            "avx512_bf16"
+        ])));
+        // VNNI + FP16 → also true (FP16 covers the small-FP need).
+        assert!(derive_ternary_aot_capable(&feats(&[
+            "avx512_vnni",
+            "avx512_fp16"
+        ])));
+        // VNNI alone → false (no small-FP accumulator).
+        assert!(!derive_ternary_aot_capable(&feats(&["avx512_vnni"])));
+        // BF16 alone → false (no INT8 dot product).
+        assert!(!derive_ternary_aot_capable(&feats(&["avx512_bf16"])));
+        // Empty → false.
+        assert!(!derive_ternary_aot_capable(&feats(&[])));
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lane_capacity_picks_widest_path() {
+        // AVX-512 VNNI → 64 lanes (the SAIN-01 master spec § 16 reading).
+        assert_eq!(
+            derive_zmm_int8_lane_capacity(&feats(&["avx512_vnni", "avx2", "ssse3"])),
+            64
+        );
+        // AVX2 only → 32 lanes (YMM fallback).
+        assert_eq!(
+            derive_zmm_int8_lane_capacity(&feats(&["avx2", "ssse3"])),
+            32
+        );
+        // SSSE3 only → 16 lanes (XMM fallback).
+        assert_eq!(derive_zmm_int8_lane_capacity(&feats(&["ssse3"])), 16);
+        // Pre-SSSE3 → 0 lanes.
+        assert_eq!(derive_zmm_int8_lane_capacity(&feats(&[])), 0);
+    }
+
+    #[test]
+    fn sdr64_capabilities_carry_derived_summary_fields_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "ssse3", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        assert!(caps.cpu.ternary_aot_capable, "SAIN-01 must show ternary_aot_capable");
+        assert_eq!(
+            caps.cpu.zmm_int8_lane_capacity, 64,
+            "SAIN-01 must report 64 INT8 lanes (VPDPBUSD on ZMM)"
+        );
+    }
+
+    #[test]
+    fn sdr64_capabilities_are_zero_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(!caps.cpu.ternary_aot_capable);
+        assert_eq!(caps.cpu.zmm_int8_lane_capacity, 0);
+    }
+
+    #[test]
+    fn sdr64_layer_b_emits_zmm_lane_gauge_and_ternary_predicate() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        // ZMM lane count gauge: SAIN-01 → 64.
+        assert!(
+            out.contains("# TYPE sovereign_os_selfdef_hardware_zmm_int8_lanes gauge"),
+            "type line missing: {out}"
+        );
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_zmm_int8_lanes 64"),
+            "ZMM lane gauge missing or wrong value: {out}"
+        );
+        // Ternary readiness predicate rides the per-predicate map.
+        assert!(
+            out.contains(r#"predicate="ternary_aot_capable"} 1"#),
+            "ternary_aot_capable predicate missing: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr64_layer_b_emits_zero_lanes_and_zero_ternary_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_zmm_int8_lanes 0"),
+            "expected 0-lane reading on minimal host: {out}"
+        );
+        assert!(
+            out.contains(r#"predicate="ternary_aot_capable"} 0"#),
+            "expected ternary_aot_capable=0 on minimal host: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr64_capabilities_json_carries_derived_fields() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"ternary_aot_capable\":true"),
+            "ternary_aot_capable field missing in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"zmm_int8_lane_capacity\":64"),
+            "zmm_int8_lane_capacity field missing in JSON: {json}"
+        );
     }
 }
