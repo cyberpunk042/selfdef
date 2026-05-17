@@ -662,6 +662,216 @@ pub(crate) fn cmd_lora_list(state: Option<&Path>, json: bool) -> Result<i32> {
     Ok(0)
 }
 
+fn save_lora_state(path: &Path, state: &LoraStateFile) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
+        }
+    }
+    let body = serde_json::to_string_pretty(state)?;
+    let tmp = path.with_extension(format!(
+        "{}.tmp",
+        path.extension().and_then(|s| s.to_str()).unwrap_or("json")
+    ));
+    std::fs::write(&tmp, &body).with_context(|| format!("writing {}", tmp.display()))?;
+    std::fs::rename(&tmp, path)
+        .with_context(|| format!("renaming {} -> {}", tmp.display(), path.display()))?;
+    Ok(())
+}
+
+fn now_utc_iso() -> String {
+    use std::time::SystemTime;
+    let secs = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Simple ISO-8601 (UTC, second precision). selfdef doesn't pull in
+    // chrono; the format is stable enough for an audit timestamp.
+    let (year, mon, day, hh, mm, ss) = secs_to_utc(secs);
+    format!("{year:04}-{mon:02}-{day:02}T{hh:02}:{mm:02}:{ss:02}Z")
+}
+
+fn secs_to_utc(secs: u64) -> (i32, u32, u32, u32, u32, u32) {
+    // Days since epoch (1970-01-01).
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    let hh = (rem / 3600) as u32;
+    let mm = ((rem % 3600) / 60) as u32;
+    let ss = (rem % 60) as u32;
+    // Civil-from-days (Howard Hinnant algorithm).
+    let z = days + 719_468;
+    let era = if z >= 0 {
+        z / 146_097
+    } else {
+        (z - 146_096) / 146_097
+    };
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = (yoe as i64) + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = if m <= 2 { y + 1 } else { y };
+    (year as i32, m as u32, d as u32, hh, mm, ss)
+}
+
+/// SD-R89 (SDD-025 Y-2 extension): atomic upsert of one LoRA
+/// attachment. Re-attaching the same adapter_id replaces the prior
+/// row's base_model/status/attached_at (idempotent).
+pub(crate) fn cmd_lora_attach(
+    state: Option<&Path>,
+    adapter_id: &str,
+    base_model: &str,
+    status: Option<&str>,
+    json: bool,
+) -> Result<i32> {
+    let path = lora_state_path(state);
+    let mut s = load_lora_state(&path)?;
+    let new_status = status.unwrap_or("active").to_string();
+    let now = now_utc_iso();
+    let upserted =
+        if let Some(existing) = s.adapters.iter_mut().find(|a| a.adapter_id == adapter_id) {
+            existing.base_model = base_model.to_string();
+            existing.status = new_status.clone();
+            existing.attached_at = now.clone();
+            "upserted"
+        } else {
+            s.adapters.push(LoraEntry {
+                adapter_id: adapter_id.to_string(),
+                base_model: base_model.to_string(),
+                attached_at: now.clone(),
+                status: new_status.clone(),
+            });
+            "attached"
+        };
+    save_lora_state(&path, &s)?;
+    if json {
+        let doc = serde_json::json!({
+            "round": "SD-R89",
+            "action": "attach",
+            "outcome": upserted,
+            "adapter_id": adapter_id,
+            "base_model": base_model,
+            "status": new_status,
+            "attached_at": now,
+            "state_path": path.display().to_string(),
+            "adapter_count": s.adapters.len(),
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+    } else {
+        println!("SD-R89 lora {upserted}: {adapter_id} → {base_model} ({new_status}) at {now}");
+        println!(
+            "  state: {} ({} total adapter(s))",
+            path.display(),
+            s.adapters.len()
+        );
+    }
+    Ok(0)
+}
+
+/// SD-R89: remove one attachment by adapter_id. Atomic update.
+/// rc=1 when the adapter wasn't present.
+pub(crate) fn cmd_lora_detach(state: Option<&Path>, adapter_id: &str, json: bool) -> Result<i32> {
+    let path = lora_state_path(state);
+    let mut s = load_lora_state(&path)?;
+    let before = s.adapters.len();
+    s.adapters.retain(|a| a.adapter_id != adapter_id);
+    let removed = before - s.adapters.len();
+    if removed == 0 {
+        if json {
+            let doc = serde_json::json!({
+                "round": "SD-R89",
+                "action": "detach",
+                "outcome": "not-found",
+                "adapter_id": adapter_id,
+                "state_path": path.display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&doc)?);
+        } else {
+            eprintln!(
+                "ERROR adapter {adapter_id:?} not present in {}",
+                path.display()
+            );
+        }
+        return Ok(1);
+    }
+    save_lora_state(&path, &s)?;
+    if json {
+        let doc = serde_json::json!({
+            "round": "SD-R89",
+            "action": "detach",
+            "outcome": "removed",
+            "adapter_id": adapter_id,
+            "state_path": path.display().to_string(),
+            "adapter_count": s.adapters.len(),
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+    } else {
+        println!(
+            "SD-R89 lora detached: {adapter_id} ({} adapter(s) remain)",
+            s.adapters.len()
+        );
+    }
+    Ok(0)
+}
+
+/// SD-R89: flip an adapter's status in-place. rc=1 when adapter
+/// isn't present; rc=2 when status string isn't one of the known
+/// values (active / disabled / errored).
+pub(crate) fn cmd_lora_set_status(
+    state: Option<&Path>,
+    adapter_id: &str,
+    new_status: &str,
+    json: bool,
+) -> Result<i32> {
+    const KNOWN: &[&str] = &["active", "disabled", "errored"];
+    if !KNOWN.contains(&new_status) {
+        eprintln!("ERROR status {new_status:?} not one of {KNOWN:?}");
+        return Ok(2);
+    }
+    let path = lora_state_path(state);
+    let mut s = load_lora_state(&path)?;
+    let prior;
+    match s.adapters.iter_mut().find(|a| a.adapter_id == adapter_id) {
+        Some(entry) => {
+            prior = entry.status.clone();
+            entry.status = new_status.to_string();
+        }
+        None => {
+            if json {
+                let doc = serde_json::json!({
+                    "round": "SD-R89",
+                    "action": "set-status",
+                    "outcome": "not-found",
+                    "adapter_id": adapter_id,
+                });
+                println!("{}", serde_json::to_string_pretty(&doc)?);
+            } else {
+                eprintln!("ERROR adapter {adapter_id:?} not present");
+            }
+            return Ok(1);
+        }
+    }
+    save_lora_state(&path, &s)?;
+    if json {
+        let doc = serde_json::json!({
+            "round": "SD-R89",
+            "action": "set-status",
+            "outcome": "updated",
+            "adapter_id": adapter_id,
+            "prior_status": prior,
+            "new_status": new_status,
+            "state_path": path.display().to_string(),
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+    } else {
+        println!("SD-R89 lora set-status: {adapter_id} {prior} → {new_status}");
+    }
+    Ok(0)
+}
+
 fn humanize_bytes(b: u64) -> String {
     const KIB: u64 = 1024;
     const MIB: u64 = 1024 * KIB;

@@ -81,6 +81,9 @@ fn sdr85_repl_bootstrap_emits_executable_python() {
         "def modules_config_scaffold(",
         "def models(",
         "def lora_list(",
+        "def lora_attach(",
+        "def lora_detach(",
+        "def lora_set_status(",
         "def mcp_tools()",
     ] {
         assert!(
@@ -129,6 +132,9 @@ fn sdr85_repl_bootstrap_is_valid_python() {
         "modules_config_scaffold",
         "models",
         "lora_list",
+        "lora_attach",
+        "lora_detach",
+        "lora_set_status",
         "mcp_tools",
     ] {
         assert!(

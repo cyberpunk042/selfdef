@@ -108,6 +108,9 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "modules_install_plan(host_config=None, dir=None, category=None)",
                 "modules_config_scaffold(slug, dir=None, instance=None)",
                 "lora_list(state=None)",
+                "lora_attach(adapter_id, base_model, status=None, state=None)",
+                "lora_detach(adapter_id, state=None)",
+                "lora_set_status(adapter_id, status, state=None)",
             ],
         },
         Tier {
@@ -315,6 +318,42 @@ def lora_list(state=None):
         args += ["--state", state]
     return _ctl(*args)
 
+def lora_attach(adapter_id, base_model, status=None, state=None):
+    """selfdefctl models lora attach <id> <base> [--status S] --json
+
+    SD-R89 (SDD-025 Y-2 extension): atomic upsert of one LoRA in the
+    operator state file. Re-attaching the same adapter_id replaces
+    base_model + status + attached_at.
+    """
+    args = ["models", "lora", "attach", adapter_id, base_model, "--json"]
+    if status:
+        args += ["--status", status]
+    if state:
+        args += ["--state", state]
+    return _ctl(*args)
+
+def lora_detach(adapter_id, state=None):
+    """selfdefctl models lora detach <id> --json
+
+    SD-R89: remove one adapter by id. Raises RuntimeError when the
+    adapter wasn't present (subprocess rc=1).
+    """
+    args = ["models", "lora", "detach", adapter_id, "--json"]
+    if state:
+        args += ["--state", state]
+    return _ctl(*args)
+
+def lora_set_status(adapter_id, status, state=None):
+    """selfdefctl models lora set-status <id> <status> --json
+
+    SD-R89: flip an attached LoRA's status (active / disabled /
+    errored) without removing the binding.
+    """
+    args = ["models", "lora", "set-status", adapter_id, status, "--json"]
+    if state:
+        args += ["--state", state]
+    return _ctl(*args)
+
 def mcp_tools():
     """selfdefctl mcp tools (JSON manifest)"""
     return _ctl("mcp", "tools")
@@ -332,6 +371,9 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  modules_config_scaffold(slug, dir=..., instance=...)")
     print("  models()           -> str    (table)")
     print("  lora_list(state=...)")
+    print("  lora_attach(adapter_id, base_model, status=..., state=...)")
+    print("  lora_detach(adapter_id, state=...)")
+    print("  lora_set_status(adapter_id, status, state=...)")
     print("  mcp_tools()        -> dict   (manifest)")
     print("  Tier 2: define your own helpers atop these — the surface is yours.")
 "#
@@ -355,6 +397,9 @@ mod tests {
         assert!(s.contains("def modules_install_plan"));
         assert!(s.contains("def modules_config_scaffold"));
         assert!(s.contains("def lora_list"));
+        assert!(s.contains("def lora_attach"));
+        assert!(s.contains("def lora_detach"));
+        assert!(s.contains("def lora_set_status"));
         assert!(s.contains("def mcp_tools"));
     }
 

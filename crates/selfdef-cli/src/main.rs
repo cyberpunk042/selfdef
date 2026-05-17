@@ -556,6 +556,45 @@ enum LoraAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R89 (SDD-025 Y-2 extension): record a LoRA attachment in
+    /// the operator state file.
+    ///
+    /// Atomic update: read existing state, append/upsert the entry,
+    /// write atomically via tempfile + rename. Idempotent — attaching
+    /// the same adapter_id twice upserts the base_model + status
+    /// fields rather than duplicating the row.
+    Attach {
+        adapter_id: String,
+        base_model: String,
+        /// Override status (default: "active").
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: remove a LoRA attachment by adapter_id. Atomic update.
+    /// rc=1 when the adapter wasn't present (operator should re-check).
+    Detach {
+        adapter_id: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: flip an attached LoRA's status (active / disabled /
+    /// errored). Doesn't remove the row — useful for "I want to keep
+    /// the binding metadata but stop loading this adapter".
+    SetStatus {
+        adapter_id: String,
+        /// One of: active / disabled / errored.
+        status: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1401,6 +1440,46 @@ async fn main() -> Result<()> {
             ModelsAction::Lora { action } => match action {
                 LoraAction::List { state, json } => {
                     let code = models::cmd_lora_list(state.as_deref(), json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::Attach {
+                    adapter_id,
+                    base_model,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_attach(
+                        state.as_deref(),
+                        &adapter_id,
+                        &base_model,
+                        status.as_deref(),
+                        json,
+                    )?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::Detach {
+                    adapter_id,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_detach(state.as_deref(), &adapter_id, json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::SetStatus {
+                    adapter_id,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code =
+                        models::cmd_lora_set_status(state.as_deref(), &adapter_id, &status, json)?;
                     if code != 0 {
                         std::process::exit(code);
                     }

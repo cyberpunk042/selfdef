@@ -209,6 +209,12 @@ pub(crate) fn tools() -> Vec<McpTool> {
             backing_cli: "selfdefctl models lora list [--state P] [--json]",
             category: "read-only",
         },
+        // SD-R89 LoRA mutation verbs (attach / detach / set-status)
+        // are deliberately NOT exposed via MCP in cycle 8 — SD-R84
+        // doctrine pins MCP tools to read-only only. The CLI surface
+        // covers operator-explicit LoRA writes; an MCP-write gate
+        // (with SELFDEF_MCP_ALLOW_WRITES=YES) lands in a follow-up
+        // round after the write-tool authorization model is signed.
         McpTool {
             name: "selfdef.models.list",
             description: "List registered models in the catalog with R71 taxonomy \
