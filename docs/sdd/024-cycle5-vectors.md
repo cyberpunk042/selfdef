@@ -114,9 +114,18 @@ The hardware gate evaluates against a cached capabilities snapshot
 the operator changes BIOS settings (enables AVX-512, swaps a GPU
 in), the cached snapshot diverges from reality.
 
-  - Recommendation: `selfdefctl modules apply --reprobe-hardware`
-    flag forces a fresh probe before the gate runs. Operator-friendly
-    safety knob; defaults to using the cache.
+  - **Decision (SD-R76, 2026-05-17)** — landed in cycle-5 PR. The
+    flag is wired through `ModulesAction::Apply` →
+    `LifecycleOpts.reprobe_hardware` → `apply_hardware_gate_with_opts()`
+    and emits a visible `# SD-R76 (--reprobe-hardware): forcing
+    fresh hardware probe; ignoring any daemon-cached capabilities
+    snapshot` stderr banner. Current selfdef-hardware `probe()` is
+    already fresh per-invocation, so the flag is a no-op at the
+    probe layer in cycle 5 — but the operator-CLI surface +
+    LifecycleOpts plumbing + stderr-banner contract are pinned so a
+    future round can short-circuit reading a daemon-cached
+    `/var/lib/selfdef/hardware-capabilities.json` when the flag is
+    set without changing the operator CLI.
 
 ### X-6 — Module-class taxonomy (parallel to R212 model class)
 

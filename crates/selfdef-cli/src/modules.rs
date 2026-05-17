@@ -1887,6 +1887,12 @@ pub(crate) struct LifecycleOpts {
     /// `[requires_hardware]`, run_lifecycle exits non-zero. Set by
     /// `selfdefctl modules apply --strict-hardware`.
     pub(crate) strict_hardware: bool,
+    /// SD-R76 (SDD-024 X-5 operator safety knob): force a fresh
+    /// hardware probe before the `[requires_hardware]` gate
+    /// evaluates, instead of reading the cached selfdef-hardware
+    /// snapshot. Set by `selfdefctl modules apply --reprobe-hardware`.
+    /// Default false → use the cached snapshot like every prior round.
+    pub(crate) reprobe_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -2239,7 +2245,29 @@ fn apply_signing_gate(active: Vec<ActiveModule>) -> (Vec<ActiveModule>, Vec<(Str
     (kept, failed)
 }
 
+#[cfg(test)]
 fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
+    apply_hardware_gate_with_opts(active, false)
+}
+
+/// SD-R76 (SDD-024 X-5): variant that records whether the operator
+/// forced a fresh reprobe via `--reprobe-hardware`. The selfdef-
+/// hardware probe() call is ALREADY fresh per-invocation in cycle
+/// 5; the flag is plumbed so the operator gets a visible "[SD-R76]
+/// forced hardware reprobe" stderr line + so a future round that
+/// introduces a daemon-emitted cache path can short-circuit
+/// reading the cache when the flag is set, without changing the
+/// operator-facing CLI surface.
+fn apply_hardware_gate_with_opts(
+    active: Vec<ActiveModule>,
+    reprobe_hardware: bool,
+) -> Vec<ActiveModule> {
+    if reprobe_hardware {
+        eprintln!(
+            "# SD-R76 (--reprobe-hardware): forcing fresh hardware probe; \
+             ignoring any daemon-cached capabilities snapshot"
+        );
+    }
     let caps = match selfdef_hardware::probe() {
         Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
         Err(e) => {
@@ -2918,7 +2946,7 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
             .any(|a| !a.manifest.requires_hardware.is_empty())
     {
         let pre_count = active.len();
-        active = apply_hardware_gate(active);
+        active = apply_hardware_gate_with_opts(active, opts.reprobe_hardware);
         let post_count = active.len();
         // SD-R44 (--strict-hardware): if any modules were filtered
         // out, exit non-zero. The SD-R14 skip block already landed
@@ -3859,6 +3887,7 @@ mod sdd_015_apply_gate_tests {
             ignore_daemon_requires: false,
             ignore_hardware: false,
             strict_hardware: false,
+            reprobe_hardware: false,
             daemon_config_path: Some(daemon_config_path),
         }
     }
@@ -4029,6 +4058,7 @@ mod sdd_015_apply_gate_tests {
             ignore_daemon_requires: false,
             ignore_hardware: false,
             strict_hardware: false,
+            reprobe_hardware: false,
             daemon_config_path: None,
         };
         let code = pre_apply_perimeter_check(&opts).unwrap();
