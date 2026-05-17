@@ -320,11 +320,32 @@ pub(crate) struct HardwareRequirements {
 
 impl HardwareRequirements {
     /// Returns Ok iff every set requirement passes; Err with a list
-    /// of unmet predicates otherwise.
+    /// of unmet predicates otherwise. Thin wrapper over
+    /// [`Self::evaluate_resolved`] for callers that don't need the
+    /// any_of branch index (SD-R79 / SDD-025 Y-1).
     pub(crate) fn evaluate(
         &self,
         caps: &selfdef_hardware::HardwareCapabilities,
     ) -> Result<(), Vec<String>> {
+        self.evaluate_resolved(caps).map(|_| ())
+    }
+
+    /// SD-R79 (SDD-025 Y-1): full evaluation that returns WHICH
+    /// `any_of` branch matched.
+    ///
+    /// - `Ok(None)` = root-only pass (no any_of branches involved).
+    /// - `Ok(Some(idx))` = passed via the `idx`-th any_of branch
+    ///   (after every root predicate also passed).
+    /// - `Err` = unmet predicate list (same operator-readable format
+    ///   as before).
+    ///
+    /// The apply path uses the returned branch index to emit a
+    /// `# SD-R79: module X resolved via any_of[N]` stderr line so
+    /// operators see which OR-path actually exercised on this host.
+    pub(crate) fn evaluate_resolved(
+        &self,
+        caps: &selfdef_hardware::HardwareCapabilities,
+    ) -> Result<Option<usize>, Vec<String>> {
         let mut unmet = Vec::new();
         if self.avx512_vnni && !caps.cpu.avx512vnni {
             unmet.push("avx512_vnni required (host lacks AVX-512 VNNI)".into());
@@ -525,19 +546,25 @@ impl HardwareRequirements {
         // predicates have been collected, evaluate `any_of` — module
         // passes iff at least ONE inner block fully evaluates clean.
         // Empty `any_of` = no OR-constraint (pass-through).
+        // SD-R79 (SDD-025 Y-1): record WHICH branch matched so the
+        // apply path can surface it as operator-visible observability.
+        let mut matched_branch: Option<usize> = None;
         if !self.any_of.is_empty() {
-            let mut any_passed = false;
             let mut per_branch_failures: Vec<Vec<String>> = Vec::new();
-            for branch in &self.any_of {
+            for (i, branch) in self.any_of.iter().enumerate() {
+                // evaluate() (not evaluate_resolved()) — flat
+                // semantics inside any_of branches keeps the
+                // operator-facing model simple (no nested branch
+                // indices on stderr).
                 match branch.evaluate(caps) {
                     Ok(()) => {
-                        any_passed = true;
+                        matched_branch = Some(i);
                         break;
                     }
                     Err(branch_unmet) => per_branch_failures.push(branch_unmet),
                 }
             }
-            if !any_passed {
+            if matched_branch.is_none() {
                 unmet.push(format!(
                     "any_of: NONE of {} OR-branch(es) passed",
                     self.any_of.len()
@@ -547,7 +574,11 @@ impl HardwareRequirements {
                 }
             }
         }
-        if unmet.is_empty() { Ok(()) } else { Err(unmet) }
+        if unmet.is_empty() {
+            Ok(matched_branch)
+        } else {
+            Err(unmet)
+        }
     }
 
     /// Returns true if NO requirement is set (the manifest has no
@@ -2334,17 +2365,35 @@ fn apply_hardware_gate_with_opts(
     };
     let mut kept = Vec::with_capacity(active.len());
     let mut skipped = Vec::new();
+    // SD-R79 (SDD-025 Y-1): track which any_of branch resolved each
+    // gated module. Operator-visible observability for OR-paths
+    // exercised at apply time.
+    let mut anyof_resolved: Vec<(String, usize)> = Vec::new();
     for m in active {
         if m.manifest.requires_hardware.is_empty() {
             kept.push(m);
             continue;
         }
         match &caps {
-            Some(c) => match m.manifest.requires_hardware.evaluate(c) {
-                Ok(()) => kept.push(m),
+            Some(c) => match m.manifest.requires_hardware.evaluate_resolved(c) {
+                Ok(matched_branch) => {
+                    if let Some(idx) = matched_branch {
+                        anyof_resolved.push((m.display_name(), idx));
+                    }
+                    kept.push(m);
+                }
                 Err(unmet) => skipped.push((m.display_name(), unmet)),
             },
             None => skipped.push((m.display_name(), vec!["hardware probe unavailable".into()])),
+        }
+    }
+    if !anyof_resolved.is_empty() {
+        eprintln!(
+            "# SD-R79: {} module(s) resolved via [[requires_hardware.any_of]] (SDD-025 Y-1):",
+            anyof_resolved.len()
+        );
+        for (name, idx) in &anyof_resolved {
+            eprintln!("  - {name}: any_of[{idx}] matched");
         }
     }
     if !skipped.is_empty() {
@@ -4638,6 +4687,84 @@ gpu_vram_gib_min = 24
         assert!(parsed.requires_hardware.any_of[0].ternary_aot_capable_required);
         assert_eq!(parsed.requires_hardware.any_of[1].gpu_count_min, 1);
         assert_eq!(parsed.requires_hardware.any_of[1].gpu_vram_gib_min, 24);
+    }
+
+    // ---- SD-R79 (SDD-025 Y-1): evaluate_resolved branch index ----
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_none_when_no_any_of() {
+        // Root-only pass — no any_of branches → None.
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&full_match_sain01()).unwrap();
+        assert_eq!(matched, None);
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_zero_when_first_branch_matches() {
+        // SAIN-01 host satisfies branch 0 (avx512_vnni). Index = 0.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    gpu_count_min: 8,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&full_match_sain01()).unwrap();
+        assert_eq!(matched, Some(0));
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_one_when_second_branch_matches() {
+        // First branch demands an impossible flag; second branch is
+        // trivially-empty (passes). Index = 1.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    host_features_required: "avx512_fp16".into(),
+                    ..Default::default()
+                },
+                HardwareRequirements::default(),
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&minimal_host()).unwrap();
+        assert_eq!(matched, Some(1));
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_short_circuits_on_first_match() {
+        // Branch 0 passes; branches 1 and 2 would also pass — but
+        // evaluate_resolved must short-circuit at the first match.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements::default(),
+                HardwareRequirements::default(),
+                HardwareRequirements::default(),
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&minimal_host()).unwrap();
+        assert_eq!(matched, Some(0));
+    }
+
+    #[test]
+    fn sdr79_evaluate_preserves_back_compat_signature() {
+        // Old callers using evaluate() get () back regardless of
+        // any_of usage.
+        let req = HardwareRequirements {
+            any_of: vec![HardwareRequirements::default()],
+            ..Default::default()
+        };
+        req.evaluate(&minimal_host()).unwrap();
     }
 
     #[test]
