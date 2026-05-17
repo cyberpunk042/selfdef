@@ -348,6 +348,126 @@ pub(crate) fn cmd_check_hardware(dir: Option<&Path>, json: bool) -> Result<i32> 
 
 /// SD-R34 `selfdefctl models list` — operator-friendly catalog
 /// listing without the gate evaluation. Read-only.
+/// SD-R57 (closes SDD-019 T-3 fetch-side): download a model
+/// artifact + verify its sha256 against the manifest declaration.
+/// Operator workflow:
+///
+///   $ selfdefctl models fetch bitnet-b1.58-2B-4T --to /mnt/vault/models/bitnet/model.gguf
+///
+/// Behavior:
+///   - Reads the manifest at <dir>/<slug>/model.toml
+///   - GETs artifact_url; streams to a tempfile next to --to
+///   - Streams through sha256; refuses to rename when digest mismatches
+///   - On match, atomic rename to --to
+///
+/// Mandatory: artifact_sha256 MUST be present in the manifest. The
+/// fetcher refuses to write a file we can't verify. Operators pin
+/// sha256 at manifest authoring time + commit the pinned value.
+///
+/// Operator-supplied tokens: env `HUGGINGFACE_HUB_TOKEN` (or
+/// `--token <env-name>`) → forwarded as a Bearer header. Never read
+/// from the manifest (operator-supplied keys NEVER in-repo).
+pub(crate) async fn cmd_fetch(
+    dir: Option<&Path>,
+    slug: &str,
+    to: &Path,
+    token_env: Option<&str>,
+) -> Result<i32> {
+    let resolved = resolve_dir(dir);
+    let mods = load_all(&resolved)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no model `{slug}` in {}", resolved.display()))?;
+    if m.model.artifact_url.is_empty() {
+        anyhow::bail!("model `{slug}` has no artifact_url — operator must pin one in model.toml");
+    }
+    if m.model.artifact_sha256.is_empty() {
+        anyhow::bail!(
+            "model `{slug}` has no artifact_sha256 — refusing to fetch unverifiable artifact"
+        );
+    }
+
+    // Stage a tempfile next to the destination so the atomic rename
+    // stays on the same filesystem.
+    if let Some(parent) = to.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating destination dir {}", parent.display()))?;
+        }
+    }
+    let mut tmp_path = std::ffi::OsString::from(to);
+    tmp_path.push(".partial");
+    let tmp_path = std::path::PathBuf::from(tmp_path);
+
+    eprintln!(
+        "# SD-R57: fetching {} → {}",
+        m.model.artifact_url,
+        to.display()
+    );
+    eprintln!("#   expected sha256: {}", m.model.artifact_sha256);
+
+    let mut req = reqwest::Client::new().get(&m.model.artifact_url);
+    if let Some(env_name) = token_env {
+        if let Ok(tok) = std::env::var(env_name) {
+            if !tok.is_empty() {
+                req = req.bearer_auth(tok);
+                eprintln!("#   auth: Bearer from ${env_name}");
+            }
+        }
+    }
+    let mut resp = req
+        .send()
+        .await
+        .with_context(|| format!("GET {}", m.model.artifact_url))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("HTTP {} fetching {}", resp.status(), m.model.artifact_url);
+    }
+
+    // Stream → sha256 + tempfile in parallel.
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncWriteExt;
+    let mut hasher = Sha256::new();
+    let mut bytes_written: u64 = 0;
+    let mut f = tokio::fs::File::create(&tmp_path)
+        .await
+        .with_context(|| format!("create {}", tmp_path.display()))?;
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .with_context(|| format!("read chunk from {}", m.model.artifact_url))?
+    {
+        hasher.update(&chunk);
+        f.write_all(&chunk)
+            .await
+            .with_context(|| format!("write to {}", tmp_path.display()))?;
+        bytes_written = bytes_written.saturating_add(chunk.len() as u64);
+    }
+    f.sync_all().await.ok();
+    drop(f);
+
+    let actual = hasher.finalize();
+    let actual_hex: String = actual.iter().map(|b| format!("{b:02x}")).collect();
+    let expected = m.model.artifact_sha256.trim().to_ascii_lowercase();
+
+    if actual_hex != expected {
+        // Tampered or wrong artifact — refuse to commit.
+        let _ = std::fs::remove_file(&tmp_path);
+        eprintln!("# SD-R57: ✗ digest MISMATCH — refusing to rename");
+        eprintln!("#   expected: {expected}");
+        eprintln!("#   actual:   {actual_hex}");
+        anyhow::bail!("sha256 mismatch on {slug} ({bytes_written} bytes downloaded)");
+    }
+    std::fs::rename(&tmp_path, to)
+        .with_context(|| format!("rename {} → {}", tmp_path.display(), to.display()))?;
+    eprintln!(
+        "# SD-R57: ✓ verified {actual_hex} ({bytes_written} bytes) → {}",
+        to.display()
+    );
+    Ok(0)
+}
+
 pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
     let resolved = resolve_dir(dir);
     let catalog = load_all(&resolved)?;

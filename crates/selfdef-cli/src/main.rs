@@ -438,6 +438,24 @@ enum ModelsAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R57 (closes SDD-019 T-3 fetch-side): download a model
+    /// artifact + verify sha256 against the manifest. Operator
+    /// pins artifact_sha256 in model.toml; fetcher refuses to
+    /// rename on mismatch.
+    Fetch {
+        /// Model slug (the directory name under --dir).
+        slug: String,
+        /// Destination path for the downloaded artifact.
+        #[arg(long)]
+        to: PathBuf,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Env-var name carrying a Bearer token (e.g.
+        /// HUGGINGFACE_HUB_TOKEN). Operator-supplied tokens
+        /// NEVER live in-repo; only env-var references.
+        #[arg(long, value_name = "ENV_NAME")]
+        token_env: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1123,6 +1141,18 @@ async fn main() -> Result<()> {
             }
             ModelsAction::CheckHardware { dir, json } => {
                 let code = models::cmd_check_hardware(dir.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModelsAction::Fetch {
+                slug,
+                to,
+                dir,
+                token_env,
+            } => {
+                let code =
+                    models::cmd_fetch(dir.as_deref(), &slug, &to, token_env.as_deref()).await?;
                 if code != 0 {
                     std::process::exit(code);
                 }
