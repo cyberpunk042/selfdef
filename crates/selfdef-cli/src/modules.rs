@@ -610,6 +610,42 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// SD-R63: machine-readable list for tooling consumers (last JSON
+/// gap on the modules surface). Mirrors `models list --json` pattern
+/// from SD-R34 + `modules info --json` from SD-R40 — same schema_version
+/// + per-entry shape.
+pub(crate) fn cmd_list_json(dir: &Path) -> Result<()> {
+    let mods = load_all(dir)?;
+    let entries: Vec<serde_json::Value> = mods
+        .iter()
+        .map(|(slug, m)| {
+            serde_json::json!({
+                "slug": slug,
+                "name": m.name,
+                "version": m.version,
+                "category": m.category,
+                "summary": m.summary,
+                "phase": m.phase.as_str(),
+                "instanced": m.instanced,
+                "depends_on": m.depends_on,
+                "provides": m.provides,
+                "consumes": m.consumes,
+                "has_requires_hardware": !m.requires_hardware.is_empty(),
+                "has_signing_block": m.signing.is_some(),
+                "has_resources_block": m.resources.is_some(),
+            })
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "modules_dir": dir.display().to_string(),
+        "total": entries.len(),
+        "modules": entries,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
 /// SD-R40: emit the module manifest as structured JSON (with the
 /// SD-R39 host_status verdict inlined). Operator-stable schema for
 /// tooling consumers (sovereign-osctl, fleet dashboards, future

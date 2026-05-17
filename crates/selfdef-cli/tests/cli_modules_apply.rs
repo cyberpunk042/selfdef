@@ -869,6 +869,61 @@ fn sdr62_trust_root_dir_refuses_when_no_key_matches() {
     );
 }
 
+/// SD-R63: `modules list --json` for tooling completeness (last
+/// JSON gap on the modules surface).
+#[test]
+fn sdr63_modules_list_json_emits_catalog_summary() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "beta", &["alpha"], stub);
+    // beta declares a [signing] block + [resources] block
+    let b_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&b_toml).unwrap();
+    manifest.push_str(
+        "\n[requires_hardware]\navx512_vnni = true\n[signing]\nrequired = false\n[resources]\ncpu_max = \"1.5\"\n",
+    );
+    std::fs::write(&b_toml, manifest).unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "list",
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["total"], 2);
+    let mods = v["modules"].as_array().unwrap();
+    assert_eq!(mods.len(), 2);
+    // Per-module shape: name, summary, has_* booleans
+    let alpha = mods.iter().find(|m| m["slug"] == "alpha").unwrap();
+    assert_eq!(alpha["has_requires_hardware"], false);
+    assert_eq!(alpha["has_signing_block"], false);
+    assert_eq!(alpha["has_resources_block"], false);
+    let beta = mods.iter().find(|m| m["slug"] == "beta").unwrap();
+    assert_eq!(beta["has_requires_hardware"], true);
+    assert_eq!(beta["has_signing_block"], true);
+    assert_eq!(beta["has_resources_block"], true);
+    // depends_on round-trips
+    assert!(
+        beta["depends_on"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d == "alpha")
+    );
+}
+
 /// SD-R56: `modules info --json` includes a `signing` block that
 /// summarises the SD-R55 posture — state, required flag,
 /// minisig_present, trust_root. Tooling complement to the R195

@@ -466,6 +466,9 @@ enum ModulesAction {
         /// falling back to the workspace `modules/` in dev runs).
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R63: machine-readable JSON instead of the tabular view.
+        #[arg(long)]
+        json: bool,
     },
     /// Show the full manifest for one module by slug.
     Info {
@@ -1159,9 +1162,13 @@ async fn main() -> Result<()> {
             }
         },
         Command::Modules { action } => match action {
-            ModulesAction::List { dir } => {
+            ModulesAction::List { dir, json } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_list(&resolved)?;
+                if json {
+                    modules::cmd_list_json(&resolved)?;
+                } else {
+                    modules::cmd_list(&resolved)?;
+                }
             }
             ModulesAction::Info {
                 slug,
