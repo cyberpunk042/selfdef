@@ -122,6 +122,16 @@ pub(crate) struct ModuleManifest {
     /// passed.
     #[serde(default)]
     pub(crate) daemon_requires: BTreeMap<String, DaemonRequirement>,
+    /// SD-R99 (E2.M6): operator-tunable per-module feature defaults.
+    /// Each entry is a feature name → default value (any TOML type).
+    /// Operators can override individual leaves by adding a `[features]`
+    /// table to `/etc/selfdef/modules/<slug>.toml` (or pass
+    /// `--config <path>` to `selfdefctl modules features`). The merge
+    /// follows the operator-overlay-doctrine (SDD-030 R283 equivalent
+    /// adopted for selfdef): operator-key-wins, lists REPLACE, nested
+    /// dicts deep-merge.
+    #[serde(default)]
+    pub(crate) features: BTreeMap<String, toml::Value>,
 }
 
 /// Expected value for one daemon-config knob. Backed by an untagged
@@ -918,6 +928,217 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
+}
+
+/// SD-R99 (E2.M6): operator-pull module-features overlay. Resolves the
+/// effective per-module feature map by deep-merging the operator's
+/// `/etc/selfdef/modules/<slug>.toml` (or `--config <path>`) on top of
+/// the module manifest's `[features]` defaults. Returns operator-
+/// readable JSON: source path used, sorted dotted-path overlay keys,
+/// final feature map.
+///
+/// Operator-overlay-doctrine (SDD-030 R283 vector) adopted here:
+///   - explicit `--config` wins
+///   - $SELFDEF_MODULE_FEATURES_<SLUG_UPPER> env var (capitalized;
+///     non-alphanum → `_`) is consulted next
+///   - /etc/selfdef/modules/<slug>.toml is the default
+///   - on no overlay file → defaults pass through with
+///     `_source = "(defaults — no overlay file)"`
+///
+/// Deep-merge semantics: scalars/lists REPLACED, nested tables MERGED.
+pub(crate) fn cmd_features_json(
+    dir: &Path,
+    slug: &str,
+    explicit_config: Option<&Path>,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+
+    let defaults: toml::Value = toml::Value::Table(
+        m.features
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect::<toml::map::Map<_, _>>(),
+    );
+
+    // Resolve overlay path (operator-overlay-doctrine 4-tier precedence).
+    let resolved_path = resolve_module_features_overlay(slug, explicit_config);
+
+    // Load + parse overlay (if any).
+    let (overlay_table, source_label, parse_error) = match &resolved_path {
+        Some(p) => match std::fs::read_to_string(p) {
+            Ok(body) => match toml::from_str::<toml::Value>(&body) {
+                Ok(v) => {
+                    // The operator file may carry a `[features]` table
+                    // OR be a flat table; accept both shapes.
+                    let table = match v {
+                        toml::Value::Table(t) => {
+                            if let Some(toml::Value::Table(inner)) = t.get("features").cloned() {
+                                inner
+                            } else {
+                                t
+                            }
+                        }
+                        _ => toml::map::Map::new(),
+                    };
+                    (
+                        Some(toml::Value::Table(table)),
+                        p.display().to_string(),
+                        None,
+                    )
+                }
+                Err(e) => (None, p.display().to_string(), Some(e.to_string())),
+            },
+            Err(e) => (None, p.display().to_string(), Some(e.to_string())),
+        },
+        None => (None, "(defaults — no overlay file)".to_string(), None),
+    };
+
+    // Deep-merge.
+    let mut merged = defaults.clone();
+    if let Some(o) = &overlay_table {
+        deep_merge_toml(&mut merged, o);
+    }
+
+    // Collect dotted-path overlay keys (only when overlay applied
+    // cleanly).
+    let mut overlay_keys: Vec<String> = Vec::new();
+    if let Some(toml::Value::Table(o_tbl)) = &overlay_table {
+        collect_overlay_keys_dotted(o_tbl, "", &mut overlay_keys);
+    }
+    overlay_keys.sort();
+
+    // Render features as JSON (best-effort toml→json convert).
+    let features_json = toml_to_json(&merged);
+
+    let mut doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "round": "SD-R99",
+        "sdd_vector": "E2.M6 / SDD-030 vector adopted",
+        "module": slug,
+        "source": source_label,
+        "overlay_keys": overlay_keys,
+        "features": features_json,
+    });
+    if let Some(err) = parse_error {
+        doc["parse_error"] = serde_json::Value::String(err);
+    }
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+/// SD-R99: env-var name for a given slug. `bridge-l2` →
+/// `SELFDEF_MODULE_FEATURES_BRIDGE_L2`.
+pub(crate) fn module_features_env_name(slug: &str) -> String {
+    let mut s = String::with_capacity(32 + slug.len());
+    s.push_str("SELFDEF_MODULE_FEATURES_");
+    for c in slug.chars() {
+        if c.is_ascii_alphanumeric() {
+            s.push(c.to_ascii_uppercase());
+        } else {
+            s.push('_');
+        }
+    }
+    s
+}
+
+/// SD-R99: 4-tier path resolution.
+pub(crate) fn resolve_module_features_overlay(
+    slug: &str,
+    explicit: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(p) = explicit {
+        if p.is_file() {
+            return Some(p.to_path_buf());
+        }
+        return None;
+    }
+    if let Ok(env_path) = std::env::var(module_features_env_name(slug)) {
+        if !env_path.is_empty() {
+            let p = PathBuf::from(env_path);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    let etc = Path::new(DEFAULT_PER_MODULE_DIR).join(format!("{slug}.toml"));
+    if etc.is_file() {
+        return Some(etc);
+    }
+    None
+}
+
+/// SD-R99: deep-merge `overlay` into `base` (operator-key-wins, lists
+/// REPLACE, nested tables MERGE).
+fn deep_merge_toml(base: &mut toml::Value, overlay: &toml::Value) {
+    match (base, overlay) {
+        (toml::Value::Table(b), toml::Value::Table(o)) => {
+            for (k, v) in o {
+                match b.get_mut(k) {
+                    Some(existing) => {
+                        if matches!(existing, toml::Value::Table(_))
+                            && matches!(v, toml::Value::Table(_))
+                        {
+                            deep_merge_toml(existing, v);
+                        } else {
+                            *existing = v.clone();
+                        }
+                    }
+                    None => {
+                        b.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        (base_slot, overlay_v) => {
+            *base_slot = overlay_v.clone();
+        }
+    }
+}
+
+/// SD-R99: collect dotted-path keys overridden by an overlay table.
+fn collect_overlay_keys_dotted(
+    table: &toml::map::Map<String, toml::Value>,
+    prefix: &str,
+    out: &mut Vec<String>,
+) {
+    for (k, v) in table {
+        let dotted = if prefix.is_empty() {
+            k.clone()
+        } else {
+            format!("{prefix}.{k}")
+        };
+        if let toml::Value::Table(inner) = v {
+            collect_overlay_keys_dotted(inner, &dotted, out);
+        } else {
+            out.push(dotted);
+        }
+    }
+}
+
+/// SD-R99: best-effort `toml::Value` → `serde_json::Value`.
+fn toml_to_json(v: &toml::Value) -> serde_json::Value {
+    match v {
+        toml::Value::String(s) => serde_json::Value::String(s.clone()),
+        toml::Value::Integer(n) => serde_json::Value::Number((*n).into()),
+        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
+        toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
+        toml::Value::Array(a) => serde_json::Value::Array(a.iter().map(toml_to_json).collect()),
+        toml::Value::Table(t) => {
+            let mut m = serde_json::Map::new();
+            for (k, v) in t {
+                m.insert(k.clone(), toml_to_json(v));
+            }
+            serde_json::Value::Object(m)
+        }
+    }
 }
 
 /// SD-R56 (composes with R195 sovereign-os audit): the `signing`
@@ -1828,6 +2049,7 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         requires_hardware: m.requires_hardware.clone(),
         signing: m.signing.clone(),
         resources: m.resources.clone(),
+        features: m.features.clone(),
     }
 }
 
@@ -4422,6 +4644,7 @@ mod tests {
             requires_hardware: HardwareRequirements::default(),
             signing: None,
             resources: None,
+            features: BTreeMap::new(),
         }
     }
 
@@ -5912,6 +6135,7 @@ gpu_vram_gib_min = 24
             instanced: false,
             phase: Phase::Main,
             daemon_requires: BTreeMap::new(),
+            features: BTreeMap::new(),
         };
         ActiveModule {
             slug: slug.into(),

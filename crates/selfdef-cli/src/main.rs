@@ -693,6 +693,22 @@ enum ModulesAction {
         #[arg(long)]
         phase: Option<String>,
     },
+    /// SD-R99 (E2.M6): show the effective per-module feature map —
+    /// the module manifest's `[features]` defaults deep-merged with
+    /// the operator's per-module overlay (`/etc/selfdef/modules/<slug>.toml`
+    /// or `--config <path>` or `$SELFDEF_MODULE_FEATURES_<SLUG>` env).
+    /// Always emits JSON: `{module, source, overlay_keys, features}`.
+    /// Operator-overlay-doctrine (SDD-030 R283 vector) adopted here.
+    Features {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Explicit per-module overlay TOML; beats env + /etc.
+        /// (Named `--overlay` rather than `--config` to avoid
+        /// colliding with the global daemon-config flag.)
+        #[arg(long)]
+        overlay: Option<PathBuf>,
+    },
     /// Show the full manifest for one module by slug.
     Info {
         slug: String,
@@ -1629,6 +1645,11 @@ async fn main() -> Result<()> {
                 } else {
                     modules::cmd_list_filtered(&resolved, category.as_deref(), phase.as_deref())?;
                 }
+            }
+            ModulesAction::Features { slug, dir, overlay } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let rc = modules::cmd_features_json(&resolved, &slug, overlay.as_deref())?;
+                std::process::exit(rc);
             }
             ModulesAction::Info {
                 slug,
