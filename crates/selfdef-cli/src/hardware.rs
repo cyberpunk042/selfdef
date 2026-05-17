@@ -591,10 +591,10 @@ mod tests {
         assert!(path.exists());
         let body = std::fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-        // SD-R66 bumped to 1.3.0 alongside wasm_aot.ternary_kernel_hint
-        // + SD-R64 derived cpu fields. Earlier bumps: SD-R30 1.0→1.2,
-        // SD-R25 1.1 conceptual.
-        assert_eq!(parsed["schema_version"], "1.3.0");
+        // SD-R68 bumped to 1.4.0 alongside cpu.extended_features.
+        // Earlier bumps: SD-R66 1.3.0, SD-R30 1.0→1.2, SD-R25 1.1
+        // conceptual.
+        assert_eq!(parsed["schema_version"], "1.4.0");
         for key in ["cpu", "memory", "gpu", "pcie", "sain01_match", "wasm_aot"] {
             assert!(
                 !parsed[key].is_null(),

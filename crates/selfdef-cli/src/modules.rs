@@ -273,6 +273,23 @@ pub(crate) struct HardwareRequirements {
     /// hardware-exploitation knob.
     #[serde(default)]
     pub(crate) zmm_int8_lanes_min: u32,
+
+    /// SD-R68: generalized cpuinfo-flag gate. Comma-separated list of
+    /// raw cpuinfo feature names that MUST be present on the host.
+    /// Empty string disables. Operators use this to gate modules on
+    /// rare ISA flags WITHOUT selfdef having to add a typed predicate
+    /// per flag (the long tail: rdpid, sha_ni, avx512_vbmi2, ...).
+    ///
+    /// Examples:
+    ///   host_features_required = "avx512_vbmi2"
+    ///   host_features_required = "avx512_vbmi2,rdpid,sha_ni"
+    ///
+    /// Distinct from `wasm_aot_features_required` which uses LLVM
+    /// `+feature` syntax against the wasmtime target_features string.
+    /// This predicate reads raw cpuinfo flags directly via the
+    /// SD-R68 `cpu.extended_features` array.
+    #[serde(default)]
+    pub(crate) host_features_required: String,
 }
 
 impl HardwareRequirements {
@@ -452,6 +469,32 @@ impl HardwareRequirements {
                 self.zmm_int8_lanes_min, caps.cpu.zmm_int8_lane_capacity,
             ));
         }
+        // SD-R68: generalized cpuinfo-flag gate against the host's
+        // SD-R68 extended_features long-tail surface. Comma-separated
+        // syntax matches wasm_aot_features_required's shape but
+        // operates on raw cpuinfo names (no `+` prefix).
+        if !self.host_features_required.is_empty() {
+            let actual: std::collections::HashSet<&str> = caps
+                .cpu
+                .extended_features
+                .iter()
+                .map(String::as_str)
+                .collect();
+            let missing: Vec<&str> = self
+                .host_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "host_features_required = {:?} (host missing: {})",
+                    self.host_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
         if unmet.is_empty() { Ok(()) } else { Err(unmet) }
     }
 
@@ -470,6 +513,7 @@ impl HardwareRequirements {
             && self.sain01_verdict_min.is_empty()
             && !self.ternary_aot_capable_required
             && self.zmm_int8_lanes_min == 0
+            && self.host_features_required.is_empty()
     }
 }
 
@@ -739,6 +783,7 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
             "sain01_verdict_min": rh.sain01_verdict_min,
             "ternary_aot_capable_required": rh.ternary_aot_capable_required,
             "zmm_int8_lanes_min": rh.zmm_int8_lanes_min,
+            "host_features_required": rh.host_features_required,
         },
         "signing": signing_status_json(m, dir, slug),
         "host_status": host_status_json,
@@ -1083,6 +1128,12 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
         }
         if rh.zmm_int8_lanes_min > 0 {
             println!("  - zmm_int8_lanes_min = {}", rh.zmm_int8_lanes_min);
+        }
+        if !rh.host_features_required.is_empty() {
+            println!(
+                "  - host_features_required = \"{}\"",
+                rh.host_features_required
+            );
         }
     }
     if !m.daemon_requires.is_empty() {
@@ -4152,6 +4203,7 @@ mod sdr14_hardware_gate_tests {
             sain01_verdict_min: "FullMatch".into(),
             ternary_aot_capable_required: false,
             zmm_int8_lanes_min: 0,
+            host_features_required: String::new(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
         // Every predicate fails on a minimal host: 5 lines (SD-R26
@@ -4243,6 +4295,76 @@ mod sdr14_hardware_gate_tests {
         assert!(req.is_empty());
         // And evaluate is a no-op.
         req.evaluate(&minimal_host()).unwrap();
+    }
+
+    // ---- SD-R68: host_features_required gate -----------------------
+
+    fn caps_with_extended_features(features: &[&str]) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 256, 2, Sain01Verdict::FullMatch);
+        c.cpu.extended_features = features.iter().map(|s| (*s).to_string()).collect();
+        c
+    }
+
+    #[test]
+    fn sdr68_host_features_required_passes_when_all_present() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        let caps = caps_with_extended_features(&["avx2", "avx512_vbmi2", "sha_ni", "rdpid"]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_fails_with_missing_listed() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx2", "rdpid"]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("host_features_required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("avx512_vbmi2") && unmet[0].contains("sha_ni"),
+            "must cite each missing flag: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr68_host_features_required_tolerates_whitespace_and_empty_tokens() {
+        let req = HardwareRequirements {
+            host_features_required: " avx512_vbmi2, , sha_ni ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx512_vbmi2", "sha_ni"]);
+        // Whitespace + empty-token tolerated; gate passes.
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_empty_string_disables_gate() {
+        let req = HardwareRequirements {
+            host_features_required: String::new(),
+            ..Default::default()
+        };
+        assert!(req.is_empty());
+        // Even with no features in caps the gate is a no-op.
+        let caps = caps_with_extended_features(&[]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_is_empty_false_when_host_features_required_set() {
+        let req = HardwareRequirements {
+            host_features_required: "rdpid".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
     }
 
     #[test]

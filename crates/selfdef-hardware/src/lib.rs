@@ -927,6 +927,19 @@ pub struct CpuCapabilities {
     /// CFLAGS / KCFLAGS when compiling targeted at this CPU. Only
     /// flags whose underlying feature is present are emitted.
     pub recommended_compile_flags: Vec<String>,
+
+    /// SD-R68: sorted list of EVERY raw cpuinfo feature flag observed
+    /// on this host. Surfaces the long tail of ISA flags (rdpid,
+    /// avx512_vbmi2, sha_ni, etc.) so operators can gate modules on
+    /// rare flags without selfdef having to add a typed predicate
+    /// per flag. Consumed by `host_features_required` on
+    /// `[requires_hardware]`.
+    ///
+    /// `#[serde(default)]` for forward-compat: pre-SD-R68 dumps
+    /// deserialize cleanly with an empty list (which makes every
+    /// `host_features_required` gate fail-closed — safe default).
+    #[serde(default)]
+    pub extended_features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -1007,6 +1020,12 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         zmm_int8_lane_capacity: derive_zmm_int8_lane_capacity(feats),
         recommended_march: recommended_march_for(&snap.cpu.vendor, feats),
         recommended_compile_flags: recommended_compile_flags(feats),
+        // SD-R68: sorted snapshot of every raw cpuinfo feature flag.
+        extended_features: {
+            let mut v: Vec<String> = feats.iter().cloned().collect();
+            v.sort();
+            v
+        },
     };
     let memory = MemoryCapabilities {
         total_bytes: snap.memory.total_bytes,
@@ -1036,11 +1055,12 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
     };
     let wasm_aot = derive_wasm_aot_capabilities(&cpu);
     HardwareCapabilities {
-        // SD-R66: bumped to 1.3.0 alongside the wasm_aot.ternary_kernel_hint
+        // SD-R68: bumped to 1.4.0 alongside the cpu.extended_features
         // addition. 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices;
         // 1.2.0 = SD-R30 wasm_aot field; 1.3.0 = SD-R66 ternary
-        // kernel hint + SD-R64 derived cpu fields.
-        schema_version: "1.3.0".into(),
+        // kernel hint + SD-R64 derived cpu fields; 1.4.0 = SD-R68
+        // extended_features long-tail surface.
+        schema_version: "1.4.0".into(),
         probed_at: snap.probed_at.clone(),
         host_tag: None,
         cpu,
@@ -2492,7 +2512,7 @@ mod tests {
     fn capabilities_schema_version_pinned() {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.3.0");
+        assert_eq!(c.schema_version, "1.4.0");
     }
 
     #[test]
@@ -2507,7 +2527,7 @@ mod tests {
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed.schema_version, "1.3.0");
+        assert_eq!(parsed.schema_version, "1.4.0");
         assert_eq!(parsed.cpu.recommended_march, "znver5");
         assert!(parsed.cpu.avx512vnni);
         // SD-R66: ternary kernel hint round-trips on SAIN-01 features.
@@ -3184,13 +3204,13 @@ malformed,line\n\
     }
 
     #[test]
-    fn sdr66_capabilities_schema_bumped_to_1_3_0() {
-        // SD-R66: 1.2.0 → 1.3.0 alongside wasm_aot.ternary_kernel_hint
-        // + SD-R64 derived cpu fields. Cross-repo R189 lockstep
-        // mirror in sovereign-os updates in the same arc.
+    fn sdr68_capabilities_schema_bumped_to_1_4_0() {
+        // SD-R68: 1.3.0 → 1.4.0 alongside cpu.extended_features
+        // long-tail surface. Cross-repo R211 lockstep mirror in
+        // sovereign-os updates in the same arc.
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.3.0");
+        assert_eq!(c.schema_version, "1.4.0");
     }
 
     #[test]
@@ -3524,6 +3544,43 @@ malformed,line\n\
     }
 
     // ---- SD-R66: ternary kernel hint -----------------------------
+
+    // ---- SD-R68: extended_features long-tail surface ------------
+
+    #[test]
+    fn sdr68_extended_features_carries_full_sorted_set() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512_vnni", "avx512_vbmi2", "sha_ni", "rdpid"],
+        );
+        let caps = derive_capabilities(&snap);
+        // Sorted lexicographically:
+        assert_eq!(
+            caps.cpu.extended_features,
+            vec!["avx2", "avx512_vbmi2", "avx512_vnni", "rdpid", "sha_ni"],
+        );
+    }
+
+    #[test]
+    fn sdr68_extended_features_empty_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(caps.cpu.extended_features.is_empty());
+    }
+
+    #[test]
+    fn sdr68_extended_features_round_trips_through_json() {
+        let snap = snap_with_features("AuthenticAMD", &["rdpid", "sha_ni"]);
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"extended_features\""),
+            "extended_features field missing: {json}"
+        );
+        // Re-parse round-trip.
+        let parsed: HardwareCapabilities = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.cpu.extended_features, vec!["rdpid", "sha_ni"]);
+    }
 
     #[test]
     fn sdr66_ternary_kernel_hint_picks_vpdpbusd_on_sain01() {
