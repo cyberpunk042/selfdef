@@ -105,6 +105,7 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "mcp_tools()",
                 "modules_diff(host_config=None, dir=None)",
                 "modules_install_options(host_config=None, dir=None, category=None, only_ready=False)",
+                "modules_install_plan(host_config=None, dir=None, category=None)",
                 "lora_list(state=None)",
             ],
         },
@@ -265,6 +266,25 @@ def modules_install_options(host_config=None, dir=None, category=None, only_read
         args.append("--only-ready")
     return _ctl(*args)
 
+def modules_install_plan(host_config=None, dir=None, category=None):
+    """selfdefctl modules install-plan --json [--category C]
+
+    SD-R87 (SDD-026 Z-13 closure): topologically-ordered install
+    sequence over the SD-R86 plan-ready set. Returns dict with
+    `steps` (numbered + per-step `command`) + `skipped` rows +
+    `cycle_present` flag. Dep cycles surface as cycle_present=True
+    with the unresolved nodes listed; in that case the operator must
+    fix the manifests before retrying.
+    """
+    args = ["modules", "install-plan", "--json"]
+    if host_config:
+        args += ["--host-config", host_config]
+    if dir:
+        args += ["--dir", dir]
+    if category:
+        args += ["--category", category]
+    return _ctl(*args)
+
 def models(dir=None):
     """selfdefctl models list (table)"""
     args = ["models", "list"]
@@ -292,6 +312,7 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  modules_info(slug, resolved=False)")
     print("  modules_diff(host_config=..., dir=...)")
     print("  modules_install_options(host_config=..., category=..., only_ready=False)")
+    print("  modules_install_plan(host_config=..., category=...)")
     print("  models()           -> str    (table)")
     print("  lora_list(state=...)")
     print("  mcp_tools()        -> dict   (manifest)")
@@ -314,6 +335,7 @@ mod tests {
         assert!(s.contains("def modules"));
         assert!(s.contains("def modules_diff"));
         assert!(s.contains("def modules_install_options"));
+        assert!(s.contains("def modules_install_plan"));
         assert!(s.contains("def lora_list"));
         assert!(s.contains("def mcp_tools"));
     }

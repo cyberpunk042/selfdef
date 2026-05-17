@@ -3341,6 +3341,289 @@ pub(crate) fn cmd_install_options(
     Ok(0)
 }
 
+/// SD-R87 (SDD-026 Z-13 closure): topologically-ordered install plan
+/// for the SD-R86 AVAILABLE-and-READY set.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "the options of
+/// the dashboard which offer to install any previously non-installed
+/// modules or features and whatnot anyway and configure them".
+///
+/// SD-R86 surfaces what's installable. SD-R87 turns that into a
+/// runnable sequence: dependency-graph topological sort over the
+/// READY rows + per-step `selfdefctl modules apply --only <slug>`
+/// commands. The dashboard's "Install N modules" button consumes
+/// this directly; the operator's terminal pastes each command in
+/// turn (or pipes through `sh`).
+///
+/// Cycles in the dep graph are reported as a hard error (rc=1)
+/// with the cycle path quoted — operators cannot just silently
+/// skip them, the manifests need correcting.
+///
+/// Modules that depend on AVAILABLE-but-NOT-READY entries are
+/// downgraded to "skipped" with the blocking reason carried into
+/// the plan output (so the operator sees why X isn't being
+/// installed yet, not just that it's absent).
+///
+/// Exit codes:
+///   0  plan generated (may be empty if nothing is ready)
+///   1  cycle detected in the dependency graph
+///   2  usage error
+pub(crate) fn cmd_install_plan(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Collect AVAILABLE rows + classify each. Plan-readiness is more
+    // permissive than SD-R86 install-options readiness: a module is
+    // plan-eligible if its hardware gate passes AND each `depends_on`
+    // entry is EITHER already installed in host_config OR another
+    // hardware-passing available module (which the plan will install
+    // earlier). Deps on non-existent slugs OR hardware-blocked
+    // modules still bump the recommendation off "ready".
+    type ModInfo<'a> = (&'a String, &'a ModuleManifest, &'static str, Vec<String>);
+    let mut available: Vec<ModInfo> = Vec::new();
+
+    // First pass: classify hardware gate for every available slug so
+    // we know which slugs will be installable BY THIS PLAN.
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let (gate_verdict, _): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+        // A dep is satisfiable by the plan if: already installed OR
+        // it's another hardware-passing available module the plan
+        // will run earlier.
+        let missing_deps: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        let recommendation = match (gate_verdict, missing_deps.is_empty()) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+        available.push((slug, m, recommendation, missing_deps));
+    }
+
+    let ready_set: std::collections::BTreeSet<String> = available
+        .iter()
+        .filter(|(_, _, rec, _)| *rec == "ready")
+        .map(|(s, _, _, _)| s.to_string())
+        .collect();
+
+    // Build the dep-restricted subgraph: edges only between READY nodes.
+    let mut indeg: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, m, rec, _) in &available {
+        if *rec != "ready" {
+            continue;
+        }
+        for dep in &m.depends_on {
+            // Only edges WITHIN the READY set matter: deps on already-
+            // installed slugs are satisfied; deps on not-ready slugs
+            // bumped the recommendation off "ready" already.
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.to_string());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+
+    // Kahn's algorithm: emit in deterministic order (sort the queue
+    // each step so output is reproducible).
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+
+    let mut steps: Vec<serde_json::Value> = Vec::new();
+    for (i, slug) in order.iter().enumerate() {
+        let (_, m, _, _) = available.iter().find(|(s, _, _, _)| *s == slug).unwrap();
+        steps.push(serde_json::json!({
+            "order": i + 1,
+            "slug": slug,
+            "phase": m.phase.as_str(),
+            "category": m.category,
+            "summary": m.summary,
+            "depends_on": m.depends_on,
+            "command": format!("selfdefctl modules apply --only {slug}"),
+        }));
+    }
+
+    let mut skipped: Vec<serde_json::Value> = Vec::new();
+    for (slug, m, rec, missing) in &available {
+        if *rec == "ready" {
+            continue;
+        }
+        skipped.push(serde_json::json!({
+            "slug": slug,
+            "category": m.category,
+            "recommendation": rec,
+            "missing_deps": missing,
+            "summary": m.summary,
+        }));
+    }
+
+    let cycle_nodes: Vec<String> = if cycle_present {
+        ready_set
+            .iter()
+            .filter(|s| !order.contains(s))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R87",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": { "category": category },
+            "cycle_present": cycle_present,
+            "cycle_nodes": cycle_nodes,
+            "counts": {
+                "ready_total": ready_set.len(),
+                "ordered": steps.len(),
+                "skipped": skipped.len(),
+            },
+            "steps": steps,
+            "skipped": skipped,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(if cycle_present { 1 } else { 0 });
+    }
+
+    println!("── SD-R87 selfdefctl modules install-plan (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    println!(
+        "  totals:      ready={} ordered={} skipped={}",
+        ready_set.len(),
+        steps.len(),
+        skipped.len()
+    );
+    if cycle_present {
+        println!();
+        println!("  ⛔ DEPENDENCY CYCLE DETECTED — unresolved nodes:");
+        for n in &cycle_nodes {
+            println!("       - {n}");
+        }
+        println!("  Fix: inspect `depends_on` in each module manifest above.");
+        return Ok(1);
+    }
+    if steps.is_empty() {
+        println!();
+        println!("  (no READY modules to install)");
+    } else {
+        println!();
+        println!("  PLAN ({} step(s) — run in order):", steps.len());
+        for s in &steps {
+            let n = s["order"].as_u64().unwrap_or(0);
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let cat = s["category"].as_str().unwrap_or("?");
+            let phase = s["phase"].as_str().unwrap_or("?");
+            let cmd = s["command"].as_str().unwrap_or("?");
+            println!("    {n:>3}. {slug:<32} [{cat}/{phase}]");
+            println!("         $ {cmd}");
+        }
+    }
+    if !skipped.is_empty() {
+        println!();
+        println!("  SKIPPED ({} — not ready):", skipped.len());
+        for s in &skipped {
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let rec = s["recommendation"].as_str().unwrap_or("?");
+            println!("    · {slug:<32} → {rec}");
+        }
+    }
+    Ok(0)
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet

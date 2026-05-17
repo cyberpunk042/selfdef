@@ -733,6 +733,26 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R87 (SDD-026 Z-13): topologically-ordered install plan over
+    /// the SD-R86 AVAILABLE-and-READY set.
+    ///
+    /// Resolves the dep graph + emits a numbered sequence of
+    /// `selfdefctl modules apply --only <slug>` commands the operator
+    /// runs in order. NOT-READY modules are reported in a separate
+    /// "skipped" section with their blocking reason. Dep cycles fail
+    /// the plan with rc=1 (manifests must be corrected).
+    InstallPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
     /// Destructive: requires `--confirm <hostname>` matching this host
@@ -1514,6 +1534,20 @@ async fn main() -> Result<()> {
                     category.as_deref(),
                     only_ready,
                 )?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallPlan {
+                host_config,
+                dir,
+                category,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_install_plan(&host_path, &dir_path, json, category.as_deref())?;
                 if code != 0 {
                     std::process::exit(code);
                 }

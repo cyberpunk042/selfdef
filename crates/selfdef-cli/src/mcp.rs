@@ -131,6 +131,28 @@ pub(crate) fn tools() -> Vec<McpTool> {
             category: "read-only",
         },
         McpTool {
+            name: "selfdef.modules.install_plan",
+            description: "SD-R87 (SDD-026 Z-13 closure): topologically-ordered \
+                 install plan over the SD-R86 plan-ready set. Returns the \
+                 numbered sequence of `selfdefctl modules apply --only <slug>` \
+                 commands the operator runs. Cycles in the dep graph surface \
+                 as cycle_present=true with the unresolved nodes listed; \
+                 manifests must be corrected before retrying. Read-only \
+                 (computes plan; does not mutate host_config).",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "host_config": { "type": "string" },
+                    "dir": { "type": "string" },
+                    "category": { "type": "string" },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl modules install-plan [--host-config P] [--dir D] [--category C] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.modules.info",
             description: "Print full module manifest. With --resolved, evaluate \
                  the gate against this host and surface which any_of OR-\
