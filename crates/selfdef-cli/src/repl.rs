@@ -537,6 +537,84 @@ def track(name=None):
         return _inner
     return _wrap
 
+# --- SD-R98 (E8.M4) integrated-intelligence module registry ---
+# Operator-named (§1b verbatim): "Integrated-intelligence modules —
+# operator-pull CoT routines registered with @selfdef_macro".
+_SELFDEF_MACROS = {}
+
+def selfdef_macro(name=None, description=None, tags=None, track_outcome=True):
+    """SD-R98: register a function as an operator-pull CoT routine.
+
+    The decorated function lands in _SELFDEF_MACROS so operators can
+    list / introspect / run macros by name. When track_outcome=True
+    (default) the wrapper composes with SD-R97 @track so every
+    registered macro contributes to the SD-R95 audit trail.
+
+    Usage:
+        @selfdef_macro(description="health rollup",
+                       tags=["health", "rollup"])
+        def health_summary():
+            return health_to_attention()
+
+        list_macros()                  # discover
+        macro_info("health_summary")   # introspect
+        run_macro("health_summary")    # invoke by name
+    """
+    def _wrap(fn):
+        macro_name = name or getattr(fn, "__name__", "anon")
+        wrapped = track(macro_name)(fn) if track_outcome else fn
+        doc = (fn.__doc__ or "").strip()
+        first_line = doc.split("\n", 1)[0].strip() if doc else ""
+        _SELFDEF_MACROS[macro_name] = {
+            "name": macro_name,
+            "description": (description or first_line or ""),
+            "tags": list(tags or []),
+            "track_outcome": bool(track_outcome),
+            "callable": wrapped,
+            "qualname": getattr(fn, "__qualname__", macro_name),
+        }
+        return wrapped
+    return _wrap
+
+def list_macros(tag=None):
+    """SD-R98: list registered operator-pull CoT macros (optionally
+    filtered by tag). Returns sorted-by-name list of dicts."""
+    out = []
+    for nm in sorted(_SELFDEF_MACROS.keys()):
+        meta = _SELFDEF_MACROS[nm]
+        if tag is not None and tag not in meta["tags"]:
+            continue
+        out.append({
+            "name": meta["name"],
+            "description": meta["description"],
+            "tags": list(meta["tags"]),
+            "track_outcome": meta["track_outcome"],
+        })
+    return out
+
+def macro_info(name):
+    """SD-R98: full metadata for a registered macro (or None)."""
+    m = _SELFDEF_MACROS.get(name)
+    if m is None:
+        return None
+    return {
+        "name": m["name"],
+        "description": m["description"],
+        "tags": list(m["tags"]),
+        "track_outcome": m["track_outcome"],
+        "qualname": m["qualname"],
+    }
+
+def run_macro(name, *args, **kwargs):
+    """SD-R98: invoke a registered macro by name. Raises KeyError if
+    the name isn't registered — the message lists known macros so the
+    operator doesn't have to grep for typos."""
+    m = _SELFDEF_MACROS.get(name)
+    if m is None:
+        known = sorted(_SELFDEF_MACROS.keys())
+        raise KeyError(f"unknown selfdef_macro {name!r}; known: {known}")
+    return m["callable"](*args, **kwargs)
+
 # Banner — only print when imported into an interactive session.
 if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("selfdef REPL — Tier 1 (Proto-Programming) ready.")
@@ -562,6 +640,10 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print()
     print("  SD-R97 wasted-path tracker (Tier 2):")
     print("    @track('macro_name') def my_macro(...): ...")
+    print()
+    print("  SD-R98 integrated-intelligence registry (operator-pull CoT):")
+    print("    @selfdef_macro(description=..., tags=[...])")
+    print("    list_macros()     macro_info(name)     run_macro(name, ...)")
     print()
     print("  Tier 2: define your own helpers atop these — the surface is yours.")
 "#
@@ -675,6 +757,31 @@ pub(crate) fn tier2_examples() -> Vec<Tier2Example> {
     if (hw.get("gpu") or {}).get("device_count", 0) == 0:
         attention.append({"area": "gpu", "missing": "any-gpu"})
     return attention
+"#,
+        },
+        Tier2Example {
+            name: "registered_health_rollup",
+            summary: "SD-R98 example: register a CoT routine with @selfdef_macro \
+                      so operators can discover/introspect/run it by name.",
+            source: r#"@selfdef_macro(description="health rollup over hardware+posture",
+                tags=["health", "rollup", "sd-r98-example"])
+def registered_health_rollup():
+    """Operator-pull CoT: aggregate hardware + posture + attention items
+    so a downstream agent can decide what to fix first."""
+    hw = hardware() or {}
+    p  = posture() or {}
+    return {
+        "verdict": p.get("verdict"),
+        "cpu_model": (hw.get("cpu") or {}).get("model"),
+        "gpu_count": (hw.get("gpu") or {}).get("device_count", 0),
+        "attention": health_to_attention(),
+    }
+
+# Discover/introspect/run after registration:
+#   list_macros()                              # → [{name, description, tags, ...}]
+#   list_macros(tag="health")                  # → filtered by tag
+#   macro_info("registered_health_rollup")     # → full metadata
+#   run_macro("registered_health_rollup")      # → invoke by name
 "#,
         },
     ]
