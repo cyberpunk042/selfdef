@@ -232,13 +232,37 @@ def _ctl(*args):
     SD-R95: when SELFDEF_REPL_HISTORY is set, each call is appended to
     that JSONL file with {argv, rc, started_at, duration_ms} so the
     operator gets an audit trail of every Tier 1 + Tier 2 invocation.
+
+    SD-R101 (E8.M5): when SELFDEF_MCP_URL is set (format
+    `tcp://host:port`) the call is routed through the SD-R94 MCP TCP
+    transport instead of fork+exec'ing selfdefctl. The result is the
+    same JSON the subprocess would have returned, but the operator's
+    REPL pays a single socket roundtrip instead of a process spawn —
+    closes E8.M5 (zero-subprocess Tier 1) via the MCP bridge without
+    requiring pyo3 / unsafe code.
+
+    The MCP URL can also be set on a per-call basis at the top of the
+    bootstrap session — operators audit which transport was used via
+    the SD-R95 history's `transport` field (added in this round).
     """
     import time as _time
     started_at = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
+    mcp_url = _os.environ.get("SELFDEF_MCP_URL", "").strip()
+    if mcp_url:
+        t0 = _time.time()
+        try:
+            result = _ctl_via_mcp(args, mcp_url)
+            duration_ms = int((_time.time() - t0) * 1000)
+            _record_history_v2(args, 0, started_at, duration_ms, "mcp-tcp")
+            return result
+        except RuntimeError:
+            duration_ms = int((_time.time() - t0) * 1000)
+            _record_history_v2(args, -1, started_at, duration_ms, "mcp-tcp")
+            raise
     if _SELFDEFCTL is None:
         # Record the failed attempt before raising — operators auditing
         # a session see what was tried even when the CLI is missing.
-        _record_history(args, -1, started_at, 0)
+        _record_history_v2(args, -1, started_at, 0, "subprocess")
         raise RuntimeError("selfdefctl missing — install the selfdef-cli crate")
     t0 = _time.time()
     r = _subp.run(
@@ -246,7 +270,7 @@ def _ctl(*args):
         capture_output=True, text=True, check=False, timeout=20,
     )
     duration_ms = int((_time.time() - t0) * 1000)
-    _record_history(args, r.returncode, started_at, duration_ms)
+    _record_history_v2(args, r.returncode, started_at, duration_ms, "subprocess")
     if r.returncode != 0:
         raise RuntimeError(
             f"selfdefctl {' '.join(args)} exited {r.returncode}: {r.stderr.strip()}"
@@ -257,6 +281,219 @@ def _ctl(*args):
         return _json.loads(r.stdout)
     except _json.JSONDecodeError:
         return r.stdout  # fall back to raw stdout
+
+# SD-R101 (E8.M5): argv → MCP tool name + arguments translation.
+# Each Tier 1 callable's argv shape maps to one SD-R94 MCP tool.
+# Operator-readable mapping table — easy to extend as new MCP tools
+# land in selfdef-cli's mcp.rs.
+def _argv_to_mcp_call(args):
+    """Translate (*argv) to (tool_name, arguments_dict).
+
+    Returns None if the argv shape isn't covered by the MCP tool
+    catalog (operator falls back to subprocess transparently).
+
+    Every Tier 1 callable appends `--json`; the MCP tool schemas all
+    expose a `json` boolean (default false) that we MUST set to true
+    so the tool's backing CLI runs in JSON mode. The translator
+    auto-injects it into the arguments dict — no caller needs to
+    remember.
+    """
+    a = list(args)
+    # Strip a trailing --json — every Tier 1 caller appends it; MCP
+    # tools always return JSON when `json=true` lands in arguments.
+    if a and a[-1] == "--json":
+        a = a[:-1]
+    if not a:
+        return None
+
+    def _with_json(tool_name, arg_dict=None):
+        arg_dict = dict(arg_dict or {})
+        arg_dict["json"] = True
+        return tool_name, arg_dict
+
+    # Hardware surface.
+    # selfdef.hardware.export is JSON-only by design (no `json` knob in
+    # its schema; adding one fails CLI argparse). Skip the auto-inject.
+    if a == ["hardware"]:
+        return "selfdef.hardware.export", {}
+    if a == ["hardware", "posture"]:
+        return _with_json("selfdef.hardware.posture")
+
+    # Modules surface.
+    if a[:2] == ["modules", "list"]:
+        kw = {}
+        i = 2
+        while i < len(a):
+            if a[i] == "--category" and i + 1 < len(a):
+                kw["category"] = a[i + 1]; i += 2; continue
+            if a[i] == "--phase" and i + 1 < len(a):
+                kw["phase"] = a[i + 1]; i += 2; continue
+            i += 1
+        return _with_json("selfdef.modules.list", kw)
+    if a[:2] == ["modules", "info"] and len(a) >= 3:
+        kw = {"slug": a[2]}
+        if "--resolved" in a:
+            kw["resolved"] = True
+        return _with_json("selfdef.modules.info", kw)
+    if a[:2] == ["modules", "diff"]:
+        return _with_json("selfdef.modules.diff", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "install-options"]:
+        return _with_json("selfdef.modules.install_options", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "install-plan"]:
+        return _with_json("selfdef.modules.install_plan", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "config-scaffold"] and len(a) >= 3:
+        kw = {"slug": a[2]}
+        kw.update(_kv_pairs(a[3:]))
+        return _with_json("selfdef.modules.config_scaffold", kw)
+    if a[:2] == ["modules", "apply-plan"]:
+        return _with_json("selfdef.modules.apply_plan", _kv_pairs(a[2:]))
+
+    # LoRA surface.
+    if a[:2] == ["lora", "list"]:
+        return _with_json("selfdef.models.lora.list", _kv_pairs(a[2:]))
+    if a[:2] == ["lora", "attach"] and len(a) >= 4:
+        kw = {"adapter_id": a[2], "base_model": a[3]}
+        kw.update(_kv_pairs(a[4:]))
+        return _with_json("selfdef.models.lora.attach", kw)
+    if a[:2] == ["lora", "detach"] and len(a) >= 3:
+        kw = {"adapter_id": a[2]}
+        kw.update(_kv_pairs(a[3:]))
+        return _with_json("selfdef.models.lora.detach", kw)
+    if a[:2] == ["lora", "set-status"] and len(a) >= 4:
+        return _with_json("selfdef.models.lora.set_status", {
+            "adapter_id": a[2], "status": a[3],
+        })
+
+    # REPL history.
+    if a[:2] == ["repl", "history"]:
+        return _with_json("selfdef.repl.history", _kv_pairs(a[2:]))
+
+    return None
+
+def _kv_pairs(args):
+    """Walk a --k v --flag list and return a dict of {k: v} pairs,
+    converting --flag (no value) to {flag: True}."""
+    out = {}
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok.startswith("--"):
+            key = tok[2:].replace("-", "_")
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                out[key] = args[i + 1]
+                i += 2
+                continue
+            out[key] = True
+            i += 1
+            continue
+        i += 1
+    return out
+
+def _ctl_via_mcp(args, url):
+    """SD-R101: route a Tier 1 call through SD-R94 MCP TCP."""
+    if not url.startswith("tcp://"):
+        raise RuntimeError(
+            f"SELFDEF_MCP_URL must start with tcp:// (got {url!r})"
+        )
+    hostport = url[len("tcp://"):]
+    if ":" not in hostport:
+        raise RuntimeError(f"SELFDEF_MCP_URL malformed (need host:port): {url!r}")
+    host, port_s = hostport.rsplit(":", 1)
+    try:
+        port = int(port_s)
+    except ValueError as e:
+        raise RuntimeError(f"SELFDEF_MCP_URL port: {e}") from e
+
+    mapped = _argv_to_mcp_call(args)
+    if mapped is None:
+        # Argv not in the MCP catalog — fall back to subprocess.
+        if _SELFDEFCTL is None:
+            raise RuntimeError(
+                f"argv {list(args)} not in MCP catalog + selfdefctl unavailable"
+            )
+        r = _subp.run(
+            [_SELFDEFCTL, *args],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"selfdefctl {' '.join(args)} exited {r.returncode}: "
+                f"{r.stderr.strip()}"
+            )
+        if not r.stdout.strip():
+            return None
+        try:
+            return _json.loads(r.stdout)
+        except _json.JSONDecodeError:
+            return r.stdout
+
+    tool_name, arguments = mapped
+    import socket as _socket
+    req = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": tool_name, "arguments": arguments},
+    }
+    line = _json.dumps(req) + "\n"
+    s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    s.settimeout(20)
+    try:
+        s.connect((host, port))
+        # Optional Bearer auth — SD-R94 supports per-connection auth.
+        bearer = _os.environ.get("SELFDEF_MCP_BEARER", "").strip()
+        if bearer:
+            s.sendall(f"Authorization: Bearer {bearer}\n".encode())
+        s.sendall(line.encode())
+        # Read line-delimited response.
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+    finally:
+        s.close()
+    try:
+        resp = _json.loads(buf.decode(errors="replace"))
+    except _json.JSONDecodeError as e:
+        raise RuntimeError(f"MCP response not JSON: {e}; raw={buf[:200]!r}") from e
+    if "error" in resp:
+        err = resp["error"]
+        raise RuntimeError(
+            f"MCP tool {tool_name} returned error {err.get('code')}: {err.get('message')}"
+        )
+    result = resp.get("result", {})
+    # MCP tools wrap their payload as
+    # {"content":[{"type":"text","text":"<json>"}]}; unwrap when present.
+    if isinstance(result, dict) and "content" in result:
+        content = result.get("content")
+        if isinstance(content, list) and content and isinstance(content[0], dict):
+            text = content[0].get("text")
+            if isinstance(text, str):
+                try:
+                    return _json.loads(text)
+                except _json.JSONDecodeError:
+                    return text
+    return result
+
+def _record_history_v2(args, rc, started_at, duration_ms, transport):
+    """SD-R101: extension of SD-R95 with the `transport` field so the
+    operator can tell which calls went through MCP vs subprocess."""
+    if not _HISTORY_PATH:
+        return
+    try:
+        with open(_HISTORY_PATH, "a") as fh:
+            fh.write(_json.dumps({
+                "round": "SD-R101",
+                "started_at": started_at,
+                "duration_ms": duration_ms,
+                "argv": list(args),
+                "rc": rc,
+                "transport": transport,
+            }) + "\n")
+    except OSError:
+        pass
 
 def hardware():
     """selfdefctl hardware --json"""
@@ -644,6 +881,12 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  SD-R98 integrated-intelligence registry (operator-pull CoT):")
     print("    @selfdef_macro(description=..., tags=[...])")
     print("    list_macros()     macro_info(name)     run_macro(name, ...)")
+    print()
+    print("  SD-R101 (E8.M5) zero-subprocess Tier 1 via MCP TCP bridge:")
+    print("    export SELFDEF_MCP_URL=tcp://127.0.0.1:9876  # uses SD-R94")
+    print("    export SELFDEF_MCP_BEARER=<token>            # optional auth")
+    print("    Every _ctl(*argv) call becomes one socket roundtrip; "
+          "SD-R95 history records `transport` field per call.")
     print()
     print("  Tier 2: define your own helpers atop these — the surface is yours.")
 "#
