@@ -97,6 +97,74 @@ fn sdr58_check_rejects_missing_etc_dir() {
     assert!(!out.status.success(), "check should fail on absent etc");
 }
 
+/// SD-R60 (closes SDD-021 W-1): the slice-plan.json emitted by
+/// the tensor-parallel-inference module's apply.sh must conform
+/// to the documented schema at
+/// docs/schemas/tensor-parallel-slice-plan.schema.json.
+#[test]
+fn sdr60_slice_plan_conforms_to_documented_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    let etc = dir.path().join("etc");
+    let tune = dir.path().join("hw-tune.env");
+    std::fs::write(&tune, "SELFDEF_HARDWARE_MARCH=znver5\n").unwrap();
+    let apply = module_dir().join("install/apply.sh");
+    let out = Command::new(&apply)
+        .env("SELFDEF_TENSOR_PARALLEL_ETC_DIR", etc.to_str().unwrap())
+        .env("SELFDEF_HARDWARE_TUNE_ENV", tune.to_str().unwrap())
+        .output()
+        .expect("spawn apply.sh");
+    assert!(out.status.success());
+
+    let body = std::fs::read_to_string(etc.join("slice-plan.json")).unwrap();
+    let doc: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    // Required top-level keys
+    for k in ["schema_version", "ranks", "slices"] {
+        assert!(
+            doc.get(k).is_some(),
+            "slice-plan.json missing required top-level key '{k}': {body}"
+        );
+    }
+    // schema_version is N.N.N
+    let v = doc["schema_version"]
+        .as_str()
+        .expect("schema_version is string");
+    let parts: Vec<&str> = v.split('.').collect();
+    assert_eq!(parts.len(), 3, "schema_version not N.N.N: {v}");
+    for p in &parts {
+        assert!(p.chars().all(|c| c.is_ascii_digit()), "non-numeric: {p}");
+    }
+    // ranks is non-negative integer
+    let ranks = doc["ranks"].as_i64().expect("ranks must be integer");
+    assert!(ranks >= 0, "ranks must be >= 0: {ranks}");
+    // slices array entries each have rank/gpu_index/share_pct
+    let slices = doc["slices"].as_array().expect("slices must be array");
+    for entry in slices {
+        let rank = entry["rank"].as_i64().expect("rank must be integer");
+        assert!(rank >= 0, "rank must be >= 0: {rank}");
+        let gpu = entry["gpu_index"]
+            .as_i64()
+            .expect("gpu_index must be integer");
+        assert!(gpu >= 0, "gpu_index must be >= 0: {gpu}");
+        let share = entry["share_pct"]
+            .as_i64()
+            .expect("share_pct must be integer");
+        assert!(
+            (0..=100).contains(&share),
+            "share_pct must be in [0, 100]: {share}"
+        );
+    }
+}
+
+#[test]
+fn sdr60_slice_plan_schema_file_exists_and_is_valid_json() {
+    let crate_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let schema = crate_root.join("../../docs/schemas/tensor-parallel-slice-plan.schema.json");
+    assert!(schema.exists(), "schema missing: {}", schema.display());
+    let body = std::fs::read_to_string(&schema).unwrap();
+    let _v: serde_json::Value = serde_json::from_str(&body).expect("schema must be valid JSON");
+}
+
 #[test]
 fn sdr58_info_surfaces_each_min_and_signing_block() {
     let out = Command::new(binary())
