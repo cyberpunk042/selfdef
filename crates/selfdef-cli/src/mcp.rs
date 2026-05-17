@@ -947,15 +947,32 @@ mod tests {
     }
 
     #[test]
-    fn sdr84_cycle_8_doctrine_read_only_only() {
-        // Every tool MUST be category=read-only in cycle 8.
+    fn sdr84_sdr96_tool_categories_constrained() {
+        // SD-R84 originally locked cycle 8 to read-only only. SD-R96
+        // (E7.M4) opens the write category, gated behind
+        // SELFDEF_MCP_ALLOW_WRITES=YES at the server. The contract
+        // now is: every tool's category is one of {read-only, write}.
+        // Write tools are filtered from tools/list + rejected by
+        // tools/call with -32604 unless the env flag is YES (the
+        // serve-side enforcement is covered by cli_mcp_write_gate).
         for t in tools() {
-            assert_eq!(
-                t.category, "read-only",
-                "tool {} must be read-only in cycle 8",
-                t.name
+            assert!(
+                t.category == "read-only" || t.category == "write",
+                "tool {} category={:?} must be one of {{read-only, write}}",
+                t.name,
+                t.category,
             );
         }
+        // At least ONE write tool must be in the manifest (SD-R96 added
+        // 3 LoRA mutation entries); otherwise the gate is dead code.
+        let write_count = tools()
+            .into_iter()
+            .filter(|t| t.category == "write")
+            .count();
+        assert!(
+            write_count >= 3,
+            "expected ≥3 write-category tools per SD-R96 (got {write_count})"
+        );
     }
 
     #[test]
