@@ -238,6 +238,26 @@ pub(crate) fn tools() -> Vec<McpTool> {
         // (with SELFDEF_MCP_ALLOW_WRITES=YES) lands in a follow-up
         // round after the write-tool authorization model is signed.
         McpTool {
+            name: "selfdef.repl.history",
+            description: "SD-R95 (SDD-026 Z-12 audit): read back the operator's \
+                 REPL JSONL audit trail (SELFDEF_REPL_HISTORY-recorded calls). \
+                 MCP-callable so an integrated-intelligence module can review \
+                 what the operator's session executed before deciding what \
+                 to do next. Read-only.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string" },
+                    "limit": { "type": "integer", "default": 50 },
+                    "all": { "type": "boolean", "default": false },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl repl history [--path P] [--limit N] [--all] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.repl.tier2_examples",
             description: "SD-R90 (SDD-026 Z-12 follow-up): list the operator-\
                  facing Tier 2 (Proto-Proto-Programming) example macros the \

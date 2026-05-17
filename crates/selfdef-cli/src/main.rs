@@ -270,6 +270,24 @@ enum ReplAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R95 (SDD-026 Z-12 audit): read back the JSONL audit trail
+    /// the REPL bootstrap writes when SELFDEF_REPL_HISTORY is set.
+    /// Operator-pull surface: shows every Tier 1 + Tier 2 invocation
+    /// with argv + rc + duration_ms so the operator can audit what
+    /// their session (or an integrated-intelligence module) executed.
+    History {
+        /// Override the history file path.
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Cap the number of rows rendered (default = 50; --all overrides).
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        /// Show every row regardless of --limit.
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1155,6 +1173,17 @@ async fn main() -> Result<()> {
             }
             ReplAction::Tier2Examples { name, json } => {
                 let code = repl::cmd_tier2_examples(name.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ReplAction::History {
+                path,
+                limit,
+                all,
+                json,
+            } => {
+                let code = repl::cmd_history(path.as_deref(), limit, all, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }

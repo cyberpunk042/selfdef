@@ -201,14 +201,50 @@ if _SELFDEFCTL is None:
         file=_sys.stderr,
     )
 
+# SD-R95: opt-in JSONL audit trail of every _ctl() call. Set the env
+# var to a path the operator owns; the wrapper appends one line per
+# invocation. Operator-pull surface: dashboards / event-timeline read
+# the file alongside R246 sovereign-os events aggregator.
+_HISTORY_PATH = _os.environ.get("SELFDEF_REPL_HISTORY")
+
+def _record_history(args, rc, started_at, duration_ms):
+    """Append one JSONL row to SELFDEF_REPL_HISTORY when set."""
+    if not _HISTORY_PATH:
+        return
+    try:
+        with open(_HISTORY_PATH, "a") as fh:
+            fh.write(_json.dumps({
+                "round": "SD-R95",
+                "started_at": started_at,
+                "duration_ms": duration_ms,
+                "argv": list(args),
+                "rc": rc,
+            }) + "\n")
+    except OSError:
+        # Audit failure must NEVER take the operator's Tier 1 call down.
+        pass
+
 def _ctl(*args):
-    """Run selfdefctl + parse JSON stdout. Returns parsed dict/list."""
+    """Run selfdefctl + parse JSON stdout. Returns parsed dict/list.
+
+    SD-R95: when SELFDEF_REPL_HISTORY is set, each call is appended to
+    that JSONL file with {argv, rc, started_at, duration_ms} so the
+    operator gets an audit trail of every Tier 1 + Tier 2 invocation.
+    """
+    import time as _time
+    started_at = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
     if _SELFDEFCTL is None:
+        # Record the failed attempt before raising — operators auditing
+        # a session see what was tried even when the CLI is missing.
+        _record_history(args, -1, started_at, 0)
         raise RuntimeError("selfdefctl missing — install the selfdef-cli crate")
+    t0 = _time.time()
     r = _subp.run(
         [_SELFDEFCTL, *args],
         capture_output=True, text=True, check=False, timeout=20,
     )
+    duration_ms = int((_time.time() - t0) * 1000)
+    _record_history(args, r.returncode, started_at, duration_ms)
     if r.returncode != 0:
         raise RuntimeError(
             f"selfdefctl {' '.join(args)} exited {r.returncode}: {r.stderr.strip()}"
@@ -561,6 +597,95 @@ pub(crate) fn cmd_tier2_examples(name: Option<&str>, json: bool) -> anyhow::Resu
         println!("# {}", e.summary);
         println!();
         println!("{}", e.source);
+    }
+    Ok(0)
+}
+
+/// SD-R95 (SDD-026 Z-12 audit): render the JSONL history the
+/// bootstrap script writes when `SELFDEF_REPL_HISTORY` is set.
+///
+/// Defaults: path from `SELFDEF_REPL_HISTORY` env (fallback
+/// `/var/lib/selfdef/repl-history.jsonl`); limit 50 rows; tail; json
+/// mode emits the full row list.
+pub(crate) fn cmd_history(
+    path: Option<&std::path::Path>,
+    limit: usize,
+    all: bool,
+    json: bool,
+) -> anyhow::Result<i32> {
+    use std::io::BufRead;
+    let resolved: std::path::PathBuf = match path {
+        Some(p) => p.to_path_buf(),
+        None => match std::env::var("SELFDEF_REPL_HISTORY") {
+            Ok(s) if !s.is_empty() => std::path::PathBuf::from(s),
+            _ => std::path::PathBuf::from("/var/lib/selfdef/repl-history.jsonl"),
+        },
+    };
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    if resolved.exists() {
+        let f = std::fs::File::open(&resolved)?;
+        let r = std::io::BufReader::new(f);
+        for line in r.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                rows.push(v);
+            }
+        }
+    }
+    let total = rows.len();
+    if !all && rows.len() > limit {
+        let start = rows.len() - limit;
+        rows.drain(..start);
+    }
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R95",
+            "sdd_vector": "SDD-026 Z-12 audit",
+            "path": resolved.display().to_string(),
+            "exists": resolved.exists(),
+            "total_rows": total,
+            "returned_rows": rows.len(),
+            "rows": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R95 selfdefctl repl history (SDD-026 Z-12 audit) ──");
+    println!("  path:           {}", resolved.display());
+    println!("  exists:         {}", resolved.exists());
+    println!("  total_rows:     {total}");
+    println!("  returned_rows:  {}", rows.len());
+    if rows.is_empty() {
+        println!();
+        println!(
+            "  (no rows — set SELFDEF_REPL_HISTORY=<path> in the REPL's env, \
+             then call any Tier 1 callable to populate)"
+        );
+        return Ok(0);
+    }
+    println!();
+    for r in &rows {
+        let ts = r["started_at"].as_str().unwrap_or("?");
+        let rc = r["rc"].as_i64().unwrap_or(-1);
+        let dur = r["duration_ms"].as_u64().unwrap_or(0);
+        let mark = if rc == 0 { "OK  " } else { "FAIL" };
+        let argv: Vec<String> = r["argv"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!("  [{mark}] {ts}  {dur:>5}ms  selfdefctl {}", argv.join(" "));
     }
     Ok(0)
 }
