@@ -216,6 +216,21 @@ enum ReplAction {
         #[arg(long)]
         human: bool,
     },
+    /// SD-R90 (SDD-026 Z-12 follow-up): print ready-to-paste example
+    /// Tier 2 (Proto-Proto-Programming) macros built on top of the
+    /// Tier 1 callable surface. Operators copy-paste OR import into
+    /// their Python session — these are starting-point demonstrations
+    /// of the operator-extension layer the SD-R85 manifest names.
+    /// Operator-named: "you do you own things and you even have
+    /// custom CoT or such and advanced tailored features".
+    Tier2Examples {
+        /// Show only one example (by name); without --name, prints all.
+        #[arg(long)]
+        name: Option<String>,
+        /// Emit JSON inventory instead of the example source.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1060,6 +1075,12 @@ async fn main() -> Result<()> {
                     print!("{}", repl::render_tiers_human());
                 } else {
                     println!("{}", repl::render_tiers_json());
+                }
+            }
+            ReplAction::Tier2Examples { name, json } => {
+                let code = repl::cmd_tier2_examples(name.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
                 }
             }
         },

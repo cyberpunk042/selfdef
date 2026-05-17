@@ -380,6 +380,170 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     .to_string()
 }
 
+/// SD-R90 (SDD-026 Z-12 follow-up): ready-to-paste example Tier 2
+/// macros. Operators copy them whole OR derive their own. Each
+/// example is operator-readable + composes against the Tier 1
+/// callable surface SD-R85 ships.
+///
+/// We ship these AS DEMONSTRATIONS, not as a prescriptive Tier 2 —
+/// the SD-R85 manifest pins Tier 2 as operator-pull. The examples
+/// just show the SHAPE of useful operator-extension macros.
+pub(crate) struct Tier2Example {
+    pub name: &'static str,
+    pub summary: &'static str,
+    pub source: &'static str,
+}
+
+pub(crate) fn tier2_examples() -> Vec<Tier2Example> {
+    vec![
+        Tier2Example {
+            name: "hw_summary",
+            summary: "1-line host summary — operator's first CoT \
+                      sanity check (composes hardware() + posture()).",
+            source: r#"def hw_summary():
+    """SD-R90 example: 1-line host summary (Tier 2 macro)."""
+    hw = hardware() or {}
+    p  = posture()  or {}
+    cpu = (hw.get("cpu") or {}).get("model", "?")
+    cores = (hw.get("cpu") or {}).get("threads", "?")
+    gpus = (hw.get("gpu") or {}).get("device_count", 0)
+    mem_gib = ((hw.get("memory") or {}).get("total_bytes", 0)) // (1024**3)
+    verdict = p.get("verdict") or "?"
+    return f"{cpu} ({cores}T) | {gpus} GPU(s) | {mem_gib} GiB RAM | sain01={verdict}"
+"#,
+        },
+        Tier2Example {
+            name: "modules_ready_only",
+            summary: "Filter install-options to only ready rows + return slugs \
+                      (token-saving alias over modules_install_options()).",
+            source: r#"def modules_ready_only(host_config=None, dir=None, category=None):
+    """SD-R90 example: just give me the slugs I can install RIGHT NOW."""
+    rep = modules_install_options(
+        host_config=host_config, dir=dir,
+        category=category, only_ready=True,
+    ) or {}
+    return [o["slug"] for o in (rep.get("options") or [])]
+"#,
+        },
+        Tier2Example {
+            name: "apply_install_plan",
+            summary: "CoT loop: fetch install-plan, dry-run each step's command via _ctl. \
+                      Operator-supplied confirmation gates each apply.",
+            source: r#"def apply_install_plan(host_config=None, dir=None,
+                       category=None, confirm=False, dry_run=True):
+    """SD-R90 example: walk the SD-R87 install-plan + apply each step.
+
+    Custom CoT: PER-STEP decide → optionally exec. dry_run=True (default)
+    just prints what would happen. confirm=True bypasses the per-step
+    input(). Set both to actually apply unattended (operator's choice).
+    """
+    plan = modules_install_plan(host_config=host_config, dir=dir,
+                                category=category) or {}
+    if plan.get("cycle_present"):
+        return {"aborted": "dependency cycle: " + ",".join(plan.get("cycle_nodes", []))}
+    out = []
+    for step in plan.get("steps", []) or []:
+        slug = step["slug"]
+        cmd  = step["command"]
+        if dry_run:
+            out.append({"step": step["order"], "slug": slug, "outcome": "dry-run", "cmd": cmd})
+            continue
+        if not confirm:
+            ans = input(f"apply {slug}? [y/N]: ").strip().lower()
+            if ans != "y":
+                out.append({"step": step["order"], "slug": slug, "outcome": "skipped"})
+                continue
+        # Real apply — split the recorded command back into args for _ctl.
+        argv = cmd.split()[1:]
+        try:
+            res = _ctl(*argv)
+            out.append({"step": step["order"], "slug": slug, "outcome": "applied", "result": res})
+        except RuntimeError as e:
+            out.append({"step": step["order"], "slug": slug, "outcome": "error", "error": str(e)})
+    return {"plan_steps": len(plan.get("steps", [])), "results": out}
+"#,
+        },
+        Tier2Example {
+            name: "health_to_attention",
+            summary: "Token-saving alias: return only the probe ids currently \
+                      in attention/down severity (over hardware/posture/health).",
+            source: r#"def health_to_attention():
+    """SD-R90 example: just tell me what's wrong RIGHT NOW.
+
+    Calls mcp_tools() to confirm a health-scan-equivalent tool is
+    available, then drives selfdef hardware + posture + modules
+    list rollup. Returns a flat list of attention items so the
+    operator-side CoT doesn't have to walk nested JSON.
+    """
+    hw = hardware() or {}
+    posture_d = posture() or {}
+    attention = []
+    verdict = posture_d.get("verdict")
+    if verdict and verdict not in ("ok", "sain01"):
+        attention.append({"area": "posture", "verdict": verdict})
+    cpu = (hw.get("cpu") or {})
+    if not cpu.get("avx512vnni"):
+        attention.append({"area": "cpu", "missing": "avx512_vnni"})
+    if (hw.get("gpu") or {}).get("device_count", 0) == 0:
+        attention.append({"area": "gpu", "missing": "any-gpu"})
+    return attention
+"#,
+        },
+    ]
+}
+
+pub(crate) fn cmd_tier2_examples(name: Option<&str>, json: bool) -> anyhow::Result<i32> {
+    let all = tier2_examples();
+    let selected: Vec<&Tier2Example> = match name {
+        Some(n) => {
+            let m: Vec<&Tier2Example> = all.iter().filter(|e| e.name == n).collect();
+            if m.is_empty() {
+                eprintln!(
+                    "ERROR unknown tier2 example {n:?}; known: {:?}",
+                    all.iter().map(|e| e.name).collect::<Vec<_>>()
+                );
+                return Ok(2);
+            }
+            m
+        }
+        None => all.iter().collect(),
+    };
+    if json {
+        let rows: Vec<serde_json::Value> = selected
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "name": e.name,
+                    "summary": e.summary,
+                    "source": e.source,
+                })
+            })
+            .collect();
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R90",
+            "sdd_vector": "SDD-026 Z-12 follow-up",
+            "examples": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("# SD-R90 selfdef Tier 2 example macros (SDD-026 Z-12 follow-up).");
+    println!("# Copy-paste into your `python3 -i -c \"$(selfdefctl repl bootstrap)\"` session.");
+    println!("# These are DEMONSTRATIONS — Tier 2 is operator-pull; derive your own.");
+    println!();
+    for e in &selected {
+        println!(
+            "# ─── {} ──────────────────────────────────────────",
+            e.name
+        );
+        println!("# {}", e.summary);
+        println!();
+        println!("{}", e.source);
+    }
+    Ok(0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

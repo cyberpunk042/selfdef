@@ -216,6 +216,25 @@ pub(crate) fn tools() -> Vec<McpTool> {
         // (with SELFDEF_MCP_ALLOW_WRITES=YES) lands in a follow-up
         // round after the write-tool authorization model is signed.
         McpTool {
+            name: "selfdef.repl.tier2_examples",
+            description: "SD-R90 (SDD-026 Z-12 follow-up): list the operator-\
+                 facing Tier 2 (Proto-Proto-Programming) example macros the \
+                 CLI ships as starting-point demonstrations of the operator-\
+                 extension layer. MCP-callable so an AI orchestrator can \
+                 fetch the source + execute it on the operator's behalf. \
+                 Returns the same {name, summary, source} rows the CLI emits.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl repl tier2-examples [--name N] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.models.list",
             description: "List registered models in the catalog with R71 taxonomy \
                  columns (class / quant / size / vram / context). Read-only.",
