@@ -231,12 +231,71 @@ pub(crate) fn tools() -> Vec<McpTool> {
             backing_cli: "selfdefctl models lora list [--state P] [--json]",
             category: "read-only",
         },
-        // SD-R89 LoRA mutation verbs (attach / detach / set-status)
-        // are deliberately NOT exposed via MCP in cycle 8 — SD-R84
-        // doctrine pins MCP tools to read-only only. The CLI surface
-        // covers operator-explicit LoRA writes; an MCP-write gate
-        // (with SELFDEF_MCP_ALLOW_WRITES=YES) lands in a follow-up
-        // round after the write-tool authorization model is signed.
+        // SD-R96 (E7.M4): the SD-R89 LoRA mutation verbs are
+        // registered as `category: "write"`. They are filtered OUT
+        // of tools/list by default — only when the MCP server is
+        // launched with SELFDEF_MCP_ALLOW_WRITES=YES does the server
+        // surface them. Default-off preserves SD-R84 read-only
+        // doctrine; opt-in is explicit, visible in env (audit-able),
+        // and tools/list reports x_selfdef_writes_allowed so MCP
+        // clients can adjust UI affordances.
+        McpTool {
+            name: "selfdef.models.lora.attach",
+            description: "SD-R89 (write): atomic upsert of one LoRA attachment in \
+                 the operator state file. Re-attaching the same adapter_id replaces \
+                 base_model + status + attached_at. Gated by SELFDEF_MCP_ALLOW_WRITES=YES.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "required": ["adapter_id", "base_model"],
+                "properties": {
+                    "adapter_id": { "type": "string" },
+                    "base_model": { "type": "string" },
+                    "status":     { "type": "string", "enum": ["active", "disabled", "errored"] },
+                    "state":      { "type": "string" },
+                    "json":       { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl models lora attach <adapter_id> <base_model> [--status S] [--state P] [--json]",
+            category: "write",
+        },
+        McpTool {
+            name: "selfdef.models.lora.detach",
+            description: "SD-R89 (write): remove one LoRA attachment by adapter_id. \
+                 Atomic update. rc=1 when adapter not present. Gated by \
+                 SELFDEF_MCP_ALLOW_WRITES=YES.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "required": ["adapter_id"],
+                "properties": {
+                    "adapter_id": { "type": "string" },
+                    "state":      { "type": "string" },
+                    "json":       { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl models lora detach <adapter_id> [--state P] [--json]",
+            category: "write",
+        },
+        McpTool {
+            name: "selfdef.models.lora.set_status",
+            description: "SD-R89 (write): flip an attached LoRA's status \
+                 (active / disabled / errored) without removing the binding. \
+                 Gated by SELFDEF_MCP_ALLOW_WRITES=YES.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "required": ["adapter_id", "status"],
+                "properties": {
+                    "adapter_id": { "type": "string" },
+                    "status":     { "type": "string", "enum": ["active", "disabled", "errored"] },
+                    "state":      { "type": "string" },
+                    "json":       { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl models lora set-status <adapter_id> <status> [--state P] [--json]",
+            category: "write",
+        },
         McpTool {
             name: "selfdef.repl.history",
             description: "SD-R95 (SDD-026 Z-12 audit): read back the operator's \
@@ -658,17 +717,31 @@ fn handle_jsonrpc_line(line: &str) -> String {
                 "tools": { "listChanged": false },
             },
         })),
-        "tools/list" => Ok(serde_json::json!({
-            "tools": tools()
+        "tools/list" => {
+            // SD-R96 (E7.M4): when SELFDEF_MCP_ALLOW_WRITES=YES is
+            // set, write-category tools also surface. Default-off
+            // preserves the SD-R84 read-only doctrine; opt-in is
+            // explicit + visible in env so audit can confirm.
+            let writes_allowed = std::env::var("SELFDEF_MCP_ALLOW_WRITES")
+                .map(|v| v == "YES")
+                .unwrap_or(false);
+            let tools_list: Vec<_> = tools()
                 .into_iter()
-                .filter(|t| t.category == "read-only")
-                .map(|t| serde_json::json!({
-                    "name": t.name,
-                    "description": t.description,
-                    "inputSchema": t.input_schema,
-                }))
-                .collect::<Vec<_>>(),
-        })),
+                .filter(|t| t.category == "read-only" || writes_allowed)
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "inputSchema": t.input_schema,
+                        "x_selfdef_category": t.category,
+                    })
+                })
+                .collect();
+            Ok(serde_json::json!({
+                "tools": tools_list,
+                "x_selfdef_writes_allowed": writes_allowed,
+            }))
+        }
         "tools/call" => handle_tools_call(&params),
         "shutdown" => Ok(serde_json::Value::Null),
         _ => Err((-32601, format!("Method not found: {method}"))),
@@ -702,10 +775,30 @@ fn handle_tools_call(params: &serde_json::Value) -> Result<serde_json::Value, (i
         .get("name")
         .and_then(|n| n.as_str())
         .ok_or((-32602, "Invalid params: missing 'name'".to_string()))?;
+    // SD-R96 (E7.M4): write tools opt-in via env flag.
+    let writes_allowed = std::env::var("SELFDEF_MCP_ALLOW_WRITES")
+        .map(|v| v == "YES")
+        .unwrap_or(false);
     let tool = tools()
         .into_iter()
-        .find(|t| t.name == name && t.category == "read-only")
-        .ok_or((-32601, format!("tool not exposed: {name}")))?;
+        .find(|t| t.name == name && (t.category == "read-only" || writes_allowed))
+        .ok_or_else(|| {
+            // Distinguish "doesn't exist" from "exists but write-gated"
+            // so MCP clients can surface an actionable message.
+            let any_match = tools().into_iter().any(|t| t.name == name);
+            if any_match {
+                (
+                    -32604,
+                    format!(
+                        "tool '{name}' is write-category; set \
+                         SELFDEF_MCP_ALLOW_WRITES=YES on the server's \
+                         environment to expose it"
+                    ),
+                )
+            } else {
+                (-32601, format!("tool not exposed: {name}"))
+            }
+        })?;
     let arguments = params
         .get("arguments")
         .cloned()
