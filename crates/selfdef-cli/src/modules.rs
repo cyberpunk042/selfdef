@@ -632,10 +632,45 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
             "wasm_aot_features_required": rh.wasm_aot_features_required,
             "sain01_verdict_min": rh.sain01_verdict_min,
         },
+        "signing": signing_status_json(m, dir, slug),
         "host_status": host_status_json,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
+}
+
+/// SD-R56 (composes with R195 sovereign-os audit): the `signing`
+/// block of the `modules info --json` document. Operator-stable
+/// schema: state ("no_signing_block" / "signed_optional" /
+/// "signed_required_present" / "signed_required_missing"), plus
+/// fields when relevant.
+fn signing_status_json(m: &ModuleManifest, dir: &Path, slug: &str) -> serde_json::Value {
+    let Some(spec) = m.signing.as_ref() else {
+        return serde_json::json!({
+            "state": "no_signing_block",
+            "required": false,
+            "minisig_present": false,
+        });
+    };
+    let manifest_path = dir.join(slug).join("module.toml");
+    let minisig_path = manifest_path
+        .parent()
+        .map(|p| p.join("module.toml.minisig"))
+        .unwrap_or_else(|| manifest_path.with_extension("toml.minisig"));
+    let minisig_present = minisig_path.exists();
+    let state = if !spec.required {
+        "signed_optional"
+    } else if minisig_present {
+        "signed_required_present"
+    } else {
+        "signed_required_missing"
+    };
+    serde_json::json!({
+        "state": state,
+        "required": spec.required,
+        "minisig_present": minisig_present,
+        "trust_root": spec.trust_root.as_ref().map(|p| p.display().to_string()),
+    })
 }
 
 /// SD-R50: pretty-print the SD-R47 audit JSONL stream. Operator

@@ -631,6 +631,74 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
     assert_eq!(v["host_tag"], "h");
 }
 
+/// SD-R56: `modules info --json` includes a `signing` block that
+/// summarises the SD-R55 posture — state, required flag,
+/// minisig_present, trust_root. Tooling complement to the R195
+/// sovereign-os signing audit.
+#[test]
+fn sdr56_modules_info_json_carries_signing_block_with_state() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "unsigned", &[], body);
+    write_module(&catalog, "optional", &[], body);
+    write_module(&catalog, "required-missing", &[], body);
+    write_module(&catalog, "required-present", &[], body);
+
+    // optional
+    let o_toml = catalog.join("optional/module.toml");
+    let mut m = std::fs::read_to_string(&o_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = false\n");
+    std::fs::write(&o_toml, m).unwrap();
+
+    // required-missing
+    let rm_toml = catalog.join("required-missing/module.toml");
+    let mut m = std::fs::read_to_string(&rm_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = true\ntrust_root = \"/etc/selfdef/keys/policy.pub\"\n");
+    std::fs::write(&rm_toml, m).unwrap();
+
+    // required-present (write .minisig sentinel; not verified — just sigil)
+    let rp_toml = catalog.join("required-present/module.toml");
+    let mut m = std::fs::read_to_string(&rp_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = true\n");
+    std::fs::write(&rp_toml, m).unwrap();
+    std::fs::write(
+        catalog.join("required-present/module.toml.minisig"),
+        b"sentinel\n",
+    )
+    .unwrap();
+
+    // Parse each module's JSON + assert state.
+    for (slug, expected_state) in [
+        ("unsigned", "no_signing_block"),
+        ("optional", "signed_optional"),
+        ("required-missing", "signed_required_missing"),
+        ("required-present", "signed_required_present"),
+    ] {
+        let out = run(
+            &binary(),
+            &[
+                "modules",
+                "info",
+                slug,
+                "--dir",
+                catalog.to_str().unwrap(),
+                "--json",
+            ],
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "stdout: {stdout}");
+        let v: serde_json::Value =
+            serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}\n{stdout}"));
+        assert_eq!(
+            v["signing"]["state"], expected_state,
+            "module {slug}: state mismatch in {stdout}"
+        );
+    }
+}
+
 /// SD-R55 (closes SDD-020 V-5): module manifest signing gate.
 /// When [signing].required = false (informational), apply proceeds
 /// and logs a notice. When required = true, apply refuses without a
