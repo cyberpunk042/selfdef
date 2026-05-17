@@ -445,8 +445,7 @@ impl HardwareRequirements {
         // SD-R64: ZMM INT8 lane width gate. Operator declares "I need
         // ≥N INT8 lanes in the widest dispatch" and the gate evaluates
         // against the SD-R64 derived lane count.
-        if self.zmm_int8_lanes_min > 0
-            && caps.cpu.zmm_int8_lane_capacity < self.zmm_int8_lanes_min
+        if self.zmm_int8_lanes_min > 0 && caps.cpu.zmm_int8_lane_capacity < self.zmm_int8_lanes_min
         {
             unmet.push(format!(
                 "zmm_int8_lanes_min = {} (host max = {})",

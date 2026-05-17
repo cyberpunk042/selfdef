@@ -3388,10 +3388,20 @@ malformed,line\n\
     fn sdr64_capabilities_carry_derived_summary_fields_on_sain01() {
         let snap = snap_with_features(
             "AuthenticAMD",
-            &["avx2", "fma", "ssse3", "avx512f", "avx512_vnni", "avx512_bf16"],
+            &[
+                "avx2",
+                "fma",
+                "ssse3",
+                "avx512f",
+                "avx512_vnni",
+                "avx512_bf16",
+            ],
         );
         let caps = derive_capabilities(&snap);
-        assert!(caps.cpu.ternary_aot_capable, "SAIN-01 must show ternary_aot_capable");
+        assert!(
+            caps.cpu.ternary_aot_capable,
+            "SAIN-01 must show ternary_aot_capable"
+        );
         assert_eq!(
             caps.cpu.zmm_int8_lane_capacity, 64,
             "SAIN-01 must report 64 INT8 lanes (VPDPBUSD on ZMM)"

@@ -40,6 +40,18 @@ gpu_count_min                = 1
 gpu_vram_gib_min             = 8
 gpu_power_headroom_watts_min = 100
 
+# SD-R64 hardware-exploitation gates (master spec § 16):
+#   - ternary_aot_capable_required: this module runs the bitnet.cpp
+#     ternary fast path; require the host to expose AVX-512 VNNI +
+#     (BF16 or FP16). Slightly stricter than the avx512_bf16-only
+#     predicate above (VNNI is what makes VPDPBUSD's INT8 dot product
+#     available).
+#   - zmm_int8_lanes_min = 64: explicit "I want the single-cycle 64×INT8
+#     per ZMM register hot path." Operator-readable hardware-exploit
+#     declaration — matches the master spec § 16 framing verbatim.
+ternary_aot_capable_required = true
+zmm_int8_lanes_min           = 64
+
 instanced = false
 
 # `main` phase — hardware-tune-cache (pre-phase) has already populated
