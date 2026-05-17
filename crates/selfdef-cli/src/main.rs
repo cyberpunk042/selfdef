@@ -217,6 +217,20 @@ enum HardwareAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R70: emit a complete host-tuned `wasmtime compile` script
+    /// for a given .wasm module. Pipes to `bash` to produce a
+    /// .cwasm against this host's exact target_cpu + target_features
+    /// (the SD-R30 wasm_aot surface). One-command Wasm-to-AVX-512
+    /// AOT — direct operator-verbatim directive closure.
+    AotScript {
+        /// Input .wasm module path (operator-supplied).
+        #[arg(value_name = "WASM_PATH")]
+        wasm: PathBuf,
+        /// Optional output .cwasm path. When unset the script defaults
+        /// the output to the wasm path with `.cwasm` extension.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -910,6 +924,9 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
                 Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
                 Some(HardwareAction::Posture { json: pj }) => hardware::run_posture(pj)?,
+                Some(HardwareAction::AotScript { wasm, output }) => {
+                    hardware::run_aot_script(&wasm, output.as_deref())?
+                }
                 Some(HardwareAction::Tune { format, output }) => {
                     hardware::run_tune(&format, output)?
                 }
