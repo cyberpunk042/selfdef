@@ -708,6 +708,44 @@ enum ModulesAction {
         /// colliding with the global daemon-config flag.)
         #[arg(long)]
         overlay: Option<PathBuf>,
+        /// SD-R100 (E2.M7): emit ONLY boolean leaves set to true
+        /// (recursive). Tables with no surviving children are
+        /// dropped. Operator-pull view of which features are
+        /// currently *enabled* on this host.
+        #[arg(long, conflicts_with = "disabled_only")]
+        enabled_only: bool,
+        /// SD-R100 (E2.M7): companion to `--enabled-only` — emit
+        /// ONLY boolean leaves set to false.
+        #[arg(long, conflicts_with = "enabled_only")]
+        disabled_only: bool,
+    },
+    /// SD-R100 (E2.M7): set one feature key in the operator overlay
+    /// file. Dotted keys walk/create nested tables. Value is parsed
+    /// as a TOML scalar (`true`/`false`/`42`/`"foo"`/...). Writes to
+    /// `--overlay <path>` (creating it if missing) or to the default
+    /// `/etc/selfdef/modules/<slug>.toml` when no flag given.
+    FeatureSet {
+        slug: String,
+        /// Dotted feature key (e.g. `auditd` or `limits.warn`).
+        key: String,
+        /// TOML scalar literal — `true`, `false`, `42`, `"text"`,
+        /// `3.14`, `[1, 2]`, etc.
+        value: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        overlay: Option<PathBuf>,
+    },
+    /// SD-R100 (E2.M7): remove one feature key from the operator
+    /// overlay file. Idempotent: clearing an absent key reports
+    /// `cleared = false` without error.
+    FeatureClear {
+        slug: String,
+        key: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        overlay: Option<PathBuf>,
     },
     /// Show the full manifest for one module by slug.
     Info {
@@ -1646,9 +1684,47 @@ async fn main() -> Result<()> {
                     modules::cmd_list_filtered(&resolved, category.as_deref(), phase.as_deref())?;
                 }
             }
-            ModulesAction::Features { slug, dir, overlay } => {
+            ModulesAction::Features {
+                slug,
+                dir,
+                overlay,
+                enabled_only,
+                disabled_only,
+            } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                let rc = modules::cmd_features_json(&resolved, &slug, overlay.as_deref())?;
+                let filter = match (enabled_only, disabled_only) {
+                    (true, false) => modules::FeatureFilter::EnabledOnly,
+                    (false, true) => modules::FeatureFilter::DisabledOnly,
+                    _ => modules::FeatureFilter::All,
+                };
+                let rc = modules::cmd_features_json_filtered(
+                    &resolved,
+                    &slug,
+                    overlay.as_deref(),
+                    filter,
+                )?;
+                std::process::exit(rc);
+            }
+            ModulesAction::FeatureSet {
+                slug,
+                key,
+                value,
+                dir,
+                overlay,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let rc =
+                    modules::cmd_feature_set(&resolved, &slug, &key, &value, overlay.as_deref())?;
+                std::process::exit(rc);
+            }
+            ModulesAction::FeatureClear {
+                slug,
+                key,
+                dir,
+                overlay,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let rc = modules::cmd_feature_clear(&resolved, &slug, &key, overlay.as_deref())?;
                 std::process::exit(rc);
             }
             ModulesAction::Info {
