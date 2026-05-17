@@ -85,9 +85,30 @@ status}]}`. This is the smallest contractual brick of the X-4
 arc — once the format lands, attach/detach + list verbs build on
 top in subsequent rounds.
 
-  - Recommendation: ship the JSON Schema + an empty seed file +
-    the loader/parser in selfdef-cli; defer the attach/detach
-    verbs to a follow-up.
+  - **Decision (SD-R81, 2026-05-17)** — landed in cycle-7 PR #196.
+    State file path: `/var/lib/selfdef/loras.json` (default),
+    overridable via `SELFDEF_LORA_STATE` env var or `--state` flag.
+    Format pinned via `LoraStateFile` + `LoraEntry` serde structs:
+
+    ```json
+    {
+      "schema_version": "1.0.0",
+      "adapters": [
+        {
+          "adapter_id":  "code-systems-rust",
+          "base_model":  "Qwen3-Coder-32B-Instruct",
+          "attached_at": "2026-05-17T04:00:00Z",
+          "status":      "active"
+        }
+      ]
+    }
+    ```
+
+    Forward-compat: missing file = empty state (no error);
+    schema_version + status default; only adapter_id + base_model
+    are required per entry. New `selfdefctl models lora list
+    [--state PATH] [--json]` reads + renders. attach/detach verbs
+    defer to subsequent rounds (X-4 LoRA lifecycle arc).
 
 ### Y-3 — `models suggest` cross-repo bridge
 

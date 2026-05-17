@@ -480,6 +480,30 @@ enum ModelsAction {
         #[arg(long, value_name = "ENV_NAME")]
         token_env: Option<String>,
     },
+    /// SD-R81 (SDD-025 Y-2): LoRA-adapter state surface (foundation
+    /// brick for the X-4 LoRA lifecycle arc). For now: a single
+    /// `list` subverb that reads the operator-owned state file at
+    /// `/var/lib/selfdef/loras.json` (overridable via
+    /// SELFDEF_LORA_STATE or --state) and renders the active
+    /// adapter set. attach/detach verbs land in subsequent rounds.
+    Lora {
+        #[command(subcommand)]
+        action: LoraAction,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum LoraAction {
+    /// SD-R81: list every adapter recorded in the state file.
+    List {
+        /// Override the LoRA state file path (default:
+        /// `/var/lib/selfdef/loras.json`, env `SELFDEF_LORA_STATE`).
+        #[arg(long)]
+        state: Option<PathBuf>,
+        /// Emit JSON (the raw state shape) instead of the tabular view.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1218,6 +1242,14 @@ async fn main() -> Result<()> {
                     std::process::exit(code);
                 }
             }
+            ModelsAction::Lora { action } => match action {
+                LoraAction::List { state, json } => {
+                    let code = models::cmd_lora_list(state.as_deref(), json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+            },
         },
         Command::Modules { action } => match action {
             ModulesAction::List {
