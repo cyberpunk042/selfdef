@@ -14,7 +14,6 @@
 //!   - fallback to subprocess when argv is outside the MCP catalog
 //!   - clear error when SELFDEF_MCP_URL is malformed
 
-use std::io::Read;
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -71,6 +70,10 @@ fn wait_for_bind(port: u16, deadline: Duration) -> bool {
 
 fn spawn_mcp_tcp(port: u16, exit_after: u32) -> Child {
     let bind = format!("127.0.0.1:{port}");
+    // SD-R101 (CI hardening): inherit stderr instead of piping it so a
+    // verbose MCP server (line-per-connect accept logs) can't deadlock
+    // on a full pipe buffer. Output lands in the cargo test capture,
+    // visible on failure.
     Command::new(binary())
         .args([
             "--config",
@@ -83,8 +86,8 @@ fn spawn_mcp_tcp(port: u16, exit_after: u32) -> Child {
             &exit_after.to_string(),
         ])
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::inherit())
         .spawn()
         .expect("spawn mcp serve --tcp")
 }
@@ -233,7 +236,7 @@ fn sdr101_end_to_end_mcp_bridge_returns_real_tool_payload() {
     // we drive one tools/call + one auth-less call from Python.
     let port = pick_port();
     let mut child = spawn_mcp_tcp(port, 4);
-    let ready = wait_for_bind(port, Duration::from_secs(5));
+    let ready = wait_for_bind(port, Duration::from_secs(15));
     if !ready {
         let _ = child.kill();
         panic!("mcp serve --tcp did not bind on 127.0.0.1:{port}");
@@ -267,15 +270,10 @@ print("PASS:modules")
     // Always reap the child.
     let _ = child.kill();
     let _ = child.wait();
-    // Drain stderr for diagnostics.
-    let mut child_stderr = String::new();
-    if let Some(mut s) = child.stderr.take() {
-        let _ = s.read_to_string(&mut child_stderr);
-    }
 
     assert!(
         ok,
-        "MCP-bridge probe failed:\n  stdout={stdout}\n  stderr={stderr}\n  child-stderr={child_stderr}"
+        "MCP-bridge probe failed:\n  stdout={stdout}\n  stderr={stderr}"
     );
     assert!(
         stdout.contains("PASS:posture"),
@@ -293,7 +291,7 @@ fn sdr101_history_records_transport_field_for_mcp_calls() {
     // is set, the appended history row carries transport=mcp-tcp.
     let port = pick_port();
     let mut child = spawn_mcp_tcp(port, 4);
-    let ready = wait_for_bind(port, Duration::from_secs(5));
+    let ready = wait_for_bind(port, Duration::from_secs(15));
     if !ready {
         let _ = child.kill();
         panic!("mcp serve --tcp did not bind");
