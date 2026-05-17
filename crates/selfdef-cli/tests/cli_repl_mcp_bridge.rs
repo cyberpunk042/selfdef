@@ -256,20 +256,23 @@ fn sdr101_end_to_end_mcp_bridge_returns_real_tool_payload() {
     }
     let mcp_url = format!("tcp://127.0.0.1:{port}");
 
+    // SD-R101 CI-portability: avoid hardware-probe tools — they exit
+    // with code 2 (Sain01 NoMatch) on GitHub-hosted runners since
+    // those VMs aren't the operator's SAIN-01 reference rig. The MCP
+    // server's handle_tools_call rejects rc!=0 + rc!=1 as -32000,
+    // which propagates back as a Python RuntimeError. modules.list
+    // has no hardware-verdict exit code, so it's CI-portable.
     let probe = r#"
 import os, json
-# Call hardware.posture via the MCP bridge.
-result = _ctl_via_mcp(("hardware", "posture", "--json"), os.environ["SELFDEF_MCP_URL"])
-# The MCP tool result must be a dict — selfdef.hardware.posture returns
-# {"verdict": ..., ...}. We don't assert specific keys (depend on host),
-# only that we got JSON back, not a subprocess error.
+# Call modules.list via the MCP bridge — no hardware verdict exit.
+result = _ctl_via_mcp(("modules", "list", "--json"), os.environ["SELFDEF_MCP_URL"])
 assert isinstance(result, dict), f"expected dict; got {type(result).__name__}: {result!r}"
-print("PASS:posture")
+print("PASS:modules1")
 
-# And the modules.list call.
-modules = _ctl_via_mcp(("modules", "list", "--json"), os.environ["SELFDEF_MCP_URL"])
-assert isinstance(modules, dict), modules
-print("PASS:modules")
+# A second modules call (different argv shape).
+result2 = _ctl_via_mcp(("modules", "diff", "--json"), os.environ["SELFDEF_MCP_URL"])
+assert isinstance(result2, dict), result2
+print("PASS:modules2")
 "#;
     let path_with = path_with_selfdefctl();
     let (ok, stdout, stderr) = run_probe_with_env(
@@ -289,12 +292,12 @@ print("PASS:modules")
         "MCP-bridge probe failed:\n  stdout={stdout}\n  stderr={stderr}"
     );
     assert!(
-        stdout.contains("PASS:posture"),
-        "missing posture PASS: {stdout}"
+        stdout.contains("PASS:modules1"),
+        "missing modules1 PASS: {stdout}"
     );
     assert!(
-        stdout.contains("PASS:modules"),
-        "missing modules PASS: {stdout}"
+        stdout.contains("PASS:modules2"),
+        "missing modules2 PASS: {stdout}"
     );
 }
 
@@ -316,8 +319,11 @@ fn sdr101_history_records_transport_field_for_mcp_calls() {
 
     let dir = tempfile::tempdir().unwrap();
     let hist_path = dir.path().join("hist.jsonl");
+    // CI-portability: use modules() not hardware() — hardware probes
+    // exit 2 (Sain01 NoMatch) on GitHub-hosted runners since those
+    // VMs lack AVX-512 VNNI + the operator's RTX rig.
     let probe = r#"
-result = hardware()  # high-level Tier 1 caller — must route through MCP.
+result = modules()  # high-level Tier 1 caller — must route through MCP.
 assert isinstance(result, dict), result
 print("PASS")
 "#;
@@ -360,9 +366,10 @@ fn sdr101_subprocess_path_records_transport_subprocess() {
     // carry transport=subprocess.
     let dir = tempfile::tempdir().unwrap();
     let hist_path = dir.path().join("hist.jsonl");
+    // CI-portability: see comment above — use modules() not hardware().
     let probe = r#"
-# `hardware()` falls back to subprocess (no MCP URL set).
-result = hardware()
+# `modules()` falls back to subprocess (no MCP URL set).
+result = modules()
 assert isinstance(result, dict), result
 print("PASS")
 "#;
