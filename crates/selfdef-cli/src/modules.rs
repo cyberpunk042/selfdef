@@ -3624,6 +3624,151 @@ pub(crate) fn cmd_install_plan(
     Ok(0)
 }
 
+/// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+/// scaffold for one catalog module — the operator's next step
+/// AFTER SD-R87 install-plan tells them WHAT to install.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "[…] install
+/// any previously non-installed modules or features and whatnot
+/// anyway and configure them" (emphasis on "configure them").
+///
+/// Renders a `[modules."<slug>"]` block (or `[modules."<slug>#<inst>"]`
+/// when `--instance NAME` is passed for instanced modules) plus the
+/// matching `[daemon.*]` entries the manifest declares as
+/// daemon_requires. Operator copy-pastes the output into
+/// `/etc/selfdef/modules.toml` + `/etc/selfdef/selfdef.toml` and
+/// `apply` proceeds without a daemon_requires preflight failure.
+///
+/// Hardware-gate predicates are surfaced as `# requires: …`
+/// comments so the operator knows in advance what would block
+/// apply (rather than discovering it at apply-time).
+///
+/// Exit codes:
+///   0  scaffold emitted
+///   2  unknown slug / missing --instance for instanced modules
+pub(crate) fn cmd_config_scaffold(
+    dir: &Path,
+    slug: &str,
+    instance: Option<&str>,
+    json: bool,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let target = match mods.iter().find(|(s, _)| s == slug) {
+        Some((_, m)) => m,
+        None => {
+            eprintln!(
+                "ERROR unknown module slug {slug:?}; first 10 known: {:?}",
+                mods.iter().take(10).map(|(s, _)| s).collect::<Vec<_>>()
+            );
+            return Ok(2);
+        }
+    };
+    if target.instanced && instance.is_none() {
+        eprintln!(
+            "ERROR module {slug:?} is instanced — pass --instance <name> \
+             (e.g. wg0)"
+        );
+        return Ok(2);
+    }
+
+    // Build the modules.toml block.
+    let host_key = match instance {
+        Some(i) => format!("{slug}#{i}"),
+        None => slug.to_string(),
+    };
+
+    let mut modules_toml = String::new();
+    modules_toml.push_str(&format!("[modules.\"{host_key}\"]\n"));
+    if !target.requires_hardware.is_empty() {
+        modules_toml.push_str(
+            "# This module declares requires_hardware predicates — the \
+             apply\n# gate will SKIP it if the host doesn't satisfy:\n",
+        );
+        // Render hardware predicates as comments.
+        let dbg = format!("{:?}", target.requires_hardware);
+        for line in dbg.lines() {
+            modules_toml.push_str("#   ");
+            modules_toml.push_str(line);
+            modules_toml.push('\n');
+        }
+    }
+    if !target.depends_on.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module depends_on: {} — install these first.\n",
+            target.depends_on.join(", ")
+        ));
+    }
+    if !target.provides.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module provides: {} (downstream consumers can resolve).\n",
+            target.provides.join(", ")
+        ));
+    }
+
+    // Build the daemon.* block from daemon_requires.
+    let mut daemon_toml = String::new();
+    if !target.daemon_requires.is_empty() {
+        daemon_toml.push_str(&format!(
+            "# Paste into /etc/selfdef/selfdef.toml — module {slug:?} \
+             expects these keys.\n"
+        ));
+        // Group by [section] (everything before the last dotted path
+        // segment) for readable output.
+        let mut by_section: std::collections::BTreeMap<String, Vec<(String, String)>> =
+            Default::default();
+        for (dotted, req) in &target.daemon_requires {
+            let (section, leaf) = match dotted.rfind('.') {
+                Some(i) => (&dotted[..i], &dotted[i + 1..]),
+                None => ("", dotted.as_str()),
+            };
+            by_section
+                .entry(section.to_string())
+                .or_default()
+                .push((leaf.to_string(), req.render_value()));
+        }
+        for (section, kvs) in &by_section {
+            if !section.is_empty() {
+                daemon_toml.push_str(&format!("[{section}]\n"));
+            }
+            for (k, v) in kvs {
+                daemon_toml.push_str(&format!("{k} = {v}\n"));
+            }
+            daemon_toml.push('\n');
+        }
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R88",
+            "sdd_vector": "SDD-026 Z-13 follow-up",
+            "slug": slug,
+            "instance": instance,
+            "host_key": host_key,
+            "modules_toml": modules_toml,
+            "daemon_toml": daemon_toml,
+            "has_hardware_gate": !target.requires_hardware.is_empty(),
+            "has_daemon_requires": !target.daemon_requires.is_empty(),
+            "depends_on": target.depends_on,
+            "provides": target.provides,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R88 selfdefctl modules config-scaffold ({slug}) ──");
+    println!();
+    println!("# Paste into /etc/selfdef/modules.toml:");
+    println!();
+    print!("{modules_toml}");
+    if !daemon_toml.is_empty() {
+        println!();
+        print!("{daemon_toml}");
+    }
+    println!();
+    println!("# Next step:  selfdefctl modules apply --only {slug}");
+    Ok(0)
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet

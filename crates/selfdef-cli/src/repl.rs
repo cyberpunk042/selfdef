@@ -106,6 +106,7 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "modules_diff(host_config=None, dir=None)",
                 "modules_install_options(host_config=None, dir=None, category=None, only_ready=False)",
                 "modules_install_plan(host_config=None, dir=None, category=None)",
+                "modules_config_scaffold(slug, dir=None, instance=None)",
                 "lora_list(state=None)",
             ],
         },
@@ -285,6 +286,21 @@ def modules_install_plan(host_config=None, dir=None, category=None):
         args += ["--category", category]
     return _ctl(*args)
 
+def modules_config_scaffold(slug, dir=None, instance=None):
+    """selfdefctl modules config-scaffold <slug> --json [--instance NAME]
+
+    SD-R88 (SDD-026 Z-13 follow-up): copy-pasteable config blocks for
+    one module — the `[modules."<slug>"]` block for modules.toml +
+    the `[daemon.*]` keys for selfdef.toml. Hardware-gate predicates
+    surface as comments. Instanced modules require `instance`.
+    """
+    args = ["modules", "config-scaffold", slug, "--json"]
+    if dir:
+        args += ["--dir", dir]
+    if instance:
+        args += ["--instance", instance]
+    return _ctl(*args)
+
 def models(dir=None):
     """selfdefctl models list (table)"""
     args = ["models", "list"]
@@ -313,6 +329,7 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  modules_diff(host_config=..., dir=...)")
     print("  modules_install_options(host_config=..., category=..., only_ready=False)")
     print("  modules_install_plan(host_config=..., category=...)")
+    print("  modules_config_scaffold(slug, dir=..., instance=...)")
     print("  models()           -> str    (table)")
     print("  lora_list(state=...)")
     print("  mcp_tools()        -> dict   (manifest)")
@@ -336,6 +353,7 @@ mod tests {
         assert!(s.contains("def modules_diff"));
         assert!(s.contains("def modules_install_options"));
         assert!(s.contains("def modules_install_plan"));
+        assert!(s.contains("def modules_config_scaffold"));
         assert!(s.contains("def lora_list"));
         assert!(s.contains("def mcp_tools"));
     }

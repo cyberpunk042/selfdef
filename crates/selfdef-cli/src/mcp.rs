@@ -131,6 +131,28 @@ pub(crate) fn tools() -> Vec<McpTool> {
             category: "read-only",
         },
         McpTool {
+            name: "selfdef.modules.config_scaffold",
+            description: "SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable \
+                 config scaffold for one catalog module — the operator's next \
+                 step AFTER SD-R87 install-plan tells them WHAT to install. \
+                 Returns a ready-to-paste [modules.\"<slug>\"] block + matching \
+                 [daemon.*] keys; instanced modules require the `instance` arg. \
+                 Read-only (no host_config mutation).",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "required": ["slug"],
+                "properties": {
+                    "slug": { "type": "string" },
+                    "dir": { "type": "string" },
+                    "instance": { "type": "string" },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl modules config-scaffold <slug> [--dir D] [--instance NAME] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.modules.install_plan",
             description: "SD-R87 (SDD-026 Z-13 closure): topologically-ordered \
                  install plan over the SD-R86 plan-ready set. Returns the \

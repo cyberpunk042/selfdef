@@ -753,6 +753,24 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+    /// scaffold for one catalog module — the operator's next step
+    /// AFTER `install-plan` tells them WHAT to install.
+    ///
+    /// Renders a ready-to-paste `[modules."<slug>"]` block + the
+    /// matching `[daemon.*]` entries the manifest declares as
+    /// daemon_requires. Hardware-gate predicates surface as comments.
+    ConfigScaffold {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Required when the module is instanced
+        /// (e.g. `--instance wg0` for the tunnel module).
+        #[arg(long)]
+        instance: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
     /// Destructive: requires `--confirm <hostname>` matching this host
@@ -1548,6 +1566,19 @@ async fn main() -> Result<()> {
                 let dir_path = modules::resolve_dir(dir.as_deref());
                 let code =
                     modules::cmd_install_plan(&host_path, &dir_path, json, category.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ConfigScaffold {
+                slug,
+                dir,
+                instance,
+                json,
+            } => {
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_config_scaffold(&dir_path, &slug, instance.as_deref(), json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
