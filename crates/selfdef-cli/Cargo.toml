@@ -47,6 +47,8 @@ uuid = { workspace = true }
 # walking `Response::bytes_stream()` chunks.
 reqwest = { workspace = true, features = ["stream"] }
 futures = { workspace = true }
+# SD-R57: model-fetch sha256 streaming verification (closes SDD-019 T-3).
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

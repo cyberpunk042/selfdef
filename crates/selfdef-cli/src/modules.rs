@@ -88,6 +88,18 @@ pub(crate) struct ModuleManifest {
     /// [`hardware_requirements_met`].
     #[serde(default)]
     pub(crate) requires_hardware: HardwareRequirements,
+    /// SD-R55 (closes SDD-020 V-5): supply-chain assurance. When
+    /// the operator pins this module's manifest as signed in the
+    /// `[signing]` block, apply refuses to land it unless
+    /// `module.toml.minisig` verifies against the operator's
+    /// trust-root pubkey. Empty (default) → no signing check.
+    #[serde(default)]
+    pub(crate) signing: Option<ModuleSigningSpec>,
+    /// SD-R61 (closes SDD-021 W-6): optional per-module resource
+    /// quotas applied to install scripts. Defense in depth — a
+    /// bad apply.sh shouldn't be able to OOM the host.
+    #[serde(default)]
+    pub(crate) resources: Option<ModuleResourceSpec>,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -243,6 +255,41 @@ pub(crate) struct HardwareRequirements {
     /// would be weird — operator should rarely use it).
     #[serde(default)]
     pub(crate) sain01_verdict_min: String,
+
+    /// SD-R64: ternary AOT readiness predicate. When `true`, the
+    /// module requires the CPU to expose the bitnet.cpp / Wasm-AOT
+    /// ternary fast path (AVX-512 VNNI + (BF16 or FP16)). Operators
+    /// use this to gate 1-bit / ternary inference modules onto hosts
+    /// that can actually run them at single-cycle ZMM-register lane
+    /// width per master spec § 16. Default `false` disables.
+    #[serde(default)]
+    pub(crate) ternary_aot_capable_required: bool,
+
+    /// SD-R64: minimum widest INT8 dot-product lane count the CPU
+    /// must expose (master spec § 16: a single 512-bit ZMM register
+    /// holds 64 INT8 lanes via VPDPBUSD). 0 disables the gate. Set
+    /// to 64 to require the AVX-512 VNNI hot path; 32 accepts AVX2
+    /// fallback; 16 accepts SSSE3 fallback. Operator-readable
+    /// hardware-exploitation knob.
+    #[serde(default)]
+    pub(crate) zmm_int8_lanes_min: u32,
+
+    /// SD-R68: generalized cpuinfo-flag gate. Comma-separated list of
+    /// raw cpuinfo feature names that MUST be present on the host.
+    /// Empty string disables. Operators use this to gate modules on
+    /// rare ISA flags WITHOUT selfdef having to add a typed predicate
+    /// per flag (the long tail: rdpid, sha_ni, avx512_vbmi2, ...).
+    ///
+    /// Examples:
+    ///   host_features_required = "avx512_vbmi2"
+    ///   host_features_required = "avx512_vbmi2,rdpid,sha_ni"
+    ///
+    /// Distinct from `wasm_aot_features_required` which uses LLVM
+    /// `+feature` syntax against the wasmtime target_features string.
+    /// This predicate reads raw cpuinfo flags directly via the
+    /// SD-R68 `cpu.extended_features` array.
+    #[serde(default)]
+    pub(crate) host_features_required: String,
 }
 
 impl HardwareRequirements {
@@ -401,6 +448,53 @@ impl HardwareRequirements {
                 ));
             }
         }
+        // SD-R64: ternary AOT readiness predicate. Operator declares
+        // "I need the bitnet.cpp hot path" and the gate evaluates
+        // against the SD-R64 derived flag on CpuCapabilities.
+        if self.ternary_aot_capable_required && !caps.cpu.ternary_aot_capable {
+            unmet.push(
+                "ternary_aot_capable required (host lacks AVX-512 VNNI \
+                 + (BF16 or FP16) — bitnet.cpp ternary hot path \
+                 unavailable per master spec § 16)"
+                    .into(),
+            );
+        }
+        // SD-R64: ZMM INT8 lane width gate. Operator declares "I need
+        // ≥N INT8 lanes in the widest dispatch" and the gate evaluates
+        // against the SD-R64 derived lane count.
+        if self.zmm_int8_lanes_min > 0 && caps.cpu.zmm_int8_lane_capacity < self.zmm_int8_lanes_min
+        {
+            unmet.push(format!(
+                "zmm_int8_lanes_min = {} (host max = {})",
+                self.zmm_int8_lanes_min, caps.cpu.zmm_int8_lane_capacity,
+            ));
+        }
+        // SD-R68: generalized cpuinfo-flag gate against the host's
+        // SD-R68 extended_features long-tail surface. Comma-separated
+        // syntax matches wasm_aot_features_required's shape but
+        // operates on raw cpuinfo names (no `+` prefix).
+        if !self.host_features_required.is_empty() {
+            let actual: std::collections::HashSet<&str> = caps
+                .cpu
+                .extended_features
+                .iter()
+                .map(String::as_str)
+                .collect();
+            let missing: Vec<&str> = self
+                .host_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "host_features_required = {:?} (host missing: {})",
+                    self.host_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
         if unmet.is_empty() { Ok(()) } else { Err(unmet) }
     }
 
@@ -417,7 +511,64 @@ impl HardwareRequirements {
             && self.gpu_power_headroom_watts_min == 0
             && self.wasm_aot_features_required.is_empty()
             && self.sain01_verdict_min.is_empty()
+            && !self.ternary_aot_capable_required
+            && self.zmm_int8_lanes_min == 0
+            && self.host_features_required.is_empty()
     }
+}
+
+/// SD-R55: optional `[signing]` block in module.toml. When present,
+/// apply (or any lifecycle action) verifies module.toml's detached
+/// minisig signature against the operator's trust-root pubkey
+/// BEFORE running any install/apply.sh.
+///
+/// Operator workflow:
+///   # author the manifest
+///   $ vim modules/bitnet-gpu-inference/module.toml
+///   # sign with the policy private key (already generated for SDD-006 rule signing)
+///   $ minisign -S -m modules/bitnet-gpu-inference/module.toml -s ~/.selfdef-policy.key
+///   # commit module.toml + module.toml.minisig together
+///
+/// The `required = true` field makes the gate fail-closed; without
+/// the .minisig file present + valid, apply refuses to proceed.
+/// `required = false` (default for the block when present but the
+/// operator hasn't enforced) is informational: warn-only.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleSigningSpec {
+    /// When true, apply REFUSES to land the module without a valid
+    /// signature. When false (or block omitted), the apply path
+    /// surfaces the signing posture but doesn't gate.
+    #[serde(default)]
+    pub(crate) required: bool,
+    /// Optional override of the trust-root public key path. When
+    /// unset, the verifier reads `/etc/selfdef/keys/policy.pub`
+    /// (same root as the existing SDD-006 rule signing).
+    #[serde(default)]
+    pub(crate) trust_root: Option<PathBuf>,
+}
+
+/// SD-R61 (closes SDD-021 W-6): optional per-module resource quotas.
+/// Surface is operator-stable but ENFORCEMENT is currently advisory
+/// — the runner exports the quotas as SELFDEF_RESOURCE_* env vars
+/// for apply.sh / check.sh / uninstall.sh to honor via `ulimit` or
+/// `systemd-run --user`. Future round can wrap the subprocess in
+/// systemd-run automatically.
+///
+/// Operator-stable fields (all optional — empty = unlimited):
+///   cpu_max          fractional CPUs (e.g. "1.5" means 150% of a core)
+///   memory_max       human-readable size (e.g. "512M", "2G")
+///   io_weight        cgroup IOWeight in [1, 10000] (default 100)
+///   time_max_seconds wall-clock cap on the apply subprocess
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleResourceSpec {
+    #[serde(default)]
+    pub(crate) cpu_max: Option<String>,
+    #[serde(default)]
+    pub(crate) memory_max: Option<String>,
+    #[serde(default)]
+    pub(crate) io_weight: Option<u32>,
+    #[serde(default)]
+    pub(crate) time_max_seconds: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -544,6 +695,42 @@ pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// SD-R63: machine-readable list for tooling consumers (last JSON
+/// gap on the modules surface). Mirrors `models list --json` pattern
+/// from SD-R34 + `modules info --json` from SD-R40 — same schema_version
+/// + per-entry shape.
+pub(crate) fn cmd_list_json(dir: &Path) -> Result<()> {
+    let mods = load_all(dir)?;
+    let entries: Vec<serde_json::Value> = mods
+        .iter()
+        .map(|(slug, m)| {
+            serde_json::json!({
+                "slug": slug,
+                "name": m.name,
+                "version": m.version,
+                "category": m.category,
+                "summary": m.summary,
+                "phase": m.phase.as_str(),
+                "instanced": m.instanced,
+                "depends_on": m.depends_on,
+                "provides": m.provides,
+                "consumes": m.consumes,
+                "has_requires_hardware": !m.requires_hardware.is_empty(),
+                "has_signing_block": m.signing.is_some(),
+                "has_resources_block": m.resources.is_some(),
+            })
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "modules_dir": dir.display().to_string(),
+        "total": entries.len(),
+        "modules": entries,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
 /// SD-R40: emit the module manifest as structured JSON (with the
 /// SD-R39 host_status verdict inlined). Operator-stable schema for
 /// tooling consumers (sovereign-osctl, fleet dashboards, future
@@ -594,11 +781,49 @@ pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
             "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
             "wasm_aot_features_required": rh.wasm_aot_features_required,
             "sain01_verdict_min": rh.sain01_verdict_min,
+            "ternary_aot_capable_required": rh.ternary_aot_capable_required,
+            "zmm_int8_lanes_min": rh.zmm_int8_lanes_min,
+            "host_features_required": rh.host_features_required,
         },
+        "signing": signing_status_json(m, dir, slug),
         "host_status": host_status_json,
     });
     println!("{}", serde_json::to_string_pretty(&doc)?);
     Ok(())
+}
+
+/// SD-R56 (composes with R195 sovereign-os audit): the `signing`
+/// block of the `modules info --json` document. Operator-stable
+/// schema: state ("no_signing_block" / "signed_optional" /
+/// "signed_required_present" / "signed_required_missing"), plus
+/// fields when relevant.
+fn signing_status_json(m: &ModuleManifest, dir: &Path, slug: &str) -> serde_json::Value {
+    let Some(spec) = m.signing.as_ref() else {
+        return serde_json::json!({
+            "state": "no_signing_block",
+            "required": false,
+            "minisig_present": false,
+        });
+    };
+    let manifest_path = dir.join(slug).join("module.toml");
+    let minisig_path = manifest_path
+        .parent()
+        .map(|p| p.join("module.toml.minisig"))
+        .unwrap_or_else(|| manifest_path.with_extension("toml.minisig"));
+    let minisig_present = minisig_path.exists();
+    let state = if !spec.required {
+        "signed_optional"
+    } else if minisig_present {
+        "signed_required_present"
+    } else {
+        "signed_required_missing"
+    };
+    serde_json::json!({
+        "state": state,
+        "required": spec.required,
+        "minisig_present": minisig_present,
+        "trust_root": spec.trust_root.as_ref().map(|p| p.display().to_string()),
+    })
 }
 
 /// SD-R50: pretty-print the SD-R47 audit JSONL stream. Operator
@@ -897,6 +1122,18 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
         }
         if !rh.sain01_verdict_min.is_empty() {
             println!("  - sain01_verdict_min = {}", rh.sain01_verdict_min);
+        }
+        if rh.ternary_aot_capable_required {
+            println!("  - ternary_aot_capable_required = true");
+        }
+        if rh.zmm_int8_lanes_min > 0 {
+            println!("  - zmm_int8_lanes_min = {}", rh.zmm_int8_lanes_min);
+        }
+        if !rh.host_features_required.is_empty() {
+            println!(
+                "  - host_features_required = \"{}\"",
+                rh.host_features_required
+            );
         }
     }
     if !m.daemon_requires.is_empty() {
@@ -1335,6 +1572,8 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         phase: m.phase,
         daemon_requires: m.daemon_requires.clone(),
         requires_hardware: m.requires_hardware.clone(),
+        signing: m.signing.clone(),
+        resources: m.resources.clone(),
     }
 }
 
@@ -1503,6 +1742,24 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     // default sensibly.
     if let Some(inst) = &active.instance {
         cmd.env("SELFDEF_INSTANCE_ID", inst);
+    }
+    // SD-R61 (closes SDD-021 W-6): surface resource quotas to
+    // apply.sh / check.sh / uninstall.sh as SELFDEF_RESOURCE_*
+    // env vars. Scripts honor via `ulimit` or `systemd-run --user`
+    // wrappers; future round can wrap the subprocess automatically.
+    if let Some(res) = &active.manifest.resources {
+        if let Some(v) = res.cpu_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_CPU_MAX", v);
+        }
+        if let Some(v) = res.memory_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_MEMORY_MAX", v);
+        }
+        if let Some(v) = res.io_weight {
+            cmd.env("SELFDEF_RESOURCE_IO_WEIGHT", v.to_string());
+        }
+        if let Some(v) = res.time_max_seconds {
+            cmd.env("SELFDEF_RESOURCE_TIME_MAX_SECONDS", v.to_string());
+        }
     }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
@@ -1818,6 +2075,127 @@ pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
 /// didn't apply. The probe failure (e.g. on minimal hosts) is silent
 /// for modules that DON'T declare hardware requirements; modules
 /// that DO declare them are skipped with a clear log.
+/// SD-R55 (closes SDD-020 V-5): verify module.toml's detached
+/// minisig signature when the manifest declares `[signing]` with
+/// `required = true`. Returns Ok(()) when:
+///   - the module has no [signing] block
+///   - [signing].required = false (informational)
+///   - [signing].required = true AND the .minisig verifies
+///
+/// Returns Err with operator-readable detail when the gate fails.
+fn verify_module_signing(am: &ActiveModule) -> Result<(), String> {
+    let signing = match am.manifest.signing.as_ref() {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+    if !signing.required {
+        // Informational-only block; surface the posture as a notice
+        // but don't gate.
+        eprintln!(
+            "# SD-R55: module {} declares [signing] but required=false (informational only)",
+            am.display_name()
+        );
+        return Ok(());
+    }
+    let trust_root = signing
+        .trust_root
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("/etc/selfdef/keys/policy.pub"));
+    let manifest_path = am.module_root.join("module.toml");
+    // SD-R62 (closes SDD-021 W-2): keyring rotation. If trust_root
+    // is a DIRECTORY, load every *.pub file inside as a candidate
+    // pubkey; verification passes if ANY pubkey accepts the sig.
+    // If it's a regular file, behave as cycle-3 SD-R55 (single key).
+    let verifiers = load_trust_roots(&trust_root)?;
+    if verifiers.is_empty() {
+        return Err(format!(
+            "trust-root {} resolved to zero pubkeys",
+            trust_root.display()
+        ));
+    }
+    let mut last_err: Option<String> = None;
+    for v in &verifiers {
+        match v.verify_detached_file(&manifest_path) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(format!("key {}: {e}", v.source().display()));
+            }
+        }
+    }
+    Err(format!(
+        "signature verification failed for {} (tried {} pubkey(s); last error: {})",
+        manifest_path.display(),
+        verifiers.len(),
+        last_err.unwrap_or_else(|| "<none>".into())
+    ))
+}
+
+/// SD-R62: load trust roots from a path. If path is a directory,
+/// every `*.pub` file in it becomes a candidate verifier (operator-
+/// stable rotation surface: deploy the new key alongside the old,
+/// re-sign at leisure, remove the old key after the migration).
+fn load_trust_roots(path: &Path) -> Result<Vec<selfdef_signing::Verifier>, String> {
+    if path.is_dir() {
+        let mut entries: Vec<_> = std::fs::read_dir(path)
+            .map_err(|e| format!("reading keyring dir {}: {e}", path.display()))?
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pub"))
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        let mut verifiers = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let p = entry.path();
+            match selfdef_signing::Verifier::load(&p) {
+                Ok(v) => verifiers.push(v),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SD-R62: skipping unparseable pubkey in keyring"
+                    );
+                }
+            }
+        }
+        Ok(verifiers)
+    } else if path.is_file() {
+        let v = selfdef_signing::Verifier::load(path)
+            .map_err(|e| format!("trust-root pubkey unreadable at {}: {e}", path.display()))?;
+        Ok(vec![v])
+    } else {
+        Err(format!(
+            "trust-root path {} doesn't exist (or isn't a file/dir)",
+            path.display()
+        ))
+    }
+}
+
+/// SD-R55: apply the signing gate to every active module. Returns
+/// the kept set (modules whose signing posture passed). Failures
+/// on required=true surface as a stderr block + drop the module
+/// from the kept set; if no module remains required-and-failed,
+/// the caller proceeds normally.
+fn apply_signing_gate(active: Vec<ActiveModule>) -> (Vec<ActiveModule>, Vec<(String, String)>) {
+    let mut kept = Vec::with_capacity(active.len());
+    let mut failed: Vec<(String, String)> = Vec::new();
+    for am in active {
+        match verify_module_signing(&am) {
+            Ok(()) => kept.push(am),
+            Err(msg) => failed.push((am.display_name(), msg)),
+        }
+    }
+    if !failed.is_empty() {
+        eprintln!(
+            "# SD-R55 module-signing gate — {} module(s) failed signature verification:",
+            failed.len()
+        );
+        for (name, msg) in &failed {
+            eprintln!("  - {name}: {msg}");
+        }
+        eprintln!("# To proceed without signing, set [signing].required = false in module.toml");
+    }
+    (kept, failed)
+}
+
 fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
     let caps = match selfdef_hardware::probe() {
         Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
@@ -2471,6 +2849,21 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     }
     // SD-R14: hardware-aware module gate. On Apply / Check, probe
     // the host hardware once + filter out modules whose
+    // SD-R55 (closes SDD-020 V-5): module-manifest signing gate.
+    // For Apply + Check, refuse to land modules whose [signing]
+    // block declares required=true without a valid .minisig.
+    // Uninstall skips signing (tearing down doesn't require the
+    // operator to re-verify signatures).
+    if matches!(action, Action::Apply | Action::Check) {
+        let (kept, failed) = apply_signing_gate(active);
+        active = kept;
+        if !failed.is_empty() && matches!(action, Action::Apply) {
+            // Apply is destructive — fail loudly when ANY required
+            // signing check fails. Check is informational — just
+            // log + continue with the kept set.
+            return Ok(1);
+        }
+    }
     // [requires_hardware] block isn't met. The unmet modules surface
     // as a single warning block before apply; the filtered set
     // proceeds. Uninstall skips this — tearing a module down doesn't
@@ -2743,6 +3136,8 @@ mod tests {
             phase,
             daemon_requires: BTreeMap::new(),
             requires_hardware: HardwareRequirements::default(),
+            signing: None,
+            resources: None,
         }
     }
 
@@ -3650,6 +4045,12 @@ mod sdr14_hardware_gate_tests {
             cpu: CpuCapabilities {
                 avx512vnni: avx512_vnni,
                 avx512bf16: avx512_bf16,
+                // SD-R64: derived fields mirror the production logic
+                // in derive_capabilities so test caps reflect reality.
+                // Ternary capable = VNNI + (BF16 or FP16); lanes = 64
+                // on VNNI hosts.
+                ternary_aot_capable: avx512_vnni && avx512_bf16,
+                zmm_int8_lane_capacity: if avx512_vnni { 64 } else { 0 },
                 ..Default::default()
             },
             memory: MemoryCapabilities {
@@ -3800,11 +4201,184 @@ mod sdr14_hardware_gate_tests {
             gpu_power_headroom_watts_min: 0,
             wasm_aot_features_required: String::new(),
             sain01_verdict_min: "FullMatch".into(),
+            ternary_aot_capable_required: false,
+            zmm_int8_lanes_min: 0,
+            host_features_required: String::new(),
         };
         let unmet = req.evaluate(&minimal_host()).unwrap_err();
         // Every predicate fails on a minimal host: 5 lines (SD-R26
         // gates only fire when their threshold > 0).
         assert_eq!(unmet.len(), 5, "got: {unmet:?}");
+    }
+
+    // ---- SD-R64: ternary + ZMM lane gate ---------------------------
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_passes_on_sain01() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        // full_match_sain01 has vnni + bf16 → derived ternary = true.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_on_minimal_host() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("bitnet.cpp"),
+            "remediation hint must mention bitnet.cpp hot path: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_when_only_vnni_present() {
+        // vnni=true, bf16=false → derived ternary = false even though
+        // VNNI alone is present. Predicate must reject.
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let caps = caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_64_passes_on_sain01() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_fails_when_host_lacks_avx512_vnni() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        // minimal_host has vnni=false → derived lanes = 0.
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert!(
+            unmet[0].contains("zmm_int8_lanes_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("host max = 0"),
+            "must cite actual host lane count: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_zero_disables_gate() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 0,
+            ..Default::default()
+        };
+        // is_empty must remain true with both gates disabled.
+        assert!(req.is_empty());
+        // And evaluate is a no-op.
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    // ---- SD-R68: host_features_required gate -----------------------
+
+    fn caps_with_extended_features(features: &[&str]) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 256, 2, Sain01Verdict::FullMatch);
+        c.cpu.extended_features = features.iter().map(|s| (*s).to_string()).collect();
+        c
+    }
+
+    #[test]
+    fn sdr68_host_features_required_passes_when_all_present() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        let caps = caps_with_extended_features(&["avx2", "avx512_vbmi2", "sha_ni", "rdpid"]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_fails_with_missing_listed() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx2", "rdpid"]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("host_features_required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("avx512_vbmi2") && unmet[0].contains("sha_ni"),
+            "must cite each missing flag: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr68_host_features_required_tolerates_whitespace_and_empty_tokens() {
+        let req = HardwareRequirements {
+            host_features_required: " avx512_vbmi2, , sha_ni ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx512_vbmi2", "sha_ni"]);
+        // Whitespace + empty-token tolerated; gate passes.
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_empty_string_disables_gate() {
+        let req = HardwareRequirements {
+            host_features_required: String::new(),
+            ..Default::default()
+        };
+        assert!(req.is_empty());
+        // Even with no features in caps the gate is a no-op.
+        let caps = caps_with_extended_features(&[]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_is_empty_false_when_host_features_required_set() {
+        let req = HardwareRequirements {
+            host_features_required: "rdpid".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+    }
+
+    #[test]
+    fn sdr64_is_empty_false_when_either_sdr64_gate_set() {
+        let r1 = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!r1.is_empty());
+        let r2 = HardwareRequirements {
+            zmm_int8_lanes_min: 16,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
     }
 
     // -- apply_hardware_gate ----------------------------------------
@@ -3821,6 +4395,8 @@ mod sdr14_hardware_gate_tests {
             consumes: Vec::new(),
             requires: Vec::new(),
             requires_hardware: req,
+            signing: None,
+            resources: None,
             install: None,
             profiles: None,
             instanced: false,
@@ -4176,6 +4752,7 @@ mod sdr14_hardware_gate_tests {
             target_cpu: "znver5".into(),
             target_features: features.into(),
             compile_command_hint: String::new(),
+            ternary_kernel_hint: String::new(),
         };
         c
     }

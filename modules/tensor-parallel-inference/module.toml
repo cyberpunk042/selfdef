@@ -1,0 +1,50 @@
+name        = "tensor-parallel-inference"
+version     = "0.1.0"
+summary     = "Provision tensor-parallel inference splits (every GPU hosts a slice) — demonstrates SD-R51 ALL-semantics + SD-R55 signing composition (SD-R58)"
+category    = "inference"
+
+depends_on  = ["hardware-tune-cache"]
+conflicts   = []
+provides    = ["tensor-parallel-runtime"]
+consumes    = ["hardware-tune-env"]
+
+requires    = [
+    { kind = "binary", value = "selfdefctl" },
+]
+
+# SD-R58 — the third real selfdef module. Demonstrates how cycle-2
+# + cycle-3 predicates compose for a niche but well-defined workload:
+# tensor-parallel inference, where EVERY GPU hosts a slice of the
+# model and the slices must be evenly sized.
+#
+# Predicate composition:
+#   gpu_count_min        = 2     two cards minimum for a split
+#   gpu_vram_gib_each_min = 16   ALL GPUs need ≥ 16 GiB (slices)
+#   avx512_bf16          = true  BF16 reductions across the all-reduce
+#
+# On the SAIN-01 dual-GPU pair (RTX PRO 6000 98 GiB + RTX 3090 24 GiB),
+# this lands cleanly (both ≥ 16). On a 1×98 + 1×4 hypothetical, ANY
+# would pass but EACH (SD-R51) correctly refuses.
+[requires_hardware]
+gpu_count_min         = 2
+gpu_vram_gib_each_min = 16
+avx512_bf16           = true
+memory_gib_min        = 32
+
+# SD-R58 demonstrates the cycle-3 SD-R55 signing surface. We set
+# required = false (informational) so the module ships unsigned
+# but operators see the SD-R55 banner — proving the cycle's
+# signing surface composes alongside the cycle-2 predicates.
+# Production deployments would flip required = true after pinning
+# a signature with `minisign -S -m module.toml`.
+[signing]
+required = false
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"

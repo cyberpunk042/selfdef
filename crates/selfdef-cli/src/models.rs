@@ -79,6 +79,50 @@ pub(crate) struct ModelSpec {
     /// downstream tooling to pick the right loader.
     #[serde(default)]
     pub(crate) weight_format: String,
+
+    // ---- SD-R71: R212 model-class taxonomy mirror -----------------
+    //
+    // Mirrors the operator-facing taxonomy from sovereign-os R212
+    // (schemas/model-catalog.schema.yaml). The fields are all
+    // Option-typed / default to "" or empty Vec so pre-SD-R71 model
+    // registries keep deserialising cleanly. cmd_list + JSON outputs
+    // surface them so operators see the SAME taxonomy on either side.
+    /// SD-R71: model class — `"llm" | "slm" | "rlm" | "ternary-lm" |
+    /// "lora-adapter" | "embed" | "vision" | "multimodal" | "code" |
+    /// "mixture" | "speculative" | "reranker"`. Free-string because
+    /// the registry doesn't constrain the operator (sovereign-os
+    /// catalog DOES constrain via JSON Schema).
+    #[serde(default)]
+    pub(crate) class: String,
+
+    /// SD-R71: operator-readable size bucket — `"xs" | "s" | "m" |
+    /// "l" | "xl" | "xxl"`. <1B / 1-7B / 7-30B / 30-70B / 70-200B / >200B.
+    #[serde(default)]
+    pub(crate) size_class: String,
+
+    /// SD-R71: operator-readable purpose tags (chat / reasoning /
+    /// code / multimodal / embedding / vision / agent / function-
+    /// calling / rag / speculation / reranking / distillation-base).
+    /// Multiple allowed; a model can serve several roles.
+    #[serde(default)]
+    pub(crate) purpose: Vec<String>,
+
+    /// SD-R71: minimum VRAM (GiB) for live inference at the declared
+    /// `weight_format` + a small context. Operator-facing reality
+    /// check before pulling the artifact.
+    #[serde(default)]
+    pub(crate) vram_gib_min: f64,
+
+    /// SD-R71: max context window in tokens.
+    #[serde(default)]
+    pub(crate) context_window_tokens: u64,
+
+    /// SD-R71: when `class == "lora-adapter"`, the base model id
+    /// this adapter attaches to. Operator-readable; not enforced
+    /// at the schema level (registry is permissive — sovereign-os
+    /// catalog is the strict source).
+    #[serde(default)]
+    pub(crate) base_model: String,
 }
 
 /// SD-R34: hardware predicates governing whether a model lands.
@@ -348,6 +392,126 @@ pub(crate) fn cmd_check_hardware(dir: Option<&Path>, json: bool) -> Result<i32> 
 
 /// SD-R34 `selfdefctl models list` — operator-friendly catalog
 /// listing without the gate evaluation. Read-only.
+/// SD-R57 (closes SDD-019 T-3 fetch-side): download a model
+/// artifact + verify its sha256 against the manifest declaration.
+/// Operator workflow:
+///
+///   $ selfdefctl models fetch bitnet-b1.58-2B-4T --to /mnt/vault/models/bitnet/model.gguf
+///
+/// Behavior:
+///   - Reads the manifest at <dir>/<slug>/model.toml
+///   - GETs artifact_url; streams to a tempfile next to --to
+///   - Streams through sha256; refuses to rename when digest mismatches
+///   - On match, atomic rename to --to
+///
+/// Mandatory: artifact_sha256 MUST be present in the manifest. The
+/// fetcher refuses to write a file we can't verify. Operators pin
+/// sha256 at manifest authoring time + commit the pinned value.
+///
+/// Operator-supplied tokens: env `HUGGINGFACE_HUB_TOKEN` (or
+/// `--token <env-name>`) → forwarded as a Bearer header. Never read
+/// from the manifest (operator-supplied keys NEVER in-repo).
+pub(crate) async fn cmd_fetch(
+    dir: Option<&Path>,
+    slug: &str,
+    to: &Path,
+    token_env: Option<&str>,
+) -> Result<i32> {
+    let resolved = resolve_dir(dir);
+    let mods = load_all(&resolved)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no model `{slug}` in {}", resolved.display()))?;
+    if m.model.artifact_url.is_empty() {
+        anyhow::bail!("model `{slug}` has no artifact_url — operator must pin one in model.toml");
+    }
+    if m.model.artifact_sha256.is_empty() {
+        anyhow::bail!(
+            "model `{slug}` has no artifact_sha256 — refusing to fetch unverifiable artifact"
+        );
+    }
+
+    // Stage a tempfile next to the destination so the atomic rename
+    // stays on the same filesystem.
+    if let Some(parent) = to.parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating destination dir {}", parent.display()))?;
+        }
+    }
+    let mut tmp_path = std::ffi::OsString::from(to);
+    tmp_path.push(".partial");
+    let tmp_path = std::path::PathBuf::from(tmp_path);
+
+    eprintln!(
+        "# SD-R57: fetching {} → {}",
+        m.model.artifact_url,
+        to.display()
+    );
+    eprintln!("#   expected sha256: {}", m.model.artifact_sha256);
+
+    let mut req = reqwest::Client::new().get(&m.model.artifact_url);
+    if let Some(env_name) = token_env {
+        if let Ok(tok) = std::env::var(env_name) {
+            if !tok.is_empty() {
+                req = req.bearer_auth(tok);
+                eprintln!("#   auth: Bearer from ${env_name}");
+            }
+        }
+    }
+    let mut resp = req
+        .send()
+        .await
+        .with_context(|| format!("GET {}", m.model.artifact_url))?;
+    if !resp.status().is_success() {
+        anyhow::bail!("HTTP {} fetching {}", resp.status(), m.model.artifact_url);
+    }
+
+    // Stream → sha256 + tempfile in parallel.
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncWriteExt;
+    let mut hasher = Sha256::new();
+    let mut bytes_written: u64 = 0;
+    let mut f = tokio::fs::File::create(&tmp_path)
+        .await
+        .with_context(|| format!("create {}", tmp_path.display()))?;
+    while let Some(chunk) = resp
+        .chunk()
+        .await
+        .with_context(|| format!("read chunk from {}", m.model.artifact_url))?
+    {
+        hasher.update(&chunk);
+        f.write_all(&chunk)
+            .await
+            .with_context(|| format!("write to {}", tmp_path.display()))?;
+        bytes_written = bytes_written.saturating_add(chunk.len() as u64);
+    }
+    f.sync_all().await.ok();
+    drop(f);
+
+    let actual = hasher.finalize();
+    let actual_hex: String = actual.iter().map(|b| format!("{b:02x}")).collect();
+    let expected = m.model.artifact_sha256.trim().to_ascii_lowercase();
+
+    if actual_hex != expected {
+        // Tampered or wrong artifact — refuse to commit.
+        let _ = std::fs::remove_file(&tmp_path);
+        eprintln!("# SD-R57: ✗ digest MISMATCH — refusing to rename");
+        eprintln!("#   expected: {expected}");
+        eprintln!("#   actual:   {actual_hex}");
+        anyhow::bail!("sha256 mismatch on {slug} ({bytes_written} bytes downloaded)");
+    }
+    std::fs::rename(&tmp_path, to)
+        .with_context(|| format!("rename {} → {}", tmp_path.display(), to.display()))?;
+    eprintln!(
+        "# SD-R57: ✓ verified {actual_hex} ({bytes_written} bytes) → {}",
+        to.display()
+    );
+    Ok(0)
+}
+
 pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
     let resolved = resolve_dir(dir);
     let catalog = load_all(&resolved)?;
@@ -355,7 +519,12 @@ pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
         println!("(no models registered in {})", resolved.display());
         return Ok(0);
     }
-    println!("{:<32}  {:<10}  {:<10}  summary", "name", "format", "size");
+    // SD-R71: include R212 taxonomy columns when any model in the
+    // catalog declares them.
+    println!(
+        "{:<32}  {:<14}  {:<6}  {:<5}  {:<10}  summary",
+        "name", "class", "size", "quant", "footprint"
+    );
     for (slug, m) in &catalog {
         let size_human = humanize_bytes(m.model.size_bytes);
         let fmt = if m.model.weight_format.is_empty() {
@@ -363,9 +532,19 @@ pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
         } else {
             m.model.weight_format.as_str()
         };
+        let class = if m.model.class.is_empty() {
+            "?"
+        } else {
+            m.model.class.as_str()
+        };
+        let size_class = if m.model.size_class.is_empty() {
+            "?"
+        } else {
+            m.model.size_class.as_str()
+        };
         println!(
-            "{:<32}  {:<10}  {:<10}  {}",
-            slug, fmt, size_human, m.model.summary
+            "{:<32}  {:<14}  {:<6}  {:<5}  {:<10}  {}",
+            slug, class, size_class, fmt, size_human, m.model.summary
         );
     }
     Ok(0)
@@ -438,6 +617,7 @@ mod tests {
                 target_cpu: "znver5".into(),
                 target_features: "+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma".into(),
                 compile_command_hint: String::new(),
+                ternary_kernel_hint: String::new(),
             },
         }
     }

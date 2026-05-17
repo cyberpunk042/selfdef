@@ -54,6 +54,228 @@ pub(crate) fn run_export(output: Option<std::path::PathBuf>) -> Result<i32> {
 /// from /sys/class/hwmon (CPU package, NVMe drives, motherboard
 /// sensors) plus nvidia-smi GPU temps when nvidia-smi is available.
 /// Read-only; exit code 0 always.
+/// SD-R67: `selfdefctl hardware posture` — one-screen
+/// hardware-exploit posture summary. Composes SD-R64 + SD-R66 into
+/// the "can this box run 1-bit / ternary models at the hot-path lane
+/// width?" operator-readable rollup.
+pub(crate) fn run_posture(json: bool) -> Result<i32> {
+    let snap = selfdef_hardware::probe()?;
+    let caps = selfdef_hardware::derive_capabilities(&snap);
+    if json {
+        let doc = serde_json::json!({
+            "ternary_aot_capable": caps.cpu.ternary_aot_capable,
+            "zmm_int8_lane_capacity": caps.cpu.zmm_int8_lane_capacity,
+            "ternary_kernel_hint": caps.wasm_aot.ternary_kernel_hint,
+            "target_cpu": caps.wasm_aot.target_cpu,
+            "target_features": caps.wasm_aot.target_features,
+            "sain01_match": caps.sain01_match.overall,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+    } else {
+        print!("{}", render_posture(&caps));
+    }
+    Ok(verdict_exit(caps.sain01_match.overall))
+}
+
+/// SD-R67 — pure render. Tests pin the operator-facing format.
+pub(crate) fn render_posture(caps: &selfdef_hardware::HardwareCapabilities) -> String {
+    use std::fmt::Write as _;
+    let mut buf = String::new();
+    writeln!(&mut buf, "── selfdef hardware-exploit posture (SD-R67) ──").unwrap();
+    writeln!(
+        &mut buf,
+        "  Sain01 verdict          : {:?}",
+        caps.sain01_match.overall
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  Target CPU (LLVM)       : {}",
+        caps.wasm_aot.target_cpu
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  Target features         : {}",
+        if caps.wasm_aot.target_features.is_empty() {
+            "(none — pre-AVX-512 host)"
+        } else {
+            &caps.wasm_aot.target_features
+        }
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  Ternary AOT capable     : {}",
+        if caps.cpu.ternary_aot_capable {
+            "yes (VNNI + (BF16 or FP16))"
+        } else {
+            "no — host lacks VNNI or small-FP path"
+        }
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  ZMM INT8 lane capacity  : {} (master spec § 16 reading)",
+        caps.cpu.zmm_int8_lane_capacity
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  Kernel hint             : {}",
+        if caps.wasm_aot.ternary_kernel_hint.is_empty() {
+            "(no INT8 SIMD path on this host)"
+        } else {
+            &caps.wasm_aot.ternary_kernel_hint
+        }
+    )
+    .unwrap();
+    buf
+}
+
+/// SD-R70: emit a complete host-tuned `wasmtime compile` script.
+/// The script can be piped to `bash` to run the AOT compile, or
+/// saved + edited. Composes SD-R19 (host-tuned compile flags),
+/// SD-R30 (wasm_aot.target_cpu + target_features), and SD-R66
+/// (ternary_kernel_hint) so the operator sees one self-contained
+/// script that exploits THIS host's AVX-512 surface.
+pub(crate) fn run_aot_script(
+    wasm: &std::path::Path,
+    output: Option<&std::path::Path>,
+) -> Result<i32> {
+    let snap = selfdef_hardware::probe()?;
+    let caps = selfdef_hardware::derive_capabilities(&snap);
+    print!("{}", render_aot_script(&caps, wasm, output));
+    Ok(0)
+}
+
+/// SD-R70 — pure renderer. Tests pin the script shape.
+pub(crate) fn render_aot_script(
+    caps: &selfdef_hardware::HardwareCapabilities,
+    wasm: &std::path::Path,
+    output: Option<&std::path::Path>,
+) -> String {
+    use std::fmt::Write as _;
+    let mut buf = String::new();
+    let out_path = match output {
+        Some(p) => p.to_path_buf(),
+        None => {
+            // default to wasm with `.cwasm` extension
+            let mut p = wasm.to_path_buf();
+            p.set_extension("cwasm");
+            p
+        }
+    };
+    let target_features = if caps.wasm_aot.target_features.is_empty() {
+        // pre-AVX-512 host — let wasmtime infer
+        "native".to_string()
+    } else {
+        caps.wasm_aot.target_features.clone()
+    };
+    writeln!(&mut buf, "#!/usr/bin/env bash").unwrap();
+    writeln!(
+        &mut buf,
+        "# selfdef SD-R70 — host-tuned Wasm-to-AVX-512 AOT compile script."
+    )
+    .unwrap();
+    writeln!(&mut buf, "#").unwrap();
+    writeln!(
+        &mut buf,
+        "# Generated on this host:  CPU={}  ternary_aot={}",
+        if caps.wasm_aot.target_cpu.is_empty() {
+            "(unknown)"
+        } else {
+            &caps.wasm_aot.target_cpu
+        },
+        caps.cpu.ternary_aot_capable,
+    )
+    .unwrap();
+    if !caps.wasm_aot.ternary_kernel_hint.is_empty() {
+        writeln!(
+            &mut buf,
+            "# Kernel hint (SD-R66):  {}",
+            caps.wasm_aot.ternary_kernel_hint
+        )
+        .unwrap();
+    }
+    writeln!(&mut buf, "#").unwrap();
+    writeln!(
+        &mut buf,
+        "# Pipe to bash:  selfdefctl hardware aot-script {} | bash",
+        wasm.display()
+    )
+    .unwrap();
+    writeln!(&mut buf, "set -euo pipefail").unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(&mut buf, "WASM_INPUT={:?}", wasm.to_string_lossy().as_ref()).unwrap();
+    writeln!(
+        &mut buf,
+        "CWASM_OUTPUT={:?}",
+        out_path.to_string_lossy().as_ref()
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "TARGET_TRIPLE={:?}",
+        caps.wasm_aot.target_triple.as_str()
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "TARGET_CPU={:?}",
+        if caps.wasm_aot.target_cpu.is_empty() {
+            "native"
+        } else {
+            caps.wasm_aot.target_cpu.as_str()
+        }
+    )
+    .unwrap();
+    writeln!(&mut buf, "TARGET_FEATURES={target_features:?}").unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        r#"if ! command -v wasmtime >/dev/null 2>&1; then
+  echo "ERROR wasmtime not installed — apt install wasmtime, or download from https://wasmtime.dev" >&2
+  exit 1
+fi"#
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        r#"if [ ! -r "${{WASM_INPUT}}" ]; then
+  echo "ERROR input wasm not readable: ${{WASM_INPUT}}" >&2
+  exit 1
+fi"#
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "echo \"selfdef SD-R70 — compiling ${{WASM_INPUT}} → ${{CWASM_OUTPUT}}\""
+    )
+    .unwrap();
+    writeln!(&mut buf, "echo \"  target-cpu       : ${{TARGET_CPU}}\"").unwrap();
+    writeln!(
+        &mut buf,
+        "echo \"  target-features  : ${{TARGET_FEATURES}}\""
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "wasmtime compile \\
+  --target \"${{TARGET_TRIPLE}}\" \\
+  --cranelift-set \"opt_level=speed\" \\
+  --target-feature \"${{TARGET_FEATURES}}\" \\
+  \"${{WASM_INPUT}}\" -o \"${{CWASM_OUTPUT}}\""
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(&mut buf, "echo \"OK ${{CWASM_OUTPUT}}\"").unwrap();
+    buf
+}
+
 pub(crate) fn run_thermals(json: bool) -> Result<i32> {
     // Probe once — selfdef_hardware::probe wires the thermal reads
     // into HardwareSnapshot.thermals.
@@ -512,9 +734,10 @@ mod tests {
         assert!(path.exists());
         let body = std::fs::read_to_string(&path).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&body).unwrap();
-        // SD-R30 bumped the schema (1.0.0 → 1.1.0 was SD-R25 conceptually
-        // but not yet emitted; this round formalises it to 1.2.0).
-        assert_eq!(parsed["schema_version"], "1.2.0");
+        // SD-R68 bumped to 1.4.0 alongside cpu.extended_features.
+        // Earlier bumps: SD-R66 1.3.0, SD-R30 1.0→1.2, SD-R25 1.1
+        // conceptual.
+        assert_eq!(parsed["schema_version"], "1.4.0");
         for key in ["cpu", "memory", "gpu", "pcie", "sain01_match", "wasm_aot"] {
             assert!(
                 !parsed[key].is_null(),
@@ -691,5 +914,191 @@ mod tests {
         // Atomic write contract: no leftover .tmp suffix file.
         let tmp = dir.path().join("tune.env.tmp");
         assert!(!tmp.exists(), "tempfile should have been renamed away");
+    }
+
+    // ----- SD-R67 posture renderer ----------------------------------
+
+    #[test]
+    fn sdr67_render_posture_emits_all_six_lines() {
+        let caps = synth_caps();
+        let out = render_posture(&caps);
+        for needle in [
+            "── selfdef hardware-exploit posture (SD-R67) ──",
+            "Sain01 verdict",
+            "Target CPU (LLVM)",
+            "Target features",
+            "Ternary AOT capable",
+            "ZMM INT8 lane capacity",
+            "Kernel hint",
+        ] {
+            assert!(out.contains(needle), "missing {needle:?}: {out}");
+        }
+    }
+
+    #[test]
+    fn sdr67_render_posture_reports_sain01_values() {
+        // synth_caps is the Zen 5 + VNNI + BF16 SAIN-01 shape.
+        let caps = synth_caps();
+        let out = render_posture(&caps);
+        assert!(
+            out.contains("yes (VNNI + (BF16 or FP16))"),
+            "expected SAIN-01 ternary YES line: {out}"
+        );
+        assert!(
+            out.contains("64 (master spec § 16 reading)"),
+            "expected 64-lane reading + spec citation: {out}"
+        );
+        assert!(
+            out.contains("VPDPBUSD"),
+            "expected SAIN-01 kernel-hint: {out}"
+        );
+    }
+
+    // ----- SD-R70: AOT compile-script renderer ---------------------
+
+    #[test]
+    fn sdr70_render_aot_script_emits_shebang_and_pipe_hint() {
+        let caps = synth_caps();
+        let wasm = std::path::PathBuf::from("/tmp/foo.wasm");
+        let script = render_aot_script(&caps, &wasm, None);
+        assert!(
+            script.starts_with("#!/usr/bin/env bash"),
+            "must begin with shebang: {script}"
+        );
+        assert!(
+            script.contains("selfdefctl hardware aot-script /tmp/foo.wasm | bash"),
+            "must include the pipe-to-bash one-liner: {script}"
+        );
+        assert!(
+            script.contains("set -euo pipefail"),
+            "must use strict bash mode: {script}"
+        );
+    }
+
+    #[test]
+    fn sdr70_render_aot_script_default_output_is_dot_cwasm_sibling() {
+        let caps = synth_caps();
+        let wasm = std::path::PathBuf::from("/tmp/foo.wasm");
+        let script = render_aot_script(&caps, &wasm, None);
+        assert!(
+            script.contains("CWASM_OUTPUT=\"/tmp/foo.cwasm\""),
+            "default output must replace extension: {script}"
+        );
+    }
+
+    #[test]
+    fn sdr70_render_aot_script_honors_explicit_output() {
+        let caps = synth_caps();
+        let wasm = std::path::PathBuf::from("/srv/in.wasm");
+        let out = std::path::PathBuf::from("/var/cache/out.cwasm");
+        let script = render_aot_script(&caps, &wasm, Some(&out));
+        assert!(
+            script.contains("CWASM_OUTPUT=\"/var/cache/out.cwasm\""),
+            "explicit output must be honored: {script}"
+        );
+    }
+
+    #[test]
+    fn sdr70_render_aot_script_uses_host_target_features() {
+        let caps = synth_caps();
+        let script = render_aot_script(&caps, &std::path::PathBuf::from("a.wasm"), None);
+        // synth_caps is the Zen 5 + AVX-512 shape → target_features
+        // non-empty + includes +avx512vnni.
+        assert!(
+            script.contains("+avx512vnni"),
+            "must carry host target features: {script}"
+        );
+        assert!(
+            script.contains("TARGET_CPU=\"znver5\""),
+            "must carry znver5 target: {script}"
+        );
+    }
+
+    #[test]
+    fn sdr70_render_aot_script_invokes_wasmtime_compile() {
+        let caps = synth_caps();
+        let script = render_aot_script(&caps, &std::path::PathBuf::from("a.wasm"), None);
+        assert!(
+            script.contains("wasmtime compile"),
+            "must invoke wasmtime compile: {script}"
+        );
+        assert!(
+            script.contains("--target-feature"),
+            "must pass target-feature flag: {script}"
+        );
+        assert!(
+            script.contains("if ! command -v wasmtime"),
+            "must guard on wasmtime presence: {script}"
+        );
+    }
+
+    #[test]
+    fn sdr70_render_aot_script_falls_back_to_native_on_pre_avx512_host() {
+        // Minimal host: no AVX-512 → target_features is empty.
+        let snap = selfdef_hardware::HardwareSnapshot {
+            cpu: selfdef_hardware::CpuInventory {
+                vendor: "GenuineIntel".into(),
+                model_name: "Old".into(),
+                physical_cores: 4,
+                logical_threads: 8,
+                features: std::collections::HashSet::new(),
+                avx512_present: false,
+                avx512_vnni: false,
+                avx512_bf16: false,
+            },
+            memory: selfdef_hardware::MemoryInventory {
+                total_bytes: 8 * 1024 * 1024 * 1024,
+            },
+            gpus: vec![],
+            motherboard: None,
+            pcie: selfdef_hardware::PcieInventory::default(),
+            probed_at: "2026-05-17T00:00:00Z".into(),
+            thermals: vec![],
+        };
+        let caps = selfdef_hardware::derive_capabilities(&snap);
+        let script = render_aot_script(&caps, &std::path::PathBuf::from("a.wasm"), None);
+        assert!(
+            script.contains("TARGET_FEATURES=\"native\""),
+            "pre-AVX-512 host must fall back to 'native': {script}"
+        );
+    }
+
+    #[test]
+    fn sdr67_render_posture_handles_minimal_host_cleanly() {
+        // Build a minimal-host caps by hand: no AVX-512, no SIMD path.
+        let snap = selfdef_hardware::HardwareSnapshot {
+            cpu: selfdef_hardware::CpuInventory {
+                vendor: "GenuineIntel".into(),
+                model_name: "Old".into(),
+                physical_cores: 4,
+                logical_threads: 8,
+                features: std::collections::HashSet::new(),
+                avx512_present: false,
+                avx512_vnni: false,
+                avx512_bf16: false,
+            },
+            memory: selfdef_hardware::MemoryInventory {
+                total_bytes: 8 * 1024 * 1024 * 1024,
+            },
+            gpus: vec![],
+            motherboard: None,
+            pcie: selfdef_hardware::PcieInventory::default(),
+            probed_at: "2026-05-17T00:00:00Z".into(),
+            thermals: vec![],
+        };
+        let caps = selfdef_hardware::derive_capabilities(&snap);
+        let out = render_posture(&caps);
+        assert!(
+            out.contains("no — host lacks VNNI or small-FP path"),
+            "expected minimal-host ternary NO line: {out}"
+        );
+        assert!(
+            out.contains("0 (master spec § 16 reading)"),
+            "expected 0-lane reading: {out}"
+        );
+        assert!(
+            out.contains("(no INT8 SIMD path on this host)"),
+            "expected no-SIMD kernel-hint fallback: {out}"
+        );
     }
 }

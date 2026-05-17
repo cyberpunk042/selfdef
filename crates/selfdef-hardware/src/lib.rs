@@ -838,6 +838,26 @@ pub struct WasmAotCapabilities {
     /// Worked `wasmtime compile` example command (operator
     /// copy/pasteable). Empty when AOT isn't recommended.
     pub compile_command_hint: String,
+
+    /// SD-R66: operator-readable string describing which INT8
+    /// dot-product / ternary kernel path the host can run, tying
+    /// SD-R64's `ternary_aot_capable` + `zmm_int8_lane_capacity`
+    /// into a single human-meaningful hint.
+    ///
+    /// Examples:
+    ///   - `"bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)"`
+    ///     on SAIN-01 (AVX-512 VNNI + BF16/FP16).
+    ///   - `"bitnet.cpp/VPMADDUBSW: 32×INT8 per YMM (AVX2 fallback)"` on
+    ///     AVX2-only hosts.
+    ///   - `"bitnet.cpp/PMADDUBSW: 16×INT8 per XMM (SSSE3 fallback)"` on
+    ///     SSSE3-only hosts.
+    ///   - `""` on pre-SSSE3 hosts (no INT8 SIMD path).
+    ///
+    /// `#[serde(default)]` for forward-compat with pre-SD-R66 dumps —
+    /// the hint reads empty, which the consumer treats as "no
+    /// ternary kernel guidance available."
+    #[serde(default)]
+    pub ternary_kernel_hint: String,
 }
 
 /// CPU instruction-family availability + recommended flags for
@@ -869,6 +889,35 @@ pub struct CpuCapabilities {
     pub avx512vbmi: bool,
     pub avx512vbmi2: bool,
 
+    /// SD-R64: hardware-exploitation summary — true when the CPU can
+    /// run the bitnet.cpp / Wasm-AOT ternary fast path efficiently.
+    /// Requires `avx512_vnni` (VPDPBUSD INT8 dot product, single-cycle
+    /// 64×INT8 per 512-bit ZMM register per master spec § 16) plus at
+    /// least one small-FP path (`avx512_bf16` or `avx512_fp16`) for
+    /// the activation reduction stage. Operator-readable: "yes, this
+    /// box runs 1-bit models at the hot-path lane width."
+    ///
+    /// `#[serde(default)]` keeps the JSON schema forward-compatible:
+    /// pre-SD-R64 capability dumps deserialize cleanly (the flag
+    /// reads `false`, which is the safe default for hardware-gating).
+    #[serde(default)]
+    pub ternary_aot_capable: bool,
+
+    /// SD-R64: max INT8 lanes the CPU can multiply-accumulate per
+    /// single dispatch using the widest available vector ISA.
+    ///
+    /// - 64 when VPDPBUSD (AVX-512 VNNI on ZMM/512-bit) is available
+    ///   (master spec § 16: 64×INT8 per ZMM register).
+    /// - 32 when AVX2 VPMADDUBSW fallback applies (256-bit YMM).
+    /// - 16 when SSSE3 PMADDUBSW only.
+    /// - 0 when no INT8 SIMD path detected.
+    ///
+    /// Operators reading this know the bitnet.cpp inner-loop lane
+    /// width WITHOUT having to map ISA flags to vector geometry.
+    /// `#[serde(default)]` for forward-compat with pre-SD-R64 dumps.
+    #[serde(default)]
+    pub zmm_int8_lane_capacity: u32,
+
     /// Convenience: the recommended `-march=` token for GCC/clang when
     /// compiling for this CPU. `znver5` on Zen 5 + AVX-512 hosts;
     /// `native` on others. Operators can override at build time.
@@ -878,6 +927,19 @@ pub struct CpuCapabilities {
     /// CFLAGS / KCFLAGS when compiling targeted at this CPU. Only
     /// flags whose underlying feature is present are emitted.
     pub recommended_compile_flags: Vec<String>,
+
+    /// SD-R68: sorted list of EVERY raw cpuinfo feature flag observed
+    /// on this host. Surfaces the long tail of ISA flags (rdpid,
+    /// avx512_vbmi2, sha_ni, etc.) so operators can gate modules on
+    /// rare flags without selfdef having to add a typed predicate
+    /// per flag. Consumed by `host_features_required` on
+    /// `[requires_hardware]`.
+    ///
+    /// `#[serde(default)]` for forward-compat: pre-SD-R68 dumps
+    /// deserialize cleanly with an empty list (which makes every
+    /// `host_features_required` gate fail-closed — safe default).
+    #[serde(default)]
+    pub extended_features: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -950,8 +1012,20 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
         avx512fp16: has("avx512_fp16"),
         avx512vbmi: has("avx512_vbmi"),
         avx512vbmi2: has("avx512_vbmi2"),
+        // SD-R64: derived hardware-exploitation summary fields. The
+        // closures below build them from the raw flags so a single
+        // snapshot probe produces both the granular ISA truth + the
+        // operator-readable rollup.
+        ternary_aot_capable: derive_ternary_aot_capable(feats),
+        zmm_int8_lane_capacity: derive_zmm_int8_lane_capacity(feats),
         recommended_march: recommended_march_for(&snap.cpu.vendor, feats),
         recommended_compile_flags: recommended_compile_flags(feats),
+        // SD-R68: sorted snapshot of every raw cpuinfo feature flag.
+        extended_features: {
+            let mut v: Vec<String> = feats.iter().cloned().collect();
+            v.sort();
+            v
+        },
     };
     let memory = MemoryCapabilities {
         total_bytes: snap.memory.total_bytes,
@@ -981,10 +1055,12 @@ pub fn derive_capabilities(snap: &HardwareSnapshot) -> HardwareCapabilities {
     };
     let wasm_aot = derive_wasm_aot_capabilities(&cpu);
     HardwareCapabilities {
-        // SD-R30: bumped to 1.2.0 alongside the wasm_aot addition.
-        // 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices; 1.2.0 =
-        // SD-R30 wasm_aot field.
-        schema_version: "1.2.0".into(),
+        // SD-R68: bumped to 1.4.0 alongside the cpu.extended_features
+        // addition. 1.0.0 = SD-R10; 1.1.0 = SD-R25 per-GPU devices;
+        // 1.2.0 = SD-R30 wasm_aot field; 1.3.0 = SD-R66 ternary
+        // kernel hint + SD-R64 derived cpu fields; 1.4.0 = SD-R68
+        // extended_features long-tail surface.
+        schema_version: "1.4.0".into(),
         probed_at: snap.probed_at.clone(),
         host_tag: None,
         cpu,
@@ -1059,11 +1135,80 @@ pub fn derive_wasm_aot_capabilities(cpu: &CpuCapabilities) -> WasmAotCapabilitie
         String::new()
     };
 
+    // SD-R66: derive the operator-readable ternary kernel hint.
+    // Composes with SD-R64 (ternary_aot_capable + lane width).
+    let ternary_kernel_hint = derive_ternary_kernel_hint(cpu);
+
     WasmAotCapabilities {
         target_triple,
         target_cpu,
         target_features,
         compile_command_hint,
+        ternary_kernel_hint,
+    }
+}
+
+/// SD-R66: pick the operator-readable ternary-kernel hint based on
+/// the widest INT8 dispatch path the CPU can execute. Pure function;
+/// tests pin every reachable branch.
+///
+/// On SAIN-01 (master spec § 16 hot path) returns the VPDPBUSD/ZMM
+/// path; AVX2/SSSE3 hosts get the explicit fallback string so
+/// operators reading `selfdefctl hardware export` JSON know which
+/// kernel will execute (the host info command surfaces this directly).
+#[must_use]
+fn derive_ternary_kernel_hint(cpu: &CpuCapabilities) -> String {
+    if cpu.avx512vnni {
+        "bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)".to_string()
+    } else if cpu.avx2 {
+        "bitnet.cpp/VPMADDUBSW: 32×INT8 per YMM (AVX2 fallback)".to_string()
+    } else if cpu.sse4_2 {
+        // SSE 4.2 implies SSSE3 (the actual gate for PMADDUBSW) on
+        // every realistic x86_64 host we'll target.
+        "bitnet.cpp/PMADDUBSW: 16×INT8 per XMM (SSSE3 fallback)".to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// SD-R64: derive `ternary_aot_capable` from the raw cpuinfo feature
+/// set. The bitnet.cpp + Wasm-AOT ternary hot path needs:
+///   - `avx512_vnni` for VPDPBUSD (64×INT8 dot product per ZMM register)
+///   - `avx512_bf16` OR `avx512_fp16` for the small-FP activation
+///     reduction stage (BitNet maps {-1,0,+1} weights × INT8
+///     activations → BF16/FP16 accumulator).
+///
+/// Pure function. Tests pin every meaningful combination.
+#[must_use]
+fn derive_ternary_aot_capable(feats: &HashSet<String>) -> bool {
+    let vnni = feats.contains("avx512_vnni");
+    let small_fp = feats.contains("avx512_bf16") || feats.contains("avx512_fp16");
+    vnni && small_fp
+}
+
+/// SD-R64: derive the operator-readable INT8 lane width for the widest
+/// dot-product ISA available on this host. Master spec § 16 motivates
+/// the 64-lane reading: "A single 512-bit ZMM register can hold and
+/// manipulate 64 INT8 values."
+///
+/// Returns the lane count by widest available path:
+///   - 64 when AVX-512 VNNI (VPDPBUSD on ZMM, 512-bit)
+///   - 32 when AVX2 (VPMADDUBSW on YMM, 256-bit) — fallback path
+///   - 16 when SSSE3 only (PMADDUBSW on XMM, 128-bit)
+///   - 0 when no INT8 SIMD detected (unlikely on x86_64 — SSSE3 is
+///     pre-2008)
+///
+/// Pure function.
+#[must_use]
+fn derive_zmm_int8_lane_capacity(feats: &HashSet<String>) -> u32 {
+    if feats.contains("avx512_vnni") {
+        64
+    } else if feats.contains("avx2") {
+        32
+    } else if feats.contains("ssse3") {
+        16
+    } else {
+        0
     }
 }
 
@@ -1505,12 +1650,117 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
         .unwrap();
         let safe_features = wasm_aot.target_features.replace('"', "\\\"");
         let safe_cpu = wasm_aot.target_cpu.replace('"', "\\\"");
+        // SD-R67: surface SD-R66 ternary kernel hint as a label.
+        // Empty when no INT8 SIMD path; consumer dashboards can
+        // distinguish "AOT-ready but no ternary path" from
+        // "AOT-ready ternary capable".
+        let safe_kernel = wasm_aot.ternary_kernel_hint.replace('"', "\\\"");
         writeln!(
             &mut buf,
-            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\"}} 1"
+            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\",ternary_kernel_hint=\"{safe_kernel}\"}} 1"
         )
         .unwrap();
     }
+    // SD-R54 (closes SDD-020 V-2): per-predicate-name capability
+    // gauges. For each named hardware predicate operators might
+    // gate on (from SD-R14 + SD-R26 + SD-R32 + SD-R51), emit a
+    // 0/1 indicator of whether THIS host satisfies a reasonable
+    // baseline value. Fleet dashboards compute pass-rate via:
+    //   sum by (predicate)(sovereign_os_selfdef_hardware_gate_capable)
+    //     / count(sovereign_os_selfdef_hardware_gate_capable)
+    let cpu_features = &snap.cpu.features;
+    let gpus = &snap.gpus;
+    let predicates: Vec<(&str, u8)> = vec![
+        (
+            "avx512_vnni",
+            u8::from(cpu_features.contains("avx512_vnni")),
+        ),
+        (
+            "avx512_bf16",
+            u8::from(cpu_features.contains("avx512_bf16")),
+        ),
+        (
+            "avx512_fp16",
+            u8::from(cpu_features.contains("avx512_fp16")),
+        ),
+        (
+            "memory_at_least_64gib",
+            u8::from(snap.memory.total_bytes >= 64 * 1024 * 1024 * 1024),
+        ),
+        (
+            "memory_at_least_256gib",
+            u8::from(snap.memory.total_bytes >= 256 * 1024 * 1024 * 1024),
+        ),
+        ("gpu_count_at_least_1", u8::from(!gpus.is_empty())),
+        ("gpu_count_at_least_2", u8::from(gpus.len() >= 2)),
+        (
+            "any_gpu_vram_at_least_24gib",
+            u8::from(
+                gpus.iter()
+                    .any(|g| g.vram_bytes.is_some_and(|b| b >= 24 * 1024 * 1024 * 1024)),
+            ),
+        ),
+        (
+            "any_gpu_vram_at_least_80gib",
+            u8::from(
+                gpus.iter()
+                    .any(|g| g.vram_bytes.is_some_and(|b| b >= 80 * 1024 * 1024 * 1024)),
+            ),
+        ),
+        (
+            "all_gpus_have_power_telemetry",
+            u8::from(
+                !gpus.is_empty()
+                    && gpus
+                        .iter()
+                        .all(|g| g.power_draw_watts.is_some() && g.power_limit_watts.is_some()),
+            ),
+        ),
+        // SD-R64: hardware-exploitation rollup.
+        (
+            "ternary_aot_capable",
+            u8::from(derive_ternary_aot_capable(cpu_features)),
+        ),
+    ];
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_gate_capable Per-predicate-name capability flag — does this host satisfy the named baseline? Fleet dashboards compute pass-rate via sum-by-predicate / count (SD-R54)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_gate_capable gauge"
+    )
+    .unwrap();
+    for (name, value) in &predicates {
+        writeln!(
+            &mut buf,
+            "sovereign_os_selfdef_hardware_gate_capable{{predicate=\"{name}\"}} {value}"
+        )
+        .unwrap();
+    }
+
+    // SD-R64: ZMM INT8 lane width gauge. Numeric (not 0/1), so it
+    // gets its own metric instead of riding the per-predicate map.
+    // Master spec § 16 motivates the 64-lane reading for the SAIN-01
+    // bitnet.cpp hot path.
+    writeln!(
+        &mut buf,
+        "# HELP sovereign_os_selfdef_hardware_zmm_int8_lanes Widest INT8 dot-product lane count available on this CPU (64 = AVX-512 VNNI, 32 = AVX2, 16 = SSSE3, 0 = none). Master spec § 16 (SD-R64)."
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "# TYPE sovereign_os_selfdef_hardware_zmm_int8_lanes gauge"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "sovereign_os_selfdef_hardware_zmm_int8_lanes {}",
+        derive_zmm_int8_lane_capacity(cpu_features),
+    )
+    .unwrap();
+
     buf
 }
 
@@ -2262,7 +2512,7 @@ mod tests {
     fn capabilities_schema_version_pinned() {
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.2.0");
+        assert_eq!(c.schema_version, "1.4.0");
     }
 
     #[test]
@@ -2277,9 +2527,15 @@ mod tests {
         assert!(path.exists());
         let body = fs::read_to_string(&path).unwrap();
         let parsed: HardwareCapabilities = serde_json::from_str(&body).unwrap();
-        assert_eq!(parsed.schema_version, "1.2.0");
+        assert_eq!(parsed.schema_version, "1.4.0");
         assert_eq!(parsed.cpu.recommended_march, "znver5");
         assert!(parsed.cpu.avx512vnni);
+        // SD-R66: ternary kernel hint round-trips on SAIN-01 features.
+        assert!(
+            parsed.wasm_aot.ternary_kernel_hint.contains("VPDPBUSD"),
+            "expected VPDPBUSD hint, got: {:?}",
+            parsed.wasm_aot.ternary_kernel_hint
+        );
         // SD-R30: wasm_aot block round-trips with the expected feature
         // string on the Zen 5 + AVX-512 synth snapshot.
         assert_eq!(parsed.wasm_aot.target_cpu, "znver5");
@@ -2948,10 +3204,13 @@ malformed,line\n\
     }
 
     #[test]
-    fn sdr30_capabilities_schema_bumped_to_1_2_0() {
+    fn sdr68_capabilities_schema_bumped_to_1_4_0() {
+        // SD-R68: 1.3.0 → 1.4.0 alongside cpu.extended_features
+        // long-tail surface. Cross-repo R211 lockstep mirror in
+        // sovereign-os updates in the same arc.
         let snap = snap_with_features("AuthenticAMD", &["avx2"]);
         let c = derive_capabilities(&snap);
-        assert_eq!(c.schema_version, "1.2.0");
+        assert_eq!(c.schema_version, "1.4.0");
     }
 
     #[test]
@@ -2971,6 +3230,115 @@ malformed,line\n\
     }
 
     // ----- SD-R31: wasm-AOT Layer B metric --------------------------
+
+    #[test]
+    fn sdr54_layer_b_emits_per_predicate_capability_gauges() {
+        // SAIN-01-flavored synth snap: avx512_vnni + bf16 + 256 GiB
+        // + 2 GPUs (one 98 GiB, one 24 GiB), both with power telemetry.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory {
+                vendor: "AuthenticAMD".into(),
+                model_name: "AMD Ryzen 9 9900X".into(),
+                physical_cores: 12,
+                logical_threads: 24,
+                features: ["avx2", "avx512f", "avx512_vnni", "avx512_bf16"]
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                avx512_present: true,
+                avx512_vnni: true,
+                avx512_bf16: true,
+            },
+            memory: MemoryInventory {
+                total_bytes: 256 * 1024 * 1024 * 1024,
+            },
+            gpus: vec![
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia0"),
+                    pci_address: None,
+                    model_hint: Some("RTX PRO 6000".into()),
+                    vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(275),
+                    power_limit_watts: Some(600),
+                },
+                GpuInventory {
+                    device_node: PathBuf::from("/dev/nvidia1"),
+                    pci_address: None,
+                    model_hint: Some("RTX 3090".into()),
+                    vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                    power_draw_watts: Some(180),
+                    power_limit_watts: Some(350),
+                },
+            ],
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        // Section header present
+        assert!(
+            out.contains("# TYPE sovereign_os_selfdef_hardware_gate_capable gauge"),
+            "type line missing: {out}"
+        );
+        // Every named predicate has a row with value 1 on this SAIN-01 host.
+        for needle in [
+            r#"predicate="avx512_vnni"} 1"#,
+            r#"predicate="avx512_bf16"} 1"#,
+            r#"predicate="memory_at_least_256gib"} 1"#,
+            r#"predicate="gpu_count_at_least_2"} 1"#,
+            r#"predicate="any_gpu_vram_at_least_80gib"} 1"#,
+            r#"predicate="all_gpus_have_power_telemetry"} 1"#,
+        ] {
+            assert!(
+                out.contains(needle),
+                "missing predicate row '{needle}': {out}"
+            );
+        }
+        // fp16 is absent on this synth → value 0.
+        assert!(
+            out.contains(r#"predicate="avx512_fp16"} 0"#),
+            "fp16 row missing: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr54_layer_b_emits_zeros_on_minimal_host() {
+        // True minimal host: no AVX-512, 8 GiB RAM, no GPUs.
+        let snap = HardwareSnapshot {
+            cpu: CpuInventory {
+                vendor: "GenuineIntel".into(),
+                model_name: "Old Xeon".into(),
+                physical_cores: 4,
+                logical_threads: 8,
+                features: std::collections::HashSet::new(),
+                avx512_present: false,
+                avx512_vnni: false,
+                avx512_bf16: false,
+            },
+            memory: MemoryInventory {
+                total_bytes: 8 * 1024 * 1024 * 1024,
+            },
+            gpus: Vec::new(),
+            motherboard: None,
+            pcie: PcieInventory::default(),
+            probed_at: "2026-05-16T00:00:00Z".into(),
+            thermals: Vec::new(),
+        };
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        for needle in [
+            r#"predicate="avx512_vnni"} 0"#,
+            r#"predicate="avx512_bf16"} 0"#,
+            r#"predicate="memory_at_least_256gib"} 0"#,
+            r#"predicate="gpu_count_at_least_1"} 0"#,
+            r#"predicate="any_gpu_vram_at_least_80gib"} 0"#,
+            r#"predicate="all_gpus_have_power_telemetry"} 0"#,
+        ] {
+            assert!(out.contains(needle), "missing zero row '{needle}': {out}");
+        }
+    }
 
     #[test]
     fn sdr31_layer_b_emits_wasm_aot_feature_count_when_avx512_present() {
@@ -3012,10 +3380,15 @@ malformed,line\n\
             out.contains("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma"),
             "missing target_features label: {out}"
         );
-        // info-metric value is always 1.
+        // SD-R67: info-metric value is always 1, but the gauge now
+        // carries a third label (ternary_kernel_hint). The closing
+        // `} 1` lands after the kernel-hint label.
         assert!(
-            out.contains("target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\"} 1"),
-            "info metric value not 1: {out}"
+            out.contains(
+                "target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\",\
+                 ternary_kernel_hint=\"bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)\"} 1"
+            ),
+            "info metric value not 1 or kernel-hint label missing: {out}"
         );
     }
 
@@ -3053,5 +3426,252 @@ malformed,line\n\
         };
         let caps = derive_capabilities(&snap);
         assert!(gencode_flags_for_gpus(&caps).is_empty());
+    }
+
+    // ---- SD-R64: hardware-exploitation rollup ---------------------
+
+    fn feats(items: &[&str]) -> HashSet<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_requires_vnni_plus_small_fp() {
+        // SAIN-01 — VNNI + BF16 → true.
+        assert!(derive_ternary_aot_capable(&feats(&[
+            "avx512_vnni",
+            "avx512_bf16"
+        ])));
+        // VNNI + FP16 → also true (FP16 covers the small-FP need).
+        assert!(derive_ternary_aot_capable(&feats(&[
+            "avx512_vnni",
+            "avx512_fp16"
+        ])));
+        // VNNI alone → false (no small-FP accumulator).
+        assert!(!derive_ternary_aot_capable(&feats(&["avx512_vnni"])));
+        // BF16 alone → false (no INT8 dot product).
+        assert!(!derive_ternary_aot_capable(&feats(&["avx512_bf16"])));
+        // Empty → false.
+        assert!(!derive_ternary_aot_capable(&feats(&[])));
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lane_capacity_picks_widest_path() {
+        // AVX-512 VNNI → 64 lanes (the SAIN-01 master spec § 16 reading).
+        assert_eq!(
+            derive_zmm_int8_lane_capacity(&feats(&["avx512_vnni", "avx2", "ssse3"])),
+            64
+        );
+        // AVX2 only → 32 lanes (YMM fallback).
+        assert_eq!(
+            derive_zmm_int8_lane_capacity(&feats(&["avx2", "ssse3"])),
+            32
+        );
+        // SSSE3 only → 16 lanes (XMM fallback).
+        assert_eq!(derive_zmm_int8_lane_capacity(&feats(&["ssse3"])), 16);
+        // Pre-SSSE3 → 0 lanes.
+        assert_eq!(derive_zmm_int8_lane_capacity(&feats(&[])), 0);
+    }
+
+    #[test]
+    fn sdr64_capabilities_carry_derived_summary_fields_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &[
+                "avx2",
+                "fma",
+                "ssse3",
+                "avx512f",
+                "avx512_vnni",
+                "avx512_bf16",
+            ],
+        );
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.cpu.ternary_aot_capable,
+            "SAIN-01 must show ternary_aot_capable"
+        );
+        assert_eq!(
+            caps.cpu.zmm_int8_lane_capacity, 64,
+            "SAIN-01 must report 64 INT8 lanes (VPDPBUSD on ZMM)"
+        );
+    }
+
+    #[test]
+    fn sdr64_capabilities_are_zero_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(!caps.cpu.ternary_aot_capable);
+        assert_eq!(caps.cpu.zmm_int8_lane_capacity, 0);
+    }
+
+    #[test]
+    fn sdr64_layer_b_emits_zmm_lane_gauge_and_ternary_predicate() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        // ZMM lane count gauge: SAIN-01 → 64.
+        assert!(
+            out.contains("# TYPE sovereign_os_selfdef_hardware_zmm_int8_lanes gauge"),
+            "type line missing: {out}"
+        );
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_zmm_int8_lanes 64"),
+            "ZMM lane gauge missing or wrong value: {out}"
+        );
+        // Ternary readiness predicate rides the per-predicate map.
+        assert!(
+            out.contains(r#"predicate="ternary_aot_capable"} 1"#),
+            "ternary_aot_capable predicate missing: {out}"
+        );
+    }
+
+    #[test]
+    fn sdr64_layer_b_emits_zero_lanes_and_zero_ternary_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let m = matches_sain01(&snap);
+        let out = render_layer_b_metrics(&snap, &m);
+        assert!(
+            out.contains("sovereign_os_selfdef_hardware_zmm_int8_lanes 0"),
+            "expected 0-lane reading on minimal host: {out}"
+        );
+        assert!(
+            out.contains(r#"predicate="ternary_aot_capable"} 0"#),
+            "expected ternary_aot_capable=0 on minimal host: {out}"
+        );
+    }
+
+    // ---- SD-R66: ternary kernel hint -----------------------------
+
+    // ---- SD-R68: extended_features long-tail surface ------------
+
+    #[test]
+    fn sdr68_extended_features_carries_full_sorted_set() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "avx512_vnni", "avx512_vbmi2", "sha_ni", "rdpid"],
+        );
+        let caps = derive_capabilities(&snap);
+        // Sorted lexicographically:
+        assert_eq!(
+            caps.cpu.extended_features,
+            vec!["avx2", "avx512_vbmi2", "avx512_vnni", "rdpid", "sha_ni"],
+        );
+    }
+
+    #[test]
+    fn sdr68_extended_features_empty_on_minimal_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(caps.cpu.extended_features.is_empty());
+    }
+
+    #[test]
+    fn sdr68_extended_features_round_trips_through_json() {
+        let snap = snap_with_features("AuthenticAMD", &["rdpid", "sha_ni"]);
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"extended_features\""),
+            "extended_features field missing: {json}"
+        );
+        // Re-parse round-trip.
+        let parsed: HardwareCapabilities = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.cpu.extended_features, vec!["rdpid", "sha_ni"]);
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_picks_vpdpbusd_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("VPDPBUSD"),
+            "SAIN-01 must select VPDPBUSD hot path: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("§ 16"),
+            "hint must cite master spec § 16: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_falls_back_to_vpmaddubsw_on_avx2_host() {
+        let snap = snap_with_features("GenuineIntel", &["sse4_2", "avx", "avx2", "fma"]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("VPMADDUBSW"),
+            "AVX2-only host must pick VPMADDUBSW: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("AVX2 fallback"),
+            "must label as fallback: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_falls_back_to_pmaddubsw_on_ssse3_host() {
+        let snap = snap_with_features("GenuineIntel", &["sse4_2"]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.contains("PMADDUBSW"),
+            "SSSE3-only host must pick PMADDUBSW: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_ternary_kernel_hint_empty_on_pre_ssse3_host() {
+        let snap = snap_with_features("GenuineIntel", &[]);
+        let caps = derive_capabilities(&snap);
+        assert!(
+            caps.wasm_aot.ternary_kernel_hint.is_empty(),
+            "pre-SSSE3 host must report empty hint: {:?}",
+            caps.wasm_aot.ternary_kernel_hint,
+        );
+    }
+
+    #[test]
+    fn sdr66_capabilities_json_carries_ternary_kernel_hint_on_sain01() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"ternary_kernel_hint\""),
+            "ternary_kernel_hint field missing in JSON: {json}"
+        );
+        assert!(
+            json.contains("VPDPBUSD"),
+            "VPDPBUSD substring missing in JSON: {json}"
+        );
+    }
+
+    #[test]
+    fn sdr64_capabilities_json_carries_derived_fields() {
+        let snap = snap_with_features(
+            "AuthenticAMD",
+            &["avx2", "fma", "avx512f", "avx512_vnni", "avx512_bf16"],
+        );
+        let caps = derive_capabilities(&snap);
+        let json = serde_json::to_string(&caps).expect("serializes");
+        assert!(
+            json.contains("\"ternary_aot_capable\":true"),
+            "ternary_aot_capable field missing in JSON: {json}"
+        );
+        assert!(
+            json.contains("\"zmm_int8_lane_capacity\":64"),
+            "zmm_int8_lane_capacity field missing in JSON: {json}"
+        );
     }
 }

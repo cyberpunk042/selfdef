@@ -631,6 +631,492 @@ fn sdr50_audit_log_json_mode_emits_raw_lines() {
     assert_eq!(v["host_tag"], "h");
 }
 
+/// SD-R61 (closes SDD-021 W-6): per-module [resources] quotas
+/// surface as SELFDEF_RESOURCE_* env vars to apply.sh.
+#[test]
+fn sdr61_resources_block_surfaces_as_env_vars_to_apply_sh() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    // apply.sh writes env vars to a side-file so we can assert
+    // independently of the runner's stdout parsing.
+    let probe_file = root.path().join("env-probe.txt");
+    let body = format!(
+        "#!/usr/bin/env bash\n\
+         {{\n\
+           printf 'CPU=%s\\n' \"${{SELFDEF_RESOURCE_CPU_MAX:-unset}}\"\n\
+           printf 'MEM=%s\\n' \"${{SELFDEF_RESOURCE_MEMORY_MAX:-unset}}\"\n\
+           printf 'IO=%s\\n' \"${{SELFDEF_RESOURCE_IO_WEIGHT:-unset}}\"\n\
+           printf 'TIME=%s\\n' \"${{SELFDEF_RESOURCE_TIME_MAX_SECONDS:-unset}}\"\n\
+         }} > '{}'\n\
+         echo '{{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}}'\n",
+        probe_file.display()
+    );
+    write_module(&catalog, "alpha", &[], &body);
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str(
+        "\n[resources]\ncpu_max = \"1.5\"\nmemory_max = \"512M\"\nio_weight = 200\ntime_max_seconds = 30\n",
+    );
+    std::fs::write(&a_toml, manifest).unwrap();
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "stdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let probe = std::fs::read_to_string(&probe_file).unwrap();
+    assert!(probe.contains("CPU=1.5"), "cpu_max not propagated: {probe}");
+    assert!(
+        probe.contains("MEM=512M"),
+        "memory_max not propagated: {probe}"
+    );
+    assert!(
+        probe.contains("IO=200"),
+        "io_weight not propagated: {probe}"
+    );
+    assert!(
+        probe.contains("TIME=30"),
+        "time_max_seconds not propagated: {probe}"
+    );
+}
+
+#[test]
+fn sdr61_no_resources_block_means_empty_env_vars() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let probe_file = root.path().join("env-probe.txt");
+    let body = format!(
+        "#!/usr/bin/env bash\n\
+         printf 'CPU=%s\\n' \"${{SELFDEF_RESOURCE_CPU_MAX:-unset}}\" > '{}'\n\
+         echo '{{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}}'\n",
+        probe_file.display()
+    );
+    write_module(&catalog, "alpha", &[], &body);
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+        ],
+    );
+    assert!(out.status.success());
+    let probe = std::fs::read_to_string(&probe_file).unwrap();
+    assert!(
+        probe.contains("CPU=unset"),
+        "expected unset on missing [resources] block: {probe}"
+    );
+}
+
+/// SD-R62 (closes SDD-021 W-2): trust_root as DIRECTORY enables
+/// key rotation. We generate a fresh minisign keypair via the
+/// `minisign` crate, sign a module manifest with it, drop the
+/// pubkey into a keyring directory, and verify the apply gate passes.
+#[test]
+fn sdr62_trust_root_dir_supports_keyring_rotation() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    let keyring = root.path().join("keyring");
+    std::fs::create_dir_all(&catalog).unwrap();
+    std::fs::create_dir_all(&keyring).unwrap();
+
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    let a_toml = catalog.join("alpha/module.toml");
+    let trust_root_str = keyring.to_str().unwrap();
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str(&format!(
+        "\n[signing]\nrequired = true\ntrust_root = \"{trust_root_str}\"\n"
+    ));
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    // Generate THREE keys; only the last signs the module — verifier
+    // must iterate through the keyring and find the valid one.
+    let stale_a = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    let stale_b = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    let live = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    std::fs::write(
+        keyring.join("00-old.pub"),
+        stale_a.pk.to_box().unwrap().to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        keyring.join("01-stale.pub"),
+        stale_b.pk.to_box().unwrap().to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        keyring.join("02-live.pub"),
+        live.pk.to_box().unwrap().to_string(),
+    )
+    .unwrap();
+    // Random non-pub file — directory walker should ignore.
+    std::fs::write(keyring.join("readme.txt"), "not a pubkey\n").unwrap();
+
+    let manifest_bytes = std::fs::read(&a_toml).unwrap();
+    let sig = minisign::sign(None, &live.sk, &manifest_bytes[..], None, None).unwrap();
+    std::fs::write(catalog.join("alpha/module.toml.minisig"), sig.to_string()).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "apply should succeed when LIVE key in keyring signs: stderr={stderr}\nstdout={stdout}"
+    );
+    assert!(
+        stdout.contains("alpha [apply]"),
+        "module should apply: {stdout}"
+    );
+}
+
+#[test]
+fn sdr62_trust_root_dir_refuses_when_no_key_matches() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    let keyring = root.path().join("keyring");
+    std::fs::create_dir_all(&catalog).unwrap();
+    std::fs::create_dir_all(&keyring).unwrap();
+
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    let a_toml = catalog.join("alpha/module.toml");
+    let trust_root_str = keyring.to_str().unwrap();
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str(&format!(
+        "\n[signing]\nrequired = true\ntrust_root = \"{trust_root_str}\"\n"
+    ));
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    let stale_a = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    let stale_b = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    let unknown = minisign::KeyPair::generate_unencrypted_keypair().unwrap();
+    std::fs::write(
+        keyring.join("00-a.pub"),
+        stale_a.pk.to_box().unwrap().to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        keyring.join("01-b.pub"),
+        stale_b.pk.to_box().unwrap().to_string(),
+    )
+    .unwrap();
+
+    let manifest_bytes = std::fs::read(&a_toml).unwrap();
+    let sig = minisign::sign(None, &unknown.sk, &manifest_bytes[..], None, None).unwrap();
+    std::fs::write(catalog.join("alpha/module.toml.minisig"), sig.to_string()).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "should refuse when no key matches: stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("tried 2 pubkey(s)") || stderr.contains("verification failed"),
+        "should mention multi-key try: {stderr}"
+    );
+}
+
+/// SD-R63: `modules list --json` for tooling completeness (last
+/// JSON gap on the modules surface).
+#[test]
+fn sdr63_modules_list_json_emits_catalog_summary() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let stub =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], stub);
+    write_module(&catalog, "beta", &["alpha"], stub);
+    // beta declares a [signing] block + [resources] block
+    let b_toml = catalog.join("beta/module.toml");
+    let mut manifest = std::fs::read_to_string(&b_toml).unwrap();
+    manifest.push_str(
+        "\n[requires_hardware]\navx512_vnni = true\n[signing]\nrequired = false\n[resources]\ncpu_max = \"1.5\"\n",
+    );
+    std::fs::write(&b_toml, manifest).unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "list",
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--json",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "stdout: {stdout}");
+    let v: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(v["schema_version"], "1.0.0");
+    assert_eq!(v["total"], 2);
+    let mods = v["modules"].as_array().unwrap();
+    assert_eq!(mods.len(), 2);
+    // Per-module shape: name, summary, has_* booleans
+    let alpha = mods.iter().find(|m| m["slug"] == "alpha").unwrap();
+    assert_eq!(alpha["has_requires_hardware"], false);
+    assert_eq!(alpha["has_signing_block"], false);
+    assert_eq!(alpha["has_resources_block"], false);
+    let beta = mods.iter().find(|m| m["slug"] == "beta").unwrap();
+    assert_eq!(beta["has_requires_hardware"], true);
+    assert_eq!(beta["has_signing_block"], true);
+    assert_eq!(beta["has_resources_block"], true);
+    // depends_on round-trips
+    assert!(
+        beta["depends_on"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d == "alpha")
+    );
+}
+
+/// SD-R56: `modules info --json` includes a `signing` block that
+/// summarises the SD-R55 posture — state, required flag,
+/// minisig_present, trust_root. Tooling complement to the R195
+/// sovereign-os signing audit.
+#[test]
+fn sdr56_modules_info_json_carries_signing_block_with_state() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"x\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "unsigned", &[], body);
+    write_module(&catalog, "optional", &[], body);
+    write_module(&catalog, "required-missing", &[], body);
+    write_module(&catalog, "required-present", &[], body);
+
+    // optional
+    let o_toml = catalog.join("optional/module.toml");
+    let mut m = std::fs::read_to_string(&o_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = false\n");
+    std::fs::write(&o_toml, m).unwrap();
+
+    // required-missing
+    let rm_toml = catalog.join("required-missing/module.toml");
+    let mut m = std::fs::read_to_string(&rm_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = true\ntrust_root = \"/etc/selfdef/keys/policy.pub\"\n");
+    std::fs::write(&rm_toml, m).unwrap();
+
+    // required-present (write .minisig sentinel; not verified — just sigil)
+    let rp_toml = catalog.join("required-present/module.toml");
+    let mut m = std::fs::read_to_string(&rp_toml).unwrap();
+    m.push_str("\n[signing]\nrequired = true\n");
+    std::fs::write(&rp_toml, m).unwrap();
+    std::fs::write(
+        catalog.join("required-present/module.toml.minisig"),
+        b"sentinel\n",
+    )
+    .unwrap();
+
+    // Parse each module's JSON + assert state.
+    for (slug, expected_state) in [
+        ("unsigned", "no_signing_block"),
+        ("optional", "signed_optional"),
+        ("required-missing", "signed_required_missing"),
+        ("required-present", "signed_required_present"),
+    ] {
+        let out = run(
+            &binary(),
+            &[
+                "modules",
+                "info",
+                slug,
+                "--dir",
+                catalog.to_str().unwrap(),
+                "--json",
+            ],
+        );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert!(out.status.success(), "stdout: {stdout}");
+        let v: serde_json::Value =
+            serde_json::from_str(&stdout).unwrap_or_else(|e| panic!("{e}\n{stdout}"));
+        assert_eq!(
+            v["signing"]["state"], expected_state,
+            "module {slug}: state mismatch in {stdout}"
+        );
+    }
+}
+
+/// SD-R55 (closes SDD-020 V-5): module manifest signing gate.
+/// When [signing].required = false (informational), apply proceeds
+/// and logs a notice. When required = true, apply refuses without a
+/// valid .minisig.
+#[test]
+fn sdr55_signing_required_false_is_informational_only() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], body);
+    // Add [signing] block with required = false.
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    manifest.push_str("\n[signing]\nrequired = false\n");
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "apply with informational signing should succeed: stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("SD-R55") && stderr.contains("required=false"),
+        "informational SD-R55 notice should fire: {stderr}"
+    );
+    assert!(
+        stdout.contains("alpha [apply]"),
+        "module should apply: {stdout}"
+    );
+}
+
+#[test]
+fn sdr55_signing_required_true_without_minisig_refuses_apply() {
+    let root = tempfile::tempdir().unwrap();
+    let catalog = root.path().join("catalog");
+    std::fs::create_dir_all(&catalog).unwrap();
+    let body =
+        "#!/usr/bin/env bash\necho '{\"module\":\"alpha\",\"status\":\"ok\",\"message\":\"\"}'\n";
+    write_module(&catalog, "alpha", &[], body);
+    let a_toml = catalog.join("alpha/module.toml");
+    let mut manifest = std::fs::read_to_string(&a_toml).unwrap();
+    // Point trust_root at a nonexistent path so the verifier load
+    // fails (operator-readable error path).
+    let trust_root = root.path().join("nonexistent.pub");
+    manifest.push_str(&format!(
+        "\n[signing]\nrequired = true\ntrust_root = \"{}\"\n",
+        trust_root.display()
+    ));
+    std::fs::write(&a_toml, manifest).unwrap();
+
+    let host_config = root.path().join("modules.toml");
+    std::fs::write(&host_config, "[modules.alpha]\n").unwrap();
+
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            host_config.to_str().unwrap(),
+            "--dir",
+            catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !out.status.success(),
+        "apply with required signing + missing pubkey should fail: stderr={stderr}"
+    );
+    assert!(
+        stderr.contains("SD-R55 module-signing gate"),
+        "gate banner should fire: {stderr}"
+    );
+    assert!(
+        stderr.contains("trust-root pubkey unreadable")
+            || stderr.contains("trust-root path")
+            || stderr.contains("signature verification failed"),
+        "operator-readable error should cite trust-root issue: {stderr}"
+    );
+}
+
+#[test]
+fn sdr55_no_signing_block_proceeds_normally() {
+    // Modules WITHOUT a [signing] block should apply without any
+    // signing-related output (backward compat with cycle-1+2 modules).
+    let fx = fixture("[modules.alpha]\n");
+    let out = run(
+        &binary(),
+        &[
+            "modules",
+            "apply",
+            "--host-config",
+            fx.host_config.to_str().unwrap(),
+            "--dir",
+            fx.catalog.to_str().unwrap(),
+            "--dry-run",
+        ],
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "stderr: {stderr}");
+    assert!(
+        !stderr.contains("SD-R55"),
+        "SD-R55 banner should NOT fire on unsigned modules: {stderr}"
+    );
+}
+
 /// SD-R53 (closes SDD-020 V-1): `--strict-hardware` audit-trail.
 /// Same OCSF envelope as SD-R47 but distinct category prefix
 /// (selfdef.modules.skip-strict) so dashboards split kept vs

@@ -207,6 +207,30 @@ enum HardwareAction {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// SD-R67: one-screen operator-readable hardware-exploit posture
+    /// summary. Composes SD-R64 (ternary_aot_capable +
+    /// zmm_int8_lane_capacity) + SD-R66 (ternary_kernel_hint) into
+    /// a "at-a-glance: can this box run 1-bit models at the hot-path
+    /// lane width?" report. Exit code reflects Sain01Match verdict.
+    Posture {
+        /// Emit JSON instead of the human-readable banner.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R70: emit a complete host-tuned `wasmtime compile` script
+    /// for a given .wasm module. Pipes to `bash` to produce a
+    /// .cwasm against this host's exact target_cpu + target_features
+    /// (the SD-R30 wasm_aot surface). One-command Wasm-to-AVX-512
+    /// AOT — direct operator-verbatim directive closure.
+    AotScript {
+        /// Input .wasm module path (operator-supplied).
+        #[arg(value_name = "WASM_PATH")]
+        wasm: PathBuf,
+        /// Optional output .cwasm path. When unset the script defaults
+        /// the output to the wasm path with `.cwasm` extension.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -438,6 +462,24 @@ enum ModelsAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R57 (closes SDD-019 T-3 fetch-side): download a model
+    /// artifact + verify sha256 against the manifest. Operator
+    /// pins artifact_sha256 in model.toml; fetcher refuses to
+    /// rename on mismatch.
+    Fetch {
+        /// Model slug (the directory name under --dir).
+        slug: String,
+        /// Destination path for the downloaded artifact.
+        #[arg(long)]
+        to: PathBuf,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Env-var name carrying a Bearer token (e.g.
+        /// HUGGINGFACE_HUB_TOKEN). Operator-supplied tokens
+        /// NEVER live in-repo; only env-var references.
+        #[arg(long, value_name = "ENV_NAME")]
+        token_env: Option<String>,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -448,6 +490,9 @@ enum ModulesAction {
         /// falling back to the workspace `modules/` in dev runs).
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R63: machine-readable JSON instead of the tabular view.
+        #[arg(long)]
+        json: bool,
     },
     /// Show the full manifest for one module by slug.
     Info {
@@ -878,6 +923,10 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Match) => hardware::run_match()?,
                 Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
                 Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
+                Some(HardwareAction::Posture { json: pj }) => hardware::run_posture(pj)?,
+                Some(HardwareAction::AotScript { wasm, output }) => {
+                    hardware::run_aot_script(&wasm, output.as_deref())?
+                }
                 Some(HardwareAction::Tune { format, output }) => {
                     hardware::run_tune(&format, output)?
                 }
@@ -1127,11 +1176,27 @@ async fn main() -> Result<()> {
                     std::process::exit(code);
                 }
             }
+            ModelsAction::Fetch {
+                slug,
+                to,
+                dir,
+                token_env,
+            } => {
+                let code =
+                    models::cmd_fetch(dir.as_deref(), &slug, &to, token_env.as_deref()).await?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
         },
         Command::Modules { action } => match action {
-            ModulesAction::List { dir } => {
+            ModulesAction::List { dir, json } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_list(&resolved)?;
+                if json {
+                    modules::cmd_list_json(&resolved)?;
+                } else {
+                    modules::cmd_list(&resolved)?;
+                }
             }
             ModulesAction::Info {
                 slug,
