@@ -325,13 +325,27 @@ pub(crate) fn render_tools_human() -> String {
 ///
 /// exit_after: when Some(N), serve exits cleanly after handling N
 /// requests (test fixture; production uses None = until stdin closes).
-pub(crate) fn serve_stdio(exit_after: Option<u32>) -> anyhow::Result<i32> {
-    use std::io::{BufRead, Write};
+pub(crate) fn serve_stdio(exit_after: Option<u32>, framing: &str) -> anyhow::Result<i32> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
-    let mut out = stdout.lock();
+    let out = stdout.lock();
+    match framing {
+        "line" => serve_stdio_line(exit_after, stdin.lock(), out),
+        "lsp" => serve_stdio_lsp(exit_after, stdin.lock(), out),
+        other => {
+            eprintln!("ERROR unknown framing {other:?} (use `line` or `lsp`)");
+            Ok(2)
+        }
+    }
+}
+
+fn serve_stdio_line<R, W>(exit_after: Option<u32>, reader: R, mut writer: W) -> anyhow::Result<i32>
+where
+    R: std::io::BufRead,
+    W: std::io::Write,
+{
     let mut handled: u32 = 0;
-    for line in stdin.lock().lines() {
+    for line in reader.lines() {
         let line = match line {
             Ok(l) => l,
             Err(_) => break,
@@ -341,8 +355,8 @@ pub(crate) fn serve_stdio(exit_after: Option<u32>) -> anyhow::Result<i32> {
             continue;
         }
         let resp = handle_jsonrpc_line(trimmed);
-        writeln!(out, "{resp}")?;
-        out.flush()?;
+        writeln!(writer, "{resp}")?;
+        writer.flush()?;
         handled += 1;
         if let Some(n) = exit_after {
             if handled >= n {
@@ -351,6 +365,101 @@ pub(crate) fn serve_stdio(exit_after: Option<u32>) -> anyhow::Result<i32> {
         }
     }
     Ok(0)
+}
+
+/// SD-R92 — LSP-style Content-Length framing (real MCP wire format).
+///
+/// Per the JSON-RPC base protocol used by LSP + MCP, each message is
+/// preceded by header lines (Content-Length and optionally
+/// Content-Type), a blank line, then exactly Content-Length bytes of
+/// JSON payload. Responses follow the same format.
+fn serve_stdio_lsp<R, W>(
+    exit_after: Option<u32>,
+    mut reader: R,
+    mut writer: W,
+) -> anyhow::Result<i32>
+where
+    R: std::io::BufRead,
+    W: std::io::Write,
+{
+    let mut handled: u32 = 0;
+    loop {
+        // Parse headers (one per line, terminated by blank line).
+        let mut content_length: Option<usize> = None;
+        loop {
+            let mut header = String::new();
+            let n = match reader.read_line(&mut header) {
+                Ok(n) => n,
+                Err(_) => return Ok(0),
+            };
+            if n == 0 {
+                // EOF before any header → operator closed stdin.
+                return Ok(0);
+            }
+            let trimmed = header.trim_end_matches(['\r', '\n']);
+            if trimmed.is_empty() {
+                // Blank line: end of headers.
+                break;
+            }
+            // Case-insensitive Content-Length: <int>
+            if let Some(rest) = trimmed
+                .strip_prefix("Content-Length:")
+                .or_else(|| trimmed.strip_prefix("content-length:"))
+            {
+                if let Ok(v) = rest.trim().parse::<usize>() {
+                    content_length = Some(v);
+                }
+            }
+            // Other headers (Content-Type) are ignored — we always
+            // emit application/vscode-jsonrpc; charset=utf-8.
+        }
+        let len = match content_length {
+            Some(v) => v,
+            None => {
+                // Bad framing — emit a parse-error response per LSP.
+                let resp = error_response(
+                    serde_json::Value::Null,
+                    -32700,
+                    "Parse error: missing Content-Length",
+                );
+                write_lsp_message(&mut writer, &resp)?;
+                handled += 1;
+                if let Some(n) = exit_after {
+                    if handled >= n {
+                        break;
+                    }
+                }
+                continue;
+            }
+        };
+        // Read exactly `len` bytes of payload.
+        let mut buf = vec![0u8; len];
+        if reader.read_exact(&mut buf).is_err() {
+            break;
+        }
+        let payload = String::from_utf8_lossy(&buf);
+        let resp = handle_jsonrpc_line(payload.trim());
+        write_lsp_message(&mut writer, &resp)?;
+        handled += 1;
+        if let Some(n) = exit_after {
+            if handled >= n {
+                break;
+            }
+        }
+    }
+    Ok(0)
+}
+
+fn write_lsp_message<W: std::io::Write>(writer: &mut W, payload: &str) -> std::io::Result<()> {
+    let bytes = payload.as_bytes();
+    write!(
+        writer,
+        "Content-Length: {}\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n",
+        bytes.len()
+    )?;
+    writer.write_all(bytes)?;
+    writer.flush()?;
+    Ok(())
 }
 
 fn handle_jsonrpc_line(line: &str) -> String {

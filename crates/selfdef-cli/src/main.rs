@@ -213,6 +213,15 @@ enum McpAction {
         /// Handle exactly N requests then exit (used by L3 tests).
         #[arg(long)]
         exit_after: Option<u32>,
+        /// SD-R92: select wire framing.
+        ///
+        ///   line       SD-R91 line-delimited JSON-RPC (testable, jq-able)
+        ///   lsp        SD-R92 LSP-style Content-Length framing (spec MCP)
+        ///
+        /// Default is `line` for backwards compat with SD-R91. Real
+        /// MCP clients (claude-code et al.) speak `lsp`.
+        #[arg(long, default_value = "line")]
+        framing: String,
     },
 }
 
@@ -1080,8 +1089,11 @@ async fn main() -> Result<()> {
                     println!("{}", mcp::render_tools_json());
                 }
             }
-            McpAction::Serve { exit_after } => {
-                let code = mcp::serve_stdio(exit_after)?;
+            McpAction::Serve {
+                exit_after,
+                framing,
+            } => {
+                let code = mcp::serve_stdio(exit_after, &framing)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
