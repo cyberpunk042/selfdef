@@ -79,6 +79,50 @@ pub(crate) struct ModelSpec {
     /// downstream tooling to pick the right loader.
     #[serde(default)]
     pub(crate) weight_format: String,
+
+    // ---- SD-R71: R212 model-class taxonomy mirror -----------------
+    //
+    // Mirrors the operator-facing taxonomy from sovereign-os R212
+    // (schemas/model-catalog.schema.yaml). The fields are all
+    // Option-typed / default to "" or empty Vec so pre-SD-R71 model
+    // registries keep deserialising cleanly. cmd_list + JSON outputs
+    // surface them so operators see the SAME taxonomy on either side.
+    /// SD-R71: model class — `"llm" | "slm" | "rlm" | "ternary-lm" |
+    /// "lora-adapter" | "embed" | "vision" | "multimodal" | "code" |
+    /// "mixture" | "speculative" | "reranker"`. Free-string because
+    /// the registry doesn't constrain the operator (sovereign-os
+    /// catalog DOES constrain via JSON Schema).
+    #[serde(default)]
+    pub(crate) class: String,
+
+    /// SD-R71: operator-readable size bucket — `"xs" | "s" | "m" |
+    /// "l" | "xl" | "xxl"`. <1B / 1-7B / 7-30B / 30-70B / 70-200B / >200B.
+    #[serde(default)]
+    pub(crate) size_class: String,
+
+    /// SD-R71: operator-readable purpose tags (chat / reasoning /
+    /// code / multimodal / embedding / vision / agent / function-
+    /// calling / rag / speculation / reranking / distillation-base).
+    /// Multiple allowed; a model can serve several roles.
+    #[serde(default)]
+    pub(crate) purpose: Vec<String>,
+
+    /// SD-R71: minimum VRAM (GiB) for live inference at the declared
+    /// `weight_format` + a small context. Operator-facing reality
+    /// check before pulling the artifact.
+    #[serde(default)]
+    pub(crate) vram_gib_min: f64,
+
+    /// SD-R71: max context window in tokens.
+    #[serde(default)]
+    pub(crate) context_window_tokens: u64,
+
+    /// SD-R71: when `class == "lora-adapter"`, the base model id
+    /// this adapter attaches to. Operator-readable; not enforced
+    /// at the schema level (registry is permissive — sovereign-os
+    /// catalog is the strict source).
+    #[serde(default)]
+    pub(crate) base_model: String,
 }
 
 /// SD-R34: hardware predicates governing whether a model lands.
@@ -475,7 +519,12 @@ pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
         println!("(no models registered in {})", resolved.display());
         return Ok(0);
     }
-    println!("{:<32}  {:<10}  {:<10}  summary", "name", "format", "size");
+    // SD-R71: include R212 taxonomy columns when any model in the
+    // catalog declares them.
+    println!(
+        "{:<32}  {:<14}  {:<6}  {:<5}  {:<10}  summary",
+        "name", "class", "size", "quant", "footprint"
+    );
     for (slug, m) in &catalog {
         let size_human = humanize_bytes(m.model.size_bytes);
         let fmt = if m.model.weight_format.is_empty() {
@@ -483,9 +532,19 @@ pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
         } else {
             m.model.weight_format.as_str()
         };
+        let class = if m.model.class.is_empty() {
+            "?"
+        } else {
+            m.model.class.as_str()
+        };
+        let size_class = if m.model.size_class.is_empty() {
+            "?"
+        } else {
+            m.model.size_class.as_str()
+        };
         println!(
-            "{:<32}  {:<10}  {:<10}  {}",
-            slug, fmt, size_human, m.model.summary
+            "{:<32}  {:<14}  {:<6}  {:<5}  {:<10}  {}",
+            slug, class, size_class, fmt, size_human, m.model.summary
         );
     }
     Ok(0)
