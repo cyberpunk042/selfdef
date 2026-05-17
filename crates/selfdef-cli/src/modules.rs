@@ -3769,6 +3769,264 @@ pub(crate) fn cmd_config_scaffold(
     Ok(0)
 }
 
+/// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+/// end-to-end. Generates the topologically-ordered plan + iterates
+/// each step, invoking `cmd_apply` with `--only <slug>` per step.
+/// Per-step outcome (ok / failed / skipped) is captured in a result
+/// vector + summarized.
+///
+/// Cycle-8 write-doctrine: dry-run by default. The `--apply` flag
+/// actually runs the underlying lifecycle (and writes to
+/// host_config when needed). Step failures HALT the rest of the
+/// plan unless `--continue-on-failure` is set (operator chooses
+/// between "all or nothing" and "best effort").
+///
+/// Exit codes:
+///   0  plan generated + every step succeeded (or all dry-run)
+///   1  plan cycle detected OR ≥1 step failed
+///   2  usage error
+pub(crate) fn cmd_apply_plan(
+    host_path: &Path,
+    dir: &Path,
+    category: Option<&str>,
+    apply: bool,
+    continue_on_failure: bool,
+    json: bool,
+) -> Result<i32> {
+    // First: get the install-plan. Re-derive via the same logic
+    // cmd_install_plan uses; capture the order + skipped rows.
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Classify (mirror of cmd_install_plan's pass-1).
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    let mut ready_set: std::collections::BTreeSet<String> = Default::default();
+    let mut deps_of: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if !gate_ok {
+            continue;
+        }
+        let missing: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        if missing.is_empty() {
+            ready_set.insert(slug.clone());
+            deps_of.insert(slug.clone(), m.depends_on.clone());
+        }
+    }
+
+    // Kahn's algorithm again (deterministic; same as cmd_install_plan).
+    let mut indeg: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, deps) in &deps_of {
+        for dep in deps {
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.clone());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+    if cycle_present {
+        let report = serde_json::json!({
+            "round": "SD-R93",
+            "vector": "SDD-026 Z-13 (apply-plan)",
+            "outcome": "cycle-detected",
+            "ready_set": ready_set.iter().cloned().collect::<Vec<_>>(),
+            "summary": "Dependency cycle in plan-ready set; install-plan refuses to execute. Fix manifests + retry.",
+        });
+        if json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            eprintln!(
+                "SD-R93 ABORTED — dependency cycle detected. Inspect with `selfdefctl modules install-plan`."
+            );
+        }
+        return Ok(1);
+    }
+
+    // Execute each step.
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut failed = 0usize;
+    let mut applied = 0usize;
+    for (i, slug) in order.iter().enumerate() {
+        let step_num = i + 1;
+        if !apply {
+            results.push(serde_json::json!({
+                "step": step_num, "slug": slug,
+                "outcome": "dry-run",
+                "command": format!("selfdefctl modules apply --only {slug}"),
+            }));
+            continue;
+        }
+        // Build LifecycleOpts for this one slug.
+        let step_opts = LifecycleOpts {
+            host_config: Some(host_path.to_path_buf()),
+            dir: Some(dir.to_path_buf()),
+            only: vec![slug.clone()],
+            ..Default::default()
+        };
+        match cmd_apply(&step_opts) {
+            Ok(0) => {
+                applied += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "ok", "rc": 0,
+                }));
+            }
+            Ok(rc) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "failed", "rc": rc,
+                }));
+                if !continue_on_failure {
+                    results.push(serde_json::json!({
+                        "step": step_num + 1, "slug": "(remaining-steps)",
+                        "outcome": "halted",
+                        "detail": "--continue-on-failure not set; halting after first failure",
+                    }));
+                    break;
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "error",
+                    "detail": e.to_string(),
+                }));
+                if !continue_on_failure {
+                    break;
+                }
+            }
+        }
+    }
+
+    let report = serde_json::json!({
+        "round": "SD-R93",
+        "vector": "SDD-026 Z-13 (apply-plan)",
+        "host_config": host_path.display().to_string(),
+        "modules_dir": dir.display().to_string(),
+        "dry_run": !apply,
+        "continue_on_failure": continue_on_failure,
+        "plan_steps": order.len(),
+        "applied_count": applied,
+        "failed_count": failed,
+        "results": results,
+        "summary": if !apply {
+            format!("{} step(s) — DRY-RUN", order.len())
+        } else if failed == 0 {
+            format!("{}/{} step(s) succeeded", applied, order.len())
+        } else {
+            format!("{} ok / {} failed ({} step(s) attempted)", applied, failed, applied + failed)
+        },
+    });
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("── SD-R93 selfdefctl modules apply-plan (SDD-026 Z-13) ──");
+        println!("  host_config: {}", host_path.display());
+        println!("  catalog:     {}", dir.display());
+        println!("  plan_steps:  {}", order.len());
+        println!("  mode:        {}", if apply { "APPLY" } else { "DRY-RUN" });
+        for r in report["results"].as_array().unwrap() {
+            let step = r["step"].as_u64().unwrap_or(0);
+            let slug = r["slug"].as_str().unwrap_or("?");
+            let outcome = r["outcome"].as_str().unwrap_or("?");
+            let mark = match outcome {
+                "ok" => "OK ",
+                "failed" => "FAIL",
+                "error" => "ERR ",
+                "dry-run" => "DRY",
+                "halted" => "STOP",
+                _ => "?  ",
+            };
+            println!("  [{mark}] {step:>3}. {slug}");
+        }
+        println!();
+        println!("  {}", report["summary"].as_str().unwrap_or(""));
+    }
+    Ok(if failed > 0 { 1 } else { 0 })
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet

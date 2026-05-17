@@ -849,6 +849,28 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+    /// end-to-end. Walks each step of the topologically-ordered plan,
+    /// invoking `apply --only <slug>` per step. Per-step outcome is
+    /// reported. DRY-RUN by default; `--apply` actually executes. Step
+    /// failures HALT the rest of the plan unless `--continue-on-failure`
+    /// is set.
+    ApplyPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        category: Option<String>,
+        /// Actually execute (default is DRY-RUN preview).
+        #[arg(long)]
+        apply: bool,
+        /// Don't halt on first failure — keep trying every step.
+        #[arg(long)]
+        continue_on_failure: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
     /// Destructive: requires `--confirm <hostname>` matching this host
@@ -1712,6 +1734,28 @@ async fn main() -> Result<()> {
                 let dir_path = modules::resolve_dir(dir.as_deref());
                 let code =
                     modules::cmd_config_scaffold(&dir_path, &slug, instance.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ApplyPlan {
+                host_config,
+                dir,
+                category,
+                apply,
+                continue_on_failure,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_apply_plan(
+                    &host_path,
+                    &dir_path,
+                    category.as_deref(),
+                    apply,
+                    continue_on_failure,
+                    json,
+                )?;
                 if code != 0 {
                     std::process::exit(code);
                 }

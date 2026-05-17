@@ -107,6 +107,7 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "modules_install_options(host_config=None, dir=None, category=None, only_ready=False)",
                 "modules_install_plan(host_config=None, dir=None, category=None)",
                 "modules_config_scaffold(slug, dir=None, instance=None)",
+                "modules_apply_plan(host_config=None, dir=None, category=None, continue_on_failure=False)",
                 "lora_list(state=None)",
                 "lora_attach(adapter_id, base_model, status=None, state=None)",
                 "lora_detach(adapter_id, state=None)",
@@ -304,6 +305,25 @@ def modules_config_scaffold(slug, dir=None, instance=None):
         args += ["--instance", instance]
     return _ctl(*args)
 
+def modules_apply_plan(host_config=None, dir=None, category=None, continue_on_failure=False):
+    """selfdefctl modules apply-plan --json [--category C]
+
+    SD-R93 (SDD-026 Z-13 execution): walk the SD-R87 install-plan +
+    invoke `apply --only <slug>` per step. Tier 1 returns the DRY-RUN
+    shape only — operators wanting real execution use the CLI with
+    `--apply` (write-doctrine carve-out).
+    """
+    args = ["modules", "apply-plan", "--json"]
+    if host_config:
+        args += ["--host-config", host_config]
+    if dir:
+        args += ["--dir", dir]
+    if category:
+        args += ["--category", category]
+    if continue_on_failure:
+        args.append("--continue-on-failure")
+    return _ctl(*args)
+
 def models(dir=None):
     """selfdefctl models list (table)"""
     args = ["models", "list"]
@@ -369,6 +389,7 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  modules_install_options(host_config=..., category=..., only_ready=False)")
     print("  modules_install_plan(host_config=..., category=...)")
     print("  modules_config_scaffold(slug, dir=..., instance=...)")
+    print("  modules_apply_plan(host_config=..., category=..., continue_on_failure=False)")
     print("  models()           -> str    (table)")
     print("  lora_list(state=...)")
     print("  lora_attach(adapter_id, base_model, status=..., state=...)")
@@ -560,6 +581,7 @@ mod tests {
         assert!(s.contains("def modules_install_options"));
         assert!(s.contains("def modules_install_plan"));
         assert!(s.contains("def modules_config_scaffold"));
+        assert!(s.contains("def modules_apply_plan"));
         assert!(s.contains("def lora_list"));
         assert!(s.contains("def lora_attach"));
         assert!(s.contains("def lora_detach"));

@@ -153,6 +153,28 @@ pub(crate) fn tools() -> Vec<McpTool> {
             category: "read-only",
         },
         McpTool {
+            name: "selfdef.modules.apply_plan",
+            description: "SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 \
+                 install-plan end-to-end. Walks each step, invokes `apply \
+                 --only <slug>` per step, returns per-step outcome. DRY-RUN \
+                 by default (preview). Cycle-8 read-only doctrine: this MCP \
+                 entry exposes ONLY the dry-run path; the `--apply` flag \
+                 path is operator-CLI-only until the write-tool gate lands.",
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "host_config": { "type": "string" },
+                    "dir": { "type": "string" },
+                    "category": { "type": "string" },
+                    "continue_on_failure": { "type": "boolean", "default": false },
+                    "json": { "type": "boolean", "default": false }
+                },
+                "additionalProperties": false
+            }),
+            backing_cli: "selfdefctl modules apply-plan [--host-config P] [--dir D] [--category C] [--continue-on-failure] [--json]",
+            category: "read-only",
+        },
+        McpTool {
             name: "selfdef.modules.install_plan",
             description: "SD-R87 (SDD-026 Z-13 closure): topologically-ordered \
                  install plan over the SD-R86 plan-ready set. Returns the \
