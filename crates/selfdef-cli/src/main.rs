@@ -207,6 +207,16 @@ enum HardwareAction {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+    /// SD-R67: one-screen operator-readable hardware-exploit posture
+    /// summary. Composes SD-R64 (ternary_aot_capable +
+    /// zmm_int8_lane_capacity) + SD-R66 (ternary_kernel_hint) into
+    /// a "at-a-glance: can this box run 1-bit models at the hot-path
+    /// lane width?" report. Exit code reflects Sain01Match verdict.
+    Posture {
+        /// Emit JSON instead of the human-readable banner.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -899,6 +909,7 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Match) => hardware::run_match()?,
                 Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
                 Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
+                Some(HardwareAction::Posture { json: pj }) => hardware::run_posture(pj)?,
                 Some(HardwareAction::Tune { format, output }) => {
                     hardware::run_tune(&format, output)?
                 }

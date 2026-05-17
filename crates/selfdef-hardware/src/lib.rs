@@ -1630,9 +1630,14 @@ pub fn render_layer_b_metrics(snap: &HardwareSnapshot, m: &Sain01Match) -> Strin
         .unwrap();
         let safe_features = wasm_aot.target_features.replace('"', "\\\"");
         let safe_cpu = wasm_aot.target_cpu.replace('"', "\\\"");
+        // SD-R67: surface SD-R66 ternary kernel hint as a label.
+        // Empty when no INT8 SIMD path; consumer dashboards can
+        // distinguish "AOT-ready but no ternary path" from
+        // "AOT-ready ternary capable".
+        let safe_kernel = wasm_aot.ternary_kernel_hint.replace('"', "\\\"");
         writeln!(
             &mut buf,
-            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\"}} 1"
+            "sovereign_os_selfdef_hardware_wasm_aot_info{{target_cpu=\"{safe_cpu}\",target_features=\"{safe_features}\",ternary_kernel_hint=\"{safe_kernel}\"}} 1"
         )
         .unwrap();
     }
@@ -3355,10 +3360,15 @@ malformed,line\n\
             out.contains("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma"),
             "missing target_features label: {out}"
         );
-        // info-metric value is always 1.
+        // SD-R67: info-metric value is always 1, but the gauge now
+        // carries a third label (ternary_kernel_hint). The closing
+        // `} 1` lands after the kernel-hint label.
         assert!(
-            out.contains("target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\"} 1"),
-            "info metric value not 1: {out}"
+            out.contains(
+                "target_features=\"+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma\",\
+                 ternary_kernel_hint=\"bitnet.cpp/VPDPBUSD: 64×INT8 per ZMM (master spec § 16 hot path)\"} 1"
+            ),
+            "info metric value not 1 or kernel-hint label missing: {out}"
         );
     }
 
