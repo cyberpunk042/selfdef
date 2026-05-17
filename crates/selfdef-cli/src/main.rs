@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod hardware;
 mod init;
+mod mcp;
 mod models;
 mod modules;
 mod notify;
@@ -162,8 +163,29 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
+    /// manifest surface. The future selfdef-mcp-server consumes the
+    /// SAME manifest the operator's `claude-code` (or any MCP client)
+    /// reads to learn what selfdef verbs are exposable as tools.
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum McpAction {
+    /// Print the JSON tool manifest the future MCP server would
+    /// expose. Operator-readable schema for every selfdef verb that
+    /// is safe to expose as a stateless MCP tool call.
+    Tools {
+        /// Emit machine-readable JSON (default) or human-readable
+        /// table.
+        #[arg(long)]
+        human: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -889,6 +911,15 @@ async fn main() -> Result<()> {
                 selfdef_core::SCHEMA_VERSION,
             );
         }
+        Command::Mcp { action } => match action {
+            McpAction::Tools { human } => {
+                if human {
+                    print!("{}", mcp::render_tools_human());
+                } else {
+                    println!("{}", mcp::render_tools_json());
+                }
+            }
+        },
         Command::Api {
             action:
                 ApiAction::RotateToken {

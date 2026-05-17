@@ -249,9 +249,20 @@ Two angles:
      operator-installed MCP server (Anthropic, local, etc.) for
      reasoning workflows.
 
-  - Recommendation: stdio + TCP transports; manifest at
-    /etc/selfdef/mcp-tools.toml lists which selfdef verbs are
-    exposed (operator opts in per-tool).
+  - **Decision (SD-R84, 2026-05-17, partial FOUNDATION)** — cycle-8
+    PR seeds the manifest brick: `selfdefctl mcp tools` renders the
+    curated tool manifest (JSON default + --human terminal view).
+    Cycle-8 doctrine: READ-ONLY verbs only (hardware.posture,
+    hardware.export, modules.list, modules.diff, modules.info,
+    models.list, models.lora.list — 7 tools shipped). Write verbs
+    (apply / set-mode / fetch / lora-attach) land in subsequent
+    rounds with explicit per-tool opt-in gates. Every tool carries
+    a JSON Schema `input_schema` with `type=object` +
+    `additionalProperties=false` for strict MCP-client validation.
+    The future `selfdef-mcp-server` (stdio + TCP transports) will
+    consume the SAME manifest the operator already reads via
+    `mcp tools` so client and server agree on the exposable surface
+    before the server lands.
 
 ### Z-12 — Multi-tier REPL (Programming / Proto / Proto-Proto)
 
