@@ -222,6 +222,21 @@ enum McpAction {
         /// MCP clients (claude-code et al.) speak `lsp`.
         #[arg(long, default_value = "line")]
         framing: String,
+        /// SD-R94: bind a TCP listener instead of reading from stdin.
+        /// HOST:PORT form, e.g. `127.0.0.1:8444`. Each accepted
+        /// connection runs the same per-line/per-LSP-message dispatch
+        /// loop, then closes. Cycle-8 doctrine: read-only tools only;
+        /// `--token-env VAR` enforces a per-connection Bearer-style
+        /// preamble (first line MUST be `Authorization: Bearer
+        /// <env-value>` for the connection to handle requests).
+        #[arg(long)]
+        tcp: Option<String>,
+        /// SD-R94: name of env var holding the connection token.
+        /// When set with `--tcp`, every connection MUST send the
+        /// Authorization preamble before its first JSON-RPC message.
+        /// Operator-supplied tokens NEVER live in-repo (SDD-009).
+        #[arg(long)]
+        token_env: Option<String>,
     },
 }
 
@@ -1114,8 +1129,14 @@ async fn main() -> Result<()> {
             McpAction::Serve {
                 exit_after,
                 framing,
+                tcp,
+                token_env,
             } => {
-                let code = mcp::serve_stdio(exit_after, &framing)?;
+                let code = if let Some(bind) = tcp {
+                    mcp::serve_tcp(&bind, &framing, token_env.as_deref(), exit_after)?
+                } else {
+                    mcp::serve_stdio(exit_after, &framing)?
+                };
                 if code != 0 {
                     std::process::exit(code);
                 }

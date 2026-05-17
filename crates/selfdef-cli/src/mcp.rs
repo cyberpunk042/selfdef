@@ -472,6 +472,132 @@ where
     Ok(0)
 }
 
+/// SD-R94: TCP transport for the MCP server.
+///
+/// Binds `bind` (HOST:PORT), accepts connections, and dispatches each
+/// using the same per-line/per-LSP-message machinery that stdio uses.
+/// `exit_after` limits the total number of CONNECTIONS handled (not
+/// requests) — production uses None (until killed); L3 tests pin a
+/// small N for deterministic teardown.
+///
+/// Per-connection auth: when `token_env` is Some(VAR) and the env var
+/// resolves to a non-empty value, the first line of each connection
+/// MUST be `Authorization: Bearer <value>` or the connection is
+/// closed without processing requests.
+pub(crate) fn serve_tcp(
+    bind: &str,
+    framing: &str,
+    token_env: Option<&str>,
+    exit_after: Option<u32>,
+) -> anyhow::Result<i32> {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    if framing != "line" && framing != "lsp" {
+        eprintln!("ERROR unknown framing {framing:?} (use `line` or `lsp`)");
+        return Ok(2);
+    }
+    let expected_token: Option<String> = token_env
+        .and_then(|v| std::env::var(v).ok())
+        .filter(|s| !s.is_empty());
+    if token_env.is_some() && expected_token.is_none() {
+        eprintln!(
+            "ERROR --token-env {:?} resolved to empty (export the env var)",
+            token_env.unwrap_or("")
+        );
+        return Ok(2);
+    }
+
+    let listener = match TcpListener::bind(bind) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("ERROR bind {bind}: {e}");
+            return Ok(2);
+        }
+    };
+    eprintln!(
+        "# SD-R94 selfdef MCP TCP serving on {bind} (framing={framing}, auth={})",
+        if expected_token.is_some() {
+            "required"
+        } else {
+            "none"
+        }
+    );
+
+    let mut handled: u32 = 0;
+    for incoming in listener.incoming() {
+        let stream = match incoming {
+            Ok(s) => s,
+            Err(_) => break,
+        };
+        let peer = stream
+            .peer_addr()
+            .map(|a| a.to_string())
+            .unwrap_or_else(|_| "?".into());
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut writer = stream;
+
+        // Per-connection auth preamble.
+        if let Some(ref want) = expected_token {
+            let mut header = String::new();
+            if reader.read_line(&mut header).is_err() {
+                handled += 1;
+                if let Some(n) = exit_after {
+                    if handled >= n {
+                        break;
+                    }
+                }
+                continue;
+            }
+            let trimmed = header.trim_end_matches(['\r', '\n']);
+            let ok = trimmed
+                .strip_prefix("Authorization: Bearer ")
+                .or_else(|| trimmed.strip_prefix("authorization: bearer "))
+                .map(|t| t == want.as_str())
+                .unwrap_or(false);
+            if !ok {
+                let _ = writeln!(
+                    writer,
+                    "{}",
+                    error_response(
+                        serde_json::Value::Null,
+                        -32001,
+                        "Unauthorized: bad or missing Authorization preamble",
+                    )
+                );
+                drop(writer);
+                handled += 1;
+                if let Some(n) = exit_after {
+                    if handled >= n {
+                        break;
+                    }
+                }
+                continue;
+            }
+            eprintln!("# SD-R94 accepted {peer} (auth OK)");
+        } else {
+            eprintln!("# SD-R94 accepted {peer} (no auth)");
+        }
+
+        // Dispatch using the same handlers as stdio.
+        let dispatch_result = match framing {
+            "line" => serve_stdio_line(None, reader, writer),
+            "lsp" => serve_stdio_lsp(None, reader, writer),
+            _ => unreachable!(),
+        };
+        if let Err(e) = dispatch_result {
+            eprintln!("# SD-R94 dispatch error: {e}");
+        }
+        handled += 1;
+        if let Some(n) = exit_after {
+            if handled >= n {
+                break;
+            }
+        }
+    }
+    Ok(0)
+}
+
 fn write_lsp_message<W: std::io::Write>(writer: &mut W, payload: &str) -> std::io::Result<()> {
     let bytes = payload.as_bytes();
     write!(
