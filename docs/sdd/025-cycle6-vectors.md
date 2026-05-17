@@ -57,9 +57,23 @@ don't see WHICH branch matched. Cycle 6: emit a
 counter so fleet dashboards show which OR-paths are actually
 exercised.
 
-  - Recommendation: piggyback on the existing SD-R54 Layer B
-    `sovereign_os_selfdef_hardware_*` emission cadence; same
-    textfile-collector mechanics; same operator workflow.
+  - **Decision (SD-R79, 2026-05-17, partial)** — landed in cycle-6
+    PR #195 as a STERR-side surface (operator-immediate). The apply
+    path tracks which `any_of` branch resolved each module + emits:
+
+    ```
+    # SD-R79: 1 module(s) resolved via [[requires_hardware.any_of]] (SDD-025 Y-1):
+      - my-module: any_of[0] matched
+    ```
+
+    New `HardwareRequirements::evaluate_resolved(caps)
+    -> Result<Option<usize>, Vec<String>>` returns the matched
+    branch index. `evaluate()` stays the back-compat thin wrapper
+    discarding the index. The Layer-B counter wiring (textfile
+    collector) is deferred to a follow-up round once an operator
+    confirms which fleet-aggregation cadence they want — the
+    stderr surface lands the immediate operator-readable
+    observability without committing to a specific metric shape.
 
 ### Y-2 — LoRA registry state file format
 
