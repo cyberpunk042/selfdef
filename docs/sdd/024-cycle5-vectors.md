@@ -66,10 +66,30 @@ Operators have asked for OR semantics: "VNNI on the CPU OR
 gpu_count_min ≥ 1" — meaning the module lands when either path is
 viable. Today operators must split into two near-identical modules.
 
-  - Recommendation: extend the TOML schema with an optional
-    `[[requires_hardware.any_of]]` array — list of inner predicate
-    blocks; module passes if ANY block fully evaluates. Existing
-    flat predicates stay AND-composed at the root.
+  - **Decision (SD-R77, 2026-05-17)** — landed in cycle-5 PR #194.
+    `HardwareRequirements` gains a `Vec<HardwareRequirements>
+    any_of` field (recursive, `#[serde(default)]`). The TOML surface
+    is the standard array-of-tables shape:
+
+    ```toml
+    [requires_hardware]
+    memory_gib_min = 8       # root AND-predicate
+
+    [[requires_hardware.any_of]]
+    avx512_vnni = true       # SAIN-01 path
+    ternary_aot_capable_required = true
+
+    [[requires_hardware.any_of]]
+    gpu_count_min = 1        # GPU fallback path
+    gpu_vram_gib_min = 24
+    ```
+
+    Evaluation rule: module passes iff root predicates ALL pass AND
+    (any_of empty OR at least ONE inner block fully passes). When
+    every any_of branch fails, the unmet list contains an
+    operator-readable "any_of: NONE of N OR-branch(es) passed"
+    header followed by per-branch failure recaps. Empty `any_of` =
+    pass-through (back-compat with cycle 1-4 manifests).
 
 ### X-2 — Cross-module dependency negotiation (`depends_optional`)
 
