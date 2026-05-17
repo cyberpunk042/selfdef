@@ -636,6 +636,27 @@ enum ModulesAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R83 (SDD-026 Z-13 partial): show installed / available /
+    /// orphaned modules in one table, partitioning the catalog ×
+    /// host-config join:
+    ///   INSTALLED  — slug present in both catalog AND host-config
+    ///                ([modules.X] entry in /etc/selfdef/modules.toml)
+    ///   AVAILABLE  — slug present in catalog, NOT activated in
+    ///                host-config (operator could `apply --only X`)
+    ///   ORPHANED   — slug in host-config but NOT in catalog (stale
+    ///                entry — operator should prune or restore the
+    ///                manifest)
+    /// Read-only. Composes with the future Z-1 dashboard's "Browse
+    /// available" sub-tab.
+    Diff {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of the tabular partition.
+        #[arg(long)]
+        json: bool,
+    },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
     /// Destructive: requires `--confirm <hostname>` matching this host
@@ -1364,6 +1385,18 @@ async fn main() -> Result<()> {
                 } else {
                     modules::cmd_status(&opts)?
                 };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Diff {
+                host_config,
+                dir,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_diff(&host_path, &dir_path, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }

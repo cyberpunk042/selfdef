@@ -278,9 +278,16 @@ category/phase filter) with one-click "Install" that runs
 `selfdefctl modules apply <slug>`. Uninstalled modules are NOT
 hidden — they're separately discoverable.
 
-  - Recommendation: dashboard knows install-state from the daemon's
-    SD-R34/R55/R81 state files; install action returns the apply
-    log streamed back to the browser.
+  - **Decision (SD-R83, 2026-05-17, partial CLI surface)** — cycle-8
+    PR seeds the CLI counterpart: `selfdefctl modules diff` partitions
+    catalog × host-config into three buckets:
+      INSTALLED  — slug in both (would apply)
+      AVAILABLE  — slug in catalog only (operator can `apply --only X`)
+      ORPHANED   — slug in host-config only (stale entry; restore
+                   manifest OR prune host-config)
+    JSON output feeds the future Z-1 dashboard "Browse available"
+    tab directly. Operator-actionable hint surfaces when orphans
+    are present. The dashboard side lands when Z-1 ships.
 
 ## Cycle-7+ priority ranking
 

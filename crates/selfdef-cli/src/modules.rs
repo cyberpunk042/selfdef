@@ -3043,6 +3043,96 @@ pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R83 (SDD-026 Z-13 partial): partition the catalog × host-config
+/// join into INSTALLED / AVAILABLE / ORPHANED buckets.
+///
+///   INSTALLED  — slug in catalog AND in host_config.modules
+///   AVAILABLE  — slug in catalog only (operator could activate via
+///                `selfdefctl modules apply --only <slug>`)
+///   ORPHANED   — slug in host_config only (operator has a stale
+///                entry — either restore the manifest or prune)
+///
+/// Operator-readable tabular or --json output. rc=0 always (this is
+/// a discovery surface; non-empty ORPHANED is not an error — the
+/// operator may have intentionally pinned a slug for a not-yet-
+/// shipped module).
+pub(crate) fn cmd_diff(host_path: &Path, dir: &Path, json: bool) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+    let catalog_slugs: std::collections::BTreeSet<String> =
+        mods.iter().map(|(s, _)| s.clone()).collect();
+    // host_config keys may carry instance suffix `slug#name`; the
+    // catalog tracks the bare slug. Split each host key on `#` and
+    // bucket by the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let installed: Vec<String> = catalog_slugs.intersection(&host_slugs).cloned().collect();
+    let available: Vec<String> = catalog_slugs.difference(&host_slugs).cloned().collect();
+    let orphaned: Vec<String> = host_slugs.difference(&catalog_slugs).cloned().collect();
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "host_config":  host_path.display().to_string(),
+            "modules_dir":  dir.display().to_string(),
+            "installed":    installed,
+            "available":    available,
+            "orphaned":     orphaned,
+            "counts": {
+                "installed": installed.len(),
+                "available": available.len(),
+                "orphaned":  orphaned.len(),
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R83 selfdefctl modules diff (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    println!();
+    println!("  installed ({}):", installed.len());
+    if installed.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &installed {
+            println!("    ✓ {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  available ({}) — operator can activate via apply:",
+        available.len()
+    );
+    if available.is_empty() {
+        println!("    (every catalog module is activated in host_config)");
+    } else {
+        for slug in &available {
+            println!("    + {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  orphaned ({}) — host_config entries with no catalog manifest:",
+        orphaned.len()
+    );
+    if orphaned.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &orphaned {
+            println!("    ? {slug}");
+        }
+        println!();
+        println!("  → operator should EITHER restore the missing manifest into");
+        println!("    {} OR remove the stale [modules.<slug>]", dir.display());
+        println!("    entry from {}.", host_path.display());
+    }
+    Ok(0)
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet
