@@ -524,6 +524,14 @@ enum ModulesAction {
         /// `host_status` in the JSON.
         #[arg(long)]
         json: bool,
+        /// SD-R80 (SDD-025 Y-4): probe the host + render the
+        /// RESOLVED requirement set — root predicates plus the
+        /// `any_of` branch that matched (when applicable). Operators
+        /// learn "this host would land via branch 1: VNNI + ternary
+        /// path." Implies --with-host-status. Pure renderer over
+        /// `HardwareRequirements::evaluate_resolved` (SD-R79).
+        #[arg(long)]
+        resolved: bool,
     },
     /// Apply every active module's install/apply.sh in dependency order.
     Apply {
@@ -1234,6 +1242,7 @@ async fn main() -> Result<()> {
                 dir,
                 with_host_status,
                 json,
+                resolved: resolved_flag,
             } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
                 if json {
@@ -1243,8 +1252,13 @@ async fn main() -> Result<()> {
                     modules::cmd_info_json(&resolved, &slug)?;
                 } else {
                     modules::cmd_info(&resolved, &slug)?;
-                    if with_host_status {
+                    if with_host_status || resolved_flag {
                         modules::cmd_info_host_status(&resolved, &slug)?;
+                    }
+                    if resolved_flag {
+                        // SD-R80 (SDD-025 Y-4) — render the resolved
+                        // requirement set (root + matched any_of branch).
+                        modules::cmd_info_resolved(&resolved, &slug)?;
                     }
                 }
             }

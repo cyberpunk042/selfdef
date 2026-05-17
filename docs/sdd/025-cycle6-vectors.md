@@ -110,8 +110,26 @@ requirement set (root + chosen any_of branch) instead of the raw
 manifest. Operators learn "this host would land via branch 1: VNNI
 + ternary path."
 
-  - Recommendation: pure renderer over existing evaluate() output;
-    no new state.
+  - **Decision (SD-R80, 2026-05-17)** — landed in cycle-7 PR.
+    `selfdefctl modules info <slug> --resolved` adds a new
+    `resolved_requirements (SD-R80)` section to the human-readable
+    info output:
+
+    ```
+    resolved_requirements (SD-R80):
+      root predicates (AND-composed):
+        - memory_gib_min = 1
+      any_of: 2 OR-branch(es) declared
+        ✓ resolves on this host via any_of[0]
+    ```
+
+    Three degenerate cases handled cleanly: no `[requires_hardware]`
+    block ("hardware-agnostic"); root-only gate ("any_of: (none
+    declared)"); probe failure ("hardware probe unavailable —
+    cannot resolve any_of branch"). Pure renderer over the SD-R79
+    `evaluate_resolved` API — no new state, no schema bump. The
+    flag also enables host_status output (so operators run `info
+    --resolved` once and see both verdict + branch).
 
 ### Y-5 — `--reprobe-hardware` actually does something
 

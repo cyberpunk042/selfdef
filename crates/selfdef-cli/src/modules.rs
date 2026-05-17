@@ -1158,6 +1158,132 @@ pub(crate) fn cmd_info_host_status(dir: &Path, slug: &str) -> Result<()> {
     Ok(())
 }
 
+/// SD-R80 (SDD-025 Y-4): print the RESOLVED requirement view on
+/// this host — root predicates plus the matched `any_of` branch
+/// (when applicable). Composes with `cmd_info_host_status` (the
+/// gate verdict) and SD-R79 `evaluate_resolved`. Output is
+/// operator-readable; tooling consumers stick with `--json` (cmd_info_json).
+pub(crate) fn cmd_info_resolved(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    println!();
+    println!("resolved_requirements (SD-R80):");
+    if m.requires_hardware.is_empty() {
+        println!("  ✓ no [requires_hardware] block — module is hardware-agnostic");
+        return Ok(());
+    }
+    let Some(c) = caps else {
+        println!("  ? hardware probe unavailable — cannot resolve any_of branch");
+        return Ok(());
+    };
+    // Render root predicates (compact summary).
+    let mut root_lines: Vec<String> = Vec::new();
+    if m.requires_hardware.avx512_vnni {
+        root_lines.push("avx512_vnni".into());
+    }
+    if m.requires_hardware.avx512_bf16 {
+        root_lines.push("avx512_bf16".into());
+    }
+    if m.requires_hardware.memory_gib_min > 0 {
+        root_lines.push(format!(
+            "memory_gib_min = {}",
+            m.requires_hardware.memory_gib_min
+        ));
+    }
+    if m.requires_hardware.gpu_count_min > 0 {
+        root_lines.push(format!(
+            "gpu_count_min = {}",
+            m.requires_hardware.gpu_count_min
+        ));
+    }
+    if m.requires_hardware.gpu_vram_gib_min > 0 {
+        root_lines.push(format!(
+            "gpu_vram_gib_min = {}",
+            m.requires_hardware.gpu_vram_gib_min
+        ));
+    }
+    if m.requires_hardware.gpu_vram_gib_each_min > 0 {
+        root_lines.push(format!(
+            "gpu_vram_gib_each_min = {}",
+            m.requires_hardware.gpu_vram_gib_each_min
+        ));
+    }
+    if m.requires_hardware.gpu_power_headroom_watts_min > 0 {
+        root_lines.push(format!(
+            "gpu_power_headroom_watts_min = {}",
+            m.requires_hardware.gpu_power_headroom_watts_min
+        ));
+    }
+    if !m.requires_hardware.wasm_aot_features_required.is_empty() {
+        root_lines.push(format!(
+            "wasm_aot_features_required = {:?}",
+            m.requires_hardware.wasm_aot_features_required
+        ));
+    }
+    if !m.requires_hardware.sain01_verdict_min.is_empty() {
+        root_lines.push(format!(
+            "sain01_verdict_min = {}",
+            m.requires_hardware.sain01_verdict_min
+        ));
+    }
+    if m.requires_hardware.ternary_aot_capable_required {
+        root_lines.push("ternary_aot_capable_required".into());
+    }
+    if m.requires_hardware.zmm_int8_lanes_min > 0 {
+        root_lines.push(format!(
+            "zmm_int8_lanes_min = {}",
+            m.requires_hardware.zmm_int8_lanes_min
+        ));
+    }
+    if !m.requires_hardware.host_features_required.is_empty() {
+        root_lines.push(format!(
+            "host_features_required = {:?}",
+            m.requires_hardware.host_features_required
+        ));
+    }
+    if root_lines.is_empty() {
+        println!("  root predicates: (none)");
+    } else {
+        println!("  root predicates (AND-composed):");
+        for line in &root_lines {
+            println!("    - {line}");
+        }
+    }
+    // Resolve the any_of branch.
+    if m.requires_hardware.any_of.is_empty() {
+        println!("  any_of: (none declared)");
+    } else {
+        println!(
+            "  any_of: {} OR-branch(es) declared",
+            m.requires_hardware.any_of.len()
+        );
+        match m.requires_hardware.evaluate_resolved(&c) {
+            Ok(None) => {
+                // Shouldn't happen given any_of non-empty + Ok.
+                println!("    ✓ gate passed but no any_of branch index reported");
+            }
+            Ok(Some(idx)) => {
+                println!("    ✓ resolves on this host via any_of[{idx}]");
+            }
+            Err(unmet) => {
+                println!("    ✗ gate would FAIL on this host:");
+                for u in &unmet {
+                    println!("        - {u}");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     let mods = load_all(dir)?;
     let m = mods
