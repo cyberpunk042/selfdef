@@ -17,7 +17,17 @@
 use std::net::{SocketAddr, TcpListener};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+/// SD-R101 (CI hardening v2): serialize the 2 tests that spawn
+/// `selfdefctl mcp serve --tcp` subprocesses. Empirically, running
+/// them in parallel under cargo test on GitHub-hosted runners
+/// flakes intermittently (passes on one of ubuntu-latest /
+/// ubuntu-24.04, fails on the other — order varies across reruns).
+/// Both tests only need ~100ms of mcp-server real-time once the
+/// listener binds, so serializing them costs effectively nothing.
+static MCP_TCP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn binary() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_selfdefctl"))
@@ -232,6 +242,9 @@ print("PASS")
 
 #[test]
 fn sdr101_end_to_end_mcp_bridge_returns_real_tool_payload() {
+    // Serialize w/ the other TCP-spawning test in this file —
+    // parallel execution flaked across both runners.
+    let _guard = MCP_TCP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // Spin up a real selfdefctl MCP TCP listener with exit_after=2 —
     // we drive one tools/call + one auth-less call from Python.
     let port = pick_port();
@@ -287,6 +300,9 @@ print("PASS:modules")
 
 #[test]
 fn sdr101_history_records_transport_field_for_mcp_calls() {
+    // Serialize w/ the other TCP-spawning test in this file —
+    // parallel execution flaked across both runners.
+    let _guard = MCP_TCP_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     // Verify that when SELFDEF_MCP_URL is set + SELFDEF_REPL_HISTORY
     // is set, the appended history row carries transport=mcp-tcp.
     let port = pick_port();
