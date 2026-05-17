@@ -550,6 +550,118 @@ pub(crate) fn cmd_list(dir: Option<&Path>) -> Result<i32> {
     Ok(0)
 }
 
+// ---- SD-R81 (SDD-025 Y-2) — LoRA adapter state surface ------------
+//
+// Operator-owned state file at /var/lib/selfdef/loras.json (env
+// override SELFDEF_LORA_STATE; --state CLI flag wins above both).
+// This round ships ONLY the format + the `list` verb; attach/detach
+// land in subsequent rounds (X-4 LoRA lifecycle arc).
+//
+// Shape (operator-stable, validated at parse-time):
+//
+//   {
+//     "schema_version": "1.0.0",
+//     "adapters": [
+//       {
+//         "adapter_id":  "code-systems-rust",
+//         "base_model":  "Qwen3-Coder-32B-Instruct",
+//         "attached_at": "2026-05-17T04:00:00Z",
+//         "status":      "active"
+//       }
+//     ]
+//   }
+//
+// Forward-compat: missing file = empty state (no error). Missing
+// schema_version = "1.0.0" default. Operator can hand-edit the file
+// safely.
+
+const LORA_STATE_DEFAULT: &str = "/var/lib/selfdef/loras.json";
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct LoraStateFile {
+    #[serde(default = "default_lora_schema_version")]
+    pub(crate) schema_version: String,
+    #[serde(default)]
+    pub(crate) adapters: Vec<LoraEntry>,
+}
+
+fn default_lora_schema_version() -> String {
+    "1.0.0".to_string()
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub(crate) struct LoraEntry {
+    pub(crate) adapter_id: String,
+    pub(crate) base_model: String,
+    #[serde(default)]
+    pub(crate) attached_at: String,
+    #[serde(default = "default_lora_status")]
+    pub(crate) status: String,
+}
+
+fn default_lora_status() -> String {
+    "active".to_string()
+}
+
+fn lora_state_path(explicit: Option<&Path>) -> PathBuf {
+    if let Some(p) = explicit {
+        return p.to_path_buf();
+    }
+    if let Ok(env) = std::env::var("SELFDEF_LORA_STATE") {
+        if !env.is_empty() {
+            return PathBuf::from(env);
+        }
+    }
+    PathBuf::from(LORA_STATE_DEFAULT)
+}
+
+pub(crate) fn load_lora_state(path: &Path) -> Result<LoraStateFile> {
+    if !path.exists() {
+        // Missing file = empty state (operator-friendly).
+        return Ok(LoraStateFile {
+            schema_version: default_lora_schema_version(),
+            adapters: Vec::new(),
+        });
+    }
+    let body =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let state: LoraStateFile =
+        serde_json::from_str(&body).with_context(|| format!("parsing {}", path.display()))?;
+    Ok(state)
+}
+
+pub(crate) fn cmd_lora_list(state: Option<&Path>, json: bool) -> Result<i32> {
+    let path = lora_state_path(state);
+    let state = load_lora_state(&path)?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&state)?);
+        return Ok(0);
+    }
+    if state.adapters.is_empty() {
+        println!(
+            "(no LoRA adapters attached — state file: {})",
+            path.display()
+        );
+        return Ok(0);
+    }
+    println!(
+        "{:<32}  {:<32}  {:<8}  attached_at",
+        "adapter_id", "base_model", "status"
+    );
+    for a in &state.adapters {
+        let attached = if a.attached_at.is_empty() {
+            "?"
+        } else {
+            a.attached_at.as_str()
+        };
+        println!(
+            "{:<32}  {:<32}  {:<8}  {}",
+            a.adapter_id, a.base_model, a.status, attached
+        );
+    }
+    Ok(0)
+}
+
 fn humanize_bytes(b: u64) -> String {
     const KIB: u64 = 1024;
     const MIB: u64 = 1024 * KIB;

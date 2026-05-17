@@ -85,9 +85,30 @@ status}]}`. This is the smallest contractual brick of the X-4
 arc — once the format lands, attach/detach + list verbs build on
 top in subsequent rounds.
 
-  - Recommendation: ship the JSON Schema + an empty seed file +
-    the loader/parser in selfdef-cli; defer the attach/detach
-    verbs to a follow-up.
+  - **Decision (SD-R81, 2026-05-17)** — landed in cycle-7 PR #196.
+    State file path: `/var/lib/selfdef/loras.json` (default),
+    overridable via `SELFDEF_LORA_STATE` env var or `--state` flag.
+    Format pinned via `LoraStateFile` + `LoraEntry` serde structs:
+
+    ```json
+    {
+      "schema_version": "1.0.0",
+      "adapters": [
+        {
+          "adapter_id":  "code-systems-rust",
+          "base_model":  "Qwen3-Coder-32B-Instruct",
+          "attached_at": "2026-05-17T04:00:00Z",
+          "status":      "active"
+        }
+      ]
+    }
+    ```
+
+    Forward-compat: missing file = empty state (no error);
+    schema_version + status default; only adapter_id + base_model
+    are required per entry. New `selfdefctl models lora list
+    [--state PATH] [--json]` reads + renders. attach/detach verbs
+    defer to subsequent rounds (X-4 LoRA lifecycle arc).
 
 ### Y-3 — `models suggest` cross-repo bridge
 
@@ -110,8 +131,26 @@ requirement set (root + chosen any_of branch) instead of the raw
 manifest. Operators learn "this host would land via branch 1: VNNI
 + ternary path."
 
-  - Recommendation: pure renderer over existing evaluate() output;
-    no new state.
+  - **Decision (SD-R80, 2026-05-17)** — landed in cycle-7 PR.
+    `selfdefctl modules info <slug> --resolved` adds a new
+    `resolved_requirements (SD-R80)` section to the human-readable
+    info output:
+
+    ```
+    resolved_requirements (SD-R80):
+      root predicates (AND-composed):
+        - memory_gib_min = 1
+      any_of: 2 OR-branch(es) declared
+        ✓ resolves on this host via any_of[0]
+    ```
+
+    Three degenerate cases handled cleanly: no `[requires_hardware]`
+    block ("hardware-agnostic"); root-only gate ("any_of: (none
+    declared)"); probe failure ("hardware probe unavailable —
+    cannot resolve any_of branch"). Pure renderer over the SD-R79
+    `evaluate_resolved` API — no new state, no schema bump. The
+    flag also enables host_status output (so operators run `info
+    --resolved` once and see both verdict + branch).
 
 ### Y-5 — `--reprobe-hardware` actually does something
 
