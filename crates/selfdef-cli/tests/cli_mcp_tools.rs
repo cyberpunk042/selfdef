@@ -89,7 +89,15 @@ fn sdr84_mcp_tools_every_entry_has_well_formed_input_schema() {
         assert!(t["name"].is_string());
         assert!(t["description"].is_string());
         assert!(t["backing_cli"].is_string());
-        assert_eq!(t["category"], "read-only");
+        // SD-R96 (E7.M4): manifest may contain "read-only" OR "write"
+        // entries; write ones are filtered out of tools/list unless
+        // SELFDEF_MCP_ALLOW_WRITES=YES is set on the server's env.
+        let cat = t["category"].as_str().unwrap_or("");
+        assert!(
+            cat == "read-only" || cat == "write",
+            "tool {} category={cat:?} must be read-only OR write",
+            t["name"]
+        );
     }
 }
 

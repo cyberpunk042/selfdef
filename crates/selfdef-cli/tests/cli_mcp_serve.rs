@@ -120,20 +120,22 @@ fn sdr91_tools_call_dispatches_to_selfdefctl_subprocess() {
 }
 
 #[test]
-fn sdr91_tools_call_write_tool_returns_not_found() {
+fn sdr91_tools_call_write_tool_returns_write_gated() {
+    // SD-R96 (E7.M4) refined the rejection semantics: write tools
+    // now return -32604 with the actionable env-flag hint instead
+    // of the generic -32601. The behavior (rejection by default)
+    // is unchanged from SD-R91.
     let resps = rpc_exchange(&[
         r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"selfdef.models.lora.attach","arguments":{"adapter_id":"x","base_model":"y"}}}"#,
     ]);
     let r = &resps[0];
     assert_eq!(r["id"], 4);
     assert!(r["result"].is_null());
-    assert_eq!(r["error"]["code"], -32601);
+    assert_eq!(r["error"]["code"], -32604, "{r}");
+    let msg = r["error"]["message"].as_str().unwrap();
     assert!(
-        r["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("not exposed"),
-        "{r}"
+        msg.contains("write-category") && msg.contains("SELFDEF_MCP_ALLOW_WRITES"),
+        "expected write-gate hint; got: {msg}"
     );
 }
 

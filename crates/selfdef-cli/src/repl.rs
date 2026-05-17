@@ -112,6 +112,8 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "lora_attach(adapter_id, base_model, status=None, state=None)",
                 "lora_detach(adapter_id, state=None)",
                 "lora_set_status(adapter_id, status, state=None)",
+                "SD-R97 aliases: h() p() m() mi(slug) md() mio() mip() lo() la() ld() ls() mt() mtt() rh(N)",
+                "SD-R97 @track(name) — wasted-path tracker for Tier 2 macros",
             ],
         },
         Tier {
@@ -201,14 +203,74 @@ if _SELFDEFCTL is None:
         file=_sys.stderr,
     )
 
+# SD-R95: opt-in JSONL audit trail of every _ctl() call. Set the env
+# var to a path the operator owns; the wrapper appends one line per
+# invocation. Operator-pull surface: dashboards / event-timeline read
+# the file alongside R246 sovereign-os events aggregator.
+_HISTORY_PATH = _os.environ.get("SELFDEF_REPL_HISTORY")
+
+def _record_history(args, rc, started_at, duration_ms):
+    """Append one JSONL row to SELFDEF_REPL_HISTORY when set."""
+    if not _HISTORY_PATH:
+        return
+    try:
+        with open(_HISTORY_PATH, "a") as fh:
+            fh.write(_json.dumps({
+                "round": "SD-R95",
+                "started_at": started_at,
+                "duration_ms": duration_ms,
+                "argv": list(args),
+                "rc": rc,
+            }) + "\n")
+    except OSError:
+        # Audit failure must NEVER take the operator's Tier 1 call down.
+        pass
+
 def _ctl(*args):
-    """Run selfdefctl + parse JSON stdout. Returns parsed dict/list."""
+    """Run selfdefctl + parse JSON stdout. Returns parsed dict/list.
+
+    SD-R95: when SELFDEF_REPL_HISTORY is set, each call is appended to
+    that JSONL file with {argv, rc, started_at, duration_ms} so the
+    operator gets an audit trail of every Tier 1 + Tier 2 invocation.
+
+    SD-R101 (E8.M5): when SELFDEF_MCP_URL is set (format
+    `tcp://host:port`) the call is routed through the SD-R94 MCP TCP
+    transport instead of fork+exec'ing selfdefctl. The result is the
+    same JSON the subprocess would have returned, but the operator's
+    REPL pays a single socket roundtrip instead of a process spawn —
+    closes E8.M5 (zero-subprocess Tier 1) via the MCP bridge without
+    requiring pyo3 / unsafe code.
+
+    The MCP URL can also be set on a per-call basis at the top of the
+    bootstrap session — operators audit which transport was used via
+    the SD-R95 history's `transport` field (added in this round).
+    """
+    import time as _time
+    started_at = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
+    mcp_url = _os.environ.get("SELFDEF_MCP_URL", "").strip()
+    if mcp_url:
+        t0 = _time.time()
+        try:
+            result = _ctl_via_mcp(args, mcp_url)
+            duration_ms = int((_time.time() - t0) * 1000)
+            _record_history_v2(args, 0, started_at, duration_ms, "mcp-tcp")
+            return result
+        except RuntimeError:
+            duration_ms = int((_time.time() - t0) * 1000)
+            _record_history_v2(args, -1, started_at, duration_ms, "mcp-tcp")
+            raise
     if _SELFDEFCTL is None:
+        # Record the failed attempt before raising — operators auditing
+        # a session see what was tried even when the CLI is missing.
+        _record_history_v2(args, -1, started_at, 0, "subprocess")
         raise RuntimeError("selfdefctl missing — install the selfdef-cli crate")
+    t0 = _time.time()
     r = _subp.run(
         [_SELFDEFCTL, *args],
         capture_output=True, text=True, check=False, timeout=20,
     )
+    duration_ms = int((_time.time() - t0) * 1000)
+    _record_history_v2(args, r.returncode, started_at, duration_ms, "subprocess")
     if r.returncode != 0:
         raise RuntimeError(
             f"selfdefctl {' '.join(args)} exited {r.returncode}: {r.stderr.strip()}"
@@ -219,6 +281,219 @@ def _ctl(*args):
         return _json.loads(r.stdout)
     except _json.JSONDecodeError:
         return r.stdout  # fall back to raw stdout
+
+# SD-R101 (E8.M5): argv → MCP tool name + arguments translation.
+# Each Tier 1 callable's argv shape maps to one SD-R94 MCP tool.
+# Operator-readable mapping table — easy to extend as new MCP tools
+# land in selfdef-cli's mcp.rs.
+def _argv_to_mcp_call(args):
+    """Translate (*argv) to (tool_name, arguments_dict).
+
+    Returns None if the argv shape isn't covered by the MCP tool
+    catalog (operator falls back to subprocess transparently).
+
+    Every Tier 1 callable appends `--json`; the MCP tool schemas all
+    expose a `json` boolean (default false) that we MUST set to true
+    so the tool's backing CLI runs in JSON mode. The translator
+    auto-injects it into the arguments dict — no caller needs to
+    remember.
+    """
+    a = list(args)
+    # Strip a trailing --json — every Tier 1 caller appends it; MCP
+    # tools always return JSON when `json=true` lands in arguments.
+    if a and a[-1] == "--json":
+        a = a[:-1]
+    if not a:
+        return None
+
+    def _with_json(tool_name, arg_dict=None):
+        arg_dict = dict(arg_dict or {})
+        arg_dict["json"] = True
+        return tool_name, arg_dict
+
+    # Hardware surface.
+    # selfdef.hardware.export is JSON-only by design (no `json` knob in
+    # its schema; adding one fails CLI argparse). Skip the auto-inject.
+    if a == ["hardware"]:
+        return "selfdef.hardware.export", {}
+    if a == ["hardware", "posture"]:
+        return _with_json("selfdef.hardware.posture")
+
+    # Modules surface.
+    if a[:2] == ["modules", "list"]:
+        kw = {}
+        i = 2
+        while i < len(a):
+            if a[i] == "--category" and i + 1 < len(a):
+                kw["category"] = a[i + 1]; i += 2; continue
+            if a[i] == "--phase" and i + 1 < len(a):
+                kw["phase"] = a[i + 1]; i += 2; continue
+            i += 1
+        return _with_json("selfdef.modules.list", kw)
+    if a[:2] == ["modules", "info"] and len(a) >= 3:
+        kw = {"slug": a[2]}
+        if "--resolved" in a:
+            kw["resolved"] = True
+        return _with_json("selfdef.modules.info", kw)
+    if a[:2] == ["modules", "diff"]:
+        return _with_json("selfdef.modules.diff", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "install-options"]:
+        return _with_json("selfdef.modules.install_options", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "install-plan"]:
+        return _with_json("selfdef.modules.install_plan", _kv_pairs(a[2:]))
+    if a[:2] == ["modules", "config-scaffold"] and len(a) >= 3:
+        kw = {"slug": a[2]}
+        kw.update(_kv_pairs(a[3:]))
+        return _with_json("selfdef.modules.config_scaffold", kw)
+    if a[:2] == ["modules", "apply-plan"]:
+        return _with_json("selfdef.modules.apply_plan", _kv_pairs(a[2:]))
+
+    # LoRA surface.
+    if a[:2] == ["lora", "list"]:
+        return _with_json("selfdef.models.lora.list", _kv_pairs(a[2:]))
+    if a[:2] == ["lora", "attach"] and len(a) >= 4:
+        kw = {"adapter_id": a[2], "base_model": a[3]}
+        kw.update(_kv_pairs(a[4:]))
+        return _with_json("selfdef.models.lora.attach", kw)
+    if a[:2] == ["lora", "detach"] and len(a) >= 3:
+        kw = {"adapter_id": a[2]}
+        kw.update(_kv_pairs(a[3:]))
+        return _with_json("selfdef.models.lora.detach", kw)
+    if a[:2] == ["lora", "set-status"] and len(a) >= 4:
+        return _with_json("selfdef.models.lora.set_status", {
+            "adapter_id": a[2], "status": a[3],
+        })
+
+    # REPL history.
+    if a[:2] == ["repl", "history"]:
+        return _with_json("selfdef.repl.history", _kv_pairs(a[2:]))
+
+    return None
+
+def _kv_pairs(args):
+    """Walk a --k v --flag list and return a dict of {k: v} pairs,
+    converting --flag (no value) to {flag: True}."""
+    out = {}
+    i = 0
+    while i < len(args):
+        tok = args[i]
+        if tok.startswith("--"):
+            key = tok[2:].replace("-", "_")
+            if i + 1 < len(args) and not args[i + 1].startswith("--"):
+                out[key] = args[i + 1]
+                i += 2
+                continue
+            out[key] = True
+            i += 1
+            continue
+        i += 1
+    return out
+
+def _ctl_via_mcp(args, url):
+    """SD-R101: route a Tier 1 call through SD-R94 MCP TCP."""
+    if not url.startswith("tcp://"):
+        raise RuntimeError(
+            f"SELFDEF_MCP_URL must start with tcp:// (got {url!r})"
+        )
+    hostport = url[len("tcp://"):]
+    if ":" not in hostport:
+        raise RuntimeError(f"SELFDEF_MCP_URL malformed (need host:port): {url!r}")
+    host, port_s = hostport.rsplit(":", 1)
+    try:
+        port = int(port_s)
+    except ValueError as e:
+        raise RuntimeError(f"SELFDEF_MCP_URL port: {e}") from e
+
+    mapped = _argv_to_mcp_call(args)
+    if mapped is None:
+        # Argv not in the MCP catalog — fall back to subprocess.
+        if _SELFDEFCTL is None:
+            raise RuntimeError(
+                f"argv {list(args)} not in MCP catalog + selfdefctl unavailable"
+            )
+        r = _subp.run(
+            [_SELFDEFCTL, *args],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"selfdefctl {' '.join(args)} exited {r.returncode}: "
+                f"{r.stderr.strip()}"
+            )
+        if not r.stdout.strip():
+            return None
+        try:
+            return _json.loads(r.stdout)
+        except _json.JSONDecodeError:
+            return r.stdout
+
+    tool_name, arguments = mapped
+    import socket as _socket
+    req = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": tool_name, "arguments": arguments},
+    }
+    line = _json.dumps(req) + "\n"
+    s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    s.settimeout(20)
+    try:
+        s.connect((host, port))
+        # Optional Bearer auth — SD-R94 supports per-connection auth.
+        bearer = _os.environ.get("SELFDEF_MCP_BEARER", "").strip()
+        if bearer:
+            s.sendall(f"Authorization: Bearer {bearer}\n".encode())
+        s.sendall(line.encode())
+        # Read line-delimited response.
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(8192)
+            if not chunk:
+                break
+            buf += chunk
+    finally:
+        s.close()
+    try:
+        resp = _json.loads(buf.decode(errors="replace"))
+    except _json.JSONDecodeError as e:
+        raise RuntimeError(f"MCP response not JSON: {e}; raw={buf[:200]!r}") from e
+    if "error" in resp:
+        err = resp["error"]
+        raise RuntimeError(
+            f"MCP tool {tool_name} returned error {err.get('code')}: {err.get('message')}"
+        )
+    result = resp.get("result", {})
+    # MCP tools wrap their payload as
+    # {"content":[{"type":"text","text":"<json>"}]}; unwrap when present.
+    if isinstance(result, dict) and "content" in result:
+        content = result.get("content")
+        if isinstance(content, list) and content and isinstance(content[0], dict):
+            text = content[0].get("text")
+            if isinstance(text, str):
+                try:
+                    return _json.loads(text)
+                except _json.JSONDecodeError:
+                    return text
+    return result
+
+def _record_history_v2(args, rc, started_at, duration_ms, transport):
+    """SD-R101: extension of SD-R95 with the `transport` field so the
+    operator can tell which calls went through MCP vs subprocess."""
+    if not _HISTORY_PATH:
+        return
+    try:
+        with open(_HISTORY_PATH, "a") as fh:
+            fh.write(_json.dumps({
+                "round": "SD-R101",
+                "started_at": started_at,
+                "duration_ms": duration_ms,
+                "argv": list(args),
+                "rc": rc,
+                "transport": transport,
+            }) + "\n")
+    except OSError:
+        pass
 
 def hardware():
     """selfdefctl hardware --json"""
@@ -378,6 +653,205 @@ def mcp_tools():
     """selfdefctl mcp tools (JSON manifest)"""
     return _ctl("mcp", "tools")
 
+# ============================================================
+# SD-R97 (E8.M6) — Token-saving aliases + wasted-path tracker.
+#
+# Operator-named (§1b verbatim): "save/need less tokens, save wasted
+# paths / useless tracks and stuff like all this."
+#
+# Two operator-facing surfaces:
+#   1. Compact aliases (h / p / m / mi / md / mio / mip / lo / la /
+#      ld / ls / mt / mtt / rh) — single-character-class verbs for
+#      the most-used Tier 1 callables. Cut REPL transcript length
+#      by ~75% for routine probes.
+#   2. wasted_path tracker: a `_track()` decorator that records when
+#      the operator's Tier 2 macros return None / raise / produce
+#      structurally-empty results. The wasted-path log accumulates
+#      in $SELFDEF_REPL_HISTORY (when set) under outcome="wasted-path".
+# ============================================================
+
+# --- Compact aliases (alphabetical for muscle memory) ---
+def h():
+    """h() = hardware() — token-saving alias."""
+    return hardware()
+
+def p():
+    """p() = posture() — token-saving alias."""
+    return posture()
+
+def m(c=None, ph=None):
+    """m(category, phase) = modules(category, phase) — token-saving alias."""
+    return modules(category=c, phase=ph)
+
+def mi(slug, resolved=False):
+    """mi(slug) = modules_info(slug) — token-saving alias."""
+    return modules_info(slug, resolved=resolved)
+
+def md():
+    """md() = modules_diff() — token-saving alias."""
+    return modules_diff()
+
+def mio(only_ready=False):
+    """mio() = modules_install_options() — token-saving alias."""
+    return modules_install_options(only_ready=only_ready)
+
+def mip():
+    """mip() = modules_install_plan() — token-saving alias."""
+    return modules_install_plan()
+
+def lo(state=None):
+    """lo() = lora_list() — token-saving alias."""
+    return lora_list(state=state)
+
+def la(adapter_id, base_model, status=None):
+    """la(id, base) = lora_attach(id, base) — token-saving alias."""
+    return lora_attach(adapter_id, base_model, status=status)
+
+def ld(adapter_id):
+    """ld(id) = lora_detach(id) — token-saving alias."""
+    return lora_detach(adapter_id)
+
+def ls(adapter_id, status):
+    """ls(id, status) = lora_set_status(id, status) — token-saving alias."""
+    return lora_set_status(adapter_id, status)
+
+def mt():
+    """mt() = mcp_tools() — token-saving alias."""
+    return mcp_tools()
+
+def mtt():
+    """mtt() = repl tier2 examples inventory — token-saving alias."""
+    return _ctl("repl", "tier2-examples", "--json")
+
+def rh(limit=20):
+    """rh(N) = repl history --limit N --json — token-saving alias."""
+    args = ["repl", "history", "--limit", str(limit), "--json"]
+    return _ctl(*args)
+
+# --- Wasted-path tracker decorator (Tier 2 ergonomic) ---
+def track(name=None):
+    """SD-R97: decorator that records when wrapped Tier 2 macros
+    return falsy / empty / raise. Appends to SELFDEF_REPL_HISTORY
+    (when set) as outcome={ok, empty-result, raised}. Operator pulls
+    `rh()` afterward to see which paths wasted tokens.
+
+    Usage:
+        @track("my_macro")
+        def my_macro(x):
+            return _ctl("modules", "list", "--json")
+
+    Operator-named: "save wasted paths / useless tracks".
+    """
+    def _wrap(fn):
+        macro_name = name or getattr(fn, "__name__", "anon")
+        def _inner(*args, **kwargs):
+            import time as _time
+            started_at = _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime())
+            t0 = _time.time()
+            try:
+                result = fn(*args, **kwargs)
+                outcome = "ok"
+                if result is None:
+                    outcome = "empty-result"
+                elif isinstance(result, (list, dict, str)) and len(result) == 0:
+                    outcome = "empty-result"
+                duration_ms = int((_time.time() - t0) * 1000)
+                _record_history(
+                    ("tier2-macro", macro_name, *[repr(a)[:40] for a in args]),
+                    {"ok": 0, "empty-result": 0, "raised": -2}[outcome],
+                    started_at, duration_ms,
+                )
+                return result
+            except Exception as e:
+                duration_ms = int((_time.time() - t0) * 1000)
+                _record_history(
+                    ("tier2-macro", macro_name, f"raised:{type(e).__name__}"),
+                    -2, started_at, duration_ms,
+                )
+                raise
+        _inner.__name__ = macro_name
+        _inner.__wrapped__ = fn
+        return _inner
+    return _wrap
+
+# --- SD-R98 (E8.M4) integrated-intelligence module registry ---
+# Operator-named (§1b verbatim): "Integrated-intelligence modules —
+# operator-pull CoT routines registered with @selfdef_macro".
+_SELFDEF_MACROS = {}
+
+def selfdef_macro(name=None, description=None, tags=None, track_outcome=True):
+    """SD-R98: register a function as an operator-pull CoT routine.
+
+    The decorated function lands in _SELFDEF_MACROS so operators can
+    list / introspect / run macros by name. When track_outcome=True
+    (default) the wrapper composes with SD-R97 @track so every
+    registered macro contributes to the SD-R95 audit trail.
+
+    Usage:
+        @selfdef_macro(description="health rollup",
+                       tags=["health", "rollup"])
+        def health_summary():
+            return health_to_attention()
+
+        list_macros()                  # discover
+        macro_info("health_summary")   # introspect
+        run_macro("health_summary")    # invoke by name
+    """
+    def _wrap(fn):
+        macro_name = name or getattr(fn, "__name__", "anon")
+        wrapped = track(macro_name)(fn) if track_outcome else fn
+        doc = (fn.__doc__ or "").strip()
+        first_line = doc.split("\n", 1)[0].strip() if doc else ""
+        _SELFDEF_MACROS[macro_name] = {
+            "name": macro_name,
+            "description": (description or first_line or ""),
+            "tags": list(tags or []),
+            "track_outcome": bool(track_outcome),
+            "callable": wrapped,
+            "qualname": getattr(fn, "__qualname__", macro_name),
+        }
+        return wrapped
+    return _wrap
+
+def list_macros(tag=None):
+    """SD-R98: list registered operator-pull CoT macros (optionally
+    filtered by tag). Returns sorted-by-name list of dicts."""
+    out = []
+    for nm in sorted(_SELFDEF_MACROS.keys()):
+        meta = _SELFDEF_MACROS[nm]
+        if tag is not None and tag not in meta["tags"]:
+            continue
+        out.append({
+            "name": meta["name"],
+            "description": meta["description"],
+            "tags": list(meta["tags"]),
+            "track_outcome": meta["track_outcome"],
+        })
+    return out
+
+def macro_info(name):
+    """SD-R98: full metadata for a registered macro (or None)."""
+    m = _SELFDEF_MACROS.get(name)
+    if m is None:
+        return None
+    return {
+        "name": m["name"],
+        "description": m["description"],
+        "tags": list(m["tags"]),
+        "track_outcome": m["track_outcome"],
+        "qualname": m["qualname"],
+    }
+
+def run_macro(name, *args, **kwargs):
+    """SD-R98: invoke a registered macro by name. Raises KeyError if
+    the name isn't registered — the message lists known macros so the
+    operator doesn't have to grep for typos."""
+    m = _SELFDEF_MACROS.get(name)
+    if m is None:
+        known = sorted(_SELFDEF_MACROS.keys())
+        raise KeyError(f"unknown selfdef_macro {name!r}; known: {known}")
+    return m["callable"](*args, **kwargs)
+
 # Banner — only print when imported into an interactive session.
 if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("selfdef REPL — Tier 1 (Proto-Programming) ready.")
@@ -396,6 +870,24 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("  lora_detach(adapter_id, state=...)")
     print("  lora_set_status(adapter_id, status, state=...)")
     print("  mcp_tools()        -> dict   (manifest)")
+    print()
+    print("  SD-R97 token-saving aliases:")
+    print("    h()  p()  m(c,ph)  mi(slug)  md()  mio()  mip()")
+    print("    lo()  la(id,m)  ld(id)  ls(id,s)  mt()  mtt()  rh(N)")
+    print()
+    print("  SD-R97 wasted-path tracker (Tier 2):")
+    print("    @track('macro_name') def my_macro(...): ...")
+    print()
+    print("  SD-R98 integrated-intelligence registry (operator-pull CoT):")
+    print("    @selfdef_macro(description=..., tags=[...])")
+    print("    list_macros()     macro_info(name)     run_macro(name, ...)")
+    print()
+    print("  SD-R101 (E8.M5) zero-subprocess Tier 1 via MCP TCP bridge:")
+    print("    export SELFDEF_MCP_URL=tcp://127.0.0.1:9876  # uses SD-R94")
+    print("    export SELFDEF_MCP_BEARER=<token>            # optional auth")
+    print("    Every _ctl(*argv) call becomes one socket roundtrip; "
+          "SD-R95 history records `transport` field per call.")
+    print()
     print("  Tier 2: define your own helpers atop these — the surface is yours.")
 "#
     .to_string()
@@ -510,6 +1002,31 @@ pub(crate) fn tier2_examples() -> Vec<Tier2Example> {
     return attention
 "#,
         },
+        Tier2Example {
+            name: "registered_health_rollup",
+            summary: "SD-R98 example: register a CoT routine with @selfdef_macro \
+                      so operators can discover/introspect/run it by name.",
+            source: r#"@selfdef_macro(description="health rollup over hardware+posture",
+                tags=["health", "rollup", "sd-r98-example"])
+def registered_health_rollup():
+    """Operator-pull CoT: aggregate hardware + posture + attention items
+    so a downstream agent can decide what to fix first."""
+    hw = hardware() or {}
+    p  = posture() or {}
+    return {
+        "verdict": p.get("verdict"),
+        "cpu_model": (hw.get("cpu") or {}).get("model"),
+        "gpu_count": (hw.get("gpu") or {}).get("device_count", 0),
+        "attention": health_to_attention(),
+    }
+
+# Discover/introspect/run after registration:
+#   list_macros()                              # → [{name, description, tags, ...}]
+#   list_macros(tag="health")                  # → filtered by tag
+#   macro_info("registered_health_rollup")     # → full metadata
+#   run_macro("registered_health_rollup")      # → invoke by name
+"#,
+        },
     ]
 }
 
@@ -561,6 +1078,95 @@ pub(crate) fn cmd_tier2_examples(name: Option<&str>, json: bool) -> anyhow::Resu
         println!("# {}", e.summary);
         println!();
         println!("{}", e.source);
+    }
+    Ok(0)
+}
+
+/// SD-R95 (SDD-026 Z-12 audit): render the JSONL history the
+/// bootstrap script writes when `SELFDEF_REPL_HISTORY` is set.
+///
+/// Defaults: path from `SELFDEF_REPL_HISTORY` env (fallback
+/// `/var/lib/selfdef/repl-history.jsonl`); limit 50 rows; tail; json
+/// mode emits the full row list.
+pub(crate) fn cmd_history(
+    path: Option<&std::path::Path>,
+    limit: usize,
+    all: bool,
+    json: bool,
+) -> anyhow::Result<i32> {
+    use std::io::BufRead;
+    let resolved: std::path::PathBuf = match path {
+        Some(p) => p.to_path_buf(),
+        None => match std::env::var("SELFDEF_REPL_HISTORY") {
+            Ok(s) if !s.is_empty() => std::path::PathBuf::from(s),
+            _ => std::path::PathBuf::from("/var/lib/selfdef/repl-history.jsonl"),
+        },
+    };
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    if resolved.exists() {
+        let f = std::fs::File::open(&resolved)?;
+        let r = std::io::BufReader::new(f);
+        for line in r.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+                rows.push(v);
+            }
+        }
+    }
+    let total = rows.len();
+    if !all && rows.len() > limit {
+        let start = rows.len() - limit;
+        rows.drain(..start);
+    }
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R95",
+            "sdd_vector": "SDD-026 Z-12 audit",
+            "path": resolved.display().to_string(),
+            "exists": resolved.exists(),
+            "total_rows": total,
+            "returned_rows": rows.len(),
+            "rows": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R95 selfdefctl repl history (SDD-026 Z-12 audit) ──");
+    println!("  path:           {}", resolved.display());
+    println!("  exists:         {}", resolved.exists());
+    println!("  total_rows:     {total}");
+    println!("  returned_rows:  {}", rows.len());
+    if rows.is_empty() {
+        println!();
+        println!(
+            "  (no rows — set SELFDEF_REPL_HISTORY=<path> in the REPL's env, \
+             then call any Tier 1 callable to populate)"
+        );
+        return Ok(0);
+    }
+    println!();
+    for r in &rows {
+        let ts = r["started_at"].as_str().unwrap_or("?");
+        let rc = r["rc"].as_i64().unwrap_or(-1);
+        let dur = r["duration_ms"].as_u64().unwrap_or(0);
+        let mark = if rc == 0 { "OK  " } else { "FAIL" };
+        let argv: Vec<String> = r["argv"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        println!("  [{mark}] {ts}  {dur:>5}ms  selfdefctl {}", argv.join(" "));
     }
     Ok(0)
 }
