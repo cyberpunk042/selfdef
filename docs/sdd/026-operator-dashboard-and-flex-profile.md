@@ -249,9 +249,20 @@ Two angles:
      operator-installed MCP server (Anthropic, local, etc.) for
      reasoning workflows.
 
-  - Recommendation: stdio + TCP transports; manifest at
-    /etc/selfdef/mcp-tools.toml lists which selfdef verbs are
-    exposed (operator opts in per-tool).
+  - **Decision (SD-R84, 2026-05-17, partial FOUNDATION)** — cycle-8
+    PR seeds the manifest brick: `selfdefctl mcp tools` renders the
+    curated tool manifest (JSON default + --human terminal view).
+    Cycle-8 doctrine: READ-ONLY verbs only (hardware.posture,
+    hardware.export, modules.list, modules.diff, modules.info,
+    models.list, models.lora.list — 7 tools shipped). Write verbs
+    (apply / set-mode / fetch / lora-attach) land in subsequent
+    rounds with explicit per-tool opt-in gates. Every tool carries
+    a JSON Schema `input_schema` with `type=object` +
+    `additionalProperties=false` for strict MCP-client validation.
+    The future `selfdef-mcp-server` (stdio + TCP transports) will
+    consume the SAME manifest the operator already reads via
+    `mcp tools` so client and server agree on the exposable surface
+    before the server lands.
 
 ### Z-12 — Multi-tier REPL (Programming / Proto / Proto-Proto)
 
@@ -266,9 +277,17 @@ Python REPL ON TOP OF selfdef state:
     Saves tokens; eliminates wasted paths; the "deeper" layer the
     operator named.
 
-  - Recommendation: pyo3 bindings on the Rust side; Jupyter-style
-    notebook surface in the dashboard for Tier 1+2 sessions; state
-    persistence per-operator-session.
+  - **Decision (SD-R85, 2026-05-17, foundation)** — cycle-8 PR seeds
+    Tier 1 via subprocess wrappers (not pyo3 yet — that's a future
+    round). `selfdefctl repl bootstrap` emits the Python script the
+    operator pastes into `python3 -i -c "$(...)"`. Eight callables:
+      hardware() / posture() / modules(category=..., phase=...) /
+      modules_info(slug, resolved=...) / modules_diff(...) /
+      models() / lora_list(state=...) / mcp_tools()
+    `selfdefctl repl tiers` prints the manifest (3 tiers) — JSON
+    default, --human for terminal banner. Tier 2 is the operator-
+    extension surface (we ship Tier 1 + the named callables; the
+    operator owns the custom CoT / token-saving aliases on top).
 
 ### Z-13 — Module options-to-install surface
 
@@ -278,9 +297,32 @@ category/phase filter) with one-click "Install" that runs
 `selfdefctl modules apply <slug>`. Uninstalled modules are NOT
 hidden — they're separately discoverable.
 
-  - Recommendation: dashboard knows install-state from the daemon's
-    SD-R34/R55/R81 state files; install action returns the apply
-    log streamed back to the browser.
+  - **Decision (SD-R83, 2026-05-17, partial CLI surface)** — cycle-8
+    PR seeds the CLI counterpart: `selfdefctl modules diff` partitions
+    catalog × host-config into three buckets:
+      INSTALLED  — slug in both (would apply)
+      AVAILABLE  — slug in catalog only (operator can `apply --only X`)
+      ORPHANED   — slug in host-config only (stale entry; restore
+                   manifest OR prune host-config)
+    JSON output feeds the future Z-1 dashboard "Browse available"
+    tab directly. Operator-actionable hint surfaces when orphans
+    are present. The dashboard side lands when Z-1 ships.
+
+  - **Decision (SD-R86, 2026-05-17, install-options surface)** —
+    cycle-8 PR grows the operator-decision side: `selfdefctl modules
+    install-options` walks the SD-R83 AVAILABLE partition and
+    decorates each row with operator-actionable recommendations:
+      ready                       — hardware gate passes + deps present
+      blocked-by-hardware         — gate fails (unmet predicates listed)
+      blocked-by-missing-deps     — depends_on chain incomplete
+      needs-review                — hardware probe unavailable
+    `--category`, `--only-ready` filters compose with the JSON output
+    so the dashboard's "Install options" tab renders the ready set
+    by default + lets the operator drill into blocked rows. Closes
+    the "Dont mix uninstalled and installed Module" operator
+    requirement (verbatim). Also exposed as Tier 1 REPL callable
+    `modules_install_options(host_config=..., dir=..., category=...,
+    only_ready=False)` + MCP tool `selfdef.modules.install_options`.
 
 ## Cycle-7+ priority ranking
 

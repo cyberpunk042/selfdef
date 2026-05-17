@@ -12,11 +12,13 @@ mod emit;
 mod follow;
 mod hardware;
 mod init;
+mod mcp;
 mod models;
 mod modules;
 mod notify;
 mod paths;
 mod perimeter;
+mod repl;
 mod wizard;
 
 use std::path::PathBuf;
@@ -162,8 +164,112 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
+    /// manifest surface. The future selfdef-mcp-server consumes the
+    /// SAME manifest the operator's `claude-code` (or any MCP client)
+    /// reads to learn what selfdef verbs are exposable as tools.
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+    /// SD-R85 (SDD-026 Z-12 foundation): operator-facing REPL surface.
+    /// Multi-tier programming layer per the operator directive:
+    ///   Tier 0  Programming        (Rust crates linked to selfdef-core)
+    ///   Tier 1  Proto-Programming  (Python REPL atop selfdef-cli verbs;
+    ///                               THIS round seeds Tier 1)
+    ///   Tier 2  Proto-Proto-Prog   (operator-defined macros + custom CoT
+    ///                               loops compiling to Tier 1 calls;
+    ///                               future round)
+    Repl {
+        #[command(subcommand)]
+        action: ReplAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum McpAction {
+    /// Print the JSON tool manifest the future MCP server would
+    /// expose. Operator-readable schema for every selfdef verb that
+    /// is safe to expose as a stateless MCP tool call.
+    Tools {
+        /// Emit machine-readable JSON (default) or human-readable
+        /// table.
+        #[arg(long)]
+        human: bool,
+    },
+    /// SD-R91 (SDD-026 Z-11 closure): stdio JSON-RPC MCP server that
+    /// exposes the SD-R84 read-only tool manifest. Implements
+    /// `initialize`, `tools/list`, `tools/call`. Each `tools/call`
+    /// invokes the matching `selfdefctl …` subprocess + returns its
+    /// JSON output as a single text content block.
+    ///
+    /// Wire format: line-delimited JSON-RPC 2.0 (one request per
+    /// line, one response per line). Cycle-8 read-only doctrine:
+    /// only tools with `category == "read-only"` are callable;
+    /// requests for write tools return JSON-RPC error -32601.
+    Serve {
+        /// Handle exactly N requests then exit (used by L3 tests).
+        #[arg(long)]
+        exit_after: Option<u32>,
+        /// SD-R92: select wire framing.
+        ///
+        ///   line       SD-R91 line-delimited JSON-RPC (testable, jq-able)
+        ///   lsp        SD-R92 LSP-style Content-Length framing (spec MCP)
+        ///
+        /// Default is `line` for backwards compat with SD-R91. Real
+        /// MCP clients (claude-code et al.) speak `lsp`.
+        #[arg(long, default_value = "line")]
+        framing: String,
+        /// SD-R94: bind a TCP listener instead of reading from stdin.
+        /// HOST:PORT form, e.g. `127.0.0.1:8444`. Each accepted
+        /// connection runs the same per-line/per-LSP-message dispatch
+        /// loop, then closes. Cycle-8 doctrine: read-only tools only;
+        /// `--token-env VAR` enforces a per-connection Bearer-style
+        /// preamble (first line MUST be `Authorization: Bearer
+        /// <env-value>` for the connection to handle requests).
+        #[arg(long)]
+        tcp: Option<String>,
+        /// SD-R94: name of env var holding the connection token.
+        /// When set with `--tcp`, every connection MUST send the
+        /// Authorization preamble before its first JSON-RPC message.
+        /// Operator-supplied tokens NEVER live in-repo (SDD-009).
+        #[arg(long)]
+        token_env: Option<String>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum ReplAction {
+    /// SD-R85: print the REPL bootstrap script the operator dumps
+    /// into their Python session (or `python3 -i -c "$(selfdefctl
+    /// repl bootstrap)"`). Imports the selfdef-cli subprocess
+    /// wrappers + sets up the operator namespace. Tier 1
+    /// (Proto-Programming) seed.
+    Bootstrap,
+    /// SD-R85: print the manifest describing the REPL tiers + which
+    /// callables each tier exposes. JSON by default; --human for
+    /// banner.
+    Tiers {
+        #[arg(long)]
+        human: bool,
+    },
+    /// SD-R90 (SDD-026 Z-12 follow-up): print ready-to-paste example
+    /// Tier 2 (Proto-Proto-Programming) macros built on top of the
+    /// Tier 1 callable surface. Operators copy-paste OR import into
+    /// their Python session — these are starting-point demonstrations
+    /// of the operator-extension layer the SD-R85 manifest names.
+    /// Operator-named: "you do you own things and you even have
+    /// custom CoT or such and advanced tailored features".
+    Tier2Examples {
+        /// Show only one example (by name); without --name, prints all.
+        #[arg(long)]
+        name: Option<String>,
+        /// Emit JSON inventory instead of the example source.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -504,6 +610,45 @@ enum LoraAction {
         #[arg(long)]
         json: bool,
     },
+    /// SD-R89 (SDD-025 Y-2 extension): record a LoRA attachment in
+    /// the operator state file.
+    ///
+    /// Atomic update: read existing state, append/upsert the entry,
+    /// write atomically via tempfile + rename. Idempotent — attaching
+    /// the same adapter_id twice upserts the base_model + status
+    /// fields rather than duplicating the row.
+    Attach {
+        adapter_id: String,
+        base_model: String,
+        /// Override status (default: "active").
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: remove a LoRA attachment by adapter_id. Atomic update.
+    /// rc=1 when the adapter wasn't present (operator should re-check).
+    Detach {
+        adapter_id: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: flip an attached LoRA's status (active / disabled /
+    /// errored). Doesn't remove the row — useful for "I want to keep
+    /// the binding metadata but stop loading this adapter".
+    SetStatus {
+        adapter_id: String,
+        /// One of: active / disabled / errored.
+        status: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -633,6 +778,111 @@ enum ModulesAction {
         /// status rows instead of the human-readable summary.
         /// Tooling consumers (sovereign-osctl overview, fleet
         /// dashboards) parse this directly.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R83 (SDD-026 Z-13 partial): show installed / available /
+    /// orphaned modules in one table, partitioning the catalog ×
+    /// host-config join:
+    ///   INSTALLED  — slug present in both catalog AND host-config
+    ///                ([modules.X] entry in /etc/selfdef/modules.toml)
+    ///   AVAILABLE  — slug present in catalog, NOT activated in
+    ///                host-config (operator could `apply --only X`)
+    ///   ORPHANED   — slug in host-config but NOT in catalog (stale
+    ///                entry — operator should prune or restore the
+    ///                manifest)
+    /// Read-only. Composes with the future Z-1 dashboard's "Browse
+    /// available" sub-tab.
+    Diff {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of the tabular partition.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R86 (SDD-026 Z-13): surface uninstalled-but-available
+    /// catalog modules with operator-actionable recommendations.
+    ///
+    /// Walks the AVAILABLE partition from `modules diff` and decorates
+    /// each row with hardware-gate verdict, per-dependency installed
+    /// flag, and a roll-up `recommendation` field (ready /
+    /// blocked-by-hardware / blocked-by-missing-deps / needs-review).
+    /// The dashboard's "Install options" tab consumes the JSON
+    /// directly. Operator-named "modules options-to-install".
+    InstallOptions {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Show only `recommendation = "ready"` rows.
+        #[arg(long)]
+        only_ready: bool,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R87 (SDD-026 Z-13): topologically-ordered install plan over
+    /// the SD-R86 AVAILABLE-and-READY set.
+    ///
+    /// Resolves the dep graph + emits a numbered sequence of
+    /// `selfdefctl modules apply --only <slug>` commands the operator
+    /// runs in order. NOT-READY modules are reported in a separate
+    /// "skipped" section with their blocking reason. Dep cycles fail
+    /// the plan with rc=1 (manifests must be corrected).
+    InstallPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+    /// scaffold for one catalog module — the operator's next step
+    /// AFTER `install-plan` tells them WHAT to install.
+    ///
+    /// Renders a ready-to-paste `[modules."<slug>"]` block + the
+    /// matching `[daemon.*]` entries the manifest declares as
+    /// daemon_requires. Hardware-gate predicates surface as comments.
+    ConfigScaffold {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Required when the module is instanced
+        /// (e.g. `--instance wg0` for the tunnel module).
+        #[arg(long)]
+        instance: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+    /// end-to-end. Walks each step of the topologically-ordered plan,
+    /// invoking `apply --only <slug>` per step. Per-step outcome is
+    /// reported. DRY-RUN by default; `--apply` actually executes. Step
+    /// failures HALT the rest of the plan unless `--continue-on-failure`
+    /// is set.
+    ApplyPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        category: Option<String>,
+        /// Actually execute (default is DRY-RUN preview).
+        #[arg(long)]
+        apply: bool,
+        /// Don't halt on first failure — keep trying every step.
+        #[arg(long)]
+        continue_on_failure: bool,
         #[arg(long)]
         json: bool,
     },
@@ -868,6 +1118,48 @@ async fn main() -> Result<()> {
                 selfdef_core::SCHEMA_VERSION,
             );
         }
+        Command::Mcp { action } => match action {
+            McpAction::Tools { human } => {
+                if human {
+                    print!("{}", mcp::render_tools_human());
+                } else {
+                    println!("{}", mcp::render_tools_json());
+                }
+            }
+            McpAction::Serve {
+                exit_after,
+                framing,
+                tcp,
+                token_env,
+            } => {
+                let code = if let Some(bind) = tcp {
+                    mcp::serve_tcp(&bind, &framing, token_env.as_deref(), exit_after)?
+                } else {
+                    mcp::serve_stdio(exit_after, &framing)?
+                };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+        },
+        Command::Repl { action } => match action {
+            ReplAction::Bootstrap => {
+                print!("{}", repl::bootstrap_script());
+            }
+            ReplAction::Tiers { human } => {
+                if human {
+                    print!("{}", repl::render_tiers_human());
+                } else {
+                    println!("{}", repl::render_tiers_json());
+                }
+            }
+            ReplAction::Tier2Examples { name, json } => {
+                let code = repl::cmd_tier2_examples(name.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+        },
         Command::Api {
             action:
                 ApiAction::RotateToken {
@@ -1249,6 +1541,46 @@ async fn main() -> Result<()> {
                         std::process::exit(code);
                     }
                 }
+                LoraAction::Attach {
+                    adapter_id,
+                    base_model,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_attach(
+                        state.as_deref(),
+                        &adapter_id,
+                        &base_model,
+                        status.as_deref(),
+                        json,
+                    )?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::Detach {
+                    adapter_id,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_detach(state.as_deref(), &adapter_id, json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::SetStatus {
+                    adapter_id,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code =
+                        models::cmd_lora_set_status(state.as_deref(), &adapter_id, &status, json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
             },
         },
         Command::Modules { action } => match action {
@@ -1364,6 +1696,87 @@ async fn main() -> Result<()> {
                 } else {
                     modules::cmd_status(&opts)?
                 };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Diff {
+                host_config,
+                dir,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_diff(&host_path, &dir_path, json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallOptions {
+                host_config,
+                dir,
+                category,
+                only_ready,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_install_options(
+                    &host_path,
+                    &dir_path,
+                    json,
+                    category.as_deref(),
+                    only_ready,
+                )?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallPlan {
+                host_config,
+                dir,
+                category,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_install_plan(&host_path, &dir_path, json, category.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ConfigScaffold {
+                slug,
+                dir,
+                instance,
+                json,
+            } => {
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_config_scaffold(&dir_path, &slug, instance.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ApplyPlan {
+                host_config,
+                dir,
+                category,
+                apply,
+                continue_on_failure,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_apply_plan(
+                    &host_path,
+                    &dir_path,
+                    category.as_deref(),
+                    apply,
+                    continue_on_failure,
+                    json,
+                )?;
                 if code != 0 {
                     std::process::exit(code);
                 }

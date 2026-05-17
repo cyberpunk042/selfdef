@@ -3043,6 +3043,990 @@ pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R83 (SDD-026 Z-13 partial): partition the catalog × host-config
+/// join into INSTALLED / AVAILABLE / ORPHANED buckets.
+///
+///   INSTALLED  — slug in catalog AND in host_config.modules
+///   AVAILABLE  — slug in catalog only (operator could activate via
+///                `selfdefctl modules apply --only <slug>`)
+///   ORPHANED   — slug in host_config only (operator has a stale
+///                entry — either restore the manifest or prune)
+///
+/// Operator-readable tabular or --json output. rc=0 always (this is
+/// a discovery surface; non-empty ORPHANED is not an error — the
+/// operator may have intentionally pinned a slug for a not-yet-
+/// shipped module).
+pub(crate) fn cmd_diff(host_path: &Path, dir: &Path, json: bool) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+    let catalog_slugs: std::collections::BTreeSet<String> =
+        mods.iter().map(|(s, _)| s.clone()).collect();
+    // host_config keys may carry instance suffix `slug#name`; the
+    // catalog tracks the bare slug. Split each host key on `#` and
+    // bucket by the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let installed: Vec<String> = catalog_slugs.intersection(&host_slugs).cloned().collect();
+    let available: Vec<String> = catalog_slugs.difference(&host_slugs).cloned().collect();
+    let orphaned: Vec<String> = host_slugs.difference(&catalog_slugs).cloned().collect();
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "host_config":  host_path.display().to_string(),
+            "modules_dir":  dir.display().to_string(),
+            "installed":    installed,
+            "available":    available,
+            "orphaned":     orphaned,
+            "counts": {
+                "installed": installed.len(),
+                "available": available.len(),
+                "orphaned":  orphaned.len(),
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R83 selfdefctl modules diff (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    println!();
+    println!("  installed ({}):", installed.len());
+    if installed.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &installed {
+            println!("    ✓ {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  available ({}) — operator can activate via apply:",
+        available.len()
+    );
+    if available.is_empty() {
+        println!("    (every catalog module is activated in host_config)");
+    } else {
+        for slug in &available {
+            println!("    + {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  orphaned ({}) — host_config entries with no catalog manifest:",
+        orphaned.len()
+    );
+    if orphaned.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &orphaned {
+            println!("    ? {slug}");
+        }
+        println!();
+        println!("  → operator should EITHER restore the missing manifest into");
+        println!("    {} OR remove the stale [modules.<slug>]", dir.display());
+        println!("    entry from {}.", host_path.display());
+    }
+    Ok(0)
+}
+
+/// SD-R86 (SDD-026 Z-13): surface UNINSTALLED-but-AVAILABLE catalog
+/// modules with operator-actionable recommendations.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "modules
+/// options-to-install ([…] Dont mix uninstalled and installed Module)".
+///
+/// SD-R83 modules diff partitions catalog vs host_config into
+/// installed / available / orphaned. SD-R86 walks the AVAILABLE
+/// partition and decorates each row with:
+///
+///   hardware_gate    passes / blocked / ungated / probe-unavailable
+///   depends_on       per-dep installed flag
+///   phase            ordering hint
+///   category         filter hint
+///   summary          manifest one-liner
+///   recommendation   ready / blocked-by-hardware / blocked-by-missing-deps
+///
+/// The dashboard's "Install options" tab renders this directly.
+/// Exit code: 0 always (informational).
+pub(crate) fn cmd_install_options(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+    only_ready: bool,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    // host-config keys: split `slug#instance` and keep the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+
+    // Probe hardware once; reused for every gate evaluation.
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    let mut counts_ready: usize = 0;
+    let mut counts_blocked_hw: usize = 0;
+    let mut counts_blocked_deps: usize = 0;
+    let mut counts_probe_unavail: usize = 0;
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue; // installed — skip
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+
+        // Hardware gate
+        let (gate_verdict, gate_unmet): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+
+        // depends_on resolution against host installed set.
+        let mut deps: Vec<serde_json::Value> = Vec::new();
+        let mut all_deps_present = true;
+        for dep in &m.depends_on {
+            let installed = host_slugs.contains(dep);
+            if !installed {
+                all_deps_present = false;
+            }
+            deps.push(serde_json::json!({
+                "slug": dep,
+                "installed": installed,
+            }));
+        }
+
+        // Recommendation:
+        let recommendation = match (gate_verdict, all_deps_present) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+
+        match recommendation {
+            "ready" => counts_ready += 1,
+            "blocked-by-hardware" => counts_blocked_hw += 1,
+            "blocked-by-missing-deps" => counts_blocked_deps += 1,
+            "needs-review" => counts_probe_unavail += 1,
+            _ => {}
+        }
+
+        if only_ready && recommendation != "ready" {
+            continue;
+        }
+
+        rows.push(serde_json::json!({
+            "slug": slug,
+            "name": m.name,
+            "version": m.version,
+            "category": m.category,
+            "summary": m.summary,
+            "phase": m.phase.as_str(),
+            "depends_on": deps,
+            "hardware_gate": {
+                "verdict": gate_verdict,
+                "unmet": gate_unmet,
+            },
+            "recommendation": recommendation,
+        }));
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R86",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": {
+                "category": category,
+                "only_ready": only_ready,
+            },
+            "probe_ok": caps.is_some(),
+            "counts": {
+                "total": rows.len(),
+                "ready": counts_ready,
+                "blocked_by_hardware": counts_blocked_hw,
+                "blocked_by_missing_deps": counts_blocked_deps,
+                "needs_review": counts_probe_unavail,
+            },
+            "options": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+
+    println!("── SD-R86 selfdefctl modules install-options (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    if only_ready {
+        println!("  filter:      only-ready");
+    }
+    println!(
+        "  totals:      ready={counts_ready}  blocked-by-hw={counts_blocked_hw}  \
+         blocked-by-deps={counts_blocked_deps}  needs-review={counts_probe_unavail}"
+    );
+    println!();
+    if rows.is_empty() {
+        println!("  (no available modules match the filter)");
+        return Ok(0);
+    }
+    for r in &rows {
+        let slug = r["slug"].as_str().unwrap_or("?");
+        let rec = r["recommendation"].as_str().unwrap_or("?");
+        let cat = r["category"].as_str().unwrap_or("?");
+        let phase = r["phase"].as_str().unwrap_or("?");
+        let summ = r["summary"].as_str().unwrap_or("");
+        let glyph = match rec {
+            "ready" => "✓",
+            "blocked-by-hardware" => "⛔",
+            "blocked-by-missing-deps" => "⤴",
+            "needs-review" => "?",
+            _ => "·",
+        };
+        println!("  {glyph} {slug}  [{cat} / {phase}]  → {rec}");
+        if !summ.is_empty() {
+            println!("      {summ}");
+        }
+        // Show blocking reason.
+        let hw = &r["hardware_gate"];
+        if hw["verdict"] == "blocked" {
+            if let Some(u) = hw["unmet"].as_array() {
+                let joined: Vec<String> = u
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+                if !joined.is_empty() {
+                    println!("      hardware unmet: {}", joined.join(", "));
+                }
+            }
+        }
+        if let Some(deps) = r["depends_on"].as_array() {
+            let missing: Vec<String> = deps
+                .iter()
+                .filter(|d| d["installed"] == false)
+                .filter_map(|d| d["slug"].as_str().map(String::from))
+                .collect();
+            if !missing.is_empty() {
+                println!("      missing deps: {}", missing.join(", "));
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R87 (SDD-026 Z-13 closure): topologically-ordered install plan
+/// for the SD-R86 AVAILABLE-and-READY set.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "the options of
+/// the dashboard which offer to install any previously non-installed
+/// modules or features and whatnot anyway and configure them".
+///
+/// SD-R86 surfaces what's installable. SD-R87 turns that into a
+/// runnable sequence: dependency-graph topological sort over the
+/// READY rows + per-step `selfdefctl modules apply --only <slug>`
+/// commands. The dashboard's "Install N modules" button consumes
+/// this directly; the operator's terminal pastes each command in
+/// turn (or pipes through `sh`).
+///
+/// Cycles in the dep graph are reported as a hard error (rc=1)
+/// with the cycle path quoted — operators cannot just silently
+/// skip them, the manifests need correcting.
+///
+/// Modules that depend on AVAILABLE-but-NOT-READY entries are
+/// downgraded to "skipped" with the blocking reason carried into
+/// the plan output (so the operator sees why X isn't being
+/// installed yet, not just that it's absent).
+///
+/// Exit codes:
+///   0  plan generated (may be empty if nothing is ready)
+///   1  cycle detected in the dependency graph
+///   2  usage error
+pub(crate) fn cmd_install_plan(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Collect AVAILABLE rows + classify each. Plan-readiness is more
+    // permissive than SD-R86 install-options readiness: a module is
+    // plan-eligible if its hardware gate passes AND each `depends_on`
+    // entry is EITHER already installed in host_config OR another
+    // hardware-passing available module (which the plan will install
+    // earlier). Deps on non-existent slugs OR hardware-blocked
+    // modules still bump the recommendation off "ready".
+    type ModInfo<'a> = (&'a String, &'a ModuleManifest, &'static str, Vec<String>);
+    let mut available: Vec<ModInfo> = Vec::new();
+
+    // First pass: classify hardware gate for every available slug so
+    // we know which slugs will be installable BY THIS PLAN.
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let (gate_verdict, _): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+        // A dep is satisfiable by the plan if: already installed OR
+        // it's another hardware-passing available module the plan
+        // will run earlier.
+        let missing_deps: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        let recommendation = match (gate_verdict, missing_deps.is_empty()) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+        available.push((slug, m, recommendation, missing_deps));
+    }
+
+    let ready_set: std::collections::BTreeSet<String> = available
+        .iter()
+        .filter(|(_, _, rec, _)| *rec == "ready")
+        .map(|(s, _, _, _)| s.to_string())
+        .collect();
+
+    // Build the dep-restricted subgraph: edges only between READY nodes.
+    let mut indeg: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, m, rec, _) in &available {
+        if *rec != "ready" {
+            continue;
+        }
+        for dep in &m.depends_on {
+            // Only edges WITHIN the READY set matter: deps on already-
+            // installed slugs are satisfied; deps on not-ready slugs
+            // bumped the recommendation off "ready" already.
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.to_string());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+
+    // Kahn's algorithm: emit in deterministic order (sort the queue
+    // each step so output is reproducible).
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+
+    let mut steps: Vec<serde_json::Value> = Vec::new();
+    for (i, slug) in order.iter().enumerate() {
+        let (_, m, _, _) = available.iter().find(|(s, _, _, _)| *s == slug).unwrap();
+        steps.push(serde_json::json!({
+            "order": i + 1,
+            "slug": slug,
+            "phase": m.phase.as_str(),
+            "category": m.category,
+            "summary": m.summary,
+            "depends_on": m.depends_on,
+            "command": format!("selfdefctl modules apply --only {slug}"),
+        }));
+    }
+
+    let mut skipped: Vec<serde_json::Value> = Vec::new();
+    for (slug, m, rec, missing) in &available {
+        if *rec == "ready" {
+            continue;
+        }
+        skipped.push(serde_json::json!({
+            "slug": slug,
+            "category": m.category,
+            "recommendation": rec,
+            "missing_deps": missing,
+            "summary": m.summary,
+        }));
+    }
+
+    let cycle_nodes: Vec<String> = if cycle_present {
+        ready_set
+            .iter()
+            .filter(|s| !order.contains(s))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R87",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": { "category": category },
+            "cycle_present": cycle_present,
+            "cycle_nodes": cycle_nodes,
+            "counts": {
+                "ready_total": ready_set.len(),
+                "ordered": steps.len(),
+                "skipped": skipped.len(),
+            },
+            "steps": steps,
+            "skipped": skipped,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(if cycle_present { 1 } else { 0 });
+    }
+
+    println!("── SD-R87 selfdefctl modules install-plan (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    println!(
+        "  totals:      ready={} ordered={} skipped={}",
+        ready_set.len(),
+        steps.len(),
+        skipped.len()
+    );
+    if cycle_present {
+        println!();
+        println!("  ⛔ DEPENDENCY CYCLE DETECTED — unresolved nodes:");
+        for n in &cycle_nodes {
+            println!("       - {n}");
+        }
+        println!("  Fix: inspect `depends_on` in each module manifest above.");
+        return Ok(1);
+    }
+    if steps.is_empty() {
+        println!();
+        println!("  (no READY modules to install)");
+    } else {
+        println!();
+        println!("  PLAN ({} step(s) — run in order):", steps.len());
+        for s in &steps {
+            let n = s["order"].as_u64().unwrap_or(0);
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let cat = s["category"].as_str().unwrap_or("?");
+            let phase = s["phase"].as_str().unwrap_or("?");
+            let cmd = s["command"].as_str().unwrap_or("?");
+            println!("    {n:>3}. {slug:<32} [{cat}/{phase}]");
+            println!("         $ {cmd}");
+        }
+    }
+    if !skipped.is_empty() {
+        println!();
+        println!("  SKIPPED ({} — not ready):", skipped.len());
+        for s in &skipped {
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let rec = s["recommendation"].as_str().unwrap_or("?");
+            println!("    · {slug:<32} → {rec}");
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+/// scaffold for one catalog module — the operator's next step
+/// AFTER SD-R87 install-plan tells them WHAT to install.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "[…] install
+/// any previously non-installed modules or features and whatnot
+/// anyway and configure them" (emphasis on "configure them").
+///
+/// Renders a `[modules."<slug>"]` block (or `[modules."<slug>#<inst>"]`
+/// when `--instance NAME` is passed for instanced modules) plus the
+/// matching `[daemon.*]` entries the manifest declares as
+/// daemon_requires. Operator copy-pastes the output into
+/// `/etc/selfdef/modules.toml` + `/etc/selfdef/selfdef.toml` and
+/// `apply` proceeds without a daemon_requires preflight failure.
+///
+/// Hardware-gate predicates are surfaced as `# requires: …`
+/// comments so the operator knows in advance what would block
+/// apply (rather than discovering it at apply-time).
+///
+/// Exit codes:
+///   0  scaffold emitted
+///   2  unknown slug / missing --instance for instanced modules
+pub(crate) fn cmd_config_scaffold(
+    dir: &Path,
+    slug: &str,
+    instance: Option<&str>,
+    json: bool,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let target = match mods.iter().find(|(s, _)| s == slug) {
+        Some((_, m)) => m,
+        None => {
+            eprintln!(
+                "ERROR unknown module slug {slug:?}; first 10 known: {:?}",
+                mods.iter().take(10).map(|(s, _)| s).collect::<Vec<_>>()
+            );
+            return Ok(2);
+        }
+    };
+    if target.instanced && instance.is_none() {
+        eprintln!(
+            "ERROR module {slug:?} is instanced — pass --instance <name> \
+             (e.g. wg0)"
+        );
+        return Ok(2);
+    }
+
+    // Build the modules.toml block.
+    let host_key = match instance {
+        Some(i) => format!("{slug}#{i}"),
+        None => slug.to_string(),
+    };
+
+    let mut modules_toml = String::new();
+    modules_toml.push_str(&format!("[modules.\"{host_key}\"]\n"));
+    if !target.requires_hardware.is_empty() {
+        modules_toml.push_str(
+            "# This module declares requires_hardware predicates — the \
+             apply\n# gate will SKIP it if the host doesn't satisfy:\n",
+        );
+        // Render hardware predicates as comments.
+        let dbg = format!("{:?}", target.requires_hardware);
+        for line in dbg.lines() {
+            modules_toml.push_str("#   ");
+            modules_toml.push_str(line);
+            modules_toml.push('\n');
+        }
+    }
+    if !target.depends_on.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module depends_on: {} — install these first.\n",
+            target.depends_on.join(", ")
+        ));
+    }
+    if !target.provides.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module provides: {} (downstream consumers can resolve).\n",
+            target.provides.join(", ")
+        ));
+    }
+
+    // Build the daemon.* block from daemon_requires.
+    let mut daemon_toml = String::new();
+    if !target.daemon_requires.is_empty() {
+        daemon_toml.push_str(&format!(
+            "# Paste into /etc/selfdef/selfdef.toml — module {slug:?} \
+             expects these keys.\n"
+        ));
+        // Group by [section] (everything before the last dotted path
+        // segment) for readable output.
+        let mut by_section: std::collections::BTreeMap<String, Vec<(String, String)>> =
+            Default::default();
+        for (dotted, req) in &target.daemon_requires {
+            let (section, leaf) = match dotted.rfind('.') {
+                Some(i) => (&dotted[..i], &dotted[i + 1..]),
+                None => ("", dotted.as_str()),
+            };
+            by_section
+                .entry(section.to_string())
+                .or_default()
+                .push((leaf.to_string(), req.render_value()));
+        }
+        for (section, kvs) in &by_section {
+            if !section.is_empty() {
+                daemon_toml.push_str(&format!("[{section}]\n"));
+            }
+            for (k, v) in kvs {
+                daemon_toml.push_str(&format!("{k} = {v}\n"));
+            }
+            daemon_toml.push('\n');
+        }
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R88",
+            "sdd_vector": "SDD-026 Z-13 follow-up",
+            "slug": slug,
+            "instance": instance,
+            "host_key": host_key,
+            "modules_toml": modules_toml,
+            "daemon_toml": daemon_toml,
+            "has_hardware_gate": !target.requires_hardware.is_empty(),
+            "has_daemon_requires": !target.daemon_requires.is_empty(),
+            "depends_on": target.depends_on,
+            "provides": target.provides,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R88 selfdefctl modules config-scaffold ({slug}) ──");
+    println!();
+    println!("# Paste into /etc/selfdef/modules.toml:");
+    println!();
+    print!("{modules_toml}");
+    if !daemon_toml.is_empty() {
+        println!();
+        print!("{daemon_toml}");
+    }
+    println!();
+    println!("# Next step:  selfdefctl modules apply --only {slug}");
+    Ok(0)
+}
+
+/// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+/// end-to-end. Generates the topologically-ordered plan + iterates
+/// each step, invoking `cmd_apply` with `--only <slug>` per step.
+/// Per-step outcome (ok / failed / skipped) is captured in a result
+/// vector + summarized.
+///
+/// Cycle-8 write-doctrine: dry-run by default. The `--apply` flag
+/// actually runs the underlying lifecycle (and writes to
+/// host_config when needed). Step failures HALT the rest of the
+/// plan unless `--continue-on-failure` is set (operator chooses
+/// between "all or nothing" and "best effort").
+///
+/// Exit codes:
+///   0  plan generated + every step succeeded (or all dry-run)
+///   1  plan cycle detected OR ≥1 step failed
+///   2  usage error
+pub(crate) fn cmd_apply_plan(
+    host_path: &Path,
+    dir: &Path,
+    category: Option<&str>,
+    apply: bool,
+    continue_on_failure: bool,
+    json: bool,
+) -> Result<i32> {
+    // First: get the install-plan. Re-derive via the same logic
+    // cmd_install_plan uses; capture the order + skipped rows.
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Classify (mirror of cmd_install_plan's pass-1).
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    let mut ready_set: std::collections::BTreeSet<String> = Default::default();
+    let mut deps_of: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if !gate_ok {
+            continue;
+        }
+        let missing: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        if missing.is_empty() {
+            ready_set.insert(slug.clone());
+            deps_of.insert(slug.clone(), m.depends_on.clone());
+        }
+    }
+
+    // Kahn's algorithm again (deterministic; same as cmd_install_plan).
+    let mut indeg: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, deps) in &deps_of {
+        for dep in deps {
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.clone());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+    if cycle_present {
+        let report = serde_json::json!({
+            "round": "SD-R93",
+            "vector": "SDD-026 Z-13 (apply-plan)",
+            "outcome": "cycle-detected",
+            "ready_set": ready_set.iter().cloned().collect::<Vec<_>>(),
+            "summary": "Dependency cycle in plan-ready set; install-plan refuses to execute. Fix manifests + retry.",
+        });
+        if json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            eprintln!(
+                "SD-R93 ABORTED — dependency cycle detected. Inspect with `selfdefctl modules install-plan`."
+            );
+        }
+        return Ok(1);
+    }
+
+    // Execute each step.
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut failed = 0usize;
+    let mut applied = 0usize;
+    for (i, slug) in order.iter().enumerate() {
+        let step_num = i + 1;
+        if !apply {
+            results.push(serde_json::json!({
+                "step": step_num, "slug": slug,
+                "outcome": "dry-run",
+                "command": format!("selfdefctl modules apply --only {slug}"),
+            }));
+            continue;
+        }
+        // Build LifecycleOpts for this one slug.
+        let step_opts = LifecycleOpts {
+            host_config: Some(host_path.to_path_buf()),
+            dir: Some(dir.to_path_buf()),
+            only: vec![slug.clone()],
+            ..Default::default()
+        };
+        match cmd_apply(&step_opts) {
+            Ok(0) => {
+                applied += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "ok", "rc": 0,
+                }));
+            }
+            Ok(rc) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "failed", "rc": rc,
+                }));
+                if !continue_on_failure {
+                    results.push(serde_json::json!({
+                        "step": step_num + 1, "slug": "(remaining-steps)",
+                        "outcome": "halted",
+                        "detail": "--continue-on-failure not set; halting after first failure",
+                    }));
+                    break;
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "error",
+                    "detail": e.to_string(),
+                }));
+                if !continue_on_failure {
+                    break;
+                }
+            }
+        }
+    }
+
+    let report = serde_json::json!({
+        "round": "SD-R93",
+        "vector": "SDD-026 Z-13 (apply-plan)",
+        "host_config": host_path.display().to_string(),
+        "modules_dir": dir.display().to_string(),
+        "dry_run": !apply,
+        "continue_on_failure": continue_on_failure,
+        "plan_steps": order.len(),
+        "applied_count": applied,
+        "failed_count": failed,
+        "results": results,
+        "summary": if !apply {
+            format!("{} step(s) — DRY-RUN", order.len())
+        } else if failed == 0 {
+            format!("{}/{} step(s) succeeded", applied, order.len())
+        } else {
+            format!("{} ok / {} failed ({} step(s) attempted)", applied, failed, applied + failed)
+        },
+    });
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("── SD-R93 selfdefctl modules apply-plan (SDD-026 Z-13) ──");
+        println!("  host_config: {}", host_path.display());
+        println!("  catalog:     {}", dir.display());
+        println!("  plan_steps:  {}", order.len());
+        println!("  mode:        {}", if apply { "APPLY" } else { "DRY-RUN" });
+        for r in report["results"].as_array().unwrap() {
+            let step = r["step"].as_u64().unwrap_or(0);
+            let slug = r["slug"].as_str().unwrap_or("?");
+            let outcome = r["outcome"].as_str().unwrap_or("?");
+            let mark = match outcome {
+                "ok" => "OK ",
+                "failed" => "FAIL",
+                "error" => "ERR ",
+                "dry-run" => "DRY",
+                "halted" => "STOP",
+                _ => "?  ",
+            };
+            println!("  [{mark}] {step:>3}. {slug}");
+        }
+        println!();
+        println!("  {}", report["summary"].as_str().unwrap_or(""));
+    }
+    Ok(if failed > 0 { 1 } else { 0 })
+}
+
 /// SD-R45: structured JSON variant of cmd_status. Emits per-module
 /// rows with manifest summary + [requires_hardware] presence + the
 /// live gate verdict for each. Operator-stable schema for fleet
