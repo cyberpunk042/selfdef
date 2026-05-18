@@ -27,6 +27,14 @@
 | **E11.M11** — Anti-minimization continued audit | selfdef per-module audit pass: "have we covered all angles? if so, can we improve it?"; output: per-module improvement backlog | ✓ shipped (SD-R-AUDIT-1: `crates/selfdef-audit-manifest` NEW crate — `AuditManifest` type + `[module]` header (id + label) + `[[findings]]` array with per-entry pattern/count/note; `PATTERN_IDS` const mirrors sovereign-os R456 8-pattern verbatim ordering (todo-no-anchor / empty-stub / skipped-no-followup / surface-gap / doc-gap / mandate-todo / minimize-phrase / partial-status); `validate()` enforces schema_version=1 + non-empty module fields + non-empty findings + each pattern ∈ PATTERN_IDS + no-duplicate-patterns + count>0-requires-non-empty-note (operator §1g 'do not minimize or settle for less' standing rule — any non-zero finding MUST have operator-discoverable rationale); `total_findings()` helper for cross-repo aggregation. 10 unit + 8 integration = 18 tests covering: PATTERN_IDS verbatim order match + 8-entry count + parses-well-formed + count-positive-without-note-rejected + unknown-pattern-rejected + duplicate-pattern-rejected + count-zero-no-note-required + total_findings-aggregates + serde round-trip + future-schema-version-rejected + empty-findings-rejected + each-of-8-patterns-parses-individually + programmatic construction + programmatic-count-without-note-rejected + ioerror-when-path-missing + total_findings-zero-when-all-count-zero. rustfmt + clippy -D warnings clean.) |
 | **E11.M12** — selfdef branch + never-ending PR setup | **DONE** — branch `claude/general-session-Wk97z` + PR #199 (draft, accumulating); this document IS the second accumulating artifact | ✓ shipped (PR #199) |
 
+## Cross-repo binding closures (sovereign-os instruments consuming selfdef TOMLs)
+
+In addition to the E11.M-counterpart rows above, the following SD-R-* bindings provide typed mirrors of sovereign-os instruments that don't map 1:1 to a single E11.M Module (because they're cross-cutting compliance instruments R453-R458):
+
+| Cross-repo ID | Sovereign-os instrument | Selfdef crate | Status |
+|---|---|---|---|
+| SD-R-DOC-MANIFEST-1 | R454 doc-coverage (E11.M1 auxiliary — typed mirror complementing SD-R-DOCS-1 prose) | `crates/selfdef-doc-manifest` — `DocManifest` + `DocEntry` (kind/state/path/reason) + `DocState` (Shipped/Waived/Planned) enum + `DOC_KINDS` const mirroring sovereign-os R454 6-kind order (readme/sdd/helptext/metric-inventory/mandate-row/man-page); `validate()` enforces Shipped-requires-path + Waived-requires-reason; 13 unit + 8 integration = 21 tests | ✓ shipped |
+
 ## selfdef-native rounds (not directly tied to a sovereign-os E11.M)
 
 | ID | Module | Status |
