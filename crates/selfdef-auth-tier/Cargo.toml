@@ -1,0 +1,17 @@
+[package]
+name = "selfdef-auth-tier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Typed 6-tier auth-tier catalog mirroring sovereign-os R450 (E11.M7). Per operator §1g: no auth → basic → advanced → social → enterprise → network-level. Cross-repo binding ID: SD-R-AUTH-TIER-1."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
