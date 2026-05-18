@@ -211,6 +211,16 @@ crates/                          One workspace, many focused crates.
                                  operator-facing bash installer at
                                  `packaging/bash/selfdefctl-bashrc-install.sh`;
                                  mirrors sovereign-os R447.
+  selfdef-doc-manifest/          SD-R-DOC-MANIFEST-1 — per-module TOML
+                                 declaring which of the 6 §1g doc
+                                 surfaces (readme/sdd/helptext/metric-
+                                 inventory/mandate-row/man-page) the
+                                 module ships; DocState enum
+                                 (Shipped/Waived/Planned) with
+                                 Shipped-requires-path + Waived-
+                                 requires-reason validation; consumed
+                                 by sovereign-os doc-coverage
+                                 (R454/R471).
 
 modules/                         Install modules — operator-activatable units.
 rules/                           Detection-as-code (sigma, tetragon, yara).
@@ -313,6 +323,7 @@ just documentation.
 | `SD-R-UX-CHECKLIST-1`         | `/etc/selfdef/ux-checklists/<m>.toml`     | `ux-design-audit` (R457/R464)  | 6-dimension UX-quality enum   |
 | `SD-R-AUDIT-1`                | `/etc/selfdef/audit-manifests/<m>.toml`   | `anti-minimization-audit` (R456/R466) | 8-pattern minimization catalog |
 | `SD-R-BASHRC-1`               | (operator-runnable installer)             | sister to `bashrc-install.sh` (R447) | sentinel-bounded bashrc block |
+| `SD-R-DOC-MANIFEST-1`         | `/etc/selfdef/doc-manifests/<m>.toml`     | `doc-coverage` (R454/R471)     | 6-kind doc-surface catalog    |
 
 Operators with both repos cloned can run
 `sovereign-osctl compliance status` to see runtime + doc + UX + audit +
