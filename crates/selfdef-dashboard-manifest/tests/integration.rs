@@ -3,8 +3,8 @@
 //! these manifests at runtime; the contract is enforced here.
 
 use selfdef_dashboard_manifest::{
-    from_toml_path, from_toml_str, validate, DashboardManifest,
-    DashboardSpec, AUTH_TIERS, SURFACES, SCHEMA_VERSION,
+    AUTH_TIERS, DashboardManifest, DashboardSpec, SCHEMA_VERSION, SURFACES, from_toml_path,
+    from_toml_str, validate,
 };
 use std::io::Write;
 use tempfile::NamedTempFile;

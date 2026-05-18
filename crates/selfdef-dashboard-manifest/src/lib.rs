@@ -137,9 +137,7 @@ pub fn from_toml_str(s: &str) -> Result<DashboardManifest, ManifestError> {
 }
 
 /// Load + validate a manifest from a filesystem path.
-pub fn from_toml_path<P: AsRef<Path>>(p: P)
-    -> Result<DashboardManifest, ManifestError>
-{
+pub fn from_toml_path<P: AsRef<Path>>(p: P) -> Result<DashboardManifest, ManifestError> {
     let s = std::fs::read_to_string(p)?;
     from_toml_str(&s)
 }
@@ -193,9 +191,8 @@ pub fn validate(m: &DashboardManifest) -> Result<(), ManifestError> {
     for s in &d.surfaces {
         if !SURFACES.contains(&s.as_str()) {
             return Err(ManifestError::Validation(format!(
-                "dashboard.surfaces[]={:?} not one of {:?} \
-                 (sovereign-os R453 taxonomy)",
-                s, SURFACES
+                "dashboard.surfaces[]={s:?} not one of {SURFACES:?} \
+                 (sovereign-os R453 taxonomy)"
             )));
         }
     }
@@ -227,8 +224,12 @@ surfaces      = ["dashboard", "api"]
         assert_eq!(
             AUTH_TIERS,
             [
-                "no-auth", "basic", "advanced", "social",
-                "enterprise", "network-level"
+                "no-auth",
+                "basic",
+                "advanced",
+                "social",
+                "enterprise",
+                "network-level"
             ]
         );
     }
@@ -241,8 +242,14 @@ surfaces      = ["dashboard", "api"]
         assert_eq!(
             SURFACES,
             [
-                "core", "cli", "tui", "api", "mcp",
-                "dashboard", "webapp", "service"
+                "core",
+                "cli",
+                "tui",
+                "api",
+                "mcp",
+                "dashboard",
+                "webapp",
+                "service"
             ]
         );
     }
@@ -282,8 +289,7 @@ surfaces      = ["dashboard", "api"]
 
     #[test]
     fn rejects_privileged_port() {
-        let bad = GOOD_MANIFEST.replace("port          = 8090",
-                                        "port          = 80");
+        let bad = GOOD_MANIFEST.replace("port          = 8090", "port          = 80");
         let err = from_toml_str(&bad).unwrap_err();
         assert!(format!("{err}").contains("port"));
     }
@@ -310,28 +316,23 @@ surfaces      = ["dashboard", "api"]
 
     #[test]
     fn rejects_empty_module() {
-        let bad = GOOD_MANIFEST.replace(
-            r#"module        = "agent-guard""#,
-            r#"module        = """#,
-        );
+        let bad =
+            GOOD_MANIFEST.replace(r#"module        = "agent-guard""#, r#"module        = """#);
         let err = from_toml_str(&bad).unwrap_err();
         assert!(format!("{err}").contains("module"));
     }
 
     #[test]
     fn rejects_empty_label() {
-        let bad = GOOD_MANIFEST.replace(
-            r#"label         = "Agent Guard""#,
-            r#"label         = """#,
-        );
+        let bad =
+            GOOD_MANIFEST.replace(r#"label         = "Agent Guard""#, r#"label         = """#);
         let err = from_toml_str(&bad).unwrap_err();
         assert!(format!("{err}").contains("label"));
     }
 
     #[test]
     fn rejects_future_schema_version() {
-        let bad = GOOD_MANIFEST.replace("schema_version = 1",
-                                        "schema_version = 99");
+        let bad = GOOD_MANIFEST.replace("schema_version = 1", "schema_version = 99");
         let err = from_toml_str(&bad).unwrap_err();
         assert!(format!("{err}").contains("schema_version"));
     }
