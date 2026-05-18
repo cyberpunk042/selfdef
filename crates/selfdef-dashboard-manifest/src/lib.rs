@@ -49,21 +49,17 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+use selfdef_auth_tier::{AuthTier, TIER_NAMES};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use thiserror::Error;
 
-/// 6-tier auth ladder. Mirrors sovereign-os R450 (E11.M7) operator
-/// §1g verbatim ordering (LOW → HIGH). Drift between this constant
-/// and the sovereign-os `AUTH_TIERS` table is a contract violation.
-pub const AUTH_TIERS: [&str; 6] = [
-    "no-auth",
-    "basic",
-    "advanced",
-    "social",
-    "enterprise",
-    "network-level",
-];
+/// 6-tier auth ladder, re-exported from `selfdef-auth-tier::TIER_NAMES`
+/// for backwards compatibility. Mirrors sovereign-os R450 (E11.M7)
+/// operator §1g verbatim ordering (LOW → HIGH). Drift between this
+/// const and the sovereign-os `AUTH_TIERS` table is a contract
+/// violation (caught by tests in BOTH crates).
+pub const AUTH_TIERS: [&str; 6] = TIER_NAMES;
 
 /// 8-surface taxonomy. Mirrors sovereign-os R453 (E11.M3) operator
 /// §1g verbatim ordering ("not just core, not just cli, not just TUI,
@@ -107,8 +103,10 @@ pub struct DashboardSpec {
     pub subpath: String,
     /// Human-readable label for `sovereign-osctl master-dashboard list`.
     pub label: String,
-    /// One of the [`AUTH_TIERS`] strings.
-    pub auth_tier: String,
+    /// Typed auth-tier baseline. Wire format is kebab-case via
+    /// [`selfdef_auth_tier::AuthTier`]'s serde rename — unknown
+    /// strings are rejected by serde BEFORE [`validate`] runs.
+    pub auth_tier: AuthTier,
     /// Optional list of §1g surfaces this dashboard exposes
     /// (subset of [`SURFACES`]).
     #[serde(default)]
@@ -181,12 +179,19 @@ pub fn validate(m: &DashboardManifest) -> Result<(), ManifestError> {
             "dashboard.label must be non-empty".into(),
         ));
     }
-    if !AUTH_TIERS.contains(&d.auth_tier.as_str()) {
-        return Err(ManifestError::Validation(format!(
-            "dashboard.auth_tier={:?} not one of {:?} \
-             (sovereign-os R450 ladder)",
-            d.auth_tier, AUTH_TIERS
-        )));
+    // R-refactor: auth_tier is now a typed AuthTier enum; serde
+    // rejects unknown strings before validate() runs. The match
+    // below is exhaustive at compile time — a NEW tier added on the
+    // sovereign-os side would require updating selfdef-auth-tier
+    // first, then this match would fail to compile (contract drift
+    // surfaces at build time, not run time).
+    match d.auth_tier {
+        AuthTier::NoAuth
+        | AuthTier::Basic
+        | AuthTier::Advanced
+        | AuthTier::Social
+        | AuthTier::Enterprise
+        | AuthTier::NetworkLevel => {}
     }
     for s in &d.surfaces {
         if !SURFACES.contains(&s.as_str()) {
@@ -260,7 +265,7 @@ surfaces      = ["dashboard", "api"]
         assert_eq!(m.schema_version, 1);
         assert_eq!(m.dashboard.module, "agent-guard");
         assert_eq!(m.dashboard.port, 8090);
-        assert_eq!(m.dashboard.auth_tier, "basic");
+        assert_eq!(m.dashboard.auth_tier, AuthTier::Basic);
         assert_eq!(m.dashboard.surfaces, vec!["dashboard", "api"]);
     }
 
@@ -270,10 +275,13 @@ surfaces      = ["dashboard", "api"]
             r#"auth_tier     = "basic""#,
             r#"auth_tier     = "wide-open""#,
         );
+        // serde rejects unknown enum variants → ManifestError::Toml.
         let err = from_toml_str(&bad).unwrap_err();
         let msg = format!("{err}");
-        assert!(msg.contains("auth_tier"), "got {msg}");
-        assert!(msg.contains("wide-open"), "got {msg}");
+        assert!(
+            msg.contains("toml") || msg.contains("variant"),
+            "expected serde-level rejection; got {msg}"
+        );
     }
 
     #[test]

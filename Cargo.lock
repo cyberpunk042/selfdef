@@ -2389,6 +2389,7 @@ dependencies = [
 name = "selfdef-dashboard-manifest"
 version = "0.1.0"
 dependencies = [
+ "selfdef-auth-tier",
  "serde",
  "tempfile",
  "thiserror 2.0.18",

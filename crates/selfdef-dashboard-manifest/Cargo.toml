@@ -13,6 +13,7 @@ description = "Per-module dashboard manifest (SD-R-DASHBOARD-MANIFEST-1; soverei
 workspace = true
 
 [dependencies]
+selfdef-auth-tier = { path = "../selfdef-auth-tier" }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }

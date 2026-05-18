@@ -2,6 +2,7 @@
 //! binding: sovereign-os R452 (master-dashboard aggregator) reads
 //! these manifests at runtime; the contract is enforced here.
 
+use selfdef_auth_tier::AuthTier;
 use selfdef_dashboard_manifest::{
     AUTH_TIERS, DashboardManifest, DashboardSpec, SCHEMA_VERSION, SURFACES, from_toml_path,
     from_toml_str, validate,
@@ -48,7 +49,7 @@ fn programmatic_construction_passes_validation() {
             healthz_path: "/healthz".into(),
             subpath: "/polarproxy/".into(),
             label: "PolarProxy".into(),
-            auth_tier: "social".into(),
+            auth_tier: AuthTier::Social,
             surfaces: vec!["dashboard".into(), "api".into()],
         },
     };
