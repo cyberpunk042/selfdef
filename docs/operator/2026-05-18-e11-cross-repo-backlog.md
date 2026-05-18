@@ -34,6 +34,7 @@ In addition to the E11.M-counterpart rows above, the following SD-R-* bindings p
 | Cross-repo ID | Sovereign-os instrument | Selfdef crate | Status |
 |---|---|---|---|
 | SD-R-DOC-MANIFEST-1 | R454 doc-coverage (E11.M1 auxiliary — typed mirror complementing SD-R-DOCS-1 prose) | `crates/selfdef-doc-manifest` — `DocManifest` + `DocEntry` (kind/state/path/reason) + `DocState` (Shipped/Waived/Planned) enum + `DOC_KINDS` const mirroring sovereign-os R454 6-kind order (readme/sdd/helptext/metric-inventory/mandate-row/man-page); `validate()` enforces Shipped-requires-path + Waived-requires-reason; 13 unit + 8 integration = 21 tests | ✓ shipped |
+| SD-R-SATURATION-1 | sister to sovereign-os R473 — selfdef-side workspace saturation invariant (meta-test asserting all 8 cross-repo mirror crates exist + every operator-named taxonomy const ships with the correct array length + cross-crate aliases agree + binding-IDs are unique + taxonomy entries are kebab-case with no duplicates) | `crates/selfdef-cross-repo-saturation` — meta-crate with `Cargo.toml` depending on all 8 mirror crates (workspace build fails if any is renamed/removed) + 10 integration tests covering SATURATION-A through SATURATION-J | ✓ shipped |
 
 ## selfdef-native rounds (not directly tied to a sovereign-os E11.M)
 

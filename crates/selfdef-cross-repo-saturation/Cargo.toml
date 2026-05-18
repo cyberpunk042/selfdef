@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-cross-repo-saturation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "SD-R-SATURATION-1: cross-repo typed-mirror saturation invariant. Asserts every claimed selfdef-side mirror crate exists in the workspace, has its verbatim-order const exported, and ships a drift-detection unit test. Sister to sovereign-os R473."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-auth-tier = { path = "../selfdef-auth-tier" }
+selfdef-dashboard-manifest = { path = "../selfdef-dashboard-manifest" }
+selfdef-history-sink = { path = "../selfdef-history-sink" }
+selfdef-surface-manifest = { path = "../selfdef-surface-manifest" }
+selfdef-ux-checklist = { path = "../selfdef-ux-checklist" }
+selfdef-audit-manifest = { path = "../selfdef-audit-manifest" }
+selfdef-doc-manifest = { path = "../selfdef-doc-manifest" }
+selfdef-bashrc-install = { path = "../selfdef-bashrc-install" }

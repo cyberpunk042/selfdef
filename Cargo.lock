@@ -2352,6 +2352,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-cross-repo-saturation"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-manifest",
+ "selfdef-auth-tier",
+ "selfdef-bashrc-install",
+ "selfdef-dashboard-manifest",
+ "selfdef-doc-manifest",
+ "selfdef-history-sink",
+ "selfdef-surface-manifest",
+ "selfdef-ux-checklist",
+]
+
+[[package]]
 name = "selfdef-daemon"
 version = "0.1.0"
 dependencies = [

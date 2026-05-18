@@ -221,6 +221,17 @@ crates/                          One workspace, many focused crates.
                                  requires-reason validation; consumed
                                  by sovereign-os doc-coverage
                                  (R454/R471).
+  selfdef-cross-repo-saturation/ SD-R-SATURATION-1 — meta-test crate
+                                 that depends on all 8 cross-repo
+                                 mirror crates above + asserts (10
+                                 integration tests) workspace
+                                 saturation: count floor + crate-name
+                                 uniqueness + binding-ID uniqueness +
+                                 array-length match + cross-crate
+                                 alias agreement + bashrc constants +
+                                 kebab-case taxonomy-entry hygiene +
+                                 no duplicate entries within a
+                                 taxonomy. Sister to sovereign-os R473.
 
 modules/                         Install modules — operator-activatable units.
 rules/                           Detection-as-code (sigma, tetragon, yara).
