@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-evidence-redaction-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-channel evidence redaction policy — declares which redactors (email/ipv4/ipv6/ssh-key/bearer-token/path-home) apply to evidence outbound to each external channel (Loki/OpenSearch/Discord/Slack/SMTP/PagerDuty/Wall). Composes selfdef-audit-redaction."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-audit-redaction = { path = "../selfdef-audit-redaction" }
+selfdef-incident-classifier = { path = "../selfdef-incident-classifier" }
+
+[features]
+default = []

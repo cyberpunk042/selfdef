@@ -2878,6 +2878,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-evidence-redaction-policy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-redaction",
+ "selfdef-incident-classifier",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-evidence-search"
 version = "0.1.0"
 dependencies = [
