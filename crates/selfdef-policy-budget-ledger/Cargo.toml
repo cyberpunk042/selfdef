@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-budget-ledger"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-subject token/cost ledger — sliding-window counters of tokens_in + tokens_out + millicents spent per (subject, provider). When monthly/daily budget breached, daemon emits a TooExpensive incident + forces Ask outcomes for that subject."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
