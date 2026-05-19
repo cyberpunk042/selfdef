@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-issuer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Companion engine to selfdef-grants-mirror — given a signed operator request, issues a typed grant (filesystem/network/capability/communication/sandbox) with per-kind validation + TTL ceiling + MS003 signature checks. Per MS035 + MS037 + MS038 + R09175 (default 60s TTL)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+
+[features]
+default = []
