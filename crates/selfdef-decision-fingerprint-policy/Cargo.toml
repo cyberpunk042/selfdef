@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-fingerprint-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS decision-fingerprint authority. Each decision input (subject, action, profile, mode, tool_version_digest, prompt_template_id) is canonicalized then FNV-1a hashed to a u64 fingerprint. Two decisions with identical fingerprints SHOULD produce identical outcomes. Drives the decision cache key + replay correlation."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
