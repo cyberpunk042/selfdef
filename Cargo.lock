@@ -2582,6 +2582,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-event-emitter"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-log-writer",
+ "selfdef-policy-bus",
+ "selfdef-policy-decision",
+ "selfdef-trace-span",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-evidence-ledger"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,25 @@
+[package]
+name = "selfdef-event-emitter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Composite event emitter — for one decided action, builds PolicyDecision + TraceSpan + AuditRecord + DispatchPlan in coordinated form. Wires selfdef-policy-decision + selfdef-trace-span + selfdef-audit-log-writer + selfdef-policy-bus."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-trace-span = { path = "../selfdef-trace-span" }
+selfdef-audit-log-writer = { path = "../selfdef-audit-log-writer" }
+selfdef-policy-bus = { path = "../selfdef-policy-bus" }
+
+[features]
+default = []
