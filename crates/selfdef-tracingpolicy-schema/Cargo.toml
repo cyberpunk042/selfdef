@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tracingpolicy-schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS017 agent-guard Tetragon TracingPolicy schema. Typed shape the daemon emits to Tetragon for kprobe + tracepoint policies guarding AI agents in Podman containers. Per MS017 + MS016 + dump 549-556."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
