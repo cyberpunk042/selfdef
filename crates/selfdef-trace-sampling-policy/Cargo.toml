@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-trace-sampling-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS trace-sampling policy. Per-SpanClass sample_rate_ppm (parts-per-million) so high-volume spans don't drown the audit log while keeping all DecisionDenial and CanaryTrip spans (force_keep). Deterministic FNV-1a-of-trace_id sampling so the same trace either survives or is dropped consistently."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
