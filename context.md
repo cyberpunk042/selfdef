@@ -167,8 +167,12 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 163 crates total (was 83 pre-session, +80 fresh this session).
-Full workspace test suite: 2808 passing tests. Newest:
+Selfdef workspace at 166 crates total (was 83 pre-session, +83 fresh this session).
+Full workspace test suite: 2834 passing tests. Newest:
+`selfdef-decision-router` (composite 4-outcome gate),
+`selfdef-action-replay-counter` (sliding-window repeat counter),
+`selfdef-substrate-readiness` (8-check daemon bring-up gate).
+Earlier:
 `selfdef-evidence-redaction-policy` (per-channel × redactor),
 `selfdef-policy-decision-batcher` (MAX_BATCH=128 + FNV-1a hash). Newest batch:
 `selfdef-grant-receipt`, `selfdef-audit-summary-digest`,
