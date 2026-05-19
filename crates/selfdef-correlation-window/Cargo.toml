@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-correlation-window"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side sliding-window correlation tracker — per-subject moving window of recent decisions used by the anomaly detector to spot bursts (e.g. >10 decisions in 60s). Caller decides what counts as 'recent'; the tracker only stores timestamps and counts."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
