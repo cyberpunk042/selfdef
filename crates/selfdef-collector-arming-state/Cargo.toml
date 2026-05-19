@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-collector-arming-state"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-collector arming state machine. Each of the 7 collectors transitions through Disabled→Arming→Armed→Active→Draining→Quarantined with explicit guards on each transition; the daemon serializes a 7-element state vector at boot + per state-change. Composes with selfdef-collector-source-taxonomy + selfdef-collector-quarantine-ledger."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-collector-source-taxonomy = { path = "../selfdef-collector-source-taxonomy" }
+
+[features]
+default = []
