@@ -56,6 +56,13 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | selfdef-state-snapshot (unified IPS state envelope composing 6 sub-crates per MS041 R09757 + canonical-path /var/lib/selfdef/state-snapshot.json) | ✓ shipped (11 passing tests) | `crates/selfdef-state-snapshot/` |
 | selfdef-sandbox-dispatcher (MS036 tier selection engine — companion engine to selfdef-sandbox-mirror; full decision matrix across side-effect × network × trust × risk) | ✓ shipped (15 passing tests) | `crates/selfdef-sandbox-dispatcher/` |
 | selfdef-quarantine-engine (MS042 4-disposition decision engine — companion engine to selfdef-quarantine-mirror; severity + recidivism + SecretAccess escalator + whitelist override) | ✓ shipped (15 passing tests) | `crates/selfdef-quarantine-engine/` |
+| selfdef-evidence-ledger (MS040 R09408-R09410 gate-evidence 100-day retention + trace_id/actor index) | ✓ shipped (11 passing tests) | `crates/selfdef-evidence-ledger/` |
+| selfdef-functional-modules (MS006 14-functional-module catalog) | ✓ shipped (11 passing tests) | `crates/selfdef-functional-modules/` |
+| selfdef-grant-issuer (companion engine to selfdef-grants-mirror) | ✓ shipped (11 passing tests) | `crates/selfdef-grant-issuer/` |
+| selfdef-policy-bus (MS033 6-subsystem dispatch fabric: Observability/EventBus/Correlator/AuditLog/NotifyChain/OperatorQueue) | ✓ shipped (10 passing tests) | `crates/selfdef-policy-bus/` |
+| selfdef-trust-score-engine (companion engine to selfdef-trust-score-mirror; 9-reason canonical deltas + 0..1000 clamp) | ✓ shipped (18 passing tests) | `crates/selfdef-trust-score-engine/` |
+| selfdef-boundary-summary (R08591 5-boundary SATURATED composite: MS034/MS035/MS036/MS037/MS038) | ✓ shipped (13 passing tests) | `crates/selfdef-boundary-summary/` |
+| **selfdef Rust workspace: 28 crates total** | ✓ MILESTONE | `crates/selfdef-*` |
 | **9 of 9 mirror crates COMPLETE** — 100 passing tests total across MS007 typed-mirror trio | ✓ MILESTONE | `crates/selfdef-*-mirror/` |
 | selfdef-web minimal-web bundle (R10166-R10173 + R10212 + R10220 — localhost:7575, 4-panel layout, SSE 2s refresh, read-only default + operator-key-gated mutations, sovereignty-clean static bundle) | ✓ shipped (13 passing tests + ux-harness L1 minimal-web check active) | `crates/selfdef-web/` |
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
