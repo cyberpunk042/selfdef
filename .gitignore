@@ -39,3 +39,8 @@ docs/book/
 
 # Snapshots (insta)
 **/snapshots/*.new
+
+# Python build artifacts
+__pycache__/
+*.pyc
+*.pyo
