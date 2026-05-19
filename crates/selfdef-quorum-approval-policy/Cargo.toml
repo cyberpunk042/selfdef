@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-quorum-approval-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS quorum-approval authority. High-risk actions require N-of-M distinct operator approvals before the gate clears. Approvals accumulate; duplicates from the same operator do not double-count. Expiry, vetoes, and reset semantics are encoded so that a single dissent vacates the approval pool."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
