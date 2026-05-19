@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-temperature-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS LLM-temperature authority. Per-ExecutionMode allowed temperature range. clamp(mode, requested) returns the value clipped into [min, max]; admit() rejects values outside the range. Prevents over-creative sampling in Production / DryRun / Replay where determinism matters."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
