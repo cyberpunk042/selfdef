@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-sandbox-dispatcher"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS036 sandbox tier dispatcher engine. Given a tool name + declared side-effect class + risk class, returns the canonical MS036 tier (A/B/C/D) per E0362-E0365 + F04527 cross-cycle mapping. Companion to selfdef-sandbox-mirror (which exposes the allocations); this crate is the decision engine that PICKS the tier."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-network-boundary = { path = "../selfdef-network-boundary" }
+selfdef-sandbox-mirror = { path = "../selfdef-sandbox-mirror" }
+
+[features]
+default = []
