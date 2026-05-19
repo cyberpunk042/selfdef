@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-output-channel-allowlist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS output-channel allowlist. Maps (ContextSensitivity × OutputChannel) → Allow/Deny matrix. Distinct from clipboard-egress (which is just clipboard); this covers ALL output channels: Stdout, AuditLog, OperatorChat, Webhook, EmailOut, Notification, File."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
