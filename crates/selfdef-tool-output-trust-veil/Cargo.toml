@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-output-trust-veil"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS tool-output trust veil. Wraps tool outputs in a typed Veil { source_tool, trust_tier, content } so downstream consumers (LLM context assembler, audit log, cockpit display) must explicitly opt into the trust tier before using the bytes. Prevents implicit promotion of Untrusted content into Operator-trusted prompt segments."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
