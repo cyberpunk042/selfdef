@@ -338,3 +338,14 @@ Total this resume: 20 selfdef IPS-authority crates. Workspace 185.
   classes; tier-vs-class inequality gate)
 
 Total this resume: 25 selfdef IPS-authority crates. Workspace 190.
+
+### Fifth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-pii-detection-policy` (Email/Phone/SsnUs/CreditCard/IpV4
+  pattern detector with Luhn check for cards)
+- `selfdef-prompt-context-quota` (5-class System/Operator/Persistent/
+  Tool/Untrusted sub-cap + global cap with per-class actual report)
+- `selfdef-recovery-snapshot-authority` (Hourly/Daily/Weekly classes
+  with min_kept per class; select_for_recovery at-or-before)
+
+Total this resume: 28 selfdef IPS-authority crates. Workspace 193.
