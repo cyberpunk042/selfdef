@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-anomaly-baseline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS anomaly-baseline tracker. Maintains a bounded ring of recent values for a metric, computes mean + population stddev, and classifies new observations as Normal / Suspect / Anomalous based on z-score against operator-configured thresholds. Pure stateful computation."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
