@@ -167,13 +167,28 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 121 crates total (was 83 pre-session, +38 fresh this session).
-Full workspace test suite: 2403 passing tests. Latest additions include
+Selfdef workspace at 128 crates total (was 83 pre-session, +45 fresh this session).
+Full workspace test suite: 2403+ passing tests. Latest additions include
 `selfdef-grant-coverage-summary` (per-actor × kind rollup),
 `selfdef-trust-promotion-feed` (auto-suggest promotions/demotions),
 `selfdef-decision-explainer` (operator rationale chain),
 `selfdef-policy-conflict-detector` (3-class policy stream scanner),
 `selfdef-grant-overlap-detector` (per-kind scope overlap detection).
+
+### Boundary correction batch (2026-05-19 post-/goal-reissue)
+
+After operator critique ("things in Sovereign-OS you should have done in
+Selfdef and used in Sovereign-OS"), the following IPS-authority crates
+were shipped to selfdef as the source-of-truth that the (already-shipped)
+sovereign-os runtime crates mirror:
+
+- `selfdef-execution-mode-policy` — 7-mode capability-tuple authority
+- `selfdef-mode-transition-authority` — Forbidden/DirectShift/Snapshot/Routine gate matrix
+- `selfdef-tool-capability-policy` — (tool × mode × profile) admission
+- `selfdef-toggle-audit-authority` — 5-scope MS003-signed audit
+- `selfdef-replay-source-authority` — Replay-mode entry gate
+- `selfdef-policy-bundle-signature` — operator-signed substrate manifest
+- `selfdef-routing-decision-authority` — (ProviderClass × Profile × Mode) gate
 Final-leg crates beyond the rolled-up batch:
 `selfdef-grant-application-queue`, `selfdef-network-egress-decision`,
 `selfdef-process-spawn-registry`, `selfdef-pattern-match-engine`,
