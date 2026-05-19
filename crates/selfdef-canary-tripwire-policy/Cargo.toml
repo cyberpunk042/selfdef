@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-canary-tripwire-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS canary-tripwire policy. Each Tripwire is (id, expected_state_hash, expected_path, severity). check() compares observed against expected and emits a Trip record on mismatch with a severity that downstream gates (alert, kill-switch, operator notify) react to. Pure deterministic comparison."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []

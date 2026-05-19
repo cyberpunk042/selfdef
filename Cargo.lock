@@ -2328,6 +2328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-canary-tripwire-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-capability-mirror"
 version = "0.1.0"
 dependencies = [
