@@ -1,0 +1,38 @@
+name        = "hardware-tune-cache"
+version     = "0.1.0"
+summary     = "Cache host-tuned compile flags from `selfdefctl hardware tune` to /etc/selfdef/hardware-tune.env for downstream build pipelines (SD-R23)"
+category    = "hardware"
+
+depends_on  = []
+conflicts   = []
+provides    = ["hardware-tune-env"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "selfdefctl" },
+]
+
+# SD-R14 [requires_hardware]: this module only makes sense on hosts
+# with AVX-512 VNNI. Generic CI hosts + minimal VMs don't need a
+# cached tune file because `-march=native` is already correct + the
+# selfdef-tune.sh fallback returns the right thing.
+#
+# On a SAIN-01 / workstation-class box this module shines: the tuned
+# env file lets bitnet.cpp / Wasm-AOT / kernel rebuilds pick up the
+# host's actual AVX-512 capabilities (including BF16/FP16/VNNI flags
+# + ZMM-width hint) without each build script doing its own probe.
+[requires_hardware]
+avx512_vnni    = true
+memory_gib_min = 32   # threshold below which workstation-style builds aren't relevant
+
+instanced = false
+
+# `pre` so the env file is in place before observability / any
+# downstream module that wants to source it.
+phase = "pre"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"

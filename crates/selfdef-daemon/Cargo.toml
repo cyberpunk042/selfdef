@@ -38,6 +38,9 @@ selfdef-integration-smtp = { workspace = true }
 selfdef-integration-twilio = { workspace = true }
 selfdef-integration-wall = { workspace = true }
 selfdef-integration-write = { workspace = true }
+selfdef-integration-shared-audit-summary = { workspace = true }
+selfdef-integration-oracle-triage = { workspace = true }
+selfdef-hardware = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }
@@ -59,12 +62,12 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-journald = { workspace = true }
 sd-notify = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 wiremock = { workspace = true }
 async-trait = { workspace = true }
-serde_json = { workspace = true }
 selfdef-collector-canary = { workspace = true }
 selfdef-collector-eventstream = { workspace = true }
 selfdef-collector-ebpf = { workspace = true }

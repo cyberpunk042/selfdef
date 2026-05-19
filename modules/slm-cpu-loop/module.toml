@@ -1,0 +1,66 @@
+name        = "slm-cpu-loop"
+version     = "0.1.0"
+summary     = "SLM-on-CPU agent loop runtime — pins a small language model (Phi-4-mini / Qwen3-1.7B class) to CCD-0 cores for low-latency background agent work (SD-R72)"
+category    = "inference"
+
+depends_on  = ["hardware-tune-cache"]
+conflicts   = []
+provides    = ["slm-loop-runtime"]
+consumes    = ["hardware-tune-env"]
+
+requires    = [
+    { kind = "binary", value = "selfdefctl" },
+]
+
+# SD-R72 — third real demonstrator of the cycle-3 hardware-exploit
+# surface (after SD-R28 bitnet-gpu-inference + SD-R48 wasm-aot-cache).
+#
+# This module showcases the SD-R64 + SD-R68 cycle-3 predicates AND the
+# R212 (sovereign-os) model-class taxonomy:
+#
+#   - ternary_aot_capable_required: false   (SLMs run dense, not ternary)
+#   - zmm_int8_lanes_min:        32          (AVX2 minimum; 64 preferred
+#                                            for VNNI hot path)
+#   - host_features_required:    "avx2,fma"  (load-bearing for the
+#                                            llama.cpp dense kernels)
+#
+# Plus the existing cycle-1+2 gates:
+#   - memory_gib_min: 8       (Phi-4-mini bf16 needs ~4 GiB +
+#                              tokenizer overhead + KV cache headroom)
+#   - gpu_count_min:  0       (CPU-only by design)
+#
+# Operator workflow:
+#   1. selfdefctl modules apply slm-cpu-loop
+#      → installs /etc/selfdef/slm-loop.env with CCD-0 core mask +
+#        model path placeholder + start command template
+#   2. Operator sets SELFDEF_SLM_MODEL=Phi-4-mini-instruct (or any
+#      catalog id with class=slm)
+#   3. systemd-run wrapper picks up the env file
+#
+# This module composes with:
+#   - SD-R70 selfdefctl hardware aot-script (for AOT precompile)
+#   - SD-R67 selfdefctl hardware posture (operator confirms VNNI path)
+#   - R212 sovereign-os models query --class slm (find the right model)
+
+[requires_hardware]
+memory_gib_min       = 8
+zmm_int8_lanes_min   = 32
+host_features_required = "avx2,fma"
+
+# R212 (sovereign-os) model-class taxonomy mirror — affinity tag.
+# Selfdef registry currently doesn't enforce the class taxonomy at
+# the schema layer (sovereign-os is the strict source), but this
+# field communicates intent to operators reading the module.toml
+# alongside R212 catalog entries with class=slm.
+[metadata]
+intended_model_class = "slm"
+intended_purpose     = ["chat", "agent", "function-calling"]
+
+instanced = false
+
+# `main` phase — hardware-tune-cache (pre-phase) has already populated
+# /etc/selfdef/hardware-tune.env by the time we run.
+phase = "main"
+
+[install]
+kind = "script"

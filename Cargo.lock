@@ -2176,6 +2176,7 @@ dependencies = [
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-hardware",
  "selfdef-integration-ntfy",
  "selfdef-notifier",
  "selfdef-notifier-engine",
@@ -2185,6 +2186,8 @@ dependencies = [
  "selfdef-store",
  "serde",
  "serde_json",
+ "serde_yaml_ng",
+ "sha2",
  "tempfile",
  "time",
  "tokio",
@@ -2386,11 +2389,14 @@ dependencies = [
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-ebpf-common",
+ "selfdef-hardware",
  "selfdef-integration-discord",
  "selfdef-integration-loki",
  "selfdef-integration-ntfy",
  "selfdef-integration-opensearch",
+ "selfdef-integration-oracle-triage",
  "selfdef-integration-pagerduty",
+ "selfdef-integration-shared-audit-summary",
  "selfdef-integration-signal",
  "selfdef-integration-slack",
  "selfdef-integration-smtp",
@@ -2442,6 +2448,18 @@ name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "selfdef-hardware"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tracing",
 ]
 
 [[package]]
@@ -2531,6 +2549,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-integration-oracle-triage"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "reqwest",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "selfdef-integration-pagerduty"
 version = "0.1.0"
 dependencies = [
@@ -2547,6 +2583,22 @@ dependencies = [
  "tracing",
  "uuid",
  "wiremock",
+]
+
+[[package]]
+name = "selfdef-integration-shared-audit-summary"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "selfdef-core",
+ "selfdef-notifier",
+ "selfdef-notifier-orchestrator",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

@@ -10,10 +10,16 @@
 mod doctor;
 mod emit;
 mod follow;
+mod hardware;
 mod init;
+mod mcp;
+mod models;
 mod modules;
 mod notify;
 mod paths;
+mod perimeter;
+mod repl;
+mod wizard;
 
 use std::path::PathBuf;
 
@@ -70,6 +76,13 @@ enum Command {
         #[command(subcommand)]
         action: ModulesAction,
     },
+    /// SD-R34: 1-bit / ternary / quantised model registry. List
+    /// registered models or dry-run "would this land on THIS
+    /// host?" via the SD-R14 + SD-R26 + SD-R32 predicate engine.
+    Models {
+        #[command(subcommand)]
+        action: ModelsAction,
+    },
     /// Manage the API surface (token rotation, etc).
     Api {
         #[command(subcommand)]
@@ -122,8 +135,236 @@ enum Command {
         #[command(subcommand)]
         action: InitAction,
     },
+    /// SDD-015: Tetragon perimeter coexistence — inspect / verify
+    /// the boundary between selfdef-authored `agent-guard-*`
+    /// TracingPolicies and sovereign-os's host-scoped
+    /// `sovereign-kernel-fence.yaml`.
+    Perimeter {
+        #[command(subcommand)]
+        action: PerimeterAction,
+    },
+    /// SD-R11: first-time-operator setup walkthrough — probes
+    /// hardware, surfaces Sain01Match verdict, recommends a config
+    /// snippet, prints next-step commands. Pure-read; never writes
+    /// config (operator copy-pastes — authority always wins).
+    Wizard {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-017: SAIN-01 hardware inventory + Sain01Match verdict.
+    /// Probes the host for CPU features, memory, GPU device nodes,
+    /// motherboard ID + PCIe state, and compares to the SAIN-01
+    /// target. Read-only; safe on any host (graceful on missing
+    /// kernel surfaces).
+    Hardware {
+        #[command(subcommand)]
+        action: Option<HardwareAction>,
+        /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
+    /// manifest surface. The future selfdef-mcp-server consumes the
+    /// SAME manifest the operator's `claude-code` (or any MCP client)
+    /// reads to learn what selfdef verbs are exposable as tools.
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+    /// SD-R85 (SDD-026 Z-12 foundation): operator-facing REPL surface.
+    /// Multi-tier programming layer per the operator directive:
+    ///   Tier 0  Programming        (Rust crates linked to selfdef-core)
+    ///   Tier 1  Proto-Programming  (Python REPL atop selfdef-cli verbs;
+    ///                               THIS round seeds Tier 1)
+    ///   Tier 2  Proto-Proto-Prog   (operator-defined macros + custom CoT
+    ///                               loops compiling to Tier 1 calls;
+    ///                               future round)
+    Repl {
+        #[command(subcommand)]
+        action: ReplAction,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum McpAction {
+    /// Print the JSON tool manifest the future MCP server would
+    /// expose. Operator-readable schema for every selfdef verb that
+    /// is safe to expose as a stateless MCP tool call.
+    Tools {
+        /// Emit machine-readable JSON (default) or human-readable
+        /// table.
+        #[arg(long)]
+        human: bool,
+    },
+    /// SD-R91 (SDD-026 Z-11 closure): stdio JSON-RPC MCP server that
+    /// exposes the SD-R84 read-only tool manifest. Implements
+    /// `initialize`, `tools/list`, `tools/call`. Each `tools/call`
+    /// invokes the matching `selfdefctl …` subprocess + returns its
+    /// JSON output as a single text content block.
+    ///
+    /// Wire format: line-delimited JSON-RPC 2.0 (one request per
+    /// line, one response per line). Cycle-8 read-only doctrine:
+    /// only tools with `category == "read-only"` are callable;
+    /// requests for write tools return JSON-RPC error -32601.
+    Serve {
+        /// Handle exactly N requests then exit (used by L3 tests).
+        #[arg(long)]
+        exit_after: Option<u32>,
+        /// SD-R92: select wire framing.
+        ///
+        ///   line       SD-R91 line-delimited JSON-RPC (testable, jq-able)
+        ///   lsp        SD-R92 LSP-style Content-Length framing (spec MCP)
+        ///
+        /// Default is `line` for backwards compat with SD-R91. Real
+        /// MCP clients (claude-code et al.) speak `lsp`.
+        #[arg(long, default_value = "line")]
+        framing: String,
+        /// SD-R94: bind a TCP listener instead of reading from stdin.
+        /// HOST:PORT form, e.g. `127.0.0.1:8444`. Each accepted
+        /// connection runs the same per-line/per-LSP-message dispatch
+        /// loop, then closes. Cycle-8 doctrine: read-only tools only;
+        /// `--token-env VAR` enforces a per-connection Bearer-style
+        /// preamble (first line MUST be `Authorization: Bearer
+        /// <env-value>` for the connection to handle requests).
+        #[arg(long)]
+        tcp: Option<String>,
+        /// SD-R94: name of env var holding the connection token.
+        /// When set with `--tcp`, every connection MUST send the
+        /// Authorization preamble before its first JSON-RPC message.
+        /// Operator-supplied tokens NEVER live in-repo (SDD-009).
+        #[arg(long)]
+        token_env: Option<String>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum ReplAction {
+    /// SD-R85: print the REPL bootstrap script the operator dumps
+    /// into their Python session (or `python3 -i -c "$(selfdefctl
+    /// repl bootstrap)"`). Imports the selfdef-cli subprocess
+    /// wrappers + sets up the operator namespace. Tier 1
+    /// (Proto-Programming) seed.
+    Bootstrap,
+    /// SD-R85: print the manifest describing the REPL tiers + which
+    /// callables each tier exposes. JSON by default; --human for
+    /// banner.
+    Tiers {
+        #[arg(long)]
+        human: bool,
+    },
+    /// SD-R90 (SDD-026 Z-12 follow-up): print ready-to-paste example
+    /// Tier 2 (Proto-Proto-Programming) macros built on top of the
+    /// Tier 1 callable surface. Operators copy-paste OR import into
+    /// their Python session — these are starting-point demonstrations
+    /// of the operator-extension layer the SD-R85 manifest names.
+    /// Operator-named: "you do you own things and you even have
+    /// custom CoT or such and advanced tailored features".
+    Tier2Examples {
+        /// Show only one example (by name); without --name, prints all.
+        #[arg(long)]
+        name: Option<String>,
+        /// Emit JSON inventory instead of the example source.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R95 (SDD-026 Z-12 audit): read back the JSONL audit trail
+    /// the REPL bootstrap writes when SELFDEF_REPL_HISTORY is set.
+    /// Operator-pull surface: shows every Tier 1 + Tier 2 invocation
+    /// with argv + rc + duration_ms so the operator can audit what
+    /// their session (or an integrated-intelligence module) executed.
+    History {
+        /// Override the history file path.
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Cap the number of rows rendered (default = 50; --all overrides).
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+        /// Show every row regardless of --limit.
+        #[arg(long)]
+        all: bool,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum HardwareAction {
+    /// Probe + render the full snapshot + Sain01Match verdict (default).
+    Probe,
+    /// Only render the Sain01Match verdict label (FullMatch /
+    /// PartialMatch / NoMatch). Exit code reflects verdict.
+    Match,
+    /// SD-R10: emit the HardwareCapabilities JSON to stdout (default)
+    /// or to `--output PATH` atomically. Consumed by sovereign-os
+    /// Wasm-AOT pipeline + future hardware-aware policies; schema is
+    /// operator-stable. Exit code reflects verdict.
+    Export {
+        /// Optional destination path. When set, the file is written
+        /// atomically (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// SD-R17: per-sensor temperature readout from /sys/class/hwmon
+    /// + nvidia-smi (GPU temps). Read-only. Exit code 0 always.
+    Thermals {
+        /// Output JSON instead of human-readable rows.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R19: emit host-specific compile flags (CFLAGS / KCFLAGS /
+    /// `-march=`) in a format the operator can `source` or `eval`
+    /// before invoking their build pipeline. Direct enabler for the
+    /// Wasm-to-AVX-512 AOT + bitnet.cpp paths.
+    Tune {
+        /// Output format. `sh` (default) emits POSIX shell assignments
+        /// suitable for `source <(...)`. `env-file` emits the same
+        /// without the `export` prefix (for systemd EnvironmentFile=).
+        /// `make` emits Makefile assignments. `json` emits a structured
+        /// document with each field as a key.
+        #[arg(long, default_value = "sh")]
+        format: String,
+        /// Optional output path. When set, writes atomically to the
+        /// file (tempfile + rename) instead of stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// SD-R67: one-screen operator-readable hardware-exploit posture
+    /// summary. Composes SD-R64 (ternary_aot_capable +
+    /// zmm_int8_lane_capacity) + SD-R66 (ternary_kernel_hint) into
+    /// a "at-a-glance: can this box run 1-bit models at the hot-path
+    /// lane width?" report. Exit code reflects Sain01Match verdict.
+    Posture {
+        /// Emit JSON instead of the human-readable banner.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R70: emit a complete host-tuned `wasmtime compile` script
+    /// for a given .wasm module. Pipes to `bash` to produce a
+    /// .cwasm against this host's exact target_cpu + target_features
+    /// (the SD-R30 wasm_aot surface). One-command Wasm-to-AVX-512
+    /// AOT — direct operator-verbatim directive closure.
+    AotScript {
+        /// Input .wasm module path (operator-supplied).
+        #[arg(value_name = "WASM_PATH")]
+        wasm: PathBuf,
+        /// Optional output .cwasm path. When unset the script defaults
+        /// the output to the wasm path with `.cwasm` extension.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum PerimeterAction {
+    /// Inspect the cross-author overlap between selfdef + sovereign-os
+    /// Tetragon TracingPolicies. Exit 0 on pass, 1 on overlap.
+    CheckOverlap,
+    /// Show the coexistence configuration + per-author policy counts
+    /// on disk. Read-only.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -141,6 +382,13 @@ enum InitAction {
         /// refuses to clobber on-disk state.
         #[arg(long)]
         force: bool,
+        /// SDD-013: pin the deployment target in the generated
+        /// config. `generic` (default) uses /var/lib/selfdef paths;
+        /// `sain01` routes state to /mnt/vault/context per
+        /// sovereign-os `profiles/sain-01.yaml § hardware.storage`.
+        /// Operator typos fail-loud — no silent fallback.
+        #[arg(long, value_parser = parse_deployment_target, default_value = "generic")]
+        target: selfdef_config::DeploymentTarget,
     },
     /// Write a starter `modules.toml` listing every shipped
     /// module commented out with a short description.
@@ -322,6 +570,106 @@ enum NotifyAction {
 }
 
 #[derive(Debug, Subcommand)]
+enum ModelsAction {
+    /// SD-R34: list every model.toml under the registry dir.
+    List {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
+    /// SD-R34: dry-run the hardware gate on this host — shows
+    /// which registered models WOULD apply and which WOULD SKIP.
+    /// Read-only.
+    CheckHardware {
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R57 (closes SDD-019 T-3 fetch-side): download a model
+    /// artifact + verify sha256 against the manifest. Operator
+    /// pins artifact_sha256 in model.toml; fetcher refuses to
+    /// rename on mismatch.
+    Fetch {
+        /// Model slug (the directory name under --dir).
+        slug: String,
+        /// Destination path for the downloaded artifact.
+        #[arg(long)]
+        to: PathBuf,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Env-var name carrying a Bearer token (e.g.
+        /// HUGGINGFACE_HUB_TOKEN). Operator-supplied tokens
+        /// NEVER live in-repo; only env-var references.
+        #[arg(long, value_name = "ENV_NAME")]
+        token_env: Option<String>,
+    },
+    /// SD-R81 (SDD-025 Y-2): LoRA-adapter state surface (foundation
+    /// brick for the X-4 LoRA lifecycle arc). For now: a single
+    /// `list` subverb that reads the operator-owned state file at
+    /// `/var/lib/selfdef/loras.json` (overridable via
+    /// SELFDEF_LORA_STATE or --state) and renders the active
+    /// adapter set. attach/detach verbs land in subsequent rounds.
+    Lora {
+        #[command(subcommand)]
+        action: LoraAction,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum LoraAction {
+    /// SD-R81: list every adapter recorded in the state file.
+    List {
+        /// Override the LoRA state file path (default:
+        /// `/var/lib/selfdef/loras.json`, env `SELFDEF_LORA_STATE`).
+        #[arg(long)]
+        state: Option<PathBuf>,
+        /// Emit JSON (the raw state shape) instead of the tabular view.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89 (SDD-025 Y-2 extension): record a LoRA attachment in
+    /// the operator state file.
+    ///
+    /// Atomic update: read existing state, append/upsert the entry,
+    /// write atomically via tempfile + rename. Idempotent — attaching
+    /// the same adapter_id twice upserts the base_model + status
+    /// fields rather than duplicating the row.
+    Attach {
+        adapter_id: String,
+        base_model: String,
+        /// Override status (default: "active").
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: remove a LoRA attachment by adapter_id. Atomic update.
+    /// rc=1 when the adapter wasn't present (operator should re-check).
+    Detach {
+        adapter_id: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R89: flip an attached LoRA's status (active / disabled /
+    /// errored). Doesn't remove the row — useful for "I want to keep
+    /// the binding metadata but stop loading this adapter".
+    SetStatus {
+        adapter_id: String,
+        /// One of: active / disabled / errored.
+        status: String,
+        #[arg(long)]
+        state: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum ModulesAction {
     /// List every module manifest found in the modules directory.
     List {
@@ -329,12 +677,102 @@ enum ModulesAction {
         /// falling back to the workspace `modules/` in dev runs).
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R63: machine-readable JSON instead of the tabular view.
+        #[arg(long)]
+        json: bool,
+        /// SD-R75 (SDD-024 X-6): filter to modules whose `category`
+        /// field matches exactly. Operator-stable string;
+        /// currently in use: hardening / inference / network /
+        /// detection / hardware / observability.
+        #[arg(long)]
+        category: Option<String>,
+        /// SD-R75 (SDD-024 X-6): filter to modules whose `phase`
+        /// field matches exactly. Operator-stable string;
+        /// currently in use: pre-install / during-install /
+        /// post-install / main / recurrent.
+        #[arg(long)]
+        phase: Option<String>,
+    },
+    /// SD-R99 (E2.M6): show the effective per-module feature map —
+    /// the module manifest's `[features]` defaults deep-merged with
+    /// the operator's per-module overlay (`/etc/selfdef/modules/<slug>.toml`
+    /// or `--config <path>` or `$SELFDEF_MODULE_FEATURES_<SLUG>` env).
+    /// Always emits JSON: `{module, source, overlay_keys, features}`.
+    /// Operator-overlay-doctrine (SDD-030 R283 vector) adopted here.
+    Features {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Explicit per-module overlay TOML; beats env + /etc.
+        /// (Named `--overlay` rather than `--config` to avoid
+        /// colliding with the global daemon-config flag.)
+        #[arg(long)]
+        overlay: Option<PathBuf>,
+        /// SD-R100 (E2.M7): emit ONLY boolean leaves set to true
+        /// (recursive). Tables with no surviving children are
+        /// dropped. Operator-pull view of which features are
+        /// currently *enabled* on this host.
+        #[arg(long, conflicts_with = "disabled_only")]
+        enabled_only: bool,
+        /// SD-R100 (E2.M7): companion to `--enabled-only` — emit
+        /// ONLY boolean leaves set to false.
+        #[arg(long, conflicts_with = "enabled_only")]
+        disabled_only: bool,
+    },
+    /// SD-R100 (E2.M7): set one feature key in the operator overlay
+    /// file. Dotted keys walk/create nested tables. Value is parsed
+    /// as a TOML scalar (`true`/`false`/`42`/`"foo"`/...). Writes to
+    /// `--overlay <path>` (creating it if missing) or to the default
+    /// `/etc/selfdef/modules/<slug>.toml` when no flag given.
+    FeatureSet {
+        slug: String,
+        /// Dotted feature key (e.g. `auditd` or `limits.warn`).
+        key: String,
+        /// TOML scalar literal — `true`, `false`, `42`, `"text"`,
+        /// `3.14`, `[1, 2]`, etc.
+        value: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        overlay: Option<PathBuf>,
+    },
+    /// SD-R100 (E2.M7): remove one feature key from the operator
+    /// overlay file. Idempotent: clearing an absent key reports
+    /// `cleared = false` without error.
+    FeatureClear {
+        slug: String,
+        key: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        overlay: Option<PathBuf>,
     },
     /// Show the full manifest for one module by slug.
     Info {
         slug: String,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R39: probe the host and surface "gate verdict on THIS
+        /// host" inline (passes / unmet predicates). Same engine as
+        /// `modules check-hardware` but for one module.
+        #[arg(long)]
+        with_host_status: bool,
+        /// SD-R40: emit the manifest as structured JSON instead of
+        /// the human-readable form. Tooling consumers
+        /// (sovereign-osctl, future fleet dashboards) parse this
+        /// directly without scraping. Implies `--with-host-status`
+        /// when set alongside; the gate verdict lands under
+        /// `host_status` in the JSON.
+        #[arg(long)]
+        json: bool,
+        /// SD-R80 (SDD-025 Y-4): probe the host + render the
+        /// RESOLVED requirement set — root predicates plus the
+        /// `any_of` branch that matched (when applicable). Operators
+        /// learn "this host would land via branch 1: VNNI + ternary
+        /// path." Implies --with-host-status. Pure renderer over
+        /// `HardwareRequirements::evaluate_resolved` (SD-R79).
+        #[arg(long)]
+        resolved: bool,
     },
     /// Apply every active module's install/apply.sh in dependency order.
     Apply {
@@ -359,6 +797,33 @@ enum ModulesAction {
         /// you know what you're doing.
         #[arg(long)]
         ignore_daemon_requires: bool,
+        /// SDD-018 D-2 (SD-R42): force-apply gated modules even
+        /// when their `[requires_hardware]` predicates fail on
+        /// this host. Equivalent to deleting the
+        /// `[requires_hardware]` block from each manifest, but
+        /// without editing files. Use for one-off testing on
+        /// near-match hosts. Production should rely on the gate.
+        #[arg(long, conflicts_with = "strict_hardware")]
+        ignore_hardware: bool,
+        /// SD-R44 (companion to --ignore-hardware): turn gate-SKIP
+        /// into gate-FAIL. When any module would silently skip due
+        /// to unmet `[requires_hardware]` predicates, apply EXITS
+        /// non-zero with the unmet predicate list. Use on SAIN-01
+        /// production to refuse incomplete installs. Cannot be
+        /// combined with --ignore-hardware (the two flags express
+        /// opposite intents).
+        #[arg(long, conflicts_with = "ignore_hardware")]
+        strict_hardware: bool,
+        /// SD-R76 (SDD-024 X-5): force a FRESH hardware probe
+        /// before the `[requires_hardware]` gate evaluates, instead
+        /// of using the cached selfdef-hardware snapshot. Use when
+        /// the operator has changed BIOS settings (enabled AVX-512,
+        /// swapped GPUs in/out) and the cached snapshot diverges
+        /// from physical reality. Default OFF — most apply runs
+        /// happen on a stable host where the cached snapshot is
+        /// current.
+        #[arg(long)]
+        reprobe_hardware: bool,
     },
     /// Run check.sh for every active module (no mutations).
     Check {
@@ -381,6 +846,117 @@ enum ModulesAction {
         host_config: Option<PathBuf>,
         #[arg(long)]
         dir: Option<PathBuf>,
+        /// SD-R45: emit a structured JSON document with per-module
+        /// status rows instead of the human-readable summary.
+        /// Tooling consumers (sovereign-osctl overview, fleet
+        /// dashboards) parse this directly.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R83 (SDD-026 Z-13 partial): show installed / available /
+    /// orphaned modules in one table, partitioning the catalog ×
+    /// host-config join:
+    ///   INSTALLED  — slug present in both catalog AND host-config
+    ///                ([modules.X] entry in /etc/selfdef/modules.toml)
+    ///   AVAILABLE  — slug present in catalog, NOT activated in
+    ///                host-config (operator could `apply --only X`)
+    ///   ORPHANED   — slug in host-config but NOT in catalog (stale
+    ///                entry — operator should prune or restore the
+    ///                manifest)
+    /// Read-only. Composes with the future Z-1 dashboard's "Browse
+    /// available" sub-tab.
+    Diff {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of the tabular partition.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R86 (SDD-026 Z-13): surface uninstalled-but-available
+    /// catalog modules with operator-actionable recommendations.
+    ///
+    /// Walks the AVAILABLE partition from `modules diff` and decorates
+    /// each row with hardware-gate verdict, per-dependency installed
+    /// flag, and a roll-up `recommendation` field (ready /
+    /// blocked-by-hardware / blocked-by-missing-deps / needs-review).
+    /// The dashboard's "Install options" tab consumes the JSON
+    /// directly. Operator-named "modules options-to-install".
+    InstallOptions {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Show only `recommendation = "ready"` rows.
+        #[arg(long)]
+        only_ready: bool,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R87 (SDD-026 Z-13): topologically-ordered install plan over
+    /// the SD-R86 AVAILABLE-and-READY set.
+    ///
+    /// Resolves the dep graph + emits a numbered sequence of
+    /// `selfdefctl modules apply --only <slug>` commands the operator
+    /// runs in order. NOT-READY modules are reported in a separate
+    /// "skipped" section with their blocking reason. Dep cycles fail
+    /// the plan with rc=1 (manifests must be corrected).
+    InstallPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Restrict to one category.
+        #[arg(long)]
+        category: Option<String>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+    /// scaffold for one catalog module — the operator's next step
+    /// AFTER `install-plan` tells them WHAT to install.
+    ///
+    /// Renders a ready-to-paste `[modules."<slug>"]` block + the
+    /// matching `[daemon.*]` entries the manifest declares as
+    /// daemon_requires. Hardware-gate predicates surface as comments.
+    ConfigScaffold {
+        slug: String,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Required when the module is instanced
+        /// (e.g. `--instance wg0` for the tunnel module).
+        #[arg(long)]
+        instance: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+    /// end-to-end. Walks each step of the topologically-ordered plan,
+    /// invoking `apply --only <slug>` per step. Per-step outcome is
+    /// reported. DRY-RUN by default; `--apply` actually executes. Step
+    /// failures HALT the rest of the plan unless `--continue-on-failure`
+    /// is set.
+    ApplyPlan {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        #[arg(long)]
+        category: Option<String>,
+        /// Actually execute (default is DRY-RUN preview).
+        #[arg(long)]
+        apply: bool,
+        /// Don't halt on first failure — keep trying every step.
+        #[arg(long)]
+        continue_on_failure: bool,
+        #[arg(long)]
+        json: bool,
     },
     /// Run uninstall.sh for every active module in reverse dependency order.
     ///
@@ -412,6 +988,64 @@ enum ModulesAction {
         host_config: Option<PathBuf>,
         #[arg(long)]
         dir: Option<PathBuf>,
+    },
+    /// SD-R15: dry-run the SD-R14 hardware gate on this host —
+    /// shows which active modules WOULD apply and which WOULD SKIP
+    /// based on each manifest's `[requires_hardware]` block.
+    /// Read-only; no module scripts run.
+    CheckHardware {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit JSON instead of human-readable output.
+        #[arg(long)]
+        json: bool,
+        /// SD-R38: dry-run the gate against a SAVED capabilities
+        /// JSON instead of probing the local host. Lets operators
+        /// preview "would this catalog land on a SAIN-01 box?" from
+        /// a dev workstation. The file shape matches the SD-R10
+        /// `selfdefctl hardware export --output <path>` output.
+        #[arg(long, value_name = "PATH")]
+        caps: Option<PathBuf>,
+    },
+    /// SD-R36: emit the active modules' dependency graph in
+    /// Graphviz DOT format. Operators pipe to `dot -Tsvg` for a
+    /// visual layout, or read the text directly for a quick
+    /// audit of how modules compose. Read-only.
+    Graph {
+        #[arg(long)]
+        host_config: Option<PathBuf>,
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Annotate node colour by SD-R14 gate verdict (green =
+        /// kept, red = skipped). Requires a hardware probe;
+        /// default is off (graph alone is operator-readable
+        /// without colour).
+        #[arg(long)]
+        with_hardware_gate: bool,
+        /// SD-R41: emit the graph as structured JSON (nodes +
+        /// edges) instead of DOT. Tooling consumers
+        /// (sovereign-osctl, fleet dashboards) consume this
+        /// directly without parsing DOT.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SD-R50: pretty-print the SD-R47 `--ignore-hardware` audit
+    /// trail (one operator-readable line per recorded override).
+    /// Reads the file at SELFDEF_MODULES_AUDIT_PATH or --audit-path.
+    AuditLog {
+        /// Path to the audit JSONL file. Defaults to
+        /// $SELFDEF_MODULES_AUDIT_PATH if set, else
+        /// /var/log/selfdef/modules-audit.jsonl.
+        #[arg(long)]
+        audit_path: Option<PathBuf>,
+        /// Show the last N entries (default: 20).
+        #[arg(short, long, default_value_t = 20)]
+        n: usize,
+        /// Emit raw JSONL instead of the human-readable form.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -556,6 +1190,59 @@ async fn main() -> Result<()> {
                 selfdef_core::SCHEMA_VERSION,
             );
         }
+        Command::Mcp { action } => match action {
+            McpAction::Tools { human } => {
+                if human {
+                    print!("{}", mcp::render_tools_human());
+                } else {
+                    println!("{}", mcp::render_tools_json());
+                }
+            }
+            McpAction::Serve {
+                exit_after,
+                framing,
+                tcp,
+                token_env,
+            } => {
+                let code = if let Some(bind) = tcp {
+                    mcp::serve_tcp(&bind, &framing, token_env.as_deref(), exit_after)?
+                } else {
+                    mcp::serve_stdio(exit_after, &framing)?
+                };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+        },
+        Command::Repl { action } => match action {
+            ReplAction::Bootstrap => {
+                print!("{}", repl::bootstrap_script());
+            }
+            ReplAction::Tiers { human } => {
+                if human {
+                    print!("{}", repl::render_tiers_human());
+                } else {
+                    println!("{}", repl::render_tiers_json());
+                }
+            }
+            ReplAction::Tier2Examples { name, json } => {
+                let code = repl::cmd_tier2_examples(name.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ReplAction::History {
+                path,
+                limit,
+                all,
+                json,
+            } => {
+                let code = repl::cmd_history(path.as_deref(), limit, all, json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+        },
         Command::Api {
             action:
                 ApiAction::RotateToken {
@@ -626,9 +1313,13 @@ async fn main() -> Result<()> {
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
-            InitAction::Config { output, force } => {
+            InitAction::Config {
+                output,
+                force,
+                target,
+            } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_DAEMON_CONFIG));
-                init::write_starter_config(&path, force)?;
+                init::write_starter_config_with_target(&path, force, target)?;
             }
             InitAction::Modules { output, force } => {
                 let path = output.unwrap_or_else(|| PathBuf::from(init::DEFAULT_MODULES_CONFIG));
@@ -638,6 +1329,42 @@ async fn main() -> Result<()> {
                 init::print_checklist();
             }
         },
+        Command::Perimeter { action } => match action {
+            PerimeterAction::CheckOverlap => {
+                let exit = perimeter::run_check_overlap(&cfg).context("perimeter check-overlap")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::Status => {
+                let exit = perimeter::run_status(&cfg).context("perimeter status")?;
+                std::process::exit(exit);
+            }
+        },
+        Command::Wizard { json } => {
+            let exit = if json {
+                wizard::run_json()?
+            } else {
+                wizard::run_human()?
+            };
+            std::process::exit(exit);
+        }
+        Command::Hardware { action, json } => {
+            let exit = match action {
+                Some(HardwareAction::Match) => hardware::run_match()?,
+                Some(HardwareAction::Export { output }) => hardware::run_export(output)?,
+                Some(HardwareAction::Thermals { json: tj }) => hardware::run_thermals(tj)?,
+                Some(HardwareAction::Posture { json: pj }) => hardware::run_posture(pj)?,
+                Some(HardwareAction::AotScript { wasm, output }) => {
+                    hardware::run_aot_script(&wasm, output.as_deref())?
+                }
+                Some(HardwareAction::Tune { format, output }) => {
+                    hardware::run_tune(&format, output)?
+                }
+                Some(HardwareAction::Probe) if json => hardware::run_json()?,
+                None if json => hardware::run_json()?,
+                _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
         Command::Status => {
             let store = SqliteStore::open(&cfg.store.hot_path).context("opening hot store")?;
             let count = store.count().await.context("counting events")?;
@@ -865,14 +1592,165 @@ async fn main() -> Result<()> {
                 println!("{}", outcome.notes);
             }
         },
-        Command::Modules { action } => match action {
-            ModulesAction::List { dir } => {
-                let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_list(&resolved)?;
+        Command::Models { action } => match action {
+            ModelsAction::List { dir } => {
+                let code = models::cmd_list(dir.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
             }
-            ModulesAction::Info { slug, dir } => {
+            ModelsAction::CheckHardware { dir, json } => {
+                let code = models::cmd_check_hardware(dir.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModelsAction::Fetch {
+                slug,
+                to,
+                dir,
+                token_env,
+            } => {
+                let code =
+                    models::cmd_fetch(dir.as_deref(), &slug, &to, token_env.as_deref()).await?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModelsAction::Lora { action } => match action {
+                LoraAction::List { state, json } => {
+                    let code = models::cmd_lora_list(state.as_deref(), json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::Attach {
+                    adapter_id,
+                    base_model,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_attach(
+                        state.as_deref(),
+                        &adapter_id,
+                        &base_model,
+                        status.as_deref(),
+                        json,
+                    )?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::Detach {
+                    adapter_id,
+                    state,
+                    json,
+                } => {
+                    let code = models::cmd_lora_detach(state.as_deref(), &adapter_id, json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+                LoraAction::SetStatus {
+                    adapter_id,
+                    status,
+                    state,
+                    json,
+                } => {
+                    let code =
+                        models::cmd_lora_set_status(state.as_deref(), &adapter_id, &status, json)?;
+                    if code != 0 {
+                        std::process::exit(code);
+                    }
+                }
+            },
+        },
+        Command::Modules { action } => match action {
+            ModulesAction::List {
+                dir,
+                json,
+                category,
+                phase,
+            } => {
                 let resolved = modules::resolve_dir(dir.as_deref());
-                modules::cmd_info(&resolved, &slug)?;
+                if json {
+                    modules::cmd_list_json_filtered(
+                        &resolved,
+                        category.as_deref(),
+                        phase.as_deref(),
+                    )?;
+                } else {
+                    modules::cmd_list_filtered(&resolved, category.as_deref(), phase.as_deref())?;
+                }
+            }
+            ModulesAction::Features {
+                slug,
+                dir,
+                overlay,
+                enabled_only,
+                disabled_only,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let filter = match (enabled_only, disabled_only) {
+                    (true, false) => modules::FeatureFilter::EnabledOnly,
+                    (false, true) => modules::FeatureFilter::DisabledOnly,
+                    _ => modules::FeatureFilter::All,
+                };
+                let rc = modules::cmd_features_json_filtered(
+                    &resolved,
+                    &slug,
+                    overlay.as_deref(),
+                    filter,
+                )?;
+                std::process::exit(rc);
+            }
+            ModulesAction::FeatureSet {
+                slug,
+                key,
+                value,
+                dir,
+                overlay,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let rc =
+                    modules::cmd_feature_set(&resolved, &slug, &key, &value, overlay.as_deref())?;
+                std::process::exit(rc);
+            }
+            ModulesAction::FeatureClear {
+                slug,
+                key,
+                dir,
+                overlay,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                let rc = modules::cmd_feature_clear(&resolved, &slug, &key, overlay.as_deref())?;
+                std::process::exit(rc);
+            }
+            ModulesAction::Info {
+                slug,
+                dir,
+                with_host_status,
+                json,
+                resolved: resolved_flag,
+            } => {
+                let resolved = modules::resolve_dir(dir.as_deref());
+                if json {
+                    // SD-R40: --json implies host_status (the field
+                    // is cheap to compute + tooling almost always
+                    // wants both).
+                    modules::cmd_info_json(&resolved, &slug)?;
+                } else {
+                    modules::cmd_info(&resolved, &slug)?;
+                    if with_host_status || resolved_flag {
+                        modules::cmd_info_host_status(&resolved, &slug)?;
+                    }
+                    if resolved_flag {
+                        // SD-R80 (SDD-025 Y-4) — render the resolved
+                        // requirement set (root + matched any_of branch).
+                        modules::cmd_info_resolved(&resolved, &slug)?;
+                    }
+                }
             }
             ModulesAction::Apply {
                 host_config,
@@ -881,6 +1759,9 @@ async fn main() -> Result<()> {
                 only,
                 except,
                 ignore_daemon_requires,
+                ignore_hardware,
+                strict_hardware,
+                reprobe_hardware,
             } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
@@ -889,6 +1770,9 @@ async fn main() -> Result<()> {
                     except,
                     dry_run,
                     ignore_daemon_requires,
+                    ignore_hardware,
+                    strict_hardware,
+                    reprobe_hardware,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_apply(&opts)?;
@@ -910,6 +1794,9 @@ async fn main() -> Result<()> {
                     except,
                     dry_run: false,
                     ignore_daemon_requires,
+                    ignore_hardware: false,
+                    strict_hardware: false,
+                    reprobe_hardware: false,
                     daemon_config_path: Some(daemon_config_path.clone()),
                 };
                 let code = modules::cmd_check(&opts)?;
@@ -917,7 +1804,11 @@ async fn main() -> Result<()> {
                     std::process::exit(code);
                 }
             }
-            ModulesAction::Status { host_config, dir } => {
+            ModulesAction::Status {
+                host_config,
+                dir,
+                json,
+            } => {
                 let opts = modules::LifecycleOpts {
                     host_config,
                     dir,
@@ -926,7 +1817,92 @@ async fn main() -> Result<()> {
                     dry_run: false,
                     ..Default::default()
                 };
-                let code = modules::cmd_status(&opts)?;
+                let code = if json {
+                    modules::cmd_status_json(&opts)?
+                } else {
+                    modules::cmd_status(&opts)?
+                };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Diff {
+                host_config,
+                dir,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_diff(&host_path, &dir_path, json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallOptions {
+                host_config,
+                dir,
+                category,
+                only_ready,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_install_options(
+                    &host_path,
+                    &dir_path,
+                    json,
+                    category.as_deref(),
+                    only_ready,
+                )?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::InstallPlan {
+                host_config,
+                dir,
+                category,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_install_plan(&host_path, &dir_path, json, category.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ConfigScaffold {
+                slug,
+                dir,
+                instance,
+                json,
+            } => {
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code =
+                    modules::cmd_config_scaffold(&dir_path, &slug, instance.as_deref(), json)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::ApplyPlan {
+                host_config,
+                dir,
+                category,
+                apply,
+                continue_on_failure,
+                json,
+            } => {
+                let host_path = modules::resolve_host_config_path(host_config.as_deref());
+                let dir_path = modules::resolve_dir(dir.as_deref());
+                let code = modules::cmd_apply_plan(
+                    &host_path,
+                    &dir_path,
+                    category.as_deref(),
+                    apply,
+                    continue_on_failure,
+                    json,
+                )?;
                 if code != 0 {
                     std::process::exit(code);
                 }
@@ -938,6 +1914,59 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 };
                 let code = modules::cmd_show_requires(&opts)?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::CheckHardware {
+                host_config,
+                dir,
+                json,
+                caps,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = modules::cmd_check_hardware_with_caps(&opts, json, caps.as_deref())?;
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::Graph {
+                host_config,
+                dir,
+                with_hardware_gate,
+                json,
+            } => {
+                let opts = modules::LifecycleOpts {
+                    host_config,
+                    dir,
+                    ..Default::default()
+                };
+                let code = if json {
+                    modules::cmd_graph_json(&opts, with_hardware_gate)?
+                } else {
+                    modules::cmd_graph(&opts, with_hardware_gate)?
+                };
+                if code != 0 {
+                    std::process::exit(code);
+                }
+            }
+            ModulesAction::AuditLog {
+                audit_path,
+                n,
+                json,
+            } => {
+                let resolved = audit_path
+                    .or_else(|| {
+                        std::env::var("SELFDEF_MODULES_AUDIT_PATH")
+                            .ok()
+                            .map(PathBuf::from)
+                    })
+                    .unwrap_or_else(|| PathBuf::from("/var/log/selfdef/modules-audit.jsonl"));
+                let code = modules::cmd_audit_log(&resolved, n, json)?;
                 if code != 0 {
                     std::process::exit(code);
                 }
@@ -1459,6 +2488,15 @@ fn rbac_check(
             );
         }
     }
+}
+
+/// SDD-013: clap value-parser for `--target`. Routes through
+/// [`DeploymentTarget::from_str`] so the CLI rejects unknown values
+/// fail-loud, matching the config-loader contract (no silent
+/// fallback, no case-insensitive variants).
+fn parse_deployment_target(s: &str) -> Result<selfdef_config::DeploymentTarget, String> {
+    use std::str::FromStr;
+    selfdef_config::DeploymentTarget::from_str(s)
 }
 
 /// Parse the agent-guard module config TOML for `scope`,

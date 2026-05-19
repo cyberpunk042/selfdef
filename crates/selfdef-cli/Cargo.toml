@@ -19,6 +19,7 @@ workspace = true
 [dependencies]
 selfdef-core = { workspace = true }
 selfdef-config = { workspace = true }
+selfdef-hardware = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
 selfdef-signing = { workspace = true }
@@ -34,6 +35,7 @@ tracing-subscriber = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
 time = { workspace = true }
 toml = { workspace = true }
 uuid = { workspace = true }
@@ -45,6 +47,8 @@ uuid = { workspace = true }
 # walking `Response::bytes_stream()` chunks.
 reqwest = { workspace = true, features = ["stream"] }
 futures = { workspace = true }
+# SD-R57: model-fetch sha256 streaming verification (closes SDD-019 T-3).
+sha2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

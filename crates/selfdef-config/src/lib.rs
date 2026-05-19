@@ -47,7 +47,224 @@ pub struct Config {
     /// signature-less workflow; closing the original
     /// rule-signing Known gap is opt-in.
     pub security: SecurityConfig,
+    /// SDD-013: deployment-target switch — gates all SAIN-01-specific
+    /// behavior (state paths, audit-summary channel, oracle-triage
+    /// channel, perimeter coexistence). Default is `Generic`; existing
+    /// configs that don't carry a `[deployment]` block parse unchanged.
+    pub deployment: DeploymentConfig,
+    /// SD-R21 (SDD-018 follow-up): periodic hardware probe + thermal
+    /// thresholds. Default is fully disabled — operators opt in by
+    /// setting `[hardware_probe].enabled = true`. When enabled, the
+    /// daemon re-probes every `interval_seconds`; when
+    /// `emit_thermal_events = true`, sensors crossing the configured
+    /// critical threshold emit OCSF Detection Findings to the bus.
+    #[serde(default)]
+    pub hardware_probe: HardwareProbeConfig,
+    /// SDD-015: Tetragon perimeter coexistence config — controls the
+    /// boundary check between selfdef-authored agent-guard policies
+    /// and sovereign-os's `sovereign-kernel-fence.yaml`. When
+    /// `deployment.target = sain01`, `check_overlap_on_apply` defaults
+    /// to true. When `target = generic`, this block is ignored.
+    pub perimeter: PerimeterConfig,
 }
+
+// ---------------------------------------------------------------- deployment (SDD-013)
+
+/// SDD-013: deployment-target switch.
+///
+/// All SAIN-01-specific behavior in selfdef forks on this enum:
+/// state paths, audit-log paths, escalations DB path, the
+/// shared-audit-summary notifier channel (SDD-014), perimeter
+/// check-overlap (SDD-015), and the oracle-triage channel
+/// (SDD-016) all read [`Config::deployment`].
+///
+/// Default is [`DeploymentTarget::Generic`]. Existing operator configs
+/// that don't carry a `[deployment]` block parse unchanged.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct DeploymentConfig {
+    pub target: DeploymentTarget,
+    /// SDD-017 § 5: when `target = sain01` AND this flag is true,
+    /// the daemon refuses to start unless the hardware probe returns
+    /// `Sain01Verdict::FullMatch`. Default false (warn-only on
+    /// mismatch). Operators on the SAIN-01 hardware should enable
+    /// this once they trust the probe.
+    pub sain01_strict: bool,
+    /// SDD-017 § 6: when set, the daemon writes a Layer B textfile
+    /// collector .prom file at this path with the per-dimension
+    /// Sain01Match results. node_exporter's textfile collector picks
+    /// it up. Empty = disabled. Default empty (operators opt-in by
+    /// pointing at their node_exporter textfile dir, e.g.
+    /// /var/lib/node_exporter/textfile_collector/selfdef-hardware.prom).
+    pub hardware_metrics_path: String,
+
+    /// SDD-017 § 7 (SD-R10): when set, the daemon writes the
+    /// HardwareCapabilities JSON to this path at startup. Consumed
+    /// by sovereign-os Wasm-AOT pipeline + future hardware-aware
+    /// agent-guard policies. Atomic tempfile+rename. Empty = disabled.
+    /// Default: empty.
+    pub hardware_capabilities_path: String,
+}
+
+/// SD-R21: periodic hardware probe + thermal threshold config.
+///
+/// All fields default to disabled / safe values — an operator who
+/// doesn't add a `[hardware_probe]` block gets the same behavior as
+/// today (single probe at startup, no periodic re-probe, no event
+/// emission). Operators opt in by setting `enabled = true`.
+///
+/// Thermal thresholds mirror the sovereign-os R172 defaults for the
+/// `sain-01` profile (warn ≥ 85 °C, critical ≥ 95 °C). NVIDIA GPU
+/// sensors are gated through the same thresholds — operators tune
+/// per-host via the `gpu_critical_celsius` override when needed.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct HardwareProbeConfig {
+    /// Master switch. When false, the daemon probes once at startup
+    /// (existing behavior) and never re-probes.
+    pub enabled: bool,
+    /// Re-probe cadence in seconds. Default 300 (5 minutes).
+    /// Below 30 is rejected at validation time (probe I/O is cheap
+    /// but not free — sub-30s cadence yields no operator value).
+    pub interval_seconds: u64,
+    /// When true AND `enabled` is true, sensors crossing the
+    /// critical threshold emit an OCSF Detection Finding
+    /// (category_uid=2, class_uid=2004, severity=Critical) to the
+    /// bus on the probe tick. Default false.
+    pub emit_thermal_events: bool,
+    /// Warn threshold in °C. Default 85 (sain-01 profile baseline).
+    pub thermal_warn_celsius: i32,
+    /// Critical threshold in °C. Default 95.
+    pub thermal_critical_celsius: i32,
+    /// Override for GPU sensors (sensors whose source starts with
+    /// `nvidia-gpu-`). 0 means "use the same critical threshold as
+    /// other sensors". Default 0 (no override).
+    pub gpu_critical_celsius: i32,
+}
+
+impl Default for HardwareProbeConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interval_seconds: 300,
+            emit_thermal_events: false,
+            thermal_warn_celsius: 85,
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 0,
+        }
+    }
+}
+
+/// SD-R21: pure classification of a single thermal reading against
+/// the configured thresholds. Returns `"ok"`, `"warn"`, or `"critical"`.
+/// GPU sensors honor `gpu_critical_celsius` when set.
+#[must_use]
+pub fn classify_thermal_reading(
+    cfg: &HardwareProbeConfig,
+    source: &str,
+    celsius: i32,
+) -> &'static str {
+    let is_gpu = source.starts_with("nvidia-gpu-");
+    let critical = if is_gpu && cfg.gpu_critical_celsius > 0 {
+        cfg.gpu_critical_celsius
+    } else {
+        cfg.thermal_critical_celsius
+    };
+    if celsius >= critical {
+        "critical"
+    } else if celsius >= cfg.thermal_warn_celsius {
+        "warn"
+    } else {
+        "ok"
+    }
+}
+
+/// SDD-013: target enum. New variants land via additional SDDs.
+///
+/// `#[serde(rename_all = "lowercase")]` so the TOML form is
+/// `target = "generic"` / `target = "sain01"` — operator-readable.
+/// Unknown values fail-loud at parse time (SDD-013 § Goals point 3).
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum DeploymentTarget {
+    /// Default — runs on any Debian/Ubuntu host without SAIN-01 hardware
+    /// or ZFS state-fabric. State paths under `/var/lib/selfdef`.
+    #[default]
+    Generic,
+    /// SAIN-01 AI workstation (per sovereign-os `profiles/sain-01.yaml`).
+    /// State paths under `/mnt/vault/context` (tank/context ZFS dataset
+    /// with `sync=always` + `copies=2` for durability).
+    Sain01,
+}
+
+impl DeploymentTarget {
+    /// Operator-readable token (matches the TOML serialization).
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::Sain01 => "sain01",
+        }
+    }
+}
+
+impl std::fmt::Display for DeploymentTarget {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for DeploymentTarget {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "generic" => Ok(Self::Generic),
+            "sain01" => Ok(Self::Sain01),
+            other => Err(format!(
+                "unknown deployment.target {other:?}: expected 'generic' or 'sain01'"
+            )),
+        }
+    }
+}
+
+// ---------------------------------------------------------------- path resolver (SDD-013)
+
+/// SDD-013 § 3: single source of truth for target-conditional state paths.
+///
+/// All callers — daemon, CLI, notifier, doctor — read paths through
+/// these helpers. No path string is duplicated across crates.
+///
+/// Generic: `/var/lib/selfdef` (FHS-standard system-state dir).
+/// SAIN-01: `/mnt/vault/context` (tank/context ZFS dataset; sync=always;
+/// copies=2 per sovereign-os `profiles/sain-01.yaml § hardware.storage`).
+pub fn state_dir(target: DeploymentTarget) -> &'static Path {
+    match target {
+        DeploymentTarget::Generic => Path::new("/var/lib/selfdef"),
+        DeploymentTarget::Sain01 => Path::new("/mnt/vault/context"),
+    }
+}
+
+/// Audit-log path (JSONL stream of all selfdef events). Caller appends.
+pub fn audit_log_path(target: DeploymentTarget) -> PathBuf {
+    state_dir(target).join("selfdef-audit.jsonl")
+}
+
+/// Escalations DB path (SQLite — operator-acknowledgements + escalation
+/// state machine per the notifier channels).
+pub fn escalations_path(target: DeploymentTarget) -> PathBuf {
+    state_dir(target).join("selfdef-escalations.sqlite")
+}
+
+/// Shared audit log per SDD-014. ONLY meaningful when target=Sain01;
+/// returns `None` on Generic deployments (no shared timeline exists).
+/// Path matches sovereign-os master spec § 10.1 + § 7.1 verbatim.
+pub fn shared_audit_log_path(target: DeploymentTarget) -> Option<PathBuf> {
+    match target {
+        DeploymentTarget::Generic => None,
+        DeploymentTarget::Sain01 => Some(PathBuf::from("/mnt/vault/context/security_audit.log")),
+    }
+}
+
+// ---------------------------------------------------------------- security
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(default)]
@@ -438,6 +655,19 @@ pub struct NotifierConfig {
     /// wall's broadcast-all-TTYs behavior. Empty `users` keeps the
     /// channel disabled.
     pub write: WriteConfig,
+    /// SDD-014: shared-audit-summary channel — when on a SAIN-01
+    /// deployment, selfdef appends an index line per event to
+    /// /mnt/vault/context/security_audit.log (the shared cross-
+    /// component operator timeline that sovereign-os guardian-core
+    /// also writes to). Auto-enabled when deployment.target=sain01;
+    /// operators can opt out via `enabled = false`. Never auto-
+    /// enabled on generic deployments (Q-G honored).
+    pub shared_audit_summary: SharedAuditSummaryConfig,
+    /// SDD-016: oracle-triage channel — dispatches event payloads
+    /// through the sovereign-os inference router for operator-reviewed
+    /// triage suggestions. NEVER auto-enabled, even on SAIN-01
+    /// (Q-D verbatim). Operator must explicitly set `enabled = true`.
+    pub oracle_triage: OracleTriageConfig,
     /// SDD-008 D-5a/b/c: path to the persistent escalation engine's
     /// SQLite database. When set, the daemon opens this file at
     /// startup, persists outbound events in it, and runs the wake-
@@ -537,6 +767,8 @@ impl Default for NotifierConfig {
             thehive: TheHiveConfig::default(),
             wall: WallConfig::default(),
             write: WriteConfig::default(),
+            shared_audit_summary: SharedAuditSummaryConfig::default(),
+            oracle_triage: OracleTriageConfig::default(),
             escalations_path: None,
             mode: "enforce".to_owned(),
             profile: "auto".to_owned(),
@@ -753,6 +985,246 @@ pub struct WriteConfig {
     /// Usernames must match `[a-zA-Z0-9._-]+` — shell metacharacters
     /// are rejected at config-load time.
     pub users: Vec<String>,
+}
+
+// ---------------------------------------------------------------- perimeter (SDD-015)
+
+/// SDD-015: Tetragon perimeter coexistence configuration.
+///
+/// When `deployment.target = sain01`, selfdef and sovereign-os both
+/// author Tetragon TracingPolicy YAMLs into
+/// `/etc/tetragon/tracing-policies/`. This config gates the boundary
+/// enforcement that prevents a selfdef-authored `agent-guard-*` policy
+/// from overlapping with sovereign-os's `sovereign-kernel-fence.yaml`
+/// host-scoped allowlist.
+///
+/// On `deployment.target = generic`, this block is IGNORED entirely —
+/// the boundary doesn't apply (no sovereign-os assumption).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct PerimeterConfig {
+    /// When true (default on sain01, false on generic),
+    /// `selfdefctl modules apply` runs `perimeter check-overlap`
+    /// before installing any new TracingPolicy file. Refuses to apply
+    /// if overlap is detected (unless `overlap_warn_only = true`).
+    pub check_overlap_on_apply: Option<bool>,
+    /// Path to sovereign-os's host-scoped allowlist. selfdef reads
+    /// this to know what NOT to overlap with. Empty path is treated
+    /// as "no peer policy author" (overlap check vacuously passes).
+    pub sovereign_kernel_fence_path: PathBuf,
+    /// Directory holding all Tetragon TracingPolicy YAMLs (both
+    /// authors). Default `/etc/tetragon/tracing-policies` matches
+    /// Tetragon's stock load path.
+    pub policies_dir: PathBuf,
+    /// When true, overlap detection emits a WARN line but does NOT
+    /// fail. Default false (block on overlap).
+    pub overlap_warn_only: bool,
+    /// SDD-015 Q15-D: stance toward THIRD-PARTY Tetragon policies
+    /// (files not matching "sovereign-" or "agent-guard-" prefix).
+    /// One of:
+    ///   - "warn" (default): treat as opaque, log a WARN but do not
+    ///     block. Operator's discretion (per Q15-D recommendation).
+    ///   - "ignore": no warning, no block.
+    ///   - "block": treat third-party policies the same as
+    ///     agent-guard for the overlap check (refuse on host-scoped
+    ///     fenced syscalls). Stricter than the spec — operator opt-in.
+    pub third_party_policy_stance: String,
+}
+
+impl Default for PerimeterConfig {
+    fn default() -> Self {
+        Self {
+            check_overlap_on_apply: None, // resolves via target at use-site
+            sovereign_kernel_fence_path: PathBuf::from(
+                "/etc/tetragon/tracing-policies/sovereign-kernel-fence.yaml",
+            ),
+            policies_dir: PathBuf::from("/etc/tetragon/tracing-policies"),
+            overlap_warn_only: false,
+            third_party_policy_stance: "warn".to_owned(),
+        }
+    }
+}
+
+/// SDD-015 § 4: resolve effective `check_overlap_on_apply` —
+/// auto-true on sain01 unless explicitly overridden; auto-false on
+/// generic unless explicitly overridden.
+#[must_use]
+pub fn resolve_perimeter_check_overlap(cfg: &Config) -> bool {
+    if let Some(v) = cfg.perimeter.check_overlap_on_apply {
+        return v;
+    }
+    matches!(cfg.deployment.target, DeploymentTarget::Sain01)
+}
+
+// ---------------------------------------------------------------- oracle-triage (SDD-016)
+
+/// SDD-016: oracle-triage channel configuration.
+///
+/// NEVER auto-enabled — operator must set `enabled = true` explicitly,
+/// even on SAIN-01 (SDD-012 Q-D verbatim: "selfdef stays Oracle-Core-
+/// unaware in v1; opt-in `oracle-triage` notifier channel post-
+/// procurement"). On generic deployments the channel can still be
+/// enabled by pointing `endpoint` at a different inference router.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct OracleTriageConfig {
+    /// Opt-in flag. Default `false` — operator's explicit consent
+    /// required.
+    pub enabled: bool,
+    /// Inference-router endpoint. Default `http://127.0.0.1:8080`
+    /// matches sovereign-os SDD-011's router default.
+    pub endpoint: String,
+    /// Model token. `"auto"` (default) lets the router's classify()
+    /// pick per-request; operators can pin a specific model.
+    pub model: String,
+    /// Per-request timeout. Default 30s per SDD-016 § 2.
+    pub timeout_seconds: u64,
+    /// Env-var name carrying an optional bearer token. Empty/None =
+    /// no Authorization header. Operators NEVER write the secret
+    /// itself into selfdef.toml — only the variable name.
+    pub api_key_env: Option<String>,
+    /// Filter applied per event before dispatch (severity floor +
+    /// kind allowlist).
+    pub filter: OracleTriageFilterConfig,
+    /// Where the triage block lands.
+    /// `operator-dashboard` | `shared-audit-summary` | `both`.
+    pub output_target: String,
+    /// Optional path to a custom system prompt. None = use the
+    /// SDD-016 § 3 default.
+    pub system_prompt_path: Option<PathBuf>,
+    /// SDD-016 Q16-D: cost / token-budget rate limit. The channel
+    /// refuses to dispatch when it has already sent `max_events_per_hour`
+    /// requests in the trailing 60-minute window — protects operator
+    /// inference budgets from runaway event storms. Default 100 per
+    /// SDD-016 Q16-D recommendation. Set to 0 to disable.
+    pub max_events_per_hour: u32,
+}
+
+impl Default for OracleTriageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            endpoint: "http://127.0.0.1:8080".to_owned(),
+            model: "auto".to_owned(),
+            timeout_seconds: 30,
+            api_key_env: None,
+            filter: OracleTriageFilterConfig::default(),
+            output_target: "operator-dashboard".to_owned(),
+            system_prompt_path: None,
+            max_events_per_hour: 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(default)]
+pub struct OracleTriageFilterConfig {
+    /// Severity floor (token: `informational` / `low` / `medium` /
+    /// `high` / `critical` / `fatal`). Default `medium`.
+    pub min_severity: String,
+    /// Kind allowlist. Empty = all kinds pass.
+    pub kinds: Vec<String>,
+}
+
+impl Default for OracleTriageFilterConfig {
+    fn default() -> Self {
+        Self {
+            min_severity: "medium".to_owned(),
+            kinds: Vec::new(),
+        }
+    }
+}
+
+/// SDD-014: shared-audit-summary channel configuration.
+///
+/// Most operators on SAIN-01 will leave this entirely default — the
+/// channel auto-enables at `deployment.target=sain01` (see
+/// [`resolve_shared_audit_summary_enabled`]) and routes to
+/// `/mnt/vault/context/security_audit.log`. The config block exists so
+/// operators can:
+///   - opt out with `enabled = false`
+///   - override the path for testing
+///   - override the selfdef-audit pointer target
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SharedAuditSummaryConfig {
+    /// Operator-explicit on/off. `None` = "use the SAIN-01 default"
+    /// (auto-enable on sain01, never on generic). `Some(true)` =
+    /// force-enable; `Some(false)` = force-disable (operator can opt
+    /// out on SAIN-01 with this).
+    pub enabled: Option<bool>,
+    /// Override path. `None` = use the resolver default
+    /// `/mnt/vault/context/security_audit.log` (SDD-014 § 2 default).
+    pub path: Option<PathBuf>,
+    /// Override selfdef-audit pointer target. `None` = use the
+    /// resolver default (target-driven, per SDD-013).
+    pub selfdef_audit_path: Option<PathBuf>,
+    /// SDD-014 Q14-C: emit a JSONL twin under
+    /// `/mnt/vault/context/security_audit.jsonl` alongside the text
+    /// summary. Machine readers (dashboards, fleet aggregators)
+    /// consume the JSONL; operators read the text log. Default false
+    /// — opt-in per Q14-C "DEFER" recommendation; operators enable
+    /// only when they have a machine reader.
+    pub jsonl_twin: bool,
+    /// Override JSONL twin path. `None` = derive from `path` by
+    /// swapping `.log` → `.jsonl`. Only used when `jsonl_twin = true`.
+    pub jsonl_twin_path: Option<PathBuf>,
+}
+
+/// SDD-014 § 2: resolve the effective enabled-state for the
+/// shared-audit-summary channel. Single source of truth for both the
+/// daemon's `build_channel_set` and `selfdefctl doctor`.
+///
+/// Logic:
+///   - generic target  → never auto-enable; respect explicit override
+///   - sain01 target   → auto-enable; respect explicit override
+#[must_use]
+pub fn resolve_shared_audit_summary_enabled(cfg: &Config) -> bool {
+    if let Some(v) = cfg.notifier.shared_audit_summary.enabled {
+        return v;
+    }
+    matches!(cfg.deployment.target, DeploymentTarget::Sain01)
+}
+
+/// SDD-014 § 2: resolve the effective shared-audit-log path.
+/// Override > resolver default (per target).
+#[must_use]
+pub fn resolve_shared_audit_summary_path(cfg: &Config) -> Option<PathBuf> {
+    if let Some(p) = &cfg.notifier.shared_audit_summary.path {
+        return Some(p.clone());
+    }
+    shared_audit_log_path(cfg.deployment.target)
+}
+
+/// SDD-014 § 2: resolve the effective selfdef-audit pointer target.
+/// Override > resolver default (per target).
+#[must_use]
+pub fn resolve_shared_audit_summary_pointer(cfg: &Config) -> PathBuf {
+    if let Some(p) = &cfg.notifier.shared_audit_summary.selfdef_audit_path {
+        return p.clone();
+    }
+    audit_log_path(cfg.deployment.target)
+}
+
+/// SDD-014 Q14-C: resolve the effective JSONL twin path. Returns
+/// `None` when `jsonl_twin = false` (the Q14-C default). When enabled,
+/// returns either the explicit `jsonl_twin_path` override, or the
+/// shared-log path with `.log` swapped to `.jsonl`.
+#[must_use]
+pub fn resolve_shared_audit_summary_jsonl_twin(cfg: &Config) -> Option<PathBuf> {
+    if !cfg.notifier.shared_audit_summary.jsonl_twin {
+        return None;
+    }
+    if let Some(p) = &cfg.notifier.shared_audit_summary.jsonl_twin_path {
+        return Some(p.clone());
+    }
+    // Derive from shared-log path: foo/security_audit.log →
+    // foo/security_audit.jsonl. When the resolver returns None (generic
+    // target, no override), we have nothing to derive from.
+    let base = resolve_shared_audit_summary_path(cfg)?;
+    let mut s = base.clone();
+    s.set_extension("jsonl");
+    Some(s)
 }
 
 /// SDD-008 D-6c: operator-defined custom escalation profile shape.
@@ -1043,6 +1515,114 @@ mod tests {
         assert!(!cfg.collectors.auditd.enabled);
     }
 
+    // ----- SD-R21 hardware-probe config -----------------------------
+
+    #[test]
+    fn sdr21_hardware_probe_defaults_are_disabled() {
+        let cfg = HardwareProbeConfig::default();
+        assert!(!cfg.enabled, "must be opt-in");
+        assert!(!cfg.emit_thermal_events);
+        assert_eq!(cfg.interval_seconds, 300);
+        assert_eq!(cfg.thermal_warn_celsius, 85);
+        assert_eq!(cfg.thermal_critical_celsius, 95);
+        assert_eq!(cfg.gpu_critical_celsius, 0);
+    }
+
+    #[test]
+    fn sdr21_hardware_probe_block_parses_when_set() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [hardware_probe]
+            enabled = true
+            interval_seconds = 60
+            emit_thermal_events = true
+            thermal_warn_celsius = 75
+            thermal_critical_celsius = 90
+            gpu_critical_celsius = 95
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.hardware_probe.enabled);
+        assert_eq!(cfg.hardware_probe.interval_seconds, 60);
+        assert!(cfg.hardware_probe.emit_thermal_events);
+        assert_eq!(cfg.hardware_probe.thermal_warn_celsius, 75);
+        assert_eq!(cfg.hardware_probe.thermal_critical_celsius, 90);
+        assert_eq!(cfg.hardware_probe.gpu_critical_celsius, 95);
+    }
+
+    #[test]
+    fn sdr21_classify_below_warn_returns_ok() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 60), "ok");
+    }
+
+    #[test]
+    fn sdr21_classify_at_warn_returns_warn() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 85), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 94), "warn");
+    }
+
+    #[test]
+    fn sdr21_classify_at_critical_returns_critical() {
+        let cfg = HardwareProbeConfig::default();
+        assert_eq!(
+            classify_thermal_reading(&cfg, "k10temp/Tctl", 95),
+            "critical"
+        );
+        assert_eq!(
+            classify_thermal_reading(&cfg, "k10temp/Tctl", 110),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_gpu_uses_gpu_threshold_when_set() {
+        let cfg = HardwareProbeConfig {
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 85,
+            ..Default::default()
+        };
+        // CPU sensor: 90 → warn (under critical 95)
+        assert_eq!(classify_thermal_reading(&cfg, "k10temp/Tctl", 90), "warn");
+        // GPU sensor: 90 → critical (under default critical 95 but
+        // over GPU-specific 85).
+        assert_eq!(
+            classify_thermal_reading(&cfg, "nvidia-gpu-0", 90),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_gpu_falls_back_when_override_zero() {
+        let cfg = HardwareProbeConfig {
+            thermal_critical_celsius: 95,
+            gpu_critical_celsius: 0, // disabled
+            ..Default::default()
+        };
+        assert_eq!(classify_thermal_reading(&cfg, "nvidia-gpu-0", 90), "warn");
+        assert_eq!(
+            classify_thermal_reading(&cfg, "nvidia-gpu-0", 95),
+            "critical"
+        );
+    }
+
+    #[test]
+    fn sdr21_classify_handles_custom_thresholds() {
+        let cfg = HardwareProbeConfig {
+            thermal_warn_celsius: 50,
+            thermal_critical_celsius: 70,
+            ..Default::default()
+        };
+        assert_eq!(classify_thermal_reading(&cfg, "x", 49), "ok");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 50), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 69), "warn");
+        assert_eq!(classify_thermal_reading(&cfg, "x", 70), "critical");
+    }
+
     #[test]
     fn toml_overrides_defaults() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
@@ -1315,5 +1895,641 @@ mod tests {
         assert!(cfg.api.enabled);
         assert_eq!(cfg.api.max_sse_subscribers, None);
         assert_eq!(cfg.api.max_sse_subscribers_per_token, None);
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-013 regression-prevention tests
+    // ----------------------------------------------------------------
+
+    /// SDD-013 § 6: target defaults to Generic when the [deployment]
+    /// block is absent. Existing operator configs must parse unchanged.
+    #[test]
+    fn sdd_013_target_defaults_to_generic_when_absent() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(tmp.path(), "").unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+    }
+
+    /// SDD-013 § 6: explicit `target = "generic"` parses to Generic.
+    #[test]
+    fn sdd_013_target_parses_generic() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "generic"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+    }
+
+    /// SDD-013 § 6: explicit `target = "sain01"` parses to Sain01.
+    #[test]
+    fn sdd_013_target_parses_sain01() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "sain01"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+    }
+
+    /// SDD-013 § Goals point 3: unknown values fail-loud at parse time.
+    /// No silent fallback — operator typos become hard errors.
+    #[test]
+    fn sdd_013_target_rejects_unknown_value() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "bogus"
+            "#,
+        )
+        .unwrap();
+        let r = Config::load(Some(tmp.path()));
+        assert!(r.is_err(), "unknown target value must fail-loud");
+    }
+
+    /// SDD-013 § 3: state_dir for Generic is FHS-standard.
+    #[test]
+    fn sdd_013_generic_target_uses_var_lib_selfdef() {
+        assert_eq!(
+            state_dir(DeploymentTarget::Generic),
+            Path::new("/var/lib/selfdef")
+        );
+    }
+
+    /// SDD-013 § 3: state_dir for SAIN-01 is the ZFS tank/context mount.
+    #[test]
+    fn sdd_013_sain01_target_uses_mnt_vault_context() {
+        assert_eq!(
+            state_dir(DeploymentTarget::Sain01),
+            Path::new("/mnt/vault/context")
+        );
+    }
+
+    /// SDD-013 § 3: audit_log_path threads through state_dir.
+    #[test]
+    fn sdd_013_audit_log_paths_match_target() {
+        assert_eq!(
+            audit_log_path(DeploymentTarget::Generic),
+            PathBuf::from("/var/lib/selfdef/selfdef-audit.jsonl")
+        );
+        assert_eq!(
+            audit_log_path(DeploymentTarget::Sain01),
+            PathBuf::from("/mnt/vault/context/selfdef-audit.jsonl")
+        );
+    }
+
+    /// SDD-013 § 3: escalations_path threads through state_dir.
+    #[test]
+    fn sdd_013_escalations_paths_match_target() {
+        assert_eq!(
+            escalations_path(DeploymentTarget::Generic),
+            PathBuf::from("/var/lib/selfdef/selfdef-escalations.sqlite")
+        );
+        assert_eq!(
+            escalations_path(DeploymentTarget::Sain01),
+            PathBuf::from("/mnt/vault/context/selfdef-escalations.sqlite")
+        );
+    }
+
+    /// SDD-014 wire: shared_audit_log_path returns Some only on SAIN-01.
+    /// Generic deployments have no shared timeline (selfdef alone owns
+    /// its audit log).
+    #[test]
+    fn sdd_013_shared_audit_log_is_sain01_only() {
+        assert!(shared_audit_log_path(DeploymentTarget::Generic).is_none());
+        assert_eq!(
+            shared_audit_log_path(DeploymentTarget::Sain01),
+            Some(PathBuf::from("/mnt/vault/context/security_audit.log"))
+        );
+    }
+
+    /// DeploymentTarget round-trips through TOML serialize/deserialize
+    /// (operator can write what they read; agent emitters round-trip).
+    #[test]
+    fn sdd_013_deployment_target_toml_roundtrip() {
+        for t in [DeploymentTarget::Generic, DeploymentTarget::Sain01] {
+            let cfg = Config {
+                deployment: DeploymentConfig {
+                    target: t,
+                    ..DeploymentConfig::default()
+                },
+                ..Config::default()
+            };
+            let toml_str = toml::to_string(&cfg).unwrap();
+            let parsed: Config = toml::from_str(&toml_str).unwrap();
+            assert_eq!(parsed.deployment.target, t);
+        }
+    }
+
+    /// SDD-013 ergonomics: as_str matches the TOML serialization form
+    /// (operator tooling that prints the target uses one token).
+    #[test]
+    fn sdd_013_deployment_target_as_str_matches_serde() {
+        assert_eq!(DeploymentTarget::Generic.as_str(), "generic");
+        assert_eq!(DeploymentTarget::Sain01.as_str(), "sain01");
+        assert_eq!(format!("{}", DeploymentTarget::Sain01), "sain01");
+    }
+
+    /// FromStr parses both the canonical tokens; unknown is rejected.
+    #[test]
+    fn sdd_013_deployment_target_from_str() {
+        use std::str::FromStr;
+        assert_eq!(
+            DeploymentTarget::from_str("generic").unwrap(),
+            DeploymentTarget::Generic
+        );
+        assert_eq!(
+            DeploymentTarget::from_str("sain01").unwrap(),
+            DeploymentTarget::Sain01
+        );
+        assert!(DeploymentTarget::from_str("bogus").is_err());
+        assert!(DeploymentTarget::from_str("SAIN01").is_err()); // case-sensitive per serde rename_all
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-014 resolver tests
+    // ----------------------------------------------------------------
+
+    /// SDD-014 § 2: on Generic, channel never auto-enables.
+    #[test]
+    fn sdd_014_generic_target_does_not_auto_enable_shared_audit_summary() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: on SAIN-01, channel auto-enables.
+    #[test]
+    fn sdd_014_sain01_target_auto_enables_shared_audit_summary() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2 + Q14-B: explicit `enabled = false` overrides
+    /// the auto-enable on SAIN-01.
+    #[test]
+    fn sdd_014_explicit_disable_overrides_auto_enable_on_sain01() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(false),
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: explicit `enabled = true` force-enables on Generic
+    /// (operator override path — they get to opt-in to the shared log
+    /// even on a generic deployment if they really want).
+    #[test]
+    fn sdd_014_explicit_enable_overrides_auto_disable_on_generic() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(true),
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_shared_audit_summary_enabled(&cfg));
+    }
+
+    /// SDD-014 § 2: path resolver — default routes to
+    /// /mnt/vault/context on SAIN-01, None on Generic.
+    #[test]
+    fn sdd_014_path_resolution() {
+        let g = Config::default();
+        assert!(resolve_shared_audit_summary_path(&g).is_none());
+        let s = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_path(&s),
+            Some(PathBuf::from("/mnt/vault/context/security_audit.log"))
+        );
+    }
+
+    /// SDD-014 § 2: operator-supplied path overrides the resolver.
+    #[test]
+    fn sdd_014_path_override_wins() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Generic,
+                ..DeploymentConfig::default()
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: Some(true),
+                    path: Some(PathBuf::from("/var/log/custom-shared.log")),
+                    selfdef_audit_path: None,
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_path(&cfg),
+            Some(PathBuf::from("/var/log/custom-shared.log"))
+        );
+    }
+
+    /// SDD-014 § 2: selfdef-audit pointer override.
+    #[test]
+    fn sdd_014_pointer_override_wins() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            notifier: NotifierConfig {
+                shared_audit_summary: SharedAuditSummaryConfig {
+                    enabled: None,
+                    path: None,
+                    selfdef_audit_path: Some(PathBuf::from("/srv/audit.jsonl")),
+                    ..SharedAuditSummaryConfig::default()
+                },
+                ..NotifierConfig::default()
+            },
+            ..Config::default()
+        };
+        assert_eq!(
+            resolve_shared_audit_summary_pointer(&cfg),
+            PathBuf::from("/srv/audit.jsonl")
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-015 perimeter coexistence resolver tests
+    // ----------------------------------------------------------------
+
+    /// SDD-015 § 4: on Generic, check_overlap_on_apply auto-false.
+    #[test]
+    fn sdd_015_generic_target_check_overlap_off_by_default() {
+        let cfg = Config::default();
+        assert!(!resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: on SAIN-01, check_overlap_on_apply auto-true.
+    #[test]
+    fn sdd_015_sain01_target_check_overlap_on_by_default() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: explicit Some(false) on SAIN-01 disables the check
+    /// (operator opt-out path — e.g. they're maintaining the boundary
+    /// by hand during migration).
+    #[test]
+    fn sdd_015_explicit_disable_overrides_auto_enable_on_sain01() {
+        let cfg = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            perimeter: PerimeterConfig {
+                check_overlap_on_apply: Some(false),
+                ..PerimeterConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: explicit Some(true) on Generic enables the check
+    /// (operator override path — e.g. multi-author Tetragon setup not
+    /// involving sovereign-os).
+    #[test]
+    fn sdd_015_explicit_enable_overrides_auto_disable_on_generic() {
+        let cfg = Config {
+            perimeter: PerimeterConfig {
+                check_overlap_on_apply: Some(true),
+                ..PerimeterConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(resolve_perimeter_check_overlap(&cfg));
+    }
+
+    /// SDD-015 § 4: default perimeter paths point at the Tetragon
+    /// stock load directory.
+    #[test]
+    fn sdd_015_default_perimeter_paths() {
+        let p = PerimeterConfig::default();
+        assert_eq!(
+            p.policies_dir,
+            PathBuf::from("/etc/tetragon/tracing-policies")
+        );
+        assert_eq!(
+            p.sovereign_kernel_fence_path,
+            PathBuf::from("/etc/tetragon/tracing-policies/sovereign-kernel-fence.yaml")
+        );
+        assert!(!p.overlap_warn_only);
+        assert!(p.check_overlap_on_apply.is_none());
+    }
+
+    // ----------------------------------------------------------------
+    // SDD-016 oracle-triage config tests
+    // ----------------------------------------------------------------
+
+    /// SDD-016 § 2 + Q-D verbatim: channel is OFF by default, even
+    /// on SAIN-01. Opt-in is operator-explicit.
+    #[test]
+    fn sdd_016_oracle_triage_disabled_by_default() {
+        let cfg = Config::default();
+        assert!(!cfg.notifier.oracle_triage.enabled);
+        let s = Config {
+            deployment: DeploymentConfig {
+                target: DeploymentTarget::Sain01,
+                ..DeploymentConfig::default()
+            },
+            ..Config::default()
+        };
+        assert!(!s.notifier.oracle_triage.enabled);
+    }
+
+    /// SDD-016 § 2: default endpoint matches SDD-011 router.
+    #[test]
+    fn sdd_016_default_endpoint_matches_sdd_011_router() {
+        let cfg = OracleTriageConfig::default();
+        assert_eq!(cfg.endpoint, "http://127.0.0.1:8080");
+        assert_eq!(cfg.model, "auto");
+        assert_eq!(cfg.timeout_seconds, 30);
+        assert!(cfg.api_key_env.is_none());
+        assert_eq!(cfg.output_target, "operator-dashboard");
+    }
+
+    /// SDD-016 § 2: configured via TOML; round-trip.
+    #[test]
+    fn sdd_016_config_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.oracle_triage]
+            enabled = true
+            endpoint = "http://10.0.100.50:8080"
+            model = "auto"
+            timeout_seconds = 45
+            output_target = "both"
+
+            [notifier.oracle_triage.filter]
+            min_severity = "high"
+            kinds = ["POLICY_VIOLATION", "CONN_ANOMALY"]
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.notifier.oracle_triage.enabled);
+        assert_eq!(
+            cfg.notifier.oracle_triage.endpoint,
+            "http://10.0.100.50:8080"
+        );
+        assert_eq!(cfg.notifier.oracle_triage.timeout_seconds, 45);
+        assert_eq!(cfg.notifier.oracle_triage.output_target, "both");
+        assert_eq!(cfg.notifier.oracle_triage.filter.min_severity, "high");
+        assert_eq!(
+            cfg.notifier.oracle_triage.filter.kinds,
+            vec!["POLICY_VIOLATION".to_owned(), "CONN_ANOMALY".to_owned()]
+        );
+    }
+
+    // ----------------------------------------------------------------
+    // SD-R6 follow-up tests (Q14-C JSONL twin, Q15-D third-party,
+    // Q16-D rate-limit)
+    // ----------------------------------------------------------------
+
+    /// SDD-014 Q14-C: jsonl_twin defaults to false (deferred per Q14-C
+    /// recommendation; opt-in only).
+    #[test]
+    fn sdd_014_jsonl_twin_defaults_false() {
+        let cfg = Config::default();
+        assert!(!cfg.notifier.shared_audit_summary.jsonl_twin);
+    }
+
+    /// SDD-014 Q14-C: jsonl_twin opt-in via TOML.
+    #[test]
+    fn sdd_014_jsonl_twin_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.shared_audit_summary]
+            jsonl_twin = true
+            jsonl_twin_path = "/var/log/custom.jsonl"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert!(cfg.notifier.shared_audit_summary.jsonl_twin);
+        assert_eq!(
+            cfg.notifier.shared_audit_summary.jsonl_twin_path,
+            Some(PathBuf::from("/var/log/custom.jsonl"))
+        );
+    }
+
+    /// SDD-015 Q15-D: third_party_policy_stance defaults to "warn".
+    #[test]
+    fn sdd_015_third_party_stance_defaults_to_warn() {
+        let p = PerimeterConfig::default();
+        assert_eq!(p.third_party_policy_stance, "warn");
+    }
+
+    /// SDD-015 Q15-D: third_party_policy_stance accepts "warn",
+    /// "ignore", "block" — operators express stricter postures
+    /// without changing the default.
+    #[test]
+    fn sdd_015_third_party_stance_parses_from_toml() {
+        for stance in ["warn", "ignore", "block"] {
+            let tmp = tempfile::NamedTempFile::new().unwrap();
+            std::fs::write(
+                tmp.path(),
+                format!(
+                    r#"
+                    [perimeter]
+                    third_party_policy_stance = "{stance}"
+                    "#
+                ),
+            )
+            .unwrap();
+            let cfg = Config::load(Some(tmp.path())).unwrap();
+            assert_eq!(cfg.perimeter.third_party_policy_stance, stance);
+        }
+    }
+
+    /// SDD-016 Q16-D: max_events_per_hour defaults to 100.
+    #[test]
+    fn sdd_016_rate_limit_defaults_to_100() {
+        let cfg = OracleTriageConfig::default();
+        assert_eq!(cfg.max_events_per_hour, 100);
+    }
+
+    /// SDD-017 § 5: sain01_strict defaults to false (warn-only).
+    #[test]
+    fn sdd_017_sain01_strict_defaults_false() {
+        let cfg = Config::default();
+        assert!(!cfg.deployment.sain01_strict);
+    }
+
+    /// SDD-017 § 5: explicit sain01_strict=true parses.
+    #[test]
+    fn sdd_017_sain01_strict_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            target = "sain01"
+            sain01_strict = true
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Sain01);
+        assert!(cfg.deployment.sain01_strict);
+    }
+
+    /// SDD-017 § 6: hardware_metrics_path empty by default; opt-in
+    /// via config.
+    #[test]
+    fn sdd_017_hardware_metrics_path_defaults_empty() {
+        let cfg = Config::default();
+        assert!(cfg.deployment.hardware_metrics_path.is_empty());
+    }
+
+    /// SDD-017 § 7 (SD-R10): hardware_capabilities_path defaults to empty.
+    #[test]
+    fn sdr10_hardware_capabilities_path_defaults_empty() {
+        let cfg = Config::default();
+        assert!(cfg.deployment.hardware_capabilities_path.is_empty());
+    }
+
+    /// SDD-017 § 7 (SD-R10): hardware_capabilities_path TOML parse.
+    #[test]
+    fn sdr10_hardware_capabilities_path_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            hardware_capabilities_path = "/var/lib/selfdef/hardware-capabilities.json"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(
+            cfg.deployment.hardware_capabilities_path,
+            "/var/lib/selfdef/hardware-capabilities.json"
+        );
+    }
+
+    #[test]
+    fn sdd_017_hardware_metrics_path_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            hardware_metrics_path = "/var/lib/node_exporter/textfile_collector/selfdef-hardware.prom"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(
+            cfg.deployment.hardware_metrics_path,
+            "/var/lib/node_exporter/textfile_collector/selfdef-hardware.prom"
+        );
+    }
+
+    /// SDD-016 Q16-D: rate-limit configurable; 0 disables.
+    #[test]
+    fn sdd_016_rate_limit_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [notifier.oracle_triage]
+            max_events_per_hour = 0
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.notifier.oracle_triage.max_events_per_hour, 0);
+    }
+
+    /// SDD-013 § Goals point 2 (zero regression): a fully-populated
+    /// pre-SDD-013 config (without [deployment]) loads identically to
+    /// before. Snapshot: the daemon paths reach the legacy Generic
+    /// values; no field other than `cfg.deployment` is touched.
+    #[test]
+    fn sdd_013_legacy_config_parses_with_generic_target_only() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [daemon]
+            log_level = "debug"
+
+            [api]
+            enabled = true
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(cfg.daemon.log_level, "debug");
+        assert!(cfg.api.enabled);
+        assert_eq!(cfg.deployment.target, DeploymentTarget::Generic);
+        assert_eq!(
+            state_dir(cfg.deployment.target),
+            Path::new("/var/lib/selfdef")
+        );
     }
 }

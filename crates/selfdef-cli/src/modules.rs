@@ -80,6 +80,26 @@ pub(crate) struct ModuleManifest {
     pub(crate) consumes: Vec<String>,
     #[serde(default)]
     pub(crate) requires: Vec<Requirement>,
+    /// SD-R14: hardware requirements gate. Module is SKIPPED at
+    /// apply-time when any declared requirement isn't met. Empty
+    /// (default) means the module is always applied.
+    ///
+    /// Operator-stable; consumed by `cmd_apply` via
+    /// [`hardware_requirements_met`].
+    #[serde(default)]
+    pub(crate) requires_hardware: HardwareRequirements,
+    /// SD-R55 (closes SDD-020 V-5): supply-chain assurance. When
+    /// the operator pins this module's manifest as signed in the
+    /// `[signing]` block, apply refuses to land it unless
+    /// `module.toml.minisig` verifies against the operator's
+    /// trust-root pubkey. Empty (default) → no signing check.
+    #[serde(default)]
+    pub(crate) signing: Option<ModuleSigningSpec>,
+    /// SD-R61 (closes SDD-021 W-6): optional per-module resource
+    /// quotas applied to install scripts. Defense in depth — a
+    /// bad apply.sh shouldn't be able to OOM the host.
+    #[serde(default)]
+    pub(crate) resources: Option<ModuleResourceSpec>,
     #[serde(default)]
     pub(crate) install: Option<InstallSpec>,
     #[serde(default)]
@@ -102,6 +122,16 @@ pub(crate) struct ModuleManifest {
     /// passed.
     #[serde(default)]
     pub(crate) daemon_requires: BTreeMap<String, DaemonRequirement>,
+    /// SD-R99 (E2.M6): operator-tunable per-module feature defaults.
+    /// Each entry is a feature name → default value (any TOML type).
+    /// Operators can override individual leaves by adding a `[features]`
+    /// table to `/etc/selfdef/modules/<slug>.toml` (or pass
+    /// `--config <path>` to `selfdefctl modules features`). The merge
+    /// follows the operator-overlay-doctrine (SDD-030 R283 equivalent
+    /// adopted for selfdef): operator-key-wins, lists REPLACE, nested
+    /// dicts deep-merge.
+    #[serde(default)]
+    pub(crate) features: BTreeMap<String, toml::Value>,
 }
 
 /// Expected value for one daemon-config knob. Backed by an untagged
@@ -148,6 +178,492 @@ impl DaemonRequirement {
 pub(crate) struct Requirement {
     pub(crate) kind: String,
     pub(crate) value: String,
+}
+
+/// SD-R14: hardware-aware module gating.
+///
+/// A module's `[requires_hardware]` table declares minimum host
+/// hardware. The apply path skips modules that don't meet the bar
+/// with a clear log line; operators can override with
+/// `--ignore-hardware` (future round) or by editing the module manifest.
+#[derive(Debug, Default, Deserialize, Clone)]
+pub(crate) struct HardwareRequirements {
+    /// When set, requires `cpu.avx512_vnni = true` in the host's
+    /// HardwareCapabilities. Match for ternary-inference fast path
+    /// modules (master spec § 16).
+    #[serde(default)]
+    pub(crate) avx512_vnni: bool,
+
+    /// When set, requires `cpu.avx512_bf16 = true`. Match for
+    /// BitNet acceleration modules.
+    #[serde(default)]
+    pub(crate) avx512_bf16: bool,
+
+    /// Minimum memory in GiB.
+    #[serde(default)]
+    pub(crate) memory_gib_min: u64,
+
+    /// Minimum count of NVIDIA GPUs. 0 disables the gate.
+    #[serde(default)]
+    pub(crate) gpu_count_min: u32,
+
+    /// SD-R26: minimum VRAM (GiB) on AT LEAST ONE GPU. Lets a module
+    /// declare "I need to fit a model that takes 80 GiB" — passes
+    /// when any GPU in HardwareCapabilities.gpu.devices reports
+    /// vram_bytes ≥ this. 0 disables the gate.
+    ///
+    /// Pairs naturally with `gpu_count_min`: combined "needs 2 GPUs
+    /// AND at least one with 80 GiB VRAM" lands inference modules
+    /// on the SAIN-01 dual-GPU rig (RTX PRO 6000 → 98 GiB).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_min: u64,
+
+    /// SD-R51 (closes SDD-019 T-1): ALL-semantics companion to
+    /// `gpu_vram_gib_min`. Every GPU in
+    /// HardwareCapabilities.gpu.devices must report vram_bytes ≥
+    /// this. Use case: fleet-uniformity modules (e.g. a tensor-
+    /// parallel inference module that splits a model across BOTH
+    /// GPUs and needs each card to host an equal slice). 0 disables.
+    ///
+    /// Fail-closed when the per-device list is empty (no probe data
+    /// → can't prove ALL GPUs satisfy → fail).
+    #[serde(default)]
+    pub(crate) gpu_vram_gib_each_min: u64,
+
+    /// SD-R26: minimum total power headroom (watts) across ALL GPUs.
+    /// Headroom for one GPU = power_limit - power_draw; we sum
+    /// across the fleet. Gate disabled when 0. When set, requires
+    /// every GPU to expose both `power_limit_watts` AND
+    /// `power_draw_watts` (else the predicate fails — modules
+    /// asking for headroom assurance must have telemetry).
+    ///
+    /// Use case: a sustained-load inference module declares
+    /// `gpu_power_headroom_watts_min = 200` and only applies on
+    /// hosts where adding ~200W won't blow the cap.
+    #[serde(default)]
+    pub(crate) gpu_power_headroom_watts_min: u32,
+
+    /// SD-R32: required wasm-AOT target features (comma-separated,
+    /// `+feature` syntax; sovereign-os pulse/wasm-aot.sh-compatible).
+    /// Empty disables the gate. Module passes when EVERY listed
+    /// feature appears in
+    /// HardwareCapabilities.wasm_aot.target_features.
+    ///
+    /// Examples (operator surface):
+    ///   wasm_aot_features_required = "+avx512f"
+    ///   wasm_aot_features_required = "+avx512vnni,+avx512bf16"
+    ///
+    /// Use case: an AOT-compiled inference module declares
+    /// "I need VNNI for INT8 matmul AND BF16 for the activation
+    /// reduction stage" — passes on the SAIN-01 9900X, fails on
+    /// 9700X (no BF16) before any compile happens.
+    #[serde(default)]
+    pub(crate) wasm_aot_features_required: String,
+
+    /// Required Sain01Match verdict, when set:
+    /// `"FullMatch"` / `"PartialMatch"` / `"NoMatch"` (the last
+    /// would be weird — operator should rarely use it).
+    #[serde(default)]
+    pub(crate) sain01_verdict_min: String,
+
+    /// SD-R64: ternary AOT readiness predicate. When `true`, the
+    /// module requires the CPU to expose the bitnet.cpp / Wasm-AOT
+    /// ternary fast path (AVX-512 VNNI + (BF16 or FP16)). Operators
+    /// use this to gate 1-bit / ternary inference modules onto hosts
+    /// that can actually run them at single-cycle ZMM-register lane
+    /// width per master spec § 16. Default `false` disables.
+    #[serde(default)]
+    pub(crate) ternary_aot_capable_required: bool,
+
+    /// SD-R64: minimum widest INT8 dot-product lane count the CPU
+    /// must expose (master spec § 16: a single 512-bit ZMM register
+    /// holds 64 INT8 lanes via VPDPBUSD). 0 disables the gate. Set
+    /// to 64 to require the AVX-512 VNNI hot path; 32 accepts AVX2
+    /// fallback; 16 accepts SSSE3 fallback. Operator-readable
+    /// hardware-exploitation knob.
+    #[serde(default)]
+    pub(crate) zmm_int8_lanes_min: u32,
+
+    /// SD-R68: generalized cpuinfo-flag gate. Comma-separated list of
+    /// raw cpuinfo feature names that MUST be present on the host.
+    /// Empty string disables. Operators use this to gate modules on
+    /// rare ISA flags WITHOUT selfdef having to add a typed predicate
+    /// per flag (the long tail: rdpid, sha_ni, avx512_vbmi2, ...).
+    ///
+    /// Examples:
+    ///   host_features_required = "avx512_vbmi2"
+    ///   host_features_required = "avx512_vbmi2,rdpid,sha_ni"
+    ///
+    /// Distinct from `wasm_aot_features_required` which uses LLVM
+    /// `+feature` syntax against the wasmtime target_features string.
+    /// This predicate reads raw cpuinfo flags directly via the
+    /// SD-R68 `cpu.extended_features` array.
+    #[serde(default)]
+    pub(crate) host_features_required: String,
+
+    /// SD-R77 (SDD-024 X-1): composable OR-predicates. Root-level
+    /// predicates above stay AND-composed. Each entry in `any_of`
+    /// is a nested HardwareRequirements block; the module passes
+    /// iff the root predicates pass AND at least ONE any_of block
+    /// passes.
+    ///
+    /// Operator syntax in module.toml:
+    ///
+    /// ```toml
+    /// [requires_hardware]
+    /// memory_gib_min = 8           # root AND-predicate
+    ///
+    /// [[requires_hardware.any_of]]
+    /// avx512_vnni = true           # SAIN-01 path
+    /// ternary_aot_capable_required = true
+    ///
+    /// [[requires_hardware.any_of]]
+    /// gpu_count_min = 1            # GPU fallback path
+    /// gpu_vram_gib_min = 24
+    /// ```
+    ///
+    /// Empty `any_of` array = no OR-constraint (the original
+    /// AND-only behavior; default).
+    #[serde(default)]
+    pub(crate) any_of: Vec<HardwareRequirements>,
+}
+
+impl HardwareRequirements {
+    /// Returns Ok iff every set requirement passes; Err with a list
+    /// of unmet predicates otherwise. Thin wrapper over
+    /// [`Self::evaluate_resolved`] for callers that don't need the
+    /// any_of branch index (SD-R79 / SDD-025 Y-1).
+    pub(crate) fn evaluate(
+        &self,
+        caps: &selfdef_hardware::HardwareCapabilities,
+    ) -> Result<(), Vec<String>> {
+        self.evaluate_resolved(caps).map(|_| ())
+    }
+
+    /// SD-R79 (SDD-025 Y-1): full evaluation that returns WHICH
+    /// `any_of` branch matched.
+    ///
+    /// - `Ok(None)` = root-only pass (no any_of branches involved).
+    /// - `Ok(Some(idx))` = passed via the `idx`-th any_of branch
+    ///   (after every root predicate also passed).
+    /// - `Err` = unmet predicate list (same operator-readable format
+    ///   as before).
+    ///
+    /// The apply path uses the returned branch index to emit a
+    /// `# SD-R79: module X resolved via any_of[N]` stderr line so
+    /// operators see which OR-path actually exercised on this host.
+    pub(crate) fn evaluate_resolved(
+        &self,
+        caps: &selfdef_hardware::HardwareCapabilities,
+    ) -> Result<Option<usize>, Vec<String>> {
+        let mut unmet = Vec::new();
+        if self.avx512_vnni && !caps.cpu.avx512vnni {
+            unmet.push("avx512_vnni required (host lacks AVX-512 VNNI)".into());
+        }
+        if self.avx512_bf16 && !caps.cpu.avx512bf16 {
+            unmet.push("avx512_bf16 required (host lacks AVX-512 BF16)".into());
+        }
+        if self.memory_gib_min > 0 {
+            let host_gib = caps.memory.total_bytes / (1024 * 1024 * 1024);
+            if host_gib < self.memory_gib_min {
+                unmet.push(format!(
+                    "memory_gib_min = {} (host has {} GiB)",
+                    self.memory_gib_min, host_gib,
+                ));
+            }
+        }
+        if self.gpu_count_min > 0 && caps.gpu.device_count < self.gpu_count_min {
+            unmet.push(format!(
+                "gpu_count_min = {} (host has {} GPU(s))",
+                self.gpu_count_min, caps.gpu.device_count,
+            ));
+        }
+        if self.gpu_vram_gib_min > 0 {
+            // Pass when ANY GPU meets the bar. Uses the SD-R25
+            // per-device caps surface; falls back to a fail if the
+            // per-device list is empty (probe didn't enrich).
+            let want_bytes = self.gpu_vram_gib_min.saturating_mul(1024 * 1024 * 1024);
+            let any_big_enough = caps
+                .gpu
+                .devices
+                .iter()
+                .any(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !any_big_enough {
+                let best_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .max()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_min = {} (host best is {} GiB)",
+                    self.gpu_vram_gib_min, best_gib,
+                ));
+            }
+        }
+        if self.gpu_vram_gib_each_min > 0 {
+            // SD-R51 ALL-semantics. Every GPU must report
+            // vram_bytes ≥ this. Empty per-device list → fail (we
+            // can't prove ALL are big enough).
+            let want_bytes = self
+                .gpu_vram_gib_each_min
+                .saturating_mul(1024 * 1024 * 1024);
+            let all_big_enough = !caps.gpu.devices.is_empty()
+                && caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .all(|d| d.vram_bytes.is_some_and(|b| b >= want_bytes));
+            if !all_big_enough {
+                let worst_gib = caps
+                    .gpu
+                    .devices
+                    .iter()
+                    .filter_map(|d| d.vram_bytes)
+                    .min()
+                    .map(|b| b / (1024 * 1024 * 1024))
+                    .unwrap_or(0);
+                unmet.push(format!(
+                    "gpu_vram_gib_each_min = {} (host worst is {} GiB across {} GPU(s))",
+                    self.gpu_vram_gib_each_min,
+                    worst_gib,
+                    caps.gpu.devices.len()
+                ));
+            }
+        }
+        if self.gpu_power_headroom_watts_min > 0 {
+            let mut total_headroom: u32 = 0;
+            let mut telemetry_complete = !caps.gpu.devices.is_empty();
+            for d in &caps.gpu.devices {
+                match (d.power_limit_watts, d.power_draw_watts) {
+                    (Some(limit), Some(draw)) => {
+                        total_headroom = total_headroom.saturating_add(limit.saturating_sub(draw));
+                    }
+                    _ => {
+                        telemetry_complete = false;
+                    }
+                }
+            }
+            if !telemetry_complete {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host GPU(s) lack power telemetry — install nvidia-smi + NVML)",
+                    self.gpu_power_headroom_watts_min
+                ));
+            } else if total_headroom < self.gpu_power_headroom_watts_min {
+                unmet.push(format!(
+                    "gpu_power_headroom_watts_min = {} (host headroom is {} W)",
+                    self.gpu_power_headroom_watts_min, total_headroom
+                ));
+            }
+        }
+        if !self.wasm_aot_features_required.is_empty() {
+            // Build the actual host feature set from the SD-R30
+            // wasm_aot.target_features string. Both sides use the
+            // `+feature` convention (LLVM/wasmtime). Empty side =
+            // host hasn't enabled AOT → every required feature is
+            // missing.
+            let actual: std::collections::HashSet<&str> = caps
+                .wasm_aot
+                .target_features
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            let missing: Vec<&str> = self
+                .wasm_aot_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "wasm_aot_features_required = {:?} (host missing: {})",
+                    self.wasm_aot_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
+        if !self.sain01_verdict_min.is_empty() {
+            let actual = match caps.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            let rank = |s: &str| match s {
+                "FullMatch" => 3,
+                "PartialMatch" => 2,
+                "NoMatch" => 1,
+                _ => 0,
+            };
+            if rank(actual) < rank(&self.sain01_verdict_min) {
+                unmet.push(format!(
+                    "sain01_verdict_min = {} (host verdict = {})",
+                    self.sain01_verdict_min, actual,
+                ));
+            }
+        }
+        // SD-R64: ternary AOT readiness predicate. Operator declares
+        // "I need the bitnet.cpp hot path" and the gate evaluates
+        // against the SD-R64 derived flag on CpuCapabilities.
+        if self.ternary_aot_capable_required && !caps.cpu.ternary_aot_capable {
+            unmet.push(
+                "ternary_aot_capable required (host lacks AVX-512 VNNI \
+                 + (BF16 or FP16) — bitnet.cpp ternary hot path \
+                 unavailable per master spec § 16)"
+                    .into(),
+            );
+        }
+        // SD-R64: ZMM INT8 lane width gate. Operator declares "I need
+        // ≥N INT8 lanes in the widest dispatch" and the gate evaluates
+        // against the SD-R64 derived lane count.
+        if self.zmm_int8_lanes_min > 0 && caps.cpu.zmm_int8_lane_capacity < self.zmm_int8_lanes_min
+        {
+            unmet.push(format!(
+                "zmm_int8_lanes_min = {} (host max = {})",
+                self.zmm_int8_lanes_min, caps.cpu.zmm_int8_lane_capacity,
+            ));
+        }
+        // SD-R68: generalized cpuinfo-flag gate against the host's
+        // SD-R68 extended_features long-tail surface. Comma-separated
+        // syntax matches wasm_aot_features_required's shape but
+        // operates on raw cpuinfo names (no `+` prefix).
+        if !self.host_features_required.is_empty() {
+            let actual: std::collections::HashSet<&str> = caps
+                .cpu
+                .extended_features
+                .iter()
+                .map(String::as_str)
+                .collect();
+            let missing: Vec<&str> = self
+                .host_features_required
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .filter(|f| !actual.contains(f))
+                .collect();
+            if !missing.is_empty() {
+                unmet.push(format!(
+                    "host_features_required = {:?} (host missing: {})",
+                    self.host_features_required,
+                    missing.join(",")
+                ));
+            }
+        }
+        // SD-R77 (SDD-024 X-1): OR-composition. After the root
+        // predicates have been collected, evaluate `any_of` — module
+        // passes iff at least ONE inner block fully evaluates clean.
+        // Empty `any_of` = no OR-constraint (pass-through).
+        // SD-R79 (SDD-025 Y-1): record WHICH branch matched so the
+        // apply path can surface it as operator-visible observability.
+        let mut matched_branch: Option<usize> = None;
+        if !self.any_of.is_empty() {
+            let mut per_branch_failures: Vec<Vec<String>> = Vec::new();
+            for (i, branch) in self.any_of.iter().enumerate() {
+                // evaluate() (not evaluate_resolved()) — flat
+                // semantics inside any_of branches keeps the
+                // operator-facing model simple (no nested branch
+                // indices on stderr).
+                match branch.evaluate(caps) {
+                    Ok(()) => {
+                        matched_branch = Some(i);
+                        break;
+                    }
+                    Err(branch_unmet) => per_branch_failures.push(branch_unmet),
+                }
+            }
+            if matched_branch.is_none() {
+                unmet.push(format!(
+                    "any_of: NONE of {} OR-branch(es) passed",
+                    self.any_of.len()
+                ));
+                for (i, branch_unmet) in per_branch_failures.iter().enumerate() {
+                    unmet.push(format!("  any_of[{}]: {}", i, branch_unmet.join(" | ")));
+                }
+            }
+        }
+        if unmet.is_empty() {
+            Ok(matched_branch)
+        } else {
+            Err(unmet)
+        }
+    }
+
+    /// Returns true if NO requirement is set (the manifest has no
+    /// `[requires_hardware]` block, or it has only zero/false fields).
+    /// Used to skip the probe entirely on hardware-agnostic modules.
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.avx512_vnni
+            && !self.avx512_bf16
+            && self.memory_gib_min == 0
+            && self.gpu_count_min == 0
+            && self.gpu_vram_gib_min == 0
+            && self.gpu_vram_gib_each_min == 0
+            && self.gpu_power_headroom_watts_min == 0
+            && self.wasm_aot_features_required.is_empty()
+            && self.sain01_verdict_min.is_empty()
+            && !self.ternary_aot_capable_required
+            && self.zmm_int8_lanes_min == 0
+            && self.host_features_required.is_empty()
+            // SD-R77 — any_of is part of the gate surface.
+            && self.any_of.is_empty()
+    }
+}
+
+/// SD-R55: optional `[signing]` block in module.toml. When present,
+/// apply (or any lifecycle action) verifies module.toml's detached
+/// minisig signature against the operator's trust-root pubkey
+/// BEFORE running any install/apply.sh.
+///
+/// Operator workflow:
+///   # author the manifest
+///   $ vim modules/bitnet-gpu-inference/module.toml
+///   # sign with the policy private key (already generated for SDD-006 rule signing)
+///   $ minisign -S -m modules/bitnet-gpu-inference/module.toml -s ~/.selfdef-policy.key
+///   # commit module.toml + module.toml.minisig together
+///
+/// The `required = true` field makes the gate fail-closed; without
+/// the .minisig file present + valid, apply refuses to proceed.
+/// `required = false` (default for the block when present but the
+/// operator hasn't enforced) is informational: warn-only.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleSigningSpec {
+    /// When true, apply REFUSES to land the module without a valid
+    /// signature. When false (or block omitted), the apply path
+    /// surfaces the signing posture but doesn't gate.
+    #[serde(default)]
+    pub(crate) required: bool,
+    /// Optional override of the trust-root public key path. When
+    /// unset, the verifier reads `/etc/selfdef/keys/policy.pub`
+    /// (same root as the existing SDD-006 rule signing).
+    #[serde(default)]
+    pub(crate) trust_root: Option<PathBuf>,
+}
+
+/// SD-R61 (closes SDD-021 W-6): optional per-module resource quotas.
+/// Surface is operator-stable but ENFORCEMENT is currently advisory
+/// — the runner exports the quotas as SELFDEF_RESOURCE_* env vars
+/// for apply.sh / check.sh / uninstall.sh to honor via `ulimit` or
+/// `systemd-run --user`. Future round can wrap the subprocess in
+/// systemd-run automatically.
+///
+/// Operator-stable fields (all optional — empty = unlimited):
+///   cpu_max          fractional CPUs (e.g. "1.5" means 150% of a core)
+///   memory_max       human-readable size (e.g. "512M", "2G")
+///   io_weight        cgroup IOWeight in [1, 10000] (default 100)
+///   time_max_seconds wall-clock cap on the apply subprocess
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ModuleResourceSpec {
+    #[serde(default)]
+    pub(crate) cpu_max: Option<String>,
+    #[serde(default)]
+    pub(crate) memory_max: Option<String>,
+    #[serde(default)]
+    pub(crate) io_weight: Option<u32>,
+    #[serde(default)]
+    pub(crate) time_max_seconds: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -255,21 +771,952 @@ pub(crate) fn load_all(dir: &Path) -> Result<Vec<(String, ModuleManifest)>> {
     Ok(out)
 }
 
-pub(crate) fn cmd_list(dir: &Path) -> Result<()> {
+/// SD-R75 (SDD-024 X-6): operator-facing filtered list. When
+/// `category` or `phase` is set, only modules whose corresponding
+/// field exactly matches are emitted. Empty / non-matching catalogs
+/// print the operator-readable "(no modules match)" so callers can
+/// detect zero-match runs without scraping the table header.
+pub(crate) fn cmd_list_filtered(
+    dir: &Path,
+    category: Option<&str>,
+    phase: Option<&str>,
+) -> Result<()> {
     let mods = load_all(dir)?;
     if mods.is_empty() {
         println!("(no modules in {})", dir.display());
         return Ok(());
     }
-    println!(
-        "{:<20}  {:<10}  {:<14}  summary",
-        "name", "version", "category"
-    );
-    for (_, m) in &mods {
+    let filtered: Vec<_> = mods
+        .iter()
+        .filter(|(_, m)| {
+            category.is_none_or(|c| m.category == c) && phase.is_none_or(|p| m.phase.as_str() == p)
+        })
+        .collect();
+    if filtered.is_empty() {
         println!(
-            "{:<20}  {:<10}  {:<14}  {}",
-            m.name, m.version, m.category, m.summary
+            "(no modules match: category={:?} phase={:?} in {})",
+            category,
+            phase,
+            dir.display()
         );
+        return Ok(());
+    }
+    println!(
+        "{:<24}  {:<10}  {:<14}  {:<14}  summary",
+        "name", "version", "category", "phase"
+    );
+    for (_, m) in &filtered {
+        println!(
+            "{:<24}  {:<10}  {:<14}  {:<14}  {}",
+            m.name,
+            m.version,
+            m.category,
+            m.phase.as_str(),
+            m.summary
+        );
+    }
+    Ok(())
+}
+
+/// SD-R63: machine-readable list for tooling consumers (last JSON
+/// gap on the modules surface). Mirrors `models list --json` pattern
+/// from SD-R34 + `modules info --json` from SD-R40 — same schema_version
+/// + per-entry shape.
+///
+/// SD-R75 (SDD-024 X-6): JSON list with `category` + `phase`
+/// filters. Matches `cmd_list_filtered` semantics — empty filter
+/// → all modules; one or both filters → exact match.
+pub(crate) fn cmd_list_json_filtered(
+    dir: &Path,
+    category: Option<&str>,
+    phase: Option<&str>,
+) -> Result<()> {
+    let mods = load_all(dir)?;
+    let entries: Vec<serde_json::Value> = mods
+        .iter()
+        .filter(|(_, m)| {
+            category.is_none_or(|c| m.category == c) && phase.is_none_or(|p| m.phase.as_str() == p)
+        })
+        .map(|(slug, m)| {
+            serde_json::json!({
+                "slug": slug,
+                "name": m.name,
+                "version": m.version,
+                "category": m.category,
+                "summary": m.summary,
+                "phase": m.phase.as_str(),
+                "instanced": m.instanced,
+                "depends_on": m.depends_on,
+                "provides": m.provides,
+                "consumes": m.consumes,
+                "has_requires_hardware": !m.requires_hardware.is_empty(),
+                "has_signing_block": m.signing.is_some(),
+                "has_resources_block": m.resources.is_some(),
+            })
+        })
+        .collect();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "modules_dir": dir.display().to_string(),
+        "filter": {
+            "category": category,
+            "phase": phase,
+        },
+        "total": entries.len(),
+        "modules": entries,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
+/// SD-R40: emit the module manifest as structured JSON (with the
+/// SD-R39 host_status verdict inlined). Operator-stable schema for
+/// tooling consumers (sovereign-osctl, fleet dashboards, future
+/// model-fetcher scripts).
+pub(crate) fn cmd_info_json(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let host_status_json = if m.requires_hardware.is_empty() {
+        serde_json::json!({"verdict": "applies-on-any-host", "unmet": []})
+    } else {
+        match &caps {
+            Some(c) => match m.requires_hardware.evaluate(c) {
+                Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                Err(unmet) => serde_json::json!({"verdict": "skipped", "unmet": unmet}),
+            },
+            None => serde_json::json!({"verdict": "probe-unavailable", "unmet": []}),
+        }
+    };
+    let rh = &m.requires_hardware;
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "name": m.name,
+        "version": m.version,
+        "summary": m.summary,
+        "category": m.category,
+        "depends_on": m.depends_on,
+        "conflicts": m.conflicts,
+        "provides": m.provides,
+        "consumes": m.consumes,
+        "instanced": m.instanced,
+        "phase": m.phase.as_str(),
+        "requires_hardware": {
+            "is_empty": rh.is_empty(),
+            "avx512_vnni": rh.avx512_vnni,
+            "avx512_bf16": rh.avx512_bf16,
+            "memory_gib_min": rh.memory_gib_min,
+            "gpu_count_min": rh.gpu_count_min,
+            "gpu_vram_gib_min": rh.gpu_vram_gib_min,
+            "gpu_vram_gib_each_min": rh.gpu_vram_gib_each_min,
+            "gpu_power_headroom_watts_min": rh.gpu_power_headroom_watts_min,
+            "wasm_aot_features_required": rh.wasm_aot_features_required,
+            "sain01_verdict_min": rh.sain01_verdict_min,
+            "ternary_aot_capable_required": rh.ternary_aot_capable_required,
+            "zmm_int8_lanes_min": rh.zmm_int8_lanes_min,
+            "host_features_required": rh.host_features_required,
+        },
+        "signing": signing_status_json(m, dir, slug),
+        "host_status": host_status_json,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(())
+}
+
+/// SD-R99 (E2.M6): operator-pull module-features overlay. Resolves the
+/// effective per-module feature map by deep-merging the operator's
+/// `/etc/selfdef/modules/<slug>.toml` (or `--config <path>`) on top of
+/// the module manifest's `[features]` defaults. Returns operator-
+/// readable JSON: source path used, sorted dotted-path overlay keys,
+/// final feature map.
+///
+/// Operator-overlay-doctrine (SDD-030 R283 vector) adopted here:
+///   - explicit `--config` wins
+///   - $SELFDEF_MODULE_FEATURES_<SLUG_UPPER> env var (capitalized;
+///     non-alphanum → `_`) is consulted next
+///   - /etc/selfdef/modules/<slug>.toml is the default
+///   - on no overlay file → defaults pass through with
+///     `_source = "(defaults — no overlay file)"`
+///
+/// Deep-merge semantics: scalars/lists REPLACED, nested tables MERGED.
+/// SD-R100 (E2.M7): which leaves to keep when emitting features JSON.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FeatureFilter {
+    All,
+    EnabledOnly,
+    DisabledOnly,
+}
+
+/// SD-R100 (E2.M7): operator-pull filter that emits ONLY boolean
+/// leaves equal to the filter target (true → enabled-only, false →
+/// disabled-only). Non-boolean leaves are dropped entirely under a
+/// filter; tables with no surviving children are pruned. Preserves
+/// the SD-R99 envelope (round / source / overlay_keys).
+pub(crate) fn cmd_features_json_filtered(
+    dir: &Path,
+    slug: &str,
+    explicit_config: Option<&Path>,
+    filter: FeatureFilter,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+
+    let defaults: toml::Value = toml::Value::Table(
+        m.features
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect::<toml::map::Map<_, _>>(),
+    );
+
+    // Resolve overlay path (operator-overlay-doctrine 4-tier precedence).
+    let resolved_path = resolve_module_features_overlay(slug, explicit_config);
+
+    // Load + parse overlay (if any).
+    let (overlay_table, source_label, parse_error) = match &resolved_path {
+        Some(p) => match std::fs::read_to_string(p) {
+            Ok(body) => match toml::from_str::<toml::Value>(&body) {
+                Ok(v) => {
+                    // The operator file may carry a `[features]` table
+                    // OR be a flat table; accept both shapes.
+                    let table = match v {
+                        toml::Value::Table(t) => {
+                            if let Some(toml::Value::Table(inner)) = t.get("features").cloned() {
+                                inner
+                            } else {
+                                t
+                            }
+                        }
+                        _ => toml::map::Map::new(),
+                    };
+                    (
+                        Some(toml::Value::Table(table)),
+                        p.display().to_string(),
+                        None,
+                    )
+                }
+                Err(e) => (None, p.display().to_string(), Some(e.to_string())),
+            },
+            Err(e) => (None, p.display().to_string(), Some(e.to_string())),
+        },
+        None => (None, "(defaults — no overlay file)".to_string(), None),
+    };
+
+    // Deep-merge.
+    let mut merged = defaults.clone();
+    if let Some(o) = &overlay_table {
+        deep_merge_toml(&mut merged, o);
+    }
+
+    // Collect dotted-path overlay keys (only when overlay applied
+    // cleanly).
+    let mut overlay_keys: Vec<String> = Vec::new();
+    if let Some(toml::Value::Table(o_tbl)) = &overlay_table {
+        collect_overlay_keys_dotted(o_tbl, "", &mut overlay_keys);
+    }
+    overlay_keys.sort();
+
+    // SD-R100 (E2.M7): apply enabled/disabled filter when requested.
+    let (filtered, filter_label) = match filter {
+        FeatureFilter::All => (merged, "all"),
+        FeatureFilter::EnabledOnly => (filter_features_by_bool(&merged, true), "enabled-only"),
+        FeatureFilter::DisabledOnly => (filter_features_by_bool(&merged, false), "disabled-only"),
+    };
+
+    // Render features as JSON (best-effort toml→json convert).
+    let features_json = toml_to_json(&filtered);
+
+    let round_label = match filter {
+        FeatureFilter::All => "SD-R99",
+        _ => "SD-R100",
+    };
+    let mut doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "round": round_label,
+        "sdd_vector": "E2.M6 / E2.M7 / SDD-030 vector adopted",
+        "module": slug,
+        "source": source_label,
+        "overlay_keys": overlay_keys,
+        "filter": filter_label,
+        "features": features_json,
+    });
+    if let Some(err) = parse_error {
+        doc["parse_error"] = serde_json::Value::String(err);
+    }
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+/// SD-R100: walk a `toml::Value` and keep only boolean leaves equal
+/// to `target`. Tables with no surviving children are dropped.
+/// Non-boolean leaves (ints, strings, lists, datetimes) are always
+/// dropped under a filter — they're not part of the enable/disable
+/// lifecycle. Arrays of booleans are dropped (lifecycle is per-key,
+/// not per-element).
+fn filter_features_by_bool(v: &toml::Value, target: bool) -> toml::Value {
+    match v {
+        toml::Value::Boolean(b) if *b == target => v.clone(),
+        toml::Value::Table(t) => {
+            let mut out = toml::map::Map::new();
+            for (k, child) in t {
+                let kept = filter_features_by_bool(child, target);
+                match &kept {
+                    toml::Value::Table(inner) if inner.is_empty() => {}
+                    toml::Value::Boolean(b) if *b == target => {
+                        out.insert(k.clone(), kept);
+                    }
+                    toml::Value::Table(_) => {
+                        out.insert(k.clone(), kept);
+                    }
+                    _ => {}
+                }
+            }
+            toml::Value::Table(out)
+        }
+        _ => toml::Value::Table(toml::map::Map::new()),
+    }
+}
+
+/// SD-R100 (E2.M7): write `key = value` into the operator overlay
+/// file. The dotted key walks/creates nested tables. The value is
+/// parsed as a TOML scalar (`true`/`false`/int/quoted-string/etc) so
+/// the operator gets the same syntax they'd use in the file.
+///
+/// If `--overlay <path>` is omitted, defaults to
+/// `/etc/selfdef/modules/<slug>.toml`. Creates the file (and parent
+/// directory) if missing. The verb refuses unknown modules.
+pub(crate) fn cmd_feature_set(
+    dir: &Path,
+    slug: &str,
+    key: &str,
+    value: &str,
+    explicit_overlay: Option<&Path>,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let _m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+
+    // Parse the value as a TOML scalar via a synthetic doc.
+    let parsed: toml::Value = toml::from_str::<toml::Value>(&format!("v = {value}"))
+        .with_context(|| format!("invalid TOML scalar for value: `{value}`"))?
+        .get("v")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("could not parse scalar"))?;
+
+    let overlay_path = overlay_write_path(slug, explicit_overlay);
+    if let Some(parent) = overlay_path.parent() {
+        std::fs::create_dir_all(parent).ok();
+    }
+
+    let mut root = load_overlay_or_empty(&overlay_path);
+    // Normalize into the same shape `cmd_features_json` reads: live
+    // at the root if no `[features]` block is present, else under it.
+    set_dotted(&mut root, key, parsed.clone());
+    let body = toml::to_string_pretty(&root)
+        .with_context(|| format!("rendering TOML for {}", overlay_path.display()))?;
+    std::fs::write(&overlay_path, body)
+        .with_context(|| format!("writing {}", overlay_path.display()))?;
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "round": "SD-R100",
+        "sdd_vector": "E2.M7",
+        "module": slug,
+        "overlay_path": overlay_path.display().to_string(),
+        "set": { "key": key, "value": toml_to_json(&parsed) },
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+/// SD-R100 (E2.M7): remove a dotted key from the operator overlay.
+/// Idempotent — clearing a key that doesn't exist (or removing from a
+/// nonexistent overlay) is a no-op + reports cleared=false.
+pub(crate) fn cmd_feature_clear(
+    dir: &Path,
+    slug: &str,
+    key: &str,
+    explicit_overlay: Option<&Path>,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let _m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+
+    let overlay_path = overlay_write_path(slug, explicit_overlay);
+    let cleared = if overlay_path.is_file() {
+        let mut root = load_overlay_or_empty(&overlay_path);
+        let did = clear_dotted(&mut root, key);
+        if did {
+            let body = toml::to_string_pretty(&root)?;
+            std::fs::write(&overlay_path, body)?;
+        }
+        did
+    } else {
+        false
+    };
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "round": "SD-R100",
+        "sdd_vector": "E2.M7",
+        "module": slug,
+        "overlay_path": overlay_path.display().to_string(),
+        "overlay_present": overlay_path.is_file(),
+        "key": key,
+        "cleared": cleared,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+fn overlay_write_path(slug: &str, explicit: Option<&Path>) -> PathBuf {
+    if let Some(p) = explicit {
+        return p.to_path_buf();
+    }
+    Path::new(DEFAULT_PER_MODULE_DIR).join(format!("{slug}.toml"))
+}
+
+fn load_overlay_or_empty(path: &Path) -> toml::Value {
+    let body = match std::fs::read_to_string(path) {
+        Ok(b) => b,
+        Err(_) => return toml::Value::Table(toml::map::Map::new()),
+    };
+    toml::from_str::<toml::Value>(&body)
+        .unwrap_or_else(|_| toml::Value::Table(toml::map::Map::new()))
+}
+
+fn set_dotted(root: &mut toml::Value, dotted: &str, value: toml::Value) {
+    let parts: Vec<&str> = dotted.split('.').collect();
+    // Ensure root is a table.
+    if !matches!(root, toml::Value::Table(_)) {
+        *root = toml::Value::Table(toml::map::Map::new());
+    }
+    let mut cursor: &mut toml::Value = root;
+    for (i, p) in parts.iter().enumerate() {
+        let toml::Value::Table(map) = cursor else {
+            return;
+        };
+        if i + 1 == parts.len() {
+            map.insert((*p).to_string(), value);
+            return;
+        }
+        let entry = map
+            .entry((*p).to_string())
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        if !matches!(entry, toml::Value::Table(_)) {
+            *entry = toml::Value::Table(toml::map::Map::new());
+        }
+        cursor = entry;
+    }
+}
+
+fn clear_dotted(root: &mut toml::Value, dotted: &str) -> bool {
+    let parts: Vec<&str> = dotted.split('.').collect();
+    let toml::Value::Table(_) = root else {
+        return false;
+    };
+    let mut cursor: &mut toml::Value = root;
+    for (i, p) in parts.iter().enumerate() {
+        let toml::Value::Table(map) = cursor else {
+            return false;
+        };
+        if i + 1 == parts.len() {
+            return map.remove(*p).is_some();
+        }
+        match map.get_mut(*p) {
+            Some(next) => cursor = next,
+            None => return false,
+        }
+    }
+    false
+}
+
+/// SD-R99: env-var name for a given slug. `bridge-l2` →
+/// `SELFDEF_MODULE_FEATURES_BRIDGE_L2`.
+pub(crate) fn module_features_env_name(slug: &str) -> String {
+    let mut s = String::with_capacity(32 + slug.len());
+    s.push_str("SELFDEF_MODULE_FEATURES_");
+    for c in slug.chars() {
+        if c.is_ascii_alphanumeric() {
+            s.push(c.to_ascii_uppercase());
+        } else {
+            s.push('_');
+        }
+    }
+    s
+}
+
+/// SD-R99: 4-tier path resolution.
+pub(crate) fn resolve_module_features_overlay(
+    slug: &str,
+    explicit: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(p) = explicit {
+        if p.is_file() {
+            return Some(p.to_path_buf());
+        }
+        return None;
+    }
+    if let Ok(env_path) = std::env::var(module_features_env_name(slug)) {
+        if !env_path.is_empty() {
+            let p = PathBuf::from(env_path);
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+    }
+    let etc = Path::new(DEFAULT_PER_MODULE_DIR).join(format!("{slug}.toml"));
+    if etc.is_file() {
+        return Some(etc);
+    }
+    None
+}
+
+/// SD-R99: deep-merge `overlay` into `base` (operator-key-wins, lists
+/// REPLACE, nested tables MERGE).
+fn deep_merge_toml(base: &mut toml::Value, overlay: &toml::Value) {
+    match (base, overlay) {
+        (toml::Value::Table(b), toml::Value::Table(o)) => {
+            for (k, v) in o {
+                match b.get_mut(k) {
+                    Some(existing) => {
+                        if matches!(existing, toml::Value::Table(_))
+                            && matches!(v, toml::Value::Table(_))
+                        {
+                            deep_merge_toml(existing, v);
+                        } else {
+                            *existing = v.clone();
+                        }
+                    }
+                    None => {
+                        b.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        (base_slot, overlay_v) => {
+            *base_slot = overlay_v.clone();
+        }
+    }
+}
+
+/// SD-R99: collect dotted-path keys overridden by an overlay table.
+fn collect_overlay_keys_dotted(
+    table: &toml::map::Map<String, toml::Value>,
+    prefix: &str,
+    out: &mut Vec<String>,
+) {
+    for (k, v) in table {
+        let dotted = if prefix.is_empty() {
+            k.clone()
+        } else {
+            format!("{prefix}.{k}")
+        };
+        if let toml::Value::Table(inner) = v {
+            collect_overlay_keys_dotted(inner, &dotted, out);
+        } else {
+            out.push(dotted);
+        }
+    }
+}
+
+/// SD-R99: best-effort `toml::Value` → `serde_json::Value`.
+fn toml_to_json(v: &toml::Value) -> serde_json::Value {
+    match v {
+        toml::Value::String(s) => serde_json::Value::String(s.clone()),
+        toml::Value::Integer(n) => serde_json::Value::Number((*n).into()),
+        toml::Value::Float(f) => serde_json::Number::from_f64(*f)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        toml::Value::Boolean(b) => serde_json::Value::Bool(*b),
+        toml::Value::Datetime(d) => serde_json::Value::String(d.to_string()),
+        toml::Value::Array(a) => serde_json::Value::Array(a.iter().map(toml_to_json).collect()),
+        toml::Value::Table(t) => {
+            let mut m = serde_json::Map::new();
+            for (k, v) in t {
+                m.insert(k.clone(), toml_to_json(v));
+            }
+            serde_json::Value::Object(m)
+        }
+    }
+}
+
+/// SD-R56 (composes with R195 sovereign-os audit): the `signing`
+/// block of the `modules info --json` document. Operator-stable
+/// schema: state ("no_signing_block" / "signed_optional" /
+/// "signed_required_present" / "signed_required_missing"), plus
+/// fields when relevant.
+fn signing_status_json(m: &ModuleManifest, dir: &Path, slug: &str) -> serde_json::Value {
+    let Some(spec) = m.signing.as_ref() else {
+        return serde_json::json!({
+            "state": "no_signing_block",
+            "required": false,
+            "minisig_present": false,
+        });
+    };
+    let manifest_path = dir.join(slug).join("module.toml");
+    let minisig_path = manifest_path
+        .parent()
+        .map(|p| p.join("module.toml.minisig"))
+        .unwrap_or_else(|| manifest_path.with_extension("toml.minisig"));
+    let minisig_present = minisig_path.exists();
+    let state = if !spec.required {
+        "signed_optional"
+    } else if minisig_present {
+        "signed_required_present"
+    } else {
+        "signed_required_missing"
+    };
+    serde_json::json!({
+        "state": state,
+        "required": spec.required,
+        "minisig_present": minisig_present,
+        "trust_root": spec.trust_root.as_ref().map(|p| p.display().to_string()),
+    })
+}
+
+/// SD-R50: pretty-print the SD-R47 audit JSONL stream. Operator
+/// runs `selfdefctl modules audit-log` to see recent gate
+/// overrides on this host. Read-only.
+pub(crate) fn cmd_audit_log(audit_path: &Path, n: usize, json: bool) -> Result<i32> {
+    if !audit_path.exists() {
+        println!(
+            "(no audit log at {} — no overrides recorded yet)",
+            audit_path.display()
+        );
+        return Ok(0);
+    }
+    let body = std::fs::read_to_string(audit_path)
+        .with_context(|| format!("reading {}", audit_path.display()))?;
+    let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
+    let total = lines.len();
+    let start = total.saturating_sub(n);
+    let recent = &lines[start..];
+
+    if json {
+        for line in recent {
+            println!("{line}");
+        }
+        return Ok(0);
+    }
+
+    println!("# SD-R50: selfdefctl modules audit-log");
+    println!(
+        "# {} total entries; showing last {} (path: {})",
+        total,
+        recent.len(),
+        audit_path.display()
+    );
+    if recent.is_empty() {
+        println!("# (no entries to show)");
+        return Ok(0);
+    }
+    println!();
+    for line in recent {
+        match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(v) => {
+                let ts = v["timestamp"].as_str().unwrap_or("(no timestamp)");
+                let category = v["category"].as_str().unwrap_or("(no category)");
+                let flag = v["flag"].as_str().unwrap_or("");
+                let host = v["host_tag"].as_str().unwrap_or("(no host)");
+                let empty: Vec<serde_json::Value> = Vec::new();
+                let mods = v["gated_modules"].as_array().unwrap_or(&empty);
+                let mod_list: Vec<String> = mods
+                    .iter()
+                    .filter_map(|m| m.as_str().map(String::from))
+                    .collect();
+                println!("  {ts}  host={host}  {category}  {flag}");
+                if !mod_list.is_empty() {
+                    println!("    gated_modules: {}", mod_list.join(", "));
+                }
+            }
+            Err(_) => {
+                println!("  (malformed entry skipped: {line})");
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R53 (closes SDD-020 V-1 — per-action audit prefixes): same
+/// OCSF envelope as SD-R47 but for the --strict-hardware refusal
+/// path. Distinct category prefix so dashboards can split
+/// override-fired vs strict-refusal events.
+pub(crate) fn sdr53_emit_strict_hardware_audit(
+    path: &Path,
+    skipped_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = skipped_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.skip-strict\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--strict-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
+/// SD-R47 (closes SDD-019 T-2): append an OCSF-shaped JSONL line
+/// to the operator-configured audit path when `--ignore-hardware`
+/// fires. Operators wanting fleet-alert visibility on gate
+/// overrides set `SELFDEF_MODULES_AUDIT_PATH=/var/log/selfdef/audit.jsonl`
+/// before invoking `selfdefctl modules apply --ignore-hardware`.
+///
+/// Schema: minimal OCSF-style envelope —
+///   - schema_version: pinned to "1.0.0"
+///   - timestamp: ISO8601 UTC
+///   - category: "selfdef.modules.override"
+///   - severity: "medium" (operator action that bypasses safety gates)
+///   - source: "selfdefctl"
+///   - flag: "--ignore-hardware"
+///   - host_tag: from $HOSTNAME or /etc/hostname
+///   - gated_modules: array of slugs (or slug#instance)
+///
+/// Atomic append via O_APPEND. Failure surfaces as a banner on
+/// stderr (already printed) but doesn't abort the apply —
+/// audit-trail loss shouldn't block production overrides.
+pub(crate) fn sdr47_emit_ignore_hardware_audit(
+    path: &Path,
+    gated_modules: &[String],
+) -> std::io::Result<()> {
+    use std::io::Write;
+    let host_tag = std::env::var("HOSTNAME")
+        .ok()
+        .or_else(|| std::fs::read_to_string("/etc/hostname").ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Iso8601::DEFAULT)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let modules_json: Vec<String> = gated_modules
+        .iter()
+        .map(|m| format!("\"{}\"", m.replace('"', "\\\"")))
+        .collect();
+    let line = format!(
+        "{{\"schema_version\":\"1.0.0\",\"timestamp\":\"{now}\",\
+         \"category\":\"selfdef.modules.override\",\
+         \"severity\":\"medium\",\
+         \"source\":\"selfdefctl\",\
+         \"flag\":\"--ignore-hardware\",\
+         \"host_tag\":\"{host_tag}\",\
+         \"gated_modules\":[{}]}}\n",
+        modules_json.join(",")
+    );
+    // O_APPEND atomic short-append (POSIX guarantees PIPE_BUF size).
+    if let Some(dir) = path.parent() {
+        if !dir.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir)?;
+        }
+    }
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+    f.write_all(line.as_bytes())?;
+    Ok(())
+}
+
+/// SD-R39: probe the host + emit the gate verdict for one module
+/// as an inline addendum to cmd_info. Doesn't repeat the manifest
+/// body (cmd_info already printed it).
+pub(crate) fn cmd_info_host_status(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    println!();
+    println!("host_status:");
+    if m.requires_hardware.is_empty() {
+        println!("  ✓ no [requires_hardware] block — applies on any host");
+        return Ok(());
+    }
+    match &caps {
+        Some(c) => match m.requires_hardware.evaluate(c) {
+            Ok(()) => println!("  ✓ all hardware requirements met on this host"),
+            Err(unmet) => {
+                println!("  ✗ {} predicate(s) unmet:", unmet.len());
+                for u in &unmet {
+                    println!("      - {u}");
+                }
+            }
+        },
+        None => {
+            println!("  ? hardware probe unavailable — gate would skip this module");
+        }
+    }
+    Ok(())
+}
+
+/// SD-R80 (SDD-025 Y-4): print the RESOLVED requirement view on
+/// this host — root predicates plus the matched `any_of` branch
+/// (when applicable). Composes with `cmd_info_host_status` (the
+/// gate verdict) and SD-R79 `evaluate_resolved`. Output is
+/// operator-readable; tooling consumers stick with `--json` (cmd_info_json).
+pub(crate) fn cmd_info_resolved(dir: &Path, slug: &str) -> Result<()> {
+    let mods = load_all(dir)?;
+    let m = mods
+        .iter()
+        .find(|(s, _)| s == slug)
+        .map(|(_, m)| m)
+        .with_context(|| format!("no module named `{slug}` in {}", dir.display()))?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    println!();
+    println!("resolved_requirements (SD-R80):");
+    if m.requires_hardware.is_empty() {
+        println!("  ✓ no [requires_hardware] block — module is hardware-agnostic");
+        return Ok(());
+    }
+    let Some(c) = caps else {
+        println!("  ? hardware probe unavailable — cannot resolve any_of branch");
+        return Ok(());
+    };
+    // Render root predicates (compact summary).
+    let mut root_lines: Vec<String> = Vec::new();
+    if m.requires_hardware.avx512_vnni {
+        root_lines.push("avx512_vnni".into());
+    }
+    if m.requires_hardware.avx512_bf16 {
+        root_lines.push("avx512_bf16".into());
+    }
+    if m.requires_hardware.memory_gib_min > 0 {
+        root_lines.push(format!(
+            "memory_gib_min = {}",
+            m.requires_hardware.memory_gib_min
+        ));
+    }
+    if m.requires_hardware.gpu_count_min > 0 {
+        root_lines.push(format!(
+            "gpu_count_min = {}",
+            m.requires_hardware.gpu_count_min
+        ));
+    }
+    if m.requires_hardware.gpu_vram_gib_min > 0 {
+        root_lines.push(format!(
+            "gpu_vram_gib_min = {}",
+            m.requires_hardware.gpu_vram_gib_min
+        ));
+    }
+    if m.requires_hardware.gpu_vram_gib_each_min > 0 {
+        root_lines.push(format!(
+            "gpu_vram_gib_each_min = {}",
+            m.requires_hardware.gpu_vram_gib_each_min
+        ));
+    }
+    if m.requires_hardware.gpu_power_headroom_watts_min > 0 {
+        root_lines.push(format!(
+            "gpu_power_headroom_watts_min = {}",
+            m.requires_hardware.gpu_power_headroom_watts_min
+        ));
+    }
+    if !m.requires_hardware.wasm_aot_features_required.is_empty() {
+        root_lines.push(format!(
+            "wasm_aot_features_required = {:?}",
+            m.requires_hardware.wasm_aot_features_required
+        ));
+    }
+    if !m.requires_hardware.sain01_verdict_min.is_empty() {
+        root_lines.push(format!(
+            "sain01_verdict_min = {}",
+            m.requires_hardware.sain01_verdict_min
+        ));
+    }
+    if m.requires_hardware.ternary_aot_capable_required {
+        root_lines.push("ternary_aot_capable_required".into());
+    }
+    if m.requires_hardware.zmm_int8_lanes_min > 0 {
+        root_lines.push(format!(
+            "zmm_int8_lanes_min = {}",
+            m.requires_hardware.zmm_int8_lanes_min
+        ));
+    }
+    if !m.requires_hardware.host_features_required.is_empty() {
+        root_lines.push(format!(
+            "host_features_required = {:?}",
+            m.requires_hardware.host_features_required
+        ));
+    }
+    if root_lines.is_empty() {
+        println!("  root predicates: (none)");
+    } else {
+        println!("  root predicates (AND-composed):");
+        for line in &root_lines {
+            println!("    - {line}");
+        }
+    }
+    // Resolve the any_of branch.
+    if m.requires_hardware.any_of.is_empty() {
+        println!("  any_of: (none declared)");
+    } else {
+        println!(
+            "  any_of: {} OR-branch(es) declared",
+            m.requires_hardware.any_of.len()
+        );
+        match m.requires_hardware.evaluate_resolved(&c) {
+            Ok(None) => {
+                // Shouldn't happen given any_of non-empty + Ok.
+                println!("    ✓ gate passed but no any_of branch index reported");
+            }
+            Ok(Some(idx)) => {
+                println!("    ✓ resolves on this host via any_of[{idx}]");
+            }
+            Err(unmet) => {
+                println!("    ✗ gate would FAIL on this host:");
+                for u in &unmet {
+                    println!("        - {u}");
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -325,6 +1772,66 @@ pub(crate) fn cmd_info(dir: &Path, slug: &str) -> Result<()> {
     // "phase: main" for every module would just be noise.
     if m.phase != Phase::default() {
         println!("phase:    {}", m.phase.as_str());
+    }
+    // SD-R35: surface the [requires_hardware] block when non-empty.
+    // Operators inspecting a module via `selfdefctl modules info`
+    // should see every predicate the gate will enforce — same
+    // visibility as `modules check-hardware` but without running
+    // the probe.
+    let rh = &m.requires_hardware;
+    if !rh.is_empty() {
+        println!("requires_hardware:");
+        if rh.avx512_vnni {
+            println!("  - avx512_vnni = true");
+        }
+        if rh.avx512_bf16 {
+            println!("  - avx512_bf16 = true");
+        }
+        if rh.memory_gib_min > 0 {
+            println!("  - memory_gib_min = {}", rh.memory_gib_min);
+        }
+        if rh.gpu_count_min > 0 {
+            println!("  - gpu_count_min = {}", rh.gpu_count_min);
+        }
+        if rh.gpu_vram_gib_min > 0 {
+            println!("  - gpu_vram_gib_min = {}", rh.gpu_vram_gib_min);
+        }
+        if rh.gpu_vram_gib_each_min > 0 {
+            println!("  - gpu_vram_gib_each_min = {}", rh.gpu_vram_gib_each_min);
+        }
+        if rh.gpu_power_headroom_watts_min > 0 {
+            println!(
+                "  - gpu_power_headroom_watts_min = {}",
+                rh.gpu_power_headroom_watts_min
+            );
+        }
+        if !rh.wasm_aot_features_required.is_empty() {
+            println!(
+                "  - wasm_aot_features_required = \"{}\"",
+                rh.wasm_aot_features_required
+            );
+        }
+        if !rh.sain01_verdict_min.is_empty() {
+            println!("  - sain01_verdict_min = {}", rh.sain01_verdict_min);
+        }
+        if rh.ternary_aot_capable_required {
+            println!("  - ternary_aot_capable_required = true");
+        }
+        if rh.zmm_int8_lanes_min > 0 {
+            println!("  - zmm_int8_lanes_min = {}", rh.zmm_int8_lanes_min);
+        }
+        if !rh.host_features_required.is_empty() {
+            println!(
+                "  - host_features_required = \"{}\"",
+                rh.host_features_required
+            );
+        }
+    }
+    if !m.daemon_requires.is_empty() {
+        println!("daemon_requires:");
+        for k in m.daemon_requires.keys() {
+            println!("  - {k}");
+        }
     }
     Ok(())
 }
@@ -755,6 +2262,10 @@ fn clone_manifest(m: &ModuleManifest) -> ModuleManifest {
         instanced: m.instanced,
         phase: m.phase,
         daemon_requires: m.daemon_requires.clone(),
+        requires_hardware: m.requires_hardware.clone(),
+        signing: m.signing.clone(),
+        resources: m.resources.clone(),
+        features: m.features.clone(),
     }
 }
 
@@ -924,6 +2435,24 @@ pub(crate) fn run_one(active: &ActiveModule, action: Action, dry_run: bool) -> R
     if let Some(inst) = &active.instance {
         cmd.env("SELFDEF_INSTANCE_ID", inst);
     }
+    // SD-R61 (closes SDD-021 W-6): surface resource quotas to
+    // apply.sh / check.sh / uninstall.sh as SELFDEF_RESOURCE_*
+    // env vars. Scripts honor via `ulimit` or `systemd-run --user`
+    // wrappers; future round can wrap the subprocess automatically.
+    if let Some(res) = &active.manifest.resources {
+        if let Some(v) = res.cpu_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_CPU_MAX", v);
+        }
+        if let Some(v) = res.memory_max.as_deref() {
+            cmd.env("SELFDEF_RESOURCE_MEMORY_MAX", v);
+        }
+        if let Some(v) = res.io_weight {
+            cmd.env("SELFDEF_RESOURCE_IO_WEIGHT", v.to_string());
+        }
+        if let Some(v) = res.time_max_seconds {
+            cmd.env("SELFDEF_RESOURCE_TIME_MAX_SECONDS", v.to_string());
+        }
+    }
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
 
     let out = cmd
@@ -997,6 +2526,22 @@ pub(crate) struct LifecycleOpts {
     /// `/etc/selfdef/selfdef.toml` halts the apply with exit 2
     /// and a copy-pasteable snippet.
     pub(crate) ignore_daemon_requires: bool,
+    /// SD-R42 (SDD-018 D-2 operator override): bypass the SD-R14
+    /// `[requires_hardware]` gate. Modules whose predicates would
+    /// fail still apply. `selfdefctl modules apply --ignore-hardware`
+    /// sets this. Default false → gate enforced normally.
+    pub(crate) ignore_hardware: bool,
+    /// SD-R44 (production discipline): turn gate-SKIP into gate-FAIL.
+    /// When any module would silently skip due to unmet
+    /// `[requires_hardware]`, run_lifecycle exits non-zero. Set by
+    /// `selfdefctl modules apply --strict-hardware`.
+    pub(crate) strict_hardware: bool,
+    /// SD-R76 (SDD-024 X-5 operator safety knob): force a fresh
+    /// hardware probe before the `[requires_hardware]` gate
+    /// evaluates, instead of reading the cached selfdef-hardware
+    /// snapshot. Set by `selfdefctl modules apply --reprobe-hardware`.
+    /// Default false → use the cached snapshot like every prior round.
+    pub(crate) reprobe_hardware: bool,
     /// Override path to the daemon-side `/etc/selfdef/selfdef.toml`
     /// the validator reads. Tests use this; operators leave it
     /// unset (defaults to `/etc/selfdef/selfdef.toml`).
@@ -1207,7 +2752,298 @@ fn render_requirements_snippet(unmet: &[UnmetByModule], daemon_config_path: &Pat
 }
 
 pub(crate) fn cmd_apply(opts: &LifecycleOpts) -> Result<i32> {
+    // SDD-015 § 4: when [perimeter] check_overlap_on_apply is true
+    // (auto-true on Sain01 unless overridden), refuse to apply if any
+    // selfdef-authored policy would overlap with sovereign-os's
+    // host-scoped allowlist. The check runs BEFORE any apply.sh
+    // fires — operators don't get partial installs of conflicting
+    // policies.
+    let pre_code = pre_apply_perimeter_check(opts)?;
+    if pre_code != 0 {
+        return Ok(pre_code);
+    }
     run_lifecycle(opts, Action::Apply, LifecyclePolicy::default())
+}
+
+/// SD-R14: hardware-aware module gate.
+///
+/// Probes the host once + drops modules whose `[requires_hardware]`
+/// block isn't satisfied. Skipped modules log a single line citing
+/// the unmet predicates so operators understand WHY their module
+/// didn't apply. The probe failure (e.g. on minimal hosts) is silent
+/// for modules that DON'T declare hardware requirements; modules
+/// that DO declare them are skipped with a clear log.
+/// SD-R55 (closes SDD-020 V-5): verify module.toml's detached
+/// minisig signature when the manifest declares `[signing]` with
+/// `required = true`. Returns Ok(()) when:
+///   - the module has no [signing] block
+///   - [signing].required = false (informational)
+///   - [signing].required = true AND the .minisig verifies
+///
+/// Returns Err with operator-readable detail when the gate fails.
+fn verify_module_signing(am: &ActiveModule) -> Result<(), String> {
+    let signing = match am.manifest.signing.as_ref() {
+        Some(s) => s,
+        None => return Ok(()),
+    };
+    if !signing.required {
+        // Informational-only block; surface the posture as a notice
+        // but don't gate.
+        eprintln!(
+            "# SD-R55: module {} declares [signing] but required=false (informational only)",
+            am.display_name()
+        );
+        return Ok(());
+    }
+    let trust_root = signing
+        .trust_root
+        .clone()
+        .unwrap_or_else(|| PathBuf::from("/etc/selfdef/keys/policy.pub"));
+    let manifest_path = am.module_root.join("module.toml");
+    // SD-R62 (closes SDD-021 W-2): keyring rotation. If trust_root
+    // is a DIRECTORY, load every *.pub file inside as a candidate
+    // pubkey; verification passes if ANY pubkey accepts the sig.
+    // If it's a regular file, behave as cycle-3 SD-R55 (single key).
+    let verifiers = load_trust_roots(&trust_root)?;
+    if verifiers.is_empty() {
+        return Err(format!(
+            "trust-root {} resolved to zero pubkeys",
+            trust_root.display()
+        ));
+    }
+    let mut last_err: Option<String> = None;
+    for v in &verifiers {
+        match v.verify_detached_file(&manifest_path) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                last_err = Some(format!("key {}: {e}", v.source().display()));
+            }
+        }
+    }
+    Err(format!(
+        "signature verification failed for {} (tried {} pubkey(s); last error: {})",
+        manifest_path.display(),
+        verifiers.len(),
+        last_err.unwrap_or_else(|| "<none>".into())
+    ))
+}
+
+/// SD-R62: load trust roots from a path. If path is a directory,
+/// every `*.pub` file in it becomes a candidate verifier (operator-
+/// stable rotation surface: deploy the new key alongside the old,
+/// re-sign at leisure, remove the old key after the migration).
+fn load_trust_roots(path: &Path) -> Result<Vec<selfdef_signing::Verifier>, String> {
+    if path.is_dir() {
+        let mut entries: Vec<_> = std::fs::read_dir(path)
+            .map_err(|e| format!("reading keyring dir {}: {e}", path.display()))?
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == "pub"))
+            .collect();
+        entries.sort_by_key(std::fs::DirEntry::file_name);
+        let mut verifiers = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let p = entry.path();
+            match selfdef_signing::Verifier::load(&p) {
+                Ok(v) => verifiers.push(v),
+                Err(e) => {
+                    tracing::warn!(
+                        path = %p.display(),
+                        error = %e,
+                        "SD-R62: skipping unparseable pubkey in keyring"
+                    );
+                }
+            }
+        }
+        Ok(verifiers)
+    } else if path.is_file() {
+        let v = selfdef_signing::Verifier::load(path)
+            .map_err(|e| format!("trust-root pubkey unreadable at {}: {e}", path.display()))?;
+        Ok(vec![v])
+    } else {
+        Err(format!(
+            "trust-root path {} doesn't exist (or isn't a file/dir)",
+            path.display()
+        ))
+    }
+}
+
+/// SD-R55: apply the signing gate to every active module. Returns
+/// the kept set (modules whose signing posture passed). Failures
+/// on required=true surface as a stderr block + drop the module
+/// from the kept set; if no module remains required-and-failed,
+/// the caller proceeds normally.
+fn apply_signing_gate(active: Vec<ActiveModule>) -> (Vec<ActiveModule>, Vec<(String, String)>) {
+    let mut kept = Vec::with_capacity(active.len());
+    let mut failed: Vec<(String, String)> = Vec::new();
+    for am in active {
+        match verify_module_signing(&am) {
+            Ok(()) => kept.push(am),
+            Err(msg) => failed.push((am.display_name(), msg)),
+        }
+    }
+    if !failed.is_empty() {
+        eprintln!(
+            "# SD-R55 module-signing gate — {} module(s) failed signature verification:",
+            failed.len()
+        );
+        for (name, msg) in &failed {
+            eprintln!("  - {name}: {msg}");
+        }
+        eprintln!("# To proceed without signing, set [signing].required = false in module.toml");
+    }
+    (kept, failed)
+}
+
+#[cfg(test)]
+fn apply_hardware_gate(active: Vec<ActiveModule>) -> Vec<ActiveModule> {
+    apply_hardware_gate_with_opts(active, false)
+}
+
+/// SD-R76 (SDD-024 X-5): variant that records whether the operator
+/// forced a fresh reprobe via `--reprobe-hardware`. The selfdef-
+/// hardware probe() call is ALREADY fresh per-invocation in cycle
+/// 5; the flag is plumbed so the operator gets a visible "[SD-R76]
+/// forced hardware reprobe" stderr line + so a future round that
+/// introduces a daemon-emitted cache path can short-circuit
+/// reading the cache when the flag is set, without changing the
+/// operator-facing CLI surface.
+fn apply_hardware_gate_with_opts(
+    active: Vec<ActiveModule>,
+    reprobe_hardware: bool,
+) -> Vec<ActiveModule> {
+    if reprobe_hardware {
+        eprintln!(
+            "# SD-R76 (--reprobe-hardware): forcing fresh hardware probe; \
+             ignoring any daemon-cached capabilities snapshot"
+        );
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "SD-R14: hardware probe failed; modules with [requires_hardware] will be skipped"
+            );
+            None
+        }
+    };
+    let mut kept = Vec::with_capacity(active.len());
+    let mut skipped = Vec::new();
+    // SD-R79 (SDD-025 Y-1): track which any_of branch resolved each
+    // gated module. Operator-visible observability for OR-paths
+    // exercised at apply time.
+    let mut anyof_resolved: Vec<(String, usize)> = Vec::new();
+    for m in active {
+        if m.manifest.requires_hardware.is_empty() {
+            kept.push(m);
+            continue;
+        }
+        match &caps {
+            Some(c) => match m.manifest.requires_hardware.evaluate_resolved(c) {
+                Ok(matched_branch) => {
+                    if let Some(idx) = matched_branch {
+                        anyof_resolved.push((m.display_name(), idx));
+                    }
+                    kept.push(m);
+                }
+                Err(unmet) => skipped.push((m.display_name(), unmet)),
+            },
+            None => skipped.push((m.display_name(), vec!["hardware probe unavailable".into()])),
+        }
+    }
+    if !anyof_resolved.is_empty() {
+        eprintln!(
+            "# SD-R79: {} module(s) resolved via [[requires_hardware.any_of]] (SDD-025 Y-1):",
+            anyof_resolved.len()
+        );
+        for (name, idx) in &anyof_resolved {
+            eprintln!("  - {name}: any_of[{idx}] matched");
+        }
+    }
+    if !skipped.is_empty() {
+        eprintln!(
+            "# SD-R14 hardware-aware module gate — skipping {} module(s):",
+            skipped.len()
+        );
+        for (name, reasons) in &skipped {
+            eprintln!("  - {name}:");
+            for r in reasons {
+                eprintln!("      ✗ {r}");
+            }
+        }
+        eprintln!("# To force-apply, remove [requires_hardware] from the module's module.toml");
+        eprintln!("# or upgrade the host to meet the requirements.");
+    }
+    kept
+}
+
+/// SDD-015 § 4 + § 6 pre-apply gate. Reads the daemon config to
+/// resolve `[perimeter] check_overlap_on_apply` + `policies_dir` +
+/// `overlap_warn_only`. Loads policies, runs overlap detection, and:
+///   - returns 0 (no gate) when the check is disabled
+///   - returns 0 (passed) when no findings
+///   - returns 0 (warn-only mode) when findings exist but downgraded
+///   - returns 1 (blocked) when findings exist and not in warn-only
+fn pre_apply_perimeter_check(opts: &LifecycleOpts) -> Result<i32> {
+    let cfg_path = match &opts.daemon_config_path {
+        Some(p) => p,
+        None => return Ok(0), // no config supplied → no gate
+    };
+    let cfg = match selfdef_config::Config::load(Some(cfg_path)) {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::warn!(
+                config = %cfg_path.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — daemon config unloadable"
+            );
+            return Ok(0);
+        }
+    };
+    if !selfdef_config::resolve_perimeter_check_overlap(&cfg) {
+        return Ok(0);
+    }
+    let policies = match crate::perimeter::read_policies_dir(&cfg.perimeter.policies_dir) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(
+                dir = %cfg.perimeter.policies_dir.display(),
+                error = %e,
+                "modules apply: perimeter pre-check skipped — policies dir unreadable"
+            );
+            return Ok(0);
+        }
+    };
+    let stance = cfg.perimeter.third_party_policy_stance.as_str();
+    let findings = crate::perimeter::check_overlap_with_stance(&policies, stance);
+    let blocking: Vec<_> = findings
+        .iter()
+        .filter(|f| crate::perimeter::finding_is_blocking(f))
+        .collect();
+    if blocking.is_empty() {
+        tracing::info!(
+            policies = policies.len(),
+            "modules apply: perimeter pre-check PASS (SDD-015)"
+        );
+        return Ok(0);
+    }
+    let (report, exit) = crate::perimeter::render_check_overlap_report(&policies, &findings);
+    eprintln!("# modules apply pre-check (SDD-015):\n");
+    eprintln!("{report}");
+    if cfg.perimeter.overlap_warn_only {
+        eprintln!(
+            "[perimeter] overlap_warn_only = true → proceeding with apply despite findings (Q15-B)."
+        );
+        return Ok(0);
+    }
+    eprintln!(
+        "Refusing to apply: {} blocking finding(s) detected (of {} total). \
+         Set `[perimeter] overlap_warn_only = true` to downgrade, or fix the \
+         FAIL violations above and re-run.",
+        blocking.len(),
+        findings.len(),
+    );
+    Ok(exit.max(1))
 }
 
 /// SDD-002 D-5: `selfdefctl modules show-requires` reads every
@@ -1259,11 +3095,1435 @@ pub(crate) fn cmd_check(opts: &LifecycleOpts) -> Result<i32> {
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
 }
 
+/// SD-R15: dry-run the SD-R14 [requires_hardware] gate without
+/// touching any module scripts. Operators planning an install on a
+/// new host run this BEFORE `apply` to see which modules will skip.
+#[cfg(test)]
+pub(crate) fn cmd_check_hardware(opts: &LifecycleOpts, json: bool) -> Result<i32> {
+    cmd_check_hardware_with_caps(opts, json, None)
+}
+
+/// SD-R38: dry-run the gate against a saved capabilities JSON
+/// instead of probing the host. When `caps_path` is None this is
+/// equivalent to `cmd_check_hardware` (live probe).
+pub(crate) fn cmd_check_hardware_with_caps(
+    opts: &LifecycleOpts,
+    json: bool,
+    caps_path: Option<&Path>,
+) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if let Some(p) = caps_path {
+        match std::fs::read_to_string(p) {
+            Ok(body) => match serde_json::from_str::<selfdef_hardware::HardwareCapabilities>(&body)
+            {
+                Ok(c) => Some(c),
+                Err(e) => {
+                    tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps JSON unreadable");
+                    None
+                }
+            },
+            Err(e) => {
+                tracing::warn!(error = %e, path = %p.display(), "SD-R38: --caps file unreadable");
+                None
+            }
+        }
+    } else {
+        match selfdef_hardware::probe() {
+            Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+            Err(_) => None,
+        }
+    };
+    let mut kept: Vec<(String, String)> = Vec::new(); // (name, reason)
+    let mut skipped: Vec<(String, Vec<String>)> = Vec::new();
+    let mut probe_ok = caps.is_some();
+    for am in &active {
+        let name = am.display_name();
+        if am.manifest.requires_hardware.is_empty() {
+            kept.push((name, "no [requires_hardware] block".into()));
+            continue;
+        }
+        match &caps {
+            Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                Ok(()) => kept.push((name, "all hardware requirements met".into())),
+                Err(unmet) => skipped.push((name, unmet)),
+            },
+            None => {
+                probe_ok = false;
+                skipped.push((name, vec!["hardware probe unavailable".into()]));
+            }
+        }
+    }
+    if json {
+        // SD-R27: emit the full HardwareCapabilities as the
+        // `host_snapshot` field so machine consumers can correlate
+        // skip reasons with actual host values without re-probing.
+        // serde_json gives us the canonical shape — no hand-rolled
+        // JSON for the inner snapshot.
+        let total = kept.len() + skipped.len();
+        let kept_json: Vec<String> = kept
+            .iter()
+            .map(|(n, r)| format!(r#"{{"module":"{n}","reason":"{r}"}}"#))
+            .collect();
+        let skipped_json: Vec<String> = skipped
+            .iter()
+            .map(|(n, reasons)| {
+                let r = reasons
+                    .iter()
+                    .map(|s| format!(r#""{}""#, s.replace('"', "\\\"")))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                format!(r#"{{"module":"{n}","unmet":[{r}]}}"#)
+            })
+            .collect();
+        let snap_json = caps
+            .as_ref()
+            .and_then(|c| serde_json::to_string(c).ok())
+            .unwrap_or_else(|| "null".into());
+        println!(
+            r#"{{"probe_ok":{},"total":{},"kept":[{}],"skipped":[{}],"host_snapshot":{}}}"#,
+            probe_ok,
+            total,
+            kept_json.join(","),
+            skipped_json.join(","),
+            snap_json,
+        );
+    } else {
+        println!("# SD-R15 hardware gate dry-run");
+        if !probe_ok {
+            println!("# (hardware probe unavailable — gated modules will be skipped)");
+        }
+        // SD-R27: host-snapshot block surfaces the actual probed
+        // values that the gate evaluates against. Operators see WHY
+        // a module skipped without separately running `selfdefctl
+        // hardware probe`.
+        if let Some(c) = &caps {
+            println!();
+            println!("HOST SNAPSHOT (what the gate sees):");
+            let avx_bits: Vec<&str> = [
+                ("avx512f", c.cpu.avx512f),
+                ("avx512vnni", c.cpu.avx512vnni),
+                ("avx512bf16", c.cpu.avx512bf16),
+                ("avx512fp16", c.cpu.avx512fp16),
+            ]
+            .iter()
+            .filter_map(|(name, present)| if *present { Some(*name) } else { None })
+            .collect();
+            let avx_summary = if avx_bits.is_empty() {
+                "none".to_string()
+            } else {
+                avx_bits.join(", ")
+            };
+            println!(
+                "  CPU      : {} ({})",
+                if c.cpu.model_name.is_empty() {
+                    "(unknown)"
+                } else {
+                    c.cpu.model_name.as_str()
+                },
+                avx_summary,
+            );
+            println!(
+                "  Memory   : {} GiB",
+                c.memory.total_bytes / (1024 * 1024 * 1024),
+            );
+            println!("  GPUs     : {} device(s)", c.gpu.device_count);
+            for (i, d) in c.gpu.devices.iter().enumerate() {
+                let model = d.model_hint.as_deref().unwrap_or("(unknown model)");
+                let vram = d
+                    .vram_bytes
+                    .map(|b| format!("{} GiB", b / (1024 * 1024 * 1024)))
+                    .unwrap_or_else(|| "?".to_string());
+                let pwr = match (d.power_draw_watts, d.power_limit_watts) {
+                    (Some(draw), Some(limit)) => {
+                        format!(
+                            "{draw}/{limit} W (headroom {} W)",
+                            limit.saturating_sub(draw)
+                        )
+                    }
+                    _ => "no telemetry".to_string(),
+                };
+                println!("    [{i}] {model} — vram {vram}, power {pwr}");
+            }
+            let verdict = match c.sain01_match.overall {
+                selfdef_hardware::Sain01Verdict::FullMatch => "FullMatch",
+                selfdef_hardware::Sain01Verdict::PartialMatch => "PartialMatch",
+                selfdef_hardware::Sain01Verdict::NoMatch => "NoMatch",
+            };
+            println!("  Sain01   : {verdict}");
+        }
+        println!();
+        println!("# {} active module(s):", kept.len() + skipped.len());
+        if !kept.is_empty() {
+            println!();
+            println!("WOULD APPLY ({}):", kept.len());
+            for (name, reason) in &kept {
+                println!("  ✓ {name}  ({reason})");
+            }
+        }
+        if !skipped.is_empty() {
+            println!();
+            println!("WOULD SKIP ({}):", skipped.len());
+            for (name, reasons) in &skipped {
+                println!("  ✗ {name}");
+                for r in reasons {
+                    println!("      - {r}");
+                }
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R36: emit active modules as a Graphviz DOT digraph.
+/// Operator pipes to `dot -Tsvg > graph.svg` for a visual map of
+/// how their modules compose; the raw text is also operator-readable.
+///
+/// Edges:
+///   - `dependency` arrows: `A → B` means B depends on A (apply order)
+///   - `instance` dashed edges between multi-instance modules
+///
+/// When `with_hardware_gate=true`, nodes are coloured by SD-R14
+/// verdict (green = passes gate, red = skipped).
+/// SD-R41: structured JSON variant of cmd_graph. Same data shape
+/// (nodes + edges + per-node gate verdict) but machine-readable.
+pub(crate) fn cmd_graph_json(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+
+    let mut nodes: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let name = am.display_name();
+        let mut node = serde_json::json!({
+            "id": name,
+            "slug": am.slug,
+            "instance": am.instance,
+            "phase": am.manifest.phase.as_str(),
+        });
+        if with_hardware_gate {
+            let (verdict, unmet): (&str, Vec<String>) = if am.manifest.requires_hardware.is_empty()
+            {
+                ("ungated", Vec::new())
+            } else {
+                match &caps {
+                    Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                        Ok(()) => ("kept", Vec::new()),
+                        Err(u) => ("skipped", u),
+                    },
+                    None => ("probe-unavailable", Vec::new()),
+                }
+            };
+            node["gate"] = serde_json::json!({
+                "verdict": verdict,
+                "unmet": unmet,
+            });
+        }
+        nodes.push(node);
+    }
+
+    // Edges
+    let mut edges: Vec<serde_json::Value> = Vec::new();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                edges.push(serde_json::json!({
+                    "kind": "dependency",
+                    "from": dep,
+                    "to": am.display_name(),
+                }));
+            }
+        }
+    }
+    // Instance grouping
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            edges.push(serde_json::json!({
+                "kind": "instance-sibling",
+                "shared_slug": slug,
+                "from": instances[i].display_name(),
+                "to": instances[i + 1].display_name(),
+            }));
+        }
+    }
+
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "node_count": nodes.len(),
+        "edge_count": edges.len(),
+        "with_hardware_gate": with_hardware_gate,
+        "probe_ok": caps.is_some(),
+        "nodes": nodes,
+        "edges": edges,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
+}
+
+pub(crate) fn cmd_graph(opts: &LifecycleOpts, with_hardware_gate: bool) -> Result<i32> {
+    let (_host_path, active) = prepare(opts)?;
+    let caps = if with_hardware_gate {
+        selfdef_hardware::probe()
+            .ok()
+            .map(|s| selfdef_hardware::derive_capabilities(&s))
+    } else {
+        None
+    };
+
+    println!("// SD-R36: selfdefctl modules graph");
+    println!("// {} active module(s)", active.len());
+    if with_hardware_gate {
+        println!("// SD-R14 hardware gate: ON (green=kept, red=skipped)");
+        if caps.is_none() {
+            println!("// (hardware probe unavailable — gates ignored, all nodes default)");
+        }
+    }
+    println!("digraph selfdef_modules {{");
+    println!("  rankdir=LR;");
+    println!("  node [shape=box, fontname=\"sans-serif\"];");
+
+    // Nodes
+    for am in &active {
+        let label = am.display_name();
+        let mut attrs = vec![format!("label=\"{label}\"")];
+        if with_hardware_gate {
+            let (style, color) = match &caps {
+                Some(c) => {
+                    if am.manifest.requires_hardware.is_empty() {
+                        ("filled", "lightblue")
+                    } else {
+                        match am.manifest.requires_hardware.evaluate(c) {
+                            Ok(()) => ("filled", "palegreen"),
+                            Err(_) => ("filled", "lightcoral"),
+                        }
+                    }
+                }
+                None => ("solid", "white"),
+            };
+            attrs.push(format!("style={style}"));
+            attrs.push(format!("fillcolor={color}"));
+            // Tooltip carries the unmet predicates list when skipped.
+            if let Some(c) = &caps {
+                if !am.manifest.requires_hardware.is_empty() {
+                    if let Err(unmet) = am.manifest.requires_hardware.evaluate(c) {
+                        let tip = unmet
+                            .iter()
+                            .map(|s| s.replace('"', "\\\""))
+                            .collect::<Vec<_>>()
+                            .join("\\n");
+                        attrs.push(format!("tooltip=\"{tip}\""));
+                    }
+                }
+            }
+        }
+        println!("  \"{label}\" [{}];", attrs.join(", "));
+    }
+
+    // Dependency edges (B → A means B depends_on A; we draw A → B
+    // to match apply-order direction).
+    let active_names: std::collections::HashSet<&str> =
+        active.iter().map(|a| a.slug.as_str()).collect();
+    for am in &active {
+        for dep in &am.manifest.depends_on {
+            if active_names.contains(dep.as_str()) {
+                println!(
+                    "  \"{dep}\" -> \"{name}\";",
+                    dep = dep,
+                    name = am.display_name()
+                );
+            }
+        }
+    }
+
+    // Instance grouping — dashed edges between instances of the
+    // same slug.
+    let mut by_slug: std::collections::BTreeMap<&str, Vec<&ActiveModule>> =
+        std::collections::BTreeMap::new();
+    for am in &active {
+        by_slug.entry(am.slug.as_str()).or_default().push(am);
+    }
+    for (slug, instances) in &by_slug {
+        if instances.len() < 2 {
+            continue;
+        }
+        for i in 0..instances.len() - 1 {
+            println!(
+                "  \"{a}\" -> \"{b}\" [style=dashed, arrowhead=none, color=gray, tooltip=\"shared slug: {slug}\"];",
+                a = instances[i].display_name(),
+                b = instances[i + 1].display_name(),
+            );
+        }
+    }
+
+    println!("}}");
+    Ok(0)
+}
+
 pub(crate) fn cmd_status(opts: &LifecycleOpts) -> Result<i32> {
     // Status is a pretty-printed check; same machinery, different header.
     let mut o = opts.clone();
     o.dry_run = false;
     run_lifecycle(&o, Action::Check, LifecyclePolicy::default())
+}
+
+/// SD-R83 (SDD-026 Z-13 partial): partition the catalog × host-config
+/// join into INSTALLED / AVAILABLE / ORPHANED buckets.
+///
+///   INSTALLED  — slug in catalog AND in host_config.modules
+///   AVAILABLE  — slug in catalog only (operator could activate via
+///                `selfdefctl modules apply --only <slug>`)
+///   ORPHANED   — slug in host_config only (operator has a stale
+///                entry — either restore the manifest or prune)
+///
+/// Operator-readable tabular or --json output. rc=0 always (this is
+/// a discovery surface; non-empty ORPHANED is not an error — the
+/// operator may have intentionally pinned a slug for a not-yet-
+/// shipped module).
+pub(crate) fn cmd_diff(host_path: &Path, dir: &Path, json: bool) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+    let catalog_slugs: std::collections::BTreeSet<String> =
+        mods.iter().map(|(s, _)| s.clone()).collect();
+    // host_config keys may carry instance suffix `slug#name`; the
+    // catalog tracks the bare slug. Split each host key on `#` and
+    // bucket by the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let installed: Vec<String> = catalog_slugs.intersection(&host_slugs).cloned().collect();
+    let available: Vec<String> = catalog_slugs.difference(&host_slugs).cloned().collect();
+    let orphaned: Vec<String> = host_slugs.difference(&catalog_slugs).cloned().collect();
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "host_config":  host_path.display().to_string(),
+            "modules_dir":  dir.display().to_string(),
+            "installed":    installed,
+            "available":    available,
+            "orphaned":     orphaned,
+            "counts": {
+                "installed": installed.len(),
+                "available": available.len(),
+                "orphaned":  orphaned.len(),
+            },
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R83 selfdefctl modules diff (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    println!();
+    println!("  installed ({}):", installed.len());
+    if installed.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &installed {
+            println!("    ✓ {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  available ({}) — operator can activate via apply:",
+        available.len()
+    );
+    if available.is_empty() {
+        println!("    (every catalog module is activated in host_config)");
+    } else {
+        for slug in &available {
+            println!("    + {slug}");
+        }
+    }
+    println!();
+    println!(
+        "  orphaned ({}) — host_config entries with no catalog manifest:",
+        orphaned.len()
+    );
+    if orphaned.is_empty() {
+        println!("    (none)");
+    } else {
+        for slug in &orphaned {
+            println!("    ? {slug}");
+        }
+        println!();
+        println!("  → operator should EITHER restore the missing manifest into");
+        println!("    {} OR remove the stale [modules.<slug>]", dir.display());
+        println!("    entry from {}.", host_path.display());
+    }
+    Ok(0)
+}
+
+/// SD-R86 (SDD-026 Z-13): surface UNINSTALLED-but-AVAILABLE catalog
+/// modules with operator-actionable recommendations.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "modules
+/// options-to-install ([…] Dont mix uninstalled and installed Module)".
+///
+/// SD-R83 modules diff partitions catalog vs host_config into
+/// installed / available / orphaned. SD-R86 walks the AVAILABLE
+/// partition and decorates each row with:
+///
+///   hardware_gate    passes / blocked / ungated / probe-unavailable
+///   depends_on       per-dep installed flag
+///   phase            ordering hint
+///   category         filter hint
+///   summary          manifest one-liner
+///   recommendation   ready / blocked-by-hardware / blocked-by-missing-deps
+///
+/// The dashboard's "Install options" tab renders this directly.
+/// Exit code: 0 always (informational).
+pub(crate) fn cmd_install_options(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+    only_ready: bool,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    // host-config keys: split `slug#instance` and keep the base slug.
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+
+    // Probe hardware once; reused for every gate evaluation.
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    let mut rows: Vec<serde_json::Value> = Vec::new();
+    let mut counts_ready: usize = 0;
+    let mut counts_blocked_hw: usize = 0;
+    let mut counts_blocked_deps: usize = 0;
+    let mut counts_probe_unavail: usize = 0;
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue; // installed — skip
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+
+        // Hardware gate
+        let (gate_verdict, gate_unmet): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+
+        // depends_on resolution against host installed set.
+        let mut deps: Vec<serde_json::Value> = Vec::new();
+        let mut all_deps_present = true;
+        for dep in &m.depends_on {
+            let installed = host_slugs.contains(dep);
+            if !installed {
+                all_deps_present = false;
+            }
+            deps.push(serde_json::json!({
+                "slug": dep,
+                "installed": installed,
+            }));
+        }
+
+        // Recommendation:
+        let recommendation = match (gate_verdict, all_deps_present) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+
+        match recommendation {
+            "ready" => counts_ready += 1,
+            "blocked-by-hardware" => counts_blocked_hw += 1,
+            "blocked-by-missing-deps" => counts_blocked_deps += 1,
+            "needs-review" => counts_probe_unavail += 1,
+            _ => {}
+        }
+
+        if only_ready && recommendation != "ready" {
+            continue;
+        }
+
+        rows.push(serde_json::json!({
+            "slug": slug,
+            "name": m.name,
+            "version": m.version,
+            "category": m.category,
+            "summary": m.summary,
+            "phase": m.phase.as_str(),
+            "depends_on": deps,
+            "hardware_gate": {
+                "verdict": gate_verdict,
+                "unmet": gate_unmet,
+            },
+            "recommendation": recommendation,
+        }));
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R86",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": {
+                "category": category,
+                "only_ready": only_ready,
+            },
+            "probe_ok": caps.is_some(),
+            "counts": {
+                "total": rows.len(),
+                "ready": counts_ready,
+                "blocked_by_hardware": counts_blocked_hw,
+                "blocked_by_missing_deps": counts_blocked_deps,
+                "needs_review": counts_probe_unavail,
+            },
+            "options": rows,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+
+    println!("── SD-R86 selfdefctl modules install-options (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    if only_ready {
+        println!("  filter:      only-ready");
+    }
+    println!(
+        "  totals:      ready={counts_ready}  blocked-by-hw={counts_blocked_hw}  \
+         blocked-by-deps={counts_blocked_deps}  needs-review={counts_probe_unavail}"
+    );
+    println!();
+    if rows.is_empty() {
+        println!("  (no available modules match the filter)");
+        return Ok(0);
+    }
+    for r in &rows {
+        let slug = r["slug"].as_str().unwrap_or("?");
+        let rec = r["recommendation"].as_str().unwrap_or("?");
+        let cat = r["category"].as_str().unwrap_or("?");
+        let phase = r["phase"].as_str().unwrap_or("?");
+        let summ = r["summary"].as_str().unwrap_or("");
+        let glyph = match rec {
+            "ready" => "✓",
+            "blocked-by-hardware" => "⛔",
+            "blocked-by-missing-deps" => "⤴",
+            "needs-review" => "?",
+            _ => "·",
+        };
+        println!("  {glyph} {slug}  [{cat} / {phase}]  → {rec}");
+        if !summ.is_empty() {
+            println!("      {summ}");
+        }
+        // Show blocking reason.
+        let hw = &r["hardware_gate"];
+        if hw["verdict"] == "blocked" {
+            if let Some(u) = hw["unmet"].as_array() {
+                let joined: Vec<String> = u
+                    .iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect();
+                if !joined.is_empty() {
+                    println!("      hardware unmet: {}", joined.join(", "));
+                }
+            }
+        }
+        if let Some(deps) = r["depends_on"].as_array() {
+            let missing: Vec<String> = deps
+                .iter()
+                .filter(|d| d["installed"] == false)
+                .filter_map(|d| d["slug"].as_str().map(String::from))
+                .collect();
+            if !missing.is_empty() {
+                println!("      missing deps: {}", missing.join(", "));
+            }
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R87 (SDD-026 Z-13 closure): topologically-ordered install plan
+/// for the SD-R86 AVAILABLE-and-READY set.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "the options of
+/// the dashboard which offer to install any previously non-installed
+/// modules or features and whatnot anyway and configure them".
+///
+/// SD-R86 surfaces what's installable. SD-R87 turns that into a
+/// runnable sequence: dependency-graph topological sort over the
+/// READY rows + per-step `selfdefctl modules apply --only <slug>`
+/// commands. The dashboard's "Install N modules" button consumes
+/// this directly; the operator's terminal pastes each command in
+/// turn (or pipes through `sh`).
+///
+/// Cycles in the dep graph are reported as a hard error (rc=1)
+/// with the cycle path quoted — operators cannot just silently
+/// skip them, the manifests need correcting.
+///
+/// Modules that depend on AVAILABLE-but-NOT-READY entries are
+/// downgraded to "skipped" with the blocking reason carried into
+/// the plan output (so the operator sees why X isn't being
+/// installed yet, not just that it's absent).
+///
+/// Exit codes:
+///   0  plan generated (may be empty if nothing is ready)
+///   1  cycle detected in the dependency graph
+///   2  usage error
+pub(crate) fn cmd_install_plan(
+    host_path: &Path,
+    dir: &Path,
+    json: bool,
+    category: Option<&str>,
+) -> Result<i32> {
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Collect AVAILABLE rows + classify each. Plan-readiness is more
+    // permissive than SD-R86 install-options readiness: a module is
+    // plan-eligible if its hardware gate passes AND each `depends_on`
+    // entry is EITHER already installed in host_config OR another
+    // hardware-passing available module (which the plan will install
+    // earlier). Deps on non-existent slugs OR hardware-blocked
+    // modules still bump the recommendation off "ready".
+    type ModInfo<'a> = (&'a String, &'a ModuleManifest, &'static str, Vec<String>);
+    let mut available: Vec<ModInfo> = Vec::new();
+
+    // First pass: classify hardware gate for every available slug so
+    // we know which slugs will be installable BY THIS PLAN.
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let (gate_verdict, _): (&str, Vec<String>) = if m.requires_hardware.is_empty() {
+            ("ungated", Vec::new())
+        } else {
+            match &caps {
+                Some(c) => match m.requires_hardware.evaluate(c) {
+                    Ok(()) => ("passes", Vec::new()),
+                    Err(u) => ("blocked", u),
+                },
+                None => ("probe-unavailable", Vec::new()),
+            }
+        };
+        // A dep is satisfiable by the plan if: already installed OR
+        // it's another hardware-passing available module the plan
+        // will run earlier.
+        let missing_deps: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        let recommendation = match (gate_verdict, missing_deps.is_empty()) {
+            ("blocked", _) => "blocked-by-hardware",
+            ("probe-unavailable", _) => "needs-review",
+            (_, false) => "blocked-by-missing-deps",
+            _ => "ready",
+        };
+        available.push((slug, m, recommendation, missing_deps));
+    }
+
+    let ready_set: std::collections::BTreeSet<String> = available
+        .iter()
+        .filter(|(_, _, rec, _)| *rec == "ready")
+        .map(|(s, _, _, _)| s.to_string())
+        .collect();
+
+    // Build the dep-restricted subgraph: edges only between READY nodes.
+    let mut indeg: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> =
+        std::collections::BTreeMap::new();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, m, rec, _) in &available {
+        if *rec != "ready" {
+            continue;
+        }
+        for dep in &m.depends_on {
+            // Only edges WITHIN the READY set matter: deps on already-
+            // installed slugs are satisfied; deps on not-ready slugs
+            // bumped the recommendation off "ready" already.
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.to_string());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+
+    // Kahn's algorithm: emit in deterministic order (sort the queue
+    // each step so output is reproducible).
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+
+    let mut steps: Vec<serde_json::Value> = Vec::new();
+    for (i, slug) in order.iter().enumerate() {
+        let (_, m, _, _) = available.iter().find(|(s, _, _, _)| *s == slug).unwrap();
+        steps.push(serde_json::json!({
+            "order": i + 1,
+            "slug": slug,
+            "phase": m.phase.as_str(),
+            "category": m.category,
+            "summary": m.summary,
+            "depends_on": m.depends_on,
+            "command": format!("selfdefctl modules apply --only {slug}"),
+        }));
+    }
+
+    let mut skipped: Vec<serde_json::Value> = Vec::new();
+    for (slug, m, rec, missing) in &available {
+        if *rec == "ready" {
+            continue;
+        }
+        skipped.push(serde_json::json!({
+            "slug": slug,
+            "category": m.category,
+            "recommendation": rec,
+            "missing_deps": missing,
+            "summary": m.summary,
+        }));
+    }
+
+    let cycle_nodes: Vec<String> = if cycle_present {
+        ready_set
+            .iter()
+            .filter(|s| !order.contains(s))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R87",
+            "sdd_vector": "SDD-026 Z-13",
+            "host_config": host_path.display().to_string(),
+            "modules_dir": dir.display().to_string(),
+            "filter": { "category": category },
+            "cycle_present": cycle_present,
+            "cycle_nodes": cycle_nodes,
+            "counts": {
+                "ready_total": ready_set.len(),
+                "ordered": steps.len(),
+                "skipped": skipped.len(),
+            },
+            "steps": steps,
+            "skipped": skipped,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(if cycle_present { 1 } else { 0 });
+    }
+
+    println!("── SD-R87 selfdefctl modules install-plan (SDD-026 Z-13) ──");
+    println!("  host_config: {}", host_path.display());
+    println!("  catalog:     {}", dir.display());
+    if let Some(cat) = category {
+        println!("  category:    {cat}");
+    }
+    println!(
+        "  totals:      ready={} ordered={} skipped={}",
+        ready_set.len(),
+        steps.len(),
+        skipped.len()
+    );
+    if cycle_present {
+        println!();
+        println!("  ⛔ DEPENDENCY CYCLE DETECTED — unresolved nodes:");
+        for n in &cycle_nodes {
+            println!("       - {n}");
+        }
+        println!("  Fix: inspect `depends_on` in each module manifest above.");
+        return Ok(1);
+    }
+    if steps.is_empty() {
+        println!();
+        println!("  (no READY modules to install)");
+    } else {
+        println!();
+        println!("  PLAN ({} step(s) — run in order):", steps.len());
+        for s in &steps {
+            let n = s["order"].as_u64().unwrap_or(0);
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let cat = s["category"].as_str().unwrap_or("?");
+            let phase = s["phase"].as_str().unwrap_or("?");
+            let cmd = s["command"].as_str().unwrap_or("?");
+            println!("    {n:>3}. {slug:<32} [{cat}/{phase}]");
+            println!("         $ {cmd}");
+        }
+    }
+    if !skipped.is_empty() {
+        println!();
+        println!("  SKIPPED ({} — not ready):", skipped.len());
+        for s in &skipped {
+            let slug = s["slug"].as_str().unwrap_or("?");
+            let rec = s["recommendation"].as_str().unwrap_or("?");
+            println!("    · {slug:<32} → {rec}");
+        }
+    }
+    Ok(0)
+}
+
+/// SD-R88 (SDD-026 Z-13 follow-up): emit a copy-pasteable config
+/// scaffold for one catalog module — the operator's next step
+/// AFTER SD-R87 install-plan tells them WHAT to install.
+///
+/// Operator-named (verbatim, 2026-05-17 expansion): "[…] install
+/// any previously non-installed modules or features and whatnot
+/// anyway and configure them" (emphasis on "configure them").
+///
+/// Renders a `[modules."<slug>"]` block (or `[modules."<slug>#<inst>"]`
+/// when `--instance NAME` is passed for instanced modules) plus the
+/// matching `[daemon.*]` entries the manifest declares as
+/// daemon_requires. Operator copy-pastes the output into
+/// `/etc/selfdef/modules.toml` + `/etc/selfdef/selfdef.toml` and
+/// `apply` proceeds without a daemon_requires preflight failure.
+///
+/// Hardware-gate predicates are surfaced as `# requires: …`
+/// comments so the operator knows in advance what would block
+/// apply (rather than discovering it at apply-time).
+///
+/// Exit codes:
+///   0  scaffold emitted
+///   2  unknown slug / missing --instance for instanced modules
+pub(crate) fn cmd_config_scaffold(
+    dir: &Path,
+    slug: &str,
+    instance: Option<&str>,
+    json: bool,
+) -> Result<i32> {
+    let mods = load_all(dir)?;
+    let target = match mods.iter().find(|(s, _)| s == slug) {
+        Some((_, m)) => m,
+        None => {
+            eprintln!(
+                "ERROR unknown module slug {slug:?}; first 10 known: {:?}",
+                mods.iter().take(10).map(|(s, _)| s).collect::<Vec<_>>()
+            );
+            return Ok(2);
+        }
+    };
+    if target.instanced && instance.is_none() {
+        eprintln!(
+            "ERROR module {slug:?} is instanced — pass --instance <name> \
+             (e.g. wg0)"
+        );
+        return Ok(2);
+    }
+
+    // Build the modules.toml block.
+    let host_key = match instance {
+        Some(i) => format!("{slug}#{i}"),
+        None => slug.to_string(),
+    };
+
+    let mut modules_toml = String::new();
+    modules_toml.push_str(&format!("[modules.\"{host_key}\"]\n"));
+    if !target.requires_hardware.is_empty() {
+        modules_toml.push_str(
+            "# This module declares requires_hardware predicates — the \
+             apply\n# gate will SKIP it if the host doesn't satisfy:\n",
+        );
+        // Render hardware predicates as comments.
+        let dbg = format!("{:?}", target.requires_hardware);
+        for line in dbg.lines() {
+            modules_toml.push_str("#   ");
+            modules_toml.push_str(line);
+            modules_toml.push('\n');
+        }
+    }
+    if !target.depends_on.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module depends_on: {} — install these first.\n",
+            target.depends_on.join(", ")
+        ));
+    }
+    if !target.provides.is_empty() {
+        modules_toml.push_str(&format!(
+            "# Module provides: {} (downstream consumers can resolve).\n",
+            target.provides.join(", ")
+        ));
+    }
+
+    // Build the daemon.* block from daemon_requires.
+    let mut daemon_toml = String::new();
+    if !target.daemon_requires.is_empty() {
+        daemon_toml.push_str(&format!(
+            "# Paste into /etc/selfdef/selfdef.toml — module {slug:?} \
+             expects these keys.\n"
+        ));
+        // Group by [section] (everything before the last dotted path
+        // segment) for readable output.
+        let mut by_section: std::collections::BTreeMap<String, Vec<(String, String)>> =
+            Default::default();
+        for (dotted, req) in &target.daemon_requires {
+            let (section, leaf) = match dotted.rfind('.') {
+                Some(i) => (&dotted[..i], &dotted[i + 1..]),
+                None => ("", dotted.as_str()),
+            };
+            by_section
+                .entry(section.to_string())
+                .or_default()
+                .push((leaf.to_string(), req.render_value()));
+        }
+        for (section, kvs) in &by_section {
+            if !section.is_empty() {
+                daemon_toml.push_str(&format!("[{section}]\n"));
+            }
+            for (k, v) in kvs {
+                daemon_toml.push_str(&format!("{k} = {v}\n"));
+            }
+            daemon_toml.push('\n');
+        }
+    }
+
+    if json {
+        let doc = serde_json::json!({
+            "schema_version": "1.0.0",
+            "round": "SD-R88",
+            "sdd_vector": "SDD-026 Z-13 follow-up",
+            "slug": slug,
+            "instance": instance,
+            "host_key": host_key,
+            "modules_toml": modules_toml,
+            "daemon_toml": daemon_toml,
+            "has_hardware_gate": !target.requires_hardware.is_empty(),
+            "has_daemon_requires": !target.daemon_requires.is_empty(),
+            "depends_on": target.depends_on,
+            "provides": target.provides,
+        });
+        println!("{}", serde_json::to_string_pretty(&doc)?);
+        return Ok(0);
+    }
+    println!("── SD-R88 selfdefctl modules config-scaffold ({slug}) ──");
+    println!();
+    println!("# Paste into /etc/selfdef/modules.toml:");
+    println!();
+    print!("{modules_toml}");
+    if !daemon_toml.is_empty() {
+        println!();
+        print!("{daemon_toml}");
+    }
+    println!();
+    println!("# Next step:  selfdefctl modules apply --only {slug}");
+    Ok(0)
+}
+
+/// SD-R93 (SDD-026 Z-13 execution): apply the SD-R87 install-plan
+/// end-to-end. Generates the topologically-ordered plan + iterates
+/// each step, invoking `cmd_apply` with `--only <slug>` per step.
+/// Per-step outcome (ok / failed / skipped) is captured in a result
+/// vector + summarized.
+///
+/// Cycle-8 write-doctrine: dry-run by default. The `--apply` flag
+/// actually runs the underlying lifecycle (and writes to
+/// host_config when needed). Step failures HALT the rest of the
+/// plan unless `--continue-on-failure` is set (operator chooses
+/// between "all or nothing" and "best effort").
+///
+/// Exit codes:
+///   0  plan generated + every step succeeded (or all dry-run)
+///   1  plan cycle detected OR ≥1 step failed
+///   2  usage error
+pub(crate) fn cmd_apply_plan(
+    host_path: &Path,
+    dir: &Path,
+    category: Option<&str>,
+    apply: bool,
+    continue_on_failure: bool,
+    json: bool,
+) -> Result<i32> {
+    // First: get the install-plan. Re-derive via the same logic
+    // cmd_install_plan uses; capture the order + skipped rows.
+    let host_cfg = load_host_config(host_path)?;
+    let mods = load_all(dir)?;
+
+    let mut host_slugs: std::collections::BTreeSet<String> = Default::default();
+    for k in host_cfg.modules.keys() {
+        let base = k.split('#').next().unwrap_or(k).to_string();
+        host_slugs.insert(base);
+    }
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+
+    // Classify (mirror of cmd_install_plan's pass-1).
+    let mut hw_passing_available: std::collections::BTreeSet<String> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if gate_ok {
+            hw_passing_available.insert(slug.clone());
+        }
+    }
+
+    let mut ready_set: std::collections::BTreeSet<String> = Default::default();
+    let mut deps_of: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for (slug, m) in &mods {
+        if host_slugs.contains(slug) {
+            continue;
+        }
+        if let Some(cat) = category {
+            if m.category != cat {
+                continue;
+            }
+        }
+        let gate_ok = if m.requires_hardware.is_empty() {
+            true
+        } else {
+            match &caps {
+                Some(c) => m.requires_hardware.evaluate(c).is_ok(),
+                None => false,
+            }
+        };
+        if !gate_ok {
+            continue;
+        }
+        let missing: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| {
+                let s = d.as_str();
+                !host_slugs.contains(s) && !hw_passing_available.contains(s)
+            })
+            .cloned()
+            .collect();
+        if missing.is_empty() {
+            ready_set.insert(slug.clone());
+            deps_of.insert(slug.clone(), m.depends_on.clone());
+        }
+    }
+
+    // Kahn's algorithm again (deterministic; same as cmd_install_plan).
+    let mut indeg: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut edges: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for slug in &ready_set {
+        indeg.insert(slug.clone(), 0);
+        edges.insert(slug.clone(), Vec::new());
+    }
+    for (slug, deps) in &deps_of {
+        for dep in deps {
+            if ready_set.contains(dep) {
+                edges.entry(dep.clone()).or_default().push(slug.clone());
+                *indeg.get_mut(slug.as_str()).unwrap() += 1;
+            }
+        }
+    }
+    let mut queue: Vec<String> = indeg
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(s, _)| s.clone())
+        .collect();
+    queue.sort();
+    let mut order: Vec<String> = Vec::new();
+    while let Some(n) = queue.first().cloned() {
+        queue.remove(0);
+        order.push(n.clone());
+        for next in edges.get(&n).cloned().unwrap_or_default() {
+            let d = indeg.get_mut(&next).unwrap();
+            *d -= 1;
+            if *d == 0 {
+                queue.push(next);
+                queue.sort();
+            }
+        }
+    }
+    let cycle_present = order.len() != ready_set.len();
+    if cycle_present {
+        let report = serde_json::json!({
+            "round": "SD-R93",
+            "vector": "SDD-026 Z-13 (apply-plan)",
+            "outcome": "cycle-detected",
+            "ready_set": ready_set.iter().cloned().collect::<Vec<_>>(),
+            "summary": "Dependency cycle in plan-ready set; install-plan refuses to execute. Fix manifests + retry.",
+        });
+        if json {
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            eprintln!(
+                "SD-R93 ABORTED — dependency cycle detected. Inspect with `selfdefctl modules install-plan`."
+            );
+        }
+        return Ok(1);
+    }
+
+    // Execute each step.
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    let mut failed = 0usize;
+    let mut applied = 0usize;
+    for (i, slug) in order.iter().enumerate() {
+        let step_num = i + 1;
+        if !apply {
+            results.push(serde_json::json!({
+                "step": step_num, "slug": slug,
+                "outcome": "dry-run",
+                "command": format!("selfdefctl modules apply --only {slug}"),
+            }));
+            continue;
+        }
+        // Build LifecycleOpts for this one slug.
+        let step_opts = LifecycleOpts {
+            host_config: Some(host_path.to_path_buf()),
+            dir: Some(dir.to_path_buf()),
+            only: vec![slug.clone()],
+            ..Default::default()
+        };
+        match cmd_apply(&step_opts) {
+            Ok(0) => {
+                applied += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "ok", "rc": 0,
+                }));
+            }
+            Ok(rc) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "failed", "rc": rc,
+                }));
+                if !continue_on_failure {
+                    results.push(serde_json::json!({
+                        "step": step_num + 1, "slug": "(remaining-steps)",
+                        "outcome": "halted",
+                        "detail": "--continue-on-failure not set; halting after first failure",
+                    }));
+                    break;
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                results.push(serde_json::json!({
+                    "step": step_num, "slug": slug,
+                    "outcome": "error",
+                    "detail": e.to_string(),
+                }));
+                if !continue_on_failure {
+                    break;
+                }
+            }
+        }
+    }
+
+    let report = serde_json::json!({
+        "round": "SD-R93",
+        "vector": "SDD-026 Z-13 (apply-plan)",
+        "host_config": host_path.display().to_string(),
+        "modules_dir": dir.display().to_string(),
+        "dry_run": !apply,
+        "continue_on_failure": continue_on_failure,
+        "plan_steps": order.len(),
+        "applied_count": applied,
+        "failed_count": failed,
+        "results": results,
+        "summary": if !apply {
+            format!("{} step(s) — DRY-RUN", order.len())
+        } else if failed == 0 {
+            format!("{}/{} step(s) succeeded", applied, order.len())
+        } else {
+            format!("{} ok / {} failed ({} step(s) attempted)", applied, failed, applied + failed)
+        },
+    });
+    if json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        println!("── SD-R93 selfdefctl modules apply-plan (SDD-026 Z-13) ──");
+        println!("  host_config: {}", host_path.display());
+        println!("  catalog:     {}", dir.display());
+        println!("  plan_steps:  {}", order.len());
+        println!("  mode:        {}", if apply { "APPLY" } else { "DRY-RUN" });
+        for r in report["results"].as_array().unwrap() {
+            let step = r["step"].as_u64().unwrap_or(0);
+            let slug = r["slug"].as_str().unwrap_or("?");
+            let outcome = r["outcome"].as_str().unwrap_or("?");
+            let mark = match outcome {
+                "ok" => "OK ",
+                "failed" => "FAIL",
+                "error" => "ERR ",
+                "dry-run" => "DRY",
+                "halted" => "STOP",
+                _ => "?  ",
+            };
+            println!("  [{mark}] {step:>3}. {slug}");
+        }
+        println!();
+        println!("  {}", report["summary"].as_str().unwrap_or(""));
+    }
+    Ok(if failed > 0 { 1 } else { 0 })
+}
+
+/// SD-R45: structured JSON variant of cmd_status. Emits per-module
+/// rows with manifest summary + [requires_hardware] presence + the
+/// live gate verdict for each. Operator-stable schema for fleet
+/// dashboards + sovereign-osctl overview consumers.
+pub(crate) fn cmd_status_json(opts: &LifecycleOpts) -> Result<i32> {
+    let (host_path, active) = prepare(opts)?;
+    let caps = match selfdef_hardware::probe() {
+        Ok(snap) => Some(selfdef_hardware::derive_capabilities(&snap)),
+        Err(_) => None,
+    };
+    let mut modules: Vec<serde_json::Value> = Vec::with_capacity(active.len());
+    for am in &active {
+        let gate = if am.manifest.requires_hardware.is_empty() {
+            serde_json::json!({"verdict": "ungated", "unmet": []})
+        } else {
+            match &caps {
+                Some(c) => match am.manifest.requires_hardware.evaluate(c) {
+                    Ok(()) => serde_json::json!({"verdict": "passes", "unmet": []}),
+                    Err(u) => serde_json::json!({"verdict": "skipped", "unmet": u}),
+                },
+                None => {
+                    serde_json::json!({"verdict": "probe-unavailable", "unmet": []})
+                }
+            }
+        };
+        modules.push(serde_json::json!({
+            "name": am.display_name(),
+            "slug": am.slug,
+            "instance": am.instance,
+            "version": am.manifest.version,
+            "category": am.manifest.category,
+            "summary": am.manifest.summary,
+            "phase": am.manifest.phase.as_str(),
+            "depends_on": am.manifest.depends_on,
+            "provides": am.manifest.provides,
+            "consumes": am.manifest.consumes,
+            "requires_hardware_present": !am.manifest.requires_hardware.is_empty(),
+            "gate": gate,
+        }));
+    }
+    let kept = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "passes" || m["gate"]["verdict"] == "ungated")
+        .count();
+    let skipped = modules
+        .iter()
+        .filter(|m| m["gate"]["verdict"] == "skipped")
+        .count();
+    let doc = serde_json::json!({
+        "schema_version": "1.0.0",
+        "host_config_path": host_path,
+        "probe_ok": caps.is_some(),
+        "module_count": modules.len(),
+        "would_apply": kept,
+        "would_skip": skipped,
+        "modules": modules,
+    });
+    println!("{}", serde_json::to_string_pretty(&doc)?);
+    Ok(0)
 }
 
 pub(crate) fn cmd_uninstall(opts: &LifecycleOpts) -> Result<i32> {
@@ -1308,6 +4568,104 @@ fn run_lifecycle(opts: &LifecycleOpts, action: Action, policy: LifecyclePolicy) 
     let (host_path, mut active) = prepare(opts)?;
     if policy.reverse_order {
         active.reverse();
+    }
+    // SD-R14: hardware-aware module gate. On Apply / Check, probe
+    // the host hardware once + filter out modules whose
+    // SD-R55 (closes SDD-020 V-5): module-manifest signing gate.
+    // For Apply + Check, refuse to land modules whose [signing]
+    // block declares required=true without a valid .minisig.
+    // Uninstall skips signing (tearing down doesn't require the
+    // operator to re-verify signatures).
+    if matches!(action, Action::Apply | Action::Check) {
+        let (kept, failed) = apply_signing_gate(active);
+        active = kept;
+        if !failed.is_empty() && matches!(action, Action::Apply) {
+            // Apply is destructive — fail loudly when ANY required
+            // signing check fails. Check is informational — just
+            // log + continue with the kept set.
+            return Ok(1);
+        }
+    }
+    // [requires_hardware] block isn't met. The unmet modules surface
+    // as a single warning block before apply; the filtered set
+    // proceeds. Uninstall skips this — tearing a module down doesn't
+    // care whether the hardware now matches.
+    if matches!(action, Action::Apply | Action::Check)
+        && !opts.ignore_hardware
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        let pre_count = active.len();
+        active = apply_hardware_gate_with_opts(active, opts.reprobe_hardware);
+        let post_count = active.len();
+        // SD-R44 (--strict-hardware): if any modules were filtered
+        // out, exit non-zero. The SD-R14 skip block already landed
+        // on stderr (apply_hardware_gate printed it); we just add
+        // the strict-mode rejection banner + return.
+        if opts.strict_hardware && post_count < pre_count {
+            eprintln!(
+                "# SD-R44: --strict-hardware set — refusing to proceed; {} gated module(s) skipped",
+                pre_count - post_count
+            );
+            // SD-R53 (closes SDD-020 V-1): audit-trail the strict-mode
+            // refusal as well. Same env opt-in as SD-R47 + a distinct
+            // category prefix so dashboards can split kept vs refused.
+            if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+                let audit_path = std::path::PathBuf::from(audit_path);
+                // Modules that WOULD have skipped (the ones we filtered
+                // out) are no longer in `active`; rerun the gate on a
+                // fresh load to recover their names.
+                let (_, fresh) = match prepare(opts) {
+                    Ok(p) => p,
+                    Err(_) => (std::path::PathBuf::new(), Vec::new()),
+                };
+                let skipped_names: Vec<String> = fresh
+                    .iter()
+                    .filter(|am| {
+                        !am.manifest.requires_hardware.is_empty()
+                            && !active.iter().any(|a| a.slug == am.slug)
+                    })
+                    .map(|am| am.display_name())
+                    .collect();
+                if let Err(e) = sdr53_emit_strict_hardware_audit(&audit_path, &skipped_names) {
+                    eprintln!(
+                        "# SD-R53: audit write failed: {e} (path: {})",
+                        audit_path.display()
+                    );
+                }
+            }
+            return Ok(1);
+        }
+    } else if opts.ignore_hardware
+        && active
+            .iter()
+            .any(|a| !a.manifest.requires_hardware.is_empty())
+    {
+        // SD-R42: operator explicitly suppressed the gate. Emit a
+        // warning so the operator sees this on every run — the
+        // override is sharp-edged and should not be silent.
+        let gated_modules: Vec<String> = active
+            .iter()
+            .filter(|a| !a.manifest.requires_hardware.is_empty())
+            .map(|a| a.display_name())
+            .collect();
+        eprintln!(
+            "# SD-R42: --ignore-hardware set — gate suppressed, {} gated module(s) will be force-applied",
+            gated_modules.len()
+        );
+        // SD-R47 (closes SDD-019 T-2): audit trail for the override.
+        // When SELFDEF_MODULES_AUDIT_PATH is set, append an OCSF-
+        // shaped JSONL line. Fleet alerting picks this up.
+        if let Ok(audit_path) = std::env::var("SELFDEF_MODULES_AUDIT_PATH") {
+            let audit_path = std::path::PathBuf::from(audit_path);
+            if let Err(e) = sdr47_emit_ignore_hardware_audit(&audit_path, &gated_modules) {
+                eprintln!(
+                    "# SD-R47: audit write failed: {e} (path: {})",
+                    audit_path.display()
+                );
+            }
+        }
     }
     // SDD-002 D-2: validate every active module's
     // `[daemon_requires]` against the daemon-side config. Apply
@@ -1499,6 +4857,10 @@ mod tests {
             instanced,
             phase,
             daemon_requires: BTreeMap::new(),
+            requires_hardware: HardwareRequirements::default(),
+            signing: None,
+            resources: None,
+            features: BTreeMap::new(),
         }
     }
 
@@ -2142,5 +5504,1322 @@ mod tests {
         active.reverse();
         let order: Vec<_> = active.iter().map(|a| a.slug.clone()).collect();
         assert_eq!(order, vec!["audit", "alpha", "guard"]);
+    }
+}
+
+#[cfg(test)]
+mod sdd_015_apply_gate_tests {
+    //! SDD-015 § 4 + § 6: pre-apply perimeter check.
+    //!
+    //! We construct a `LifecycleOpts` that points at a temp daemon
+    //! config file with explicit `[deployment] target = "sain01"` +
+    //! a `[perimeter] policies_dir = <tempdir>` pointing at our
+    //! synthesized policy files. Then we call
+    //! [`pre_apply_perimeter_check`] directly and assert the exit code.
+    //!
+    //! This validates the GATE in isolation; the full
+    //! `cmd_apply → run_lifecycle` path is exercised by the integration
+    //! test suite (no module fixtures wired here).
+
+    use super::*;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn write_cfg(path: &std::path::Path, body: &str) {
+        std::fs::write(path, body).unwrap();
+    }
+
+    fn opts(daemon_config_path: PathBuf) -> LifecycleOpts {
+        LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            ignore_hardware: false,
+            strict_hardware: false,
+            reprobe_hardware: false,
+            daemon_config_path: Some(daemon_config_path),
+        }
+    }
+
+    /// SDD-015 § 4: on Generic target, the gate is auto-disabled —
+    /// returns 0 regardless of policies dir contents.
+    #[test]
+    fn sdd_015_apply_gate_skipped_on_generic_target() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Place a bad agent-guard policy that WOULD fail the check
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "generic"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "generic target → gate skipped");
+    }
+
+    /// SDD-015 § 4: on SAIN-01 target with a clean policies dir, gate
+    /// passes (returns 0).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_clean_sain01() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        // Only a properly-scoped agent-guard policy
+        std::fs::write(
+            pol_dir.join("agent-guard-shell-exec.yaml"),
+            "metadata:\n  name: agent-guard-shell-exec\nspec:\n  kprobes:\n    - call: sys_execve\n      selectors:\n        - matchNamespaces:\n            - operator: In\n              values: [container]\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "clean sain01 policies → gate passes");
+    }
+
+    /// SDD-015 § 4 + § 6: on SAIN-01 target with a host-scoped
+    /// agent-guard policy, gate BLOCKS apply (returns ≥1).
+    #[test]
+    fn sdd_015_apply_gate_blocks_on_host_scoped_agent_guard() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert!(code >= 1, "host-scoped agent-guard → blocked (got {code})");
+    }
+
+    /// SDD-015 § Q15-B: with `overlap_warn_only = true`, findings are
+    /// printed but the gate returns 0 (apply proceeds).
+    #[test]
+    fn sdd_015_apply_gate_warn_only_downgrades_to_zero() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                overlap_warn_only = true
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "warn-only → downgrade to 0 despite finding");
+    }
+
+    /// Explicit operator override: `check_overlap_on_apply = false` on
+    /// SAIN-01 disables the gate (operator-explicit opt-out path).
+    #[test]
+    fn sdd_015_apply_gate_explicit_disable_overrides_sain01_autoenable() {
+        let dir = tempdir().unwrap();
+        let pol_dir = dir.path().join("policies");
+        std::fs::create_dir_all(&pol_dir).unwrap();
+        std::fs::write(
+            pol_dir.join("agent-guard-bad.yaml"),
+            "metadata:\n  name: agent-guard-bad\nspec:\n  kprobes:\n    - call: sys_execve\n",
+        )
+        .unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            &format!(
+                r#"
+                [deployment]
+                target = "sain01"
+
+                [perimeter]
+                policies_dir = "{}"
+                check_overlap_on_apply = false
+                "#,
+                pol_dir.display()
+            ),
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "explicit disable wins over sain01 auto-enable");
+    }
+
+    /// No daemon config path supplied → gate is a no-op.
+    #[test]
+    fn sdd_015_apply_gate_noop_when_no_daemon_config_path() {
+        let opts = LifecycleOpts {
+            host_config: None,
+            dir: None,
+            only: Vec::new(),
+            except: Vec::new(),
+            dry_run: false,
+            ignore_daemon_requires: false,
+            ignore_hardware: false,
+            strict_hardware: false,
+            reprobe_hardware: false,
+            daemon_config_path: None,
+        };
+        let code = pre_apply_perimeter_check(&opts).unwrap();
+        assert_eq!(code, 0, "no daemon config → gate skipped");
+    }
+
+    /// Missing policies dir → gate passes (operator without Tetragon
+    /// installed doesn't get blocked from running modules apply).
+    #[test]
+    fn sdd_015_apply_gate_passes_on_missing_policies_dir() {
+        let dir = tempdir().unwrap();
+        let cfg = dir.path().join("selfdef.toml");
+        write_cfg(
+            &cfg,
+            r#"
+            [deployment]
+            target = "sain01"
+
+            [perimeter]
+            policies_dir = "/nonexistent/path/xyz"
+            "#,
+        );
+        let code = pre_apply_perimeter_check(&opts(cfg)).unwrap();
+        assert_eq!(code, 0, "missing policies dir → graceful pass");
+    }
+}
+
+#[cfg(test)]
+mod sdr14_hardware_gate_tests {
+    //! SD-R14: hardware-aware module gating.
+    //!
+    //! [`HardwareRequirements::evaluate`] is the pure decision function;
+    //! [`apply_hardware_gate`] wraps it with the partition + skip-block
+    //! logging. Tests here pin each predicate branch in isolation and
+    //! then exercise the gate against a synthesized [`HardwareCapabilities`].
+    //!
+    //! These are the operator-stable surface for the
+    //! `[requires_hardware]` block in `module.toml` — every assertion
+    //! reads as "what an operator declares == what gets enforced".
+    use super::*;
+    use selfdef_hardware::{
+        CpuCapabilities, GpuCapabilities, HardwareCapabilities, MemoryCapabilities,
+        PcieCapabilities, Sain01Match, Sain01Verdict,
+    };
+
+    fn caps_with(
+        avx512_vnni: bool,
+        avx512_bf16: bool,
+        mem_gib: u64,
+        gpu_count: u32,
+        verdict: Sain01Verdict,
+    ) -> HardwareCapabilities {
+        HardwareCapabilities {
+            schema_version: "1".into(),
+            probed_at: "1970-01-01T00:00:00Z".into(),
+            host_tag: None,
+            cpu: CpuCapabilities {
+                avx512vnni: avx512_vnni,
+                avx512bf16: avx512_bf16,
+                // SD-R64: derived fields mirror the production logic
+                // in derive_capabilities so test caps reflect reality.
+                // Ternary capable = VNNI + (BF16 or FP16); lanes = 64
+                // on VNNI hosts.
+                ternary_aot_capable: avx512_vnni && avx512_bf16,
+                zmm_int8_lane_capacity: if avx512_vnni { 64 } else { 0 },
+                ..Default::default()
+            },
+            memory: MemoryCapabilities {
+                total_bytes: mem_gib * 1024 * 1024 * 1024,
+                at_least_256gb: mem_gib >= 256,
+                at_least_512gb: mem_gib >= 512,
+            },
+            gpu: GpuCapabilities {
+                device_count: gpu_count,
+                device_nodes: Vec::new(),
+                devices: Vec::new(),
+            },
+            pcie: PcieCapabilities::default(),
+            sain01_match: Sain01Match {
+                overall: verdict,
+                cpu_avx512_vnni: avx512_vnni,
+                cpu_avx512_bf16: avx512_bf16,
+                memory_at_least_256gb: mem_gib >= 256,
+                gpu_count_at_least_2: gpu_count >= 2,
+                motherboard_proart_x870e: None,
+                pcie_dual_x8_present: false,
+            },
+            wasm_aot: Default::default(),
+        }
+    }
+
+    fn full_match_sain01() -> HardwareCapabilities {
+        caps_with(true, true, 256, 2, Sain01Verdict::FullMatch)
+    }
+
+    fn minimal_host() -> HardwareCapabilities {
+        caps_with(false, false, 16, 0, Sain01Verdict::NoMatch)
+    }
+
+    #[test]
+    fn sdr14_evaluate_empty_passes_any_caps() {
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        assert!(req.evaluate(&minimal_host()).is_ok());
+        assert!(req.evaluate(&full_match_sain01()).is_ok());
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_passes_on_match() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_vnni_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(unmet[0].contains("avx512_vnni"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_avx512_bf16_required_fails_on_missing() {
+        let req = HardwareRequirements {
+            avx512_bf16: true,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("avx512_bf16"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr14_evaluate_memory_threshold_enforced() {
+        let req = HardwareRequirements {
+            memory_gib_min: 128,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 32, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("memory_gib_min = 128"), "got: {unmet:?}");
+        assert!(unmet[0].contains("32 GiB"), "got: {unmet:?}");
+        // Exactly at threshold → passes.
+        req.evaluate(&caps_with(false, false, 128, 0, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_gpu_count_min_enforced() {
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            ..Default::default()
+        };
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 1, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("gpu_count_min = 2"), "got: {unmet:?}");
+        // 2 GPUs → passes.
+        req.evaluate(&caps_with(false, false, 16, 2, Sain01Verdict::NoMatch))
+            .unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_rank_ordering() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "PartialMatch".into(),
+            ..Default::default()
+        };
+        // NoMatch < PartialMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(false, false, 16, 0, Sain01Verdict::NoMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("PartialMatch"), "got: {unmet:?}");
+        // PartialMatch == PartialMatch → pass.
+        req.evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap();
+        // FullMatch > PartialMatch → pass.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_sain01_verdict_full_match_required() {
+        let req = HardwareRequirements {
+            sain01_verdict_min: "FullMatch".into(),
+            ..Default::default()
+        };
+        // PartialMatch < FullMatch → fail.
+        let unmet = req
+            .evaluate(&caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch))
+            .unwrap_err();
+        assert!(unmet[0].contains("FullMatch"), "got: {unmet:?}");
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr14_evaluate_multiple_failures_listed_together() {
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            avx512_bf16: true,
+            memory_gib_min: 256,
+            gpu_count_min: 2,
+            gpu_vram_gib_min: 0,
+            gpu_vram_gib_each_min: 0,
+            gpu_power_headroom_watts_min: 0,
+            wasm_aot_features_required: String::new(),
+            sain01_verdict_min: "FullMatch".into(),
+            ternary_aot_capable_required: false,
+            zmm_int8_lanes_min: 0,
+            host_features_required: String::new(),
+            any_of: Vec::new(),
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        // Every predicate fails on a minimal host: 5 lines (SD-R26
+        // gates only fire when their threshold > 0).
+        assert_eq!(unmet.len(), 5, "got: {unmet:?}");
+    }
+
+    // ---- SD-R64: ternary + ZMM lane gate ---------------------------
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_passes_on_sain01() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        // full_match_sain01 has vnni + bf16 → derived ternary = true.
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_on_minimal_host() {
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("bitnet.cpp"),
+            "remediation hint must mention bitnet.cpp hot path: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_ternary_aot_capable_predicate_fails_when_only_vnni_present() {
+        // vnni=true, bf16=false → derived ternary = false even though
+        // VNNI alone is present. Predicate must reject.
+        let req = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        let caps = caps_with(true, false, 256, 2, Sain01Verdict::PartialMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("ternary_aot_capable required"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_64_passes_on_sain01() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_fails_when_host_lacks_avx512_vnni() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 64,
+            ..Default::default()
+        };
+        // minimal_host has vnni=false → derived lanes = 0.
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert!(
+            unmet[0].contains("zmm_int8_lanes_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("host max = 0"),
+            "must cite actual host lane count: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr64_zmm_int8_lanes_min_zero_disables_gate() {
+        let req = HardwareRequirements {
+            zmm_int8_lanes_min: 0,
+            ..Default::default()
+        };
+        // is_empty must remain true with both gates disabled.
+        assert!(req.is_empty());
+        // And evaluate is a no-op.
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    // ---- SD-R68: host_features_required gate -----------------------
+
+    fn caps_with_extended_features(features: &[&str]) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 256, 2, Sain01Verdict::FullMatch);
+        c.cpu.extended_features = features.iter().map(|s| (*s).to_string()).collect();
+        c
+    }
+
+    #[test]
+    fn sdr68_host_features_required_passes_when_all_present() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+        let caps = caps_with_extended_features(&["avx2", "avx512_vbmi2", "sha_ni", "rdpid"]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_fails_with_missing_listed() {
+        let req = HardwareRequirements {
+            host_features_required: "avx512_vbmi2,sha_ni".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx2", "rdpid"]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert_eq!(unmet.len(), 1);
+        assert!(
+            unmet[0].contains("host_features_required"),
+            "got: {unmet:?}"
+        );
+        assert!(
+            unmet[0].contains("avx512_vbmi2") && unmet[0].contains("sha_ni"),
+            "must cite each missing flag: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr68_host_features_required_tolerates_whitespace_and_empty_tokens() {
+        let req = HardwareRequirements {
+            host_features_required: " avx512_vbmi2, , sha_ni ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_extended_features(&["avx512_vbmi2", "sha_ni"]);
+        // Whitespace + empty-token tolerated; gate passes.
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_host_features_required_empty_string_disables_gate() {
+        let req = HardwareRequirements {
+            host_features_required: String::new(),
+            ..Default::default()
+        };
+        assert!(req.is_empty());
+        // Even with no features in caps the gate is a no-op.
+        let caps = caps_with_extended_features(&[]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr68_is_empty_false_when_host_features_required_set() {
+        let req = HardwareRequirements {
+            host_features_required: "rdpid".into(),
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+    }
+
+    // ---- SD-R77: composable any_of OR-predicates -------------------
+
+    #[test]
+    fn sdr77_any_of_passes_when_first_branch_matches() {
+        // Branch 1 demands VNNI (SAIN-01 has it); branch 2 demands
+        // FullMatch verdict (also true). First match wins; gate passes.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    sain01_verdict_min: "FullMatch".into(),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(!req.is_empty(), "any_of should mark gate non-empty");
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_any_of_passes_when_only_second_branch_matches() {
+        // Branch 1 demands FP16 (not present on minimal); branch 2 is
+        // a trivially-empty block (passes vacuously). Module passes
+        // via branch 2.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    host_features_required: "avx512_fp16".into(),
+                    ..Default::default()
+                },
+                HardwareRequirements::default(), // empty branch — always passes
+            ],
+            ..Default::default()
+        };
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_any_of_fails_when_every_branch_fails() {
+        // Two impossible branches on a minimal host.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    avx512_bf16: true,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        // Operator-readable error: "any_of: NONE of N OR-branch(es)
+        // passed" + per-branch failure recap.
+        assert!(
+            unmet
+                .iter()
+                .any(|u| u.starts_with("any_of: NONE of 2 OR-branch")),
+            "expected NONE-of-N marker: {unmet:?}"
+        );
+        assert!(
+            unmet.iter().any(|u| u.contains("any_of[0]")),
+            "expected per-branch recap: {unmet:?}"
+        );
+        assert!(
+            unmet.iter().any(|u| u.contains("any_of[1]")),
+            "expected per-branch recap: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr77_root_predicate_failure_fails_even_when_any_of_passes() {
+        // Root demands 256 GiB RAM (minimal has 16). any_of contains a
+        // trivially-passing branch — should not rescue the root failure.
+        let req = HardwareRequirements {
+            memory_gib_min: 256,
+            any_of: vec![HardwareRequirements::default()],
+            ..Default::default()
+        };
+        let unmet = req.evaluate(&minimal_host()).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("memory_gib_min")),
+            "root memory predicate must still fail: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr77_empty_any_of_is_pass_through() {
+        // Behavior parity with pre-SD-R77 (no OR-block declared).
+        let req = HardwareRequirements {
+            memory_gib_min: 8,
+            any_of: Vec::new(),
+            ..Default::default()
+        };
+        req.evaluate(&full_match_sain01()).unwrap();
+    }
+
+    #[test]
+    fn sdr77_is_empty_false_when_any_of_set() {
+        let req = HardwareRequirements {
+            any_of: vec![HardwareRequirements {
+                avx512_vnni: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(!req.is_empty(), "any_of must mark gate non-empty");
+    }
+
+    #[test]
+    fn sdr77_parses_from_toml_array_of_tables() {
+        // Validate the operator-facing TOML surface — the
+        // [[requires_hardware.any_of]] array-of-tables syntax must
+        // serde-deserialize into Vec<HardwareRequirements>.
+        let toml_str = r#"
+[requires_hardware]
+memory_gib_min = 8
+
+[[requires_hardware.any_of]]
+avx512_vnni = true
+ternary_aot_capable_required = true
+
+[[requires_hardware.any_of]]
+gpu_count_min = 1
+gpu_vram_gib_min = 24
+"#;
+        #[derive(serde::Deserialize)]
+        struct Wrap {
+            requires_hardware: HardwareRequirements,
+        }
+        let parsed: Wrap = toml::from_str(toml_str).unwrap();
+        assert_eq!(parsed.requires_hardware.memory_gib_min, 8);
+        assert_eq!(parsed.requires_hardware.any_of.len(), 2);
+        assert!(parsed.requires_hardware.any_of[0].avx512_vnni);
+        assert!(parsed.requires_hardware.any_of[0].ternary_aot_capable_required);
+        assert_eq!(parsed.requires_hardware.any_of[1].gpu_count_min, 1);
+        assert_eq!(parsed.requires_hardware.any_of[1].gpu_vram_gib_min, 24);
+    }
+
+    // ---- SD-R79 (SDD-025 Y-1): evaluate_resolved branch index ----
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_none_when_no_any_of() {
+        // Root-only pass — no any_of branches → None.
+        let req = HardwareRequirements {
+            avx512_vnni: true,
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&full_match_sain01()).unwrap();
+        assert_eq!(matched, None);
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_zero_when_first_branch_matches() {
+        // SAIN-01 host satisfies branch 0 (avx512_vnni). Index = 0.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    avx512_vnni: true,
+                    ..Default::default()
+                },
+                HardwareRequirements {
+                    gpu_count_min: 8,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&full_match_sain01()).unwrap();
+        assert_eq!(matched, Some(0));
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_returns_one_when_second_branch_matches() {
+        // First branch demands an impossible flag; second branch is
+        // trivially-empty (passes). Index = 1.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements {
+                    host_features_required: "avx512_fp16".into(),
+                    ..Default::default()
+                },
+                HardwareRequirements::default(),
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&minimal_host()).unwrap();
+        assert_eq!(matched, Some(1));
+    }
+
+    #[test]
+    fn sdr79_evaluate_resolved_short_circuits_on_first_match() {
+        // Branch 0 passes; branches 1 and 2 would also pass — but
+        // evaluate_resolved must short-circuit at the first match.
+        let req = HardwareRequirements {
+            any_of: vec![
+                HardwareRequirements::default(),
+                HardwareRequirements::default(),
+                HardwareRequirements::default(),
+            ],
+            ..Default::default()
+        };
+        let matched = req.evaluate_resolved(&minimal_host()).unwrap();
+        assert_eq!(matched, Some(0));
+    }
+
+    #[test]
+    fn sdr79_evaluate_preserves_back_compat_signature() {
+        // Old callers using evaluate() get () back regardless of
+        // any_of usage.
+        let req = HardwareRequirements {
+            any_of: vec![HardwareRequirements::default()],
+            ..Default::default()
+        };
+        req.evaluate(&minimal_host()).unwrap();
+    }
+
+    #[test]
+    fn sdr64_is_empty_false_when_either_sdr64_gate_set() {
+        let r1 = HardwareRequirements {
+            ternary_aot_capable_required: true,
+            ..Default::default()
+        };
+        assert!(!r1.is_empty());
+        let r2 = HardwareRequirements {
+            zmm_int8_lanes_min: 16,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
+    }
+
+    // -- apply_hardware_gate ----------------------------------------
+
+    fn am_with_req(slug: &str, req: HardwareRequirements) -> ActiveModule {
+        let manifest = ModuleManifest {
+            name: slug.to_string(),
+            version: "0.0.0".into(),
+            summary: "sdr14 fixture".into(),
+            category: "test".into(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            requires: Vec::new(),
+            requires_hardware: req,
+            signing: None,
+            resources: None,
+            install: None,
+            profiles: None,
+            instanced: false,
+            phase: Phase::Main,
+            daemon_requires: BTreeMap::new(),
+            features: BTreeMap::new(),
+        };
+        ActiveModule {
+            slug: slug.into(),
+            instance: None,
+            module_root: PathBuf::from("/tmp/nonexistent-test-root"),
+            config_path: PathBuf::from("/tmp/nonexistent-test-cfg"),
+            manifest,
+        }
+    }
+
+    #[test]
+    fn sdr14_apply_hardware_gate_keeps_unrestricted_modules() {
+        // Hardware-agnostic modules are kept regardless of host caps.
+        // The gate must NEVER drop a module whose [requires_hardware]
+        // block is empty — that's the contract operators rely on for
+        // the 90% of modules that don't care about the host.
+        let active = vec![
+            am_with_req("alpha", HardwareRequirements::default()),
+            am_with_req("beta", HardwareRequirements::default()),
+        ];
+        let kept = apply_hardware_gate(active);
+        let names: Vec<_> = kept.iter().map(|a| a.slug.clone()).collect();
+        assert_eq!(names, vec!["alpha".to_string(), "beta".to_string()]);
+    }
+
+    // -- SD-R26: per-GPU VRAM + power-headroom gates -----------------
+
+    use selfdef_hardware::GpuDeviceCapabilities;
+
+    fn caps_with_gpu_devices(devs: Vec<GpuDeviceCapabilities>) -> HardwareCapabilities {
+        let mut c = caps_with(
+            false,
+            false,
+            0,
+            u32::try_from(devs.len()).unwrap_or(u32::MAX),
+            Sain01Verdict::PartialMatch,
+        );
+        c.gpu.devices = devs;
+        c
+    }
+
+    #[test]
+    fn sdr26_vram_gate_passes_when_at_least_one_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // SAIN-01 pair: RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_gpu_meets() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // Two 24 GiB GPUs — neither big enough for 80.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("gpu_vram_gib_min = 80"), "got: {unmet:?}");
+        assert!(unmet[0].contains("host best is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_vram_gate_fails_when_no_devices_reported() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        // No per-device data (probe didn't enrich) — fail closed.
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("host best is 0 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_passes_when_sum_meets() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 400,
+            ..Default::default()
+        };
+        // GPU 0: 600 - 275 = 325 W. GPU 1: 350 - 180 = 170 W. Sum = 495 ≥ 400.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_sum_below_min() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 600,
+            ..Default::default()
+        };
+        // Sum = 495 W (same caps as above). 495 < 600 → fail.
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(350),
+                power_draw_watts: Some(180),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_power_headroom_watts_min = 600"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("495 W"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_power_headroom_fails_when_any_gpu_lacks_telemetry() {
+        let req = HardwareRequirements {
+            gpu_power_headroom_watts_min: 100,
+            ..Default::default()
+        };
+        // Second GPU has no power telemetry — fail closed (operator
+        // asked for headroom guarantee + we can't compute it).
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                power_limit_watts: Some(600),
+                power_draw_watts: Some(275),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                power_limit_watts: None,
+                power_draw_watts: None,
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(unmet[0].contains("lack power telemetry"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr26_combined_vram_and_count_gate_on_sain01_dual_gpu() {
+        // The canonical "needs the SAIN-01 dual-GPU rig with 80+ GiB
+        // headroom on at least one card" inference module gate.
+        let req = HardwareRequirements {
+            gpu_count_min: 2,
+            gpu_vram_gib_min: 80,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Single big GPU: passes vram gate but fails count.
+        let caps_single = caps_with_gpu_devices(vec![GpuDeviceCapabilities {
+            vram_bytes: Some(98 * 1024 * 1024 * 1024),
+            ..Default::default()
+        }]);
+        let unmet = req.evaluate(&caps_single).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_count_min")),
+            "got: {unmet:?}"
+        );
+    }
+
+    // -- SD-R51: gpu_vram_gib_each_min (ALL-semantics) ---------------
+
+    #[test]
+    fn sdr51_vram_each_passes_when_all_gpus_meet_bar() {
+        // Two identical 80 GiB GPUs (hypothetical) → every-GPU bar
+        // of 64 GiB passes.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(80 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_on_mixed_sain01_dual_gpu() {
+        // SAIN-01 has RTX PRO 6000 (98 GiB) + RTX 3090 (24 GiB).
+        // A module wanting 64 GiB EACH would fail — the 3090 lags.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 64,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 64"),
+            "got: {unmet:?}"
+        );
+        assert!(unmet[0].contains("host worst is 24 GiB"), "got: {unmet:?}");
+    }
+
+    #[test]
+    fn sdr51_vram_each_fails_closed_on_empty_devices() {
+        // No per-device data → can't prove ALL satisfy → fail.
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 8,
+            ..Default::default()
+        };
+        let caps = caps_with(false, false, 0, 0, Sain01Verdict::NoMatch);
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("gpu_vram_gib_each_min = 8"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_vram_min_and_each_min_compose_naturally() {
+        // ANY ≥ 80 + EACH ≥ 16: SAIN-01 (98+24) passes both.
+        let req = HardwareRequirements {
+            gpu_vram_gib_min: 80,
+            gpu_vram_gib_each_min: 16,
+            ..Default::default()
+        };
+        let caps = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(24 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        req.evaluate(&caps).unwrap();
+        // Same predicates against 1×98 + 1×4: ANY passes (98 ≥ 80)
+        // but EACH fails (4 < 16).
+        let caps_skewed = caps_with_gpu_devices(vec![
+            GpuDeviceCapabilities {
+                vram_bytes: Some(98 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+            GpuDeviceCapabilities {
+                vram_bytes: Some(4 * 1024 * 1024 * 1024),
+                ..Default::default()
+            },
+        ]);
+        let unmet = req.evaluate(&caps_skewed).unwrap_err();
+        assert!(
+            unmet.iter().any(|u| u.contains("gpu_vram_gib_each_min")),
+            "got: {unmet:?}"
+        );
+        assert!(
+            !unmet.iter().any(|u| u.contains("gpu_vram_gib_min")),
+            "ANY predicate should NOT fail when biggest GPU meets it: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr51_is_empty_recognises_each_field() {
+        let req = HardwareRequirements {
+            gpu_vram_gib_each_min: 1,
+            ..Default::default()
+        };
+        assert!(!req.is_empty());
+    }
+
+    #[test]
+    fn sdr26_is_empty_still_true_with_only_old_fields() {
+        // Adding new fields must not break the empty short-circuit.
+        let req = HardwareRequirements::default();
+        assert!(req.is_empty());
+        // And asserting any new field flips it correctly.
+        let r2 = HardwareRequirements {
+            gpu_vram_gib_min: 1,
+            ..Default::default()
+        };
+        assert!(!r2.is_empty());
+        let r3 = HardwareRequirements {
+            gpu_power_headroom_watts_min: 1,
+            ..Default::default()
+        };
+        assert!(!r3.is_empty());
+        // SD-R32: wasm_aot_features_required also flips is_empty.
+        let r4 = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        assert!(!r4.is_empty());
+    }
+
+    // -- SD-R32: wasm_aot_features_required gate ----------------------
+
+    use selfdef_hardware::WasmAotCapabilities;
+
+    fn caps_with_wasm_aot_features(features: &str) -> HardwareCapabilities {
+        let mut c = caps_with(true, true, 0, 0, Sain01Verdict::FullMatch);
+        c.wasm_aot = WasmAotCapabilities {
+            target_triple: "x86_64-unknown-linux-gnu".into(),
+            target_cpu: "znver5".into(),
+            target_features: features.into(),
+            compile_command_hint: String::new(),
+            ternary_kernel_hint: String::new(),
+        };
+        c
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_passes_when_all_present() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_when_one_missing() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512vnni,+avx512bf16,+avx512fp16".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512fp16"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_fails_on_empty_host_features() {
+        // Host has no wasm-AOT features at all → every required
+        // feature is "missing".
+        let req = HardwareRequirements {
+            wasm_aot_features_required: "+avx512f".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        let unmet = req.evaluate(&caps).unwrap_err();
+        assert!(
+            unmet[0].contains("host missing: +avx512f"),
+            "got: {unmet:?}"
+        );
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_tolerates_whitespace_in_required_list() {
+        let req = HardwareRequirements {
+            wasm_aot_features_required: " +avx512vnni , +avx512bf16 ".into(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("+avx512f,+avx512vnni,+avx512bf16,+avx2,+fma");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr32_wasm_aot_features_required_empty_is_no_op() {
+        // Empty string in the manifest disables the gate even when
+        // the host has no wasm-AOT data.
+        let req = HardwareRequirements {
+            wasm_aot_features_required: String::new(),
+            ..Default::default()
+        };
+        let caps = caps_with_wasm_aot_features("");
+        req.evaluate(&caps).unwrap();
+    }
+
+    #[test]
+    fn sdr15_check_hardware_runs_against_fixture_catalog() {
+        // SD-R15: `selfdefctl modules check-hardware` is read-only;
+        // make sure the entry point completes with rc=0 against a
+        // catalog where one module is unrestricted and one has a
+        // mem-threshold gate. We can't pin exact stdout (the test
+        // host's caps vary across CI / dev boxes), but the function
+        // must succeed without panicking.
+        use tempfile::tempdir;
+        let dir = tempdir().unwrap();
+        let cat = dir.path().join("catalog");
+        std::fs::create_dir_all(cat.join("alpha")).unwrap();
+        std::fs::create_dir_all(cat.join("beta")).unwrap();
+        std::fs::write(
+            cat.join("alpha/module.toml"),
+            "name = \"alpha\"\nversion = \"0.0.0\"\nsummary = \"unrestricted\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            cat.join("beta/module.toml"),
+            "name = \"beta\"\nversion = \"0.0.0\"\nsummary = \"hardware-gated\"\n\
+             [requires_hardware]\nmemory_gib_min = 9999999\n",
+        )
+        .unwrap();
+        let host = dir.path().join("modules.toml");
+        std::fs::write(&host, "[modules.alpha]\n[modules.beta]\n").unwrap();
+        let opts = LifecycleOpts {
+            host_config: Some(host),
+            dir: Some(cat),
+            ..Default::default()
+        };
+        let rc = cmd_check_hardware(&opts, false).unwrap();
+        assert_eq!(rc, 0);
+        let rc_json = cmd_check_hardware(&opts, true).unwrap();
+        assert_eq!(rc_json, 0);
+    }
+
+    #[test]
+    fn sdr14_filter_active_respects_requires_hardware_field() {
+        // Sanity check: the field round-trips through clone_manifest.
+        // (Touched in this round; if the new field is forgotten there
+        // the gate silently misbehaves for instanced modules.)
+        let am = am_with_req(
+            "needs-vnni",
+            HardwareRequirements {
+                avx512_vnni: true,
+                ..Default::default()
+            },
+        );
+        let cloned = clone_manifest(&am.manifest);
+        assert!(cloned.requires_hardware.avx512_vnni);
+        assert!(!cloned.requires_hardware.is_empty());
     }
 }
