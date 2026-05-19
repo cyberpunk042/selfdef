@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-prompt-context-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS prompt-context quota authority. Per-conversation cap on assembled prompt tokens by segment class (System/Operator/Persistent/Tool/Untrusted). Assemble pre-flight check returns Allow if total fits, ExceedClass if a single class exceeds its sub-cap, or ExceedTotal if the sum exceeds the global cap; reports per-class consumption so the cockpit can show what to trim."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
