@@ -1,0 +1,26 @@
+[package]
+name = "selfdef-tui-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 8/8 SATURATED typed-mirror crate exposing selfdef TUI panel schema (4 panels: rules / grants / quarantine / authority) READ-ONLY for sovereign-os IPS-operator-surface introspection. Per MS043 R10282 + R10298. 9 of 9 mirror crates. Doctrine preserved verbatim: dump 3299 'A dashboard should not show vanity graphs'."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []

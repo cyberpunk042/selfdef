@@ -2220,6 +2220,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-cli-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-collector-auditd"
 version = "0.1.0"
 dependencies = [
@@ -2901,6 +2912,17 @@ dependencies = [
 
 [[package]]
 name = "selfdef-trust-score-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-tui-mirror"
 version = "0.1.0"
 dependencies = [
  "minisign-verify",

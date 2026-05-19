@@ -1,0 +1,26 @@
+[package]
+name = "selfdef-cli-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 8/8 SATURATED typed-mirror crate exposing selfdef CLI subcommand schema (50+ commands) READ-ONLY for sovereign-os IPS-operator-surface introspection. Per MS043 R10281 + R10297. 8 of 9 mirror crates. Doctrine preserved verbatim: dump 581 'Fullstack at the edges'."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []
