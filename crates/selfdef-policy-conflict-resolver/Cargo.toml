@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-conflict-resolver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy conflict-resolution authority. When multiple policies emit decisions for the same action, this resolver collapses them under deny-overrides semantics: Deny > Ask > Sandbox > Allow. Tied decisions are broken by source priority. Output records which input vetoed/escalated so the audit trail explains the verdict."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
