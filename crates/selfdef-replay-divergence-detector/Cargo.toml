@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-replay-divergence-detector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS replay-divergence detector. Compares an in-progress replay against the recorded transcript step-by-step; reports first divergence with its step index and a typed cause (DecisionChanged / OutputDiffered / ToolMissing / TimingExceeded). Replay mode uses the report to halt before any non-deterministic effect."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
