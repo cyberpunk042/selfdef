@@ -2232,6 +2232,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-audit-summary-digest"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-auth-tier"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-audit-summary-digest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side audit summary digest — rolling hourly summary of (allow, deny, ask, sandbox) counts + top 3 actor MS003 fingerprints + top 3 action verbs. The daemon publishes one digest per hour the cockpit timeline consumes."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
