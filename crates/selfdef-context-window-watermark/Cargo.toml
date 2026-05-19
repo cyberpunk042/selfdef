@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-context-window-watermark"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS context-window watermark authority. Reports four-zone watermark state (Cool/Warm/Hot/Critical) based on used/total tokens against per-zone thresholds. Recommends an action (Continue / SoftWarn / Compact / EmergencyCompact). Pure decision; the actual compaction is the engine's job."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
