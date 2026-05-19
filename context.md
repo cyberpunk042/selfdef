@@ -454,3 +454,15 @@ Total this resume: 54 selfdef IPS-authority crates. Workspace 219.
   only Local, Untrusted needs signature + operator approval)
 
 Total this resume: 57 selfdef IPS-authority crates. Workspace 222.
+
+### Fifteenth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-substrate-cold-boot-policy` (6 ordered BootStep with
+  required-vs-optional; first_failure/next_step/all_passed queries)
+- `selfdef-prompt-allowlist-policy` (registered PromptTemplate(id,
+  version, params); admit returns Allow/Unknown/MissingParams/
+  UnexpectedParams)
+- `selfdef-bundle-replay-window` (recorded vs current bundle-version
+  window; canonical 30d; identity_only constructor)
+
+Total this resume: 60 selfdef IPS-authority crates. Workspace 225.
