@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-emergency-stop-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS emergency-stop authority. When the operator (or an automated trigger) engages the kill switch, all in-flight execution is halted and only rescue-class operations (state snapshot, audit drain, controlled wind-down) are permitted until the operator explicitly clears the stop with an authenticated release."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
