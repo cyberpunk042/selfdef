@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-token-lifetime-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS access-token lifetime authority. Encodes per-token-class TTL (max_lifetime_seconds) and per-class idle_timeout_seconds. A token is admissible iff (now - issued_at) <= max_lifetime AND (now - last_used) <= idle_timeout. Rejects clock-skew abuse, captures revocation, and reports time-until-expiry so the operator UI can warn before forced re-auth."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
