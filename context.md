@@ -167,7 +167,7 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace now at 59 crates (was 33 pre-session, +26 in this session).
+Selfdef workspace at 110 crates total (was 83 pre-session, +27 fresh this session).
 Additional crates beyond the first batch:
 `selfdef-subject-cohort` (5-tier trust cohorts with monotonic promotion),
 `selfdef-evidence-tag` (6-tag evidence ledger taxonomy),
