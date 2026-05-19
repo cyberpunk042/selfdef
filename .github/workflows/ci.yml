@@ -77,10 +77,38 @@ jobs:
         run: cargo install --locked cargo-audit
       - run: cargo audit
 
+  python-tests:
+    name: python tests (guardian + adversary + replay + ux-harness)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run guardian + adversary + replay + ux-harness suites
+        run: |
+          python3 -m unittest \
+            tests.integration.test_guardian_core \
+            tests.adversary.test_ms042_mismatch_scenarios \
+            tests.replay.test_audit_chain_continuity \
+            tests.ux-harness.test_ux_harness_l1
+
+  ux-harness:
+    name: ux coherence harness (MS045 L1+L2+L4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run MS045 UX harness (JSON output)
+        run: |
+          python3 scripts/ux-harness/selfdef-ux-harness --json --verbose
+
   build:
     name: release build
     runs-on: ubuntu-latest
-    needs: [fmt, clippy, test]
+    needs: [fmt, clippy, test, python-tests, ux-harness]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
