@@ -1,0 +1,26 @@
+[package]
+name = "selfdef-audit-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 8/8 SATURATED typed-mirror crate exposing selfdef MS009/MS033 audit chain status + M049 13-field span + MS026 16-event taxonomy READ-ONLY for sovereign-os D-16 audit cycles + D-19 super-model manifest dashboards. Per MS043 R10186. 5 of 9 mirror crates."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []
