@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-time-window-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS time-window authority. Restricts when high-risk operation classes are permitted by wall-clock (weekday + hour-of-day). Outside the configured window the gate returns Deny regardless of profile. Designed for operators who do not want autonomous changes happening overnight or on weekends without explicit opt-in."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
