@@ -2550,6 +2550,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-functional-modules"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-grants-mirror"
 version = "0.1.0"
 dependencies = [
