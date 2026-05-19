@@ -3,6 +3,9 @@
 > Parent: `backlog/milestones/INDEX.md` row MS010.
 > Source: `docs/sdd/018-hardware-aware-modules-and-tune-surface.md` (244 lines, SD-R14..R32 arc; 5 locked contracts C-1..C-5; 13 decisions D-1..D-13; cross-repo bridge selfdef SD-R14..R32 → sovereign-os R170..R181) + `crates/selfdef-hardware/` + `modules/hardware-tune-cache/` (module.toml + install/{apply,check,uninstall}.sh) + SDD-017 (hardware inventory). All entries below extract verbatim from these source files. No invention.
 
+> **AVX++ canon update — 2026-05-19**: this milestone is affected by backward-sweep redefinition(s) — Profiles memory-lens-to-authority-gate (BREAKING). See sovereign-os M061 for canonical pinning (commit 6f07dca on sovereign-os main). R-rows below are interpreted under the canonical later definitions per operator standing direction "layered: new direction ON TOP OF prior direction — never discarded".
+
+
 ## Epics (E0101–E0110)
 
 | Epic ID | Phrase | Source |
