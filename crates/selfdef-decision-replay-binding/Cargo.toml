@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-replay-binding"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS decision-replay binding registry. Pairs a decision_id with a replay_slot_id so the operator UI / audit can jump from a verdict directly to its before/after replay artifacts. bind/unbind/lookup operations with collision protection."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
