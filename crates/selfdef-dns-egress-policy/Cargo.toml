@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-dns-egress-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS DNS egress authority. Gates which hostnames the engine may resolve / connect to before any TCP/UDP attempt. Allow-list (with wildcard subdomains via `*.example.com`), explicit deny-list (deny wins), and a 'never_resolve' set that always denies even under wildcards. Captures the actual rule that matched so the audit trail explains the verdict."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
