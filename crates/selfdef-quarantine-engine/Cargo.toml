@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-quarantine-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS042 3-step block+quarantine+trace decision engine. Companion to selfdef-quarantine-mirror (which surfaces state); this crate is the engine that DECIDES whether a declaration-vs-observed mismatch warrants block, quarantine-then-release, or forfeit. Per E0429-E0430 dump 17422-17445."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-quarantine-mirror = { path = "../selfdef-quarantine-mirror" }
+
+[features]
+default = []
