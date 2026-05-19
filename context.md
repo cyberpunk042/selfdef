@@ -167,8 +167,12 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 135 crates total (was 83 pre-session, +52 fresh this session).
-Full workspace test suite: 2552 passing tests. Latest additions include
+Selfdef workspace at 140 crates total (was 83 pre-session, +57 fresh this session).
+Full workspace test suite: 2604 passing tests. Latest IPS-authority
+additions: `selfdef-sandbox-tier-policy` (5 tiers, one-step promotion gates),
+`selfdef-snapshot-policy` (7-trigger ZFS retention), `selfdef-rate-limit-policy`
+(6 profiles × rps/rpm/rph), `selfdef-mode-cooldown-policy` (per-mode dwell),
+`selfdef-grant-promotion-policy` (TTL extend / scope widen gates). Latest additions include
 `selfdef-grant-coverage-summary` (per-actor × kind rollup),
 `selfdef-trust-promotion-feed` (auto-suggest promotions/demotions),
 `selfdef-decision-explainer` (operator rationale chain),
