@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-subject-cohort"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side subject cohort taxonomy — 5 trust cohorts (Newcomer / Probationary / Trusted / Staff / Admin) each with a default trust-score band + grant-TTL ceiling + max-risk allowance. New subjects start at Newcomer; promotion is operator-initiated and audit-logged."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []

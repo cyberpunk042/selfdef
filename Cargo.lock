@@ -3259,6 +3259,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-subject-cohort"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-substrate-self-test"
 version = "0.1.0"
 dependencies = [
