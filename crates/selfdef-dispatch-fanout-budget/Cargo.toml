@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-dispatch-fanout-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side dispatch fan-out budget — per-subsystem rate cap (events/sec) on bus broadcast. When breached, the daemon throttles the producer side rather than overwhelming downstream subsystems. Composes with selfdef-bus-subscriber-registry."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-bus-subscriber-registry = { path = "../selfdef-bus-subscriber-registry" }
+
+[features]
+default = []

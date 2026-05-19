@@ -2624,6 +2624,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-dispatch-fanout-budget"
+version = "0.1.0"
+dependencies = [
+ "selfdef-bus-subscriber-registry",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-doc-manifest"
 version = "0.1.0"
 dependencies = [
