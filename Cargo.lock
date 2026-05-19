@@ -2366,6 +2366,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-circuit-breaker-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-cli"
 version = "0.1.0"
 dependencies = [
