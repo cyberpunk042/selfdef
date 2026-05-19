@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-high-risk-triple-gate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side high-risk triple-gate per MS041 commit authority — for Persistent / Critical actions, requires (snapshot + eval-passed + (oracle-approved OR human-approved)). Composes selfdef-eval-gate-policy + selfdef-policy-decision. Returns Allow only when all three sub-gates clear."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-eval-gate-policy = { path = "../selfdef-eval-gate-policy" }
+
+[features]
+default = []
