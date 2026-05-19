@@ -40,6 +40,7 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | selfdef-sandbox-mirror (MS043 D-15 MS036 tier A/B/C/D allocations source, 4 of 9) | ✓ shipped (11 passing tests) | `crates/selfdef-sandbox-mirror/` |
 | selfdef-audit-mirror (MS043 D-16/D-19 MS009 chain status + M049 13-field span + MS026 OCSF source, 5 of 9) | ✓ shipped (11 passing tests) | `crates/selfdef-audit-mirror/` |
 | selfdef-quarantine-mirror (MS043 D-17 MS042 declaration-vs-observed mismatch source, 6 of 9) | ✓ shipped (11 passing tests) | `crates/selfdef-quarantine-mirror/` |
+| selfdef-trust-score-mirror (MS043 D-18 per-tool trust score history source, 7 of 9) | ✓ shipped (12 passing tests) | `crates/selfdef-trust-score-mirror/` |
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
 | MS026 OCSF observability | catalog ✓ / impl ongoing | `crates/selfdef-collector-*/` |
 | Multi-environment Discord/Slack/Signal/Telegram/SMTP/TheHive integrations | ✓ shipped | `crates/selfdef-integration-*/` |
@@ -68,7 +69,7 @@ Per "little piece by little piece" — next tractable selfdef deliverables:
    - ~~`crates/selfdef-sandbox-mirror/`~~ ✓ shipped 2026-05-19 (MS036 tier A/B/C/D allocations, 11 passing tests)
    - ~~`crates/selfdef-audit-mirror/`~~ ✓ shipped 2026-05-19 (MS009 chain status + M049 13-field span + MS026 OCSF, 11 passing tests)
    - ~~`crates/selfdef-quarantine-mirror/`~~ ✓ shipped 2026-05-19 (MS042 declaration-vs-observed mismatch, 11 passing tests)
-   - `crates/selfdef-trust-score-mirror/` (per-tool trust history)
+   - ~~`crates/selfdef-trust-score-mirror/`~~ ✓ shipped 2026-05-19 (per-tool trust history + band classifier, 12 passing tests)
    - `crates/selfdef-cli-mirror/` (CLI invocation schemas)
    - `crates/selfdef-tui-mirror/` (TUI panel schemas)
 4. **selfdef CLI subcommand completion** — bash + fish + zsh per MS043 R10134 — install in `.deb` package
