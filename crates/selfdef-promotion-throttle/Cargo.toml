@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-promotion-throttle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side promotion throttle — per-subject sliding-window cap on cohort/profile/grant promotions to prevent rapid escalation. Allows at most N promotions per window (default 1 per hour); demotions never throttled."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
