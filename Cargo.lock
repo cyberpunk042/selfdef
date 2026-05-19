@@ -2126,6 +2126,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-audit-manifest"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
+name = "selfdef-auth-tier"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-bashrc-install"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
+
+[[package]]
 name = "selfdef-bus"
 version = "0.1.0"
 dependencies = [
@@ -2330,6 +2355,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-cross-repo-saturation"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-manifest",
+ "selfdef-auth-tier",
+ "selfdef-bashrc-install",
+ "selfdef-dashboard-manifest",
+ "selfdef-doc-manifest",
+ "selfdef-history-sink",
+ "selfdef-surface-manifest",
+ "selfdef-ux-checklist",
+]
+
+[[package]]
 name = "selfdef-daemon"
 version = "0.1.0"
 dependencies = [
@@ -2384,6 +2423,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-dashboard-manifest"
+version = "0.1.0"
+dependencies = [
+ "selfdef-auth-tier",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
+name = "selfdef-doc-manifest"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
 name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [
@@ -2400,6 +2460,17 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "tracing",
+]
+
+[[package]]
+name = "selfdef-history-sink"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -2750,6 +2821,26 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "selfdef-surface-manifest"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
+name = "selfdef-ux-checklist"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "toml",
 ]
 
 [[package]]

@@ -177,6 +177,62 @@ crates/                          One workspace, many focused crates.
   selfdef-daemon/                selfdefd main binary.
   selfdef-ssh-wrap/              Drop-in ssh wrapper (client-side).
 
+  # --- Cross-repo binding crates (sovereign-os E11 mirrors) ---
+  selfdef-dashboard-manifest/    SD-R-DASHBOARD-MANIFEST-1 — per-module
+                                 TOML declaring port/auth-tier/subpath;
+                                 read by sovereign-os master-dashboard
+                                 aggregator (R452/R460).
+  selfdef-history-sink/          SD-R-EVENT-LOG-1 — JSONL emitter for
+                                 module lifecycle events; consumed by
+                                 sovereign-os global-history modules
+                                 reader (R448/R465).
+  selfdef-auth-tier/             SD-R-AUTH-TIER-1 — typed 6-tier auth
+                                 enum (NoAuth → … → NetworkLevel)
+                                 mirroring sovereign-os R450 ladder.
+  selfdef-surface-manifest/      SD-R-MULTI-SURFACE-AUDIT-1 — per-module
+                                 TOML declaring which of the 8 §1g
+                                 surfaces (core/cli/tui/api/mcp/
+                                 dashboard/webapp/service) the module
+                                 ships; consumed by sovereign-os
+                                 surface-map (R453/R462).
+  selfdef-ux-checklist/          SD-R-UX-CHECKLIST-1 — per-module TOML
+                                 declaring UX-quality standing across
+                                 the 6 R457 dimensions
+                                 (action-budget/discoverable/
+                                 recoverable/next-step/operator-named/
+                                 readable-30s); consumed by
+                                 sovereign-os ux-design-audit (R464).
+  selfdef-audit-manifest/        SD-R-AUDIT-1 — per-module TOML
+                                 declaring anti-minimization findings
+                                 against the 8 R456 patterns;
+                                 consumed by sovereign-os
+                                 anti-minimization-audit (R466).
+  selfdef-bashrc-install/        SD-R-BASHRC-1 — Rust harness for the
+                                 operator-facing bash installer at
+                                 `packaging/bash/selfdefctl-bashrc-install.sh`;
+                                 mirrors sovereign-os R447.
+  selfdef-doc-manifest/          SD-R-DOC-MANIFEST-1 — per-module TOML
+                                 declaring which of the 6 §1g doc
+                                 surfaces (readme/sdd/helptext/metric-
+                                 inventory/mandate-row/man-page) the
+                                 module ships; DocState enum
+                                 (Shipped/Waived/Planned) with
+                                 Shipped-requires-path + Waived-
+                                 requires-reason validation; consumed
+                                 by sovereign-os doc-coverage
+                                 (R454/R471).
+  selfdef-cross-repo-saturation/ SD-R-SATURATION-1 — meta-test crate
+                                 that depends on all 8 cross-repo
+                                 mirror crates above + asserts (10
+                                 integration tests) workspace
+                                 saturation: count floor + crate-name
+                                 uniqueness + binding-ID uniqueness +
+                                 array-length match + cross-crate
+                                 alias agreement + bashrc constants +
+                                 kebab-case taxonomy-entry hygiene +
+                                 no duplicate entries within a
+                                 taxonomy. Sister to sovereign-os R473.
+
 modules/                         Install modules — operator-activatable units.
 rules/                           Detection-as-code (sigma, tetragon, yara).
 packaging/                       OS packaging artifacts (debian, systemd, apparmor, lib).
@@ -251,6 +307,38 @@ cargo audit
 - [x] **Phase-1 audit cycle** — architect/PM sweep across the codebase. Six SDDs (charter + 001..006) plus the cleanup PRs they implied. Every blocker, important, SDD-debt finding now closed or has a shipped follow-up. See [`docs/review/99-findings-ledger.md`](docs/review/99-findings-ledger.md).
 - [x] **Audit-shipped opt-ins** — rule signing (`selfdef-signing` crate), TracingPolicy signing (`tetragon` module), API token hot-rotation (`selfdefctl api rotate-token` + daemon SIGUSR2), eventstream integrity gate, k8s RBAC posture check, shared module-script library v2.
 - [x] **Operator lifecycle verbs** — `selfdefctl init {config,modules,checklist}` (bootstrap) and `selfdefctl doctor [--json]` (verification). Together: day-0 bootstrap → day-N health check, one verb each.
+
+## Cross-repo binding (sovereign-os ↔ selfdef)
+
+selfdef is one half of a two-repo system. The companion is
+[`cyberpunk042/sovereign-os`](https://github.com/cyberpunk042/sovereign-os),
+the operator-facing OS-image-pipeline & §1g/§1h compliance instrument
+suite. The two repos co-progress via a set of **typed TOML manifests**:
+selfdef modules emit them, sovereign-os instruments consume them.
+
+Per the operator-§1g standing rule the canonical taxonomies (auth
+tiers, §1g surfaces, UX dimensions, anti-minimization patterns) MUST
+agree verbatim across both repos. Every cross-repo crate exports a
+`const` array (e.g., `AUTH_TIERS`, `SURFACE_TAXONOMY`,
+`UX_DIMENSIONS`, `PATTERN_IDS`) and includes a unit test asserting
+its order matches the sovereign-os source-of-truth. **Drift on either
+side fails tests on BOTH sides** — the binding is contract-level, not
+just documentation.
+
+| Cross-repo binding ID         | Manifest file path                        | sovereign-os consumer  | Mirrored taxonomy             |
+|-------------------------------|-------------------------------------------|------------------------|-------------------------------|
+| `SD-R-DASHBOARD-MANIFEST-1`   | `/etc/selfdef/dashboards/<m>.toml`        | `master-dashboard` (R452/R460) | 6-tier auth ladder + 8-surface taxonomy |
+| `SD-R-EVENT-LOG-1`            | `/var/log/sovereign-os/modules.jsonl`     | `global-history` (R448/R465)   | event-status enum             |
+| `SD-R-AUTH-TIER-1`            | (consumed via dashboard-manifest)         | `auth-tier` (R450)             | 6-tier ladder (typed enum)    |
+| `SD-R-MULTI-SURFACE-AUDIT-1`  | `/etc/selfdef/surfaces/<m>.toml`          | `surface-map` (R453/R462)      | 8-surface §1g taxonomy        |
+| `SD-R-UX-CHECKLIST-1`         | `/etc/selfdef/ux-checklists/<m>.toml`     | `ux-design-audit` (R457/R464)  | 6-dimension UX-quality enum   |
+| `SD-R-AUDIT-1`                | `/etc/selfdef/audit-manifests/<m>.toml`   | `anti-minimization-audit` (R456/R466) | 8-pattern minimization catalog |
+| `SD-R-BASHRC-1`               | (operator-runnable installer)             | sister to `bashrc-install.sh` (R447) | sentinel-bounded bashrc block |
+| `SD-R-DOC-MANIFEST-1`         | `/etc/selfdef/doc-manifests/<m>.toml`     | `doc-coverage` (R454/R471)     | 6-kind doc-surface catalog    |
+
+Operators with both repos cloned can run
+`sovereign-osctl compliance status` to see runtime + doc + UX + audit +
+selfdef-discovery state for both halves of the system in one screen.
 
 ## Threat model
 

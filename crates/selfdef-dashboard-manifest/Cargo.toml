@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-dashboard-manifest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Per-module dashboard manifest (SD-R-DASHBOARD-MANIFEST-1; sovereign-os E11.M2 counterpart). Every selfdef module exposing a dashboard ships one of these; the sovereign-os master-dashboard aggregator (R452) consumes the union to build reverse-proxy routes."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-auth-tier = { path = "../selfdef-auth-tier" }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

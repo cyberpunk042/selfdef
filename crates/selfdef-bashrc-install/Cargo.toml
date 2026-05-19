@@ -1,0 +1,16 @@
+[package]
+name = "selfdef-bashrc-install"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "SD-R-BASHRC-1: integration-test harness for the operator-facing bashrc installer in packaging/bash/selfdefctl-bashrc-install.sh. Cross-repo binding to sovereign-os R447 (E11.M6)."
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
