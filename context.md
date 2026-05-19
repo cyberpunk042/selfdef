@@ -517,3 +517,12 @@ Total this resume: 71 selfdef IPS-authority crates. Workspace 236.
   + total_max with admit/release; cumulative tracking)
 
 Total this resume: 73 selfdef IPS-authority crates. Workspace 238.
+
+### Twenty-first wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-action-witness-policy` (per-BlastRadius N-distinct-
+  witness requirement; submit_witness dedup; Pending/Allow)
+- `selfdef-decision-delay-policy` (per-BlastRadius mandatory delay_ms
+  between confirm and dispatch; monotonic by radius)
+
+Total this resume: 75 selfdef IPS-authority crates. Workspace 240.
