@@ -2118,6 +2118,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-action-side-effect-classifier"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-actor-attestation-chain"
 version = "0.1.0"
 dependencies = [
