@@ -2554,6 +2554,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-doctrine-coverage"
+version = "0.1.0"
+dependencies = [
+ "selfdef-boundary-summary",
+ "selfdef-doctrinal-preservation",
+ "selfdef-functional-modules",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [

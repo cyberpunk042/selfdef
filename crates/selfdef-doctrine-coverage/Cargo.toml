@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-doctrine-coverage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Cross-crate coverage summary — verifies that the 14 MS006 functional modules + 5 MS034-MS038 boundaries + 10 selfdef doctrines all have shipped enforcement crates. The post-boot integrity assertion for the IPS substrate."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-functional-modules = { path = "../selfdef-functional-modules" }
+selfdef-boundary-summary = { path = "../selfdef-boundary-summary" }
+selfdef-doctrinal-preservation = { path = "../selfdef-doctrinal-preservation" }
+
+[features]
+default = []
