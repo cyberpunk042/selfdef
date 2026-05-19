@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-config-mutation-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authority over runtime configuration mutations — declares per-config-namespace the minimum Profile required to flip a key. Examples: `boundary.*` requires Production; `notifier.*` requires Careful; `theme.*` requires Private (anybody). The runtime cockpit consults before applying any change."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
