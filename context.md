@@ -477,3 +477,16 @@ Total this resume: 60 selfdef IPS-authority crates. Workspace 225.
   + max_wait_ms; should_flush gate; Interactive 4/50ms, Bulk 128/5s)
 
 Total this resume: 63 selfdef IPS-authority crates. Workspace 228.
+
+### Seventeenth wave (same day, +4 more IPS-authority crates)
+
+- `selfdef-substrate-network-clock-policy` (NTP drift gate Ok/Warn/
+  Reject/NoAuthority; canonical 5s/60s)
+- `selfdef-task-deadline-extension-policy` (per-class extension cap
+  count + total-seconds; Maintenance disallows extension)
+- `selfdef-decision-fingerprint-policy` (FNV-1a u64 hex of
+  canonicalized decision input tuple)
+- `selfdef-tool-cancellation-policy` (3 CancelMode × 4 ExecPhase;
+  SafeOnly cancellable only in Prepare)
+
+Total this resume: 67 selfdef IPS-authority crates. Workspace 232.
