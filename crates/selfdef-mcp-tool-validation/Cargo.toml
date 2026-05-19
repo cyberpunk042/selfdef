@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-mcp-tool-validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS MCP tool descriptor validator. Checks a candidate ToolDescriptor for shape sanity (name pattern, schema-version, parameter count cap, parameter-name uniqueness) before the substrate registers it. Rejects malformed descriptors that could destabilize the tool dispatcher."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
