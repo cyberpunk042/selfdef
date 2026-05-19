@@ -2769,6 +2769,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-grant-coverage-summary"
+version = "0.1.0"
+dependencies = [
+ "selfdef-grants-mirror",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-grant-issuer"
 version = "0.1.0"
 dependencies = [
