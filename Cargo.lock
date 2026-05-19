@@ -3194,6 +3194,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-substrate-self-test"
+version = "0.1.0"
+dependencies = [
+ "selfdef-doctrinal-preservation",
+ "selfdef-doctrine-citation",
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-surface-manifest"
 version = "0.1.0"
 dependencies = [

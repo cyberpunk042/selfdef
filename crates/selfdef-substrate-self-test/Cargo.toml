@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-substrate-self-test"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side substrate self-test — 7 canary fixtures the daemon runs through its own decision/audit/trace pipeline at boot. Each fixture declares an input + expected outcome + expected doctrine citation; the daemon refuses boot if any canary deviates. Composes selfdef-policy-decision + selfdef-doctrine-citation."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-doctrine-citation = { path = "../selfdef-doctrine-citation" }
+selfdef-doctrinal-preservation = { path = "../selfdef-doctrinal-preservation" }
+
+[features]
+default = []
