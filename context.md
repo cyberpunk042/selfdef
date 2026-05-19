@@ -402,3 +402,12 @@ Total this resume: 39 selfdef IPS-authority crates. Workspace 204.
   unveil_with_tier(expected) rejects mismatched promotion)
 
 Total this resume: 41 selfdef IPS-authority crates. Workspace 206.
+
+### Eleventh wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-tool-output-language-policy` (5-shape sanity check per
+  registered tool; Json/Yaml/Sexpr/Markdown/PlainText)
+- `selfdef-rule-pack-precedence` (4-source pack precedence
+  Vendor<Substrate<Operator<Emergency with deterministic id tie-break)
+
+Total this resume: 43 selfdef IPS-authority crates. Workspace 208.
