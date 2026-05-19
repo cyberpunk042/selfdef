@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-revocation-log"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant revocation log — append-only record of grants explicitly revoked (operator-forced, drift-detected, TTL-cut, anomaly-triggered, supersession). Companion to selfdef-grant-issuer + selfdef-grants-mirror: revocation is a first-class lifecycle event that must be auditable independently of the grants snapshot."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+
+[features]
+default = []
