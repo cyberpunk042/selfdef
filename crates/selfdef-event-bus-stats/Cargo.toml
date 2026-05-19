@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-event-bus-stats"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side event bus dispatch stats — per-subscriber (delivered, dropped, throttled) counter snapshot. The daemon emits one snapshot per cadence (default 60s); the cockpit renders the bus health tile."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-bus-subscriber-registry = { path = "../selfdef-bus-subscriber-registry" }
+
+[features]
+default = []

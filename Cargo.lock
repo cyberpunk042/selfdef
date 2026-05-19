@@ -2786,6 +2786,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-event-bus-stats"
+version = "0.1.0"
+dependencies = [
+ "selfdef-bus-subscriber-registry",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-event-emitter"
 version = "0.1.0"
 dependencies = [
