@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-trust-decay-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side trust score time-decay policy — declares (per-cohort half-life days, floor score). Daemon applies decay between activity windows: a quiet subject's trust slowly drops toward floor. Composes selfdef-subject-cohort."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-subject-cohort = { path = "../selfdef-subject-cohort" }
+
+[features]
+default = []
