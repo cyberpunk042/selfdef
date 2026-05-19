@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-output-language-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS tool-output language policy. Each tool declares an expected MIME-shape (Json/Yaml/PlainText/Sexpr/Markdown). Outputs that fail a quick shape check (e.g., Json that doesn't start with `{` or `[`) are gated as ShapeMismatch so downstream parsers don't blow up on hostile/wrong output. Pure deterministic check."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
