@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-mode-cooldown-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side mode cooldown policy — minimum dwell time (seconds) before the operator can switch out of a given ExecutionMode. Prevents mode-flapping; Execute has the longest cooldown to avoid yo-yo'ing between live and dry-run."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-execution-mode-policy = { path = "../selfdef-execution-mode-policy" }
+
+[features]
+default = []
