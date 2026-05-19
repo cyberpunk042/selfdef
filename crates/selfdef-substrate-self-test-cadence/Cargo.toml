@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-self-test-cadence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate self-test cadence policy. Per-CheckClass interval_seconds + must_run_before_first_use flag. due(now, last_run) returns true when the per-class interval has elapsed or the bootstrap-required check has never run. Distinct from the substrate-self-test crate which RUNS the tests; this decides WHEN."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
