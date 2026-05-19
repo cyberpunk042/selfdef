@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-decision-explainer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side decision explainer — given a PolicyDecision, produces an operator-readable rationale chain (subject/action/risk/outcome/citation factors). The cockpit + CLI surface this so the operator can audit why a particular Allow/Deny/Ask was returned."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
