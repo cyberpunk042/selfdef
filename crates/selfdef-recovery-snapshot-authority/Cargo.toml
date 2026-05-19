@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-recovery-snapshot-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS recovery-snapshot authority. Maintains a bounded chronological set of restoreable snapshots with per-class retention (Hourly/Daily/Weekly) and per-class min_kept. eligible_for_eviction() returns snapshots that may be pruned without violating min_kept. select_for_recovery(now, target_time) picks the most-recent snapshot at or before the target."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
