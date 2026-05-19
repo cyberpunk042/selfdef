@@ -490,3 +490,12 @@ Total this resume: 63 selfdef IPS-authority crates. Workspace 228.
   SafeOnly cancellable only in Prepare)
 
 Total this resume: 67 selfdef IPS-authority crates. Workspace 232.
+
+### Eighteenth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-prompt-output-watermark` (ZWSP/ZWNJ embeds 8-bit FNV-1a
+  mark in first 8 chars; verify recovers it)
+- `selfdef-policy-cooldown-window` (4 PolicyClass per-key cooldown
+  with try_fire/seconds_to_next)
+
+Total this resume: 69 selfdef IPS-authority crates. Workspace 234.
