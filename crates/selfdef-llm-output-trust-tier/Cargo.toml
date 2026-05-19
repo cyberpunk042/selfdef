@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-output-trust-tier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS LLM-output trust-tier authority. Assigns each LLM-generated artifact a TrustTier (Verified/Corroborated/Unverified/Contradicted) based on (source provider tier, ground-truth check pass/fail, cross-model consensus). Downstream gates use the tier to decide whether the artifact may execute autonomously, be shown verbatim, or be quarantined."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
