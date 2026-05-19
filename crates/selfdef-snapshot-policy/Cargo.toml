@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-snapshot-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side ZFS snapshot policy — declares per-trigger snapshot retention. 7 triggers (PreCommit / PreExecuteMode / PreRulePackUpdate / PreDoctrineChange / OperatorRequested / Periodic / PreSandboxTier4). Each carries (retain_count, age_days). The daemon prunes snapshots only if they fall outside every trigger's retention window."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
