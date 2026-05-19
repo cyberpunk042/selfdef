@@ -167,8 +167,11 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 157 crates total (was 83 pre-session, +74 fresh this session).
-Full workspace test suite: 2757 passing tests. Newest:
+Selfdef workspace at 161 crates total (was 83 pre-session, +78 fresh this session).
+Full workspace test suite: 2792 passing tests. Newest batch:
+`selfdef-grant-receipt`, `selfdef-audit-summary-digest`,
+`selfdef-bus-priority-policy`, `selfdef-host-fingerprint-attestation`.
+Earlier:
 `selfdef-decision-budget` (per-profile × action daily/weekly/monthly caps). Newer:
 `selfdef-context-sensitivity-policy` (Public/Internal/Confidential × ProviderClass flow),
 `selfdef-grant-renewal-policy` (min-remaining + max-delta renewal bounds),
