@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-pii-detection-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS PII-detection authority. Pattern-matching classifier for personally identifiable information classes (Email/Phone/SSN-US/CreditCard/IpV4) with class-aware confidence. Output drives downstream redaction/quarantine — distinct from secret detection because PII may be operator-owned and only restricted-to-operator-visible, not strip-completely."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
