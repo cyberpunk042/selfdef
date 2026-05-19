@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-grant-batch-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS grant-batch authority. Caps the number of distinct grants the operator can approve in a single batch transaction (max_per_batch), enforces all-or-nothing semantics, and rejects batches that mix BlastRadius tiers above a configurable max_radius_in_batch. Prevents accidentally cascading high-risk grants under a single 'approve all' click."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
