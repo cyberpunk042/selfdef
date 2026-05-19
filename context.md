@@ -280,3 +280,25 @@ Added 8 IPS-authority crates this cycle:
 
 All include canonical builders, full validate() + serde roundtrip +
 edge-case tests (13..17 tests each). Workspace count: 174 crates.
+
+### Second wave (same day, +5 more IPS-authority crates)
+
+- `selfdef-blast-radius-classifier` (5-level radius from
+  TargetScope×Reversibility×Visibility, with note trail explaining
+  each bump)
+- `selfdef-policy-conflict-resolver` (Deny>Ask>Sandbox>Allow
+  multi-policy merge with priority tie-break and winning_source
+  recorded for audit)
+- `selfdef-substrate-attestation-chain` (FNV-1a chained
+  AttestationEntry; tamper at any index reports first BrokenChain
+  with expected/actual hashes)
+- `selfdef-execution-budget-policy` (triple cap wall_seconds/tokens/
+  dollars_micro with per-axis deny reporting)
+- `selfdef-fs-watch-policy` (glob-based allow/deny/never-watch
+  with deny-overrides; canonical protects ~/.ssh ~/.gnupg ~/.aws
+  /etc/shadow)
+- `selfdef-credential-vault-policy` (Local/Cloud/Master/Recovery
+  classes, sliding-window per-hour quota, op-class allow-list,
+  operator-approval flag)
+
+Total crates this resume cycle: 14. Workspace count now 179.
