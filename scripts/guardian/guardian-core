@@ -159,9 +159,14 @@ def append_atomic_audit_log(audit_log_path: str, line: str) -> bool:
             flags |= os.O_DSYNC
         fd = os.open(audit_log_path, flags, 0o640)
         try:
-            os.write(fd, line.encode("utf-8"))
-            if not line.endswith("\n"):
-                os.write(fd, b"\n")
+            # POSIX guarantees a single write < PIPE_BUF (typically 4096) is
+            # atomic w.r.t. interleaving concurrent writers. Combine line +
+            # newline into ONE buffer + ONE write call so per-line atomicity
+            # is preserved under multi-threaded / multi-process appenders.
+            buf = line.encode("utf-8")
+            if not buf.endswith(b"\n"):
+                buf += b"\n"
+            os.write(fd, buf)
             try:
                 os.fsync(fd)
             except OSError:
