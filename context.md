@@ -508,3 +508,12 @@ Total this resume: 69 selfdef IPS-authority crates. Workspace 234.
   detail_lines<=120, fix_suggestions} from policy_id + reason_code)
 
 Total this resume: 71 selfdef IPS-authority crates. Workspace 236.
+
+### Twentieth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-decision-redo-budget` (per-session Same/Adjacent/Cross
+  redo caps; Allow{remaining} / Denied)
+- `selfdef-substrate-allocator-policy` (4 ResourceClass per_alloc_max
+  + total_max with admit/release; cumulative tracking)
+
+Total this resume: 73 selfdef IPS-authority crates. Workspace 238.
