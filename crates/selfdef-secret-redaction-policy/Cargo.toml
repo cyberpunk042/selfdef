@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-secret-redaction-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS secret-redaction authority. Replaces detected secrets in operator-visible strings (transcripts, logs, audit dumps, error messages) with deterministic placeholders that preserve length classes and a stable per-secret token so the operator can still reason about the structure without seeing the literal value. Detection patterns: PEM blocks, JWT, AWS keys, GitHub tokens, generic 'sk-*'/'ghp_*'/'AKIA*' prefixes, common credential keys."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
