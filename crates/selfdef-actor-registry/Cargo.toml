@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-actor-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS041 actor registry per F04918 + R09654-R09757 — actors keyed by MS003 key fingerprint, registry signed, retained at /etc/selfdef/actors/registry.json. Required by MS041 commit envelopes (actor field rejected if not in registry per R09656)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
