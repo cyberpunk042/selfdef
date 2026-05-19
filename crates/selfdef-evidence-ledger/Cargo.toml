@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-evidence-ledger"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS040 gate-evidence ledger per R09408 + R09409 + R09410. 100-day retention of gate evidence indexed by trace-id + actor. Composes with selfdef-profile-authority-gate (Evidence struct) + selfdef-actor-registry (actor fingerprint lookup)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []

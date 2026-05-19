@@ -2531,6 +2531,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-evidence-ledger"
+version = "0.1.0"
+dependencies = [
+ "selfdef-profile-authority-gate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-filesystem-boundary"
 version = "0.1.0"
 dependencies = [
