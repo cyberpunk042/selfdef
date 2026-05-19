@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-collector-quarantine-ledger"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side collector quarantine ledger — append-only record of which collectors got pulled off the event-bus, when, why (hard EPS breach / schema invalid / operator-forced), and when they were re-armed. Companion to selfdef-collector-budget-guard for the substrate's audit trail."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-collector-source-taxonomy = { path = "../selfdef-collector-source-taxonomy" }
+selfdef-collector-budget-guard = { path = "../selfdef-collector-budget-guard" }
+
+[features]
+default = []
