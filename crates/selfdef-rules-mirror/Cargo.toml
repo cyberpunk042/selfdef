@@ -1,0 +1,29 @@
+[package]
+name = "selfdef-rules-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 8/8 SATURATED typed-mirror crate exposing selfdef Ring 0-4 nftables rules state READ-ONLY for sovereign-os D-12 networking dashboard. Per MS043 R10182-R10193. Sovereign-os runtime consumes via cargo workspace re-export; selfdef IPS publishes. Mutations proxy via MS003-signed operator request only."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# MS003 signature verification (verify-only, no signing surface)
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+# Enable when consumer is sovereign-os runtime; gates the MS007 contract
+# documentation tests that assert verbatim quote preservation.
+sovereign-os-consumer = []
