@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-trust-promotion-event"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side trust promotion/demotion event log — operator-initiated subject cohort changes (Newcomer->Probationary, etc.) tracked with reason + operator signature + trace_id. Composes selfdef-subject-cohort; entries fed into the evidence ledger under tag Promotion."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-subject-cohort = { path = "../selfdef-subject-cohort" }
+
+[features]
+default = []

@@ -3377,6 +3377,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-trust-promotion-event"
+version = "0.1.0"
+dependencies = [
+ "selfdef-subject-cohort",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-trust-score-engine"
 version = "0.1.0"
 dependencies = [
