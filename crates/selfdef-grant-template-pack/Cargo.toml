@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-template-pack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant-template pack — 8 operator-curated reusable grant templates (read-workspace / write-workspace / fetch-public / spawn-test-process / read-secrets / network-internal / sandbox-tier-1 / sandbox-tier-2). Each template fills the kind/scope/profile/TTL fields of selfdef-grant-issuer."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+
+[features]
+default = []
