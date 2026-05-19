@@ -252,6 +252,31 @@ Same as sovereign-os/context.md. Single source of truth for the operator's stand
 
 ---
 
-**Last updated**: 2026-05-19 (commit `cdc9064` + this file)
+**Last updated**: 2026-05-19 (commit `8482efe` + this file)
 **Authoritative full picture**: `cyberpunk042/sovereign-os/context.md`
 **Next AI session**: read this file → read sovereign-os/context.md → pick next item from selfdef forward queue → execute → update this file.
+
+## Latest cycle (post-resume 2026-05-19)
+
+Added 8 IPS-authority crates this cycle:
+- `selfdef-emergency-stop-policy` (kill switch with rescue-class gate
+  + release-authority binding)
+- `selfdef-quorum-approval-policy` (N-of-M distinct-operator approval
+  with veto-vacates-pool semantics)
+- `selfdef-clipboard-egress-policy` (ContextSensitivity × ClipboardTarget
+  × Profile decision matrix, TopSecret never to clipboard)
+- `selfdef-time-window-policy` (per-op weekday + hour-of-day windows
+  with wrap-past-midnight support)
+- `selfdef-prompt-injection-classifier` (6-signal pattern classifier:
+  override/extraction/role-hijack/exfiltration/jailbreak/obfuscation;
+  bucketed Clean/Suspicious/Likely/Confirmed)
+- `selfdef-blast-radius-classifier` (5-level radius: LocalEphemeral /
+  LocalPersistent / CrossSession / CrossMachine / Public, bumped by
+  irreversibility + public/fleet visibility)
+- `selfdef-secret-redaction-policy` (7 secret classes with stable
+  FNV-1a placeholder tokens for cross-occurrence correlation)
+- `selfdef-token-lifetime-policy` (4 token classes with
+  max_lifetime + idle_timeout, FutureIssued clock-skew detection)
+
+All include canonical builders, full validate() + serde roundtrip +
+edge-case tests (13..17 tests each). Workspace count: 174 crates.
