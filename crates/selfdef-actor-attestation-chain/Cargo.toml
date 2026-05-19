@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-actor-attestation-chain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side actor attestation chain — every privileged action carries (operator -> agent -> service) chain where each link is operator-signed. The daemon refuses any chain with broken signature, mismatched parent link, or skipped tier."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
