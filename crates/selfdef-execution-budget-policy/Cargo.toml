@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-execution-budget-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS execution-budget authority. Per-action ceilings on (wall_seconds, tokens, dollars_micro). Accumulator records consumed amounts; admit() gates a new spend by checking projected total against the cap. Three exhaustion classes (Time/Tokens/Cost) reported so the cockpit can show which dimension forced the deny."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
