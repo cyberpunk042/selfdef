@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-routing-decision-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authority over routing decisions — which provider classes (Local / Cloud / Synthetic) are admissible in a given (Profile × ExecutionMode) context. The runtime router consults this gate and refuses any decision the IPS doesn't authorize."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-execution-mode-policy = { path = "../selfdef-execution-mode-policy" }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
