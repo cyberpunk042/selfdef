@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-toggle-audit-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authoritative toggle audit — every cockpit toggle / feature flip / mode boolean flip is recorded here with operator MS003 signature + trace_id + before/after values. The runtime cockpit-toggle-event log mirrors approvals; selfdef refuses any flip that doesn't carry a valid signature."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
