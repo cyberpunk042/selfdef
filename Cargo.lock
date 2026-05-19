@@ -2683,6 +2683,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-decision-budget"
+version = "0.1.0"
+dependencies = [
+ "selfdef-action-class-taxonomy",
+ "selfdef-profile-authority-gate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-decision-cache"
 version = "0.1.0"
 dependencies = [

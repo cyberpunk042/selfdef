@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-decision-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-profile decision budget — operator-defined daily/weekly/monthly counts per ActionClass. The daemon refuses when the budget is exhausted. Composes selfdef-action-class-taxonomy + selfdef-profile-authority-gate."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-action-class-taxonomy = { path = "../selfdef-action-class-taxonomy" }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
