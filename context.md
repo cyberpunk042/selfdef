@@ -167,7 +167,10 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 116 crates total (was 83 pre-session, +33 fresh this session).
+Selfdef workspace at 118 crates total (was 83 pre-session, +35 fresh this session).
+Full workspace test suite: 2374 passing tests. Latest additions include
+`selfdef-grant-coverage-summary` (per-actor × kind rollup) and
+`selfdef-trust-promotion-feed` (auto-suggest promotions/demotions).
 Final-leg crates beyond the rolled-up batch:
 `selfdef-grant-application-queue`, `selfdef-network-egress-decision`,
 `selfdef-process-spawn-registry`, `selfdef-pattern-match-engine`,
