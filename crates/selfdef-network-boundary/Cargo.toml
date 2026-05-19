@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-network-boundary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS038 network boundary — 5 network profiles (offline/package-registries/docs-only/arbitrary-web/authenticated-browser) per E0382-E0386 dump 3602-3606. FQDN allowlist + CIDR allowlist + TTL ceiling + capability_word bit-16..23 network-scope encoding per F04472-F04476. IPS-side authority-graded egress enforcement engine."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
