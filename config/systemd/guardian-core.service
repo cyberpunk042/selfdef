@@ -1,0 +1,47 @@
+# selfdef MS044 Guardian Daemon systemd unit
+# Verbatim per dump 569-588 + MS044 R10409-R10420.
+#
+# Install path (per dump 569 + MS044 R10410):
+#   config/includes.chroot/etc/systemd/system/guardian-core.service
+# Enable at boot per MS044 R10420:
+#   systemctl enable guardian-core.service
+
+[Unit]
+Description=Sovereign Guardian Core eBPF Supervisor
+Documentation=https://github.com/cyberpunk042/selfdef/blob/main/backlog/milestones/MS044-guardian-daemon-tetragon-ebpf-supervisor.md
+After=tetragon.service
+Requires=tetragon.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/guardian-core
+Restart=always
+RestartSec=1
+
+# Hardening — Guardian is Ring 0 IPS service per MS039 + MS044 R10433-R10440.
+# CAP_BPF + CAP_SYS_ADMIN required for Tetragon socket access; everything else dropped.
+CapabilityBoundingSet=CAP_BPF CAP_SYS_ADMIN CAP_KILL
+AmbientCapabilities=CAP_BPF CAP_SYS_ADMIN CAP_KILL
+NoNewPrivileges=true
+ProtectSystem=strict
+# /mnt/vault/context/security_audit.log must be writable per MS044 R10386
+ReadWritePaths=/mnt/vault/context /var/log/selfdef/guardian /run/selfdef/guardian /dev/console
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+RestrictRealtime=true
+SystemCallArchitectures=native
+
+# Resource limits per M058 hardware-aware scheduler
+MemoryHigh=128M
+MemoryMax=256M
+TasksMax=64
+
+# CPU affinity per M070 + MS044 R10433 — Ring 0 kernel/IPS placement on CCD 1 cores 10-11
+# (kept commented; operator enables via /etc/sovereign-os/ccd-allocation.toml override)
+#CPUAffinity=10 11
+
+[Install]
+WantedBy=multi-user.target

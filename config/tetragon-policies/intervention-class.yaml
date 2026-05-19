@@ -1,0 +1,104 @@
+# Tetragon TracingPolicy — intervention-class detection
+#
+# Per sovereign-os M079 (Activation steering interpretability surface,
+# arXiv 2604.09839) + selfdef MS044 R13146-R13149:
+# - Detects unauthorized activation-steer hooks (WB intervention class)
+# - Detects unauthorized weight-edit syscalls (WB intervention class)
+# - Emits SIGKILL action via guardian-core event loop
+#
+# Project boundary: this policy is enforced by selfdef Guardian; sovereign-os
+# reads detection events via MS007 selfdef-guardian-mirror crate.
+#
+# Standing rule: We do not minimize anything.
+
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: intervention-class
+  labels:
+    selfdef.io/milestone: "MS044"
+    selfdef.io/cross-ref-sovereign-os: "M079"
+    selfdef.io/intervention-detector: "wb-activation-steer + wb-weight-edit"
+
+spec:
+  # Detect direct memory writes to running model weight files (WB-weight-edit class)
+  # composes with M079 weight-edit detector R13126-R13130
+  kprobes:
+    - call: "security_file_permission"
+      syscall: false
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Prefix"
+              values:
+                # Default sovereign-os model paths per M068 ZFS tank/models
+                - "/mnt/vault/models/"
+                - "/tank/models/"
+            - index: 1
+              # F_WRITE = 2 in include/linux/fs.h
+              operator: "Equal"
+              values: ["2"]
+          matchActions:
+            - action: Sigkill
+              argError: "intervention-class WB-weight-edit without operator MS003 authorization"
+
+    # Detect ptrace attach attempts on running inference processes
+    # (potential WB-activation-steer class — covers OmniParser-style activation hooks)
+    - call: "sys_ptrace"
+      syscall: true
+      args:
+        - index: 0
+          type: "long"  # request type
+        - index: 1
+          type: "long"  # pid
+      selectors:
+        - matchArgs:
+            - index: 0
+              # PTRACE_POKETEXT=4 / PTRACE_POKEDATA=5 / PTRACE_POKEUSER=6
+              operator: "InMap"
+              values: ["4", "5", "6"]
+          matchActions:
+            - action: Sigkill
+              argError: "intervention-class WB-activation-steer via ptrace without operator authorization"
+
+  # Detect unauthorized loading of model files for inference outside the
+  # operator-approved registry (composes with M046 LoRA Foundry + M077 NVFP4
+  # adapter promotion gates per MS041 high-risk triple-gate)
+  tracepoints:
+    - subsystem: "syscalls"
+      event: "sys_enter_openat"
+      args:
+        - index: 1
+          type: "string"
+        - index: 2
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 1
+              operator: "Prefix"
+              values:
+                - "/mnt/vault/models/"
+            - index: 2
+              # O_WRONLY=1 / O_RDWR=2 -- modification intent
+              operator: "Mask"
+              values: ["3"]
+          matchActions:
+            - action: Post
+              kernelStackTrace: false
+              userStackTrace: false
+
+# Policy provenance
+# Sources verbatim:
+#   - sovereign-os M079 R13146-R13149 (Guardian policy /etc/tetragon/tracing-policies/intervention-class.yaml)
+#   - selfdef MS044 R10421-R10432 (Tetragon policy YAML loader + reload contract)
+#   - arXiv 2604.09839 (Steered LLM Activations are Non-Surjective — formal WB ≠ BB separation)
+#
+# Hot-reload via:
+#   selfdef guardian policy reload  # MS043 R10432
+#
+# Signed via MS003 selfdef-signing per MS044 R10423 + sovereign-os M079 R13148.
