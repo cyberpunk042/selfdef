@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-host-watcher-channel"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side host-watcher channel registry — fsnotify-equivalent registry of paths and sockets the daemon is watching for mutations. Each entry declares (path, watch_kind, recursive, owner_subsystem). The daemon emits a HostMutation event when any watched path changes."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
