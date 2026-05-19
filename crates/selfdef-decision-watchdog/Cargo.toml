@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-watchdog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS decision-watchdog. Each in-flight decision is registered with an id, started_at, and per-DecisionClass budget. tick(now) emits TimedOutOnly{ids} or PendingCount. Distinct from execution-budget which gates per-action token/cost; this gates per-decision wall-time."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
