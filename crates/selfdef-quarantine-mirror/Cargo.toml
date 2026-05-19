@@ -1,0 +1,26 @@
+[package]
+name = "selfdef-quarantine-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 8/8 SATURATED typed-mirror crate exposing selfdef MS042 quarantined tools (declaration-vs-observed mismatch) READ-ONLY for sovereign-os D-17 quarantine dashboard. Per MS043 R10187. 6 of 9 mirror crates."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []

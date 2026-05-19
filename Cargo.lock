@@ -2800,6 +2800,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-quarantine-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-responder"
 version = "0.1.0"
 dependencies = [
