@@ -167,10 +167,13 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 113 crates total (was 83 pre-session, +30 fresh this session).
+Selfdef workspace at 116 crates total (was 83 pre-session, +33 fresh this session).
 Final-leg crates beyond the rolled-up batch:
 `selfdef-grant-application-queue`, `selfdef-network-egress-decision`,
-`selfdef-process-spawn-registry`, `selfdef-pattern-match-engine`.
+`selfdef-process-spawn-registry`, `selfdef-pattern-match-engine`,
+`selfdef-secret-detection` (4-class outbound payload scanner),
+`selfdef-evidence-search` (tag+subject+time-range filter),
+`selfdef-correlation-window` (sliding-window per-subject burst tracker).
 Additional crates beyond the first batch:
 `selfdef-subject-cohort` (5-tier trust cohorts with monotonic promotion),
 `selfdef-evidence-tag` (6-tag evidence ledger taxonomy),
