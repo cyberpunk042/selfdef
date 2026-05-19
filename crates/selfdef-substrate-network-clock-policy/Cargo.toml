@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-network-clock-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate-clock skew gate. Decisions involving wall-clock evidence (TLS validity, time-window policy, attestation timestamps) must run against a clock whose drift from authoritative sources is below max_skew_seconds. Distinct from rate-limit: this guards against operator deliberately winding clocks back to defeat policy."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
