@@ -466,3 +466,14 @@ Total this resume: 57 selfdef IPS-authority crates. Workspace 222.
   window; canonical 30d; identity_only constructor)
 
 Total this resume: 60 selfdef IPS-authority crates. Workspace 225.
+
+### Sixteenth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-tool-stream-watchdog` (per-stream silence + total timeouts
+  with verdict Ok/Silence/TotalElapsed)
+- `selfdef-input-canonicalization` (BomStripped/ZeroWidthDropped/
+  LineEndingNormalized/WhitespaceCollapsed/Trimmed transforms list)
+- `selfdef-decision-batch-size-policy` (3 DecisionClass batch_size
+  + max_wait_ms; should_flush gate; Interactive 4/50ms, Bulk 128/5s)
+
+Total this resume: 63 selfdef IPS-authority crates. Workspace 228.
