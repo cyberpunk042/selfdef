@@ -321,3 +321,20 @@ Total crates this resume cycle: 14. Workspace count now 179.
   Info/Warn/Critical severity; case-insensitive hex compare)
 
 Total this resume: 20 selfdef IPS-authority crates. Workspace 185.
+
+### Fourth wave (same day, +5 more IPS-authority crates)
+
+- `selfdef-llm-output-trust-tier` (4-tier Verified/Corroborated/
+  Unverified/Contradicted classifier from
+  (ProviderTier × GroundTruth × consensus_count))
+- `selfdef-trace-sampling-policy` (per-class ppm with FNV-1a trace
+  hashing; DecisionDenial + CanaryTrip force-kept)
+- `selfdef-decision-reason-codes` (20 canonical ReasonCode variants
+  with stable kebab-keys + default operator messages)
+- `selfdef-replay-divergence-detector` (typed DivergenceCause:
+  DecisionChanged / OutputDiffered / ToolMissing / TimingExceeded /
+  Extra / Shorter; first-divergence-wins)
+- `selfdef-sandbox-network-isolation` (5 tiers × 5 destination
+  classes; tier-vs-class inequality gate)
+
+Total this resume: 25 selfdef IPS-authority crates. Workspace 190.
