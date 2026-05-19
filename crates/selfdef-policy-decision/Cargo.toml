@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-decision"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS033 10-field policy decision object schema per F03863-F03872 + R07703-R07712 + dump 16220. Matches sovereign-os M049 Intent-Based Policy 10-field input. Phase 3 doctrine: 'Every action becomes observable and governed' verbatim per F03842 dump 16216. 4-outcome state machine (allow/deny/ask/sandbox)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
