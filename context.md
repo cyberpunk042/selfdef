@@ -62,7 +62,9 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | selfdef-policy-bus (MS033 6-subsystem dispatch fabric: Observability/EventBus/Correlator/AuditLog/NotifyChain/OperatorQueue) | ✓ shipped (10 passing tests) | `crates/selfdef-policy-bus/` |
 | selfdef-trust-score-engine (companion engine to selfdef-trust-score-mirror; 9-reason canonical deltas + 0..1000 clamp) | ✓ shipped (18 passing tests) | `crates/selfdef-trust-score-engine/` |
 | selfdef-boundary-summary (R08591 5-boundary SATURATED composite: MS034/MS035/MS036/MS037/MS038) | ✓ shipped (13 passing tests) | `crates/selfdef-boundary-summary/` |
-| **selfdef Rust workspace: 28 crates total** | ✓ MILESTONE | `crates/selfdef-*` |
+| selfdef-doctrinal-preservation (10-doctrine verbatim registry composite per "you cannot invent crap") | ✓ shipped (9 passing tests) | `crates/selfdef-doctrinal-preservation/` |
+| selfdef-doctrine-coverage (post-boot 3-composite integrity report — modules + boundaries + doctrines) | ✓ shipped (9 passing tests) | `crates/selfdef-doctrine-coverage/` |
+| **selfdef Rust workspace: 30 crates total** | ✓ MILESTONE | `crates/selfdef-*` |
 | **9 of 9 mirror crates COMPLETE** — 100 passing tests total across MS007 typed-mirror trio | ✓ MILESTONE | `crates/selfdef-*-mirror/` |
 | selfdef-web minimal-web bundle (R10166-R10173 + R10212 + R10220 — localhost:7575, 4-panel layout, SSE 2s refresh, read-only default + operator-key-gated mutations, sovereignty-clean static bundle) | ✓ shipped (13 passing tests + ux-harness L1 minimal-web check active) | `crates/selfdef-web/` |
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
