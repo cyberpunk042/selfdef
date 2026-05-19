@@ -526,3 +526,12 @@ Total this resume: 73 selfdef IPS-authority crates. Workspace 238.
   between confirm and dispatch; monotonic by radius)
 
 Total this resume: 75 selfdef IPS-authority crates. Workspace 240.
+
+### Twenty-second wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-policy-state-snapshot` (FNV-1a-digested envelope around
+  policy_blob with tamper-detect verify_digest)
+- `selfdef-policy-feature-flag` (per-policy Mode Enabled/DryRun/
+  Disabled + rationale + bounded history)
+
+Total this resume: 77 selfdef IPS-authority crates. Workspace 242.
