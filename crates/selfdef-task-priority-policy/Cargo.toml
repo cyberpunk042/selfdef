@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-task-priority-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS task-priority authority. Each task carries (TaskClass, deadline_unix_optional, operator_pinned). resolve_order(tasks) returns the dispatch order: OperatorPinned first; then by class priority (Emergency > Operator > Background > Maintenance); ties break on earliest deadline; then on insertion order. Pure ordering."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
