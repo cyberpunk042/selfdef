@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-collector-source-taxonomy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Typed taxonomy enumerating the selfdef in-process collector sources. Counterpart to sovereign-observability-fabric on the IPS side — names the actual collectors feeding the event-bus per MS025 substrate."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
