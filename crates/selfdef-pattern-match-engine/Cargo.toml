@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-pattern-match-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side unified pattern matcher — 4 pattern kinds (PathGlob / Fqdn / Cidr / SubstringRule) used by every rule pack. No regex (forbid(unsafe_code) substrate); literal matching with `*` glob in PathGlob and dot-suffix in Fqdn."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
