@@ -3079,6 +3079,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-trust-score-engine"
+version = "0.1.0"
+dependencies = [
+ "selfdef-trust-score-mirror",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-trust-score-mirror"
 version = "0.1.0"
 dependencies = [
