@@ -167,8 +167,10 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 149 crates total (was 83 pre-session, +66 fresh this session).
-Full workspace test suite: 2693 passing tests. Even-newer:
+Selfdef workspace at 153 crates total (was 83 pre-session, +70 fresh this session).
+Full workspace test suite: 2729 passing tests. Newer:
+`selfdef-grant-revocation-cascade`, `selfdef-egress-fingerprint`,
+`selfdef-mode-pre-flight`, `selfdef-event-bus-stats`. Even-newer:
 `selfdef-policy-decision-replay` (Identical/Drift/Refused comparator),
 `selfdef-evidence-chain-link` (FNV-1a chain hash for evidence ledger),
 `selfdef-actor-rotation` (operator MS003 key rotation chain),
