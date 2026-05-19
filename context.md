@@ -82,12 +82,15 @@ Same rules as sovereign-os/context.md. Verbatim:
 9. **"never include model identifier in commit messages / PR bodies / pushed artifacts"** — chat replies only.
 10. **"the AI does NOT decide when it's complete"** — operator-controlled.
 
-## Hook integration
+## Hook integration — ACTUALLY WIRED 2026-05-19
 
-This file is referenced by:
-- `~/.claude/settings.json` `SessionStart` hook — should `cat` this file when entering selfdef repo
-- `~/.claude/env-bootstrap/templates/SessionStart.sh` (if exists) — same
-- `docs/standing-directives/` (selfdef-side, when authored) — should reference this file
+This file is referenced by **live, working hooks** (verified post-edit):
+
+- `~/.claude/session-start-context.sh` detects both `/home/user/sovereign-os/context.md` and `/home/user/selfdef/context.md` and emits a `systemMessage` JSON pointing the model at both files. Wired into `SessionStart` hook in `~/.claude/settings.json`.
+- `~/.claude/post-compact-reorient.sh` uses the same detection logic on `PostCompact` events.
+- Canonical templates in `~/.claude/env-bootstrap/templates/` — `apply.sh` reinstalls if drift detected. Template-vs-live drift zero post-wire.
+
+Smoke-tested via `bash ~/.claude/session-start-context.sh` — emits valid JSON pointing to both repos' context.md.
 
 After compaction:
 1. Read this file
