@@ -1,0 +1,25 @@
+[package]
+name = "selfdef-web"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS043 minimal local web surface — bootstrap-only localhost:7575 fallback when TUI unavailable. 4-panel layout matching TUI (rules/grants/quarantine/authority) per R10170. SSE auto-refresh every 2s per R10173. Read-only by default; mutations require operator MS003 key upload per R10171."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-tui-mirror = { path = "../selfdef-tui-mirror" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []

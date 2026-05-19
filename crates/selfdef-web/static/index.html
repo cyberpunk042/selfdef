@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>selfdef — minimal local web</title>
+<meta name="x-selfdef-surface" content="minimal-web-4-panel">
+<meta name="x-selfdef-doctrine" content="Fullstack at the edges">
+<meta name="x-selfdef-binding" content="localhost:7575 (R10166)">
+<meta name="x-selfdef-mutation-policy" content="read-only-default; R10171 operator MS003 key upload required for mutations">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="hdr">
+  <div class="title">selfdef <span class="muted">— minimal-web localhost:7575</span></div>
+  <div class="auth" id="auth-state">read-only</div>
+</header>
+
+<main class="grid-4">
+  <section class="panel" id="panel-rules" data-kind="rules">
+    <h2>rules <span class="muted">(Ring 0..4 nftables)</span></h2>
+    <div class="panel-body" data-sse="/sse/rules">loading…</div>
+  </section>
+  <section class="panel" id="panel-grants" data-kind="grants">
+    <h2>grants <span class="muted">(filesystem / network / capability)</span></h2>
+    <div class="panel-body" data-sse="/sse/grants">loading…</div>
+  </section>
+  <section class="panel" id="panel-quarantine" data-kind="quarantine">
+    <h2>quarantine <span class="muted">(MS042 mismatch)</span></h2>
+    <div class="panel-body" data-sse="/sse/quarantine">loading…</div>
+  </section>
+  <section class="panel" id="panel-authority" data-kind="authority">
+    <h2>authority <span class="muted">(L0..L6 + profiles)</span></h2>
+    <div class="panel-body" data-sse="/sse/authority">loading…</div>
+  </section>
+</main>
+
+<footer class="ftr">
+  Tab cycles panels · Esc exits focus · ? shows shortcuts · all mutations require operator MS003 signed CLI (R10212)
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -169,13 +169,22 @@ def check_tui_panel_schema(repo_root: Path) -> tuple[bool, str, dict]:
 
 def check_minimal_web_panel_schema(repo_root: Path) -> tuple[bool, str, dict]:
     """R10568 — minimal-web panel list matches TUI (R10170)."""
-    # When the minimal-web bundle exists at crates/selfdef-web/, lint matches.
-    # For now, this is a soft check — pass if not present, fail if present + drift.
     web_root = repo_root / "crates" / "selfdef-web"
     if not web_root.exists():
         return True, "minimal-web bundle not yet shipped (will activate when present)", {"deferred": True}
-    # Future: parse web bundle panel registry vs EXPECTED_TUI_PANELS.
-    return True, "minimal-web panel schema check deferred to bundle activation", {}
+    lib = web_root / "src" / "lib.rs"
+    if not lib.is_file():
+        return False, "selfdef-web/src/lib.rs missing", {"path": str(lib)}
+    text = lib.read_text()
+    for panel in EXPECTED_TUI_PANELS:
+        if f"PanelKind::{panel.capitalize()}" not in text:
+            return False, f"selfdef-web missing panel '{panel}' in PANEL_ROUTES", {"expected": EXPECTED_TUI_PANELS}
+    # Verify route count = 4 + loopback default + read-only default.
+    if "PANEL_ROUTES: [PanelRoute; 4]" not in text:
+        return False, "selfdef-web PANEL_ROUTES not declared as fixed 4-array", {}
+    if "DEFAULT_PORT" not in text or "7575" not in text:
+        return False, "selfdef-web missing DEFAULT_PORT 7575 (R10166)", {}
+    return True, "minimal-web 4-panel layout + R10166 port + R10170 layout verified", {"panels": EXPECTED_TUI_PANELS}
 
 
 def check_doctrine_preservation(repo_root: Path) -> tuple[bool, str, dict]:
