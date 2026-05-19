@@ -167,9 +167,17 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace now at 49 crates (was 33 pre-session). Every crate ships with
-canonical empty builders, full validate() + serde roundtrip + edge-case tests
-(11..14 passing tests per crate).
+Selfdef workspace now at 55 crates (was 33 pre-session, +22 in this session).
+Additional crates beyond the first batch:
+`selfdef-subject-cohort` (5-tier trust cohorts with monotonic promotion),
+`selfdef-evidence-tag` (6-tag evidence ledger taxonomy),
+`selfdef-deny-recurrence` (per-(subject, action) deny counter),
+`selfdef-grant-template-pack` (8 operator-curated grant templates),
+`selfdef-policy-budget-ledger` (per-subject token+cost cap evaluator),
+`selfdef-substrate-fingerprint` (boot-time FNV-1a tamper-detection snapshot).
+
+Every crate ships with canonical empty builders, full validate() + serde
+roundtrip + edge-case tests (10..14 passing tests per crate).
 
 ## Reference table — operator quotes that shape the work
 
