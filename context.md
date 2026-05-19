@@ -135,6 +135,27 @@ After compaction:
 
 ## Recent commits (most recent first)
 
+### Session 2026-05-19 (post-compaction) — 15 fresh Rust crates added (IPS axis)
+
+- `b27795d` — `selfdef-trust-floor`: 6-side-effect trust gate (floor + grace → Allow/Ask/Deny)
+- `ea27742` — `selfdef-bus-subscriber-registry`: 9-subscriber bus catalog with assert-ready gate
+- `fab4856` — `selfdef-audit-digest`: sliding-window per outcome/side-effect/profile/risk
+- `976c315` — `selfdef-rule-pack-version`: 8-pack semver+signature manifest with pinned floors
+- `64090f5` — `selfdef-anomaly-hint`: 6-class non-blocking deviation envelope
+- `ac51521` — `selfdef-replay-ring`: bounded FIFO ring buffer for in-memory event rewind
+- `8e50305` — `selfdef-audit-redaction`: 6-redactor sanitizer for outbound audit text
+- `dc80f8c` — `selfdef-incident-classifier`: 5-level Info/Notice/Warn/Critical/Emergency taxonomy
+- `6045134` — `selfdef-substrate-self-test`: 7-canary boot-time fixture harness
+- `70c810a` — `selfdef-grant-revocation-log`: append-only with 5 reasons
+- `8257d32` — `selfdef-retention-policy`: 8-kind retention rule set
+- `d7cc07b` — `selfdef-doctrine-citation`: per-decision doctrine tag set
+- `3b8e184` — `selfdef-collector-arming-state`: 6-state per-collector arming machine
+- `f05ce99` — `selfdef-collector-quarantine-ledger`: append-only ledger with 5 reasons
+- `694c505` — `selfdef-collector-budget-guard`: per-collector EPS budget verdict
+- `d6e8881` — `selfdef-collector-source-taxonomy`: 7-collector typed catalog
+
+### Earlier milestones
+
 - `cdc9064` — MS045 UX coherence test harness milestone (240 R-rows)
 - `0b5a648` — MS044 Guardian Daemon catalog milestone (240 R-rows)
 - `6a2f6ef` — Patch Pass A MS010 canon-update annotation
@@ -145,6 +166,10 @@ After compaction:
 - `d686ccc` — MS039 Authority levels (L0..L6) + trust rings (Ring 0..4) — IPS-side projection
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
+
+Selfdef workspace now at 49 crates (was 33 pre-session). Every crate ships with
+canonical empty builders, full validate() + serde roundtrip + edge-case tests
+(11..14 passing tests per crate).
 
 ## Reference table — operator quotes that shape the work
 
