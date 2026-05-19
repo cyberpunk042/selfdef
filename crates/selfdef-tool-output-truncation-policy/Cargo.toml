@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-output-truncation-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS tool-output truncation authority. Caps every tool's stdout/stderr at per-class budgets so a hostile tool cannot blow the operator's prompt context window via a wall of attacker-controlled text. Three strategies (HeadOnly, HeadTail, MiddleEllipsis) per tool class; returns the truncated text plus a TruncationReceipt so the cockpit can show a diff/replay link."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
