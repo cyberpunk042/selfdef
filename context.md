@@ -393,3 +393,12 @@ Total this resume: 36 selfdef IPS-authority crates. Workspace 201.
   transitions; transitions_to/from filters; current_mode helper)
 
 Total this resume: 39 selfdef IPS-authority crates. Workspace 204.
+
+### Tenth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-prompt-input-classification` (6 InputSource →
+  3 TrustClass map for the prompt-context-quota sub-cap router)
+- `selfdef-tool-output-trust-veil` (typed wrap of tool output;
+  unveil_with_tier(expected) rejects mismatched promotion)
+
+Total this resume: 41 selfdef IPS-authority crates. Workspace 206.
