@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-policy-conflict-detector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side policy conflict detector — scans a stream of PolicyDecisions for inconsistencies: same trace_id with different outcomes, same (subject, action) producing Allow then Deny within window, drift between declared risk and side-effect class."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
