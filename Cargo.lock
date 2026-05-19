@@ -3240,6 +3240,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-policy-bundle-signature"
+version = "0.1.0"
+dependencies = [
+ "selfdef-rule-pack-version",
+ "selfdef-substrate-fingerprint",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-policy-bus"
 version = "0.1.0"
 dependencies = [

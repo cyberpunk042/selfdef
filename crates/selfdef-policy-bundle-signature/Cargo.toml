@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-policy-bundle-signature"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side policy-bundle signature manifest — bundles together the rule_pack_version + doctrine_text_hash + collector_summary + host_fingerprint with one operator MS003 signature. The daemon refuses boot if the bundle's MS003 signature is missing or invalid."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-substrate-fingerprint = { path = "../selfdef-substrate-fingerprint" }
+selfdef-rule-pack-version = { path = "../selfdef-rule-pack-version" }
+
+[features]
+default = []
