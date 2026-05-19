@@ -76,7 +76,7 @@ Per "little piece by little piece" — next tractable selfdef deliverables:
    - ~~`crates/selfdef-cli-mirror/`~~ ✓ shipped 2026-05-19 (50+ subcommand schema + doctrine preservation, 13 passing tests)
    - ~~`crates/selfdef-tui-mirror/`~~ ✓ shipped 2026-05-19 (4-panel canonical layout + doctrine preservation, 14 passing tests)
    - **9 of 9 mirror crates SHIPPED 2026-05-19** — MS043 typed-mirror trio complete (100 passing tests)
-4. **selfdef CLI subcommand completion** — bash + fish + zsh per MS043 R10134 — install in `.deb` package
+4. ~~**selfdef CLI subcommand completion**~~ ✓ shipped 2026-05-19 — bash + fish + zsh per MS043 R10134 at `completions/{bash,fish,zsh}/`
 
 ## What NOT to do — operator standing rules (mirror)
 

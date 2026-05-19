@@ -1,0 +1,87 @@
+#compdef selfdefctl
+# selfdefctl zsh completion
+# Install: /usr/share/zsh/vendor-completions/_selfdefctl
+# Per MS043 R10134.
+
+_selfdefctl() {
+    local -a commands
+    commands=(
+        'grant:grant lifecycle (filesystem/network/capability/communication/sandbox)'
+        'token:capability_word token lifecycle'
+        'rule:nftables ruleset (Ring 0..4)'
+        'sandbox:MS036 Tier A/B/C/D allocations'
+        'quarantine:MS042 declaration-vs-observed triage'
+        'trust:per-tool trust score (0..1000)'
+        'audit:MS009 audit chain inspection'
+        'rollback:rollback preview + apply (ZFS + MS041 receipts)'
+        'snapshot:ZFS snapshot management'
+        'commit:MS041 commit log + receipt inspection'
+        'notify:12-channel notification triage'
+        'config:daemon configuration'
+        'status:system overview surfaces'
+        'help:show help'
+        'version:build identity'
+    )
+
+    local -a common_flags
+    common_flags=(
+        '(-h --help)'{-h,--help}'[show help]'
+        '--json[JSON output]'
+        '--yaml[YAML output]'
+        '--watch[continuous updates]'
+        '(-q --quiet)'{-q,--quiet}'[suppress non-essential output]'
+        '(-v --verbose)'{-v,--verbose}'[verbose output]'
+        '--dry-run[simulate, no side effects]'
+        '--confirm[confirm destructive action]'
+        '--signed-by[operator fingerprint]:fingerprint:'
+        '--reason[audit reason (MS041 R09657)]:reason:'
+        '--ttl[TTL e.g. 1h, 30m]:ttl:'
+        '--since[time window start]:since:'
+        '--until[time window end]:until:'
+        '(-o --output)'{-o,--output}'[output format]:format:(json yaml text)'
+        '--ring[Ring 0..4]:ring:(ring0 ring1 ring2 ring3 ring4)'
+        '--tier[MS036 tier]:tier:(A B C D)'
+        '--kind[grant kind]:kind:(filesystem network capability communication sandbox)'
+        '--verdict[rule verdict]:verdict:(allow deny log)'
+        '--authority[MS039 authority level]:authority:(l0_observe l1_suggest l2_simulate l3_prepare l4_execute l5_commit l6_persist)'
+        '--profile[MS040 profile]:profile:(private fast careful autonomous experimental production)'
+        '--band[trust band]:band:(trusted watched suspect untrusted)'
+        '--severity[mismatch severity]:severity:(informational minor major critical)'
+    )
+
+    _arguments -C \
+        '1: :->command' \
+        '2: :->subcommand' \
+        '*::arg:->args'
+
+    case $state in
+        command)
+            _describe -t commands 'selfdefctl command' commands
+            ;;
+        subcommand)
+            local -a subs
+            case "$words[1]" in
+                grant)      subs=(list request approve deny revoke inspect) ;;
+                token)      subs=(list mint derive revoke inspect trace) ;;
+                rule)       subs=(list add remove inspect reload) ;;
+                sandbox)    subs=(list allocate checkpoint resume release) ;;
+                quarantine) subs=(list inspect trace release forfeit) ;;
+                trust)      subs=(list show adjust forfeit) ;;
+                audit)      subs=(tail verify export) ;;
+                rollback)   subs=(preview apply) ;;
+                snapshot)   subs=(list create diff prune) ;;
+                commit)     subs=(log inspect) ;;
+                notify)     subs=(resend list-channels) ;;
+                config)     subs=(get set list) ;;
+                status)     subs=(overview ring tier audit-chain) ;;
+                *)          subs=() ;;
+            esac
+            (( ${#subs} )) && _describe -t subcommands "${words[1]} subcommand" subs
+            ;;
+        args)
+            _arguments $common_flags
+            ;;
+    esac
+}
+
+_selfdefctl "$@"

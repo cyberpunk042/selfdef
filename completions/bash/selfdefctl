@@ -1,0 +1,117 @@
+# selfdefctl bash completion
+# Install: /usr/share/bash-completion/completions/selfdefctl
+# Per MS043 R10134.
+
+_selfdefctl() {
+    local cur prev words cword
+    _init_completion || return
+
+    # First-level subcommand namespaces (mirrors the selfdef-cli-mirror surface)
+    local namespaces="grant token rule sandbox quarantine trust audit rollback snapshot commit notify config status help version"
+
+    if [[ ${cword} -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "${namespaces}" -- "${cur}") )
+        return
+    fi
+
+    local ns="${words[1]}"
+    local sub=""
+
+    case "${ns}" in
+        grant)
+            sub="list request approve deny revoke inspect"
+            ;;
+        token)
+            sub="list mint derive revoke inspect trace"
+            ;;
+        rule)
+            sub="list add remove inspect reload"
+            ;;
+        sandbox)
+            sub="list allocate checkpoint resume release"
+            ;;
+        quarantine)
+            sub="list inspect trace release forfeit"
+            ;;
+        trust)
+            sub="list show adjust forfeit"
+            ;;
+        audit)
+            sub="tail verify export"
+            ;;
+        rollback)
+            sub="preview apply"
+            ;;
+        snapshot)
+            sub="list create diff prune"
+            ;;
+        commit)
+            sub="log inspect"
+            ;;
+        notify)
+            sub="resend list-channels"
+            ;;
+        config)
+            sub="get set list"
+            ;;
+        status)
+            sub="overview ring tier audit-chain"
+            ;;
+        *)
+            ;;
+    esac
+
+    if [[ ${cword} -eq 2 ]]; then
+        COMPREPLY=( $(compgen -W "${sub}" -- "${cur}") )
+        return
+    fi
+
+    # Third+ level — common flags depending on previous flag
+    case "${prev}" in
+        --ring)
+            COMPREPLY=( $(compgen -W "ring0 ring1 ring2 ring3 ring4" -- "${cur}") )
+            return
+            ;;
+        --tier)
+            COMPREPLY=( $(compgen -W "A B C D" -- "${cur}") )
+            return
+            ;;
+        --kind)
+            COMPREPLY=( $(compgen -W "filesystem network capability communication sandbox" -- "${cur}") )
+            return
+            ;;
+        --verdict)
+            COMPREPLY=( $(compgen -W "allow deny log" -- "${cur}") )
+            return
+            ;;
+        --authority|--min-authority)
+            COMPREPLY=( $(compgen -W "l0_observe l1_suggest l2_simulate l3_prepare l4_execute l5_commit l6_persist" -- "${cur}") )
+            return
+            ;;
+        --profile)
+            COMPREPLY=( $(compgen -W "private fast careful autonomous experimental production" -- "${cur}") )
+            return
+            ;;
+        --band)
+            COMPREPLY=( $(compgen -W "trusted watched suspect untrusted" -- "${cur}") )
+            return
+            ;;
+        --severity)
+            COMPREPLY=( $(compgen -W "informational minor major critical" -- "${cur}") )
+            return
+            ;;
+        --output|-o)
+            COMPREPLY=( $(compgen -W "json yaml text" -- "${cur}") )
+            return
+            ;;
+    esac
+
+    # Generic flag completion
+    local common_flags="--help --json --yaml --watch --quiet --verbose --dry-run --confirm --signed-by --reason --ttl --since --until --output"
+    if [[ "${cur}" == -* ]]; then
+        COMPREPLY=( $(compgen -W "${common_flags}" -- "${cur}") )
+        return
+    fi
+}
+
+complete -F _selfdefctl selfdefctl
