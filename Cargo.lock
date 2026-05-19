@@ -2162,6 +2162,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-capability-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-cli"
 version = "0.1.0"
 dependencies = [
@@ -2448,6 +2459,17 @@ name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+]
+
+[[package]]
+name = "selfdef-grants-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2781,6 +2803,17 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "selfdef-rules-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

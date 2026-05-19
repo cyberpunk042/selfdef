@@ -36,6 +36,7 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | 8/8 SATURATED mirror crates (auth-tier / bashrc-install / history-sink / dashboard-manifest / surface-manifest / ux-checklist / audit-manifest / doc-manifest) | ✓ shipped | `crates/selfdef-{auth-tier,...}/Cargo.toml` |
 | selfdef-rules-mirror (MS043 D-12 networking source, 1 of 9 mirror crates) | ✓ shipped (7 passing tests) | `crates/selfdef-rules-mirror/` (commit a0b35e6) |
 | selfdef-grants-mirror (MS043 D-13 fs/network/capability grants source, 2 of 9) | ✓ shipped (8 passing tests) | `crates/selfdef-grants-mirror/` |
+| selfdef-capability-mirror (MS043 D-14 capability_word tokens source, 3 of 9) | ✓ shipped (11 passing tests) | `crates/selfdef-capability-mirror/` |
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
 | MS026 OCSF observability | catalog ✓ / impl ongoing | `crates/selfdef-collector-*/` |
 | Multi-environment Discord/Slack/Signal/Telegram/SMTP/TheHive integrations | ✓ shipped | `crates/selfdef-integration-*/` |
@@ -60,7 +61,7 @@ Per "little piece by little piece" — next tractable selfdef deliverables:
 3. **9 MS007 mirror crates** for sovereign-os D-12..D-18 cockpit dashboards:
    - `crates/selfdef-rules-mirror/` (Ring 0-4 nftables rules)
    - `crates/selfdef-grants-mirror/` (filesystem grants)
-   - `crates/selfdef-capability-mirror/` (capability_word tokens)
+   - ~~`crates/selfdef-capability-mirror/`~~ ✓ shipped 2026-05-19 (capability_word tokens, 11 passing tests)
    - `crates/selfdef-sandbox-mirror/` (MS036 tier A/B/C/D allocations)
    - `crates/selfdef-audit-mirror/` (MS009 chain status)
    - `crates/selfdef-quarantine-mirror/` (MS042 quarantined tools)
