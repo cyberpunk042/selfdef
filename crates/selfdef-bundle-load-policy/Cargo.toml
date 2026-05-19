@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-bundle-load-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS rule-bundle load authority. Each bundle declares (source, signature_present, version_satisfies). load() returns Loaded / Rejected{reason}. Vendor bundles must be signature_present; Operator bundles MAY be unsigned only when source==Local. Schema-version mismatches between bundle and engine are always rejected."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
