@@ -47,7 +47,7 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
 | MS026 OCSF observability | catalog ✓ / impl ongoing | `crates/selfdef-collector-*/` |
 | Multi-environment Discord/Slack/Signal/Telegram/SMTP/TheHive integrations | ✓ shipped | `crates/selfdef-integration-*/` |
-| Guardian Daemon `/usr/local/bin/guardian-core` Python impl (MS044) | catalog ✓ / impl pending | `backlog/milestones/MS044-*` |
+| Guardian Daemon `/usr/local/bin/guardian-core` Python impl (MS044) | ✓ shipped + 17 integration tests passing | `scripts/guardian/guardian-core` + `tests/integration/test_guardian_core.py` |
 | MS045 UX coherence test harness `/usr/bin/selfdef-ux-harness` impl | ✓ shipped (Python 3 binary + systemd service + timer, 10/10 checks passing in --json) | `scripts/ux-harness/selfdef-ux-harness` + `config/systemd/selfdef-ux-harness.{service,timer}` |
 | 9 D-12..D-18 mirror crates (selfdef-rules / -grants / -capability / -sandbox / -audit / -quarantine / -trust-score / -cli / -tui) | catalog ✓ (MS043 R10182-R10193) / impl pending | `backlog/milestones/MS043-*` |
 
