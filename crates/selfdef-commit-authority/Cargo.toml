@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-commit-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS041 commit authority — durable-change discipline per dump 17389-17421. 8 commit types (file/memory/policy/profile/adapter/cloud-exposure/tool-side-effect/workflow) + 5 mandatory fields (actor/reason/policy_decision/rollback_status/trace_ref) + high-risk triple gate (snapshot/test-eval/oracle-or-human) per R09607-R09609 + E0420. Doctrine: 'A commit is any durable change' (R09601 dump 17389)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
