@@ -2276,6 +2276,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-blast-radius-classifier"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-boundary-summary"
 version = "0.1.0"
 dependencies = [

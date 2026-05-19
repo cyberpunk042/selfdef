@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-blast-radius-classifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS blast-radius classifier. Maps an operation's primitive features (target scope, reversibility, visibility) onto a 5-level blast-radius enum (LocalEphemeral / LocalPersistent / CrossSession / CrossMachine / Public). Higher tiers trigger stricter gates (operator approval, quorum, time-window) elsewhere in the policy graph. Pure deterministic classification."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
