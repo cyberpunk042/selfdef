@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-redo-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-session decision-redo budget. Limits how many decisions the operator may force-re-run within a single session, per ReDoClass (Same/Adjacent/Cross). request(class) returns Allow{remaining} / Denied; reset clears counters."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
