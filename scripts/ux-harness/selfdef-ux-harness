@@ -261,9 +261,76 @@ def check_tui_keyboard_replayer_deferred(_: Path) -> tuple[bool, str, dict]:
     return True, "L3 TUI keyboard replayer deferred (requires selfdef-tui binary + pyte)", {"deferred": True}
 
 
-def check_web_contrast_deferred(_: Path) -> tuple[bool, str, dict]:
-    """R10175 — WCAG 2.1 AA 4.5:1 contrast check. Deferred until minimal-web bundle ships."""
-    return True, f"L4 web WCAG {WCAG_AA_CONTRAST_MIN}:1 contrast deferred (requires pa11y)", {"deferred": True}
+def _hex_to_rgb(h: str) -> tuple[float, float, float]:
+    """Parse #rgb / #rrggbb / 3-letter hex into 0..1 RGB triple."""
+    h = h.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) != 6:
+        raise ValueError(f"invalid hex color: {h!r}")
+    return (int(h[0:2], 16) / 255.0, int(h[2:4], 16) / 255.0, int(h[4:6], 16) / 255.0)
+
+
+def _relative_luminance(rgb: tuple[float, float, float]) -> float:
+    """WCAG 2.1 relative luminance formula (sRGB)."""
+    def lin(c: float) -> float:
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (lin(c) for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(fg_hex: str, bg_hex: str) -> float:
+    """Compute WCAG 2.1 contrast ratio between two hex colors."""
+    L1 = _relative_luminance(_hex_to_rgb(fg_hex))
+    L2 = _relative_luminance(_hex_to_rgb(bg_hex))
+    lighter, darker = max(L1, L2), min(L1, L2)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def check_web_contrast(repo_root: Path) -> tuple[bool, str, dict]:
+    """R10175 — WCAG 2.1 AA 4.5:1 contrast check (pure-Python impl).
+
+    Parses the selfdef-web/static/app.css palette and verifies every
+    documented foreground/background pair meets the AA 4.5:1 minimum.
+    Activates whenever selfdef-web is shipped; defers otherwise.
+    """
+    css_path = repo_root / "crates" / "selfdef-web" / "static" / "app.css"
+    if not css_path.is_file():
+        return True, "L4 web WCAG contrast deferred (selfdef-web/static/app.css missing)", {"deferred": True}
+    text = css_path.read_text()
+    # Extract palette CSS custom properties via regex.
+    palette = {}
+    for line in text.splitlines():
+        m = re.match(r"\s*(--[\w-]+):\s*(#[0-9a-fA-F]+)\s*;", line)
+        if m:
+            palette[m.group(1)] = m.group(2)
+    # Canonical foreground/background pairs to verify.
+    pairs = [
+        ("--fg", "--bg"),
+        ("--fg", "--panel"),
+        ("--muted", "--bg"),
+        ("--accent", "--bg"),
+        ("--accent", "--panel"),
+        ("--good", "--bg"),
+        ("--bad", "--bg"),
+        ("--warn", "--bg"),
+    ]
+    failing = []
+    ratios = {}
+    for fg, bg in pairs:
+        if fg not in palette or bg not in palette:
+            continue
+        ratio = _contrast_ratio(palette[fg], palette[bg])
+        ratios[f"{fg} / {bg}"] = round(ratio, 2)
+        if ratio < WCAG_AA_CONTRAST_MIN:
+            failing.append((fg, bg, round(ratio, 2)))
+    if failing:
+        return False, f"L4 WCAG AA contrast fails for {len(failing)} pair(s): {failing}", {
+            "ratios": ratios, "failing": failing, "target_min": WCAG_AA_CONTRAST_MIN,
+        }
+    return True, f"L4 WCAG AA contrast OK across {len(ratios)} pair(s) (min {min(ratios.values()):.2f} >= {WCAG_AA_CONTRAST_MIN})", {
+        "ratios": ratios, "target_min": WCAG_AA_CONTRAST_MIN,
+    }
 
 
 def check_web_keyboard_nav_deferred(_: Path) -> tuple[bool, str, dict]:
@@ -285,7 +352,7 @@ CHECKS: list[tuple[str, str, Callable]] = [
     ("cli-startup-p95",           "L2", check_cli_startup_p95),
     # L3-L5 deferred until dependencies activate
     ("tui-keyboard-replayer",     "L3", check_tui_keyboard_replayer_deferred),
-    ("web-wcag-contrast",         "L4", check_web_contrast_deferred),
+    ("web-wcag-contrast",         "L4", check_web_contrast),
     ("web-keyboard-nav",          "L5", check_web_keyboard_nav_deferred),
 ]
 
