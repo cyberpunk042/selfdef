@@ -2709,6 +2709,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-eval-gate-policy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-event-emitter"
 version = "0.1.0"
 dependencies = [

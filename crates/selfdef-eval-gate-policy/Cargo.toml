@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-eval-gate-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side eval gate — for each high-risk action class (commit, network egress, process spawn), declares the operator-required eval suite that must have passed within the staleness window before the action is admissible. The runtime eval-suite-catalog mirrors approved gates."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
