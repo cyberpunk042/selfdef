@@ -2733,6 +2733,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-decision-router"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "selfdef-trust-floor",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-decision-throttle"
 version = "0.1.0"
 dependencies = [

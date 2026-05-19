@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-decision-router"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side decision router — composes the 4-outcome (Allow/Deny/Ask/Sandbox) gates: profile-authority + trust-floor + eval-gate + sandbox-tier into one decision pipeline that returns the final Outcome + the gate that decided."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-trust-floor = { path = "../selfdef-trust-floor" }
+
+[features]
+default = []
