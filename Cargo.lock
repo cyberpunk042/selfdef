@@ -3503,6 +3503,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-tool-capability-policy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-execution-mode-policy",
+ "selfdef-profile-authority-gate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-trace-span"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-tool-capability-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authoritative tool-capability policy — which of the 8 canonical operator-callable tools are permissible in each (ExecutionMode × Profile) context. The runtime cockpit tool-catalog mirrors this; selfdef refuses any tool invocation the policy doesn't authorize."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-execution-mode-policy = { path = "../selfdef-execution-mode-policy" }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
