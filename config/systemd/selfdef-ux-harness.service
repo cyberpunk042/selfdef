@@ -1,0 +1,20 @@
+[Unit]
+Description=selfdef-ux-harness — MS045 UX coherence test harness (one-shot)
+Documentation=https://example.org/you/selfdef/blob/main/backlog/milestones/MS045-ux-coherence-test-harness.md
+After=local-fs.target
+ConditionPathExists=/usr/bin/selfdef-ux-harness
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/selfdef-ux-harness --json
+StandardOutput=append:/var/log/selfdef/ux-harness.jsonl
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/selfdef
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

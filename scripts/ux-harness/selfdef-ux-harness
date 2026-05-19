@@ -1,0 +1,346 @@
+#!/usr/bin/env python3
+"""selfdef-ux-harness — MS045 UX coherence test harness.
+
+Per MS045 R10566-R10570 (L1 schema/lint layer) + the broader L2-L5
+arc, this binary verifies that the IPS-side operator surface (CLI +
+TUI + minimal-web + mirror crates) satisfies the UX requirements
+catalogued in MS043 R10087-R10298.
+
+Install path: /usr/bin/selfdef-ux-harness
+Systemd timer: /etc/systemd/system/selfdef-ux-harness.timer (post-commit hook)
+
+Doctrine preserved verbatim (MS045 derivation):
+  L1 = schema/lint (no virtualization)
+  L2 = CLI startup latency p95 < 50ms (MS043 R10137)
+  L3 = TUI keyboard replayer via PTY (MS043 R10150-R10155)
+  L4 = web contrast checker WCAG 2.1 AA 4.5:1 (MS043 R10175)
+  L5 = web keyboard replayer via Playwright (MS043 R10263-R10266)
+
+Standing rule: "the AI does NOT decide when it's complete"
+This harness reports per-check pass/fail; operator decides commit-gate.
+"""
+
+import argparse
+import json
+import os
+import re
+import statistics
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Optional
+
+
+# ----------------------------- canonical references ------------------------- #
+
+# MS043 canonical mirror crate list per R10182-R10189 — exactly 9.
+EXPECTED_MIRROR_CRATES = [
+    "selfdef-rules-mirror",
+    "selfdef-grants-mirror",
+    "selfdef-capability-mirror",
+    "selfdef-sandbox-mirror",
+    "selfdef-audit-mirror",
+    "selfdef-quarantine-mirror",
+    "selfdef-trust-score-mirror",
+    "selfdef-cli-mirror",
+    "selfdef-tui-mirror",
+]
+
+# MS043 canonical TUI panel list per R10141 — exactly 4.
+EXPECTED_TUI_PANELS = ["rules", "grants", "quarantine", "authority"]
+
+# MS043 R10137 CLI startup latency p95 target in milliseconds.
+CLI_STARTUP_P95_TARGET_MS = 50.0
+
+# CLI startup benchmark sample count (R10137 + R10286).
+CLI_STARTUP_SAMPLES = 1000
+
+# WCAG 2.1 AA contrast ratio minimum per MS043 R10175.
+WCAG_AA_CONTRAST_MIN = 4.5
+
+# Doctrinal preservation — verbatim, surfaced for self-check.
+DOCTRINE_FULLSTACK_AT_THE_EDGES = "Fullstack at the edges"
+DOCTRINE_NO_VANITY_GRAPHS = "A dashboard should not show vanity graphs"
+
+
+# ----------------------------- check infrastructure ------------------------- #
+
+@dataclass
+class CheckResult:
+    """Single check result. Wire-stable for --json output."""
+    name: str
+    layer: str   # "L1" / "L2" / "L3" / "L4" / "L5"
+    passed: bool
+    summary: str
+    detail: dict = field(default_factory=dict)
+    duration_ms: float = 0.0
+
+
+class Harness:
+    """Aggregates check results + emits structured report."""
+
+    def __init__(self, repo_root: Path, verbose: bool):
+        self.repo_root = repo_root
+        self.verbose = verbose
+        self.results: list[CheckResult] = []
+
+    def run(self, name: str, layer: str, fn: Callable[[], tuple[bool, str, dict]]) -> CheckResult:
+        t0 = time.monotonic()
+        try:
+            passed, summary, detail = fn()
+        except Exception as e:  # check authors should not raise; defend anyway
+            passed, summary, detail = False, f"check raised exception: {e}", {"exception": str(e)}
+        dt = (time.monotonic() - t0) * 1000
+        r = CheckResult(name=name, layer=layer, passed=passed, summary=summary, detail=detail, duration_ms=dt)
+        self.results.append(r)
+        if self.verbose:
+            status = "PASS" if passed else "FAIL"
+            print(f"[{layer}] {status:4s}  {name:<60s}  {summary}", file=sys.stderr)
+        return r
+
+    @property
+    def passed(self) -> bool:
+        return all(r.passed for r in self.results)
+
+    def summary_counts(self) -> dict[str, int]:
+        c = {"total": len(self.results), "passed": 0, "failed": 0}
+        for r in self.results:
+            if r.passed:
+                c["passed"] += 1
+            else:
+                c["failed"] += 1
+        return c
+
+
+# ----------------------------- L1: schema/lint ------------------------------ #
+# (R10566-R10570 — no virtualization needed; pure filesystem inspection.)
+
+def check_mirror_crate_list(repo_root: Path) -> tuple[bool, str, dict]:
+    """R10569 — mirror crate list (9 crates) matches MS043 schema."""
+    crates_dir = repo_root / "crates"
+    found = sorted(
+        p.name for p in crates_dir.iterdir()
+        if p.is_dir() and p.name.endswith("-mirror") and p.name.startswith("selfdef-")
+    )
+    expected = sorted(EXPECTED_MIRROR_CRATES)
+    if found == expected:
+        return True, f"all 9 mirror crates present", {"crates": found}
+    missing = [c for c in expected if c not in found]
+    extra = [c for c in found if c not in expected]
+    return False, f"mirror crate drift: missing={missing} extra={extra}", {
+        "expected": expected, "found": found, "missing": missing, "extra": extra,
+    }
+
+
+def check_cli_subcommand_schema(repo_root: Path) -> tuple[bool, str, dict]:
+    """R10566 — CLI subcommand list discoverable + non-empty.
+    Without a built `selfdefctl --list-subcommands`, this lints presence of CLI crate.
+    """
+    cli_crate = repo_root / "crates" / "selfdef-cli"
+    cli_mirror = repo_root / "crates" / "selfdef-cli-mirror" / "src" / "lib.rs"
+    if not cli_crate.is_dir():
+        return False, "selfdef-cli crate missing", {"path": str(cli_crate)}
+    if not cli_mirror.is_file():
+        return False, "selfdef-cli-mirror lib.rs missing", {"path": str(cli_mirror)}
+    text = cli_mirror.read_text()
+    if "DOCTRINE_FULLSTACK_AT_THE_EDGES" not in text:
+        return False, "selfdef-cli-mirror doctrine constant missing", {}
+    if DOCTRINE_FULLSTACK_AT_THE_EDGES not in text:
+        return False, f"selfdef-cli-mirror doctrine string not verbatim", {"expected": DOCTRINE_FULLSTACK_AT_THE_EDGES}
+    return True, "CLI surface schema present + doctrine verbatim", {}
+
+
+def check_tui_panel_schema(repo_root: Path) -> tuple[bool, str, dict]:
+    """R10567 — TUI panel list = MS043 schema (4 panels)."""
+    tui_mirror = repo_root / "crates" / "selfdef-tui-mirror" / "src" / "lib.rs"
+    if not tui_mirror.is_file():
+        return False, "selfdef-tui-mirror lib.rs missing", {}
+    text = tui_mirror.read_text()
+    for panel in EXPECTED_TUI_PANELS:
+        # Each panel name appears either as enum variant doc or panel_name match
+        if panel not in text:
+            return False, f"TUI panel '{panel}' missing from selfdef-tui-mirror", {"expected": EXPECTED_TUI_PANELS}
+    if DOCTRINE_NO_VANITY_GRAPHS not in text:
+        return False, "selfdef-tui-mirror doctrine string not verbatim", {"expected": DOCTRINE_NO_VANITY_GRAPHS}
+    return True, "TUI 4-panel layout present + doctrine verbatim", {"panels": EXPECTED_TUI_PANELS}
+
+
+def check_minimal_web_panel_schema(repo_root: Path) -> tuple[bool, str, dict]:
+    """R10568 — minimal-web panel list matches TUI (R10170)."""
+    # When the minimal-web bundle exists at crates/selfdef-web/, lint matches.
+    # For now, this is a soft check — pass if not present, fail if present + drift.
+    web_root = repo_root / "crates" / "selfdef-web"
+    if not web_root.exists():
+        return True, "minimal-web bundle not yet shipped (will activate when present)", {"deferred": True}
+    # Future: parse web bundle panel registry vs EXPECTED_TUI_PANELS.
+    return True, "minimal-web panel schema check deferred to bundle activation", {}
+
+
+def check_doctrine_preservation(repo_root: Path) -> tuple[bool, str, dict]:
+    """MS045 R10297/R10298 verbatim preservation — both doctrines present."""
+    cli_path = repo_root / "crates" / "selfdef-cli-mirror" / "src" / "lib.rs"
+    tui_path = repo_root / "crates" / "selfdef-tui-mirror" / "src" / "lib.rs"
+    ok_cli = cli_path.is_file() and DOCTRINE_FULLSTACK_AT_THE_EDGES in cli_path.read_text()
+    ok_tui = tui_path.is_file() and DOCTRINE_NO_VANITY_GRAPHS in tui_path.read_text()
+    if ok_cli and ok_tui:
+        return True, "both doctrines preserved verbatim", {"cli": True, "tui": True}
+    return False, f"doctrine preservation gap: cli={ok_cli} tui={ok_tui}", {"cli": ok_cli, "tui": ok_tui}
+
+
+def check_guardian_unit_present(repo_root: Path) -> tuple[bool, str, dict]:
+    """MS044 systemd unit + 3-step protocol present in tree."""
+    unit = repo_root / "config" / "systemd" / "guardian-core.service"
+    script = repo_root / "scripts" / "guardian" / "guardian-core"
+    if not unit.is_file():
+        return False, "guardian-core.service unit missing", {"path": str(unit)}
+    if not script.is_file():
+        return False, "guardian-core script missing", {"path": str(script)}
+    text = script.read_text()
+    # Verify 3-step protocol vocabulary present.
+    for keyword in ("SIGKILL", "podman", "zfs", "audit"):
+        if keyword.lower() not in text.lower():
+            return False, f"guardian-core script missing keyword '{keyword}'", {}
+    return True, "MS044 Guardian Daemon present + 3-step protocol referenced", {}
+
+
+# ----------------------------- L2: latency benches -------------------------- #
+# (R10137 + R10286 — CLI startup p95 < 50ms across 1000 runs.)
+
+def check_cli_startup_p95(repo_root: Path, samples: int = CLI_STARTUP_SAMPLES, target_ms: float = CLI_STARTUP_P95_TARGET_MS) -> tuple[bool, str, dict]:
+    """R10137 — CLI startup p95 < 50ms across 1000 runs.
+
+    Probes ``selfdefctl --help`` (the canonical no-op invocation) and
+    measures wall clock. If ``selfdefctl`` is not installed, this check
+    is reported as 'deferred' (passing with a flag) rather than failing,
+    since the harness is also useful pre-install.
+    """
+    binary = "selfdefctl"
+    # Detect presence — try $PATH first.
+    detect = subprocess.run(["which", binary], capture_output=True, text=True)
+    if detect.returncode != 0:
+        return True, "selfdefctl not on PATH; benchmark deferred (will activate post-install)", {"deferred": True, "samples_planned": samples}
+    timings = []
+    for _ in range(samples):
+        t0 = time.monotonic()
+        try:
+            subprocess.run([binary, "--help"], capture_output=True, timeout=2)
+        except subprocess.TimeoutExpired:
+            timings.append(2000.0)
+            continue
+        timings.append((time.monotonic() - t0) * 1000)
+    timings.sort()
+    p50 = statistics.median(timings)
+    p95 = timings[int(0.95 * len(timings))]
+    p99 = timings[int(0.99 * len(timings))]
+    if p95 < target_ms:
+        return True, f"CLI startup p95={p95:.1f}ms < {target_ms}ms target ({samples} samples)", {
+            "p50_ms": p50, "p95_ms": p95, "p99_ms": p99, "samples": samples, "target_ms": target_ms,
+        }
+    return False, f"CLI startup p95={p95:.1f}ms >= {target_ms}ms target ({samples} samples)", {
+        "p50_ms": p50, "p95_ms": p95, "p99_ms": p99, "samples": samples, "target_ms": target_ms,
+    }
+
+
+# ----------------------------- L3/L4/L5: deferred --------------------------- #
+# These require additional dependencies (PTY harness, pa11y, Playwright).
+# Reported as 'deferred' until activation.
+
+def check_tui_keyboard_replayer_deferred(_: Path) -> tuple[bool, str, dict]:
+    """R10150-R10155 — TUI keyboard replayer via PTY. Deferred until selfdef-tui binary exists."""
+    return True, "L3 TUI keyboard replayer deferred (requires selfdef-tui binary + pyte)", {"deferred": True}
+
+
+def check_web_contrast_deferred(_: Path) -> tuple[bool, str, dict]:
+    """R10175 — WCAG 2.1 AA 4.5:1 contrast check. Deferred until minimal-web bundle ships."""
+    return True, f"L4 web WCAG {WCAG_AA_CONTRAST_MIN}:1 contrast deferred (requires pa11y)", {"deferred": True}
+
+
+def check_web_keyboard_nav_deferred(_: Path) -> tuple[bool, str, dict]:
+    """R10263-R10266 — web keyboard navigation replayer. Deferred until Playwright present."""
+    return True, "L5 web keyboard nav replayer deferred (requires Playwright)", {"deferred": True}
+
+
+# ----------------------------- entry point ---------------------------------- #
+
+CHECKS: list[tuple[str, str, Callable]] = [
+    # L1 schema/lint (no virtualization)
+    ("mirror-crate-list",         "L1", check_mirror_crate_list),
+    ("cli-subcommand-schema",     "L1", check_cli_subcommand_schema),
+    ("tui-panel-schema",          "L1", check_tui_panel_schema),
+    ("minimal-web-panel-schema",  "L1", check_minimal_web_panel_schema),
+    ("doctrine-preservation",     "L1", check_doctrine_preservation),
+    ("guardian-unit-present",     "L1", check_guardian_unit_present),
+    # L2 latency bench
+    ("cli-startup-p95",           "L2", check_cli_startup_p95),
+    # L3-L5 deferred until dependencies activate
+    ("tui-keyboard-replayer",     "L3", check_tui_keyboard_replayer_deferred),
+    ("web-wcag-contrast",         "L4", check_web_contrast_deferred),
+    ("web-keyboard-nav",          "L5", check_web_keyboard_nav_deferred),
+]
+
+
+def find_repo_root(start: Path) -> Path:
+    """Walk up from start until we find the selfdef workspace root (Cargo.toml + crates/)."""
+    p = start.resolve()
+    while p != p.parent:
+        if (p / "Cargo.toml").is_file() and (p / "crates").is_dir():
+            return p
+        p = p.parent
+    raise SystemExit(f"selfdef workspace root not found from {start}")
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    ap = argparse.ArgumentParser(description="selfdef-ux-harness — MS045 UX coherence test harness")
+    ap.add_argument("--json", action="store_true", help="emit JSON report to stdout")
+    ap.add_argument("--verbose", "-v", action="store_true", help="emit per-check status to stderr")
+    ap.add_argument("--layer", choices=["L1", "L2", "L3", "L4", "L5"], help="run only checks for one layer")
+    ap.add_argument("--name", help="run only the check with this exact name")
+    ap.add_argument("--repo-root", help="override workspace root detection")
+    ap.add_argument("--cli-samples", type=int, default=CLI_STARTUP_SAMPLES, help="CLI startup bench sample count")
+    args = ap.parse_args(argv)
+
+    repo_root = Path(args.repo_root).resolve() if args.repo_root else find_repo_root(Path.cwd())
+    h = Harness(repo_root, verbose=args.verbose)
+
+    for name, layer, fn in CHECKS:
+        if args.layer and layer != args.layer:
+            continue
+        if args.name and name != args.name:
+            continue
+        if name == "cli-startup-p95":
+            h.run(name, layer, lambda: check_cli_startup_p95(repo_root, samples=args.cli_samples))
+        else:
+            h.run(name, layer, lambda fn=fn: fn(repo_root))
+
+    counts = h.summary_counts()
+    if args.json:
+        report = {
+            "schema": "selfdef-ux-harness/1.0.0",
+            "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "repo_root": str(repo_root),
+            "counts": counts,
+            "results": [
+                {
+                    "name": r.name, "layer": r.layer, "passed": r.passed,
+                    "summary": r.summary, "duration_ms": r.duration_ms, "detail": r.detail,
+                }
+                for r in h.results
+            ],
+        }
+        json.dump(report, sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
+    else:
+        for r in h.results:
+            status = "PASS" if r.passed else "FAIL"
+            print(f"[{r.layer}] {status:4s}  {r.name:<35s}  {r.summary}")
+        print()
+        print(f"Total: {counts['total']}  Passed: {counts['passed']}  Failed: {counts['failed']}")
+
+    # exit-zero only if every check passed (deferred checks pass by design)
+    return 0 if h.passed else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

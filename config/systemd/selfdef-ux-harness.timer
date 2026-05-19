@@ -1,0 +1,13 @@
+[Unit]
+Description=selfdef-ux-harness — periodic UX coherence check (MS045)
+Documentation=https://example.org/you/selfdef/blob/main/backlog/milestones/MS045-ux-coherence-test-harness.md
+
+[Timer]
+# Run at boot + every 6h thereafter; randomize +/- 5min to avoid load spike.
+OnBootSec=2min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

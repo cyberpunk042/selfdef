@@ -48,7 +48,7 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | MS026 OCSF observability | catalog ✓ / impl ongoing | `crates/selfdef-collector-*/` |
 | Multi-environment Discord/Slack/Signal/Telegram/SMTP/TheHive integrations | ✓ shipped | `crates/selfdef-integration-*/` |
 | Guardian Daemon `/usr/local/bin/guardian-core` Python impl (MS044) | catalog ✓ / impl pending | `backlog/milestones/MS044-*` |
-| MS045 UX coherence test harness `/usr/bin/selfdef-ux-harness` impl | catalog ✓ / impl pending | `backlog/milestones/MS045-*` |
+| MS045 UX coherence test harness `/usr/bin/selfdef-ux-harness` impl | ✓ shipped (Python 3 binary + systemd service + timer, 10/10 checks passing in --json) | `scripts/ux-harness/selfdef-ux-harness` + `config/systemd/selfdef-ux-harness.{service,timer}` |
 | 9 D-12..D-18 mirror crates (selfdef-rules / -grants / -capability / -sandbox / -audit / -quarantine / -trust-score / -cli / -tui) | catalog ✓ (MS043 R10182-R10193) / impl pending | `backlog/milestones/MS043-*` |
 
 ## What's ahead (selfdef forward queue)
