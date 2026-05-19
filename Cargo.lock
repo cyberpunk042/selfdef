@@ -2089,6 +2089,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-action-class-taxonomy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "selfdef-profile-authority-gate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-actor-registry"
 version = "0.1.0"
 dependencies = [

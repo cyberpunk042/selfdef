@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-action-class-taxonomy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authoritative action-class taxonomy — 10 canonical action classes (FsRead/FsWrite/FsDelete/NetFetch/NetPost/ProcSpawn/ProcKill/ConfigChange/SecretRead/IpsAdmin) each carrying default RiskClass + SideEffectClass + minimum Profile. Runtime cockpit consumes this for consistent labelling."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
