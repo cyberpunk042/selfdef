@@ -43,6 +43,7 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 | selfdef-trust-score-mirror (MS043 D-18 per-tool trust score history source, 7 of 9) | ✓ shipped (12 passing tests) | `crates/selfdef-trust-score-mirror/` |
 | selfdef-cli-mirror (MS043 50+ subcommand schema introspection, 8 of 9; doctrine "Fullstack at the edges" verbatim) | ✓ shipped (13 passing tests) | `crates/selfdef-cli-mirror/` |
 | selfdef-tui-mirror (MS043 4-panel layout schema introspection, 9 of 9; doctrine "A dashboard should not show vanity graphs" verbatim) | ✓ shipped (14 passing tests) | `crates/selfdef-tui-mirror/` |
+| selfdef-profile-authority-gate (MS040 six-profile authority matrix per dump 17468-17500 + R09361-R09600; doctrine "Authority follows evidence" verbatim per R09362 dump 17501) | ✓ shipped (27 passing tests) | `crates/selfdef-profile-authority-gate/` |
 | **9 of 9 mirror crates COMPLETE** — 100 passing tests total across MS007 typed-mirror trio | ✓ MILESTONE | `crates/selfdef-*-mirror/` |
 | selfdef-web minimal-web bundle (R10166-R10173 + R10212 + R10220 — localhost:7575, 4-panel layout, SSE 2s refresh, read-only default + operator-key-gated mutations, sovereignty-clean static bundle) | ✓ shipped (13 passing tests + ux-harness L1 minimal-web check active) | `crates/selfdef-web/` |
 | MS024 eBPF + nftables | catalog ✓ / impl partial (eBPF programs in `bpf/`) | `crates/selfdef-collector-ebpf/` |
