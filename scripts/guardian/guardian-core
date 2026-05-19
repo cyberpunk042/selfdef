@@ -75,17 +75,25 @@ _log: logging.Logger | None = None
 
 def _verify_doctrinal_preservation() -> None:
     """Per MS044 R10546-R10553, operator words sacrosanct + never paraphrased.
-    Module docstring (lines 1-23) contains the verbatim quote anchors.
-    This function intentionally exists to make doctrinal preservation
-    inspectable by replay validators (MS009).
+    The source file (read at import-time) must contain the verbatim quote
+    anchors. This function intentionally exists to make doctrinal
+    preservation inspectable by replay validators (MS009).
     """
     quotes = (
         "autonomous circuit breaker",  # dump 515 — MS044 R10325
         "hardware-level SIGKILL",  # dump 981 — MS044 R10326
         "Sovereign Guardian Core eBPF Supervisor",  # dump 571 — MS044 R10411
     )
+    # Read our own source file (not __doc__, which resolves to the local
+    # function's docstring inside a nested scope).
+    try:
+        own_path = Path(__file__).resolve()
+        source = own_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        # Best-effort: skip the check if source unreadable (e.g. zipapp)
+        return
     for q in quotes:
-        assert q in __doc__ or q in globals().get("__file__", ""), \
+        assert q in source, \
             f"doctrinal preservation broken: verbatim quote missing: {q!r}"
 
 
