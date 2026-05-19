@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-task-deadline-extension-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS task-deadline extension authority. Each TaskClass declares max_extensions + max_total_extension_seconds. extend(class, current_extensions, requested_seconds) returns Allow{new_total} / Denied{reason}. Prevents perpetual deadline-creep on operator-pinned long tasks."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
