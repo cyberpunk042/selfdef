@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-action-replay-counter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-(subject, action, resource) replay counter — bounded sliding window. Detects 'identical action requested N times in T seconds' patterns. Composes with anomaly hint emission downstream."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
