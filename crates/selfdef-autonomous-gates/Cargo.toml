@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-autonomous-gates"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS040 autonomous-profile predeclared gate envelope per F04712-F04720 + R09411-R09430. Typed parsing of /etc/selfdef/profiles/autonomous-gates.toml: allowed-paths + allowed-domains + allowed-tools + max-TTL + budget. MS003-signed (F04714). Gate-violation halts all autonomous activity per F04717."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
