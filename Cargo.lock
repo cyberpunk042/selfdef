@@ -3139,6 +3139,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-mode-transition-authority"
+version = "0.1.0"
+dependencies = [
+ "selfdef-execution-mode-policy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-nats"
 version = "0.1.0"
 dependencies = [
