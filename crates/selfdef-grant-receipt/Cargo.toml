@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-receipt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant receipt — operator-signed acknowledgement returned by the daemon when a grant is issued. Carries (grant_id, kind, scope_hash, issued_at, expires_at, operator_signature). The operator stores the receipt; later inspections compare-and-prove the grant was issued under the operator's authority."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+
+[features]
+default = []
