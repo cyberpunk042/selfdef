@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-policy-decision-replay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side policy-decision replay — re-runs a captured PolicyDecision through the live decision gate and reports reproducibility (Identical / Drift / Refused). Used for postmortem investigation + replay-mode validation."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []

@@ -3379,6 +3379,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-policy-decision-replay"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-process-spawn-registry"
 version = "0.1.0"
 dependencies = [
