@@ -167,8 +167,12 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 145 crates total (was 83 pre-session, +62 fresh this session).
-Full workspace test suite: 2654 passing tests. Newer additions:
+Selfdef workspace at 149 crates total (was 83 pre-session, +66 fresh this session).
+Full workspace test suite: 2693 passing tests. Even-newer:
+`selfdef-policy-decision-replay` (Identical/Drift/Refused comparator),
+`selfdef-evidence-chain-link` (FNV-1a chain hash for evidence ledger),
+`selfdef-actor-rotation` (operator MS003 key rotation chain),
+`selfdef-policy-bundle-pack` (atomic named bundle registry). Newer additions:
 `selfdef-network-rule-pack` (outbound allow/deny, closed-default),
 `selfdef-decision-cache` (TTL Outcome cache),
 `selfdef-audit-rotation-policy` (7-class segment rotation),
