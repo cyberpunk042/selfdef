@@ -167,8 +167,8 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 128 crates total (was 83 pre-session, +45 fresh this session).
-Full workspace test suite: 2403+ passing tests. Latest additions include
+Selfdef workspace at 135 crates total (was 83 pre-session, +52 fresh this session).
+Full workspace test suite: 2552 passing tests. Latest additions include
 `selfdef-grant-coverage-summary` (per-actor × kind rollup),
 `selfdef-trust-promotion-feed` (auto-suggest promotions/demotions),
 `selfdef-decision-explainer` (operator rationale chain),
@@ -189,6 +189,13 @@ sovereign-os runtime crates mirror:
 - `selfdef-replay-source-authority` — Replay-mode entry gate
 - `selfdef-policy-bundle-signature` — operator-signed substrate manifest
 - `selfdef-routing-decision-authority` — (ProviderClass × Profile × Mode) gate
+- `selfdef-eval-gate-policy` — (SideEffectClass → required eval + staleness)
+- `selfdef-high-risk-triple-gate` — MS041 snapshot + eval + oracle-or-human
+- `selfdef-quarantine-cause-taxonomy` — 8 causes with severity floor + clear policy
+- `selfdef-trace-id-issuer` — deterministic trace_id minting with collision detection
+- `selfdef-trust-score-history` — append-only per-subject score audit
+- `selfdef-action-class-taxonomy` — 10-class IPS-authoritative action classification
+- `selfdef-config-mutation-authority` — config-namespace × min-profile gate
 Final-leg crates beyond the rolled-up batch:
 `selfdef-grant-application-queue`, `selfdef-network-egress-decision`,
 `selfdef-process-spawn-registry`, `selfdef-pattern-match-engine`,
