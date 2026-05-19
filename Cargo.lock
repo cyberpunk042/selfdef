@@ -2954,6 +2954,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-evidence-retention-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-evidence-search"
 version = "0.1.0"
 dependencies = [
