@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-audit-log-rotation-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS audit-log rotation authority. Triggers a rotate when ANY of (size_bytes > max_size, age_seconds > max_age, line_count > max_lines) is exceeded. Reports the triggering threshold so the audit-worker can log a verbatim reason. Read-only decision — actual file ops live in the worker."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
