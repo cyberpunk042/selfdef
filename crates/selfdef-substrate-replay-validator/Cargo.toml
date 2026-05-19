@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-replay-validator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate-replay env validator. Before re-running a recorded transcript, compares (recorded vs current) ReplayEnv (engine_version, rule_bundle_digest, tool_versions BTreeMap). Returns Identical / Compatible / Incompatible{diffs}. Distinct from replay-divergence-detector (which compares STEP outputs); this validates the ENV upfront."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
