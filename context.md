@@ -370,3 +370,15 @@ Total this resume: 30 selfdef IPS-authority crates. Workspace 195.
   CollisionDetected when ≥ threshold copies in window)
 
 Total this resume: 33 selfdef IPS-authority crates. Workspace 198.
+
+### Eighth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-circuit-breaker-policy` (3-state per-subject breaker
+  Closed/Open/HalfOpen with sliding-window failure threshold +
+  timeout-driven HalfOpen trial)
+- `selfdef-feedback-loop-detector` (Edge ring; CycleDetected on
+  repeated edge, FeedbackDetected on output-equals-prior-input)
+- `selfdef-anomaly-baseline` (sliding mean+stddev; z-score
+  classifies Normal/Suspect/Anomalous against per-tier thresholds)
+
+Total this resume: 36 selfdef IPS-authority crates. Workspace 201.
