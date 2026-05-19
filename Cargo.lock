@@ -2804,6 +2804,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-host-mutation-emitter"
+version = "0.1.0"
+dependencies = [
+ "selfdef-host-watcher-channel",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-host-watcher-channel"
 version = "0.1.0"
 dependencies = [

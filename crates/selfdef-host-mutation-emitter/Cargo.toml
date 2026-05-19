@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-host-mutation-emitter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side host-mutation emitter — given a watched path change, emits a structured HostMutationEvent (path, change-kind, owner subsystem, ISO-8601 at, trace_id) onto the event bus. Companion to selfdef-host-watcher-channel."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-host-watcher-channel = { path = "../selfdef-host-watcher-channel" }
+
+[features]
+default = []
