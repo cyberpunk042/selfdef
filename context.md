@@ -359,3 +359,14 @@ Total this resume: 28 selfdef IPS-authority crates. Workspace 193.
   rotate-reason; canonical 64MiB/24h/1M-lines)
 
 Total this resume: 30 selfdef IPS-authority crates. Workspace 195.
+
+### Seventh wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-context-window-watermark` (4-zone Cool/Warm/Hot/Critical
+  with action recommendation Continue/SoftWarn/Compact/EmergencyCompact)
+- `selfdef-tool-invocation-rate-limit` (per-tool token bucket;
+  max_per_minute + burst_size; lazy refill)
+- `selfdef-prompt-output-similarity` (FIFO digest ring; trip
+  CollisionDetected when ≥ threshold copies in window)
+
+Total this resume: 33 selfdef IPS-authority crates. Workspace 198.
