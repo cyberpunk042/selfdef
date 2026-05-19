@@ -2296,6 +2296,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-collector-budget-guard"
+version = "0.1.0"
+dependencies = [
+ "selfdef-collector-source-taxonomy",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-collector-canary"
 version = "0.1.0"
 dependencies = [

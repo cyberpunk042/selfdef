@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-collector-budget-guard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-collector EPS budget guard. Each of the 7 collectors carries a hard EPS ceiling; if its sampled EPS exceeds the ceiling the guard returns a quarantine decision so the daemon can drop the collector off the event-bus before it floods downstream. Composes with selfdef-collector-source-taxonomy + selfdef-quarantine-engine."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-collector-source-taxonomy = { path = "../selfdef-collector-source-taxonomy" }
+
+[features]
+default = []
