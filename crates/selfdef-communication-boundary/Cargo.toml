@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-communication-boundary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS034 communication boundary — 8 message types (DraftRequest/DraftResult/EmbeddingRequest/RerankResult/VisionResult/ToolPlan/RiskAssessment/PatchProposal) per E0343-E0345 dump 3466-3473 + 4 transports (virtio-vsock/gRPC-over-vsock/Unix-socket/shared-folder) + invariant doctrine 'Never let the VM directly mutate host truth' (E0346) + 'The VM proposes. Host commits.' (E0347)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
