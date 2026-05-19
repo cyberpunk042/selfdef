@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-state-snapshot"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy state snapshot envelope. Wraps an opaque policy_blob with metadata (engine_version, snapshot_at_unix, digest_hex). verify_digest() recomputes FNV-1a against the blob to detect tampering. Distinct from rule-bundle (which is the SOURCE); this is the live RUNTIME state."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
