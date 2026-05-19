@@ -3371,6 +3371,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-rate-limit-policy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-profile-authority-gate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-replay-ring"
 version = "0.1.0"
 dependencies = [

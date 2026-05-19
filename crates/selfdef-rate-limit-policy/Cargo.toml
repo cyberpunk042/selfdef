@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-rate-limit-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side per-subject rate-limit policy — declares (per-second, per-minute, per-hour) request ceilings per Profile. Composes with selfdef-correlation-window for the actual sliding-window counter. The daemon refuses any request that breaches a ceiling."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+
+[features]
+default = []
