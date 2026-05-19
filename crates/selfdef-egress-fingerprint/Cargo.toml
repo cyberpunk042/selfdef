@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-egress-fingerprint"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side outbound payload fingerprint — hashes (host, port, method, path-shape, content-class) into a deterministic id so the daemon can spot 'same kind of egress' repeats + correlate to grants. FNV-1a 64-bit; never logs raw payload."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []

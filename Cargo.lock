@@ -2767,6 +2767,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-egress-fingerprint"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-eval-gate-policy"
 version = "0.1.0"
 dependencies = [
