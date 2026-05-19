@@ -3311,6 +3311,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-trust-floor"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-trust-score-engine"
 version = "0.1.0"
 dependencies = [
