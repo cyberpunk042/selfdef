@@ -1,0 +1,28 @@
+[package]
+name = "selfdef-doctrinal-preservation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Composite verbatim doctrine registry — aggregates every doctrine string emitted by the IPS-side crates. Forms one tamper-checkable snapshot of operator's canonical phrasings per the standing rule 'you cannot invent crap'. Per operator standing direction + R10297/R10298 + multiple sub-crate verbatim preservation requirements."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-cli-mirror = { path = "../selfdef-cli-mirror" }
+selfdef-tui-mirror = { path = "../selfdef-tui-mirror" }
+selfdef-profile-authority-gate = { path = "../selfdef-profile-authority-gate" }
+selfdef-commit-authority = { path = "../selfdef-commit-authority" }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-communication-boundary = { path = "../selfdef-communication-boundary" }
+selfdef-filesystem-boundary = { path = "../selfdef-filesystem-boundary" }
+
+[features]
+default = []

@@ -2538,6 +2538,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-doctrinal-preservation"
+version = "0.1.0"
+dependencies = [
+ "selfdef-cli-mirror",
+ "selfdef-commit-authority",
+ "selfdef-communication-boundary",
+ "selfdef-filesystem-boundary",
+ "selfdef-policy-decision",
+ "selfdef-profile-authority-gate",
+ "selfdef-tui-mirror",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-ebpf-common"
 version = "0.1.0"
 dependencies = [
