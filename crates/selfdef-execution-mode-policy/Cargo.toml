@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-execution-mode-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authoritative ExecutionMode policy — defines the 7 modes (Plan/DryRun/Shadow/Sandbox/Execute/Replay/Debug) and the IPS-level capability tuple each carries (writes-allowed, network-allowed, snapshot-required, replay-source-required). The runtime side mirrors this via MS007 — sovereign-os never invents mode semantics."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
