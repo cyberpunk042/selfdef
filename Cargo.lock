@@ -3319,6 +3319,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-quarantine-cause-taxonomy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-incident-classifier",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-quarantine-engine"
 version = "0.1.0"
 dependencies = [
