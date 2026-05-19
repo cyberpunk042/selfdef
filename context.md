@@ -499,3 +499,12 @@ Total this resume: 67 selfdef IPS-authority crates. Workspace 232.
   with try_fire/seconds_to_next)
 
 Total this resume: 69 selfdef IPS-authority crates. Workspace 234.
+
+### Nineteenth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-substrate-replay-validator` (engine_version / rule_bundle_
+  digest / tool_versions diff; Identical/Compatible/Incompatible)
+- `selfdef-policy-explanation-formatter` (Explanation{headline<=80,
+  detail_lines<=120, fix_suggestions} from policy_id + reason_code)
+
+Total this resume: 71 selfdef IPS-authority crates. Workspace 236.
