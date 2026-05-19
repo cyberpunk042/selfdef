@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-audit-log-writer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS016 atomic-append ZFS audit log writer typed primitive. Per MS044 R10386-R10391 — single os.write() per line under PIPE_BUF for atomicity + chain hash continuity + 0640 file mode. Companion to selfdef-trace-span (which produces the records this crate writes)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
