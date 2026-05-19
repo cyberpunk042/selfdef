@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-delay-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS decision artificial-delay policy. Forces a minimum wait between the operator's confirm-click and the action's actual dispatch — per BlastRadius. Gives operator a final chance to reconsider; rate-limits accidental rapid clicks; prevents auto-clickers from forcing irreversible actions."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []

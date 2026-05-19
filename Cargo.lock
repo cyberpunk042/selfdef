@@ -2858,6 +2858,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-decision-delay-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-decision-explainer"
 version = "0.1.0"
 dependencies = [
