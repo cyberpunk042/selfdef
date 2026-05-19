@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-credential-vault-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS credential-vault unseal authority. Each credential carries a class (Local/Cloud/Master/Recovery), a max_unseal_per_hour quota, and an allowed operation-class set. unseal() gates the request by class permissions, quota window, and operator-approval flag; sliding window counter prevents unbounded unseals."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
