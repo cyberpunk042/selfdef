@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-audit-redaction"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side audit-record redaction — 6 canonical redactor classes (Email / IPv4 / IPv6 / SshKey / BearerToken / PathHome). The daemon applies the redactor before exporting an audit record to any external sink (Loki / OpenSearch / Discord / SMTP / Slack); on-disk MS016 chain records are stored unredacted."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
