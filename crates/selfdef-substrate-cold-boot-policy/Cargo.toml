@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-cold-boot-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate cold-boot policy. Ordered checklist of BootStep (FingerprintVerify, AttestationLoad, CanaryProbe, RulePackLoad, NetworkBaseline, AcceptOperatorConnection). first_failure() returns the first step that hasn't passed. Distinct from self-test-cadence (which times re-runs); this gates first-use admission."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
