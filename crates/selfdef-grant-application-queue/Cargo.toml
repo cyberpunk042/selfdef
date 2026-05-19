@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-application-queue"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant application queue — FIFO of operator-pending grant requests (subject, template-id, scope override, justification, submitted_at). Operator approves or rejects in order; approved entries flow into selfdef-grant-issuer."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grant-template-pack = { path = "../selfdef-grant-template-pack" }
+
+[features]
+default = []

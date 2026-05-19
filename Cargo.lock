@@ -2740,6 +2740,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-grant-application-queue"
+version = "0.1.0"
+dependencies = [
+ "selfdef-grant-template-pack",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-grant-issuer"
 version = "0.1.0"
 dependencies = [
