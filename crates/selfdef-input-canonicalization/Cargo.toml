@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-input-canonicalization"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS input canonicalization. Normalizes operator input bytes deterministically: strip BOM, normalize line endings (CRLF → LF), drop zero-width characters, collapse internal whitespace runs, trim. Emits the canonical form + the set of Transforms applied. Pure UX/security pre-filter."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
