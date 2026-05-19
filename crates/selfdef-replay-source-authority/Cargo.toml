@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-replay-source-authority"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side authority validating replay sources before the daemon allows entry into ExecutionMode::Replay. A replay source must be operator-signed, point to a readable JSONL path, declare its trace_id, and pass per-source kind validation (live-capture / synthetic-canary / archived-history). Composes with selfdef-mode-transition-authority."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
