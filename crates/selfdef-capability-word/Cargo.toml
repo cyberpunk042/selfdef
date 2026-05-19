@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-capability-word"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS035 64-bit capability_word bit-field engine per E0352 + dump 3496-3504. Bits 0..7 allowed-tools / 8..15 filesystem-scope / 16..23 network-scope / 24..31 max-runtime / 32..39 max-memory / 40..47 output-type / 48..55 trust-level / 56..63 flags. The IPS authority handle that every action carries."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
