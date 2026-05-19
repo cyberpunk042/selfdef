@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-explanation-formatter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy explanation formatter. Given a (PolicyId, ReasonCode, ContextMap) tuple, produces a structured operator-readable Explanation { headline, detail_lines, fix_suggestions }. Distinct from decision-reason-codes (taxonomy); this builds the user-facing text."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
