@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-policy-bus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS033 policy-bus dispatch fabric — routes a PolicyDecision into the IPS enforcement layers. Companion to selfdef-policy-decision (the typed schema); this crate is the wire-level dispatcher per E0332 + F03899-F03902."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
