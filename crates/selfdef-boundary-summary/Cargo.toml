@@ -1,0 +1,26 @@
+[package]
+name = "selfdef-boundary-summary"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Composite read-only summary across all 5 IPS boundary modules per R08591: MS034 Communication + MS035 Capability + MS036 Sandbox + MS037 Filesystem + MS038 Network. Forms the 5-boundary IPS doctrine that ALL IPS authority flows through."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-communication-boundary = { path = "../selfdef-communication-boundary" }
+selfdef-network-boundary = { path = "../selfdef-network-boundary" }
+selfdef-filesystem-boundary = { path = "../selfdef-filesystem-boundary" }
+selfdef-capability-word = { path = "../selfdef-capability-word" }
+selfdef-sandbox-mirror = { path = "../selfdef-sandbox-mirror" }
+
+[features]
+default = []
