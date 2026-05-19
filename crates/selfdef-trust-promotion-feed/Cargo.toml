@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-trust-promotion-feed"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side automatic trust-promotion feeder — consumes recent decisions/anomalies and proposes promotion or demotion actions to the operator queue. Pure-function: no I/O, no autonomous mutation; operator approves each suggestion via the promotion-event log."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-subject-cohort = { path = "../selfdef-subject-cohort" }
+selfdef-trust-promotion-event = { path = "../selfdef-trust-promotion-event" }
+
+[features]
+default = []
