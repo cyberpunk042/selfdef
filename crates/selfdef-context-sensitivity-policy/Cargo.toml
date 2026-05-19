@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-context-sensitivity-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side policy gating which ContextSensitivity classes may flow to which provider classes (Local / Cloud / Synthetic). Top-Secret never to Cloud; Confidential allowed only with operator approval; Internal / Public have no flow restriction beyond standard routing."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+selfdef-routing-decision-authority = { path = "../selfdef-routing-decision-authority" }
+
+[features]
+default = []

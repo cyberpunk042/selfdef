@@ -2550,6 +2550,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-context-sensitivity-policy"
+version = "0.1.0"
+dependencies = [
+ "selfdef-policy-decision",
+ "selfdef-routing-decision-authority",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-core"
 version = "0.1.0"
 dependencies = [
