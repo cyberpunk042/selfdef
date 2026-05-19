@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-network-rule-pack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side outbound-network rule pack — operator-curated allowlist (FQDN suffix / CIDR) + denylist (explicit blocks taking precedence). The daemon consults this on every outbound network attempt before consulting any per-subject grant."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-pattern-match-engine = { path = "../selfdef-pattern-match-engine" }
+
+[features]
+default = []

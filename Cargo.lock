@@ -3245,6 +3245,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-network-rule-pack"
+version = "0.1.0"
+dependencies = [
+ "selfdef-pattern-match-engine",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-notifier"
 version = "0.1.0"
 dependencies = [
