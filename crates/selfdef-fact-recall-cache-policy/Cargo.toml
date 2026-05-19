@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-fact-recall-cache-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS fact-recall cache policy. Per-FactClass (Stable/SlowEvolving/Volatile/Operator/Computed) ttl_seconds and may_serve_stale flag. lookup(class, age_seconds, allow_stale_hint) returns Hit / Stale / Miss to inform whether to re-fetch."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
