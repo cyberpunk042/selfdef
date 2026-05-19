@@ -2968,6 +2968,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-state-snapshot"
+version = "0.1.0"
+dependencies = [
+ "selfdef-actor-registry",
+ "selfdef-capability-word",
+ "selfdef-network-boundary",
+ "selfdef-policy-decision",
+ "selfdef-profile-authority-gate",
+ "selfdef-trace-span",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-store"
 version = "0.1.0"
 dependencies = [
