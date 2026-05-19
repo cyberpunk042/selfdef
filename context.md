@@ -411,3 +411,22 @@ Total this resume: 41 selfdef IPS-authority crates. Workspace 206.
   Vendor<Substrate<Operator<Emergency with deterministic id tie-break)
 
 Total this resume: 43 selfdef IPS-authority crates. Workspace 208.
+
+### Twelfth wave (same day, +7 more IPS-authority crates)
+
+- `selfdef-mcp-tool-validation` (descriptor shape + name pattern +
+  param count cap + uniqueness gate)
+- `selfdef-llm-stream-cutoff-policy` (MaxTokens/StopSequence/
+  RepetitionTrip/WallTimeExceeded streaming cutoffs)
+- `selfdef-source-attribution-policy` (ArtifactClass × {Required/
+  Optional/Forbidden} citation gate)
+- `selfdef-substrate-self-test-cadence` (5 CheckClass cadence with
+  must_run_before_first_use mandatory boot checks)
+- `selfdef-action-confirmation-tier` (BlastRadius → required
+  gesture None/SingleClick/TypedConfirm/TypedName)
+- `selfdef-action-side-effect-classifier` (5-class Pure/Idempotent/
+  Mutating/Destructive/External from Verb × external × repeatable)
+- `selfdef-retry-policy` (per FailureClass exponential backoff
+  with deterministic jitter; Permanent never retries)
+
+Total this resume: 50 selfdef IPS-authority crates. Workspace 215.
