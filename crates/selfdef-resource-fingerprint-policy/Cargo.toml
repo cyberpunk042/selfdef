@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-resource-fingerprint-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS resource-fingerprint pinning. Each pinned resource (config file, prompt template, ruleset) is keyed by stable id with an expected FNV-1a digest. verify(id, observed) returns Ok / Drift{expected, observed}. Detects silent edits to operator-critical files."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
