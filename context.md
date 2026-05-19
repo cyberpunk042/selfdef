@@ -382,3 +382,14 @@ Total this resume: 33 selfdef IPS-authority crates. Workspace 198.
   classifies Normal/Suspect/Anomalous against per-tier thresholds)
 
 Total this resume: 36 selfdef IPS-authority crates. Workspace 201.
+
+### Ninth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-decision-replay-binding` (decision_id → replay_slot_id
+  registry with reverse lookup decisions_for_slot)
+- `selfdef-llm-temperature-policy` (per-ExecutionMode temp range
+  with NaN-rejection; Replay 0..0 greedy, Execute 0..0.3)
+- `selfdef-execution-mode-history` (bounded chronological log of
+  transitions; transitions_to/from filters; current_mode helper)
+
+Total this resume: 39 selfdef IPS-authority crates. Workspace 204.
