@@ -443,3 +443,14 @@ Total this resume: 50 selfdef IPS-authority crates. Workspace 215.
   resource id; verify returns Ok/Drift{expected,observed}/Unknown)
 
 Total this resume: 54 selfdef IPS-authority crates. Workspace 219.
+
+### Fourteenth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-fact-recall-cache-policy` (5 FactClass with per-class
+  ttl_seconds + may_serve_stale; decide returns Hit/Stale/Miss)
+- `selfdef-output-channel-allowlist` (4 Sensitivity × 7 OutputChannel
+  matrix; TopSecret only to AuditLog)
+- `selfdef-bundle-load-policy` (Vendor must sign, Operator unsigned
+  only Local, Untrusted needs signature + operator approval)
+
+Total this resume: 57 selfdef IPS-authority crates. Workspace 222.
