@@ -430,3 +430,16 @@ Total this resume: 43 selfdef IPS-authority crates. Workspace 208.
   with deterministic jitter; Permanent never retries)
 
 Total this resume: 50 selfdef IPS-authority crates. Workspace 215.
+
+### Thirteenth wave (same day, +4 more IPS-authority crates)
+
+- `selfdef-grant-batch-policy` (multi-grant cap + BlastRadius
+  ceiling + duplicate-id rejection)
+- `selfdef-task-priority-policy` (pinned > class-priority >
+  earliest-deadline > insertion-order ordering)
+- `selfdef-decision-watchdog` (3 DecisionClass wall-time budgets
+  with register/tick/complete)
+- `selfdef-resource-fingerprint-policy` (FNV-1a hex pin per
+  resource id; verify returns Ok/Drift{expected,observed}/Unknown)
+
+Total this resume: 54 selfdef IPS-authority crates. Workspace 219.
