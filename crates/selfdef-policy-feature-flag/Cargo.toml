@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-feature-flag"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy feature-flag registry. Per-policy_id (Enabled / DryRun / Disabled) flag, plus rationale text recording why the operator changed the state. evaluate(policy_id) returns the current Mode for the dispatcher. Toggle history kept bounded."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
