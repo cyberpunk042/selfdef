@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-bundle-replay-window"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS bundle-replay version window. Replay mode may only re-execute against rule-bundle versions within `max_age_seconds` of the recorded version (or the recorded version itself). Prevents replaying old transcripts against drastically newer rules, which would skew decisions."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
