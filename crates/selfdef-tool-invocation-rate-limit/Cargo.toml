@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-invocation-rate-limit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-tool invocation rate limit. Sliding-window token-bucket per tool_id with max_calls_per_minute + burst_size. Distinct from selfdef-rate-limit-policy which is the engine-global limiter; this one is per-tool and survives across sessions so a misbehaving tool can be capped without restarting the engine."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
