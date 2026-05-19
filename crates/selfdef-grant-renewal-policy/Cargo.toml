@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-grant-renewal-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant-renewal policy — operator can renew an Active grant before expiry, but only if it has at least min_remaining_seconds left + the renewal delta is bounded by max_delta_seconds (default 24h)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
