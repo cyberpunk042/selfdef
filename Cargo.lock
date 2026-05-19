@@ -3112,6 +3112,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-surface-trinity"
+version = "0.1.0"
+dependencies = [
+ "selfdef-cli-mirror",
+ "selfdef-tui-mirror",
+ "selfdef-web",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-trace-span"
 version = "0.1.0"
 dependencies = [

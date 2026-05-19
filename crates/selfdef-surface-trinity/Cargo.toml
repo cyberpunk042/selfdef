@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-surface-trinity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS043 IPS operator-surface trinity composite — verifies CLI + TUI + minimal-web all share consistent schemas + canonical 4-panel layout + 50+ CLI subcommands. Per MS043 R10281 + R10282 + R10168-R10170. Composes selfdef-cli-mirror + selfdef-tui-mirror + selfdef-web."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-cli-mirror = { path = "../selfdef-cli-mirror" }
+selfdef-tui-mirror = { path = "../selfdef-tui-mirror" }
+selfdef-web = { path = "../selfdef-web" }
+
+[features]
+default = []
