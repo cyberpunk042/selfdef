@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-trace-span"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS033/M049 13-field trace span emitter per F03882 dump 16221. Fields: profile + model + provider + hardware + tokens + latency + cost + risk + memory_refs + tool_refs + policy_result + branch_id + trace_id. Doctrine: 'Trace is emitted when the action is decided, not after' (F03942)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
