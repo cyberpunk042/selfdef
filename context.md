@@ -349,3 +349,13 @@ Total this resume: 25 selfdef IPS-authority crates. Workspace 190.
   with min_kept per class; select_for_recovery at-or-before)
 
 Total this resume: 28 selfdef IPS-authority crates. Workspace 193.
+
+### Sixth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-sandbox-fs-isolation` (5 SandboxTier × 5 PathClass ×
+  3 FsOp; Tier0 None, Tier1 JailDir RO, Tier2 Workspace RW,
+  Tier3 UserHome RW no-Host-write, Tier4 Host RW)
+- `selfdef-audit-log-rotation-policy` (Size/Age/Lines threshold
+  rotate-reason; canonical 64MiB/24h/1M-lines)
+
+Total this resume: 30 selfdef IPS-authority crates. Workspace 195.
