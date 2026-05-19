@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-source-attribution-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS source-attribution authority. Each artifact class declares whether sources are Required / Optional / Forbidden. check() validates a claim list against the class rule. Prevents the engine from emitting unsourced claims in classes (e.g., research summary) where the operator demands citations, and conversely prevents stuffing pseudo-citations into classes where they're noise."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
