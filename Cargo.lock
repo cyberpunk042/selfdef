@@ -2603,6 +2603,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-doctrine-citation"
+version = "0.1.0"
+dependencies = [
+ "selfdef-doctrinal-preservation",
+ "selfdef-policy-decision",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-doctrine-coverage"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-doctrine-citation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side doctrine-citation registry. Every policy decision the daemon emits must cite at least one of the 10 preserved doctrines; this crate computes which doctrines apply to which decision (action × outcome) and validates the citation envelope. Composes selfdef-doctrinal-preservation + selfdef-policy-decision."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-doctrinal-preservation = { path = "../selfdef-doctrinal-preservation" }
+selfdef-policy-decision = { path = "../selfdef-policy-decision" }
+
+[features]
+default = []
