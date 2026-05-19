@@ -302,3 +302,22 @@ edge-case tests (13..17 tests each). Workspace count: 174 crates.
   operator-approval flag)
 
 Total crates this resume cycle: 14. Workspace count now 179.
+
+### Third wave (same day, +6 more IPS-authority crates)
+
+- `selfdef-dns-egress-policy` (wildcard subdomain support, deny-
+  overrides, never_resolve always wins; canonical blocks
+  transfer.sh / pastebin.com / file.io)
+- `selfdef-process-launch-policy` (AllowRule/DenyRule with argv-prefix
+  matching; NeverLaunch hard set)
+- `selfdef-tool-output-truncation-policy` (HeadOnly/HeadTail/
+  MiddleEllipsis per ToolClass, UTF-8 boundary preserving; canonical
+  Llm 128KiB MiddleEllipsis)
+- `selfdef-evidence-retention-policy` (per-class days_to_keep +
+  never_delete override; canonical keeps CanaryTrip+Operator forever)
+- `selfdef-tool-version-pinning` (Semver or Sha256 pin per tool,
+  AdmitDecision reports which axis mismatched)
+- `selfdef-canary-tripwire-policy` (state-hash tripwire with
+  Info/Warn/Critical severity; case-insensitive hex compare)
+
+Total this resume: 20 selfdef IPS-authority crates. Workspace 185.
