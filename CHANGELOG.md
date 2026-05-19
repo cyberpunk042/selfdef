@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS007 8/8 SATURATED typed-mirror trio (9 of 9 crates) + MS044 Guardian Daemon + MS045 UX harness + minimal-web bundle (2026-05-19)
+
+The cross-repo cockpit-facing surface (per MS043 IPS operator surface catalog) is now complete: 9 typed-mirror crates exposing READ-ONLY snapshots to sovereign-os D-12..D-18 dashboards, the Guardian Daemon active-defence loop, the UX coherence test harness, and the localhost:7575 minimal-web fallback.
+
+#### What shipped
+
+- **9/9 MS007 mirror crates** (~100 Rust tests, all schema versions pinned at 1.0.0):
+  - `selfdef-rules-mirror` (D-12 nftables Ring 0..4)
+  - `selfdef-grants-mirror` (D-13 fs/network/capability/communication/sandbox grants)
+  - `selfdef-capability-mirror` (D-14 capability_word + Ring 0..4 + L0..L6 authority + F04146 inheritance)
+  - `selfdef-sandbox-mirror` (D-15 MS036 tier A/B/C/D + MS032 1-9 isolation primitives)
+  - `selfdef-audit-mirror` (D-16/D-19 M049 13-field span + MS026 OCSF 16-event taxonomy + MS016 chain continuity)
+  - `selfdef-quarantine-mirror` (D-17 MS042 7-field declaration-vs-observed + 4-severity)
+  - `selfdef-trust-score-mirror` (D-18 0..1000 score + 4-band classifier + downward-trend detection)
+  - `selfdef-cli-mirror` (50+ subcommand schema + DOCTRINE_FULLSTACK_AT_THE_EDGES verbatim per R10297)
+  - `selfdef-tui-mirror` (4-panel canonical layout + DOCTRINE_NO_VANITY_GRAPHS verbatim per R10298 + layout invariants)
+
+- **MS044 Guardian Daemon** at `scripts/guardian/guardian-core` (Python 3) + systemd unit + 37 passing tests:
+  - 17 integration tests (event parser, audit log, console bell, CLI surface, probe writes)
+  - 14 adversary tests (one per MS042 declaration field — read/write/network/env/secret/side_effects/rollback — + non-response + corrupt-input scenarios per R10358)
+  - 6 replay tests (sequential + 3-step block+quarantine+trace + Unicode + concurrent 8-thread × 25-event)
+  - **Bug found + fixed by replay tests**: append_atomic_audit_log() used two separate os.write() calls which interleaved under concurrent threads. Combined into one buffer + one write call so POSIX < PIPE_BUF atomicity guarantees per-line isolation.
+
+- **MS045 UX coherence test harness** at `scripts/ux-harness/selfdef-ux-harness` + systemd service/timer + 15 meta-tests:
+  - L1 schema/lint (6 active checks): mirror crate list, CLI surface, TUI panel layout, minimal-web panel layout, doctrine preservation verbatim, guardian unit present
+  - L2 CLI startup p95 < 50ms over 1000 samples (auto-defers when selfdefctl not on PATH per R10137)
+  - L4 WCAG 2.1 AA contrast 4.5:1 (pure-Python, no pa11y dep — verifies 8 selfdef-web color pairs, all ≥ 5.45 per R10175)
+  - L3 + L5 defer-by-design (pyte / Playwright not yet installed)
+  - --json / --verbose / --layer / --name flags
+
+- **`selfdef-web` minimal-web bundle** (13 tests): localhost:7575 4-panel layout matching TUI per R10166-R10170 + R10212. Read-only default + operator MS003 key upload required for mutations per R10171. SSE 2s refresh per R10173. Loopback-only host validator. Sovereignty-clean static bundle (no framework / no CDN / no external fonts).
+
+- **bash + fish + zsh shell completions** (`completions/{bash,fish,zsh}/`) per MS043 R10134 — 13 top-level namespaces with subcommands + closed-set flag value enumeration.
+
+- **CI wiring** — `.github/workflows/ci.yml` adds `python-tests` (52 tests) + `ux-harness` (10 checks) jobs; release build now blocked on both in addition to fmt/clippy/test.
+
 ### Added — `selfdef-integration-write` per-user TTY channel; `selfdefctl notify resend`
 
 Two operator-facing additions completing the SDD-008 channel set + escalation triage surface.
