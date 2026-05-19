@@ -167,8 +167,14 @@ After compaction:
 
 Earlier history: see `git log --oneline backlog/milestones/` and `CHANGELOG.md`.
 
-Selfdef workspace at 140 crates total (was 83 pre-session, +57 fresh this session).
-Full workspace test suite: 2604 passing tests. Latest IPS-authority
+Selfdef workspace at 145 crates total (was 83 pre-session, +62 fresh this session).
+Full workspace test suite: 2654 passing tests. Newer additions:
+`selfdef-network-rule-pack` (outbound allow/deny, closed-default),
+`selfdef-decision-cache` (TTL Outcome cache),
+`selfdef-audit-rotation-policy` (7-class segment rotation),
+`selfdef-actor-attestation-chain` (operator→agent→service signed chain),
+`selfdef-promotion-throttle` (sliding-window promotion cap).
+Earlier IPS-authority
 additions: `selfdef-sandbox-tier-policy` (5 tiers, one-step promotion gates),
 `selfdef-snapshot-policy` (7-trigger ZFS retention), `selfdef-rate-limit-policy`
 (6 profiles × rps/rpm/rph), `selfdef-mode-cooldown-policy` (per-mode dwell),
