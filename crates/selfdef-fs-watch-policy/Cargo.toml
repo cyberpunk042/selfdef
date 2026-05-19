@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-fs-watch-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS file-system watch authority. Encodes which absolute paths the engine may register a fsnotify-style watcher on. Allow-list with glob support, explicit deny-list precedence (deny wins), and a 'never watch' set (always denied even if a wildcard would otherwise allow). Designed so the engine cannot silently surveil operator-private paths."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
