@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-grant-revocation-cascade"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side grant revocation cascade — when an operator revokes a grant, all child grants (granted while the parent was Active and referencing the parent's scope) are auto-revoked too. Computes the cascade set without mutating state, leaving the actual revocation to selfdef-grant-revocation-log."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+
+[features]
+default = []
