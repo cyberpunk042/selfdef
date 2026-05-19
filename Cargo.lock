@@ -4416,6 +4416,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-tool-cancellation-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-tool-capability-policy"
 version = "0.1.0"
 dependencies = [
