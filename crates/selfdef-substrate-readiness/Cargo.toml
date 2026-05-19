@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-readiness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS-side substrate readiness probe — 8-check liveness gate (mode-policy loaded / rule-pack loaded / doctrine registry intact / collector taxonomy live / bus subscribers wired / audit chain healthy / trust-floor present / host fingerprint pinned). Daemon refuses bring-up if any check fails."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
