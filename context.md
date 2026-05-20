@@ -796,3 +796,12 @@ Total this resume: 116 selfdef IPS-authority crates. Workspace 281.
   capped at outbound-http-readonly)
 
 Total this resume: 117 selfdef IPS-authority crates. Workspace 282.
+
+### Fiftieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-rate-window-aggregator` (per-key events-per-window
+  counter; record(key, ts) monotonic; count(key, now) filters
+  in-window; rotate evicts globally; distinct from rate-limit-
+  policy — this is the count-only lane)
+
+Total this resume: 118 selfdef IPS-authority crates. Workspace 283.
