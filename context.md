@@ -1178,3 +1178,12 @@ Total this resume: 159 selfdef IPS-authority crates. Workspace 324.
   delivery)
 
 Total this resume: 160 selfdef IPS-authority crates. Workspace 325.
+
+### Ninety-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-llm-stop-sequence-policy` (per-Profile Vec<String>
+  stop sequences; should_stop returns earliest-position match
+  with longest-at-position tiebreak; canonical seed: <|im_end|>
+  / <|endoftext|> / triple-newline)
+
+Total this resume: 161 selfdef IPS-authority crates. Workspace 326.
