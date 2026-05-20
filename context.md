@@ -1372,3 +1372,13 @@ Total this resume: 180 selfdef IPS-authority crates. Workspace 345.
   with alphabetical tie-break; remove_node cleans adjacency)
 
 Total this resume: 181 selfdef IPS-authority crates. Workspace 346.
+
+### Hundred-and-fourteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-role-binding` (Role{id, permissions:BTreeSet};
+  define_role replaces; grant_to_role/revoke_from_role mutate
+  existing role (cascades to all bound actors); bind/unbind manage
+  actor↔role; effective_permissions returns union; has_permission
+  O(log n × roles); roles_of lists)
+
+Total this resume: 182 selfdef IPS-authority crates. Workspace 347.
