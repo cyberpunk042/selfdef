@@ -2219,3 +2219,12 @@ Total this resume: 275 selfdef IPS-authority crates. Workspace 440.
   entries with seq>cursor; earliest_seq/latest_seq accessors)
 
 Total this resume: 276 selfdef IPS-authority crates. Workspace 441.
+
+### Two-hundred-and-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-span-tree` (Span{id, parent, name, start_ms, end_ms};
+  insert rejects dup/unknown-parent/bad-times; root() asserts
+  single root else MultipleRoots; children/descendants
+  traversal; total_duration_ms)
+
+Total this resume: 277 selfdef IPS-authority crates. Workspace 442.
