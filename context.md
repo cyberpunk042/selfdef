@@ -2934,3 +2934,12 @@ Total this resume: 355 selfdef IPS-authority crates. Workspace 520.
   drops idle past idle_max_ms)
 
 Total this resume: 356 selfdef IPS-authority crates. Workspace 521.
+
+### Two-hundred-and-eighty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-undo-log` (record(id) clears redo + pushes onto undo
+  capacity-bounded front-eviction; undo() pops from undo +
+  pushes onto redo; redo() pops from redo + pushes onto undo;
+  can_undo/can_redo)
+
+Total this resume: 357 selfdef IPS-authority crates. Workspace 522.
