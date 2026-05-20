@@ -640,3 +640,15 @@ Total this resume: 96 selfdef IPS-authority crates. Workspace 261.
   Unconfigured; AgeExpired takes precedence)
 
 Total this resume: 98 selfdef IPS-authority crates. Workspace 263.
+
+### Thirty-third wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-mcp-tool-trust-tier` (Sandbox<SemiTrusted<Trusted<
+  Hardened tier; per-Profile floor; classify Allowed/BelowTier
+  {needed,got}/UnknownTool/Unconfigured; Production=Hardened,
+  Experimental=Sandbox)
+- `selfdef-action-step-budget` (per-Profile max_steps; start/step/
+  finish ledger; step Accepted{remaining}/Exhausted{cap}/Unknown
+  Action/Unconfigured; sequential-depth lane distinct from fanout)
+
+Total this resume: 100 selfdef IPS-authority crates. Workspace 265.
