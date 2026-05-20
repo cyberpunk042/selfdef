@@ -1090,3 +1090,12 @@ Total this resume: 149 selfdef IPS-authority crates. Workspace 314.
   both indices kept in lockstep; empty entries auto-prune)
 
 Total this resume: 150 selfdef IPS-authority crates. Workspace 315.
+
+### Eighty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-eval-bench-recorder` (EvalSample{scenario, would_outcome,
+  actual_outcome, ts}; report aggregates AgreementReport{total,
+  agreed, disagreed_pct_x100, disagreement_samples capped at 16};
+  pure recorder, no enforcement)
+
+Total this resume: 151 selfdef IPS-authority crates. Workspace 316.
