@@ -2417,3 +2417,12 @@ Total this resume: 298 selfdef IPS-authority crates. Workspace 463.
   saturated keys)
 
 Total this resume: 299 selfdef IPS-authority crates. Workspace 464.
+
+### Two-hundred-and-thirty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-three-way-merge` (base/ours/theirs map merge; for
+  each key in union: unchanged→base; one-side change→that side;
+  same change both→that value; diverging→Conflict; returns
+  Outcome::Merged(map) or Outcome::Conflict(keys))
+
+Total this resume: 300 selfdef IPS-authority crates. Workspace 465.
