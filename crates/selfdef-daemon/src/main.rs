@@ -161,6 +161,61 @@ async fn main() -> Result<()> {
         }
     }
 
+    // SDD-027 / MS046 — friction-audit observability at daemon boot.
+    //
+    // We don't EVALUATE the gate here (sovereign-guard.service has
+    // already done that at boot ordering — Before=podman.service /
+    // docker.service / containerd.service). We just surface the
+    // verdict + active operator overrides for operator visibility.
+    // Non-fatal: a friction-audit fail without an override means the
+    // operator has either signed an override OR systemd boot ordering
+    // is mis-wired (the daemon shouldn't even be running). Either way,
+    // we log it.
+    match selfdef_friction_audit::load_default_overrides(selfdef_friction_audit::now_ms()) {
+        Ok((store, report)) => {
+            let active = store.active_gates(selfdef_friction_audit::now_ms());
+            info!(
+                "friction-audit.overrides" = active.len(),
+                "friction-audit: {} operator override(s) active at startup",
+                active.len()
+            );
+            for gate in &active {
+                info!(?gate, "friction-audit: gate operator-override-active");
+            }
+            // Surface per-file load errors so operators can see when a
+            // manifest failed to verify (e.g. signature mismatch, TTL
+            // expired).
+            for entry in report {
+                if let Err(e) = entry {
+                    warn!(error = %e, "friction-audit: override manifest rejected");
+                }
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "friction-audit: override store load failed; daemon continues");
+        }
+    }
+    match selfdef_friction_audit::read_ring_buffer(std::path::Path::new(
+        selfdef_friction_audit::DEFAULT_RING_DIR,
+    )) {
+        Ok(verdicts) if verdicts.is_empty() => {
+            info!("friction-audit: no boot-time verdicts recorded yet (ring buffer empty)");
+        }
+        Ok(verdicts) => {
+            let failing = verdicts.iter().filter(|v| v.is_failing()).count();
+            info!(
+                "friction-audit.verdicts" = verdicts.len(),
+                "friction-audit.failing" = failing,
+                "friction-audit: {} ring-buffer verdict(s), {} currently failing",
+                verdicts.len(),
+                failing
+            );
+        }
+        Err(e) => {
+            warn!(error = %e, "friction-audit: ring buffer read failed; daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 

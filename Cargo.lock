@@ -3308,6 +3308,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-ebpf-common",
+ "selfdef-friction-audit",
  "selfdef-hardware",
  "selfdef-integration-discord",
  "selfdef-integration-loki",
