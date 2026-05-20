@@ -2069,3 +2069,12 @@ Total this resume: 258 selfdef IPS-authority crates. Workspace 423.
   exact)
 
 Total this resume: 259 selfdef IPS-authority crates. Workspace 424.
+
+### Hundred-and-ninety-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-key-set-diff` (Diff{added, removed, common} disjoint
+  partitions of prev ∪ next; compute uses BTreeSet ops;
+  is_change_free true iff added/removed empty; state stores
+  last computed diff + computes counter)
+
+Total this resume: 260 selfdef IPS-authority crates. Workspace 425.
