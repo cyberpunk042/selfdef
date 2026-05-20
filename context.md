@@ -2630,3 +2630,12 @@ Total this resume: 323 selfdef IPS-authority crates. Workspace 488.
   version or input change)
 
 Total this resume: 324 selfdef IPS-authority crates. Workspace 489.
+
+### Two-hundred-and-fifty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-topic-stats` (TopicStat{total, window_count,
+  window_start_ms}; record accumulates with auto-reset of
+  window if elapsed>=window_ms; rate_per_sec returns
+  window_count*1000/elapsed)
+
+Total this resume: 325 selfdef IPS-authority crates. Workspace 490.
