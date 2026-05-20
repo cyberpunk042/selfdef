@@ -2023,3 +2023,12 @@ Total this resume: 253 selfdef IPS-authority crates. Workspace 418.
   unterminated classes rejected at construction)
 
 Total this resume: 254 selfdef IPS-authority crates. Workspace 419.
+
+### Hundred-and-eighty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-rolling-checksum` (Adler-32; push: a=(a+byte) mod
+  65521, b=(b+a) mod 65521, digest=b<<16|a; roll(out,in,L)
+  O(1) update: a'=(a-out+in), b'=(b-L*out+a'-1); matches
+  known Adler-32("Wikipedia"))
+
+Total this resume: 255 selfdef IPS-authority crates. Workspace 420.
