@@ -1849,3 +1849,11 @@ Total this resume: 232 selfdef IPS-authority crates. Workspace 397.
   per-stage timeouts; force_drain/force_terminate manual)
 
 Total this resume: 233 selfdef IPS-authority crates. Workspace 398.
+
+### Hundred-and-sixty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-leaky-bucket-shaper` (capacity + drain_per_sec; offer
+  drains first then accepts if fits; rejects with overflow units;
+  remainder_ms preserves sub-second precision)
+
+Total this resume: 234 selfdef IPS-authority crates. Workspace 399.
