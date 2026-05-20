@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-string-fingerprint"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "FNV-1a-64 short hex fingerprint for strings (stable, deterministic)."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
