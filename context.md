@@ -1556,3 +1556,12 @@ Total this resume: 199 selfdef IPS-authority crates. Workspace 364.
   supported (true DAG))
 
 Total this resume: 200 selfdef IPS-authority crates. Workspace 365.
+
+### Hundred-and-thirty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tenant-shard-router` (route(tenant) = shards[FNV-1a-64(
+  tenant) % N]; pinned tenants override hash; set_shards updates
+  shard list — invalid pins unpinned and counted; distribution
+  test confirms even spread across shards)
+
+Total this resume: 201 selfdef IPS-authority crates. Workspace 366.
