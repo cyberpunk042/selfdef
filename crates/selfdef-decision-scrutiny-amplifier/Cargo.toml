@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-scrutiny-amplifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS scrutiny amplifier for actors with recent failed decisions. record_decision(actor, ok, ts) maintains a rolling window of failures per actor; level(actor, now) returns Tier{Normal/Elevated/High/Critical} based on failures-in-window. Pure tier emitter; downstream policies decide what to gate."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
