@@ -2114,3 +2114,12 @@ Total this resume: 263 selfdef IPS-authority crates. Workspace 428.
   returns earliest; duplicate ids rejected)
 
 Total this resume: 264 selfdef IPS-authority crates. Workspace 429.
+
+### Hundred-and-ninety-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-ttl-table` (key→value with per-entry expires_at_ms;
+  insert sets now+ttl; get lazy-expires entries with
+  expires_at<=now; touch refreshes; sweep eagerly removes;
+  inserts/hits/misses/expired counters)
+
+Total this resume: 265 selfdef IPS-authority crates. Workspace 430.
