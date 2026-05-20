@@ -2159,3 +2159,12 @@ Total this resume: 268 selfdef IPS-authority crates. Workspace 433.
   issued/acked/timed_out counters)
 
 Total this resume: 269 selfdef IPS-authority crates. Workspace 434.
+
+### Two-hundred-and-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-permit-semaphore` (counting permit pool; try_acquire
+  succeeds when n<=available, tracks high_water; rejected on
+  Exhausted; release saturating-decrements held; pure data,
+  no async)
+
+Total this resume: 270 selfdef IPS-authority crates. Workspace 435.
