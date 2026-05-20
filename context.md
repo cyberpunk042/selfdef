@@ -2348,3 +2348,12 @@ Total this resume: 290 selfdef IPS-authority crates. Workspace 455.
   Greater) or None when concurrent)
 
 Total this resume: 291 selfdef IPS-authority crates. Workspace 456.
+
+### Two-hundred-and-twenty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-frequency-map` (bounded key→count; observe
+  increments or inserts; eviction picks lowest-count
+  (lexicographic tie) on overflow; top_n returns count desc
+  + key asc)
+
+Total this resume: 292 selfdef IPS-authority crates. Workspace 457.
