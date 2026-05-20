@@ -215,6 +215,13 @@ enum Command {
         /// Loki / your monitoring pipeline). 0 (default) means render once.
         #[arg(long, default_value_t = 0)]
         watch: u32,
+        /// Quiet mode: single-line aggregate summary suitable for PS1
+        /// prompt embedding or terminal-multiplexer status bars. Format:
+        /// 'selfdef: fa=OK perim=ALERT guard=OK sched=OK'. Exit code 0
+        /// when all aggregates are OK; 1 otherwise (so `selfdefctl trio
+        /// --quiet && cmd` works as a gate).
+        #[arg(long)]
+        quiet: bool,
     },
     /// MS027 + four-watchdog set: unified tail of all four watchdog
     /// OCSF jsonl logs (friction-audit + perimeter + guardian + scheduler).
@@ -1644,8 +1651,8 @@ async fn main() -> Result<()> {
             };
             std::process::exit(exit);
         }
-        Command::Trio { json, watch } => {
-            let exit = trio::run(json, watch).context("trio")?;
+        Command::Trio { json, watch, quiet } => {
+            let exit = trio::run(json, watch, quiet).context("trio")?;
             std::process::exit(exit);
         }
         Command::TrioTail { interval_ms, json } => {

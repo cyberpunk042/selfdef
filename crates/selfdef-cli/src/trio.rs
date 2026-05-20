@@ -41,8 +41,9 @@ use selfdef_scheduler::{
     DEFAULT_AUDIT_LOG_PATH as SCHED_AUDIT, DEFAULT_RING_DIR as SCHED_RING,
 };
 
-pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
-    // 4 modes:
+pub(crate) fn run(json: bool, watch_secs: u32, quiet: bool) -> Result<i32> {
+    // 5 modes:
+    //  - --quiet      → single-line aggregate summary (overrides --json)
     //  - no flags     → one-shot human render
     //  - --json       → one-shot JSON
     //  - --watch N    → human clear-and-redraw every N seconds
@@ -50,6 +51,11 @@ pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
     //    monitoring pipelines: cron + jq, collectd, Loki ingest, etc).
     //    No clear-and-redraw — operators piping into a log shipper
     //    want each cycle as a distinct line, not overwritten.
+    if quiet {
+        // --quiet wins over --json + --watch — quiet is for PS1 prompts
+        // + status bars, which are one-shot single-line by definition.
+        return render_quiet();
+    }
     if watch_secs == 0 {
         // One-shot: pretty JSON for readability OR human render.
         return render_once_with(json, /*compact=*/ false);
@@ -94,6 +100,118 @@ fn chrono_now_iso() -> String {
     let m = (day_secs % 3600) / 60;
     let s = day_secs % 60;
     format!("{secs}s epoch · {h:02}:{m:02}:{s:02} UTC")
+}
+
+/// Single-line aggregate summary suitable for PS1 prompts + status
+/// bars. Format: `selfdef: fa=OK perim=ALERT guard=OK sched=OK`.
+/// Exit code 0 when all 4 aggregates are 'ok'; 1 otherwise (so
+/// `selfdefctl trio --quiet && command` works as a gate).
+fn render_quiet() -> Result<i32> {
+    let agg = compute_aggregates()?;
+    let fa = agg.friction_audit.to_uppercase();
+    let perim = agg.perimeter.to_uppercase();
+    let guard = agg.guardian.to_uppercase();
+    let sched = agg.scheduler.to_uppercase();
+    println!("selfdef: fa={fa} perim={perim} guard={guard} sched={sched}");
+    // Exit 0 iff every aggregate is 'ok'. Any other state ('alert',
+    // 'fail', 'override', 'extended', 'degraded', 'backpressure',
+    // 'unknown') maps to exit 1 — operator gates can rely on this.
+    let all_ok = agg.friction_audit == "ok"
+        && agg.perimeter == "ok"
+        && agg.guardian == "ok"
+        && agg.scheduler == "ok";
+    Ok(if all_ok { 0 } else { 1 })
+}
+
+/// Aggregate states for all four watchdogs, as the lowercased strings
+/// the existing human/JSON renderers emit.
+struct Aggregates {
+    friction_audit: String,
+    perimeter: String,
+    guardian: String,
+    scheduler: String,
+}
+
+fn compute_aggregates() -> Result<Aggregates> {
+    let now = now_ms();
+
+    let fa_verdicts = fa_read(Path::new(FA_RING)).context("friction-audit ring read")?;
+    let fa_failing = fa_verdicts
+        .iter()
+        .filter(|v| matches!(v.status, Status::Fail(_)))
+        .count();
+    let fa_overrides = fa_verdicts
+        .iter()
+        .filter(|v| matches!(v.status, Status::OverrideActive { .. }))
+        .count();
+    let friction_audit = if !fa_verdicts.is_empty() && fa_failing > 0 {
+        "fail"
+    } else if fa_overrides > 0 {
+        "override"
+    } else if fa_verdicts.is_empty() {
+        "unknown"
+    } else {
+        "ok"
+    }
+    .to_string();
+
+    let perim_verdicts = perim_read(Path::new(PERIM_RING)).context("perimeter ring read")?;
+    let (perim_store, _) = ExtensionStore::load_dir(
+        Path::new(DEFAULT_EXTENSION_DIR),
+        Path::new(DEFAULT_TRUST_ROOTS_DIR),
+        now,
+    )
+    .context("perimeter extension store load")?;
+    let perim_extensions = perim_store.active(now).len();
+    let perim_sigkills = perim_verdicts
+        .iter()
+        .filter(|v| matches!(v.outcome, Outcome::Sigkill))
+        .count();
+    let perimeter = if perim_sigkills > 0 {
+        "alert"
+    } else if perim_extensions > 0 {
+        "extended"
+    } else if perim_verdicts.is_empty() {
+        "unknown"
+    } else {
+        "ok"
+    }
+    .to_string();
+
+    let guard_verdicts = guard_read(Path::new(GUARD_RING)).context("guardian ring read")?;
+    let guard_failed = guard_verdicts.iter().filter(|v| !v.all_steps_ok()).count();
+    let guard_socket_present = Path::new(GUARD_SOCK).exists();
+    let guardian = if guard_failed > 0 {
+        "alert"
+    } else if !guard_socket_present {
+        "degraded"
+    } else if guard_verdicts.is_empty() {
+        "unknown"
+    } else {
+        "ok"
+    }
+    .to_string();
+
+    let sched_decisions = sched_read(Path::new(SCHED_RING)).context("scheduler ring read")?;
+    let sched_backpressured = sched_decisions
+        .iter()
+        .filter(|d| d.backpressure.any_pressure())
+        .count();
+    let scheduler = if sched_decisions.is_empty() {
+        "unknown"
+    } else if sched_backpressured > 0 {
+        "backpressure"
+    } else {
+        "ok"
+    }
+    .to_string();
+
+    Ok(Aggregates {
+        friction_audit,
+        perimeter,
+        guardian,
+        scheduler,
+    })
 }
 
 fn render_once_with(json: bool, compact: bool) -> Result<i32> {
