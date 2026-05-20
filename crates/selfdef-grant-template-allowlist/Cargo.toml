@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-grant-template-allowlist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile allowlist of grant template ids that may be issued in that Profile. classify(profile, template_id) returns Allowed/Denied{allowed_count}/Unconfigured. Pairs with selfdef-grant-template-pack (template registry) and selfdef-grant-issuance-cooldown — this is the per-Profile gating lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
