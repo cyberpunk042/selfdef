@@ -1865,3 +1865,11 @@ Total this resume: 234 selfdef IPS-authority crates. Workspace 399.
   returns Summary{total, passed, failed, unrun, mismatches})
 
 Total this resume: 235 selfdef IPS-authority crates. Workspace 400.
+
+### Hundred-and-sixty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tiered-retention-policy` (Tier{Hot/Warm/Cold/Expired};
+  classify(age_ms) by hot/warm/cold thresholds; bounds require
+  hot ≤ warm ≤ cold)
+
+Total this resume: 236 selfdef IPS-authority crates. Workspace 401.
