@@ -1642,3 +1642,13 @@ Total this resume: 208 selfdef IPS-authority crates. Workspace 373.
   pass_to_healthy consec; hysteresis prevents thrash)
 
 Total this resume: 209 selfdef IPS-authority crates. Workspace 374.
+
+### Hundred-and-forty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-outcome-ledger` (Outcome{Success/SoftFailure/
+  HardFailure/Skipped/Cancelled}; ClassCounters + total +
+  success_rate_bp; record appends to bounded ring (drops oldest +
+  counts) and bumps per-class counters (preserved across drops);
+  recent_newest_first)
+
+Total this resume: 210 selfdef IPS-authority crates. Workspace 375.
