@@ -2324,3 +2324,11 @@ Total this resume: 287 selfdef IPS-authority crates. Workspace 452.
   removed ids; max_age=0 or cap=0 disable respective phase)
 
 Total this resume: 288 selfdef IPS-authority crates. Workspace 453.
+
+### Two-hundred-and-twenty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-string-fingerprint` (FNV-1a-64 → 16-hex-char stable
+  fingerprint; short(s, len) returns leading len chars
+  (1..=16); matches known FNV-1a values; pure deterministic)
+
+Total this resume: 289 selfdef IPS-authority crates. Workspace 454.
