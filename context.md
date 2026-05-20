@@ -2263,3 +2263,12 @@ Total this resume: 280 selfdef IPS-authority crates. Workspace 445.
   to total; reset clears)
 
 Total this resume: 281 selfdef IPS-authority crates. Workspace 446.
+
+### Two-hundred-and-fourteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-state-machine` (named-states FSM with (from, event)
+  →to table; add_transition rejects dups; fire emits
+  UndefinedTransition on miss (state unchanged); bounded
+  history of {from, event, to, ts})
+
+Total this resume: 282 selfdef IPS-authority crates. Workspace 447.
