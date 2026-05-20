@@ -2007,3 +2007,11 @@ Total this resume: 251 selfdef IPS-authority crates. Workspace 416.
   now-ttl_ms; used/available counts)
 
 Total this resume: 252 selfdef IPS-authority crates. Workspace 417.
+
+### Hundred-and-eighty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tag-set` (sorted unique non-empty string tags;
+  add (returns inserted bool), remove, contains, intersection,
+  union, difference, is_subset_of, is_disjoint_from; pure data)
+
+Total this resume: 253 selfdef IPS-authority crates. Workspace 418.
