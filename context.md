@@ -1286,3 +1286,12 @@ Total this resume: 171 selfdef IPS-authority crates. Workspace 336.
   record_failure places in cooldown; record_success clears)
 
 Total this resume: 172 selfdef IPS-authority crates. Workspace 337.
+
+### Hundred-and-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-recurring-task-scheduler` (RecurringTask{interval_ms,
+  next_due_ms, enabled, runs}; due_at(now) returns enabled-and-due
+  task ids ordered by next_due then id; mark_run advances next_due
+  past now in interval steps — drift-resistant: skips missed ticks)
+
+Total this resume: 173 selfdef IPS-authority crates. Workspace 338.
