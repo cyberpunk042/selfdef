@@ -1430,3 +1430,13 @@ Total this resume: 186 selfdef IPS-authority crates. Workspace 351.
   elapses; zero refill never recovers)
 
 Total this resume: 187 selfdef IPS-authority crates. Workspace 352.
+
+### Hundred-and-twentieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-evidence-merkle-chain` (Link{seq, payload_hash,
+  prev_chain_hash, chain_hash, ts_ms} where chain_hash = FNV-1a-64
+  over (seq:ts:payload_hash:prev_chain_hash); append chains
+  automatically; verify_continuity detects SelfHashMismatch /
+  ContinuityBreak / SeqBreak)
+
+Total this resume: 188 selfdef IPS-authority crates. Workspace 353.
