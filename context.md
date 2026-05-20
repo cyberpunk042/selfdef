@@ -750,3 +750,11 @@ Total this resume: 111 selfdef IPS-authority crates. Workspace 276.
   Duplicate{age_ms, original_ts_ms}; rotate evicts)
 
 Total this resume: 112 selfdef IPS-authority crates. Workspace 277.
+
+### Forty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-idempotency-key` (at-least-once retry-safe
+  ledger; submit Fresh/Replay{first_seen_ts, recorded_outcome};
+  complete attaches outcome for future replays; rotate evicts)
+
+Total this resume: 113 selfdef IPS-authority crates. Workspace 278.
