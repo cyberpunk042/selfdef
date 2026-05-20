@@ -3163,6 +3163,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-count-min-sketch"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-countdown-latch"
 version = "0.1.0"
 dependencies = [
