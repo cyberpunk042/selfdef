@@ -34,6 +34,8 @@ selfdef-perimeter-mirror = { workspace = true }
 selfdef-perimeter = { workspace = true }
 selfdef-guardian-mirror = { workspace = true }
 selfdef-guardian = { workspace = true }
+selfdef-scheduler-mirror = { workspace = true }
+selfdef-scheduler = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

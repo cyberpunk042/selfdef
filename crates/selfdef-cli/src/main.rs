@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod friction_audit;
 mod guardian;
+mod scheduler;
 mod trio;
 mod hardware;
 mod init;
@@ -189,6 +190,14 @@ enum Command {
         /// Machine-readable JSON output (alternative to subverb).
         #[arg(long)]
         json: bool,
+    },
+    /// SDD-031 / MS048: Goldilocks Scheduler operator surface
+    /// (avx-plus-plus dump tail 18000-18250). Read-only by default;
+    /// mutating actions (force / audit-cycle replay) require Ring 0
+    /// authority + MS003 multi-sig.
+    Scheduler {
+        #[command(subcommand)]
+        action: SchedulerAction,
     },
     /// MS043 R10081 + F05081: consolidated three-watchdog-trio operator
     /// view. Renders friction-audit (hardware frame) + perimeter (kernel
@@ -418,6 +427,69 @@ enum FrictionAuditAction {
     /// Re-run the gate now (does not require reboot). Operator-
     /// triggered per MS046 R10927 — never automatic.
     Replay,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum SchedulerAction {
+    /// Current state + last 16 decisions + backpressure snapshot.
+    Show {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Decision history (newest-first; default 32, hard-max 256).
+    History {
+        #[arg(long, default_value_t = 32)]
+        limit: u32,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Single-decision detail by request_id.
+    Explain {
+        request_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Counterfactual replay against a different profile (read-only).
+    Replay {
+        request_id: String,
+        /// Replay against this profile (default: original profile).
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-profile 7-axis weight matrix readout.
+    Weights {
+        /// Profile name (fast / careful / private / autonomous /
+        /// experimental / production). When omitted, prints all six.
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Operator-force-override a request's route (Ring 0 + MS003).
+    Force {
+        request_id: String,
+        /// Route to force (blackwell / rtx3090 / cpu / hybrid / hibernate).
+        #[arg(long)]
+        route: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Audit-cycle replay — re-evaluate audit chain integrity.
+    AuditCycle {
+        #[command(subcommand)]
+        action: SchedulerAuditCycleAction,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum SchedulerAuditCycleAction {
+    /// Verify the SHA-256 chain integrity of the scheduler audit log.
+    Replay {
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1527,6 +1599,32 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::Scheduler { action } => {
+            let exit = match action {
+                SchedulerAction::Show { json } => scheduler::run_show(json)?,
+                SchedulerAction::History { limit, json } => {
+                    scheduler::run_history(limit, json)?
+                }
+                SchedulerAction::Explain { request_id, json } => {
+                    scheduler::run_explain(&request_id, json)?
+                }
+                SchedulerAction::Replay { request_id, profile, json } => {
+                    scheduler::run_replay(&request_id, profile.as_deref(), json)?
+                }
+                SchedulerAction::Weights { profile, json } => {
+                    scheduler::run_weights(profile.as_deref(), json)?
+                }
+                SchedulerAction::Force { request_id, route, json } => {
+                    scheduler::run_force(&request_id, &route, json)?
+                }
+                SchedulerAction::AuditCycle { action } => match action {
+                    SchedulerAuditCycleAction::Replay { json } => {
+                        scheduler::run_audit_cycle_replay(json)?
+                    }
+                },
             };
             std::process::exit(exit);
         }

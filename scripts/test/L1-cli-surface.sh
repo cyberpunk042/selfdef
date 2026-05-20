@@ -57,6 +57,7 @@ failures=0
 check_subverbs "friction-audit"  3 "SDD-027" || failures=$((failures + 1))
 check_subverbs "perimeter"       7 "SDD-028" || failures=$((failures + 1))
 check_subverbs "guardian"        4 "SDD-029" || failures=$((failures + 1))
+check_subverbs "scheduler"       7 "SDD-031" || failures=$((failures + 1))
 
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-cli-surface FAIL: ${failures} subverb-count drift(s) detected"
