@@ -841,3 +841,12 @@ Total this resume: 121 selfdef IPS-authority crates. Workspace 286.
   resets; dead_letter_ids reports current DLQ set)
 
 Total this resume: 122 selfdef IPS-authority crates. Workspace 287.
+
+### Fifty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-prewarm-policy` (PrewarmStep{kind, budget_ms,
+  optional}; canonical schedules per Profile: Private minimal,
+  Production strict, Experimental lenient with embedding refresh;
+  bootstrapper executes in order respecting budget + optional flag)
+
+Total this resume: 123 selfdef IPS-authority crates. Workspace 288.
