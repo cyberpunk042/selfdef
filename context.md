@@ -2194,3 +2194,11 @@ Total this resume: 272 selfdef IPS-authority crates. Workspace 437.
   ordered ops; identical inputs all-Keep)
 
 Total this resume: 273 selfdef IPS-authority crates. Workspace 438.
+
+### Two-hundred-and-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-stream-cursor` (advance_high_water monotonic + per-
+  consumer commit (rollback rejected); reset allows any
+  direction; lag = high_water - committed saturating)
+
+Total this resume: 274 selfdef IPS-authority crates. Workspace 439.
