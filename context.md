@@ -1212,3 +1212,12 @@ Total this resume: 163 selfdef IPS-authority crates. Workspace 328.
   spawn into the right cgroup)
 
 Total this resume: 164 selfdef IPS-authority crates. Workspace 329.
+
+### Ninety-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tenant-quota-pool` (Pool{capacity, in_use}; set_pool
+  preserves in_use; request → Granted{remaining}/Exhausted/Unknown
+  Tenant; release saturates; per-tenant pool lane distinct from
+  per-grant ledger)
+
+Total this resume: 165 selfdef IPS-authority crates. Workspace 330.
