@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-shape-checker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS shape-level validator for policy bundle metadata. check(meta) returns Ok or Issues{missing_fields, oversized_fields}; field name/value lengths checked against caller-chosen caps. Pure validator; structural-only (no semantic validation)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
