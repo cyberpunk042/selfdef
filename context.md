@@ -2768,3 +2768,12 @@ Total this resume: 338 selfdef IPS-authority crates. Workspace 503.
   mitigates thundering-herd on restart)
 
 Total this resume: 339 selfdef IPS-authority crates. Workspace 504.
+
+### Two-hundred-and-seventy-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prefetch-queue` (hint(key) enqueues; duplicate key
+  moves existing entry to back most-recent wins; pop returns
+  oldest; capacity-bounded with LRU eviction front-evict when
+  full; VecDeque-backed)
+
+Total this resume: 340 selfdef IPS-authority crates. Workspace 505.
