@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-geo-region-policy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Geographic region allow/deny policy per actor with default-mode fallback."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
