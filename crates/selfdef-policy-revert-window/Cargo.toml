@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-revert-window"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS time window after a policy change during which it can be reverted by the operator without quorum. record_change(policy_id, ts, prior_blob) opens a window of revert_ms; revert(policy_id, now) returns Accepted{prior_blob}/Stale/Unknown. After the window expires the change is sealed."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
