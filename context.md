@@ -1073,3 +1073,12 @@ Total this resume: 147 selfdef IPS-authority crates. Workspace 312.
   list_staged/active_version; promotion lane for new bundles)
 
 Total this resume: 148 selfdef IPS-authority crates. Workspace 313.
+
+### Eighty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-mcp-tool-namespace-scope` (per-tool allowed-namespace
+  BTreeSet + '*' wildcard; classify Allowed/Denied{allowed}/
+  UnknownTool; revoke auto-prunes; distinct from tool-trust-tier
+  — this is the caller-scope lane)
+
+Total this resume: 149 selfdef IPS-authority crates. Workspace 314.
