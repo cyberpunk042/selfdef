@@ -38,6 +38,7 @@
 mod control;
 mod friction_audit;
 mod handlers;
+mod perimeter;
 pub mod metrics;
 mod state;
 mod transport;
@@ -120,6 +121,10 @@ pub fn router(state: ApiState) -> Router {
         // require Ring 0 authority + MS003 multi-sig and are deferred.
         .route("/v1/friction-audit", get(friction_audit::show))
         .route("/v1/friction-audit/history", get(friction_audit::history))
+        // SDD-028 / MS047: perimeter (sovereign-kernel-fence) operator surface
+        // (read-only). Mutation flows through `selfdefctl perimeter extend/revoke`.
+        .route("/v1/perimeter", get(perimeter::show))
+        .route("/v1/perimeter/history", get(perimeter::history))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

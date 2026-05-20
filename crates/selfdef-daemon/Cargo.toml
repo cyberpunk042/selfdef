@@ -20,6 +20,7 @@ workspace = true
 selfdef-core = { workspace = true }
 selfdef-config = { workspace = true }
 selfdef-friction-audit = { workspace = true }
+selfdef-perimeter = { workspace = true }
 selfdef-bus = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }

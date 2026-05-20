@@ -216,6 +216,78 @@ async fn main() -> Result<()> {
         }
     }
 
+    // SDD-028 / MS047 — perimeter observability at daemon boot.
+    //
+    // Sister-observability point to friction-audit above. The actual
+    // enforcement is in-kernel via Tetragon's `sovereign-kernel-fence`
+    // TracingPolicy (loaded from /etc/tetragon/tracing-policies/). The
+    // daemon surfaces the policy presence + currently-loaded operator-
+    // signed allowlist extensions + the latest verdicts so operators
+    // can see the state at start. Non-fatal — if Tetragon isn't running
+    // the perimeter isn't enforcing; that's a watchdog concern for
+    // selfdef-guardian-daemon (MS044), not a reason to refuse to boot.
+    match selfdef_perimeter::load_default_extensions(selfdef_perimeter::now_ms()) {
+        Ok((store, report)) => {
+            let now = selfdef_perimeter::now_ms();
+            let active = store.active(now);
+            info!(
+                "perimeter.extensions" = active.len(),
+                "perimeter: {} operator allowlist extension(s) active at startup",
+                active.len()
+            );
+            for m in &active {
+                info!(
+                    extension_id = %m.extension_id,
+                    paths = m.binary_paths.len(),
+                    "perimeter: extension active"
+                );
+            }
+            for entry in report {
+                if let Err(e) = entry {
+                    warn!(error = %e, "perimeter: extension manifest rejected");
+                }
+            }
+        }
+        Err(e) => {
+            warn!(error = %e, "perimeter: extension store load failed; daemon continues");
+        }
+    }
+    let policy_path = std::path::Path::new(selfdef_perimeter::DEFAULT_POLICY_PATH);
+    if policy_path.exists() {
+        info!(
+            policy = %policy_path.display(),
+            "perimeter: sovereign-kernel-fence TracingPolicy present"
+        );
+    } else {
+        warn!(
+            policy = %policy_path.display(),
+            "perimeter: sovereign-kernel-fence TracingPolicy NOT present — kernel-fence is OFF"
+        );
+    }
+    match selfdef_perimeter::read_ring_buffer(std::path::Path::new(
+        selfdef_perimeter::DEFAULT_RING_DIR,
+    )) {
+        Ok(verdicts) if verdicts.is_empty() => {
+            info!("perimeter: no Tetragon verdicts recorded yet (ring buffer empty)");
+        }
+        Ok(verdicts) => {
+            let sigkills = verdicts.iter().filter(|v| v.is_sigkill()).count();
+            let extensions_used = verdicts.iter().filter(|v| v.is_extension_allowed()).count();
+            info!(
+                "perimeter.verdicts" = verdicts.len(),
+                "perimeter.sigkills" = sigkills,
+                "perimeter.extension_allowed" = extensions_used,
+                "perimeter: {} ring-buffer verdict(s), {} SIGKILL, {} extension-allowed",
+                verdicts.len(),
+                sigkills,
+                extensions_used
+            );
+        }
+        Err(e) => {
+            warn!(error = %e, "perimeter: ring buffer read failed; daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 
