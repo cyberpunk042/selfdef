@@ -1743,3 +1743,12 @@ Total this resume: 219 selfdef IPS-authority crates. Workspace 384.
   Unknown; set_caps requires warn < hard)
 
 Total this resume: 220 selfdef IPS-authority crates. Workspace 385.
+
+### Hundred-and-fifty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-geo-region-policy` (ActorRegions{Mode{AllowList/
+  DenyList}, regions:BTreeSet}; decide honors actor config or
+  falls back to default_mode + default_regions; AllowList in→Allow
+  out→Deny; DenyList in→Deny out→Allow)
+
+Total this resume: 221 selfdef IPS-authority crates. Workspace 386.
