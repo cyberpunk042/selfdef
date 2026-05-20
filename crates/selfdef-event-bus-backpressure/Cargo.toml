@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-event-bus-backpressure"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-event-kind pending-count cap. enqueue(kind) returns Accepted{pending}/HighWater{pending,high_water}/Saturated{pending,cap}. dequeue(kind) decrements. Pure policy crate; uses BTreeMap<kind,count>. Distinct from selfdef-rate-limit-policy (Hz-based) and selfdef-decision-throttle (decision lanes) — this is the queue-depth lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
