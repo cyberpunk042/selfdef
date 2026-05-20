@@ -742,3 +742,11 @@ Total this resume: 110 selfdef IPS-authority crates. Workspace 275.
   Careful=LocalPersistent)
 
 Total this resume: 111 selfdef IPS-authority crates. Workspace 276.
+
+### Forty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prompt-input-dedup` (sliding-window prompt-fingerprint
+  dedup; observe(hash,ts) monotonic; check returns Fresh /
+  Duplicate{age_ms, original_ts_ms}; rotate evicts)
+
+Total this resume: 112 selfdef IPS-authority crates. Workspace 277.
