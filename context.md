@@ -1458,3 +1458,13 @@ Total this resume: 189 selfdef IPS-authority crates. Workspace 354.
   max_age_ms but never below min_keep — safe-restore floor)
 
 Total this resume: 190 selfdef IPS-authority crates. Workspace 355.
+
+### Hundred-and-twenty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-operator-approval-queue` (Item{id, summary, submitted,
+  deadline, Priority{Low<Normal<High<Urgent}, Status{Pending/
+  Approved/Rejected/Expired}}; submit/approve/reject; mark_expired_at
+  advances overdue; pending() ordered by priority desc then submit
+  asc; double-resolve rejected)
+
+Total this resume: 191 selfdef IPS-authority crates. Workspace 356.
