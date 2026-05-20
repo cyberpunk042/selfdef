@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-grant-spend-ledger"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-grant remaining-spend ledger. issue(grant_id, units) records the issued allowance; spend(grant_id, units) returns Accepted{remaining}/Exhausted{remaining}/UnknownGrant. revoke(grant_id) zeroes the remaining and freezes further spends. Distinct from selfdef-policy-budget-ledger (policy-wide bucket) — this is the per-grant lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
