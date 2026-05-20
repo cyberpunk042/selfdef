@@ -5950,6 +5950,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-usage-receipt"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-ux-checklist"
 version = "0.1.0"
 dependencies = [
