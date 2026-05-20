@@ -2587,3 +2587,12 @@ Total this resume: 318 selfdef IPS-authority crates. Workspace 483.
   intercept_micro derived; Degenerate when denom=0)
 
 Total this resume: 319 selfdef IPS-authority crates. Workspace 484.
+
+### Two-hundred-and-fifty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-canary-ramp` (strictly-increasing (ts_ms,
+  percent_bp 0..=10000) points; current_percent picks latest
+  applicable; admit(now, key) FNV-1a-64 hash mod 10000;
+  deterministic same-input decisions)
+
+Total this resume: 320 selfdef IPS-authority crates. Workspace 485.
