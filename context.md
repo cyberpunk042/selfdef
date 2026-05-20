@@ -966,3 +966,12 @@ Total this resume: 135 selfdef IPS-authority crates. Workspace 300.
   style; mean() from sum/total)
 
 Total this resume: 136 selfdef IPS-authority crates. Workspace 301.
+
+### Sixty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-collector-jitter-policy` (deterministic FNV-1a jitter
+  in [-max/2, +max/2] from collector_id % max_jitter_ms; same id
+  always lands in same slot, distinct collectors spread; prevents
+  thundering-herd synchronisation)
+
+Total this resume: 137 selfdef IPS-authority crates. Workspace 302.
