@@ -65,6 +65,7 @@
 | MS043 | IPS operator surface — CLI + TUI + dashboard-mirror exports | dump 581, 3290–3325, 15625–15665, 16440–16466, 14760–14780 |
 | MS044 | Guardian Daemon — Tetragon eBPF supervisor + SIGKILL + atomic ZFS audit logs | sain-01 dump 513–588, 712–721, 977–981 |
 | MS045 | UX coherence test harness (CLI + TUI + minimal-web) — TDD validator for MS043 operator surface | MS043 + operator standing direction 2026-05-19 |
+| MS046 | Friction Audit System — boot-time hardware-integrity gate (PCIe / ZFS / memory) | sain-01 dump §5 lines 338–378 |
 
 ## Decomposition each milestone owes
 
