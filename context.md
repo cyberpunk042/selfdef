@@ -586,3 +586,16 @@ Total this resume: 85 selfdef IPS-authority crates. Workspace 250.
   around the warn ramp)
 
 Total this resume: 88 selfdef IPS-authority crates. Workspace 253.
+
+### Twenty-eighth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-llm-response-size-cap` (per-Profile (max_completion_tokens,
+  max_response_chars, max_attached_blobs); plan(req) → Granted /
+  Capped{adjusted} / Unconfigured)
+- `selfdef-prompt-language-allowlist` (per-Profile BCP-47 tag set
+  with primary-subtag fallback + "*" wildcard; symmetric to
+  tool-output-language-policy)
+- `selfdef-tool-call-latency-budget` (per-Profile (soft_ms, hard_ms)
+  start/poll/finish ledger; poll → OnTime/SoftExpired/HardExpired)
+
+Total this resume: 91 selfdef IPS-authority crates. Workspace 256.
