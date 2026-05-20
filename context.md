@@ -2639,3 +2639,12 @@ Total this resume: 324 selfdef IPS-authority crates. Workspace 489.
   window_count*1000/elapsed)
 
 Total this resume: 325 selfdef IPS-authority crates. Workspace 490.
+
+### Two-hundred-and-fifty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-threshold-set` (Threshold{name, value} sorted by
+  value asc; add via binary-insert (rejects duplicate name or
+  value); classify returns latest band with threshold<=value;
+  below first → default_band)
+
+Total this resume: 326 selfdef IPS-authority crates. Workspace 491.
