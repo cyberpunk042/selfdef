@@ -1905,3 +1905,11 @@ Total this resume: 239 selfdef IPS-authority crates. Workspace 404.
   set_enabled toggles; unregister auto-tidies empty kind)
 
 Total this resume: 240 selfdef IPS-authority crates. Workspace 405.
+
+### Hundred-and-seventy-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-memo-table` (keyed by policy_version +
+  input_hash; store/lookup with hit/miss counters;
+  invalidate_version drops entries for a version)
+
+Total this resume: 241 selfdef IPS-authority crates. Workspace 406.
