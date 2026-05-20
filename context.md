@@ -629,3 +629,14 @@ Total this resume: 95 selfdef IPS-authority crates. Workspace 260.
   rotate drops expired)
 
 Total this resume: 96 selfdef IPS-authority crates. Workspace 261.
+
+### Thirty-second wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-llm-thinking-budget` (per-Profile max_thinking_tokens;
+  plan returns Granted/Capped{adjusted}/Unconfigured; canonical
+  Experimental 32k, Production/Careful 4k)
+- `selfdef-session-lifetime-policy` (per-Profile (max_age_ms,
+  max_idle_ms); classify returns Active/IdleExpired/AgeExpired/
+  Unconfigured; AgeExpired takes precedence)
+
+Total this resume: 98 selfdef IPS-authority crates. Workspace 263.
