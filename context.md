@@ -2538,3 +2538,11 @@ Total this resume: 312 selfdef IPS-authority crates. Workspace 477.
   expired)
 
 Total this resume: 313 selfdef IPS-authority crates. Workspace 478.
+
+### Two-hundred-and-forty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-csv-line` (single-line CSV split with quote+quote
+  escape; configurable separator + quote char (supports TSV
+  via '\t'); unbalanced quote rejected)
+
+Total this resume: 314 selfdef IPS-authority crates. Workspace 479.
