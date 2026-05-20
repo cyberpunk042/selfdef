@@ -68,6 +68,40 @@ case "$1" in
                 /etc/systemd/system/sovereign-guard.service
         fi
 
+        # MS047 / SDD-028: install sovereign-perimeter Tetragon TracingPolicy
+        # + create operator-extension dir + perimeter cache dirs. Idempotent.
+        if [ -f /usr/share/selfdef/sovereign-perimeter.yaml ]; then
+            mkdir -p /etc/tetragon/tracing-policies
+            install -m 0644 -o root -g root \
+                /usr/share/selfdef/sovereign-perimeter.yaml \
+                /etc/tetragon/tracing-policies/sovereign-perimeter.yaml
+            # MS047 R11045 / SDD-028 §Deliverable 1: lock the YAML after
+            # install. Operators extend via /etc/selfdef/perimeter-extensions/
+            # (out-of-band, MS003-signed), not by editing this file.
+            chattr +i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml \
+                2>/dev/null || true
+            # Operator-extension manifest drop dir (MS003-signed JSON).
+            mkdir -p /etc/selfdef/perimeter-extensions
+            chown root:selfdef /etc/selfdef/perimeter-extensions
+            chmod 0750 /etc/selfdef/perimeter-extensions
+            # Perimeter ring buffer + ZFS log bridge dirs.
+            mkdir -p /var/cache/selfdef/perimeter/ring \
+                     /var/log/selfdef
+            chown selfdef:selfdef /var/cache/selfdef/perimeter \
+                /var/cache/selfdef/perimeter/ring 2>/dev/null || true
+            chmod 0750 /var/cache/selfdef/perimeter \
+                /var/cache/selfdef/perimeter/ring 2>/dev/null || true
+            # Tetragon hot-reload: if Tetragon is running, signal it to
+            # reload tracing policies. Best-effort — Tetragon's own
+            # file-watcher picks up new policies in most configurations.
+            if [ -d /run/systemd/system ] \
+               && systemctl is-active tetragon.service >/dev/null 2>&1; then
+                systemctl reload tetragon.service 2>/dev/null \
+                    || systemctl kill -s HUP tetragon.service 2>/dev/null \
+                    || true
+            fi
+        fi
+
         # systemd
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true

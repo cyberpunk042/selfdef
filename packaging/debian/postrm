@@ -19,6 +19,21 @@ case "$1" in
         fi
         rm -f /etc/systemd/system/sovereign-guard.service
         rm -rf /etc/systemd/system/sovereign-guard.service.d
+        # MS047 / SDD-028: remove sovereign-perimeter TracingPolicy +
+        # extension manifest dir. chattr -i first.
+        if [ -f /etc/tetragon/tracing-policies/sovereign-perimeter.yaml ]; then
+            chattr -i /etc/tetragon/tracing-policies/sovereign-perimeter.yaml \
+                2>/dev/null || true
+            rm -f /etc/tetragon/tracing-policies/sovereign-perimeter.yaml
+            # Tell Tetragon to reload so the kernel-fence comes down.
+            if [ -d /run/systemd/system ] \
+               && systemctl is-active tetragon.service >/dev/null 2>&1; then
+                systemctl reload tetragon.service 2>/dev/null \
+                    || systemctl kill -s HUP tetragon.service 2>/dev/null \
+                    || true
+            fi
+        fi
+        rm -rf /etc/selfdef/perimeter-extensions
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
