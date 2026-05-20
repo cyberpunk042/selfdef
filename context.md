@@ -1353,3 +1353,13 @@ Total this resume: 178 selfdef IPS-authority crates. Workspace 343.
   OriginNotAllowed/KindDenied/OverSize}; observe records counters)
 
 Total this resume: 179 selfdef IPS-authority crates. Workspace 344.
+
+### Hundred-and-twelfth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-denial-appeal-window` (Denial{denied_at_ms, actor,
+  appeal:Option<Appeal>}; window_ms gates submit_appeal; one appeal
+  per denial; resolve_appeal Resolution{Granted/Sustained}; state
+  returns NotFound/Pending{window_close}/WindowClosed/AppealPending/
+  Granted/Sustained)
+
+Total this resume: 180 selfdef IPS-authority crates. Workspace 345.
