@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-collector-jitter-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS deterministic jitter added to scheduled poll intervals. next_at(collector_id, base_ms, scheduled_ms) returns scheduled_ms + jitter where jitter is in [-max_jitter_ms/2, +max_jitter_ms/2] derived from FNV-1a(collector_id) % max_jitter_ms. Prevents two collectors from synchronising thundering-herd-style."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
