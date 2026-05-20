@@ -1662,3 +1662,13 @@ Total this resume: 210 selfdef IPS-authority crates. Workspace 375.
   labels)
 
 Total this resume: 211 selfdef IPS-authority crates. Workspace 376.
+
+### Hundred-and-forty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-periodic-report-emitter` (Report{cadence_ms,
+  last_emitted_ms, emissions, active}; should_emit checks active
+  AND elapsed since last_emitted >= cadence; mark_emitted snaps
+  last_emitted=now (skew-resistant); set_active pauses; due_at
+  lists eligible)
+
+Total this resume: 212 selfdef IPS-authority crates. Workspace 377.
