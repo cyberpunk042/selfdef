@@ -1873,3 +1873,11 @@ Total this resume: 235 selfdef IPS-authority crates. Workspace 400.
   hot ≤ warm ≤ cold)
 
 Total this resume: 236 selfdef IPS-authority crates. Workspace 401.
+
+### Hundred-and-sixty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-keyed-rate-limit` (per-key token buckets; auto-create
+  with default cap/refill; set_override / forget manage; keys
+  independent)
+
+Total this resume: 237 selfdef IPS-authority crates. Workspace 402.
