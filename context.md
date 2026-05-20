@@ -2186,3 +2186,11 @@ Total this resume: 271 selfdef IPS-authority crates. Workspace 436.
   Healthy if all ready)
 
 Total this resume: 272 selfdef IPS-authority crates. Workspace 437.
+
+### Two-hundred-and-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-line-diff` (Op{Keep/Add/Del}; LCS-based diff using
+  O(N*M) DP table + backtrack; turns a → b with deterministic
+  ordered ops; identical inputs all-Keep)
+
+Total this resume: 273 selfdef IPS-authority crates. Workspace 438.
