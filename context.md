@@ -732,3 +732,13 @@ Total this resume: 109 selfdef IPS-authority crates. Workspace 274.
   pure-evaluate; reports all missing; within-hours wraps midnight)
 
 Total this resume: 110 selfdef IPS-authority crates. Workspace 275.
+
+### Forty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-blast-radius-cap` (per-Profile cap on
+  BlastRadius from blast-radius-classifier; classify returns
+  Allowed/OverCap{cap, observed}/Unconfigured; canonical
+  Experimental=Public, Production=CrossSession, Private/
+  Careful=LocalPersistent)
+
+Total this resume: 111 selfdef IPS-authority crates. Workspace 276.
