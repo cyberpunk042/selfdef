@@ -1391,3 +1391,12 @@ Total this resume: 182 selfdef IPS-authority crates. Workspace 347.
   overshoot ≤ factor 2; suitable for latency P50/P99 viz)
 
 Total this resume: 183 selfdef IPS-authority crates. Workspace 348.
+
+### Hundred-and-sixteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-network-cidr-allowlist` (parse_ipv4 + parse_cidr
+  canonicalize to Cidr{network, prefix_len}; add/remove canonical
+  entries; decide returns Allowed{matched}/Denied first-match wins;
+  strict input 0..=255 octets, prefix 0..=32; /0 matches all)
+
+Total this resume: 184 selfdef IPS-authority crates. Workspace 349.
