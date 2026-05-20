@@ -1305,3 +1305,13 @@ Total this resume: 173 selfdef IPS-authority crates. Workspace 338.
   default_limit)
 
 Total this resume: 174 selfdef IPS-authority crates. Workspace 339.
+
+### Hundred-and-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-change-window` (Window{name, [open_ms, close_ms),
+  scope:Vec<policy_id>, Severity{Soft/Hard}}; decide returns Permit/
+  SoftBlock{window}/HardBlock{window} — Hard beats Soft; empty
+  scope = global; range half-open: open inclusive, close exclusive;
+  active_for lists all currently-applicable)
+
+Total this resume: 175 selfdef IPS-authority crates. Workspace 340.
