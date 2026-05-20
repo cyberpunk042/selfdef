@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-glob-matcher"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Shell-style glob matcher — *, ?, [abc] character classes."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
