@@ -1160,3 +1160,12 @@ Total this resume: 157 selfdef IPS-authority crates. Workspace 322.
   512MiB/1d, Private 16MiB/1d)
 
 Total this resume: 158 selfdef IPS-authority crates. Workspace 323.
+
+### Ninety-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-graceful-drain` (begin_drain(now, ms) sets
+  deadline; observe(in_flight, now) → NotDraining/DrainContinue
+  {in_flight, remaining_ms}/DrainReadyToSwap{reason:Idle|TimedOut,
+  leftover_count}; coordinated bundle-swap lane)
+
+Total this resume: 159 selfdef IPS-authority crates. Workspace 324.
