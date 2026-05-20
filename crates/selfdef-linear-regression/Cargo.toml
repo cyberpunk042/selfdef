@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-linear-regression"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Incremental linear regression — slope + intercept from running sums."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
