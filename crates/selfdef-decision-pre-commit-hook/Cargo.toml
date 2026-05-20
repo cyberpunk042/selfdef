@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-pre-commit-hook"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS registry of pre-commit decision hooks. Each hook has (id, priority, on_block: bool) and is identified by stable id. fire_order() returns the ordered list highest-priority first; a hook with on_block=true that returns Block from the orchestrator vetoes the commit. Pure descriptor (orchestrator owns invocation); supports register/deregister and conflict-free duplicate-id detection."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
