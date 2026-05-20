@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-eval-bench-recorder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS measurement-only eval recorder. record_eval(suite_id, scenario_id, would_outcome, actual_outcome, ts) tracks decision agreement between a candidate policy and the live one. report(suite_id) returns AgreementReport{total, agreed, disagreed_pct_x100, disagreement_samples}. Pure recorder; no enforcement."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
