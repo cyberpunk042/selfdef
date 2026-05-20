@@ -2740,6 +2740,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-config-personalization-bounds"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-context-sensitivity-policy"
 version = "0.1.0"
 dependencies = [
