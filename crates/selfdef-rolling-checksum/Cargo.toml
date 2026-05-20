@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-rolling-checksum"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Adler-32 rolling checksum — incremental + sliding-window updates."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
