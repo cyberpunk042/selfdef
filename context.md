@@ -1575,3 +1575,13 @@ Total this resume: 201 selfdef IPS-authority crates. Workspace 366.
   → Resolved)
 
 Total this resume: 202 selfdef IPS-authority crates. Workspace 367.
+
+### Hundred-and-thirty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-incident-record` (Stage{Open→Triaged→Mitigated→Resolved→
+  PostmortemPending} strict forward transitions; reopen Resolved/
+  PostmortemPending → Triaged (clears resolved_at); file_postmortem
+  only in PostmortemPending; stage_log preserves history; ttr_ms
+  reports time-to-resolve)
+
+Total this resume: 203 selfdef IPS-authority crates. Workspace 368.
