@@ -1363,3 +1363,12 @@ Total this resume: 179 selfdef IPS-authority crates. Workspace 344.
   Granted/Sustained)
 
 Total this resume: 180 selfdef IPS-authority crates. Workspace 345.
+
+### Hundred-and-thirteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-dependency-graph` (nodes/parents/children
+  adjacency; add_edge refuses self-loops + cycle-introducing edges
+  (WouldCycle err, graph unchanged); topological_order via Kahn
+  with alphabetical tie-break; remove_node cleans adjacency)
+
+Total this resume: 181 selfdef IPS-authority crates. Workspace 346.
