@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-actor-introduction-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS first-touch handshake gate for actors. Before any action, an actor must complete an introduction step (declaring identity, attesting to the substrate fingerprint). classify(actor, attempted_action) returns Allowed (introduction recorded) / NeedsIntroduction / Unconfigured. record_introduction(actor, ts, attested_fingerprint) marks complete."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
