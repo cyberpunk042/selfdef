@@ -2315,3 +2315,12 @@ Total this resume: 286 selfdef IPS-authority crates. Workspace 451.
   to_string reassembles; raw fields (no encoding))
 
 Total this resume: 287 selfdef IPS-authority crates. Workspace 452.
+
+### Two-hundred-and-twentieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-gc-sweeper` (Item{ts_ms, size}; sweep(now) phases:
+  1) age — remove items with ts_ms < now-max_age_ms;
+  2) size — evict oldest until total<=size_cap_bytes; returns
+  removed ids; max_age=0 or cap=0 disable respective phase)
+
+Total this resume: 288 selfdef IPS-authority crates. Workspace 453.
