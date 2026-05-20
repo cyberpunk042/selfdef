@@ -758,3 +758,13 @@ Total this resume: 112 selfdef IPS-authority crates. Workspace 277.
   complete attaches outcome for future replays; rotate evicts)
 
 Total this resume: 113 selfdef IPS-authority crates. Workspace 278.
+
+### Forty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-mcp-tool-arg-constraint` (per-tool per-arg constraints
+  RequiredPresent/ForbidEmpty/StrLenAtMost/StrEnum/IntRange;
+  check returns Ok/Violations{items}/UnknownTool; multiple
+  violations reported in a single pass; pairs with mcp-tool-
+  validation)
+
+Total this resume: 114 selfdef IPS-authority crates. Workspace 279.
