@@ -2374,3 +2374,11 @@ Total this resume: 293 selfdef IPS-authority crates. Workspace 458.
   camel/pascal regenerate; ASCII; non-ASCII passes through)
 
 Total this resume: 294 selfdef IPS-authority crates. Workspace 459.
+
+### Two-hundred-and-twenty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-step-curve` (Step{x, y} strictly increasing x;
+  lookup(x) returns y of rightmost step.x<=x via binary
+  search; default_y when x<first step or empty)
+
+Total this resume: 295 selfdef IPS-authority crates. Workspace 460.
