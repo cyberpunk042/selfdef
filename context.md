@@ -2426,3 +2426,11 @@ Total this resume: 299 selfdef IPS-authority crates. Workspace 464.
   Outcome::Merged(map) or Outcome::Conflict(keys))
 
 Total this resume: 300 selfdef IPS-authority crates. Workspace 465.
+
+### Two-hundred-and-thirty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-ranking-table` (id→score; set inserts/overwrites;
+  top_n sorts score desc + id asc; rank_of returns 1-based
+  position or None; supports negative scores)
+
+Total this resume: 301 selfdef IPS-authority crates. Workspace 466.
