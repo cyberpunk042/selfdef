@@ -1047,3 +1047,12 @@ Total this resume: 144 selfdef IPS-authority crates. Workspace 309.
   hierarchical tree)
 
 Total this resume: 145 selfdef IPS-authority crates. Workspace 310.
+
+### Seventy-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-exclusive-lock-policy` (Lease{lease_id, owner,
+  acquired_at, max_hold_ms}; acquire returns Acquired/Self
+  Reacquired (refresh)/HeldByOther; expired others auto-takeover;
+  release returns Released/WrongLease/UnknownLease)
+
+Total this resume: 146 selfdef IPS-authority crates. Workspace 311.
