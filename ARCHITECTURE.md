@@ -259,6 +259,55 @@ the checklist walks the operator through each opt-in;
 verify, one verb per step. Each opt-in has a dedicated
 runbook under `docs/dev/<feature>.md`.
 
+## Four-watchdog set (IPS spine)
+
+Four cooperating boundary-enforcement layers ship with the package as
+the IPS spine. Each operates independently; together they cover the
+full stack from hardware integrity to runtime routing decisions:
+
+```
+              ┌─────────────────────────────────────────────────────┐
+              │                  Four-watchdog set                   │
+              │                                                       │
+              │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐│
+              │  │ friction-    │  │  perimeter   │  │   guardian   ││
+              │  │  audit       │  │ (kernel-     │  │ (supervisor) ││
+              │  │ (hardware    │  │  syscall)    │  │              ││
+              │  │  frame)      │  │              │  │              ││
+              │  │   MS046      │  │    MS047     │  │     MS044    ││
+              │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘│
+              │         │ verdict ring    │ Tetragon evt    │ 3-step │
+              │         ▼                 ▼                 ▼        │
+              │    /var/cache/selfdef/<watchdog>/ring + ZFS audit    │
+              │         │                 │                 │        │
+              │         └───── consumed by ─────┐  consumed by       │
+              │                                 ▼                    │
+              │                  ┌──────────────────────────────┐    │
+              │                  │       scheduler (MS048)      │    │
+              │                  │   Goldilocks routing layer   │    │
+              │                  │   7-axis objective +         │    │
+              │                  │   5 backpressure surfaces    │    │
+              │                  └──────────────────────────────┘    │
+              └─────────────────────────────────────────────────────┘
+```
+
+Surfaces shared by all four watchdogs:
+
+- **CLI**: per-watchdog `selfdefctl <watchdog> {show,history,...}`
+  + cross-cutting `selfdefctl trio [--watch N]` (4-panel snapshot)
+  + `selfdefctl trio-tail` (unified live OCSF tail)
+- **HTTP API**: `/v1/<watchdog>{,/history,...}` (11 routes total)
+- **PWA dashboard**: 4 panels with auto-refresh + runbook links
+- **Grafana**: 9 panels + 15 Prometheus gauges (via selfdef-api/metrics)
+- **Sovereign-os cockpit**: 4 read-only typed-mirror crates
+- **Doctor**: `watchdog-set` category reports deployability
+- **Runbooks**: 20 total in the companion info-hub
+  (`wiki/runbooks/{friction-audit,perimeter,guardian,scheduler}-*.md`)
+
+Operator enables per deployment via `systemctl enable --now <unit>`;
+`selfdefctl wizard` Step 5 walks the full enablement path. All four
+OFF by default — operator-controlled.
+
 ## Self-protection of the daemon
 
 The daemon is the most valuable target on the host. Treated
