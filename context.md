@@ -1802,3 +1802,11 @@ Total this resume: 226 selfdef IPS-authority crates. Workspace 391.
   Revoked/Unknown/MissingScope; revoke marks token)
 
 Total this resume: 227 selfdef IPS-authority crates. Workspace 392.
+
+### Hundred-and-sixtieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bloom-filter` (two FNV-1a-64 hashes with different seeds;
+  insert sets 2 bits; contains AND-checks; load_bp approximates
+  load factor; clear zeros; no false negatives)
+
+Total this resume: 228 selfdef IPS-authority crates. Workspace 393.
