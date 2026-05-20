@@ -2904,3 +2904,13 @@ Total this resume: 352 selfdef IPS-authority crates. Workspace 517.
   now; peek non-mutating)
 
 Total this resume: 353 selfdef IPS-authority crates. Workspace 518.
+
+### Two-hundred-and-eighty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-latency-tracker` (stores up to capacity latency_us
+  samples in a ring front-evicted; percentile(p 0..=100) sorts
+  clone and returns nearest-rank value; p50/p99/mean
+  convenience; O(n log n) per query for windows in
+  hundreds-low-thousands)
+
+Total this resume: 354 selfdef IPS-authority crates. Workspace 519.
