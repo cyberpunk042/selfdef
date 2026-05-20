@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-kill-switch-registry"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Emergency kill-switch registry with confirmation, audit reason, and re-arm gate."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
