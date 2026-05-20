@@ -1541,3 +1541,195 @@ async fn notify_ack_idempotent_second_click_returns_404() {
     let res2 = app2.oneshot(req2).await.unwrap();
     assert_eq!(res2.status(), StatusCode::NOT_FOUND);
 }
+
+// =========================================================================
+// Four-watchdog HTTP routes (MS046 + MS047 + MS044 + MS048)
+//
+// End-to-end integration tests via tower::ServiceExt::oneshot. The
+// runtime ring buffers + audit logs are not present on the test runner;
+// these tests verify the routes are wired + return well-formed JSON +
+// degrade gracefully when no watchdog state exists (the expected
+// fresh-host behavior).
+// =========================================================================
+
+#[tokio::test]
+async fn watchdog_friction_audit_route_returns_200_with_aggregate() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/friction-audit")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    // Aggregate is one of the documented states; on a fresh host with
+    // no ring buffer, it's "unknown".
+    let agg = v["aggregate"].as_str().unwrap();
+    assert!(
+        ["ok", "fail", "override", "unknown"].contains(&agg),
+        "aggregate {agg:?} not in documented vocab"
+    );
+    assert!(v["verdicts"].is_array());
+    assert!(v["overrides"].is_array());
+}
+
+#[tokio::test]
+async fn watchdog_perimeter_route_returns_200_with_default_allowlist() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/perimeter")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    // Default allowlist must include sain-01 §6 verbatim 4 entries.
+    let allow = v["default_allowlist"].as_array().unwrap();
+    let allow_str: Vec<&str> = allow.iter().filter_map(|x| x.as_str()).collect();
+    assert!(allow_str.contains(&"/usr/bin/python3"));
+    assert!(allow_str.contains(&"/usr/bin/nvidia-smi"));
+    assert!(allow_str.contains(&"/usr/local/bin/vllm"));
+    assert!(allow_str.contains(&"/usr/bin/podman"));
+}
+
+#[tokio::test]
+async fn watchdog_guardian_route_returns_200_with_socket_state() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/guardian")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["tetragon_socket_present"].is_boolean());
+    assert!(v["verdicts"].is_array());
+    let agg = v["aggregate"].as_str().unwrap();
+    assert!(
+        ["ok", "alert", "degraded", "unknown"].contains(&agg),
+        "guardian aggregate {agg:?} not in documented vocab"
+    );
+}
+
+#[tokio::test]
+async fn watchdog_scheduler_route_returns_200_with_decisions_array() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/scheduler")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["decisions"].is_array());
+    let agg = v["aggregate"].as_str().unwrap();
+    assert!(
+        ["ok", "backpressure", "unknown"].contains(&agg),
+        "scheduler aggregate {agg:?} not in documented vocab"
+    );
+}
+
+#[tokio::test]
+async fn watchdog_scheduler_weights_route_returns_six_profile_matrix() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    // No ?profile filter → all six profiles returned.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/scheduler/weights")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let arr = v.as_array().expect("weights endpoint returns an array");
+    assert_eq!(arr.len(), 6, "expected 6 profile rows, got {}", arr.len());
+
+    // Check the careful profile's risk weight is 1.0 per MS048 R11299.
+    let careful = arr
+        .iter()
+        .find(|e| e["profile"].as_str() == Some("careful"))
+        .expect("careful profile missing");
+    let risk = careful["weights"]["risk"].as_f64().expect("risk weight is number");
+    assert!((risk - 1.0).abs() < 0.001, "careful.risk should be 1.0, got {risk}");
+}
+
+#[tokio::test]
+async fn watchdog_scheduler_weights_unknown_profile_returns_400() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/scheduler/weights?profile=bogus")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn watchdog_scheduler_explain_unknown_id_returns_404() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/scheduler/explain/req-does-not-exist")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn watchdog_history_routes_honor_limit_query() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app_a = app(state.clone());
+    let app_b = app(state.clone());
+
+    for uri in [
+        "/v1/friction-audit/history?limit=5",
+        "/v1/perimeter/history?limit=5",
+    ] {
+        let req = Request::builder()
+            .method(Method::GET)
+            .uri(uri)
+            .body(Body::empty())
+            .unwrap();
+        // Each oneshot consumes the router; use clones.
+        let app = if uri.contains("friction") {
+            app_a.clone()
+        } else {
+            app_b.clone()
+        };
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "uri {uri} expected 200");
+        let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(v["verdicts"].is_array(), "uri {uri} verdicts not array");
+    }
+}
