@@ -2211,3 +2211,11 @@ Total this resume: 274 selfdef IPS-authority crates. Workspace 439.
   bit-order)
 
 Total this resume: 275 selfdef IPS-authority crates. Workspace 440.
+
+### Two-hundred-and-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-event-log` (append-only with monotonic seq;
+  capacity-bounded dropping oldest; since(cursor) returns
+  entries with seq>cursor; earliest_seq/latest_seq accessors)
+
+Total this resume: 276 selfdef IPS-authority crates. Workspace 441.
