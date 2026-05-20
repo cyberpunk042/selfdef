@@ -1151,3 +1151,12 @@ Total this resume: 156 selfdef IPS-authority crates. Workspace 321.
   jitter from seed+n; deterministic per seed; pure math)
 
 Total this resume: 157 selfdef IPS-authority crates. Workspace 322.
+
+### Ninetieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-tmpdir-policy` (ProfileCaps{max_bytes,
+  max_age_ms}; classify Healthy/OverSize/OverAge/OverBoth/
+  Unconfigured; canonical Experimental 4GiB/7d, Production
+  512MiB/1d, Private 16MiB/1d)
+
+Total this resume: 158 selfdef IPS-authority crates. Workspace 323.
