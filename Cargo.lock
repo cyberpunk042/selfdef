@@ -3689,6 +3689,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-llm-token-throttle"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-mcp-tool-validation"
 version = "0.1.0"
 dependencies = [

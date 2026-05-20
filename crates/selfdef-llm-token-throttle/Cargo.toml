@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-token-throttle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile LLM token-per-minute throttle. Rolling-window prompt+completion token accounting. consume() returns Granted/Throttled with retry hint. Distinct from selfdef-rate-limit-policy (event count) and selfdef-prompt-context-quota (single-request shape) — this is the cumulative-token lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
