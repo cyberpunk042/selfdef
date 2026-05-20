@@ -2451,3 +2451,12 @@ Total this resume: 302 selfdef IPS-authority crates. Workspace 467.
   negative values)
 
 Total this resume: 303 selfdef IPS-authority crates. Workspace 468.
+
+### Two-hundred-and-thirty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-linear-interp` (Point{x, y} strictly increasing x;
+  lookup interpolates between adjacent segments via i128;
+  Extrapolation::Clamp returns endpoint y; Extend continues
+  boundary slope)
+
+Total this resume: 304 selfdef IPS-authority crates. Workspace 469.
