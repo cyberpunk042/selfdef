@@ -823,3 +823,12 @@ Total this resume: 119 selfdef IPS-authority crates. Workspace 284.
   deny/tightening cap classified as safer/lower-risk)
 
 Total this resume: 120 selfdef IPS-authority crates. Workspace 285.
+
+### Fifty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-config-personalization-bounds` (per-(Profile, knob)
+  Bound enum IntRange/EnumOf/BoolEither/StrLenAtMost; Value enum
+  Int/Str/Bool; check Ok/OutOfBound{bound,observed}/UnknownKnob/
+  UnknownProfile; type-mismatch counts as OutOfBound)
+
+Total this resume: 121 selfdef IPS-authority crates. Workspace 286.
