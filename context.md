@@ -2721,3 +2721,12 @@ Total this resume: 333 selfdef IPS-authority crates. Workspace 498.
   checked-add → Exhausted on overflow)
 
 Total this resume: 334 selfdef IPS-authority crates. Workspace 499.
+
+### Two-hundred-and-sixty-seventh wave — selfdef workspace crosses 500
+
+- `selfdef-nonce-store` (observe(nonce, now_ms) returns Accept if
+  unknown and inserts with expiry now+ttl, or Replay if seen and
+  not yet expired; tick(now_ms) drops expired; HMAC/signature
+  replay defense in the IPS admission path)
+
+Total this resume: 335 selfdef IPS-authority crates. Workspace 500.
