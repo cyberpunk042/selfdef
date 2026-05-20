@@ -1972,3 +1972,12 @@ Total this resume: 247 selfdef IPS-authority crates. Workspace 412.
   (earlier-seq tie-break for FIFO))
 
 Total this resume: 248 selfdef IPS-authority crates. Workspace 413.
+
+### Hundred-and-eighty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-weighted-round-robin` (smooth WRR per Nginx: increment
+  every lane's current_weight by configured weight; pick lane
+  with max current_weight, ties by earliest registration;
+  decrement winner by total_weight)
+
+Total this resume: 249 selfdef IPS-authority crates. Workspace 414.
