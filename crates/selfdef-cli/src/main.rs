@@ -11,6 +11,7 @@ mod doctor;
 mod emit;
 mod follow;
 mod friction_audit;
+mod guardian;
 mod hardware;
 mod init;
 mod mcp;
@@ -174,6 +175,16 @@ enum Command {
     FrictionAudit {
         #[command(subcommand)]
         action: Option<FrictionAuditAction>,
+        /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-029 / MS044: Guardian Daemon (sain-01 §10 guardian-core)
+    /// operator surface. Read-only by default; mutating actions
+    /// (replay / rollback) require Ring 0 authority + MS003 multi-sig.
+    Guardian {
+        #[command(subcommand)]
+        action: Option<GuardianAction>,
         /// Machine-readable JSON output (alternative to subverb).
         #[arg(long)]
         json: bool,
@@ -392,6 +403,29 @@ enum FrictionAuditAction {
     /// Re-run the gate now (does not require reboot). Operator-
     /// triggered per MS046 R10927 — never automatic.
     Replay,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum GuardianAction {
+    /// Daemon state + last N events processed (default: 16).
+    Show,
+    /// Render the last N verdicts (newest-first).
+    History {
+        /// How many entries to render (default: 32).
+        #[arg(long, default_value_t = 32)]
+        limit: u32,
+    },
+    /// Re-classify a stored event by id (MS009 replay invariant;
+    /// operator-triggered, never automatic).
+    Replay {
+        /// Event id (Tetragon UUID) to re-classify.
+        event_id: String,
+    },
+    /// Operator-signed false-positive rollback (Ring 0 + MS003).
+    Rollback {
+        /// Event id (Tetragon UUID) of the verdict being rolled back.
+        event_id: String,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1478,6 +1512,19 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::Guardian { action, json } => {
+            let exit = match action {
+                Some(GuardianAction::Show) | None => guardian::run_show(json)?,
+                Some(GuardianAction::History { limit }) => guardian::run_history(limit, json)?,
+                Some(GuardianAction::Replay { event_id }) => {
+                    guardian::run_replay(&event_id, json)?
+                }
+                Some(GuardianAction::Rollback { event_id }) => {
+                    guardian::run_rollback(&event_id, json)?
+                }
             };
             std::process::exit(exit);
         }
