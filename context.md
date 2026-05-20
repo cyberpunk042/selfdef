@@ -1913,3 +1913,11 @@ Total this resume: 240 selfdef IPS-authority crates. Workspace 405.
   invalidate_version drops entries for a version)
 
 Total this resume: 241 selfdef IPS-authority crates. Workspace 406.
+
+### Hundred-and-seventy-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-exponential-backoff` (base_ms × (multiplier_bp/10000)^
+  attempt capped at max_ms; deterministic jitter via FNV-1a-64
+  per (attempt, seed))
+
+Total this resume: 242 selfdef IPS-authority crates. Workspace 407.
