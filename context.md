@@ -1652,3 +1652,13 @@ Total this resume: 209 selfdef IPS-authority crates. Workspace 374.
   recent_newest_first)
 
 Total this resume: 210 selfdef IPS-authority crates. Workspace 375.
+
+### Hundred-and-forty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-label-policy` (per-actor BTreeMap<key,value>;
+  set_user_label refuses RESERVED_PREFIX "selfdef." (ReservedKey
+  err); set_system_label accepts any key; remove_user_label vs
+  remove_system_label parallels; empty value allowed for tag-only
+  labels)
+
+Total this resume: 211 selfdef IPS-authority crates. Workspace 376.
