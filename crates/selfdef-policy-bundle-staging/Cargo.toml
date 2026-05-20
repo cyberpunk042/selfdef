@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-bundle-staging"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS staging area for new policy bundles. stage(bundle_id, version, content_hash, ts) parks a candidate; promote(bundle_id, version) marks it as the active bundle for that id (returns previously-active version); reject removes from staging. list_staged returns all candidates."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
