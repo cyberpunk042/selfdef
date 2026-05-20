@@ -2032,3 +2032,12 @@ Total this resume: 254 selfdef IPS-authority crates. Workspace 419.
   known Adler-32("Wikipedia"))
 
 Total this resume: 255 selfdef IPS-authority crates. Workspace 420.
+
+### Hundred-and-eighty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prefix-trie` (Node{tag, BTreeMap<char,Node>}; insert
+  rejects duplicates; lookup walks char-by-char returning the
+  deepest tag along the path (longest-prefix); lookup_exact
+  requires terminal; empty prefix tags the root)
+
+Total this resume: 256 selfdef IPS-authority crates. Workspace 421.
