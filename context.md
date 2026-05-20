@@ -1760,3 +1760,12 @@ Total this resume: 221 selfdef IPS-authority crates. Workspace 386.
   records hits in state; substring matching only; total_hits sums)
 
 Total this resume: 222 selfdef IPS-authority crates. Workspace 387.
+
+### Hundred-and-fifty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-sliding-window-counter` (bucket_ms × bucket_count =
+  window_ms; record adds to most-recent bucket; rotate drops
+  oldest when time advances; long-idle clears entire window;
+  total sums after rotation)
+
+Total this resume: 223 selfdef IPS-authority crates. Workspace 388.
