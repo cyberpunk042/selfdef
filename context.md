@@ -2865,3 +2865,13 @@ Total this resume: 348 selfdef IPS-authority crates. Workspace 513.
   selfdef-denylist-store)
 
 Total this resume: 349 selfdef IPS-authority crates. Workspace 514.
+
+### Two-hundred-and-eighty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-key-rotation-set` (Key{kid, phase Verifying/Signing/
+  Retired, valid_from_ms, valid_until_ms}; add inserts Verifying;
+  promote(kid) advances to Signing and demotes prior Signing →
+  Verifying — only one Signing at a time; retire → Retired
+  rejected for new verify)
+
+Total this resume: 350 selfdef IPS-authority crates. Workspace 515.
