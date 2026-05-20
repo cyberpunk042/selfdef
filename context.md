@@ -551,3 +551,10 @@ Total this resume: 79 selfdef IPS-authority crates. Workspace 244.
   parent_id walk + child-overrides-parent + sealed/mutable flag)
 
 Total this resume: 80 selfdef IPS-authority crates. Workspace 245.
+
+### Twenty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-cpu-quota` (per-Profile cpu_seconds budget in
+  sliding window with admit/age-out)
+
+Total this resume: 81 selfdef IPS-authority crates. Workspace 246.
