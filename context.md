@@ -2924,3 +2924,13 @@ Total this resume: 354 selfdef IPS-authority crates. Workspace 519.
   oldest-first)
 
 Total this resume: 355 selfdef IPS-authority crates. Workspace 520.
+
+### Two-hundred-and-eighty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-connection-pool` (Conn{phase Idle/InUse,
+  idle_since_ms, unhealthy_until_ms}; acquire(now) returns first
+  idle id past health cooldown; release → Idle; mark_bad(id,
+  now, cooldown_ms) sets unhealthy_until acquire skips; reap_idle
+  drops idle past idle_max_ms)
+
+Total this resume: 356 selfdef IPS-authority crates. Workspace 521.
