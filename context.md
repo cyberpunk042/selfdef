@@ -768,3 +768,12 @@ Total this resume: 113 selfdef IPS-authority crates. Workspace 278.
   validation)
 
 Total this resume: 114 selfdef IPS-authority crates. Workspace 279.
+
+### Forty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-pre-commit-hook` (Hook{id, priority, on_block,
+  seq}; fire_order by priority desc then FIFO; veto_capable subset;
+  orchestrator owns invocation; veto-capable hooks can block the
+  commit)
+
+Total this resume: 115 selfdef IPS-authority crates. Workspace 280.
