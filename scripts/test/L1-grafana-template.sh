@@ -29,13 +29,14 @@ if ! python3 -c "import json; json.load(open('${TEMPLATE}'))" 2>/dev/null; then
 fi
 echo "  PASS JSON parses"
 
-# Gate 2: total panel count >= 17 (7 original + 1 row + 9 four-watchdog).
+# Gate 2: total panel count >= 20 (7 original + 1 row + 9 four-watchdog
+# + 1 row + 2 modules). Increased from 17 when MS006 module panels landed.
 panel_count="$(python3 -c "import json; print(len(json.load(open('${TEMPLATE}'))['panels']))")"
-if [[ "${panel_count}" -lt 17 ]]; then
-    echo "  FAIL panel count ${panel_count} < 17 (drift; the 9 four-watchdog panels may have been removed)"
+if [[ "${panel_count}" -lt 20 ]]; then
+    echo "  FAIL panel count ${panel_count} < 20 (drift; the 4-watchdog OR module panels may have been removed)"
     exit 1
 fi
-echo "  PASS panel count = ${panel_count} (≥ 17)"
+echo "  PASS panel count = ${panel_count} (≥ 20)"
 
 # Gate 3: every four-watchdog metric series referenced by at least one
 # panel's expr field. Each row pairs a series with its source SDD.
@@ -51,6 +52,8 @@ declare -a SERIES=(
     "selfdef_guardian_audit_chain_events|SDD-029"
     "selfdef_scheduler_backpressured_decisions_total|SDD-031"
     "selfdef_scheduler_audit_chain_events|SDD-031"
+    "selfdef_modules_shipped_total|MS006"
+    "selfdef_modules_active_total|MS006"
 )
 
 failures=0

@@ -306,6 +306,41 @@
           "legendFormat": "overrides"
         }
       ]
+    },
+    {
+      "id": 110,
+      "type": "row",
+      "title": "Module catalog (MS006 / SDD-009)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 }
+    },
+    {
+      "id": 111,
+      "type": "stat",
+      "title": "modules — shipped",
+      "description": "MS006 — count of modules at /usr/share/selfdef/modules/<name>/module.toml. Changes only on package upgrade.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 50 },
+      "targets": [
+        {
+          "expr": "selfdef_modules_shipped_total",
+          "legendFormat": "shipped"
+        }
+      ]
+    },
+    {
+      "id": 112,
+      "type": "stat",
+      "title": "modules — active",
+      "description": "MS006 — count of modules the operator activated in /etc/selfdef/modules.toml ([modules.<name>] sections). Operator-controlled; changes on 'selfdefctl modules apply'.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 50 },
+      "targets": [
+        {
+          "expr": "selfdef_modules_active_total",
+          "legendFormat": "active"
+        }
+      ]
     }
   ]
 }

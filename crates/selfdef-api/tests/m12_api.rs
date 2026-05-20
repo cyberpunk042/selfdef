@@ -1726,6 +1726,34 @@ async fn modules_route_returns_200_with_list() {
 }
 
 #[tokio::test]
+async fn module_metrics_emitted_through_metrics_endpoint() {
+    // MS006: selfdef_modules_{shipped,active}_total gauges flow through
+    // the /metrics handler so Grafana/Prometheus can chart operator
+    // module activation state.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let body = std::str::from_utf8(&body_bytes).unwrap();
+    for series in ["selfdef_modules_shipped_total", "selfdef_modules_active_total"] {
+        assert!(
+            body.contains(&format!("# HELP {series}")),
+            "missing HELP comment for {series}"
+        );
+        assert!(
+            body.contains(&format!("# TYPE {series} gauge")),
+            "missing TYPE comment for {series}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn watchdog_metrics_values_are_valid_prometheus_numbers() {
     // Every watchdog gauge must emit a numeric value (i64 or f64) per
     // Prometheus exposition format spec. Catches a regression where a

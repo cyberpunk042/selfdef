@@ -23,11 +23,11 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 /// Default modules directory shipped by the Debian package.
-pub const DEFAULT_MODULES_DIR: &str = "/usr/share/selfdef/modules";
+pub(crate) const DEFAULT_MODULES_DIR: &str = "/usr/share/selfdef/modules";
 
 /// Default operator-chosen modules-config file
 /// (presence-of-`[modules.<name>]`-section means active).
-pub const DEFAULT_MODULES_TOML: &str = "/etc/selfdef/modules.toml";
+pub(crate) const DEFAULT_MODULES_TOML: &str = "/etc/selfdef/modules.toml";
 
 /// Minimal projection of a module's manifest. Fields beyond these
 /// stay in selfdef-cli — dashboards display these; CLI handles

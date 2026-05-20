@@ -30,6 +30,10 @@
 //! - `selfdef_scheduler_backpressured_decisions_total` — decisions under any backpressure
 //! - `selfdef_scheduler_audit_chain_events`      — chain length (-1 on break)
 //!
+//! ## modules (MS006 / SDD-009 Q-G)
+//! - `selfdef_modules_shipped_total`             — count of modules in /usr/share/selfdef/modules/
+//! - `selfdef_modules_active_total`              — count activated in /etc/selfdef/modules.toml
+//!
 //! Cross-references:
 //! - MS027 (observability) — this is the four-watchdog Prometheus emission layer
 //! - modules/observability/assets/dashboards/selfdef.json.template — Grafana
@@ -69,7 +73,27 @@ pub fn render() -> String {
     render_perimeter(&mut out);
     render_guardian(&mut out);
     render_scheduler(&mut out);
+    render_modules(&mut out);
     out
+}
+
+fn render_modules(out: &mut String) {
+    let modules_dir = std::env::var("SELFDEF_MODULES_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(crate::modules::DEFAULT_MODULES_DIR));
+    let modules_toml = std::env::var("SELFDEF_MODULES_TOML")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(crate::modules::DEFAULT_MODULES_TOML));
+    let shipped = crate::modules::list_in_dir(&modules_dir).unwrap_or_default();
+    let active = crate::modules::active_modules(&modules_toml);
+
+    out.push_str("# HELP selfdef_modules_shipped_total Modules shipped at /usr/share/selfdef/modules/ (parsed module.toml count).\n");
+    out.push_str("# TYPE selfdef_modules_shipped_total gauge\n");
+    writeln!(out, "selfdef_modules_shipped_total {}", shipped.len()).unwrap();
+
+    out.push_str("# HELP selfdef_modules_active_total Modules activated by the operator in /etc/selfdef/modules.toml.\n");
+    out.push_str("# TYPE selfdef_modules_active_total gauge\n");
+    writeln!(out, "selfdef_modules_active_total {}", active.len()).unwrap();
 }
 
 fn render_friction_audit(out: &mut String) {
