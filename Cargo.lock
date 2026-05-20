@@ -3963,6 +3963,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-fixed-window-counter"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-flag-set"
 version = "0.1.0"
 dependencies = [
