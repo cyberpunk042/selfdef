@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-disk-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate disk quota. Per-Profile rolling-window write byte budget + per-write max-file-bytes cap. account/rotate around each write. Distinct from selfdef-substrate-allocator-policy (RAM) and selfdef-substrate-gpu-quota (GPU); this is the disk-write lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
