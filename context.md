@@ -1881,3 +1881,11 @@ Total this resume: 236 selfdef IPS-authority crates. Workspace 401.
   independent)
 
 Total this resume: 237 selfdef IPS-authority crates. Workspace 402.
+
+### Hundred-and-seventieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-data-freshness-tracker` (Freshness{Fresh/Stale/Expired/
+  Unknown}; check(now) bands by age vs fresh_ms/stale_ms;
+  update/forget)
+
+Total this resume: 238 selfdef IPS-authority crates. Workspace 403.
