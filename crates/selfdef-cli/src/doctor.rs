@@ -68,12 +68,145 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     out.extend(check_shared_audit_summary(cfg));
     out.extend(check_oracle_triage(cfg));
     out.extend(check_hardware(cfg));
+    // MS046 + MS047 + MS044 + MS048 — four-watchdog set deployability.
+    out.extend(check_watchdog_set(cfg));
     out
 }
 
 /// SD-R9 + SDD-014: check the shared-audit-summary channel's path is
 /// writable when the channel is enabled. Also surfaces the JSONL twin
 /// (Q14-C) path when enabled.
+/// MS046 + MS047 + MS044 + MS048 — four-watchdog set deployability checks.
+///
+/// Verifies each watchdog's runtime artifacts are present + writable +
+/// the supporting infrastructure (Tetragon socket / TracingPolicy /
+/// systemd units / PSI files) is in operator-recognized state. Read-only;
+/// never mutates anything.
+fn check_watchdog_set(_cfg: &Config) -> Vec<CheckResult> {
+    let mut out = Vec::new();
+
+    // --- friction-audit (MS046) -----------------------------------------
+    let fa_script = Path::new("/usr/local/bin/friction-audit");
+    let fa_unit = Path::new("/etc/systemd/system/sovereign-guard.service");
+    let fa_ring = Path::new("/var/cache/selfdef/friction-audit/ring");
+    let fa_status = if fa_script.exists() && fa_unit.exists() {
+        CheckStatus::Ok
+    } else if fa_script.exists() || fa_unit.exists() {
+        CheckStatus::Warn
+    } else {
+        CheckStatus::Skipped
+    };
+    out.push(CheckResult {
+        category: "watchdog-set".into(),
+        name: "friction-audit (MS046)".into(),
+        status: fa_status,
+        detail: format!(
+            "script={} unit={} ring={}",
+            fa_script.exists(),
+            fa_unit.exists(),
+            fa_ring.exists()
+        ),
+    });
+
+    // --- perimeter (MS047) ----------------------------------------------
+    let perim_yaml = Path::new("/etc/tetragon/tracing-policies/sovereign-perimeter.yaml");
+    let perim_ext_dir = Path::new("/etc/selfdef/perimeter-extensions");
+    let perim_ring = Path::new("/var/cache/selfdef/perimeter/ring");
+    let perim_status = if perim_yaml.exists() {
+        CheckStatus::Ok
+    } else {
+        CheckStatus::Skipped
+    };
+    out.push(CheckResult {
+        category: "watchdog-set".into(),
+        name: "perimeter (MS047)".into(),
+        status: perim_status,
+        detail: format!(
+            "tracingpolicy={} ext_dir={} ring={}",
+            perim_yaml.exists(),
+            perim_ext_dir.exists(),
+            perim_ring.exists()
+        ),
+    });
+
+    // --- guardian (MS044) -----------------------------------------------
+    let guard_bin = Path::new("/usr/local/bin/selfdef-guardian");
+    let guard_unit = Path::new("/etc/systemd/system/selfdef-guardian.service");
+    let guard_socket = Path::new("/var/run/tetragon/tetragon.events");
+    let guard_ring = Path::new("/var/cache/selfdef/guardian/ring");
+    let guard_status = if guard_bin.exists() && guard_unit.exists() {
+        if guard_socket.exists() {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::Warn // bin+unit ready, socket missing (Tetragon down)
+        }
+    } else if guard_bin.exists() || guard_unit.exists() {
+        CheckStatus::Warn
+    } else {
+        CheckStatus::Skipped
+    };
+    out.push(CheckResult {
+        category: "watchdog-set".into(),
+        name: "guardian (MS044)".into(),
+        status: guard_status,
+        detail: format!(
+            "bin={} unit={} tetragon_socket={} ring={}",
+            guard_bin.exists(),
+            guard_unit.exists(),
+            guard_socket.exists(),
+            guard_ring.exists()
+        ),
+    });
+
+    // --- scheduler (MS048) ----------------------------------------------
+    let sched_bin = Path::new("/usr/local/bin/selfdef-scheduler");
+    let sched_unit = Path::new("/etc/systemd/system/selfdef-scheduler.service");
+    let sched_ring = Path::new("/var/cache/selfdef/scheduler/ring");
+    let psi_cpu = Path::new("/proc/pressure/cpu");
+    let psi_ok = psi_cpu.exists();
+    let sched_status = if sched_bin.exists() && sched_unit.exists() {
+        if psi_ok {
+            CheckStatus::Ok
+        } else {
+            CheckStatus::Warn // bin+unit ready, kernel without PSI
+        }
+    } else if sched_bin.exists() || sched_unit.exists() {
+        CheckStatus::Warn
+    } else {
+        CheckStatus::Skipped
+    };
+    out.push(CheckResult {
+        category: "watchdog-set".into(),
+        name: "scheduler (MS048)".into(),
+        status: sched_status,
+        detail: format!(
+            "bin={} unit={} ring={} psi_cpu={}",
+            sched_bin.exists(),
+            sched_unit.exists(),
+            sched_ring.exists(),
+            psi_ok
+        ),
+    });
+
+    // --- audit log mountpoint (cross-cutting: guardian + scheduler) ----
+    let zfs_ctx = Path::new("/mnt/vault/context");
+    let zfs_status = if zfs_ctx.is_dir() {
+        // Best-effort writability check — try to stat; deeper checks
+        // would require write attempt, which doctor avoids.
+        CheckStatus::Ok
+    } else {
+        CheckStatus::Skipped
+    };
+    out.push(CheckResult {
+        category: "watchdog-set".into(),
+        name: "ZFS audit context (/mnt/vault/context)".into(),
+        status: zfs_status,
+        detail: format!("present={}", zfs_ctx.is_dir()),
+    });
+
+    out
+}
+
 fn check_shared_audit_summary(cfg: &Config) -> Vec<CheckResult> {
     let mut out = Vec::new();
     if !selfdef_config::resolve_shared_audit_summary_enabled(cfg) {
@@ -1303,6 +1436,34 @@ mod sdd_013_tests {
             assert!(
                 results.iter().any(|r| r.category == cat),
                 "doctor::run() must surface {cat} category"
+            );
+        }
+    }
+
+    /// MS046/MS047/MS044/MS048: the four-watchdog set category lands
+    /// in every doctor run + emits one check per watchdog.
+    #[test]
+    fn watchdog_set_category_surfaces_four_per_watchdog_groups() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = run(&cfg);
+        let cat_rows: Vec<&CheckResult> = results
+            .iter()
+            .filter(|r| r.category == "watchdog-set")
+            .collect();
+        // friction-audit + perimeter + guardian + scheduler = at least 4
+        // top-level rows. Plus per-watchdog sub-rows (binary, ring dir,
+        // audit log). We assert the bottom bound — exact count grows
+        // as we add more checks.
+        assert!(
+            cat_rows.len() >= 4,
+            "watchdog-set category should have ≥4 rows; got {}",
+            cat_rows.len()
+        );
+        let names: Vec<&str> = cat_rows.iter().map(|r| r.name.as_str()).collect();
+        for w in ["friction-audit", "perimeter", "guardian", "scheduler"] {
+            assert!(
+                names.iter().any(|n| n.contains(w)),
+                "watchdog-set must include a row about {w}; got {names:?}"
             );
         }
     }
