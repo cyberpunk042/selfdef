@@ -850,3 +850,13 @@ Total this resume: 122 selfdef IPS-authority crates. Workspace 287.
   bootstrapper executes in order respecting budget + optional flag)
 
 Total this resume: 123 selfdef IPS-authority crates. Workspace 288.
+
+### Fifty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-llm-prompt-cache-policy` ((Profile, PromptKind) →
+  Cache{ttl}/NoCache{reason: PolicyDeny/SecretLeakRisk/
+  Unconfigured}; contains_secret forces NoCache{SecretLeakRisk};
+  canonical Production caches System+ToolOutput+Pinned, never
+  UserTurn; Experimental caches Scratch too)
+
+Total this resume: 124 selfdef IPS-authority crates. Workspace 289.
