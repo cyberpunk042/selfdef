@@ -1449,3 +1449,12 @@ Total this resume: 188 selfdef IPS-authority crates. Workspace 353.
   per-priority admitted/shed counters; custom thresholds allowed)
 
 Total this resume: 189 selfdef IPS-authority crates. Workspace 354.
+
+### Hundred-and-twenty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-state-checkpoint-store` (Checkpoint{id, ts_ms, label,
+  payload_hash:FNV-1a-64, bytes}; add assigns monotonic id;
+  latest by ts then id; restore by id; prune enforces max_count +
+  max_age_ms but never below min_keep — safe-restore floor)
+
+Total this resume: 190 selfdef IPS-authority crates. Workspace 355.
