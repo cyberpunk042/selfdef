@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-prewarm-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile prewarm allowance for cold-start substrate caches (model weights, KV cache, GPU contexts). plan(profile) returns ordered Vec<PrewarmStep{kind, budget_ms, optional}> the bootstrapper executes. Distinct from selfdef-substrate-cold-boot-policy (gate) — this is the warmup-schedule lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
