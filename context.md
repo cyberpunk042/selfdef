@@ -2150,3 +2150,12 @@ Total this resume: 267 selfdef IPS-authority crates. Workspace 432.
   default_effect with defaults_applied counter)
 
 Total this resume: 268 selfdef IPS-authority crates. Workspace 433.
+
+### Two-hundred-and-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-inflight-set` (InflightEntry{issued_ms, deadline_ms};
+  issue tracks (rejects dup/empty/zero ttl); ack removes;
+  sweep_timeouts removes past-deadline entries returning ids;
+  issued/acked/timed_out counters)
+
+Total this resume: 269 selfdef IPS-authority crates. Workspace 434.
