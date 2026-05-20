@@ -1010,3 +1010,12 @@ Total this resume: 140 selfdef IPS-authority crates. Workspace 305.
   exact-string matching)
 
 Total this resume: 141 selfdef IPS-authority crates. Workspace 306.
+
+### Seventy-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-explain-pack` (ExplainPack{outcome,
+  rules_fired, rules_skipped:Vec<(rule_id, skip_reason)>, ts};
+  record/fetch/rotate(now, retention); pure store paired with
+  policy-explanation-formatter for rendering)
+
+Total this resume: 142 selfdef IPS-authority crates. Workspace 307.
