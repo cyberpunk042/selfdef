@@ -1921,3 +1921,11 @@ Total this resume: 241 selfdef IPS-authority crates. Workspace 406.
   per (attempt, seed))
 
 Total this resume: 242 selfdef IPS-authority crates. Workspace 407.
+
+### Hundred-and-seventy-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-vote-tally` (weighted approve/reject/abstain; cast
+  replaces prior; decisive-early via worst-case + best-case
+  approve_bp bounds vs threshold; otherwise Pending)
+
+Total this resume: 243 selfdef IPS-authority crates. Workspace 408.
