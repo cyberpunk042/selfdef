@@ -4842,6 +4842,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-substrate-heartbeat-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-substrate-network-clock-policy"
 version = "0.1.0"
 dependencies = [

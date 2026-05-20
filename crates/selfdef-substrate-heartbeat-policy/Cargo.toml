@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-heartbeat-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS heartbeat watchdog for critical substrate components. register(component_id, deadline_ms); beat(component_id, ts) records the latest heartbeat; check(component_id, now) returns Live{age_ms}/Stale{age_ms, deadline_ms}/Unknown. Distinct from selfdef-decision-watchdog (decision liveness) and selfdef-tool-stream-watchdog (tool-stream liveness)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
