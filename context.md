@@ -1946,3 +1946,11 @@ Total this resume: 244 selfdef IPS-authority crates. Workspace 409.
   in-band samples leave state unchanged; transitions counter)
 
 Total this resume: 245 selfdef IPS-authority crates. Workspace 410.
+
+### Hundred-and-seventy-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-monotonic-counter` (advance-only u64; observe rejects
+  regression+equality; observe_eq idempotent on equality; bump
+  returns last+1 with overflow check; regressions counted)
+
+Total this resume: 246 selfdef IPS-authority crates. Workspace 411.
