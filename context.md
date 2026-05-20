@@ -1508,3 +1508,13 @@ Total this resume: 194 selfdef IPS-authority crates. Workspace 359.
   from current.started_at; both must pass)
 
 Total this resume: 195 selfdef IPS-authority crates. Workspace 360.
+
+### Hundred-and-twenty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-advisory-feed` (Advisory{id, severity, summary,
+  published_at_ms, dismissed, dismissed_at_ms, dismissed_by};
+  publish, dismiss idempotent (preserves first dismissal),
+  active()/by_severity(min) filter undismissed newest-first,
+  prune drops dismissed past max_age_ms)
+
+Total this resume: 196 selfdef IPS-authority crates. Workspace 361.
