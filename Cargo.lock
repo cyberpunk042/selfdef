@@ -4061,6 +4061,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-prompt-language-allowlist"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-prompt-output-similarity"
 version = "0.1.0"
 dependencies = [
