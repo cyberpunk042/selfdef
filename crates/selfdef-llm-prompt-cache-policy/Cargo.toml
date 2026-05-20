@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-prompt-cache-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile per-PromptKind decision for whether to cache an LLM prompt prefix. classify(profile, kind, contains_secret) returns Cache{ttl_ms}/NoCache{reason}/Unconfigured. Secret-containing prompts are never cached regardless of policy. Pure decision crate; consumers wire it to the LLM client cache."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
