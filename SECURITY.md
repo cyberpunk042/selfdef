@@ -103,6 +103,37 @@ surfaces the shipped modules introduce.
   `/etc/selfdef/`, `/var/lib/selfdef/` for modification by anything that
   is not the daemon's own update path.
 
+### Four-watchdog set (IPS spine, MS046+MS047+MS044+MS048)
+
+Four cooperating boundary-enforcement layers ship with the package as
+the IPS spine. Each layer addresses a different class of adversary
+move (see Adversaries above):
+
+| Watchdog | Layer | Adversary it counters |
+| --- | --- | --- |
+| friction-audit (MS046) | hardware frame | PCIe / ZFS / memory tamper before kernel even boots; refuses to start container runtimes until the hardware-integrity gates pass. Boot-ordered Before=podman/docker/containerd. |
+| perimeter (MS047) | kernel syscall | Arbitrary-binary execution under any user; in-kernel `Sigkill` on `sys_execve` outside the verbatim sain-01 §6 allowlist `{python3, nvidia-smi, vllm, podman}`. Extensions require MS003 multi-sig + TTL ≤ 30 days. |
+| guardian (MS044) | supervisor tier | Tetragon-policy violations the kernel-fence catches; fans out the verbatim 3-step response (`podman kill` / atomic ZFS audit append / `/dev/console` BEL alert). Circuit breaker prevents same-target flood (5 SIGKILLs / 60s). |
+| scheduler (MS048) | routing layer | Resource-pressure-induced shortcuts: never let expensive cognition wait on cheap preparation; never let cheap speculation commit without expensive verification when risk demands it. 7-axis objective + 5 backpressure surfaces (Blackwell VRAM / RTX 3090 / CPU PSI / RAM PSI / IO PSI / human-gate queue). |
+
+Audit-chain invariant (all 3 emitting watchdogs — perimeter, guardian,
+scheduler): every event is SHA-256-chained to the prior event via a
+`prev_event_sha256` field in its OCSF JSONL line. The `selfdefctl
+doctor` `watchdog-set` category surfaces chain-break detection as a
+critical signal pointing at the matching runbook.
+
+Operator surfaces — operators can detect tampering across the spine
+without per-watchdog drill-down:
+
+- `selfdefctl doctor` — watchdog-set category reports deployability +
+  per-watchdog audit-chain integrity
+- `selfdefctl trio --watch N` — live 4-panel snapshot
+- `selfdefctl trio-tail` — unified live OCSF tail
+- Grafana — 9 panels (one per failing-state aggregate + chain length)
+- 20 operator runbooks in the companion `devops-solutions-information-hub`
+  wiki/runbooks/, 5 per watchdog covering startup-failures + chain
+  corruption + false-positive rollback + key rotation + investigation
+
 ### API surface
 - **UNIX socket transport** (default): filesystem permissions are the auth
   boundary. Default `0660 root:adm`; recommended for on-host scrapers
