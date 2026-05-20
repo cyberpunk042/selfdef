@@ -1256,3 +1256,13 @@ Total this resume: 168 selfdef IPS-authority crates. Workspace 333.
   complete drops tracking; expired(now) lists overdue)
 
 Total this resume: 169 selfdef IPS-authority crates. Workspace 334.
+
+### Hundred-and-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-syscall-allowlist` (per substrate
+  SubstrateAllowlist{allowed:BTreeSet, allow_count, deny_count};
+  decide pure returns Allowed/Denied{reason}/Unknown;
+  observe_decision increments telemetry counters; register
+  idempotent; allow/disallow manage the set)
+
+Total this resume: 170 selfdef IPS-authority crates. Workspace 335.
