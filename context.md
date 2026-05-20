@@ -599,3 +599,14 @@ Total this resume: 88 selfdef IPS-authority crates. Workspace 253.
   start/poll/finish ledger; poll → OnTime/SoftExpired/HardExpired)
 
 Total this resume: 91 selfdef IPS-authority crates. Workspace 256.
+
+### Twenty-ninth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-substrate-cpu-affinity` (per-Profile BTreeSet<core_id>
+  permitted; classify returns Allowed/Denied{allowed}/Unconfigured;
+  canonical 16-core split with no overlap among non-Private)
+- `selfdef-actor-trust-floor` (per-Profile floor 0..=1000 on
+  trust-score-engine scores; classify returns Allowed/BelowFloor
+  {floor}/Unconfigured; Production 900 / Experimental 100)
+
+Total this resume: 93 selfdef IPS-authority crates. Workspace 258.
