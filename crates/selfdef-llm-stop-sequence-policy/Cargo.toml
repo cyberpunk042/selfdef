@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-stop-sequence-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile stop-sequence policy. Each Profile declares Vec<String> of stop sequences. should_stop(profile, accumulated_text) returns Some(matched_sequence) when a stop sequence is found, else None. Pure detector; the LLM stream consumer halts on the returned sequence."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
