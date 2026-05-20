@@ -689,3 +689,11 @@ Total this resume: 104 selfdef IPS-authority crates. Workspace 269.
   CapReached{cap}/UnknownNamespace; pairs with namespace-policy)
 
 Total this resume: 105 selfdef IPS-authority crates. Workspace 270.
+
+### Thirty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-llm-context-shrink-policy` (per-message DropAction plan;
+  System+Pinned+last keep_recent_n always Keep; drop scratch then
+  tool then Summarize assistant/user; pure descriptor)
+
+Total this resume: 106 selfdef IPS-authority crates. Workspace 271.
