@@ -2262,6 +2262,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-actor-role-binding"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-actor-rotation"
 version = "0.1.0"
 dependencies = [

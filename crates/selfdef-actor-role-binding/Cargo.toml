@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-actor-role-binding"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Role bindings between actors and named permission roles."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
