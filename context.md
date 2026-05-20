@@ -610,3 +610,14 @@ Total this resume: 91 selfdef IPS-authority crates. Workspace 256.
   {floor}/Unconfigured; Production 900 / Experimental 100)
 
 Total this resume: 93 selfdef IPS-authority crates. Workspace 258.
+
+### Thirtieth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-prompt-attachment-mime-policy` (per-Profile MIME glob
+  allowlist: exact, subtype 'image/*', full '*'; canonical
+  Experimental=*, Production exact image/png+jpeg+pdf)
+- `selfdef-grant-spend-ledger` (per-grant issue/spend/revoke
+  ledger; spend → Accepted{remaining}/Exhausted{remaining}/Revoked
+  /UnknownGrant; distinct from policy-budget-ledger)
+
+Total this resume: 95 selfdef IPS-authority crates. Workspace 260.
