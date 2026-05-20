@@ -122,14 +122,44 @@ Extend the dashboard by editing
 the file is template-rendered each time so your edits to the
 checked-in template propagate.
 
+## Alert rules (MS027 four-watchdog set)
+
+`assets/alerts/selfdef.yml.template` ships 9 Prometheus alert rules
+covering the four-watchdog set (MS046 + MS047 + MS044 + MS048):
+
+| Severity | Alert | Triggers when |
+|---|---|---|
+| critical | SelfdefFrictionAuditFailingGate | hardware-integrity gate Fail, no override |
+| warning | SelfdefPerimeterSigkill | sys_execve outside the verbatim allowlist |
+| critical | SelfdefPerimeterPolicyMissing | TracingPolicy YAML absent — kernel-fence OFF |
+| critical | SelfdefPerimeterChainBroken | OCSF audit chain integrity broken |
+| critical | SelfdefGuardianFailedResponse | any 3-step response step Failed |
+| warning | SelfdefGuardianTetragonSocketMissing | Guardian can't ingest events |
+| critical | SelfdefGuardianChainBroken | OCSF audit chain integrity broken |
+| warning | SelfdefSchedulerSustainedBackpressure | resource pressure sustained 10m |
+| critical | SelfdefSchedulerChainBroken | scheduler audit chain integrity broken |
+
+Every alert carries `runbook_url` pointing at the matching
+remediation procedure in
+`~/devops-solutions-information-hub/wiki/runbooks/` (one of the
+20 operator runbooks shipped with the IPS spine). Operators using
+ntfy/pagerduty/signal as Alertmanager receivers get clickable links
+into the exact remediation.
+
+Deployment is automatic: `apply.sh` renders + installs the alert
+rules alongside the scrape config + Grafana dashboard. In the
+`bundled` profile they land at `/etc/prometheus/rules.d/selfdef.yml`
+(or operator-supplied `prometheus_rules_dir`); in `external` mode
+they land in the staging dir under `prometheus/rules/`.
+
 ## What's NOT here yet
 
-- Alert rules. Grafana's alerting + Prometheus's alertmanager are
-  operator-owned. The dashboard makes the data legible; reacting
-  to it is the notifier chain's job (which integrity-sentinel +
-  detect-host already wire up).
 - Loki / OpenTelemetry traces. Out of scope for v0.1 — selfdef's
   hot path is structured events, not generic logs/traces.
+- Alert receiver wiring (Alertmanager → ntfy/pagerduty/signal).
+  Operator-owned; the `selfdef-integration-*` notifier integrations
+  (ntfy / signal / pagerduty / etc) are independent of Prometheus
+  alerting — operators choose their alert delivery path.
 
 ## Phase
 
