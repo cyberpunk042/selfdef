@@ -1,0 +1,36 @@
+[Unit]
+Description=Sovereign Platform Hardware Sanity Enforcer
+Documentation=man:friction-audit(8) https://github.com/cyberpunk042/selfdef/blob/main/docs/sdd/027-friction-audit-system.md
+# OPERATOR-EXTENSION (MS046 F05438): containerd added to Before= for
+# kubernetes hosts; sain-01 baseline only listed podman + docker.
+After=zfs-arc-tune.service
+Before=podman.service docker.service containerd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/friction-audit
+RemainAfterExit=yes
+# OPERATOR-EXTENSION: timeout matches in-script watchdog (2000ms cap +
+# small startup overhead). Prevents systemd hanging boot indefinitely
+# if the script wedges.
+TimeoutStartSec=10s
+# OPERATOR-EXTENSION: explicit no-Restart on a oneshot. Avoids surprises
+# if a future operator adds Restart=always carelessly.
+Restart=no
+
+# OPERATOR-EXTENSION: hardening (systemd-analyze security recommends
+# these for any system-level oneshot enforcer).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/selfdef /var/cache/selfdef
+# friction-audit must read /sys/bus/pci and /proc; we don't fully
+# isolate from these.
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

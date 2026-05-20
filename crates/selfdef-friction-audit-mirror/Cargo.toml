@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-friction-audit-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 typed-mirror crate exposing selfdef friction-audit Verdict state READ-ONLY for sovereign-os M060 cockpit + selfdef MS043 TUI authority-panel binding. Implements MS046 R10891-R10905."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []

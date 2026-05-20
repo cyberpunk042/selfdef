@@ -5,7 +5,23 @@ set -e
 case "$1" in
     purge)
         # On purge, remove state and user. Config is removed by dpkg.
-        rm -rf /var/lib/selfdef /var/log/selfdef
+        rm -rf /var/lib/selfdef /var/log/selfdef /var/cache/selfdef
+        # MS046 / SDD-027: remove friction-audit + sovereign-guard.
+        # chattr -i first or rm fails on chattr +i'd files.
+        if [ -f /usr/local/bin/friction-audit ]; then
+            chattr -i /usr/local/bin/friction-audit 2>/dev/null || true
+            rm -f /usr/local/bin/friction-audit
+        fi
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/sovereign-guard.service ]; then
+            systemctl disable sovereign-guard.service 2>/dev/null || true
+            systemctl stop sovereign-guard.service 2>/dev/null || true
+        fi
+        rm -f /etc/systemd/system/sovereign-guard.service
+        rm -rf /etc/systemd/system/sovereign-guard.service.d
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+        fi
         if getent passwd selfdef >/dev/null; then
             deluser --system selfdef >/dev/null 2>&1 || true
         fi
@@ -13,7 +29,15 @@ case "$1" in
             delgroup --system selfdef >/dev/null 2>&1 || true
         fi
         ;;
-    remove|upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)
+    remove)
+        # MS046 / SDD-027: stop sovereign-guard on remove (without purge);
+        # leave the script + unit file for upgrade reinstall.
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/sovereign-guard.service ]; then
+            systemctl stop sovereign-guard.service 2>/dev/null || true
+        fi
+        ;;
+    upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)
         # nothing to do
         ;;
 esac

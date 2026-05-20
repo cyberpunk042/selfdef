@@ -45,10 +45,35 @@ case "$1" in
             apparmor_parser -r /etc/apparmor.d/usr.bin.selfdefd || true
         fi
 
+        # MS046 / SDD-027: install friction-audit script + sovereign-guard
+        # systemd unit. Idempotent — re-running configure re-asserts both.
+        if [ -f /usr/share/selfdef/friction-audit.sh ]; then
+            install -m 0755 -o root -g root \
+                /usr/share/selfdef/friction-audit.sh \
+                /usr/local/bin/friction-audit
+            # MS046 R10803: chattr +i to lock the script after install.
+            # Best-effort — fails silently on filesystems without chattr.
+            chattr +i /usr/local/bin/friction-audit 2>/dev/null || true
+            # Pre-create OCSF jsonl + ring buffer dirs with right perms.
+            mkdir -p /var/log/selfdef /var/cache/selfdef/friction-audit/ring
+            chown selfdef:selfdef /var/log/selfdef /var/cache/selfdef \
+                /var/cache/selfdef/friction-audit \
+                /var/cache/selfdef/friction-audit/ring 2>/dev/null || true
+            chmod 0750 /var/cache/selfdef /var/cache/selfdef/friction-audit \
+                /var/cache/selfdef/friction-audit/ring 2>/dev/null || true
+        fi
+        if [ -f /usr/share/selfdef/sovereign-guard.service ]; then
+            install -m 0644 -o root -g root \
+                /usr/share/selfdef/sovereign-guard.service \
+                /etc/systemd/system/sovereign-guard.service
+        fi
+
         # systemd
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
-            # do NOT auto-start; let the operator enable when ready
+            # do NOT auto-start; let the operator enable when ready.
+            # Operators wanting boot-gate enforcement run:
+            #   systemctl enable --now sovereign-guard.service
         fi
         ;;
 esac
