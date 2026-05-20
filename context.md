@@ -1143,3 +1143,11 @@ Total this resume: 155 selfdef IPS-authority crates. Workspace 320.
   reasoning)
 
 Total this resume: 156 selfdef IPS-authority crates. Workspace 321.
+
+### Eighty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-retry-backoff-policy` (delay_for_attempt(n, base_ms,
+  max_ms, seed) → base*2^(n-1) capped at max + FNV-1a-derived
+  jitter from seed+n; deterministic per seed; pure math)
+
+Total this resume: 157 selfdef IPS-authority crates. Workspace 322.
