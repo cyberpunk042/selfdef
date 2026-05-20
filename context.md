@@ -1108,3 +1108,12 @@ Total this resume: 151 selfdef IPS-authority crates. Workspace 316.
   kept for audit)
 
 Total this resume: 152 selfdef IPS-authority crates. Workspace 317.
+
+### Eighty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-delta-feed` (Event{seq, policy_id, kind: Staged/
+  Promoted/Rejected/Reverted/Sunsetted, version_after, ts};
+  push assigns monotonic seq; since(cursor) returns (events,
+  new_cursor); rotate drops past-retention)
+
+Total this resume: 153 selfdef IPS-authority crates. Workspace 318.
