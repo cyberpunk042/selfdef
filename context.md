@@ -671,3 +671,13 @@ Total this resume: 102 selfdef IPS-authority crates. Workspace 267.
   rotate trims; distinct from replay-divergence-detector)
 
 Total this resume: 103 selfdef IPS-authority crates. Workspace 268.
+
+### Thirty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tool-arg-redaction-policy` (BTreeSet of patterns: exact,
+  *suffix, prefix*, full *; case-insensitive; redact_args replaces
+  matched values with [REDACTED:<len>]; canonical password/secret/
+  api_key/auth/bearer/credential/private_key/*_token/*_secret/
+  *_key/aws_*/gcp_*/azure_*)
+
+Total this resume: 104 selfdef IPS-authority crates. Workspace 269.
