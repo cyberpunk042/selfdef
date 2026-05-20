@@ -2777,3 +2777,12 @@ Total this resume: 339 selfdef IPS-authority crates. Workspace 504.
   full; VecDeque-backed)
 
 Total this resume: 340 selfdef IPS-authority crates. Workspace 505.
+
+### Two-hundred-and-seventy-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-priority-aging` (Job{id, base_priority,
+  enqueued_at_ms}; effective(now) = base + (now-enqueued)/
+  age_step; next(now) pops highest effective (ties → lower
+  id); prevents starvation while preferring high priority)
+
+Total this resume: 341 selfdef IPS-authority crates. Workspace 506.
