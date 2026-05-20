@@ -2693,3 +2693,13 @@ Total this resume: 330 selfdef IPS-authority crates. Workspace 495.
   idempotent; issuer overflow → Exhausted)
 
 Total this resume: 331 selfdef IPS-authority crates. Workspace 496.
+
+### Two-hundred-and-sixty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-sequence-gap-detector` (observe(seq) tracks
+  expected_next; seq > expected_next records half-open
+  Gap[expected_next, seq) and advances; seq < expected_next
+  bumps out_of_order; close_gap(seq) splits matching gap;
+  missing() sums uncovered)
+
+Total this resume: 332 selfdef IPS-authority crates. Workspace 497.
