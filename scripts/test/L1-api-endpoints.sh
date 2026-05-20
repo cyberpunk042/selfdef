@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# L1-api-endpoints.sh — MS045 SDD-030 Deliverable 3
+#
+# Verifies the axum Router in selfdef-api declares every SDD-promised
+# route. STATIC check — reads crates/selfdef-api/src/lib.rs directly,
+# no HTTP server invocation needed.
+#
+# Source: SDD-030 Deliverable 3 / MS045 R-rows
+# Run: bash scripts/test/L1-api-endpoints.sh
+set -euo pipefail
+
+LIB="${LIB:-crates/selfdef-api/src/lib.rs}"
+
+if [[ ! -f "${LIB}" ]]; then
+    echo "L1-api-endpoints FAIL: ${LIB} not found" >&2
+    exit 1
+fi
+
+check_route() {
+    local route="$1"
+    local sdd="$2"
+    if grep -qE "\.route\(\"${route}\"" "${LIB}"; then
+        echo "  PASS ${route} (${sdd})"
+    else
+        echo "  FAIL ${route} — declared by ${sdd} but NOT present in ${LIB}"
+        return 1
+    fi
+}
+
+echo "L1-api-endpoints: checking selfdef-api Router (file: ${LIB})"
+
+failures=0
+# SDD-027 / MS046
+check_route "/v1/friction-audit"          "SDD-027 D6" || failures=$((failures + 1))
+check_route "/v1/friction-audit/history"  "SDD-027 D6" || failures=$((failures + 1))
+# SDD-028 / MS047
+check_route "/v1/perimeter"               "SDD-028 D8" || failures=$((failures + 1))
+check_route "/v1/perimeter/history"       "SDD-028 D8" || failures=$((failures + 1))
+# SDD-029 / MS044
+check_route "/v1/guardian"                "SDD-029 D8" || failures=$((failures + 1))
+check_route "/v1/guardian/history"        "SDD-029 D8" || failures=$((failures + 1))
+
+if [[ "${failures}" -gt 0 ]]; then
+    echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
+    echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."
+    exit 1
+fi
+
+echo "L1-api-endpoints PASS: all SDD-promised routes declared"
