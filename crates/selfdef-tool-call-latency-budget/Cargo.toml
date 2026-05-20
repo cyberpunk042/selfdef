@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-call-latency-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile per-tool wall-clock latency budget. start(id, profile, tool) records the start ts; poll(id, now) returns OnTime / SoftExpired / HardExpired against per-Profile (soft_ms, hard_ms). finish(id) clears the entry. Distinct from selfdef-task-deadline-extension-policy (task-level deadlines) — this is the single-tool-call lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
