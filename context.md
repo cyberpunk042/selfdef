@@ -2826,3 +2826,12 @@ Total this resume: 344 selfdef IPS-authority crates. Workspace 509.
   evaluation)
 
 Total this resume: 345 selfdef IPS-authority crates. Workspace 510.
+
+### Two-hundred-and-seventy-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-jump-hash` (Google Jump Consistent Hash via
+  Lamping & Veach LCG step + jump; stateless O(ln n);
+  bucket(key, num_buckets) in [0, num_buckets); growth moves
+  ~1/n keys per bucket; +/-50% distribution balance verified)
+
+Total this resume: 346 selfdef IPS-authority crates. Workspace 511.
