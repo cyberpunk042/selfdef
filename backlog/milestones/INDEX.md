@@ -66,6 +66,7 @@
 | MS044 | Guardian Daemon — Tetragon eBPF supervisor + SIGKILL + atomic ZFS audit logs | sain-01 dump 513–588, 712–721, 977–981 |
 | MS045 | UX coherence test harness (CLI + TUI + minimal-web) — TDD validator for MS043 operator surface | MS043 + operator standing direction 2026-05-19 |
 | MS046 | Friction Audit System — boot-time hardware-integrity gate (PCIe / ZFS / memory) | sain-01 dump §5 lines 338–378 |
+| MS047 | Real-Time Security Perimeter Engine — Tetragon kernel-fence (sovereign-perimeter.yaml + sys_execve Sigkill) | sain-01 dump §6 lines 380–411 |
 
 ## Decomposition each milestone owes
 
