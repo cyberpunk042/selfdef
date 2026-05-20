@@ -328,6 +328,47 @@ async fn main() -> Result<()> {
         }
     }
 
+    // SDD-031 / MS048 — Goldilocks Scheduler observability at daemon boot.
+    //
+    // Fourth member of the four-watchdog set: hardware frame (friction-
+    // audit) + kernel syscall (perimeter) + supervisor tier (guardian)
+    // + routing layer (scheduler). selfdefd does NOT run the scheduler
+    // itself — selfdef-scheduler.service is a separate systemd unit.
+    // selfdefd surfaces boot-time state for operator visibility.
+    let scheduler_audit_log =
+        std::path::Path::new(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH);
+    match selfdef_scheduler::audit_chain_check(scheduler_audit_log) {
+        Ok(n) => info!(
+            "scheduler.audit_chain_events" = n,
+            "scheduler: audit chain intact, {} event(s)",
+            n
+        ),
+        Err(e) => warn!(error = %e, "scheduler: audit chain check failed; daemon continues"),
+    }
+    match selfdef_scheduler::read_ring_buffer(std::path::Path::new(
+        selfdef_scheduler::DEFAULT_RING_DIR,
+    )) {
+        Ok(decisions) if decisions.is_empty() => {
+            info!("scheduler: no decisions recorded yet (ring buffer empty)");
+        }
+        Ok(decisions) => {
+            let backpressured = decisions
+                .iter()
+                .filter(|d| d.backpressure.any_pressure())
+                .count();
+            info!(
+                "scheduler.decisions" = decisions.len(),
+                "scheduler.backpressured_decisions" = backpressured,
+                "scheduler: {} decision(s) recorded, {} under backpressure",
+                decisions.len(),
+                backpressured
+            );
+        }
+        Err(e) => {
+            warn!(error = %e, "scheduler: ring buffer read failed; daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 

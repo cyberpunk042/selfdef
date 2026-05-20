@@ -29,6 +29,10 @@ use selfdef_perimeter::{
     ExtensionStore, Outcome, DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH as PERIM_OCSF,
     DEFAULT_POLICY_PATH, DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR,
 };
+use selfdef_scheduler::{
+    audit_chain_check as sched_chain, read_ring_buffer as sched_read,
+    DEFAULT_AUDIT_LOG_PATH as SCHED_AUDIT, DEFAULT_RING_DIR as SCHED_RING,
+};
 
 pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
     // --json + --watch is nonsensical (JSON is one-shot machine-readable).
@@ -124,6 +128,21 @@ fn render_once(json: bool) -> Result<i32> {
         "ok"
     };
 
+    // scheduler snapshot (MS048)
+    let sched_decisions = sched_read(Path::new(SCHED_RING)).context("scheduler ring read")?;
+    let sched_backpressured = sched_decisions
+        .iter()
+        .filter(|d| d.backpressure.any_pressure())
+        .count();
+    let sched_chain_events = sched_chain(Path::new(SCHED_AUDIT)).ok();
+    let sched_aggregate = if sched_decisions.is_empty() {
+        "unknown"
+    } else if sched_backpressured > 0 {
+        "backpressure"
+    } else {
+        "ok"
+    };
+
     if json {
         let payload = serde_json::json!({
             "now_ms": now,
@@ -148,15 +167,21 @@ fn render_once(json: bool) -> Result<i32> {
                 "tetragon_socket_present": guard_socket_present,
                 "audit_chain_events": guard_chain_events,
             },
+            "scheduler": {
+                "aggregate": sched_aggregate,
+                "decision_count": sched_decisions.len(),
+                "backpressured_decisions": sched_backpressured,
+                "audit_chain_events": sched_chain_events,
+            },
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(0);
     }
 
-    println!("selfdef three-watchdog trio (read-only snapshot)");
+    println!("selfdef four-watchdog set (read-only snapshot)");
     println!("{}", "═".repeat(72));
     println!(
-        "  [{aggregate:<8}] friction-audit (hardware frame, SDD-027 / MS046)",
+        "  [{aggregate:<12}] friction-audit (hardware frame, SDD-027 / MS046)",
         aggregate = fa_aggregate.to_uppercase()
     );
     println!(
@@ -167,7 +192,7 @@ fn render_once(json: bool) -> Result<i32> {
     );
     println!();
     println!(
-        "  [{aggregate:<8}] perimeter      (kernel syscall, SDD-028 / MS047)",
+        "  [{aggregate:<12}] perimeter      (kernel syscall, SDD-028 / MS047)",
         aggregate = perim_aggregate.to_uppercase()
     );
     println!(
@@ -182,7 +207,7 @@ fn render_once(json: bool) -> Result<i32> {
     );
     println!();
     println!(
-        "  [{aggregate:<8}] guardian       (supervisor tier, SDD-029 / MS044)",
+        "  [{aggregate:<12}] guardian       (supervisor tier, SDD-029 / MS044)",
         aggregate = guard_aggregate.to_uppercase()
     );
     println!(
@@ -194,9 +219,22 @@ fn render_once(json: bool) -> Result<i32> {
             .map(|n| n.to_string())
             .unwrap_or_else(|| "—".to_string()),
     );
+    println!();
+    println!(
+        "  [{aggregate:<12}] scheduler      (routing layer, SDD-031 / MS048)",
+        aggregate = sched_aggregate.to_uppercase()
+    );
+    println!(
+        "             decisions={count} · backpressured={bp} · chain={c}",
+        count = sched_decisions.len(),
+        bp = sched_backpressured,
+        c = sched_chain_events
+            .map(|n| n.to_string())
+            .unwrap_or_else(|| "—".to_string()),
+    );
     println!("{}", "═".repeat(72));
     println!(
-        "  Drill down: `selfdefctl friction-audit show` / `perimeter show` / `guardian show`"
+        "  Drill down: `selfdefctl friction-audit show` / `perimeter show` / `guardian show` / `scheduler show`"
     );
     println!("  Dashboard:  http://localhost:7575/dashboard (when selfdefd HTTP server is bound)");
     println!("  Runbooks:   ~/devops-solutions-information-hub/wiki/runbooks/");
