@@ -1082,3 +1082,11 @@ Total this resume: 148 selfdef IPS-authority crates. Workspace 313.
   — this is the caller-scope lane)
 
 Total this resume: 149 selfdef IPS-authority crates. Workspace 314.
+
+### Eighty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-group-membership` (forward group→actors + reverse
+  actor→groups indices; add/remove/members_of/groups_of/is_member;
+  both indices kept in lockstep; empty entries auto-prune)
+
+Total this resume: 150 selfdef IPS-authority crates. Workspace 315.
