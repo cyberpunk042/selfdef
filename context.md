@@ -2202,3 +2202,12 @@ Total this resume: 273 selfdef IPS-authority crates. Workspace 438.
   direction; lag = high_water - committed saturating)
 
 Total this resume: 274 selfdef IPS-authority crates. Workspace 439.
+
+### Two-hundred-and-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-flag-set` (named 64-bit flag set; register assigns
+  lowest free bit (idempotent), Full at 64; set/clear/contains
+  by name; union/intersect/subtract combine masks; active_names
+  bit-order)
+
+Total this resume: 275 selfdef IPS-authority crates. Workspace 440.
