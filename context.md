@@ -984,3 +984,11 @@ Total this resume: 137 selfdef IPS-authority crates. Workspace 302.
   triggered reset; re-record overwrites prior)
 
 Total this resume: 138 selfdef IPS-authority crates. Workspace 303.
+
+### Seventy-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-version-pin` (per-actor Pin{bundle_id, version};
+  pin/unpin/resolve Pinned/Unpinned; staged-rollout lane keeping
+  pinned actors on prior bundle while the rest migrate)
+
+Total this resume: 139 selfdef IPS-authority crates. Workspace 304.
