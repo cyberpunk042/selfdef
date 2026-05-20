@@ -1595,3 +1595,13 @@ Total this resume: 203 selfdef IPS-authority crates. Workspace 368.
   cumulative across all)
 
 Total this resume: 204 selfdef IPS-authority crates. Workspace 369.
+
+### Hundred-and-thirty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-kill-switch-registry` (Switch{id, description, tripped,
+  trip_reason, tripped_at_ms, tripped_by, dual_control, trip_count};
+  register Armed; trip needs reason+actor; rearm with dual_control
+  requires actor ≠ tripper (two-person rule); is_operational gates
+  dependent code; tripped_ids lists current)
+
+Total this resume: 205 selfdef IPS-authority crates. Workspace 370.
