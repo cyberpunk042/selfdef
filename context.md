@@ -2281,3 +2281,11 @@ Total this resume: 282 selfdef IPS-authority crates. Workspace 447.
   names rejected)
 
 Total this resume: 283 selfdef IPS-authority crates. Workspace 448.
+
+### Two-hundred-and-sixteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-log-histogram` (64 buckets indexed by floor(log2(
+  value+1)); observe bumps; quantile(p_bp) walks buckets to
+  cumulative >= target returning bucket lower bound)
+
+Total this resume: 284 selfdef IPS-authority crates. Workspace 449.
