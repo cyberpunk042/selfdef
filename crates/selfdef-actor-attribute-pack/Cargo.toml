@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-actor-attribute-pack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-actor attribute store: small key/value pairs (team, region, level) consumed by predicate matching in policies. set/get/delete; match_all(actor, predicates) returns Matched/Mismatched{missing/wrong}/UnknownActor. Pure descriptor."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
