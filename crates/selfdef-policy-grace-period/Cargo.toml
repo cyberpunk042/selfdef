@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-grace-period"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS grace-period gate. After policy install, classify(policy_id, now) returns InGrace{installed_at, grace_ms, remaining_ms} during the first grace_ms; then InEffect. Useful for letting a new strict policy ramp without surprising actors. Pure clock-based decider."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
