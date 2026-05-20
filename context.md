@@ -1410,3 +1410,12 @@ Total this resume: 184 selfdef IPS-authority crates. Workspace 349.
   different policies independent)
 
 Total this resume: 185 selfdef IPS-authority crates. Workspace 350.
+
+### Hundred-and-eighteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-cas-store` (Versioned{value, version};
+  put_cas requires expected_version match — Wrote{new_version}
+  or Conflict{observed, expected}; new keys need expected=0;
+  force() bumps without CAS; delete then re-put starts fresh)
+
+Total this resume: 186 selfdef IPS-authority crates. Workspace 351.
