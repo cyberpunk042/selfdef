@@ -2340,3 +2340,11 @@ Total this resume: 289 selfdef IPS-authority crates. Workspace 454.
   unchanged; since_last saturating; pure data)
 
 Total this resume: 290 selfdef IPS-authority crates. Workspace 455.
+
+### Two-hundred-and-twenty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-vector-clock` (per-node counter map; tick increments;
+  merge takes per-node max; compare returns Some(Equal/Less/
+  Greater) or None when concurrent)
+
+Total this resume: 291 selfdef IPS-authority crates. Workspace 456.
