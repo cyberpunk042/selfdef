@@ -723,3 +723,12 @@ Total this resume: 108 selfdef IPS-authority crates. Workspace 273.
   summarized)
 
 Total this resume: 109 selfdef IPS-authority crates. Workspace 274.
+
+### Forty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-precondition-checker` (declarative action gates;
+  Precondition enum HasGrant/NotSuspended/WithinHours{from,to}/
+  EnvFlagPresent/MinTrustScore/DepActionCompleted; ctx snapshot
+  pure-evaluate; reports all missing; within-hours wraps midnight)
+
+Total this resume: 110 selfdef IPS-authority crates. Workspace 275.
