@@ -1897,3 +1897,11 @@ Total this resume: 238 selfdef IPS-authority crates. Workspace 403.
   late arrivals after deadline → TimedOut)
 
 Total this resume: 239 selfdef IPS-authority crates. Workspace 404.
+
+### Hundred-and-seventy-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-handler-registry` (Handler{id, priority, enabled} per
+  kind, sorted by priority desc; resolve returns first-enabled;
+  set_enabled toggles; unregister auto-tidies empty kind)
+
+Total this resume: 240 selfdef IPS-authority crates. Workspace 405.
