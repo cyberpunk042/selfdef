@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-mutation-record"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS append-only record of policy mutations: who proposed, who witnessed, who applied (and when). record(policy_id, mutation_id, proposed_by, witnessed_by[], applied_by, ts). fetch(mutation_id) returns Option<Record>. Pure ledger."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
