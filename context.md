@@ -1382,3 +1382,12 @@ Total this resume: 181 selfdef IPS-authority crates. Workspace 346.
   O(log n × roles); roles_of lists)
 
 Total this resume: 182 selfdef IPS-authority crates. Workspace 347.
+
+### Hundred-and-fifteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-metric-quantile-sketch` (power-of-2 buckets: bucket i
+  covers (2^(i-1), 2^i]; record(v) classifies zero/bucket/overflow;
+  quantile(q) returns bucket upper bound at q-th observation —
+  overshoot ≤ factor 2; suitable for latency P50/P99 viz)
+
+Total this resume: 183 selfdef IPS-authority crates. Workspace 348.
