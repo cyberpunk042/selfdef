@@ -860,3 +860,12 @@ Total this resume: 123 selfdef IPS-authority crates. Workspace 288.
   UserTurn; Experimental caches Scratch too)
 
 Total this resume: 124 selfdef IPS-authority crates. Workspace 289.
+
+### Fifty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-sunset-policy` (SunsetEntry{sunset_at_ms,
+  warn_window_ms}; classify Active/Warning{remaining_ms}/Expired/
+  Unknown; rotate(now) emits + removes the expired set for the
+  audit log)
+
+Total this resume: 125 selfdef IPS-authority crates. Workspace 290.
