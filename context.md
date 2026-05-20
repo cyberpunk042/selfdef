@@ -1825,3 +1825,11 @@ Total this resume: 229 selfdef IPS-authority crates. Workspace 394.
   MissingRequired or ForbiddenPresent per field)
 
 Total this resume: 230 selfdef IPS-authority crates. Workspace 395.
+
+### Hundred-and-sixty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-content-hash-cache` (Entry{hash:FNV-1a-64, first_seen,
+  last_seen, seen_count}; observe returns New{hash}/Existing{hash,
+  seen_count} + bumps last_seen; prune drops stale by last_seen)
+
+Total this resume: 231 selfdef IPS-authority crates. Workspace 396.
