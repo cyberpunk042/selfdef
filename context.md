@@ -1752,3 +1752,11 @@ Total this resume: 220 selfdef IPS-authority crates. Workspace 385.
   out→Deny; DenyList in→Deny out→Allow)
 
 Total this resume: 221 selfdef IPS-authority crates. Workspace 386.
+
+### Hundred-and-fifty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-text-anonymizer` (Pattern{id, needle, placeholder, hits};
+  anonymize pure (returns rewritten + hits_per_pattern); observe
+  records hits in state; substring matching only; total_hits sums)
+
+Total this resume: 222 selfdef IPS-authority crates. Workspace 387.
