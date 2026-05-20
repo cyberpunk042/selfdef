@@ -905,3 +905,12 @@ Total this resume: 128 selfdef IPS-authority crates. Workspace 293.
   InScope; pairs with policy-shadow-mode for gradual enforcement)
 
 Total this resume: 129 selfdef IPS-authority crates. Workspace 294.
+
+### Sixty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-quarantine-release-policy` ((min_reviewers, min_age_ms,
+  require_operator); classify Releasable / NeedsMoreReviewers
+  {have, need} / TooFresh{age, need_min_age} / NeedsOperator;
+  order reviewers→age→operator)
+
+Total this resume: 130 selfdef IPS-authority crates. Workspace 295.
