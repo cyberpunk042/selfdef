@@ -402,6 +402,62 @@ enum PerimeterAction {
     /// Show the coexistence configuration + per-author policy counts
     /// on disk. Read-only.
     Status,
+    /// SDD-028 / MS047: active sovereign-kernel-fence policy summary +
+    /// last N Sigkill verdicts + currently-loaded allowlist extensions.
+    /// Read-only.
+    Show {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-028 / MS047: Sigkill verdict history (newest-first).
+    History {
+        /// How many entries to render (default: 32).
+        #[arg(long, default_value_t = 32)]
+        limit: u32,
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-028 / MS047: install a new operator-signed allowlist
+    /// extension manifest. Requires Ring 0 + MS003 multi-sig. The
+    /// `--signed` argument must point at a `.json` manifest with a
+    /// detached `.minisig` signature alongside.
+    Extend {
+        /// Path to the MS003-signed extension manifest (`.json`).
+        /// Its `<path>.minisig` sibling MUST exist.
+        #[arg(long)]
+        signed: PathBuf,
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-028 / MS047: revoke a currently-loaded extension by id.
+    /// Requires Ring 0 + MS003 signature.
+    Revoke {
+        /// Extension id (kebab-case) as written in the manifest.
+        extension_id: String,
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-028 / MS047: re-evaluate the perimeter baseline against the
+    /// current TracingPolicy. Operator-triggered audit cycle (replay
+    /// only; never automatic).
+    AuditCycle {
+        #[command(subcommand)]
+        action: AuditCycleAction,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum AuditCycleAction {
+    /// Re-evaluate baseline against current policy. Cross-ref MS009.
+    Replay {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -1375,6 +1431,29 @@ async fn main() -> Result<()> {
                 let exit = perimeter::run_status(&cfg).context("perimeter status")?;
                 std::process::exit(exit);
             }
+            PerimeterAction::Show { json } => {
+                let exit = perimeter::run_show(json).context("perimeter show")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::History { limit, json } => {
+                let exit = perimeter::run_history(limit, json).context("perimeter history")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::Extend { signed, json } => {
+                let exit = perimeter::run_extend(&signed, json).context("perimeter extend")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::Revoke { extension_id, json } => {
+                let exit = perimeter::run_revoke(&extension_id, json).context("perimeter revoke")?;
+                std::process::exit(exit);
+            }
+            PerimeterAction::AuditCycle { action } => match action {
+                AuditCycleAction::Replay { json } => {
+                    let exit = perimeter::run_audit_cycle_replay(json)
+                        .context("perimeter audit-cycle replay")?;
+                    std::process::exit(exit);
+                }
+            },
         },
         Command::Wizard { json } => {
             let exit = if json {

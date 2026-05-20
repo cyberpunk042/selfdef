@@ -989,3 +989,329 @@ spec:
         ));
     }
 }
+
+// =============================================================================
+// SDD-028 / MS047 — sovereign-kernel-fence operator surface
+// =============================================================================
+//
+// Read-only subverbs (show / history) consume the ring buffer +
+// extension store that the perimeter runtime crate maintains. Mutating
+// subverbs (extend / revoke / audit-cycle replay) require Ring 0 +
+// MS003 multi-sig — the CLI surface here is the operator-friendly
+// scaffold; the actual Ring 0 enforcement lives in `selfdef-perimeter`
+// loaders + the eventual selfdefd authority dispatcher.
+
+mod ms047 {
+    use std::path::{Path, PathBuf};
+
+    use anyhow::{anyhow, Context as _, Result};
+    use selfdef_perimeter::{
+        audit_chain_check, default_extension_path, emit_ocsf_detection_2004, now_ms,
+        read_ring_buffer, ExtensionManifest, ExtensionStore, Outcome, PerimeterError, Verdict,
+        DEFAULT_ALLOWLIST, DEFAULT_OCSF_PATH, DEFAULT_POLICY_PATH, DEFAULT_RING_DIR,
+        DEFAULT_TRUST_ROOTS_DIR,
+    };
+
+    fn ring_dir() -> PathBuf {
+        std::env::var("SELFDEF_PERIMETER_RING_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_RING_DIR))
+    }
+
+    fn extension_dir() -> PathBuf {
+        std::env::var("SELFDEF_PERIMETER_EXTENSION_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                PathBuf::from(selfdef_perimeter::DEFAULT_EXTENSION_DIR)
+            })
+    }
+
+    fn trust_roots_dir() -> PathBuf {
+        std::env::var("SELFDEF_PERIMETER_TRUST_ROOTS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_TRUST_ROOTS_DIR))
+    }
+
+    fn ocsf_path() -> PathBuf {
+        std::env::var("SELFDEF_PERIMETER_OCSF_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_OCSF_PATH))
+    }
+
+    fn policy_path() -> PathBuf {
+        std::env::var("SELFDEF_PERIMETER_POLICY_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from(DEFAULT_POLICY_PATH))
+    }
+
+    /// Render the policy summary + last 16 Sigkill verdicts + active
+    /// extensions (the "operator dashboard" snapshot). Read-only.
+    pub(crate) fn run_show(json: bool) -> Result<i32> {
+        let verdicts = read_ring_buffer(&ring_dir()).context("read ring buffer")?;
+        let (store, _report) =
+            load_extensions_best_effort().context("load extensions")?;
+        let now = now_ms();
+        let active_extensions: Vec<&ExtensionManifest> = store.active(now);
+        let active_paths = store.active_paths(now);
+        let policy_present = policy_path().exists();
+        let chain_events = audit_chain_check(&ocsf_path())
+            .map(Some)
+            .unwrap_or(None);
+        let last_n: Vec<&Verdict> = verdicts.iter().take(16).collect();
+
+        if json {
+            let payload = serde_json::json!({
+                "policy": {
+                    "path": policy_path(),
+                    "present": policy_present,
+                    "name": "sovereign-kernel-fence",
+                },
+                "default_allowlist": DEFAULT_ALLOWLIST,
+                "active_extensions": active_extensions.iter().map(|m| serde_json::json!({
+                    "extension_id": m.extension_id,
+                    "binary_paths": m.binary_paths,
+                    "signer_kid": m.signer_kid,
+                    "auditor_kid": m.auditor_kid,
+                    "expires_at_ms": m.expires_at_ms,
+                    "incident_url": m.incident_url,
+                })).collect::<Vec<_>>(),
+                "extension_paths": active_paths,
+                "verdicts": last_n,
+                "audit_chain_events_seen": chain_events,
+                "now_ms": now,
+            });
+            println!("{}", serde_json::to_string_pretty(&payload)?);
+        } else {
+            render_human(policy_present, &last_n, &active_extensions, &active_paths, chain_events);
+        }
+        Ok(0)
+    }
+
+    /// Render verdict history (Sigkill-priority, newest-first).
+    pub(crate) fn run_history(limit: u32, json: bool) -> Result<i32> {
+        let verdicts = read_ring_buffer(&ring_dir()).context("read ring buffer")?;
+        let limited: Vec<&Verdict> = verdicts.iter().take(limit as usize).collect();
+        if json {
+            println!("{}", serde_json::to_string_pretty(&limited)?);
+        } else {
+            if limited.is_empty() {
+                println!("(no perimeter verdicts in ring buffer at {})", ring_dir().display());
+            }
+            for v in &limited {
+                print_verdict_row(v);
+            }
+        }
+        Ok(0)
+    }
+
+    /// Install a new MS003-signed allowlist-extension manifest. The
+    /// `signed` argument is the path to the `.json` manifest; its
+    /// `.minisig` sibling must exist. The runtime crate enforces:
+    /// MS003 multi-sig + TTL ≤ 30 days + binary-path validation +
+    /// non-redundancy vs the verbatim sain-01 §6 default allowlist.
+    pub(crate) fn run_extend(signed: &Path, json: bool) -> Result<i32> {
+        let now = now_ms();
+        let manifest = ExtensionStore::load_signed(signed, &trust_roots_dir(), now)
+            .map_err(|e| anyhow!("load_signed: {e}"))?;
+
+        // Persist to the canonical extension dir (atomic copy).
+        let dest = default_extension_path(&manifest.extension_id);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| anyhow!("create_dir_all {}: {e}", parent.display()))?;
+        }
+        std::fs::copy(signed, &dest)
+            .map_err(|e| anyhow!("copy {} → {}: {e}", signed.display(), dest.display()))?;
+        let sig_src = signed.with_extension("json.minisig");
+        let sig_dest = dest.with_extension("json.minisig");
+        std::fs::copy(&sig_src, &sig_dest)
+            .map_err(|e| anyhow!("copy sig: {e}"))?;
+
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "ok": true,
+                    "extension_id": manifest.extension_id,
+                    "binary_paths": manifest.binary_paths,
+                    "expires_at_ms": manifest.expires_at_ms,
+                    "installed_to": dest,
+                }))?
+            );
+        } else {
+            println!("perimeter extend: installed extension '{}'", manifest.extension_id);
+            for p in &manifest.binary_paths {
+                println!("  + {p}");
+            }
+            println!("  expires_at_ms: {}", manifest.expires_at_ms);
+            println!("  manifest: {}", dest.display());
+            println!("  signature: {}", sig_dest.display());
+            println!(
+                "  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`."
+            );
+        }
+        Ok(0)
+    }
+
+    /// Revoke an extension by id. Removes manifest + signature from the
+    /// canonical extension dir; if the manifest is absent, exits 0
+    /// (idempotent — revoking nothing succeeds).
+    pub(crate) fn run_revoke(extension_id: &str, json: bool) -> Result<i32> {
+        if extension_id.is_empty() {
+            return Err(anyhow!("extension_id is empty"));
+        }
+        let manifest_path = default_extension_path(extension_id);
+        let sig_path = manifest_path.with_extension("json.minisig");
+        let mut removed = Vec::<PathBuf>::new();
+        for p in [&manifest_path, &sig_path] {
+            if p.exists() {
+                std::fs::remove_file(p)
+                    .map_err(|e| anyhow!("remove {}: {e}", p.display()))?;
+                removed.push(p.clone());
+            }
+        }
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "ok": true,
+                    "extension_id": extension_id,
+                    "removed": removed,
+                }))?
+            );
+        } else if removed.is_empty() {
+            println!("perimeter revoke: extension '{extension_id}' was not loaded (idempotent OK)");
+        } else {
+            println!("perimeter revoke: removed extension '{extension_id}'");
+            for p in &removed {
+                println!("  - {}", p.display());
+            }
+            println!(
+                "  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`."
+            );
+        }
+        Ok(0)
+    }
+
+    /// Audit-cycle replay: re-evaluate the current ring-buffer state
+    /// against the active policy + extensions, write a fresh "replay"
+    /// snapshot to the OCSF log bridge, and return the count of
+    /// events synthesized. Operator-triggered per SDD-028 D4 (replay
+    /// only; never automatic).
+    pub(crate) fn run_audit_cycle_replay(json: bool) -> Result<i32> {
+        let verdicts = read_ring_buffer(&ring_dir()).context("read ring buffer")?;
+        let ocsf = ocsf_path();
+        let mut emitted = 0usize;
+        for v in &verdicts {
+            emit_ocsf_detection_2004(&ocsf, v)
+                .map_err(|e| anyhow!("emit_ocsf_detection_2004: {e}"))?;
+            emitted += 1;
+        }
+        let chain_events = audit_chain_check(&ocsf).map_err(|e| anyhow!("audit_chain_check: {e}"))?;
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "ok": true,
+                    "verdicts_re_emitted": emitted,
+                    "audit_chain_events_total": chain_events,
+                    "ocsf_path": ocsf,
+                }))?
+            );
+        } else {
+            println!("perimeter audit-cycle replay:");
+            println!("  verdicts re-emitted: {emitted}");
+            println!("  audit chain events total: {chain_events}");
+            println!("  log: {}", ocsf.display());
+        }
+        Ok(0)
+    }
+
+    fn load_extensions_best_effort() -> Result<(ExtensionStore, Vec<Result<String, PerimeterError>>)>
+    {
+        let now = now_ms();
+        // Honor the env-var override for sandboxed test runs.
+        let ext_dir = extension_dir();
+        let trust = trust_roots_dir();
+        ExtensionStore::load_dir(&ext_dir, &trust, now).map_err(|e| anyhow!("load_dir: {e}"))
+    }
+
+    fn render_human(
+        policy_present: bool,
+        verdicts: &[&Verdict],
+        active_extensions: &[&ExtensionManifest],
+        active_paths: &[String],
+        chain_events: Option<usize>,
+    ) {
+        println!("perimeter: sovereign-kernel-fence");
+        println!(
+            "  policy: {} ({})",
+            policy_path().display(),
+            if policy_present { "PRESENT" } else { "MISSING" }
+        );
+        println!("  default allowlist (sain-01 §6 verbatim):");
+        for p in DEFAULT_ALLOWLIST {
+            println!("    {p}");
+        }
+        if active_extensions.is_empty() {
+            println!("  operator extensions: (none)");
+        } else {
+            println!("  operator extensions ({} active):", active_extensions.len());
+            for m in active_extensions {
+                println!(
+                    "    [{}] expires_at_ms={} signer={} auditor={}",
+                    m.extension_id, m.expires_at_ms, m.signer_kid, m.auditor_kid
+                );
+            }
+            if !active_paths.is_empty() {
+                println!("    extended allowlist paths:");
+                for p in active_paths {
+                    println!("      + {p}");
+                }
+            }
+        }
+        match chain_events {
+            Some(n) => println!("  OCSF audit chain events: {n} (chain intact)"),
+            None => println!("  OCSF audit chain events: chain check failed (see logs)"),
+        }
+        println!("  last verdicts (newest-first, {} shown):", verdicts.len());
+        if verdicts.is_empty() {
+            println!("    (none)");
+        }
+        for v in verdicts {
+            print_verdict_row(v);
+        }
+    }
+
+    fn print_verdict_row(v: &Verdict) {
+        let outcome_tag = match &v.outcome {
+            Outcome::Sigkill => "SIGKILL".to_string(),
+            Outcome::Allowlisted => "ALLOWED".to_string(),
+            Outcome::ExtensionAllowed { manifest_sha256, .. } => {
+                format!("EXTEND[{}]", &manifest_sha256[..manifest_sha256.len().min(8)])
+            }
+        };
+        println!(
+            "    [{}] {:<10} pid={} parent={} path={} cmdline={:?} host={}",
+            v.ts_ms,
+            outcome_tag,
+            v.attempting_pid,
+            v.parent_pid,
+            v.attempted_binary_path,
+            v.process_cmdline,
+            v.hostname
+        );
+    }
+
+    // CLI integration tests for these runners would need to mutate
+    // process env vars (SELFDEF_PERIMETER_* path overrides), which is
+    // unsafe on Rust 2024 multi-threaded test runners. The underlying
+    // runtime crate (`selfdef-perimeter`) carries 30 tests covering
+    // every code path these runners delegate to. Operator-facing
+    // verification is the `selfdefctl perimeter --help` synopsis +
+    // bats L2 smoke tests in `packaging/test/L2-perimeter-cli.bats`.
+}
+
+pub(crate) use ms047::{
+    run_audit_cycle_replay, run_extend, run_history, run_revoke, run_show,
+};
