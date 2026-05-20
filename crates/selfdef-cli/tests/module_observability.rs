@@ -51,9 +51,11 @@ fn write_bundled_config(fx: &Fixture, scrape_targets: &str) {
             "profile = \"bundled\"\n\
              prometheus_conf_dir    = \"{}\"\n\
              grafana_dashboards_dir = \"{}\"\n\
+             prometheus_rules_dir   = \"{}\"\n\
              scrape_targets = \"{scrape_targets}\"\n",
             fx.root.join("prom").display(),
             fx.root.join("grafana").display(),
+            fx.root.join("prom-rules").display(),
         ),
     );
 }
@@ -110,6 +112,34 @@ fn bundled_profile_writes_scrape_and_dashboard_to_configured_dirs() {
         "dashboard title not substituted:\n{dash_body}",
     );
     let _: serde_json::Value = serde_json::from_str(&dash_body).expect("dashboard JSON must parse");
+
+    // MS027 four-watchdog alert rules: bundled profile drops the
+    // alerts template to prometheus_rules_dir.
+    let alerts = fx.root.join("prom-rules/selfdef.yml");
+    assert!(alerts.is_file(), "alerts rules not written: {}", alerts.display());
+    let alerts_body = std::fs::read_to_string(&alerts).unwrap();
+    for alert_name in [
+        "SelfdefFrictionAuditFailingGate",
+        "SelfdefPerimeterSigkill",
+        "SelfdefPerimeterPolicyMissing",
+        "SelfdefPerimeterChainBroken",
+        "SelfdefGuardianFailedResponse",
+        "SelfdefGuardianTetragonSocketMissing",
+        "SelfdefGuardianChainBroken",
+        "SelfdefSchedulerSustainedBackpressure",
+        "SelfdefSchedulerChainBroken",
+    ] {
+        assert!(
+            alerts_body.contains(alert_name),
+            "alert {alert_name} missing from deployed rules:\n{alerts_body}",
+        );
+    }
+    // alerts must reference info-hub runbooks (operator-clickable from
+    // Alertmanager UIs).
+    assert!(
+        alerts_body.contains("wiki/runbooks/"),
+        "alerts missing info-hub runbook_url linkage:\n{alerts_body}",
+    );
 }
 
 #[test]
@@ -136,6 +166,14 @@ fn external_profile_writes_to_staging_dir() {
     assert!(
         staging_path.join("grafana/selfdef.json").is_file(),
         "external dashboard not staged",
+    );
+    // MS027 four-watchdog alert rules: external profile drops the
+    // alerts template to staging_dir/prometheus/rules/selfdef.yml.
+    let staged_alerts = staging_path.join("prometheus/rules/selfdef.yml");
+    assert!(
+        staged_alerts.is_file(),
+        "external alerts not staged at {}",
+        staged_alerts.display(),
     );
 }
 
