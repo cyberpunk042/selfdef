@@ -1699,3 +1699,12 @@ Total this resume: 214 selfdef IPS-authority crates. Workspace 379.
   grow count; remove auto-tidies empty traces)
 
 Total this resume: 215 selfdef IPS-authority crates. Workspace 380.
+
+### Hundred-and-forty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-dry-run` (Mode{Enforce/DryRun} per policy
+  (default DryRun); observe records would-allow vs would-deny +
+  reason counts; top_reasons top-K by count; deny requires non-
+  empty reason)
+
+Total this resume: 216 selfdef IPS-authority crates. Workspace 381.
