@@ -923,3 +923,12 @@ Total this resume: 130 selfdef IPS-authority crates. Workspace 295.
   downstream policies decide what to gate)
 
 Total this resume: 131 selfdef IPS-authority crates. Workspace 296.
+
+### Sixty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-event-emitter-rate-cap` (per-emitter events-per-min cap
+  in 60s sliding window; record Accepted{remaining}/Throttled{cap,
+  retry_after_ms}/UnknownEmitter; distinct from bus-priority-
+  policy and rate-limit-policy)
+
+Total this resume: 132 selfdef IPS-authority crates. Workspace 297.
