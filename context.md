@@ -869,3 +869,13 @@ Total this resume: 124 selfdef IPS-authority crates. Workspace 289.
   audit log)
 
 Total this resume: 125 selfdef IPS-authority crates. Workspace 290.
+
+### Fifty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-network-egress-domain-allowlist` (per-Profile FQDN
+  allowlist with exact / *.suffix wildcards / full *; case-
+  insensitive; *.example.com matches nested NOT bare; canonical
+  Production api.anthropic.com + *.huggingface.co; Experimental=*;
+  Private/Careful=empty-set deny-all)
+
+Total this resume: 126 selfdef IPS-authority crates. Workspace 291.
