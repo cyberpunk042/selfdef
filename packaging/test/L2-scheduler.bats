@@ -1,0 +1,133 @@
+#!/usr/bin/env bats
+# L2 bats unit tests for the MS048 Goldilocks Scheduler systemd unit +
+# postinst install/uninstall flow.
+#
+# Validates MS048 R11454-R11461 (systemd unit + Debian packaging).
+#
+# Run with: bats packaging/test/L2-scheduler.bats
+#
+# Source: SDD-031 Deliverable 7 — L2 (bats)
+
+UNIT="${BATS_TEST_DIRNAME}/../systemd/selfdef-scheduler.service"
+POSTINST="${BATS_TEST_DIRNAME}/../debian/postinst"
+POSTRM="${BATS_TEST_DIRNAME}/../debian/postrm"
+
+# ============================================================
+# R11454-R11458: systemd unit structural + ordering + hardening
+# ============================================================
+
+@test "R11454: selfdef-scheduler.service exists" {
+    [ -f "${UNIT}" ]
+}
+
+@test "R11454: unit declares Type=simple Restart=always" {
+    grep -q "^Type=simple$" "${UNIT}"
+    grep -q "^Restart=always$" "${UNIT}"
+}
+
+@test "R11455: unit binds After=tetragon.service" {
+    grep -qE "^After=.*tetragon.service" "${UNIT}"
+}
+
+@test "R11455: unit binds After=zfs-mount.service" {
+    grep -qE "^After=.*zfs-mount.service" "${UNIT}"
+}
+
+@test "R11455: unit binds After=selfdef-guardian.service" {
+    grep -qE "^After=.*selfdef-guardian.service" "${UNIT}"
+}
+
+@test "ExecStart=/usr/local/bin/selfdef-scheduler" {
+    grep -q "^ExecStart=/usr/local/bin/selfdef-scheduler$" "${UNIT}"
+}
+
+# ============================================================
+# R11456-R11458: Ring 0 + hardening + restart-storm cap
+# ============================================================
+
+@test "R11456: User=root + Group=root (Ring 0 per MS039)" {
+    grep -q "^User=root$" "${UNIT}"
+    grep -q "^Group=root$" "${UNIT}"
+}
+
+@test "R11457: ProtectSystem=strict + ReadWritePaths includes /mnt/vault/context" {
+    grep -q "^ProtectSystem=strict$" "${UNIT}"
+    grep -q "^ReadWritePaths=.*/mnt/vault/context" "${UNIT}"
+}
+
+@test "R11457: hardening — NoNewPrivileges + ProtectKernel* + LockPersonality" {
+    grep -q "^NoNewPrivileges=true$" "${UNIT}"
+    grep -q "^ProtectKernelTunables=true$" "${UNIT}"
+    grep -q "^ProtectKernelLogs=true$" "${UNIT}"
+    grep -q "^LockPersonality=true$" "${UNIT}"
+}
+
+@test "R11457: hardening — RestrictNamespaces + RestrictRealtime + RestrictSUIDSGID + MemoryDenyWriteExecute" {
+    grep -q "^RestrictNamespaces=true$" "${UNIT}"
+    grep -q "^RestrictRealtime=true$" "${UNIT}"
+    grep -q "^RestrictSUIDSGID=true$" "${UNIT}"
+    grep -q "^MemoryDenyWriteExecute=true$" "${UNIT}"
+}
+
+@test "R11458: StartLimitIntervalSec=60s + StartLimitBurst=10 (restart-storm cap)" {
+    grep -q "^StartLimitIntervalSec=60s$" "${UNIT}"
+    grep -q "^StartLimitBurst=10$" "${UNIT}"
+}
+
+@test "WantedBy=multi-user.target" {
+    grep -q "^WantedBy=multi-user.target$" "${UNIT}"
+}
+
+# ============================================================
+# R11459-R11461: Debian postinst + postrm wiring
+# ============================================================
+
+@test "R11459: postinst installs scheduler unit" {
+    grep -q "selfdef-scheduler.service" "${POSTINST}"
+    grep -q "/etc/systemd/system/selfdef-scheduler.service" "${POSTINST}"
+}
+
+@test "R11459: postinst pre-creates /var/cache/selfdef/scheduler/ring" {
+    grep -q "/var/cache/selfdef/scheduler/ring" "${POSTINST}"
+}
+
+@test "R11460: postrm purge: disable+stop+remove scheduler unit" {
+    grep -q "systemctl disable selfdef-scheduler.service" "${POSTRM}"
+    count="$(grep -c 'systemctl stop selfdef-scheduler.service' "${POSTRM}")"
+    [ "${count}" -ge 2 ]   # one in purge, one in remove
+    grep -q "rm -f /etc/systemd/system/selfdef-scheduler.service" "${POSTRM}"
+}
+
+@test "R11461: cargo-deb assets ship selfdef-scheduler.service" {
+    DAEMON_CARGO="${BATS_TEST_DIRNAME}/../../crates/selfdef-daemon/Cargo.toml"
+    grep -q "selfdef-scheduler.service.*usr/share/selfdef" "${DAEMON_CARGO}"
+}
+
+# ============================================================
+# systemd-analyze structural verification (skipped when absent)
+# ============================================================
+
+@test "systemd-analyze verify on scheduler unit (when available)" {
+    if ! command -v systemd-analyze >/dev/null 2>&1; then
+        skip "systemd-analyze not installed in test env"
+    fi
+    set +e
+    output="$(systemd-analyze verify "${UNIT}" 2>&1)"
+    set -e
+    if echo "${output}" | grep -qE "Unknown key|Invalid|Failed to parse"; then
+        echo "systemd-analyze unit-syntax errors detected:" >&2
+        echo "${output}" >&2
+        return 1
+    fi
+}
+
+# ============================================================
+# Four-watchdog systemd surface coherence (cross-unit check)
+# ============================================================
+
+@test "all four watchdog systemd units coexist in packaging/" {
+    [ -f "${BATS_TEST_DIRNAME}/../systemd/sovereign-guard.service" ]
+    [ -f "${BATS_TEST_DIRNAME}/../tetragon-policies/sovereign-perimeter.yaml" ]
+    [ -f "${BATS_TEST_DIRNAME}/../systemd/selfdef-guardian.service" ]
+    [ -f "${UNIT}" ]
+}

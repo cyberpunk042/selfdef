@@ -1,0 +1,48 @@
+[Unit]
+Description=Selfdef Goldilocks Scheduler — hardware-aware resource routing
+Documentation=https://github.com/cyberpunk042/selfdef/blob/main/docs/sdd/031-goldilocks-scheduler.md
+# avx-plus-plus dump tail lines 18000-18250: scheduler routes requests
+# across Blackwell (oracle) / RTX 3090 (scout) / CPU (cortex). The
+# scheduler reads PSI from /proc/pressure/* + DCGM for GPU pressure +
+# MS027 traces for human-gate latency.
+After=zfs-mount.service
+After=selfdef-guardian.service
+After=tetragon.service
+# Wants= (not Requires=) — scheduler starts even when guardian/tetragon
+# are absent; it logs the missing-source state via backpressure monitor.
+Wants=selfdef-guardian.service
+# OPERATOR-EXTENSION: cap restart-storm. If scheduler fails 10 times
+# in 60s, systemd backs off rather than hot-looping.
+StartLimitIntervalSec=60s
+StartLimitBurst=10
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/selfdef-scheduler
+Restart=always
+RestartSec=2s
+
+# Ring 0 IPS service per MS039 trust topology — root for ZFS audit log
+# append (/mnt/vault/context/scheduler_audit.log) + /proc/pressure/*
+# read (requires CAP_SYS_RESOURCE on some kernels).
+User=root
+Group=root
+
+# Hardening (systemd-analyze security baseline for a Ring 0 enforcer).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/selfdef /var/cache/selfdef /mnt/vault/context
+# /proc/pressure/* must remain readable.
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

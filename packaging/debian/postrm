@@ -42,6 +42,14 @@ case "$1" in
         fi
         rm -f /etc/systemd/system/selfdef-guardian.service
         rm -rf /etc/systemd/system/selfdef-guardian.service.d
+        # MS048 / SDD-031: disable + stop + remove Scheduler systemd unit.
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/selfdef-scheduler.service ]; then
+            systemctl disable selfdef-scheduler.service 2>/dev/null || true
+            systemctl stop selfdef-scheduler.service 2>/dev/null || true
+        fi
+        rm -f /etc/systemd/system/selfdef-scheduler.service
+        rm -rf /etc/systemd/system/selfdef-scheduler.service.d
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
@@ -64,6 +72,12 @@ case "$1" in
         if [ -d /run/systemd/system ] \
            && [ -f /etc/systemd/system/selfdef-guardian.service ]; then
             systemctl stop selfdef-guardian.service 2>/dev/null || true
+        fi
+        # MS048 / SDD-031: stop Scheduler on remove (without purge);
+        # leave the unit file for upgrade reinstall.
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/selfdef-scheduler.service ]; then
+            systemctl stop selfdef-scheduler.service 2>/dev/null || true
         fi
         ;;
     upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)

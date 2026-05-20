@@ -124,6 +124,19 @@ case "$1" in
             fi
         fi
 
+        # MS048 / SDD-031: install Goldilocks Scheduler systemd unit +
+        # pre-create ring buffer + OCSF log dirs. Idempotent.
+        if [ -f /usr/share/selfdef/selfdef-scheduler.service ]; then
+            install -m 0644 -o root -g root \
+                /usr/share/selfdef/selfdef-scheduler.service \
+                /etc/systemd/system/selfdef-scheduler.service
+            mkdir -p /var/cache/selfdef/scheduler/ring /var/log/selfdef
+            chown selfdef:selfdef /var/cache/selfdef/scheduler \
+                /var/cache/selfdef/scheduler/ring 2>/dev/null || true
+            chmod 0750 /var/cache/selfdef/scheduler \
+                /var/cache/selfdef/scheduler/ring 2>/dev/null || true
+        fi
+
         # systemd
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
