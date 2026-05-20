@@ -1998,3 +1998,12 @@ Total this resume: 250 selfdef IPS-authority crates. Workspace 415.
   slot with probability k/i; deterministic xorshift64* PRNG)
 
 Total this resume: 251 selfdef IPS-authority crates. Workspace 416.
+
+### Hundred-and-eighty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-seat-pool` (fixed capacity reservation pool; acquire
+  errors AtCapacity / DuplicateHolder; release frees by id;
+  expire sweeps holders whose acquired_ms is older than
+  now-ttl_ms; used/available counts)
+
+Total this resume: 252 selfdef IPS-authority crates. Workspace 417.
