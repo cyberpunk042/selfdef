@@ -1203,3 +1203,12 @@ Total this resume: 162 selfdef IPS-authority crates. Workspace 327.
   transition rejected; Cancel from any pre-terminal phase)
 
 Total this resume: 163 selfdef IPS-authority crates. Workspace 328.
+
+### Ninety-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-cgroup-binding` (Profile → cgroup name;
+  classify Bound{cgroup_name}/Unconfigured; canonical
+  selfdef/<profile-name>; substrate uses returned name to
+  spawn into the right cgroup)
+
+Total this resume: 164 selfdef IPS-authority crates. Workspace 329.
