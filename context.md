@@ -2078,3 +2078,12 @@ Total this resume: 259 selfdef IPS-authority crates. Workspace 424.
   last computed diff + computes counter)
 
 Total this resume: 260 selfdef IPS-authority crates. Workspace 425.
+
+### Hundred-and-ninety-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-id-generator` (ULID-like 128-bit: top 48 = ms ts,
+  bottom 80 = per-tick sequence resetting each new ms;
+  Crockford base32 → 26-char string; clock regression +
+  sequence overflow rejected; pure deterministic)
+
+Total this resume: 261 selfdef IPS-authority crates. Workspace 426.
