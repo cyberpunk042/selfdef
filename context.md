@@ -1690,3 +1690,12 @@ Total this resume: 213 selfdef IPS-authority crates. Workspace 378.
   drop_subscriber idempotent)
 
 Total this resume: 214 selfdef IPS-authority crates. Workspace 379.
+
+### Hundred-and-forty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-trace-baggage` (per-trace key/value baggage bounded by
+  max_entries + max_total_bytes; set rejects OverCount (new key
+  past cap) / OverSize (proposed total > max); replace doesn't
+  grow count; remove auto-tidies empty traces)
+
+Total this resume: 215 selfdef IPS-authority crates. Workspace 380.
