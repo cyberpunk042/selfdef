@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-latency-tracker"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Bounded-window latency tracker with p50/p99 estimates."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
