@@ -5615,6 +5615,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-rect-overlap"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-recurring-task-scheduler"
 version = "0.1.0"
 dependencies = [
