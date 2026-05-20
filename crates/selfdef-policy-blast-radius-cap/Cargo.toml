@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-policy-blast-radius-cap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile cap on the maximum BlastRadius an action may carry without an explicit operator escalation. classify(profile, observed) returns Allowed / OverCap{cap, observed} / Unconfigured. BlastRadius mirrors selfdef-blast-radius-classifier; canonical Production caps at CrossSession, Experimental admits Public."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+selfdef-blast-radius-classifier = { path = "../selfdef-blast-radius-classifier" }
+
+[features]
+default = []
