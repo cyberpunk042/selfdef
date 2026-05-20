@@ -814,3 +814,12 @@ Total this resume: 118 selfdef IPS-authority crates. Workspace 283.
   for JSON friendliness)
 
 Total this resume: 119 selfdef IPS-authority crates. Workspace 284.
+
+### Fifty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-diff-classifier` (DiffSummary→Classification
+  {effects, worst}; risk order NewAllow>LoosensCap>RemovesDeny>
+  SchemaBump>RemovesAllow>TightensCap=NewDeny>Neutral; adding
+  deny/tightening cap classified as safer/lower-risk)
+
+Total this resume: 120 selfdef IPS-authority crates. Workspace 285.
