@@ -67,7 +67,7 @@ fi
 
 # --- Cargo unit tests for the three-watchdog trio ---------------------
 
-run_layer "cargo: three-watchdog-trio unit suites" \
+run_layer "cargo: four-watchdog set unit suites" \
     cargo test --quiet \
         -p selfdef-friction-audit-mirror \
         -p selfdef-friction-audit \
@@ -75,6 +75,8 @@ run_layer "cargo: three-watchdog-trio unit suites" \
         -p selfdef-perimeter \
         -p selfdef-guardian-mirror \
         -p selfdef-guardian \
+        -p selfdef-scheduler-mirror \
+        -p selfdef-scheduler \
         -p selfdef-api
 
 # --- Summary ----------------------------------------------------------
