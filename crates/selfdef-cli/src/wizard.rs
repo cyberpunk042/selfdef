@@ -296,6 +296,73 @@ pub(crate) fn render_human(caps: &HardwareCapabilities, rec: &WizardRecommendati
         "feature set when compiling — no manual flag-pinning needed."
     )
     .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "## Step 5: Four-watchdog set (IPS boundary enforcement)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  The selfdef package ships four cooperating watchdogs. Each"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  is OFF by default; enable individually as your deployment"
+    )
+    .unwrap();
+    writeln!(&mut buf, "  needs them:").unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "  $ sudo systemctl enable --now sovereign-guard.service     # MS046 friction-audit (boot-time hardware gate)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  $ sudo systemctl enable --now selfdef-guardian.service    # MS044 Tetragon supervisor (3-step Responder)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  $ sudo systemctl enable --now selfdef-scheduler.service   # MS048 Goldilocks routing (7-axis objective)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  # MS047 perimeter: kernel-fence via Tetragon (no userspace service)"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  #   verify with: ls /etc/tetragon/tracing-policies/sovereign-perimeter.yaml"
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "  Then verify deployability + see the consolidated trio view:"
+    )
+    .unwrap();
+    writeln!(&mut buf, "  $ selfdefctl doctor    # watchdog-set category").unwrap();
+    writeln!(&mut buf, "  $ selfdefctl trio      # 4-panel snapshot").unwrap();
+    writeln!(
+        &mut buf,
+        "  $ selfdefctl trio-tail # unified live OCSF tail (Ctrl-C to exit)"
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
+        "  Operator runbooks: ~/devops-solutions-information-hub/wiki/runbooks/"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "    {{friction-audit,perimeter,guardian,scheduler}}-*.md (5 each = 20 total)"
+    )
+    .unwrap();
     buf
 }
 
@@ -464,6 +531,14 @@ mod tests {
             "Step 2: Recommendation",
             "Step 3: Copy-paste config",
             "Step 4: Next steps",
+            "Step 5: Four-watchdog set",
+            "sovereign-guard.service",
+            "selfdef-guardian.service",
+            "selfdef-scheduler.service",
+            "sovereign-perimeter.yaml",
+            "selfdefctl doctor",
+            "selfdefctl trio",
+            "selfdefctl trio-tail",
             "AVX-512 VNNI",
             "FullMatch",
             "Cross-repo bridge",
