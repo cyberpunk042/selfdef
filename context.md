@@ -2521,3 +2521,11 @@ Total this resume: 310 selfdef IPS-authority crates. Workspace 475.
   negative values)
 
 Total this resume: 311 selfdef IPS-authority crates. Workspace 476.
+
+### Two-hundred-and-forty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-text-canonical` (Options{lowercase, trim, collapse_
+  whitespace, strip_non_printable}; canonicalize applies steps
+  in fixed order: strip→lowercase→collapse→trim; deterministic)
+
+Total this resume: 312 selfdef IPS-authority crates. Workspace 477.
