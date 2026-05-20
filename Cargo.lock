@@ -6292,6 +6292,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-two-phase-commit"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-usage-receipt"
 version = "0.1.0"
 dependencies = [
