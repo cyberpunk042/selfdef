@@ -1963,3 +1963,12 @@ Total this resume: 246 selfdef IPS-authority crates. Workspace 411.
   (10000-alpha)*ema)/10000; state carried as i128 scaled 10000)
 
 Total this resume: 247 selfdef IPS-authority crates. Workspace 412.
+
+### Hundred-and-eightieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bounded-priority-queue` (Item{id, priority, seq}; push
+  at capacity evicts lowest-priority (older-seq tie-break) if
+  incoming>min, else drops incoming; pop returns highest priority
+  (earlier-seq tie-break for FIFO))
+
+Total this resume: 248 selfdef IPS-authority crates. Workspace 413.
