@@ -34,6 +34,14 @@ case "$1" in
             fi
         fi
         rm -rf /etc/selfdef/perimeter-extensions
+        # MS044 / SDD-029: disable + stop + remove Guardian systemd unit.
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/selfdef-guardian.service ]; then
+            systemctl disable selfdef-guardian.service 2>/dev/null || true
+            systemctl stop selfdef-guardian.service 2>/dev/null || true
+        fi
+        rm -f /etc/systemd/system/selfdef-guardian.service
+        rm -rf /etc/systemd/system/selfdef-guardian.service.d
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
@@ -50,6 +58,12 @@ case "$1" in
         if [ -d /run/systemd/system ] \
            && [ -f /etc/systemd/system/sovereign-guard.service ]; then
             systemctl stop sovereign-guard.service 2>/dev/null || true
+        fi
+        # MS044 / SDD-029: stop Guardian on remove (without purge);
+        # leave the unit file for upgrade reinstall.
+        if [ -d /run/systemd/system ] \
+           && [ -f /etc/systemd/system/selfdef-guardian.service ]; then
+            systemctl stop selfdef-guardian.service 2>/dev/null || true
         fi
         ;;
     upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)

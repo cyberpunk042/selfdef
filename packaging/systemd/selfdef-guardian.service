@@ -1,0 +1,52 @@
+[Unit]
+Description=Selfdef Guardian Daemon — Tetragon eBPF supervisor
+Documentation=https://github.com/cyberpunk042/selfdef/blob/main/docs/sdd/029-guardian-daemon.md
+# Sain-01 §10 dump 569-588: Guardian listens to the Tetragon UNIX socket
+# at /var/run/tetragon/tetragon.events; therefore Tetragon must be up.
+# If Tetragon is not installed/running, Guardian still starts (and waits
+# patiently on the socket) — systemd 'Wants=' rather than 'Requires='.
+Wants=tetragon.service
+After=tetragon.service
+# Audit log lives on tank/vault/context (ZFS dataset, sain-01 §10 dump
+# 531-533). zfs-mount must complete before Guardian opens the log fd.
+After=zfs-mount.service
+# OPERATOR-EXTENSION: cap restart-storm. If Guardian fails 10 times in
+# 60s, systemd backs off rather than hot-looping.
+StartLimitIntervalSec=60s
+StartLimitBurst=10
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/selfdef-guardian
+# Sain-01 §10 dump 569-588 (verbatim): Restart=always — Guardian IS the
+# circuit breaker, so a crash means the perimeter watchdog is down.
+# Operator-extension: RestartSec=2s — bound the supervisorless window.
+Restart=always
+RestartSec=2s
+
+# Ring 0 IPS service per MS039 trust topology — root for podman kill +
+# /dev/console write + ZFS log append.
+User=root
+Group=root
+
+# Hardening (systemd-analyze security recommendations for a Ring 0
+# enforcer).
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log/selfdef /var/cache/selfdef /mnt/vault/context
+# Guardian needs /var/run/tetragon for the socket + /dev/console for
+# the BEL alert.
+DeviceAllow=/dev/console rw
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

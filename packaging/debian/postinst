@@ -102,12 +102,35 @@ case "$1" in
             fi
         fi
 
+        # MS044 / SDD-029: install Guardian Daemon systemd unit + create
+        # ZFS audit log dir if mountpoint present. Idempotent.
+        if [ -f /usr/share/selfdef/selfdef-guardian.service ]; then
+            install -m 0644 -o root -g root \
+                /usr/share/selfdef/selfdef-guardian.service \
+                /etc/systemd/system/selfdef-guardian.service
+            # Guardian ring buffer + OCSF log dirs.
+            mkdir -p /var/cache/selfdef/guardian/ring /var/log/selfdef
+            chown selfdef:selfdef /var/cache/selfdef/guardian \
+                /var/cache/selfdef/guardian/ring 2>/dev/null || true
+            chmod 0750 /var/cache/selfdef/guardian \
+                /var/cache/selfdef/guardian/ring 2>/dev/null || true
+            # Pre-create the ZFS audit log directory ONLY if /mnt/vault
+            # is already a mountpoint (operator-controlled). Don't make
+            # /mnt/vault/context on bare filesystems — Guardian's
+            # RealEffector::append_audit_log will create it on first
+            # write anyway when the dataset is present.
+            if mountpoint -q /mnt/vault 2>/dev/null; then
+                mkdir -p /mnt/vault/context
+            fi
+        fi
+
         # systemd
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
             # do NOT auto-start; let the operator enable when ready.
             # Operators wanting boot-gate enforcement run:
             #   systemctl enable --now sovereign-guard.service
+            #   systemctl enable --now selfdef-guardian.service
         fi
         ;;
 esac

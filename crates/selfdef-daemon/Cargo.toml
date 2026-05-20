@@ -101,6 +101,7 @@ assets = [
     ["../../packaging/scripts/friction-audit.sh",        "/usr/share/selfdef/",                    "644"],
     ["../../packaging/systemd/sovereign-guard.service",  "/usr/share/selfdef/",                    "644"],
     ["../../packaging/tetragon-policies/sovereign-perimeter.yaml", "/usr/share/selfdef/",          "644"],
+    ["../../packaging/systemd/selfdef-guardian.service", "/usr/share/selfdef/",                    "644"],
     ["../../config/selfdef.toml.example",                "/usr/share/selfdef/",                    "644"],
     ["../../README.md",                                  "/usr/share/doc/selfdef-daemon/",         "644"],
     ["../../ARCHITECTURE.md",                            "/usr/share/doc/selfdef-daemon/",         "644"],
