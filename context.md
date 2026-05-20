@@ -2245,3 +2245,12 @@ Total this resume: 278 selfdef IPS-authority crates. Workspace 443.
   other.patch>=self.patch)))
 
 Total this resume: 279 selfdef IPS-authority crates. Workspace 444.
+
+### Two-hundred-and-twelfth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-kv-store` (Entry{value: Option<String>, generation};
+  set increments per-key gen; cas requires matching expected
+  gen else GenerationMismatch; delete tombstones with gen bump;
+  live_count counts non-tombstoned)
+
+Total this resume: 280 selfdef IPS-authority crates. Workspace 445.
