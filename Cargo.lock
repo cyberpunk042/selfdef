@@ -3342,6 +3342,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-exclusive-lock-policy"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-execution-budget-policy"
 version = "0.1.0"
 dependencies = [

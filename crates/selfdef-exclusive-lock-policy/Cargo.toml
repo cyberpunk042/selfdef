@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-exclusive-lock-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS named-resource exclusive-lock policy. acquire(resource_id, owner, ts, max_hold_ms) returns Acquired{lease_id}/HeldByOther{owner, held_until_ms}/SelfReacquired. release(resource_id, lease_id) returns Released/UnknownLease/WrongLease. Pure descriptor; idempotent per (resource, owner) re-acquire."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
