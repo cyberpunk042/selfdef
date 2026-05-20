@@ -2272,3 +2272,12 @@ Total this resume: 281 selfdef IPS-authority crates. Workspace 446.
   history of {from, event, to, ts})
 
 Total this resume: 282 selfdef IPS-authority crates. Workspace 447.
+
+### Two-hundred-and-fifteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-layered-config` (ordered layers low→high; push_layer
+  appends top; set(layer, k, v) writes; lookup walks high→low
+  returning (value, source); pop_layer drops top; dup layer
+  names rejected)
+
+Total this resume: 283 selfdef IPS-authority crates. Workspace 448.
