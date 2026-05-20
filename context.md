@@ -1990,3 +1990,11 @@ Total this resume: 249 selfdef IPS-authority crates. Workspace 414.
   collapses multiple intervals)
 
 Total this resume: 250 selfdef IPS-authority crates. Workspace 415.
+
+### Hundred-and-eighty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-reservoir-sampler` (Algorithm-R sample of K from N;
+  first k items fill reservoir, subsequent items replace random
+  slot with probability k/i; deterministic xorshift64* PRNG)
+
+Total this resume: 251 selfdef IPS-authority crates. Workspace 416.
