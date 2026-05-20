@@ -1038,3 +1038,12 @@ Total this resume: 143 selfdef IPS-authority crates. Workspace 308.
   key replay-dedup)
 
 Total this resume: 144 selfdef IPS-authority crates. Workspace 309.
+
+### Seventy-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-namespace-precedence` (priority resolver per namespace;
+  resolve(&[candidates]) highest priority wins, tiebreaker = lex
+  asc; rule-priority lane paired with policy-namespace-policy
+  hierarchical tree)
+
+Total this resume: 145 selfdef IPS-authority crates. Workspace 310.
