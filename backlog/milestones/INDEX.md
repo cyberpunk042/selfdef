@@ -67,6 +67,7 @@
 | MS045 | UX coherence test harness (CLI + TUI + minimal-web) — TDD validator for MS043 operator surface | MS043 + operator standing direction 2026-05-19 |
 | MS046 | Friction Audit System — boot-time hardware-integrity gate (PCIe / ZFS / memory) | sain-01 dump §5 lines 338–378 |
 | MS047 | Real-Time Security Perimeter Engine — Tetragon kernel-fence (sovereign-perimeter.yaml + sys_execve Sigkill) | sain-01 dump §6 lines 380–411 |
+| MS048 | Goldilocks Scheduler — hardware-aware resource routing (Blackwell/3090/CPU + KV/Context + Memory + Tool + Backpressure surfaces + 7-axis objective) | avx-plus-plus dump tail lines 18000–18250 |
 
 ## Decomposition each milestone owes
 
