@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# L1-dashboard-sections.sh — MS045 SDD-030 / MS043 dashboard surface gate
+#
+# Verifies the operator dashboard's HTML + JS declare the three-watchdog-
+# trio panels (friction-audit, perimeter, guardian) AND wire their
+# refresh handlers + auto-refresh intervals.
+#
+# Static check — grep on dashboard/*.{html,js,css}.
+#
+# Source: SDD-030 D2-style extension + SDD-027/028/029 cockpit binding
+# Run: bash scripts/test/L1-dashboard-sections.sh
+set -euo pipefail
+
+HTML="${HTML:-dashboard/index.html}"
+JS="${JS:-dashboard/app.js}"
+CSS="${CSS:-dashboard/dashboard.css}"
+
+for f in "${HTML}" "${JS}" "${CSS}"; do
+    if [[ ! -f "${f}" ]]; then
+        echo "L1-dashboard-sections FAIL: ${f} not found" >&2
+        exit 1
+    fi
+done
+
+check() {
+    local what="$1"
+    local file="$2"
+    local pattern="$3"
+    if grep -qE "${pattern}" "${file}"; then
+        echo "  PASS ${what}"
+    else
+        echo "  FAIL ${what} — pattern ${pattern!r} not found in ${file}"
+        return 1
+    fi
+}
+
+echo "L1-dashboard-sections: checking three-watchdog-trio dashboard surface"
+
+failures=0
+# HTML section presence (SDD-027 / 028 / 029 D6/D8 cockpit binding)
+check "HTML: friction-audit-section"   "${HTML}" 'id="friction-audit-section"' || failures=$((failures + 1))
+check "HTML: perimeter-section"         "${HTML}" 'id="perimeter-section"'      || failures=$((failures + 1))
+check "HTML: guardian-section"          "${HTML}" 'id="guardian-section"'       || failures=$((failures + 1))
+check "HTML: friction-audit aggregate"  "${HTML}" 'id="fa-aggregate"'            || failures=$((failures + 1))
+check "HTML: perimeter aggregate"        "${HTML}" 'id="perim-aggregate"'         || failures=$((failures + 1))
+check "HTML: guardian aggregate"         "${HTML}" 'id="guard-aggregate"'         || failures=$((failures + 1))
+
+# JS handler functions
+check "JS: refreshFrictionAudit()"      "${JS}"   'function refreshFrictionAudit' || failures=$((failures + 1))
+check "JS: refreshPerimeter()"           "${JS}"   'function refreshPerimeter'      || failures=$((failures + 1))
+check "JS: refreshGuardian()"            "${JS}"   'function refreshGuardian'       || failures=$((failures + 1))
+
+# JS auto-refresh intervals wired (every trio panel)
+check "JS: setInterval refreshFrictionAudit"  "${JS}" 'setInterval\(refreshFrictionAudit' || failures=$((failures + 1))
+check "JS: setInterval refreshPerimeter"       "${JS}" 'setInterval\(refreshPerimeter'     || failures=$((failures + 1))
+check "JS: setInterval refreshGuardian"        "${JS}" 'setInterval\(refreshGuardian'      || failures=$((failures + 1))
+
+# JS endpoint bindings (must match selfdef-api routes)
+check "JS: GET /v1/friction-audit"      "${JS}"   'get\("/v1/friction-audit"\)' || failures=$((failures + 1))
+check "JS: GET /v1/perimeter"            "${JS}"   'get\("/v1/perimeter"\)'      || failures=$((failures + 1))
+check "JS: GET /v1/guardian"             "${JS}"   'get\("/v1/guardian"\)'       || failures=$((failures + 1))
+
+# CSS aggregate classes (all 7 states: ok/fail/override/unknown/alert/extended/degraded)
+for class in fa-ok fa-fail fa-override fa-unknown fa-alert fa-extended fa-degraded; do
+    check "CSS: .fa-aggregate.${class}" "${CSS}" "\.fa-aggregate\.${class}" || failures=$((failures + 1))
+done
+
+if [[ "${failures}" -gt 0 ]]; then
+    echo "L1-dashboard-sections FAIL: ${failures} drift(s) detected"
+    exit 1
+fi
+
+echo "L1-dashboard-sections PASS: all three-watchdog-trio dashboard sections + handlers + intervals + endpoints + aggregate styles present"

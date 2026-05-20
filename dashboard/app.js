@@ -127,9 +127,15 @@
   }
 
   async function refresh(kind) {
-    // Special-case the friction-audit panel — different endpoint shape.
+    // Three-watchdog-trio panels — different endpoint shapes.
     if (kind === "friction-audit") {
       return refreshFrictionAudit();
+    }
+    if (kind === "perimeter") {
+      return refreshPerimeter();
+    }
+    if (kind === "guardian") {
+      return refreshGuardian();
     }
     const ul = document.getElementById(kind);
     try {
@@ -252,6 +258,188 @@
         li.appendChild(badgeSpan);
         li.appendChild(detailSpan);
         li.appendChild(linkA);
+        ul.appendChild(li);
+      }
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      aggEl.textContent = "ERROR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
+  // Perimeter panel — reads GET /v1/perimeter.
+  // SDD-028 / MS047. Operator-facing surface, read-only.
+  const PERIM_RUNBOOK_BASE = "/wiki/runbooks/perimeter-";
+
+  function perimOutcomeBadge(outcome) {
+    if (!outcome) return { badge: "—", color: "gray" };
+    if (outcome.outcome === "sigkill") return { badge: "SIGKILL", color: "red" };
+    if (outcome.outcome === "allowlisted") return { badge: "ALLOWED", color: "green" };
+    if (outcome.outcome === "extension-allowed") {
+      const stub = (outcome.detail && outcome.detail.manifest_sha256 || "").slice(0, 8);
+      return { badge: `EXTEND[${stub}]`, color: "yellow" };
+    }
+    return { badge: "—", color: "gray" };
+  }
+
+  async function refreshPerimeter() {
+    const ul = document.getElementById("perimeter-rows");
+    const aggEl = document.getElementById("perim-aggregate");
+    const metaEl = document.getElementById("perimeter-meta");
+    try {
+      const body = await get("/v1/perimeter");
+      aggEl.textContent = (body.aggregate || "unknown").toUpperCase();
+      aggEl.className = `fa-aggregate fa-${body.aggregate || "unknown"}`;
+
+      // Meta line: policy status + active extension count + audit chain length.
+      const policyState = body.policy && body.policy.present ? "PRESENT" : "MISSING";
+      const extCount = (body.active_extensions || []).length;
+      const chainEvents = body.audit_chain_events;
+      metaEl.textContent =
+        `policy: ${policyState} · ${extCount} operator extension(s) active · ` +
+        `OCSF chain events: ${chainEvents === null || chainEvents === undefined ? "—" : chainEvents}`;
+
+      ul.innerHTML = "";
+
+      // Active extension rows first (yellow, time-bound).
+      for (const ext of body.active_extensions || []) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `ext: ${ext.extension_id}`;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "EXTEND";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        const exp = new Date(ext.expires_at_ms).toISOString().slice(0, 19) + "Z";
+        const pathCount = (ext.binary_paths || []).length;
+        detail.textContent =
+          `${pathCount} path(s) · expires ${exp} · signer=${ext.signer_kid} auditor=${ext.auditor_kid}`;
+        const link = document.createElement("a");
+        link.className = "fa-runbook-link";
+        link.href = `${PERIM_RUNBOOK_BASE}extension-create`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "runbook ↗";
+        li.appendChild(label);
+        li.appendChild(badge);
+        li.appendChild(detail);
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+
+      // Verdict rows (newest-first; body.verdicts already capped at 16 server-side).
+      const verdicts = body.verdicts || [];
+      if (verdicts.length === 0 && (body.active_extensions || []).length === 0) {
+        setEmpty(ul, "no perimeter verdicts yet recorded");
+      }
+      for (const v of verdicts) {
+        const info = perimOutcomeBadge(v.outcome);
+        const li = document.createElement("li");
+        li.className = `fa-${info.color}`;
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = v.attempted_binary_path;
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${info.color}`;
+        badge.textContent = info.badge;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent =
+          `pid=${v.attempting_pid} parent=${v.parent_pid} · ${faFreshness(body.now_ms, v.ts_ms)} · host=${v.hostname}`;
+        const link = document.createElement("a");
+        link.className = "fa-runbook-link";
+        link.href = info.color === "red"
+          ? `${PERIM_RUNBOOK_BASE}sigkill-investigation`
+          : `${PERIM_RUNBOOK_BASE}extension-create`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "runbook ↗";
+        li.appendChild(label);
+        li.appendChild(badge);
+        li.appendChild(detail);
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      aggEl.textContent = "ERROR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
+  // Guardian panel — reads GET /v1/guardian.
+  // SDD-029 / MS044. Operator-facing surface, read-only.
+  const GUARD_RUNBOOK_BASE = "/wiki/runbooks/guardian-";
+
+  function guardActionBadge(verdict) {
+    const allOk = stepsAllOk(verdict.response_steps || []);
+    if (allOk) return { badge: "OK", color: "green" };
+    return { badge: "ALERT", color: "red" };
+  }
+
+  function stepsAllOk(steps) {
+    let haveSigkill = false, haveAudit = false, haveConsole = false;
+    for (const s of steps) {
+      const out = s.outcome;
+      const tag = (out && (out.outcome || out)) || "";
+      if (tag === "failed") return false;
+      if (s.step === "sigkill") haveSigkill = true;
+      if (s.step === "audit-append") haveAudit = true;
+      if (s.step === "console-alert") haveConsole = true;
+    }
+    return haveSigkill && haveAudit && haveConsole;
+  }
+
+  async function refreshGuardian() {
+    const ul = document.getElementById("guardian-rows");
+    const aggEl = document.getElementById("guard-aggregate");
+    const metaEl = document.getElementById("guardian-meta");
+    try {
+      const body = await get("/v1/guardian");
+      aggEl.textContent = (body.aggregate || "unknown").toUpperCase();
+      aggEl.className = `fa-aggregate fa-${body.aggregate || "unknown"}`;
+
+      const socketState = body.tetragon_socket_present ? "PRESENT" : "MISSING";
+      const chainEvents = body.audit_chain_events;
+      metaEl.textContent =
+        `tetragon socket: ${socketState} · ` +
+        `OCSF chain events: ${chainEvents === null || chainEvents === undefined ? "—" : chainEvents}`;
+
+      ul.innerHTML = "";
+      const verdicts = body.verdicts || [];
+      if (verdicts.length === 0) {
+        setEmpty(ul, "no guardian verdicts yet recorded");
+        return;
+      }
+      for (const v of verdicts) {
+        const info = guardActionBadge(v);
+        const li = document.createElement("li");
+        li.className = `fa-${info.color}`;
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = v.target_binary_path;
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${info.color}`;
+        badge.textContent = info.badge;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent =
+          `event=${v.event_id} action=${v.action} pid=${v.target_pid} · ${faFreshness(body.now_ms, v.ts_ms)} · host=${v.hostname}`;
+        const link = document.createElement("a");
+        link.className = "fa-runbook-link";
+        link.href = info.color === "red"
+          ? `${GUARD_RUNBOOK_BASE}console-alert-investigation`
+          : `${GUARD_RUNBOOK_BASE}not-running`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "runbook ↗";
+        li.appendChild(label);
+        li.appendChild(badge);
+        li.appendChild(detail);
+        li.appendChild(link);
         ul.appendChild(li);
       }
     } catch (e) {
@@ -463,12 +651,17 @@
   refresh("findings");
   refresh("events");
   refreshFrictionAudit();
+  refreshPerimeter();
+  refreshGuardian();
   refreshActionList();
   setInterval(refreshStatus, 5000);
-  // Friction-audit panel refreshes less often than status; gate state
-  // is rare-change (boot + operator replay). 30s keeps the panel
-  // fresh enough to reflect operator overrides without burning HTTP.
+  // Three-watchdog-trio panels refresh less often than status — gate
+  // state is rare-change (boot + operator overrides). 30s for the
+  // hardware frame (friction-audit) and supervisor (guardian); 15s for
+  // the perimeter since execve events can land between refreshes.
   setInterval(refreshFrictionAudit, 30000);
+  setInterval(refreshPerimeter, 15000);
+  setInterval(refreshGuardian, 30000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
