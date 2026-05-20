@@ -2835,3 +2835,13 @@ Total this resume: 345 selfdef IPS-authority crates. Workspace 510.
   ~1/n keys per bucket; +/-50% distribution balance verified)
 
 Total this resume: 346 selfdef IPS-authority crates. Workspace 511.
+
+### Two-hundred-and-seventy-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-rendezvous-hash` (HRW: for each (key, node) compute
+  h = FNV-1a-64(key + ':' + node); node with highest h wins;
+  top_k returns k highest-weighted nodes in desc order for
+  replica set; removing a node redistributes its keys to
+  next-highest of EACH key — no hot spot)
+
+Total this resume: 347 selfdef IPS-authority crates. Workspace 512.
