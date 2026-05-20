@@ -2390,3 +2390,12 @@ Total this resume: 295 selfdef IPS-authority crates. Workspace 460.
   is_cancelled/reason/ids accessors)
 
 Total this resume: 296 selfdef IPS-authority crates. Workspace 461.
+
+### Two-hundred-and-twenty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-route-table` (exact + longest-prefix routing;
+  add_exact/add_prefix register handlers; resolve checks
+  exact first then longest matching prefix; returns
+  Resolution{handler_id, kind, matched_len})
+
+Total this resume: 297 selfdef IPS-authority crates. Workspace 462.
