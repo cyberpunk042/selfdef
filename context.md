@@ -805,3 +805,12 @@ Total this resume: 117 selfdef IPS-authority crates. Workspace 282.
   policy — this is the count-only lane)
 
 Total this resume: 118 selfdef IPS-authority crates. Workspace 283.
+
+### Fifty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-collector-coalescing` (per-source-per-fingerprint
+  Observation{first_ts/last_ts/count}; observe Started/Merged;
+  drain(now) emits + clears past-window entries; nested BTreeMap
+  for JSON friendliness)
+
+Total this resume: 119 selfdef IPS-authority crates. Workspace 284.
