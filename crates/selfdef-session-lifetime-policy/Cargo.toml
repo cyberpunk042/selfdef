@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-session-lifetime-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile bounds on session lifetime. classify(profile, age_ms, idle_ms) returns Active / IdleExpired{idle_cap}/AgeExpired{age_cap}/Unconfigured. Two independent caps: maximum absolute age and maximum idle gap since the last interaction. Distinct from selfdef-token-lifetime-policy (token bearer) — this is the user-session lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
