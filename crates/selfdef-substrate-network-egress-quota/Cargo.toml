@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-network-egress-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate per-Profile network egress quota. Rolling-window byte budget + per-request max bytes cap. account() returns Accepted / RequestTooLarge / BudgetExhausted / Unconfigured. Pairs with selfdef-substrate-{cpu,gpu,disk}-quota as the network lane in the substrate quota family. Distinct from selfdef-network-egress-decision (allow/deny by destination) — this is the volumetric lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []

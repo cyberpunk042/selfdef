@@ -4463,6 +4463,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-substrate-network-egress-quota"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-substrate-readiness"
 version = "0.1.0"
 dependencies = [
