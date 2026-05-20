@@ -1735,3 +1735,11 @@ Total this resume: 218 selfdef IPS-authority crates. Workspace 383.
   available, requested}; remaining reports headroom)
 
 Total this resume: 219 selfdef IPS-authority crates. Workspace 384.
+
+### Hundred-and-fifty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prompt-size-cap` (ActorCaps{warn_bytes, hard_bytes};
+  evaluate returns Allow/Warn{headroom_bytes}/Reject{over_bytes}/
+  Unknown; set_caps requires warn < hard)
+
+Total this resume: 220 selfdef IPS-authority crates. Workspace 385.
