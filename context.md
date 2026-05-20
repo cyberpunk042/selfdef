@@ -2460,3 +2460,12 @@ Total this resume: 303 selfdef IPS-authority crates. Workspace 468.
   boundary slope)
 
 Total this resume: 304 selfdef IPS-authority crates. Workspace 469.
+
+### Two-hundred-and-thirty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-quota-table` (Quota{limit, period_ms, used,
+  last_reset_ms}; consume advances period if elapsed then
+  admits iff used+amount<=limit; Exceeded bumps denials;
+  remaining accounts for period advance)
+
+Total this resume: 305 selfdef IPS-authority crates. Workspace 470.
