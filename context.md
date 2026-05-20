@@ -1325,3 +1325,13 @@ Total this resume: 175 selfdef IPS-authority crates. Workspace 340.
   created_ms; needs_attention lists due-or-expired)
 
 Total this resume: 176 selfdef IPS-authority crates. Workspace 341.
+
+### Hundred-and-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bus-envelope-stamping` (Envelope{emitter, seq, topic,
+  ts_ms, payload_hash} via FNV-1a 64; stamp emits monotonic
+  per-emitter seq independent of other emitters; verify detects
+  payload tampering by recomputing hash; recover_emitter_state
+  advances next-seq past observed but rejects backward recovery)
+
+Total this resume: 177 selfdef IPS-authority crates. Workspace 342.
