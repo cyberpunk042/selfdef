@@ -5286,6 +5286,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-perimeter"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "selfdef-perimeter-mirror",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-perimeter-mirror"
 version = "0.1.0"
 dependencies = [

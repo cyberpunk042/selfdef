@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-perimeter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "SDD-028 Deliverable 3 — perimeter runtime authority crate: allowlist-extension manifest loader + MS003 multi-sig verification + ring-buffer reader + OCSF Detection 2004 emitter + ZFS log bridge writer + audit-chain integrity. Used by selfdefd to evaluate the sovereign-kernel-fence authority surface."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+sha2 = { workspace = true }
+selfdef-perimeter-mirror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
