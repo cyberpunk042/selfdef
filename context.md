@@ -2894,3 +2894,13 @@ Total this resume: 351 selfdef IPS-authority crates. Workspace 516.
   saturating-subtracts; available, used_bp, reset_watermark)
 
 Total this resume: 352 selfdef IPS-authority crates. Workspace 517.
+
+### Two-hundred-and-eighty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-gcra-limiter` (tracks TAT; emission_interval =
+  period_ms / capacity; arrive(now) allowed iff now + burst_ms
+  >= TAT, on allow TAT advances by interval anchored
+  max(TAT, now); on reject returns retry_after = TAT - burst -
+  now; peek non-mutating)
+
+Total this resume: 353 selfdef IPS-authority crates. Workspace 518.
