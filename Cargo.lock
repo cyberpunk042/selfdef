@@ -4691,6 +4691,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-named-lock"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-namespace-precedence"
 version = "0.1.0"
 dependencies = [
