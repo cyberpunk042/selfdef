@@ -6259,6 +6259,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-weighted-round-robin"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
