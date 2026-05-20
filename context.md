@@ -2570,3 +2570,12 @@ Total this resume: 316 selfdef IPS-authority crates. Workspace 481.
   (None if Σw=0); reset clears; zero weight rejected)
 
 Total this resume: 317 selfdef IPS-authority crates. Workspace 482.
+
+### Two-hundred-and-fiftieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fixed-interval` (poll(now) returns count of
+  period_ms elapsed since last_tick_ms; advances last_tick
+  by n*period (drift bounded < 1 period); reset(now)
+  restarts at now)
+
+Total this resume: 318 selfdef IPS-authority crates. Workspace 483.
