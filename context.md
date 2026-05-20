@@ -1726,3 +1726,12 @@ Total this resume: 217 selfdef IPS-authority crates. Workspace 382.
   non-reversible blocks backward; missing step → Missing(version))
 
 Total this resume: 218 selfdef IPS-authority crates. Workspace 383.
+
+### Hundred-and-fifty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-periodic-quota-budget` (ActorBudget{cap_per_period,
+  consumed, current_period_start_ms}; charge auto-rolls forward
+  whole periods (snap not catch-up); returns Accepted/Exceeded{
+  available, requested}; remaining reports headroom)
+
+Total this resume: 219 selfdef IPS-authority crates. Workspace 384.
