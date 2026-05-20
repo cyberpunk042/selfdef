@@ -1195,3 +1195,11 @@ Total this resume: 161 selfdef IPS-authority crates. Workspace 326.
   count>]; returns (redacted, count))
 
 Total this resume: 162 selfdef IPS-authority crates. Workspace 327.
+
+### Ninety-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-lifecycle` (Phases Requested→Approved→Executing
+  →(Completed|Failed|Cancelled); per-phase ts recorded; bad-
+  transition rejected; Cancel from any pre-terminal phase)
+
+Total this resume: 163 selfdef IPS-authority crates. Workspace 328.
