@@ -137,6 +137,7 @@ selfdef-perimeter = { path = "crates/selfdef-perimeter" }
 selfdef-guardian-mirror = { path = "crates/selfdef-guardian-mirror" }
 selfdef-guardian = { path = "crates/selfdef-guardian" }
 selfdef-scheduler-mirror = { path = "crates/selfdef-scheduler-mirror" }
+selfdef-scheduler = { path = "crates/selfdef-scheduler" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)

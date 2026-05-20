@@ -6270,6 +6270,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-scheduler"
+version = "0.1.0"
+dependencies = [
+ "selfdef-scheduler-mirror",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-scheduler-mirror"
 version = "0.1.0"
 dependencies = [
