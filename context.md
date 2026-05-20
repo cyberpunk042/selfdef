@@ -2914,3 +2914,13 @@ Total this resume: 353 selfdef IPS-authority crates. Workspace 518.
   hundreds-low-thousands)
 
 Total this resume: 354 selfdef IPS-authority crates. Workspace 519.
+
+### Two-hundred-and-eighty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-dead-letter-queue` (Entry{msg_id, attempts,
+  last_error, last_attempted_at_ms, payload_bytes}; enqueue
+  updates existing msg_id moves-to-back, capacity-bounded with
+  front-eviction; replay removes by id; drain_snapshot returns
+  oldest-first)
+
+Total this resume: 355 selfdef IPS-authority crates. Workspace 520.
