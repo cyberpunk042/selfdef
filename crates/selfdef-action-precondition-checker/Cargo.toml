@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-action-precondition-checker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS declarative precondition checker for actions. Each action_id has a list of Precondition predicates (HasGrant(id) / NotSuspended / WithinHours{from,to} / EnvFlagPresent(name) / MinTrustScore(s) / DepActionCompleted(id)). evaluate(action_id, ctx) returns Met / Unmet{missing}. Pure descriptor; consumers feed live state in ctx."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
