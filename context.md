@@ -2657,3 +2657,12 @@ Total this resume: 326 selfdef IPS-authority crates. Workspace 491.
   shingles for near-match)
 
 Total this resume: 327 selfdef IPS-authority crates. Workspace 492.
+
+### Two-hundred-and-sixtieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-path-normalize` (normalize splits on /, drops
+  empty/"."; pops on ".."; absolute paths reject EscapesRoot;
+  relative keeps ".."; preserves absolute-ness; "/"→"/",
+  ""→".")
+
+Total this resume: 328 selfdef IPS-authority crates. Workspace 493.
