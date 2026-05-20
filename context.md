@@ -1778,3 +1778,11 @@ Total this resume: 223 selfdef IPS-authority crates. Workspace 388.
   by current time)
 
 Total this resume: 224 selfdef IPS-authority crates. Workspace 389.
+
+### Hundred-and-fifty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fallback-chain` (Provider{id, healthy, failures};
+  append ordered; pick returns first healthy; mark_unhealthy/
+  mark_healthy flip; failures bumped per unhealthy mark)
+
+Total this resume: 225 selfdef IPS-authority crates. Workspace 390.
