@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-action-step-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile cap on the number of steps an action chain may execute before requiring re-authorization. start(action_id, profile) opens a counter; step(action_id) returns Accepted{remaining}/Exhausted{cap}/UnknownAction/Unconfigured. finish(action_id) clears the counter. Distinct from selfdef-dispatch-fanout-budget (parallel breadth) — this is the sequential-depth lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
