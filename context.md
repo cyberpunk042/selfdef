@@ -1708,3 +1708,12 @@ Total this resume: 215 selfdef IPS-authority crates. Workspace 380.
   empty reason)
 
 Total this resume: 216 selfdef IPS-authority crates. Workspace 381.
+
+### Hundred-and-forty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-usage-receipt` (Receipt{id, actor, resource, ts_ms,
+  input_bytes, output_bytes, tokens, duration_ms}; record bumps
+  per-actor + per-resource Totals aggregates; totals_by_actor/
+  totals_by_resource queries)
+
+Total this resume: 217 selfdef IPS-authority crates. Workspace 382.
