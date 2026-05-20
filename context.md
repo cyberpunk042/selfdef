@@ -1528,3 +1528,12 @@ Total this resume: 196 selfdef IPS-authority crates. Workspace 361.
   reset_totals keeps rates)
 
 Total this resume: 197 selfdef IPS-authority crates. Workspace 362.
+
+### Hundred-and-thirtieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-session-resume-policy` (soft_resume_window_ms /
+  reauth_window_ms; decide(disconnected_at, now, cause) returns
+  ResumeFreely / RequireReauth / RequireNewSession;
+  OperatorLogout always RequireNewSession regardless of windows)
+
+Total this resume: 198 selfdef IPS-authority crates. Workspace 363.
