@@ -2562,3 +2562,11 @@ Total this resume: 315 selfdef IPS-authority crates. Workspace 480.
   bounding_box; contains_point/contains_rect; area as i128)
 
 Total this resume: 316 selfdef IPS-authority crates. Workspace 481.
+
+### Two-hundred-and-forty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-weighted-mean` (observe(value, weight) accumulates
+  Σ(v*w) (i128) + Σw (u128); mean = weighted_sum/total_weight
+  (None if Σw=0); reset clears; zero weight rejected)
+
+Total this resume: 317 selfdef IPS-authority crates. Workspace 482.
