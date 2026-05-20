@@ -2332,3 +2332,11 @@ Total this resume: 288 selfdef IPS-authority crates. Workspace 453.
   (1..=16); matches known FNV-1a values; pure deterministic)
 
 Total this resume: 289 selfdef IPS-authority crates. Workspace 454.
+
+### Two-hundred-and-twenty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-monotonic-clock` (Strict::Yes rejects equal,
+  Strict::No allows; regressions counted with state
+  unchanged; since_last saturating; pure data)
+
+Total this resume: 290 selfdef IPS-authority crates. Workspace 455.
