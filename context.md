@@ -1237,3 +1237,13 @@ Total this resume: 166 selfdef IPS-authority crates. Workspace 331.
   Unknown; stalled_subjects(now, threshold) lists currently-stalled)
 
 Total this resume: 167 selfdef IPS-authority crates. Workspace 332.
+
+### One-hundredth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-resource-reservation` (per-resource Pool{capacity, held};
+  reserve(resource, units, ts) returns id or Insufficient err;
+  commit marks committed (held stays); abandon releases held;
+  expire(now, max_age_ms) drops stale uncommitted only;
+  set_capacity preserves existing held)
+
+Total this resume: 168 selfdef IPS-authority crates. Workspace 333.
