@@ -2816,3 +2816,13 @@ Total this resume: 343 selfdef IPS-authority crates. Workspace 508.
   replays idempotently)
 
 Total this resume: 344 selfdef IPS-authority crates. Workspace 509.
+
+### Two-hundred-and-seventy-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-recursion-guard` (enter(frame_id) pushes; leave pops;
+  DepthExceeded if push would exceed max_depth, CycleDetected
+  if id already on stack — both without mutating state;
+  Underflow on leave-when-empty; suitable for nested IPS rule
+  evaluation)
+
+Total this resume: 345 selfdef IPS-authority crates. Workspace 510.
