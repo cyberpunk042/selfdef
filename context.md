@@ -1489,3 +1489,13 @@ Total this resume: 192 selfdef IPS-authority crates. Workspace 357.
   history_retention_ms)
 
 Total this resume: 193 selfdef IPS-authority crates. Workspace 358.
+
+### Hundred-and-twenty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-leader-election` (Group{leader, epoch, lease_expires_ms};
+  try_acquire returns Acquired{epoch++}/SelfRenew{epoch}/HeldByOther{
+  leader, until}; epoch bumps only on takeover; heartbeat renews
+  for current non-expired leader; step_down voluntary; current(now)
+  reflects live lease only)
+
+Total this resume: 194 selfdef IPS-authority crates. Workspace 359.
