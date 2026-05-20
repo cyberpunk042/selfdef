@@ -1019,3 +1019,13 @@ Total this resume: 141 selfdef IPS-authority crates. Workspace 306.
   policy-explanation-formatter for rendering)
 
 Total this resume: 142 selfdef IPS-authority crates. Workspace 307.
+
+### Seventy-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-storage-quota` (per-Profile ProfileCaps
+  {soft_bytes, hard_bytes}; classify Healthy/OverSoft{soft, used}/
+  OverHard{hard, used}/Unconfigured; canonical Experimental 64/
+  128GiB, Production 8/16GiB; persistent-footprint lane distinct
+  from substrate-disk-quota write-budget)
+
+Total this resume: 143 selfdef IPS-authority crates. Workspace 308.
