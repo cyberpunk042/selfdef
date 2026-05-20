@@ -940,3 +940,12 @@ Total this resume: 132 selfdef IPS-authority crates. Workspace 297.
   Unknown; ramp window for strict policies)
 
 Total this resume: 133 selfdef IPS-authority crates. Workspace 298.
+
+### Sixty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-heartbeat-policy` (per-component liveness;
+  register(component_id, deadline_ms)/beat(monotonic)/check
+  Live{age}/Stale{age, deadline}/Unknown; stale_set(now);
+  re-register preserves last_beat)
+
+Total this resume: 134 selfdef IPS-authority crates. Workspace 299.
