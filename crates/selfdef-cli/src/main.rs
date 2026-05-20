@@ -12,6 +12,7 @@ mod emit;
 mod follow;
 mod friction_audit;
 mod guardian;
+mod trio;
 mod hardware;
 mod init;
 mod mcp;
@@ -186,6 +187,16 @@ enum Command {
         #[command(subcommand)]
         action: Option<GuardianAction>,
         /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
+    /// MS043 R10081 + F05081: consolidated three-watchdog-trio operator
+    /// view. Renders friction-audit (hardware frame) + perimeter (kernel
+    /// syscall) + guardian (supervisor tier) state in one read-only
+    /// snapshot. The single-command analog of the dashboard's main
+    /// page — useful when no GUI / no browser available.
+    Trio {
+        /// Machine-readable JSON output.
         #[arg(long)]
         json: bool,
     },
@@ -1513,6 +1524,10 @@ async fn main() -> Result<()> {
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
             };
+            std::process::exit(exit);
+        }
+        Command::Trio { json } => {
+            let exit = trio::run(json).context("trio")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

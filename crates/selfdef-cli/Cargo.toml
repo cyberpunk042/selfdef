@@ -29,6 +29,7 @@ selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-friction-audit-mirror = { workspace = true }
+selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }
 selfdef-perimeter = { workspace = true }
 selfdef-guardian-mirror = { workspace = true }
