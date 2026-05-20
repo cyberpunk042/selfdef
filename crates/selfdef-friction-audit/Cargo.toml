@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-friction-audit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "SDD-027 Deliverable 4 — friction-audit runtime authority crate: override manifest loader + MS003 signature verification + multi-sig enforcement + ring-buffer reader + replay invoker. Used by selfdefd to evaluate the gate authority surface."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+minisign-verify = { workspace = true }
+sha2 = { workspace = true }
+selfdef-friction-audit-mirror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

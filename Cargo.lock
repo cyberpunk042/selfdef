@@ -4072,6 +4072,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-friction-audit"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "selfdef-friction-audit-mirror",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-friction-audit-mirror"
 version = "0.1.0"
 dependencies = [
