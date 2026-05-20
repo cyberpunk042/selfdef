@@ -1769,3 +1769,12 @@ Total this resume: 222 selfdef IPS-authority crates. Workspace 387.
   total sums after rotation)
 
 Total this resume: 223 selfdef IPS-authority crates. Workspace 388.
+
+### Hundred-and-fifty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-subscription-registry` (Subscription{id, subscriber,
+  topic, created_at, expires_at}; subscribe with ttl; renew
+  extends; prune drops expired; active_count + by_topic filter
+  by current time)
+
+Total this resume: 224 selfdef IPS-authority crates. Workspace 389.
