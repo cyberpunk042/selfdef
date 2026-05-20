@@ -1889,3 +1889,11 @@ Total this resume: 237 selfdef IPS-authority crates. Workspace 402.
   update/forget)
 
 Total this resume: 238 selfdef IPS-authority crates. Workspace 403.
+
+### Hundred-and-seventy-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-sync-barrier` (N-party barrier; status{Waiting/Tripped/
+  TimedOut}; arrive returns status; trip when arrived==expected;
+  late arrivals after deadline → TimedOut)
+
+Total this resume: 239 selfdef IPS-authority crates. Workspace 404.
