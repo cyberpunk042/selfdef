@@ -2596,3 +2596,11 @@ Total this resume: 319 selfdef IPS-authority crates. Workspace 484.
   deterministic same-input decisions)
 
 Total this resume: 320 selfdef IPS-authority crates. Workspace 485.
+
+### Two-hundred-and-fifty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-clock-skew` (observe(local_ms, remote_ms) records
+  skew=remote-local; tracks Σskew + count + min + max;
+  mean=Σ/count (None if empty); range=max-min)
+
+Total this resume: 321 selfdef IPS-authority crates. Workspace 486.
