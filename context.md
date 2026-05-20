@@ -1344,3 +1344,12 @@ Total this resume: 177 selfdef IPS-authority crates. Workspace 342.
   in basis points (9990 = 99.9%); exhausts when actual >= allowed)
 
 Total this resume: 178 selfdef IPS-authority crates. Workspace 343.
+
+### Hundred-and-eleventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-ingest-admission-gate` (Inbound{origin, kind, size_bytes};
+  decide runs origin_allowlist → kind_denylist → size check in
+  order, returns Admitted or first Rejected{reason:
+  OriginNotAllowed/KindDenied/OverSize}; observe records counters)
+
+Total this resume: 179 selfdef IPS-authority crates. Workspace 344.
