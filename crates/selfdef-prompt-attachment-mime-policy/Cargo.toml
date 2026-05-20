@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-prompt-attachment-mime-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile allowlist of attachment MIME types for prompt inputs. classify(profile, mime) returns Allowed{matched_rule} / Denied{allowed_glob_set} / Unconfigured. Rules support exact ('image/png') and glob ('image/*') matches; literal '*' admits any. Distinct from selfdef-prompt-language-allowlist (text language) — this is the binary attachment lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
