@@ -6862,6 +6862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-weighted-mean"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-weighted-round-robin"
 version = "0.1.0"
 dependencies = [
