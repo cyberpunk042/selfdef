@@ -1605,3 +1605,12 @@ Total this resume: 204 selfdef IPS-authority crates. Workspace 369.
   dependent code; tripped_ids lists current)
 
 Total this resume: 205 selfdef IPS-authority crates. Workspace 370.
+
+### Hundred-and-thirty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-denylist` (global denies map action→reason; per-
+  actor denies isolated; decide(action, actor) returns Allow/Deny{
+  reason, scope:Global|Actor}; global precedence over actor-
+  specific; allow_global / allow_for_actor remove entries)
+
+Total this resume: 206 selfdef IPS-authority crates. Workspace 371.
