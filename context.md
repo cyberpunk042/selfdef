@@ -2408,3 +2408,12 @@ Total this resume: 297 selfdef IPS-authority crates. Workspace 462.
   forward-reference (checked at resolve))
 
 Total this resume: 298 selfdef IPS-authority crates. Workspace 463.
+
+### Two-hundred-and-thirty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-retry-budget` (per-key KeyState{used, window_start_ms};
+  try_consume resets when window elapsed, bumps used iff
+  used<budget else Exhausted; exhausted lists in-window
+  saturated keys)
+
+Total this resume: 299 selfdef IPS-authority crates. Workspace 464.
