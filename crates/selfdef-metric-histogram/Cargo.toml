@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-metric-histogram"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS bucketed histogram for IPS metrics (latency, payload size). Declared with monotonic bucket upper-bounds; observe(value) bumps the right bucket; quantile(q) walks bucket counts to find the requested percentile bucket. Pure aggregator; bucket boundaries are operator-chosen (Prometheus-style)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
