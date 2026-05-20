@@ -572,3 +572,17 @@ Total this resume: 81 selfdef IPS-authority crates. Workspace 246.
   pair — volumetric lane, distinct from network-egress-decision)
 
 Total this resume: 85 selfdef IPS-authority crates. Workspace 250.
+
+### Twenty-seventh wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-substrate-fd-quota` (per-Profile max_open_fds;
+  open(label)→Granted{handle_id}/Exhausted, close(id) frees)
+- `selfdef-substrate-thread-quota` (per-Profile max_threads;
+  spawn(label)→Granted{thread_id}/Exhausted, finish(id) frees —
+  completes substrate quota family cpu/gpu/disk/network-egress/fd/
+  thread)
+- `selfdef-tool-output-byte-quota` (per-Profile warn_bytes/
+  hard_bytes; admit_chunk returns Accept/Truncate{kept}/Reject
+  around the warn ramp)
+
+Total this resume: 88 selfdef IPS-authority crates. Workspace 253.
