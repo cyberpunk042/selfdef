@@ -1786,3 +1786,11 @@ Total this resume: 224 selfdef IPS-authority crates. Workspace 389.
   mark_healthy flip; failures bumped per unhealthy mark)
 
 Total this resume: 225 selfdef IPS-authority crates. Workspace 390.
+
+### Hundred-and-fifty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-correlation-id-issuer` (Node{id, parent, created_at_ms};
+  issue(parent) validates parent exists; lineage walks root→id;
+  IDs monotonic u64)
+
+Total this resume: 226 selfdef IPS-authority crates. Workspace 391.
