@@ -2579,3 +2579,11 @@ Total this resume: 317 selfdef IPS-authority crates. Workspace 482.
   restarts at now)
 
 Total this resume: 318 selfdef IPS-authority crates. Workspace 483.
+
+### Two-hundred-and-fifty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-linear-regression` (incremental n + Σx + Σy + Σxy +
+  Σx² as i128; slope_micro=(n*Σxy-Σx*Σy)*1e6/(n*Σx²-Σx²);
+  intercept_micro derived; Degenerate when denom=0)
+
+Total this resume: 319 selfdef IPS-authority crates. Workspace 484.
