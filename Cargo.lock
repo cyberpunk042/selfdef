@@ -2809,7 +2809,10 @@ dependencies = [
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-friction-audit",
  "selfdef-friction-audit-mirror",
+ "selfdef-guardian",
+ "selfdef-guardian-mirror",
  "selfdef-hardware",
  "selfdef-integration-ntfy",
  "selfdef-notifier",
@@ -6259,6 +6262,15 @@ dependencies = [
 
 [[package]]
 name = "selfdef-saturation-meter"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-scheduler-mirror"
 version = "0.1.0"
 dependencies = [
  "serde",
