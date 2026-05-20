@@ -1117,3 +1117,11 @@ Total this resume: 152 selfdef IPS-authority crates. Workspace 317.
   new_cursor); rotate drops past-retention)
 
 Total this resume: 153 selfdef IPS-authority crates. Workspace 318.
+
+### Eighty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-emitter-policy` (decision_kind → BTreeSet
+  <Sink: Audit/Trace/Operator/Mirror/External>; set/add_sink/
+  remove_sink/emitted_to; remove auto-prunes empty entries)
+
+Total this resume: 154 selfdef IPS-authority crates. Workspace 319.
