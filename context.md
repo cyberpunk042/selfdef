@@ -2298,3 +2298,12 @@ Total this resume: 284 selfdef IPS-authority crates. Workspace 449.
   sweeps stale)
 
 Total this resume: 285 selfdef IPS-authority crates. Workspace 450.
+
+### Two-hundred-and-eighteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-patch-set` (Op{Set/Remove/Test}; apply pre-validates
+  Test ops against current state, aborts all-or-none on
+  mismatch; otherwise applies Set/Remove in order; empty
+  keys/values rejected)
+
+Total this resume: 286 selfdef IPS-authority crates. Workspace 451.
