@@ -2855,3 +2855,13 @@ Total this resume: 347 selfdef IPS-authority crates. Workspace 512.
   expired; compact prunes)
 
 Total this resume: 348 selfdef IPS-authority crates. Workspace 513.
+
+### Two-hundred-and-eighty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-allowlist-store` (Entry{reason, granted_by,
+  granted_at_ms, expires_at_ms}; grant(key, reason, granted_by,
+  now, ttl_ms) inserts (ttl=0 permanent); allowed(key, now)
+  true iff non-expired; revoke removes; counterpart to
+  selfdef-denylist-store)
+
+Total this resume: 349 selfdef IPS-authority crates. Workspace 514.
