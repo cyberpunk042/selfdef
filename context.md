@@ -1546,3 +1546,13 @@ Total this resume: 198 selfdef IPS-authority crates. Workspace 363.
   DeadLettered on next nack; pending_count helper)
 
 Total this resume: 199 selfdef IPS-authority crates. Workspace 364.
+
+### Hundred-and-thirty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-causation-chain` (Decision{id, summary, ts_ms,
+  caused_by:BTreeSet}; record validates causes exist; add_cause
+  refuses cycles (WouldCycle if cause already downstream);
+  ancestors/descendants walk with depth bound; branch-and-merge
+  supported (true DAG))
+
+Total this resume: 200 selfdef IPS-authority crates. Workspace 365.
