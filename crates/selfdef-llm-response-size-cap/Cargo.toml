@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-response-size-cap"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile cap on a single LLM response shape: max_completion_tokens + max_response_chars + max_attached_blobs. plan(request) returns Granted/Capped{adjusted}/RejectedShape. Distinct from selfdef-llm-token-throttle (cumulative tokens-per-window) and selfdef-prompt-context-quota (input shape) — this is the per-response output-shape lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
