@@ -40,6 +40,7 @@ mod friction_audit;
 mod guardian;
 mod handlers;
 mod perimeter;
+mod scheduler;
 pub mod metrics;
 mod state;
 mod transport;
@@ -161,6 +162,14 @@ pub fn router(state: ApiState) -> Router {
         // `selfdefctl guardian` (replay / rollback).
         .route("/v1/guardian", get(guardian::show))
         .route("/v1/guardian/history", get(guardian::history))
+        // SDD-031 / MS048: Goldilocks Scheduler operator surface
+        // (read-only). Mutation flows through `selfdefctl scheduler force`
+        // (Ring 0 + MS003 multi-sig).
+        .route("/v1/scheduler", get(scheduler::show))
+        .route("/v1/scheduler/history", get(scheduler::history))
+        .route("/v1/scheduler/backpressure", get(scheduler::backpressure))
+        .route("/v1/scheduler/weights", get(scheduler::weights))
+        .route("/v1/scheduler/explain/:request_id", get(scheduler::explain))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

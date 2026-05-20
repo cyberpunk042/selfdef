@@ -34,6 +34,8 @@ selfdef-perimeter = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }
 selfdef-guardian = { workspace = true }
 selfdef-guardian-mirror = { workspace = true }
+selfdef-scheduler = { workspace = true }
+selfdef-scheduler-mirror = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }

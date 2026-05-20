@@ -39,6 +39,12 @@ check_route "/v1/perimeter/history"       "SDD-028 D8" || failures=$((failures +
 # SDD-029 / MS044
 check_route "/v1/guardian"                "SDD-029 D8" || failures=$((failures + 1))
 check_route "/v1/guardian/history"        "SDD-029 D8" || failures=$((failures + 1))
+# SDD-031 / MS048
+check_route "/v1/scheduler"               "SDD-031 D4" || failures=$((failures + 1))
+check_route "/v1/scheduler/history"       "SDD-031 D4" || failures=$((failures + 1))
+check_route "/v1/scheduler/backpressure"  "SDD-031 D4" || failures=$((failures + 1))
+check_route "/v1/scheduler/weights"       "SDD-031 D4" || failures=$((failures + 1))
+check_route "/v1/scheduler/explain/:request_id" "SDD-031 D4" || failures=$((failures + 1))
 
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
