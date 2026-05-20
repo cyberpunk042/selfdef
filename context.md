@@ -2648,3 +2648,12 @@ Total this resume: 325 selfdef IPS-authority crates. Workspace 490.
   below first → default_band)
 
 Total this resume: 326 selfdef IPS-authority crates. Workspace 491.
+
+### Two-hundred-and-fifty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-duplicate-detect` (DupEntry{text, shingles k-char
+  BTreeSet}; observe records; is_near_dup(text, threshold_bp)
+  returns first id with Jaccard >= threshold; uses k-char
+  shingles for near-match)
+
+Total this resume: 327 selfdef IPS-authority crates. Workspace 492.
