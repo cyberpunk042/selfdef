@@ -1857,3 +1857,11 @@ Total this resume: 233 selfdef IPS-authority crates. Workspace 398.
   remainder_ms preserves sub-second precision)
 
 Total this resume: 234 selfdef IPS-authority crates. Workspace 399.
+
+### Hundred-and-sixty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-test-harness` (Case{id, input, expected_outcome,
+  observed_outcome}; record_observed sets observation; summary
+  returns Summary{total, passed, failed, unrun, mismatches})
+
+Total this resume: 235 selfdef IPS-authority crates. Workspace 400.
