@@ -6,6 +6,129 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS006 / SDD-009: modules surface + MS027 Prometheus alerts + cross-cutting CI/release coherence gating (2026-05-20)
+
+Follow-on round after the four-watchdog production landing. Closes
+operator-discoverability + drift-detection + monitoring gaps that
+surfaced as the four-watchdog set rolled out.
+
+#### Module surface (MS006 / SDD-009 Q-G)
+
+- `GET /v1/modules` — new HTTP route surfacing every `module.toml`
+  the host ships at `/usr/share/selfdef/modules/<name>/`. Each entry
+  tagged with `active: bool` (`true` iff `[modules.<name>]` is in
+  `/etc/selfdef/modules.toml`). Read-only — activation goes through
+  `selfdefctl modules apply` (Ring 0 + operator-confirmed).
+- `selfdef-api::modules` module — `list_in_dir(path)` + `active_modules(path)`
+  helpers (8 unit tests + 1 m12_api integration test)
+- `dashboard/index.html` — new `#modules-section` panel with active/shipped
+  count badge; rows sorted active-first; inactive rows render gray
+- `dashboard/app.js` — `refreshModules()` handler; 60s setInterval
+- `dashboard/service-worker.js` — SHELL v3 (cache invalidation)
+- `scripts/test/L1-dashboard-sections.sh` — 4 new locks (HTML section
+  + JS handler + setInterval + endpoint binding)
+- `selfdef_modules_shipped_total` + `selfdef_modules_active_total`
+  Prometheus gauges via `selfdef-api::watchdog_metrics::render_modules()`
+- Grafana template: new 'Module catalog' row + 2 stat panels (id 111/112)
+- `scripts/test/L1-grafana-template.sh` — panel count gate raised 17→20;
+  2 new series locked
+
+#### Prometheus alerts (MS027 four-watchdog set)
+
+- `modules/observability/assets/alerts/selfdef.yml.template` — 9 alert
+  rules covering critical + warning failure modes per watchdog. Every
+  alert carries `runbook_url` pointing at the matching info-hub runbook
+  (operators clicking alerts in Alertmanager UIs get clickable links
+  into the 20-runbook remediation surface):
+  - SelfdefFrictionAuditFailingGate (critical)
+  - SelfdefPerimeterSigkill (warning) / SelfdefPerimeterPolicyMissing
+    (critical) / SelfdefPerimeterChainBroken (critical)
+  - SelfdefGuardianFailedResponse (critical) / SelfdefGuardianTetragonSocketMissing
+    (warning) / SelfdefGuardianChainBroken (critical)
+  - SelfdefSchedulerSustainedBackpressure (warning) /
+    SelfdefSchedulerChainBroken (critical)
+- `modules/observability/install/apply.sh` — deploys alert rules in
+  both `bundled` and `external` profiles alongside scrape config +
+  dashboard. New `prometheus_rules_dir` config knob.
+- `modules/observability/README.md` — new 'Alert rules' section
+  replacing the stale 'NOT here yet' bullet
+- `crates/selfdef-cli/tests/module_observability.rs` — alert deployment
+  end-to-end test (asserts 9 alerts + `wiki/runbooks/` runbook_url
+  linkage on both profiles)
+- `scripts/test/L1-prometheus-alerts.sh` — 15 checks gating template
+  parseability + alert count + per-alert runbook_url linkage + each
+  SDD-promised series referenced + apply.sh wiring
+
+#### Periodic health check (operator surface)
+
+- `packaging/systemd/selfdef-doctor.service` + `selfdef-doctor.timer`
+  ship with the package. Type=oneshot + Restart=always + hourly cadence
+  via OnUnitActiveSec=1h with RandomizedDelaySec=5min fleet spread +
+  Persistent=true for catch-up. Hardened (NoNewPrivileges,
+  ProtectSystem=strict, ReadOnlyPaths for doctor input dirs only,
+  RestrictAddressFamilies=AF_UNIX since doctor is read-only with no
+  network). Operators enable via `systemctl enable --now selfdef-doctor.timer`.
+- `crates/selfdef-cli/src/doctor.rs` — new `watchdog-set` category
+  reports per-watchdog deployability (binary + unit + ring dir +
+  supporting infrastructure) + per-watchdog audit-chain integrity
+  (SHA-256 chain check against perimeter/guardian/scheduler OCSF logs).
+  3 new chain-integrity checks added on top of the existing 5
+  deployability checks.
+- `packaging/test/L2-doctor-timer.bats` — 23 tests locking the unit +
+  timer surface against drift
+
+#### CLI ergonomics
+
+- `selfdefctl trio --json --watch N` now emits a JSONL stream (one
+  compact JSON line per cycle) for monitoring pipelines (`jq -c`,
+  Loki, Vector ingest). Previously `--watch` was silently ignored
+  when `--json` was set.
+- `selfdefctl trio-tail` — new top-level subcommand: unified live OCSF
+  tail across all four watchdog jsonl logs. Tags each event with its
+  source watchdog. Honors env-var path overrides for sandboxed runs.
+- `selfdefctl wizard` Step 5 — first-time-operator four-watchdog
+  enablement guide
+- `selfdefctl init checklist` Step 12 — same on the first-run checklist
+
+#### CI + release gating
+
+- `.github/workflows/ci.yml` — new `coherence` job runs the 10-layer
+  `scripts/test/coherence.sh` on every push + PR. The `build` job's
+  `needs` chain now includes it — release artifacts are gated on it.
+- `.github/workflows/release.yml` — Pre-release coherence gate step
+  runs the harness before cargo-deb / SBOM / cosign-signing. Hand-tagged
+  releases with a drifted surface fail-fast.
+
+#### Documentation coherence
+
+- `README.md` — new 'Four-watchdog set (IPS spine)' section
+- `ARCHITECTURE.md` — new 'Four-watchdog set' section with ASCII
+  layered diagram showing the 3 sibling watchdogs feeding into the
+  scheduler convergence point
+- `SECURITY.md` — new 'Four-watchdog set' subsection in 'Tamper
+  detection' with adversary-class table per watchdog
+- `Cargo.toml` (selfdef-daemon) — `extended-description` names all
+  four watchdogs (dpkg -s now surfaces the IPS spine)
+- `docs/dev/operator-health-check.md` — references the production-
+  shipped systemd unit (was a hand-rolled stub)
+- `docs/dev/modules.md` — new authoritative module-author contract doc
+  (was referenced but missing — F-2027-022)
+- `dashboard/manifest.json` — PWA description + 512x512 maskable icon
+  + W3C `scope` + `categories` fields
+- info-hub `wiki/log/2026-05-20-four-watchdog-end-to-end-production-landing.md`
+  — second-brain landing record (cross-references the 4 SDDs + 4
+  milestone catalogs + 20 runbooks + selfdef CHANGELOG)
+
+#### Test coverage
+
+- m12_api integration tests: 51 (was 39 before the round — +12)
+- selfdef-api watchdog_metrics: 3 unit + 3 integration tests
+- selfdef-api modules: 8 unit + 1 integration test
+- selfdef-api scheduler: 5 unit + 6 integration tests
+- L2 bats: 119 tests across 5 packaging surfaces
+- Doctor: 17 tests including new watchdog-set category
+- Wizard: 10 tests including new Step 5
+
 ### Added — MS046 + MS047 + MS048 production landings + four-watchdog operator-discoverability (2026-05-20)
 
 The four-watchdog set (MS046 friction-audit + MS047 perimeter + MS044
