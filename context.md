@@ -1929,3 +1929,12 @@ Total this resume: 242 selfdef IPS-authority crates. Workspace 407.
   approve_bp bounds vs threshold; otherwise Pending)
 
 Total this resume: 243 selfdef IPS-authority crates. Workspace 408.
+
+### Hundred-and-seventy-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-consistent-hash-ring` (FNV-1a-64 vnode hashing with
+  decimal-encoded indices; assign returns first node clockwise;
+  assign_replicas yields N distinct nodes; removal reassigns only
+  removed-node keys)
+
+Total this resume: 244 selfdef IPS-authority crates. Workspace 409.
