@@ -2703,3 +2703,12 @@ Total this resume: 331 selfdef IPS-authority crates. Workspace 496.
   missing() sums uncovered)
 
 Total this resume: 332 selfdef IPS-authority crates. Workspace 497.
+
+### Two-hundred-and-sixty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-counting-bloom` (m 8-bit counters with k hash
+  positions per key FNV-1a-64 + per-hash decimal seed; add
+  increments each of k saturating 255; remove decrements
+  skipping saturated; contains true iff all positions non-zero)
+
+Total this resume: 333 selfdef IPS-authority crates. Workspace 498.
