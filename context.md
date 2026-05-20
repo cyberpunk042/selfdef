@@ -1468,3 +1468,13 @@ Total this resume: 190 selfdef IPS-authority crates. Workspace 355.
   asc; double-resolve rejected)
 
 Total this resume: 191 selfdef IPS-authority crates. Workspace 356.
+
+### Hundred-and-twenty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-clock-skew-tolerance` (max_ahead_ms/max_behind_ms bound
+  acceptance window; accept(event_ts, now) returns InWindow{skew}/
+  TooFarFuture{skew, max_ahead}/TooFarPast{skew, max_behind};
+  observe tracks rolling max +/- skew and accepted/rejected
+  counters; signed i64 skew = event_ts - now)
+
+Total this resume: 192 selfdef IPS-authority crates. Workspace 357.
