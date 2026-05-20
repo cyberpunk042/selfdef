@@ -957,3 +957,12 @@ Total this resume: 134 selfdef IPS-authority crates. Workspace 299.
   blocked_total per actor across kinds; dashboard-surfacing lane)
 
 Total this resume: 135 selfdef IPS-authority crates. Workspace 300.
+
+### Sixty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-metric-histogram` (operator-chosen strictly-increasing
+  bucket upper bounds + +Inf overflow; observe(value) lands in
+  lowest bucket whose upper ≥ value; quantile(q_x100) Prometheus-
+  style; mean() from sum/total)
+
+Total this resume: 136 selfdef IPS-authority crates. Workspace 301.
