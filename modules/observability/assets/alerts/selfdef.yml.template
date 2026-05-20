@@ -1,0 +1,127 @@
+# Prometheus alerting rules for the selfdef four-watchdog set.
+# Managed by the `observability` module's apply.sh — drop this file
+# under /etc/prometheus/rules.d/ (or your runtime's equivalent) and
+# reload Prometheus.
+#
+# Series consumed: emitted by selfdef-api/metrics::watchdog_metrics
+# (selfdef-api crate). See ARCHITECTURE.md § "Four-watchdog set"
+# + the per-watchdog runbooks in
+# ~/devops-solutions-information-hub/wiki/runbooks/.
+
+groups:
+  - name: selfdef-four-watchdog
+    interval: 30s
+    rules:
+      # ----- MS046 friction-audit (hardware-integrity gate) -----
+      - alert: SelfdefFrictionAuditFailingGate
+        expr: selfdef_friction_audit_failing_total > 0
+        for: 1m
+        labels:
+          severity: critical
+          watchdog: friction-audit
+          ms: MS046
+        annotations:
+          summary: "friction-audit: {{ $value }} gate(s) failing on {{ $labels.instance }}"
+          description: "MS046 hardware-integrity gate has gate(s) in Fail status with no operator override honoring. Boot-time hardware integrity violated; container runtimes will refuse to start. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/friction-audit-pcie.md"
+
+      # ----- MS047 perimeter (kernel-fence) -----
+      - alert: SelfdefPerimeterSigkill
+        expr: selfdef_perimeter_sigkills_total > 0
+        for: 0m
+        labels:
+          severity: warning
+          watchdog: perimeter
+          ms: MS047
+        annotations:
+          summary: "perimeter: {{ $value }} SIGKILL verdict(s) on {{ $labels.instance }}"
+          description: "MS047 kernel-fence killed a process attempting to execve outside the verbatim sain-01 §6 allowlist. Could be operator workflow needing an extension OR a probe by something hostile. Investigate via selfdefctl perimeter history."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/perimeter-sigkill-investigation.md"
+
+      - alert: SelfdefPerimeterPolicyMissing
+        expr: selfdef_perimeter_policy_present == 0
+        for: 2m
+        labels:
+          severity: critical
+          watchdog: perimeter
+          ms: MS047
+        annotations:
+          summary: "perimeter: sovereign-perimeter.yaml not present on {{ $labels.instance }}"
+          description: "MS047 TracingPolicy YAML missing from /etc/tetragon/tracing-policies/. Kernel-fence is OFF — host can execve anything. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/perimeter-policy-load-failure.md"
+
+      - alert: SelfdefPerimeterChainBroken
+        expr: selfdef_perimeter_audit_chain_events == -1
+        for: 1m
+        labels:
+          severity: critical
+          watchdog: perimeter
+          ms: MS047
+        annotations:
+          summary: "perimeter: OCSF audit chain broken on {{ $labels.instance }}"
+          description: "MS047 SHA-256 audit chain integrity verification failed. Storage corruption, log tampering, or concurrent writer. CRITICAL — investigate per runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/perimeter-policy-load-failure.md"
+
+      # ----- MS044 guardian (Tetragon supervisor) -----
+      - alert: SelfdefGuardianFailedResponse
+        expr: selfdef_guardian_failed_responses_total > 0
+        for: 0m
+        labels:
+          severity: critical
+          watchdog: guardian
+          ms: MS044
+        annotations:
+          summary: "guardian: {{ $value }} verdict(s) with failed response step on {{ $labels.instance }}"
+          description: "MS044 supervisor Responder had at least one of its 3 steps (SIGKILL / ZFS audit-append / /dev/console BEL) Failed. Supervisor response degraded; investigate via selfdefctl guardian history."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/guardian-console-alert-investigation.md"
+
+      - alert: SelfdefGuardianTetragonSocketMissing
+        expr: selfdef_guardian_tetragon_socket_present == 0
+        for: 2m
+        labels:
+          severity: warning
+          watchdog: guardian
+          ms: MS044
+        annotations:
+          summary: "guardian: Tetragon UNIX socket missing on {{ $labels.instance }}"
+          description: "MS044 guardian can't ingest Tetragon events. Supervisor-tier observability + cross-cgroup containment + audit chain silent until Tetragon comes back. The in-kernel perimeter (MS047) still fires."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/guardian-socket-unreachable.md"
+
+      - alert: SelfdefGuardianChainBroken
+        expr: selfdef_guardian_audit_chain_events == -1
+        for: 1m
+        labels:
+          severity: critical
+          watchdog: guardian
+          ms: MS044
+        annotations:
+          summary: "guardian: OCSF audit chain broken on {{ $labels.instance }}"
+          description: "MS044 SHA-256 audit chain integrity verification failed. Storage corruption, log tampering, or concurrent writer. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/guardian-audit-log-corruption.md"
+
+      # ----- MS048 scheduler (Goldilocks routing layer) -----
+      - alert: SelfdefSchedulerSustainedBackpressure
+        # Backpressured-decisions count rising > 0 for 10m = sustained
+        # resource pressure. Operator should investigate which surface.
+        expr: selfdef_scheduler_backpressured_decisions_total > 0
+        for: 10m
+        labels:
+          severity: warning
+          watchdog: scheduler
+          ms: MS048
+        annotations:
+          summary: "scheduler: sustained backpressure on {{ $labels.instance }}"
+          description: "MS048 Goldilocks scheduler has been making backpressured routing decisions continuously for 10m. Some resource (Blackwell VRAM / 3090 / CPU / RAM / IO / human-gate) is sustained-pressured. Investigate via selfdefctl scheduler show --json."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/scheduler-backpressure-stuck-open.md"
+
+      - alert: SelfdefSchedulerChainBroken
+        expr: selfdef_scheduler_audit_chain_events == -1
+        for: 1m
+        labels:
+          severity: critical
+          watchdog: scheduler
+          ms: MS048
+        annotations:
+          summary: "scheduler: audit chain broken on {{ $labels.instance }}"
+          description: "MS048 SHA-256 audit chain integrity verification failed. Storage corruption, log tampering, or concurrent writer. Counterfactual replay no longer trustworthy. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/scheduler-audit-log-corruption.md"

@@ -54,6 +54,9 @@ run_layer "L1: dashboard sections (four-watchdog set UX surface)" \
 run_layer "L1: Grafana template (MS027 four-watchdog series)" \
     bash scripts/test/L1-grafana-template.sh
 
+run_layer "L1: Prometheus alert rules (MS027 four-watchdog alerts)" \
+    bash scripts/test/L1-prometheus-alerts.sh
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then
