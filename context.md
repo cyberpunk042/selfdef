@@ -1221,3 +1221,11 @@ Total this resume: 164 selfdef IPS-authority crates. Workspace 329.
   per-grant ledger)
 
 Total this resume: 165 selfdef IPS-authority crates. Workspace 330.
+
+### Ninety-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-mutation-record` (Record{mutation_id, policy_id,
+  proposed_by, witnessed_by[], applied_by, ts}; record/fetch/
+  for_policy; immutable once written)
+
+Total this resume: 166 selfdef IPS-authority crates. Workspace 331.
