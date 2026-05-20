@@ -1585,3 +1585,13 @@ Total this resume: 202 selfdef IPS-authority crates. Workspace 367.
   reports time-to-resolve)
 
 Total this resume: 203 selfdef IPS-authority crates. Workspace 368.
+
+### Hundred-and-thirty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fair-share-scheduler` (TenantState{weight≥1,
+  cumulative_service, picks}; pick_next minimizes cumulative*1000/
+  weight (alpha tie-break); charge adds units*1000/weight; higher-
+  weight tenants win more picks per epoch; reset_service zeros
+  cumulative across all)
+
+Total this resume: 204 selfdef IPS-authority crates. Workspace 369.
