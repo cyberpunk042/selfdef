@@ -2796,3 +2796,13 @@ Total this resume: 341 selfdef IPS-authority crates. Workspace 506.
   loop yields None iff all idle)
 
 Total this resume: 342 selfdef IPS-authority crates. Workspace 507.
+
+### Two-hundred-and-seventy-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-threshold-sig-store` (collects opaque (signer_id,
+  shard) pairs per digest; submit idempotent per (digest, signer);
+  ShardConflict if same signer submits different bytes; met
+  true at >= m distinct signers; shards returns deterministic
+  signer-id-ordered list for external combiner)
+
+Total this resume: 343 selfdef IPS-authority crates. Workspace 508.
