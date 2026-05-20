@@ -2141,3 +2141,12 @@ Total this resume: 266 selfdef IPS-authority crates. Workspace 431.
   emitted; self-edges + unknown endpoints rejected)
 
 Total this resume: 267 selfdef IPS-authority crates. Workspace 432.
+
+### Two-hundredth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-rule-list-applier` (Rule{id, Effect{Allow/Deny},
+  Match::Exact|Prefix(value), matches}; evaluate walks rules in
+  insertion order, first match wins; no-match returns
+  default_effect with defaults_applied counter)
+
+Total this resume: 268 selfdef IPS-authority crates. Workspace 433.
