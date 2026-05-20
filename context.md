@@ -2382,3 +2382,11 @@ Total this resume: 294 selfdef IPS-authority crates. Workspace 459.
   search; default_y when x<first step or empty)
 
 Total this resume: 295 selfdef IPS-authority crates. Workspace 460.
+
+### Two-hundred-and-twenty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-cancel-set` (CancelRecord{ts_ms, reason}; cancel
+  records flag; AlreadyCancelled rejects re-cancel (one-way);
+  is_cancelled/reason/ids accessors)
+
+Total this resume: 296 selfdef IPS-authority crates. Workspace 461.
