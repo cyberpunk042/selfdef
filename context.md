@@ -2604,3 +2604,12 @@ Total this resume: 320 selfdef IPS-authority crates. Workspace 485.
   mean=Σ/count (None if empty); range=max-min)
 
 Total this resume: 321 selfdef IPS-authority crates. Workspace 486.
+
+### Two-hundred-and-fifty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-request-coalescer` (enter(key) returns Leader for
+  first caller (registers inflight), Follower for subsequent
+  (bumps count); complete clears entry and returns follower
+  count; per-key single-flight)
+
+Total this resume: 322 selfdef IPS-authority crates. Workspace 487.
