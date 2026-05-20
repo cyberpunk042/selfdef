@@ -621,3 +621,11 @@ Total this resume: 93 selfdef IPS-authority crates. Workspace 258.
   /UnknownGrant; distinct from policy-budget-ledger)
 
 Total this resume: 95 selfdef IPS-authority crates. Workspace 260.
+
+### Thirty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-revert-window` (record_change opens revert_ms
+  window; revert returns Accepted{prior_blob}/Stale/Unknown;
+  rotate drops expired)
+
+Total this resume: 96 selfdef IPS-authority crates. Workspace 261.
