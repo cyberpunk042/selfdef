@@ -114,31 +114,42 @@ selfdefctl doctor || {
 
 ### Periodic health check via systemd timer
 
-`/etc/systemd/system/selfdef-doctor.service`:
+**The `selfdef-doctor.service` + `selfdef-doctor.timer` units ship with
+the package** (cargo-deb installs to `/lib/systemd/system/`). To enable:
 
-```ini
-[Unit]
-Description=Run selfdefctl doctor
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/selfdefctl doctor
-StandardOutput=journal
+```sh
+sudo systemctl enable --now selfdef-doctor.timer
+systemctl list-timers selfdef-doctor.timer
+journalctl -u selfdef-doctor.service -n 50
 ```
 
-`/etc/systemd/system/selfdef-doctor.timer`:
+The shipped units are hardened beyond a hand-rolled minimum:
 
-```ini
-[Unit]
-Description=Hourly selfdefctl doctor
+- `Type=oneshot` (each run = distinct journald entry for triage)
+- `After=selfdefd.service zfs-mount.service` (audit-log paths reachable
+  for the watchdog-set checks)
+- `User=root Group=root` (doctor is read-only; root reads root-only paths)
+- Hardening: `NoNewPrivileges=true`, `ProtectSystem=strict`,
+  `ReadOnlyPaths=/etc/selfdef /etc/tetragon /usr/local/bin /usr/share/selfdef`,
+  `ProtectKernelTunables=true`, `ProtectKernelLogs=true`,
+  `ProtectControlGroups=true`,
+  `RestrictAddressFamilies=AF_UNIX` (doctor is read-only with no network),
+  `LockPersonality=true`, `RestrictNamespaces=true`,
+  `RestrictRealtime=true`, `RestrictSUIDSGID=true`,
+  `SystemCallArchitectures=native`
+- Timer: `OnBootSec=10min` (let services settle) + `OnUnitActiveSec=1h`
+  (hourly) + `RandomizedDelaySec=5min` (fleet load spread) +
+  `Persistent=true` (catch up after host downtime) +
+  `StartLimitIntervalSec=60s` + `StartLimitBurst=10` (cap restart-storm)
 
-[Timer]
-OnCalendar=hourly
-Persistent=true
+The shipped units carry an L2 bats test suite
+(`packaging/test/L2-doctor-timer.bats`, 23 tests) gating their surface
+against drift. If you need to customize, prefer a systemd drop-in
+(`systemctl edit selfdef-doctor.timer`) over forking the unit — the
+drop-in survives package upgrades.
 
-[Install]
-WantedBy=timers.target
-```
+See `packaging/systemd/selfdef-doctor.{service,timer}` for the
+authoritative shipped definitions.
 
 ### CI consumption
 
