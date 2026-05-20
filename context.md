@@ -1681,3 +1681,12 @@ Total this resume: 212 selfdef IPS-authority crates. Workspace 377.
   without evicting; hits/misses telemetry)
 
 Total this resume: 213 selfdef IPS-authority crates. Workspace 378.
+
+### Hundred-and-forty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-topic-pubsub-router` (per-subscriber pattern set;
+  exact match or '*'-suffix prefix match; match_topic returns
+  subscriber ids matching topic sorted; subscribe/unsubscribe/
+  drop_subscriber idempotent)
+
+Total this resume: 214 selfdef IPS-authority crates. Workspace 379.
