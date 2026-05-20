@@ -1810,3 +1810,10 @@ Total this resume: 227 selfdef IPS-authority crates. Workspace 392.
   load factor; clear zeros; no false negatives)
 
 Total this resume: 228 selfdef IPS-authority crates. Workspace 393.
+
+### Hundred-and-sixty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-counter-by-key` (inc/inc_by accumulate; top_k by count
+  desc with alpha tie-break; grand_total sums; clear resets)
+
+Total this resume: 229 selfdef IPS-authority crates. Workspace 394.
