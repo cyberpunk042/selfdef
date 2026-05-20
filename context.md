@@ -2168,3 +2168,12 @@ Total this resume: 269 selfdef IPS-authority crates. Workspace 434.
   no async)
 
 Total this resume: 270 selfdef IPS-authority crates. Workspace 435.
+
+### Two-hundred-and-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-ring-buffer` (fixed-capacity u64 ring; push appends
+  until full, then overwrites oldest with head advance;
+  samples() chronological; mean/min/max/last aggregates;
+  pushes counter)
+
+Total this resume: 271 selfdef IPS-authority crates. Workspace 436.
