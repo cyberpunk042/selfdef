@@ -4239,6 +4239,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-network-cidr-allowlist"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-network-egress-decision"
 version = "0.1.0"
 dependencies = [
