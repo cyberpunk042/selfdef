@@ -2554,3 +2554,11 @@ Total this resume: 314 selfdef IPS-authority crates. Workspace 479.
   Unicode safety; similarity_bp scales to 0..=10000)
 
 Total this resume: 315 selfdef IPS-authority crates. Workspace 480.
+
+### Two-hundred-and-forty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-rect-overlap` (Rect{x, y, w, h} w,h>=1; intersect
+  returns Option<Rect> (None on disjoint or edge-only);
+  bounding_box; contains_point/contains_rect; area as i128)
+
+Total this resume: 316 selfdef IPS-authority crates. Workspace 481.
