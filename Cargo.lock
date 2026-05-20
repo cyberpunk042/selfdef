@@ -4742,6 +4742,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-recurring-task-scheduler"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-replay-divergence-detector"
 version = "0.1.0"
 dependencies = [
