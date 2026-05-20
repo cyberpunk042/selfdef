@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-counting-bloom"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Counting bloom filter — add/remove with k-hash 8-bit counters."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
