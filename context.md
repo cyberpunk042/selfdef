@@ -1247,3 +1247,12 @@ Total this resume: 167 selfdef IPS-authority crates. Workspace 332.
   set_capacity preserves existing held)
 
 Total this resume: 168 selfdef IPS-authority crates. Workspace 333.
+
+### Hundred-and-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-deadline-tracker` (register(action, deadline_ms);
+  check(now, warn_ms) returns OnTime/Expiring/Expired/Unknown;
+  extend forward-only — BackwardExtend err if new<existing;
+  complete drops tracking; expired(now) lists overdue)
+
+Total this resume: 169 selfdef IPS-authority crates. Workspace 334.
