@@ -2366,3 +2366,11 @@ Total this resume: 292 selfdef IPS-authority crates. Workspace 457.
   failing/all_holding accessors)
 
 Total this resume: 293 selfdef IPS-authority crates. Workspace 458.
+
+### Two-hundred-and-twenty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-case-convert` (tokenize splits by separators and
+  capital→lower transitions, lowercases all; to_snake/kebab/
+  camel/pascal regenerate; ASCII; non-ASCII passes through)
+
+Total this resume: 294 selfdef IPS-authority crates. Workspace 459.
