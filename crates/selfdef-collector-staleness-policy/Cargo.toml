@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-collector-staleness-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-collector-source freshness budget. set_budget(source, max_age_ms) configures; record(source, ts) stamps the last fresh sample; classify(source, now) returns Fresh{age_ms}/Stale{age_ms,budget}/Unknown. Pure freshness gate; consumers gate decisions on freshness."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
