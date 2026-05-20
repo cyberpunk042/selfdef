@@ -42,12 +42,29 @@ use selfdef_scheduler::{
 };
 
 pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
-    // --json + --watch is nonsensical (JSON is one-shot machine-readable).
-    // Honor --json and ignore --watch.
-    if json || watch_secs == 0 {
-        return render_once(json);
+    // 4 modes:
+    //  - no flags     → one-shot human render
+    //  - --json       → one-shot JSON
+    //  - --watch N    → human clear-and-redraw every N seconds
+    //  - --json --watch N → JSONL stream, one JSON per cycle (for
+    //    monitoring pipelines: cron + jq, collectd, Loki ingest, etc).
+    //    No clear-and-redraw — operators piping into a log shipper
+    //    want each cycle as a distinct line, not overwritten.
+    if watch_secs == 0 {
+        // One-shot: pretty JSON for readability OR human render.
+        return render_once_with(json, /*compact=*/ false);
     }
-    // Watch mode: clear + redraw every watch_secs seconds.
+    if json {
+        // JSONL stream mode — one COMPACT JSON line per cycle, no banner.
+        // Compact form is essential for log shippers + jq line-mode +
+        // collectd file-tail; pretty would emit multi-line JSON that
+        // breaks per-line tooling.
+        loop {
+            let _ = render_once_with(true, /*compact=*/ true)?;
+            std::thread::sleep(std::time::Duration::from_secs(u64::from(watch_secs)));
+        }
+    }
+    // Human watch mode: clear + redraw every watch_secs seconds.
     // ANSI escape: ESC[2J clears screen, ESC[H homes cursor.
     loop {
         // Clear + home.
@@ -55,13 +72,14 @@ pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
         // Inline timestamp banner for at-a-glance freshness.
         let now = chrono_now_iso();
         println!("[watch · refresh every {watch_secs}s · {now}] — Ctrl-C to exit");
-        let _ = render_once(false)?;
+        let _ = render_once_with(false, /*compact=*/ false)?;
         // Sleep — Ctrl-C breaks the sleep + process exits with 130, which
         // is the standard convention. No explicit signal handler needed
         // for an interactive CLI.
         std::thread::sleep(std::time::Duration::from_secs(u64::from(watch_secs)));
     }
 }
+
 
 fn chrono_now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,7 +96,7 @@ fn chrono_now_iso() -> String {
     format!("{secs}s epoch · {h:02}:{m:02}:{s:02} UTC")
 }
 
-fn render_once(json: bool) -> Result<i32> {
+fn render_once_with(json: bool, compact: bool) -> Result<i32> {
     let now = now_ms();
 
     // friction-audit snapshot
@@ -181,7 +199,12 @@ fn render_once(json: bool) -> Result<i32> {
                 "audit_chain_events": sched_chain_events,
             },
         });
-        println!("{}", serde_json::to_string_pretty(&payload)?);
+        let serialized = if compact {
+            serde_json::to_string(&payload)?
+        } else {
+            serde_json::to_string_pretty(&payload)?
+        };
+        println!("{serialized}");
         return Ok(0);
     }
 

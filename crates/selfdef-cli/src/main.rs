@@ -209,8 +209,10 @@ enum Command {
         /// Machine-readable JSON output.
         #[arg(long)]
         json: bool,
-        /// Watch-mode: clear+redraw every N seconds until Ctrl-C.
-        /// Ignored when --json is set. 0 (default) means render once.
+        /// Watch-mode: repeat every N seconds until Ctrl-C. In human
+        /// mode (default), clear+redraw between cycles. With --json,
+        /// emit one JSON line per cycle (JSONL stream — pipe into jq /
+        /// Loki / your monitoring pipeline). 0 (default) means render once.
         #[arg(long, default_value_t = 0)]
         watch: u32,
     },
