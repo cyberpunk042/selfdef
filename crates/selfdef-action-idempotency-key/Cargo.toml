@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-action-idempotency-key"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS idempotency-key ledger for action submissions. submit(key, ts) returns Fresh{recorded_at} the first time a key is seen, and Replay{first_seen_ts, recorded_outcome} for any subsequent submission of the same key within the retention window. complete(key, outcome) attaches the outcome so future replays can return it. Pure ledger; prevents double-executes on at-least-once retry."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
