@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-emitter-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy for which decision events get emitted to which sinks. set(decision_kind, sink_set); emitted_to(kind) returns the sinks subscribed. Sinks: Audit/Trace/Operator/Mirror/External. Pure routing descriptor."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
