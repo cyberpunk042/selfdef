@@ -97,6 +97,7 @@ maintainer-scripts = "../../packaging/debian"
 assets = [
     ["target/release/selfdefd",                          "/usr/bin/",                              "755"],
     ["target/release/selfdefctl",                        "/usr/bin/",                              "755"],
+    ["target/release/selfdef-scheduler",                 "/usr/local/bin/",                        "755"],
     ["../../packaging/systemd/selfdefd.service",         "/lib/systemd/system/",                   "644"],
     ["../../packaging/apparmor/usr.bin.selfdefd",        "/etc/apparmor.d/",                       "644"],
     ["../../packaging/lib/module-lib.sh",                "/usr/share/selfdef/lib/module-lib.sh",   "644"],

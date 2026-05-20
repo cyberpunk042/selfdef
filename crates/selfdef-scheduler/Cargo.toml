@@ -9,6 +9,10 @@ authors.workspace = true
 publish.workspace = true
 description = "SDD-031 Deliverable 2 — Goldilocks Scheduler runtime: per-profile rule registry + 7-axis objective evaluator + 5 backpressure surfaces + decision emitter + replay engine + SHA-256 chained audit log. Implements the avx-plus-plus dump tail lines 18000-18250 scheduling architecture natively in Rust."
 
+[[bin]]
+name = "selfdef-scheduler"
+path = "src/bin/selfdef-scheduler.rs"
+
 [lints]
 workspace = true
 
