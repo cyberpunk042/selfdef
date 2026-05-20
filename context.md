@@ -2050,3 +2050,13 @@ Total this resume: 256 selfdef IPS-authority crates. Workspace 421.
   counted as excess)
 
 Total this resume: 257 selfdef IPS-authority crates. Workspace 422.
+
+### Hundred-and-ninetieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-two-phase-commit` (Phase{Init/Preparing/Prepared/
+  Committed/Aborting/Aborted}; register adds participants in
+  Init; vote(id, Yes/No) recomputes phase; decide finalizes
+  Prepared→Committed or Aborting→Aborted; vote-revision allowed
+  pre-decide)
+
+Total this resume: 258 selfdef IPS-authority crates. Workspace 423.
