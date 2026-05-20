@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-rate-window-aggregator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-key events-per-window aggregator. record(key, ts) adds an event; count(key, now) returns the number of events whose ts is within [now-window_ms, now]. rotate(now) drops out-of-window events globally. Distinct from selfdef-rate-limit-policy (decision gate) — this is the pure-counting lane used by gauges, dashboards, and rate-derived metrics."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
