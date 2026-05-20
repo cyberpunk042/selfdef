@@ -1499,3 +1499,12 @@ Total this resume: 193 selfdef IPS-authority crates. Workspace 358.
   reflects live lease only)
 
 Total this resume: 194 selfdef IPS-authority crates. Workspace 359.
+
+### Hundred-and-twenty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-task-preemption-policy` (Priority{Background<Low<Normal<
+  High<Critical} with ranks; decide returns Preempt/Keep{reason}
+  gated by min_priority_gap and anti-thrash min_run_ms window
+  from current.started_at; both must pass)
+
+Total this resume: 195 selfdef IPS-authority crates. Workspace 360.
