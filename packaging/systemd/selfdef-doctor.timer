@@ -1,0 +1,19 @@
+[Unit]
+Description=Selfdef doctor — hourly periodic health check
+Documentation=man:selfdefctl(1)
+
+[Timer]
+# Hourly cadence per init checklist Step 11 promise. RandomizedDelaySec
+# spreads load when many hosts run selfdefd-doctor at the same minute
+# (e.g. a fleet rebooted simultaneously).
+OnBootSec=10min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+# Persistent: catch up on next boot if the host was off during a
+# scheduled run. The doctor result is a periodic SNAPSHOT — missing
+# one cycle is OK; double-catching-up after long downtime is fine.
+Persistent=true
+Unit=selfdef-doctor.service
+
+[Install]
+WantedBy=timers.target

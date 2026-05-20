@@ -1,0 +1,42 @@
+[Unit]
+Description=Selfdef doctor — periodic cross-cutting operator health check
+Documentation=man:selfdefctl(1)
+# Runs after the main daemon is up + ZFS is mounted (so the watchdog
+# audit-log paths are reachable for the doctor's watchdog-set checks).
+After=selfdefd.service
+After=zfs-mount.service
+
+[Service]
+Type=oneshot
+# Doctor is read-only — running as root means it can stat root-only
+# paths (audit logs, /var/cache/selfdef/*) without operator-extension
+# group plumbing. Doctor never mutates anything.
+User=root
+Group=root
+ExecStart=/usr/bin/selfdefctl doctor
+# Doctor's exit code is 0 when all checks pass + non-zero on FAIL.
+# We do NOT use systemd's RemainAfterExit so each invocation appears
+# as a distinct journald entry, making operator triage easier.
+# Don't bound runtime — doctor on a slow host (lots of modules) can
+# legitimately take several seconds.
+TimeoutStartSec=300s
+
+# Hardening (consistent with the other selfdef-* units).
+NoNewPrivileges=true
+ProtectSystem=strict
+# Doctor reads from many places — explicit allow-paths.
+ReadOnlyPaths=/etc/selfdef /etc/tetragon /usr/local/bin /usr/share/selfdef
+# Doctor needs to read /proc/pressure/* (scheduler check) and
+# /var/run/tetragon/ (guardian check).
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

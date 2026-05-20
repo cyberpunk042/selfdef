@@ -770,8 +770,11 @@ runbook for the detail.
   $ selfdefctl rbac check --probe
 
 ## 11. Periodic health check
-  # /etc/systemd/system/selfdef-doctor.timer (hourly)
-  # See docs/dev/operator-health-check.md for the unit + timer.
+  # selfdef-doctor.timer ships with the package; enable for hourly
+  # `selfdefctl doctor` runs (results go to journald):
+  $ sudo systemctl enable --now selfdef-doctor.timer
+  $ systemctl list-timers selfdef-doctor.timer
+  $ journalctl -u selfdef-doctor.service -n 50
 
 ## 12. Four-watchdog set — IPS boundary enforcement (MS046+MS047+MS044+MS048)
   # The package ships four cooperating watchdogs. All OFF by default;
