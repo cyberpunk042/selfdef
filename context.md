@@ -1099,3 +1099,12 @@ Total this resume: 150 selfdef IPS-authority crates. Workspace 315.
   pure recorder, no enforcement)
 
 Total this resume: 151 selfdef IPS-authority crates. Workspace 316.
+
+### Eighty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-handoff-policy` (Handoff{granted_at, expires_at,
+  revoked}; grant(from, to, scope, window) / revoke / classify
+  Active{expires_at}/Expired/Revoked/Unknown; revoked records
+  kept for audit)
+
+Total this resume: 152 selfdef IPS-authority crates. Workspace 317.
