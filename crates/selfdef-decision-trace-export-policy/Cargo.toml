@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-decision-trace-export-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS decision-trace export gate. Controls which fields of a decision trace may leave the engine in an export bundle, by Sensitivity class. Same canonical taxonomy as selfdef-output-channel-allowlist but specifically scoped to trace export rather than general output."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
