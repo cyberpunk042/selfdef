@@ -786,3 +786,13 @@ Total this resume: 115 selfdef IPS-authority crates. Workspace 280.
   Feature; lets optimized paths opt in honestly per substrate)
 
 Total this resume: 116 selfdef IPS-authority crates. Workspace 281.
+
+### Forty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-grant-template-allowlist` (per-Profile BTreeSet of
+  template ids + '*' wildcard; classify Allowed/Denied
+  {allowed_count}/Unconfigured; canonical Experimental=*,
+  Autonomous adds outbound-http-write+spawn-child, Production
+  capped at outbound-http-readonly)
+
+Total this resume: 117 selfdef IPS-authority crates. Workspace 282.
