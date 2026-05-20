@@ -2749,3 +2749,13 @@ Total this resume: 336 selfdef IPS-authority crates. Workspace 501.
   refresh scheduler queue depth)
 
 Total this resume: 337 selfdef IPS-authority crates. Workspace 502.
+
+### Two-hundred-and-seventieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fixed-window-counter` (window of width window_ms
+  aligned to window multiples; observe(n, now) realigns to
+  containing bucket resetting if new, then adds n; count(now)
+  also realigns; hard boundaries — edge bursts can briefly
+  exceed nominal rate)
+
+Total this resume: 338 selfdef IPS-authority crates. Workspace 503.
