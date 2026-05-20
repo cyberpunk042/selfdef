@@ -2806,3 +2806,13 @@ Total this resume: 342 selfdef IPS-authority crates. Workspace 507.
   signer-id-ordered list for external combiner)
 
 Total this resume: 343 selfdef IPS-authority crates. Workspace 508.
+
+### Two-hundred-and-seventy-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-delta-pack` (diff(old, new) walks two BTreeMap
+  <String,String> in lockstep and emits Vec<Op> in key-ascending
+  order: Add for new-only keys, Remove for old-only, Update for
+  both-with-differing-values, Equal silenced; apply(map, ops)
+  replays idempotently)
+
+Total this resume: 344 selfdef IPS-authority crates. Workspace 509.
