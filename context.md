@@ -1134,3 +1134,12 @@ Total this resume: 154 selfdef IPS-authority crates. Workspace 319.
   out-of-window)
 
 Total this resume: 155 selfdef IPS-authority crates. Workspace 320.
+
+### Eighty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-shape-checker` (PolicyShapeChecker{required_
+  fields, max_field_len}; check returns Ok/Issues{missing_fields,
+  oversized_fields}; pure structural validator, no semantic
+  reasoning)
+
+Total this resume: 156 selfdef IPS-authority crates. Workspace 321.
