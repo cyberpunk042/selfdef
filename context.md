@@ -2442,3 +2442,12 @@ Total this resume: 301 selfdef IPS-authority crates. Workspace 466.
   total exposes full sum; bad range rejected)
 
 Total this resume: 302 selfdef IPS-authority crates. Workspace 467.
+
+### Two-hundred-and-thirty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-peak-detector` (Sample{ts_ms, value}; observe
+  appends + prunes samples older than now-window_ms;
+  current_peak returns max over in-window samples; supports
+  negative values)
+
+Total this resume: 303 selfdef IPS-authority crates. Workspace 468.
