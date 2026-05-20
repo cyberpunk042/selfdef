@@ -2236,3 +2236,12 @@ Total this resume: 277 selfdef IPS-authority crates. Workspace 442.
   thresholds; may exceed 10000 → Saturated)
 
 Total this resume: 278 selfdef IPS-authority crates. Workspace 443.
+
+### Two-hundred-and-eleventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-semver` (Version{u32 major, minor, patch}; parse
+  "M.N.P" tuple-ordered; is_compatible_with(other) iff same
+  major and (other.minor>self.minor or (==minor &&
+  other.patch>=self.patch)))
+
+Total this resume: 279 selfdef IPS-authority crates. Workspace 444.
