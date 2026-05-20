@@ -2739,3 +2739,13 @@ Total this resume: 335 selfdef IPS-authority crates. Workspace 500.
   prevents distributed delete→insert resurrection races)
 
 Total this resume: 336 selfdef IPS-authority crates. Workspace 501.
+
+### Two-hundred-and-sixty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-stale-set` (per-key state Pending(since) /
+  Refreshing(since); flag→Pending, start_refresh→Refreshing,
+  confirm clears, fail reverts to Pending; double-flag
+  idempotent preserves original since; pending_count for
+  refresh scheduler queue depth)
+
+Total this resume: 337 selfdef IPS-authority crates. Workspace 502.
