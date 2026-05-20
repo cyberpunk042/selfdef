@@ -241,6 +241,174 @@ fn render_once(json: bool) -> Result<i32> {
     Ok(0)
 }
 
+/// Unified tail of the four watchdog OCSF jsonl logs.
+/// Polls each file every `interval_ms` ms; emits new lines as they
+/// appear, tagged with the source watchdog. Honors env-var overrides
+/// for sandboxed test runs (SELFDEF_FRICTION_AUDIT_OCSF_PATH /
+/// SELFDEF_PERIMETER_OCSF_PATH / SELFDEF_GUARDIAN_OCSF_PATH /
+/// SELFDEF_SCHEDULER_OCSF_PATH). Ctrl-C exits.
+pub(crate) fn run_tail(interval_ms: u64, json: bool) -> Result<i32> {
+    use std::collections::BTreeMap;
+    use std::io::{BufRead, BufReader};
+
+    let sources: [(&'static str, std::path::PathBuf); 4] = [
+        (
+            "friction-audit",
+            std::env::var("SELFDEF_FRICTION_AUDIT_OCSF_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from(selfdef_friction_audit::DEFAULT_OCSF_PATH)),
+        ),
+        (
+            "perimeter",
+            std::env::var("SELFDEF_PERIMETER_OCSF_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from(PERIM_OCSF)),
+        ),
+        (
+            "guardian",
+            std::env::var("SELFDEF_GUARDIAN_OCSF_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from(GUARD_OCSF)),
+        ),
+        (
+            "scheduler",
+            std::env::var("SELFDEF_SCHEDULER_OCSF_PATH")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|_| std::path::PathBuf::from(SCHED_AUDIT)),
+        ),
+    ];
+
+    // Per-source byte offset. Start at end-of-file (live tail; old
+    // events are accessible via `<watchdog> history`).
+    let mut offsets: BTreeMap<String, u64> = BTreeMap::new();
+    for (tag, path) in &sources {
+        let off = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        offsets.insert((*tag).to_string(), off);
+    }
+
+    eprintln!(
+        "selfdef trio-tail: watching {} sources, polling every {interval_ms}ms — Ctrl-C to exit",
+        sources.len()
+    );
+    if !json {
+        eprintln!("  {:>14}  ts_ms          severity  class  detail", "source");
+        eprintln!("  {}", "─".repeat(78));
+    }
+
+    loop {
+        for (tag, path) in &sources {
+            if !path.exists() {
+                continue;
+            }
+            let cur_off = offsets.get(*tag).copied().unwrap_or(0);
+            let len = match std::fs::metadata(path) {
+                Ok(m) => m.len(),
+                Err(_) => continue,
+            };
+            if len == cur_off {
+                continue;
+            }
+            if len < cur_off {
+                // File rotated/truncated — reset to start.
+                offsets.insert((*tag).to_string(), 0);
+                continue;
+            }
+            // Read from cur_off to end.
+            let f = match std::fs::File::open(path) {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            use std::io::{Seek, SeekFrom};
+            let mut f = f;
+            if f.seek(SeekFrom::Start(cur_off)).is_err() {
+                continue;
+            }
+            let mut new_off = cur_off;
+            for line in BufReader::new(&mut f).lines() {
+                let line = match line {
+                    Ok(l) => l,
+                    Err(_) => break,
+                };
+                new_off += (line.len() as u64) + 1; // +1 for \n
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if json {
+                    // Prefix the source tag for the consumer.
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(trimmed).unwrap_or(serde_json::json!({"raw": trimmed}));
+                    let tagged = serde_json::json!({"source": tag, "event": parsed});
+                    println!("{}", serde_json::to_string(&tagged).unwrap_or_else(|_| String::new()));
+                } else {
+                    let parsed: serde_json::Value =
+                        serde_json::from_str(trimmed).unwrap_or(serde_json::json!({}));
+                    let ts = parsed.get("ts_ms").or_else(|| parsed.get("time")).and_then(|v| v.as_u64()).unwrap_or(0);
+                    let sev = parsed
+                        .get("severity_id")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let class = parsed
+                        .get("class_uid")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    let detail = render_detail(tag, &parsed);
+                    println!(
+                        "  {:>14}  {:<14}  sev={sev}     {class}   {detail}",
+                        tag, ts
+                    );
+                }
+            }
+            offsets.insert((*tag).to_string(), new_off);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+    }
+}
+
+fn render_detail(tag: &str, ev: &serde_json::Value) -> String {
+    match tag {
+        "friction-audit" => {
+            let gate = ev.get("gate").and_then(|v| v.as_str()).unwrap_or("?");
+            let status = ev.get("status").and_then(|v| v.as_str()).unwrap_or("?");
+            format!("gate={gate} status={status}")
+        }
+        "perimeter" => {
+            let outcome = ev
+                .pointer("/outcome/outcome")
+                .and_then(|v| v.as_str())
+                .unwrap_or(
+                    ev.pointer("/outcome").and_then(|v| v.as_str()).unwrap_or("?"),
+                );
+            let path = ev
+                .pointer("/process/file/path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("outcome={outcome} path={path}")
+        }
+        "guardian" => {
+            let evt = ev.get("guardian_event_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let act = ev
+                .pointer("/guardian_action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("event={evt} action={act}")
+        }
+        "scheduler" => {
+            let req = ev.get("request_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let prof = ev
+                .pointer("/profile")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            let route = ev
+                .pointer("/route")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
+            format!("req={req} profile={prof} route={route}")
+        }
+        _ => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     // Integration test of run() requires env-var-mutating path overrides

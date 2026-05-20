@@ -213,6 +213,19 @@ enum Command {
         #[arg(long, default_value_t = 0)]
         watch: u32,
     },
+    /// MS027 + four-watchdog set: unified tail of all four watchdog
+    /// OCSF jsonl logs (friction-audit + perimeter + guardian + scheduler).
+    /// Cross-cutting operator visibility — see what's happening across
+    /// the entire IPS boundary-enforcement stack in real time.
+    TrioTail {
+        /// Poll interval in milliseconds (default 1000).
+        #[arg(long, default_value_t = 1000)]
+        interval_ms: u64,
+        /// Emit each event as a JSON line prefixed with source-tag (default
+        /// is human-readable). Useful for piping into jq / log shippers.
+        #[arg(long)]
+        json: bool,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -1630,6 +1643,10 @@ async fn main() -> Result<()> {
         }
         Command::Trio { json, watch } => {
             let exit = trio::run(json, watch).context("trio")?;
+            std::process::exit(exit);
+        }
+        Command::TrioTail { interval_ms, json } => {
+            let exit = trio::run_tail(interval_ms, json).context("trio-tail")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {
