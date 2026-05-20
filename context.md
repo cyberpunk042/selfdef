@@ -2132,3 +2132,12 @@ Total this resume: 265 selfdef IPS-authority crates. Workspace 430.
   required)
 
 Total this resume: 266 selfdef IPS-authority crates. Workspace 431.
+
+### Hundred-and-ninety-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-topo-sort` (add_node + add_edge over string-keyed
+  DAG; sort() Kahn's algorithm with BTreeSet ties for
+  deterministic ordering; CycleDetected when fewer nodes
+  emitted; self-edges + unknown endpoints rejected)
+
+Total this resume: 267 selfdef IPS-authority crates. Workspace 432.
