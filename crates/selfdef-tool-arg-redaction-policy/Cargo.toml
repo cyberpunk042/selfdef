@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-arg-redaction-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS policy that redacts sensitive tool-call arguments by name. Maintains a BTreeSet of arg-name patterns (exact + glob suffix '*'); redact_args(args) returns a Vec<(name, value_redacted)> where matching names get their value replaced with '[REDACTED:<len>]'. Pure descriptor; ledger writer applies."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
