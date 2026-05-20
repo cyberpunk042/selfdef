@@ -51,6 +51,9 @@ run_layer "L1: HTTP API endpoint declarations" \
 run_layer "L1: dashboard sections (four-watchdog set UX surface)" \
     bash scripts/test/L1-dashboard-sections.sh
 
+run_layer "L1: Grafana template (MS027 four-watchdog series)" \
+    bash scripts/test/L1-grafana-template.sh
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then

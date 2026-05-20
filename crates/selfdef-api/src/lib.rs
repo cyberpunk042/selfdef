@@ -41,6 +41,7 @@ mod guardian;
 mod handlers;
 mod perimeter;
 mod scheduler;
+pub mod watchdog_metrics;
 pub mod metrics;
 mod state;
 mod transport;

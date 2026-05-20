@@ -98,6 +98,214 @@
           "legendFormat": "events"
         }
       ]
+    },
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Four-watchdog set (MS046 + MS047 + MS044 + MS048)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 30 }
+    },
+    {
+      "id": 101,
+      "type": "stat",
+      "title": "friction-audit — failing gates",
+      "description": "MS046 hardware-integrity gate — gates currently in Fail status (no operator override honoring). >0 = boot-time hardware integrity violated.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 31 },
+      "targets": [
+        {
+          "expr": "selfdef_friction_audit_failing_total",
+          "legendFormat": "failing"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 102,
+      "type": "stat",
+      "title": "perimeter — SIGKILLs in window",
+      "description": "MS047 kernel-fence — sigkill verdicts currently in ring buffer. >0 = something non-allowlisted was killed in-kernel; investigate via selfdefctl perimeter history.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 31 },
+      "targets": [
+        {
+          "expr": "selfdef_perimeter_sigkills_total",
+          "legendFormat": "sigkills"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 103,
+      "type": "stat",
+      "title": "guardian — failed responses",
+      "description": "MS044 supervisor — guardian verdicts where any of the 3 response steps (SIGKILL / audit-append / console-alert) failed. >0 = supervisor response degraded.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 31 },
+      "targets": [
+        {
+          "expr": "selfdef_guardian_failed_responses_total",
+          "legendFormat": "failed"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 104,
+      "type": "stat",
+      "title": "scheduler — backpressured decisions",
+      "description": "MS048 Goldilocks Scheduler — decisions made while any of the 5 backpressure surfaces was open (Blackwell VRAM / 3090 / CPU / RAM / IO / human-gate). High count = sustained resource pressure.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 31 },
+      "targets": [
+        {
+          "expr": "selfdef_scheduler_backpressured_decisions_total",
+          "legendFormat": "backpressured"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 105,
+      "type": "timeseries",
+      "title": "Four-watchdog audit chain lengths",
+      "description": "OCSF audit chain events for each watchdog. Plateau = no activity. Drop to -1 = chain integrity broken (see watchdog-audit-log-corruption runbook).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "targets": [
+        {
+          "expr": "selfdef_perimeter_audit_chain_events",
+          "legendFormat": "perimeter"
+        },
+        {
+          "expr": "selfdef_guardian_audit_chain_events",
+          "legendFormat": "guardian"
+        },
+        {
+          "expr": "selfdef_scheduler_audit_chain_events",
+          "legendFormat": "scheduler"
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "stat",
+      "title": "perimeter — policy installed",
+      "description": "1 = sovereign-perimeter.yaml present at /etc/tetragon/tracing-policies/. 0 = TracingPolicy missing; kernel-fence is OFF.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 45 },
+      "targets": [
+        {
+          "expr": "selfdef_perimeter_policy_present",
+          "legendFormat": "policy"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 107,
+      "type": "stat",
+      "title": "guardian — tetragon socket present",
+      "description": "1 = /var/run/tetragon/tetragon.events reachable. 0 = guardian can't ingest events.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 45 },
+      "targets": [
+        {
+          "expr": "selfdef_guardian_tetragon_socket_present",
+          "legendFormat": "socket"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 108,
+      "type": "stat",
+      "title": "perimeter — active extensions",
+      "description": "Operator-signed allowlist extensions currently in effect. Each is MS003 multi-sig + TTL ≤ 30d.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 45 },
+      "targets": [
+        {
+          "expr": "selfdef_perimeter_extensions_total",
+          "legendFormat": "extensions"
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "type": "stat",
+      "title": "friction-audit — overrides honored",
+      "description": "Boot-time gates currently honored by an operator-signed override manifest. Each is MS003-signed + TTL ≤ 7d.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 45 },
+      "targets": [
+        {
+          "expr": "selfdef_friction_audit_overrides_total",
+          "legendFormat": "overrides"
+        }
+      ]
     }
   ]
 }

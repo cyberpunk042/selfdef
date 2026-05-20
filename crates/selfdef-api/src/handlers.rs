@@ -108,7 +108,11 @@ pub(crate) async fn findings(
 /// without mirroring its writes in an atomic.
 pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
     let store_count = s.store.count().await.unwrap_or(0);
-    let body = s.metrics.render(store_count);
+    let mut body = s.metrics.render(store_count);
+    // Four-watchdog set gauges (MS046/MS047/MS044/MS048). Filesystem
+    // reads at scrape time — degrades gracefully (zero counts / -1
+    // chain-events) when watchdog ring buffers / audit logs missing.
+    body.push_str(&crate::watchdog_metrics::render());
     (
         StatusCode::OK,
         [(
