@@ -2684,3 +2684,12 @@ Total this resume: 329 selfdef IPS-authority crates. Workspace 494.
   rows — Count-Min upper bound; reset zeros)
 
 Total this resume: 330 selfdef IPS-authority crates. Workspace 495.
+
+### Two-hundred-and-sixty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fence-token` (FenceIssuer.issue() strictly-increasing
+  u64 from 1; FenceAcceptor.accept(t) advances last_accepted if
+  t >= last; strictly-older tokens rejected Stale, equal tokens
+  idempotent; issuer overflow → Exhausted)
+
+Total this resume: 331 selfdef IPS-authority crates. Workspace 496.
