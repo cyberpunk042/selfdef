@@ -1400,3 +1400,13 @@ Total this resume: 183 selfdef IPS-authority crates. Workspace 348.
   strict input 0..=255 octets, prefix 0..=32; /0 matches all)
 
 Total this resume: 184 selfdef IPS-authority crates. Workspace 349.
+
+### Hundred-and-seventeenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-traffic-ramp` (per-policy ramp_bp 0..=10000;
+  decide deterministic via FNV-1a-64(policy:actor) mod 10000 <
+  ramp_bp; properties: deterministic per actor, monotonic under
+  ramp increase, distribution matches bp on large samples,
+  different policies independent)
+
+Total this resume: 185 selfdef IPS-authority crates. Workspace 350.
