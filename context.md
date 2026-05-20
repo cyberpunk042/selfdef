@@ -879,3 +879,12 @@ Total this resume: 125 selfdef IPS-authority crates. Workspace 290.
   Private/Careful=empty-set deny-all)
 
 Total this resume: 126 selfdef IPS-authority crates. Workspace 291.
+
+### Fifty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-mcp-handshake-version` (Triple{maj,min,pat} parsed from
+  X.Y.Z; classify Compatible (in allowlist OR in [min,max]) /
+  TooOld{min} / TooNew{max} / Unparseable; explicit allowlist
+  overrides the range)
+
+Total this resume: 127 selfdef IPS-authority crates. Workspace 292.
