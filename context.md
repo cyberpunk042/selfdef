@@ -2666,3 +2666,12 @@ Total this resume: 327 selfdef IPS-authority crates. Workspace 492.
   ""→".")
 
 Total this resume: 328 selfdef IPS-authority crates. Workspace 493.
+
+### Two-hundred-and-sixty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decay-counter` (DecayCounter{decay_per_sec, last_ts_ms,
+  stored}; observe(n, now) decays stored by
+  decay_per_sec*(now-last)/1000 then adds n + advances last_ts_ms;
+  value(now) read-only; reset clears; saturates at zero)
+
+Total this resume: 329 selfdef IPS-authority crates. Workspace 494.
