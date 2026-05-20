@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-action-result-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS short-lived cache of action results for deterministic actions. put(action_hash, result, ts, ttl_ms); get(action_hash, now) returns Hit{result, age_ms}/Stale{age_ms, ttl_ms}/Miss. Distinct from selfdef-action-idempotency-key (replay dedup); this is the deterministic-result lane (small TTL, used to avoid re-executing expensive reads)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
