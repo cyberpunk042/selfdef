@@ -2962,3 +2962,13 @@ Total this resume: 358 selfdef IPS-authority crates. Workspace 523.
   max with appropriate counter; lex Ord)
 
 Total this resume: 359 selfdef IPS-authority crates. Workspace 524.
+
+### Two-hundred-and-ninety-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-cuckoo-filter` (4-slot buckets, 8-bit non-zero
+  fingerprints; insert tries i1 then i2, relocates evicted fp
+  up to max_relocations times; contains/remove check both
+  candidate buckets; FNV-1a-64 + XOR-trick alternate-bucket;
+  supports deletion bloom does not)
+
+Total this resume: 360 selfdef IPS-authority crates. Workspace 525.
