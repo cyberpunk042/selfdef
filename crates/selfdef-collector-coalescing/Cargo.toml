@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-collector-coalescing"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS coalescing of repeated raw collector events. Within a per-source coalesce_ms window, identical event fingerprints are merged into a single observation with first_ts/last_ts/count. observe(source, fingerprint, ts) returns Started{count:1}/Merged{count}. drain(now) returns and clears observations older than coalesce_ms."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
