@@ -39,6 +39,7 @@ mod control;
 mod friction_audit;
 mod guardian;
 mod handlers;
+mod modules;
 mod perimeter;
 mod scheduler;
 pub mod watchdog_metrics;
@@ -171,6 +172,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/scheduler/backpressure", get(scheduler::backpressure))
         .route("/v1/scheduler/weights", get(scheduler::weights))
         .route("/v1/scheduler/explain/:request_id", get(scheduler::explain))
+        // MS006 / SDD-009 Q-G: operator-facing module-list surface.
+        // Read-only — module activation goes through the CLI's
+        // operator-confirmed `selfdefctl modules apply` flow.
+        .route("/v1/modules", get(modules::list))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

@@ -1706,6 +1706,26 @@ async fn watchdog_scheduler_explain_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+async fn modules_route_returns_200_with_list() {
+    // Verifies GET /v1/modules returns a well-formed JSON body.
+    // On the test runner, DEFAULT_MODULES_DIR (/usr/share/selfdef/modules)
+    // doesn't exist — handler should gracefully return an empty list.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["modules"].is_array(), "modules field must be array");
+    assert!(v["modules_dir"].is_string(), "modules_dir field must be string");
+}
+
+#[tokio::test]
 async fn watchdog_metrics_values_are_valid_prometheus_numbers() {
     // Every watchdog gauge must emit a numeric value (i64 or f64) per
     // Prometheus exposition format spec. Catches a regression where a

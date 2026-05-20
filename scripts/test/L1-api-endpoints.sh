@@ -45,6 +45,8 @@ check_route "/v1/scheduler/history"       "SDD-031 D4" || failures=$((failures +
 check_route "/v1/scheduler/backpressure"  "SDD-031 D4" || failures=$((failures + 1))
 check_route "/v1/scheduler/weights"       "SDD-031 D4" || failures=$((failures + 1))
 check_route "/v1/scheduler/explain/:request_id" "SDD-031 D4" || failures=$((failures + 1))
+# MS006 / SDD-009 Q-G — operator-facing modules list (read-only)
+check_route "/v1/modules"                 "MS006 / SDD-009 Q-G" || failures=$((failures + 1))
 
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
