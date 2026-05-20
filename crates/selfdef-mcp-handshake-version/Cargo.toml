@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-mcp-handshake-version"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS MCP handshake-version compatibility gate. classify(server_version, supported_set, supported_range) returns Compatible / TooOld{min} / TooNew{max} / Unsupported. Supports both an explicit version allowlist and a (min, max) semver-tuple range. Pure version gate; protocol semantics live downstream."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
