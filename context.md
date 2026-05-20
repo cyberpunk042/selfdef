@@ -2875,3 +2875,13 @@ Total this resume: 349 selfdef IPS-authority crates. Workspace 514.
   rejected for new verify)
 
 Total this resume: 350 selfdef IPS-authority crates. Workspace 515.
+
+### Two-hundred-and-eighty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-cert-pin-set` (per-host BTreeMap<fingerprint,
+  expires_at_ms>; pin(host, fp, now, ttl) inserts ttl=0
+  permanent; matches(host, fp, now) true iff any non-expired
+  pin equals fp case-insensitive on 64-char hex SHA-256;
+  multiple pins per host for rotation overlap)
+
+Total this resume: 351 selfdef IPS-authority crates. Workspace 516.
