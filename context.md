@@ -2529,3 +2529,12 @@ Total this resume: 311 selfdef IPS-authority crates. Workspace 476.
   in fixed order: strip→lowercase→collapse→trim; deterministic)
 
 Total this resume: 312 selfdef IPS-authority crates. Workspace 477.
+
+### Two-hundred-and-forty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-seen-set` (bounded TTL seen-id set; first_time
+  records and returns true on first obs within TTL, false on
+  duplicate within TTL; capacity evicts oldest; sweep removes
+  expired)
+
+Total this resume: 313 selfdef IPS-authority crates. Workspace 478.
