@@ -2289,3 +2289,12 @@ Total this resume: 283 selfdef IPS-authority crates. Workspace 448.
   cumulative >= target returning bucket lower bound)
 
 Total this resume: 284 selfdef IPS-authority crates. Workspace 449.
+
+### Two-hundred-and-seventeenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-named-lock` (Hold{owner, expires_at_ms}; acquire
+  grants if free / expired / same owner; release requires
+  matching owner; held(now) returns owner if valid; expire
+  sweeps stale)
+
+Total this resume: 285 selfdef IPS-authority crates. Workspace 450.
