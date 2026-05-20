@@ -2486,3 +2486,11 @@ Total this resume: 306 selfdef IPS-authority crates. Workspace 471.
   head-side ops; drops counts both eviction + rejection)
 
 Total this resume: 307 selfdef IPS-authority crates. Workspace 472.
+
+### Two-hundred-and-fortieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bp-math` (apply(value, bp)=value*bp/10000 via i128;
+  ratio_bp(numer, denom)=numer*10000/denom saturating to
+  u32::MAX, rejects zero denom; clamp_bp limits to 10000)
+
+Total this resume: 308 selfdef IPS-authority crates. Workspace 473.
