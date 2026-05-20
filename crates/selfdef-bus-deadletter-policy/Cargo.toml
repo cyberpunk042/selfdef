@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-bus-deadletter-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS dead-letter policy for failed bus deliveries. Each event_id has a Retry counter; record_attempt(event_id, ok) returns Retry{attempts} when failure < max_attempts, DeadLetter{attempts} when reached. Once dead-lettered, status() reports DeadLettered. revive(event_id) clears so the operator can retry by hand."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
