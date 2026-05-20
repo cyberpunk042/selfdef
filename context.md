@@ -2399,3 +2399,12 @@ Total this resume: 296 selfdef IPS-authority crates. Workspace 461.
   Resolution{handler_id, kind, matched_len})
 
 Total this resume: 297 selfdef IPS-authority crates. Workspace 462.
+
+### Two-hundred-and-thirtieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-dependency-resolver` (add(id, deps); resolve(target)
+  collects reachable ancestors and runs Kahn; Missing on
+  unknown dep; Cycle when fewer nodes emitted; deps may
+  forward-reference (checked at resolve))
+
+Total this resume: 298 selfdef IPS-authority crates. Workspace 463.
