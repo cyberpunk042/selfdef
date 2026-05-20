@@ -705,3 +705,11 @@ Total this resume: 106 selfdef IPS-authority crates. Workspace 271.
   budget}/Unknown/Unconfigured; record is monotonic)
 
 Total this resume: 107 selfdef IPS-authority crates. Workspace 272.
+
+### Fortieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-suspension-policy` (per-actor moratorium with
+  auto-thaw; suspend/unsuspend/classify Active/Suspended{reason,
+  unsuspend_at}/Unknown; rotate(now) evicts expired)
+
+Total this resume: 108 selfdef IPS-authority crates. Workspace 273.
