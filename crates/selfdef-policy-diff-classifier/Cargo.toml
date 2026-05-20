@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-diff-classifier"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS classifier that summarises a policy diff into a set of EffectKind labels (NewDeny / NewAllow / TightensCap / LoosensCap / RemovesDeny / RemovesAllow / SchemaBump / Neutral) plus a worst-effect rollup. Pure descriptor; consumers feed in (before, after) signed blobs along with a heuristic policy-change scan. Distinct from action-side-effect-classifier (per-action) — this is the per-policy-edit lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
