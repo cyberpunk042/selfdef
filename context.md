@@ -1065,3 +1065,11 @@ Total this resume: 146 selfdef IPS-authority crates. Workspace 311.
   chrome surfaces 'policy updated' banner)
 
 Total this resume: 147 selfdef IPS-authority crates. Workspace 312.
+
+### Eightieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-bundle-staging` (Candidate{version, content_hash,
+  staged_at}; stage/promote (returns prev-active) /reject/
+  list_staged/active_version; promotion lane for new bundles)
+
+Total this resume: 148 selfdef IPS-authority crates. Workspace 313.
