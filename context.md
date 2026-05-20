@@ -2469,3 +2469,12 @@ Total this resume: 304 selfdef IPS-authority crates. Workspace 469.
   remaining accounts for period advance)
 
 Total this resume: 305 selfdef IPS-authority crates. Workspace 470.
+
+### Two-hundred-and-thirty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-named-counter` (multi-named u64 counters; inc/dec
+  saturating; get returns 0 if absent; reset_all zeroes
+  values (keeps keys); snapshot returns frozen copy; total
+  sums u128)
+
+Total this resume: 306 selfdef IPS-authority crates. Workspace 471.
