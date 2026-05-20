@@ -1706,6 +1706,58 @@ async fn watchdog_scheduler_explain_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+async fn watchdog_metrics_emitted_through_metrics_endpoint() {
+    // Verifies the watchdog_metrics::render() output appended in
+    // handlers::metrics actually flows through the axum handler. Catches
+    // a regression where someone removes the watchdog_metrics push but
+    // leaves the unit tests passing.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let body = std::str::from_utf8(&body_bytes).unwrap();
+    // Pre-existing selfdef-bus metrics must still be present.
+    assert!(
+        body.contains("selfdef_uptime_seconds"),
+        "selfdef-bus metrics missing from /metrics body"
+    );
+    // Every four-watchdog series must be present per
+    // selfdef-api/src/watchdog_metrics.rs.
+    for series in [
+        "selfdef_friction_audit_verdicts_total",
+        "selfdef_friction_audit_failing_total",
+        "selfdef_friction_audit_overrides_total",
+        "selfdef_perimeter_verdicts_total",
+        "selfdef_perimeter_sigkills_total",
+        "selfdef_perimeter_extensions_total",
+        "selfdef_perimeter_policy_present",
+        "selfdef_perimeter_audit_chain_events",
+        "selfdef_guardian_verdicts_total",
+        "selfdef_guardian_failed_responses_total",
+        "selfdef_guardian_tetragon_socket_present",
+        "selfdef_guardian_audit_chain_events",
+        "selfdef_scheduler_decisions_total",
+        "selfdef_scheduler_backpressured_decisions_total",
+        "selfdef_scheduler_audit_chain_events",
+    ] {
+        assert!(
+            body.contains(&format!("# HELP {series}")),
+            "missing HELP comment for {series} in /metrics body"
+        );
+        assert!(
+            body.contains(&format!("# TYPE {series} gauge")),
+            "missing TYPE comment for {series} in /metrics body"
+        );
+    }
+}
+
+#[tokio::test]
 async fn watchdog_history_routes_honor_limit_query() {
     let (state, _bus, _store, _dir) = build_state().await;
     let app_a = app(state.clone());
