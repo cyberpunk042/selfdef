@@ -1623,3 +1623,12 @@ Total this resume: 206 selfdef IPS-authority crates. Workspace 371.
   counts + bytes_scanned; worst_hit filters by min severity)
 
 Total this resume: 207 selfdef IPS-authority crates. Workspace 372.
+
+### Hundred-and-fortieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-blue-green-deploy` (Slot{Blue/Green} active/standby;
+  stage writes to inactive (StageToActive err otherwise);
+  mark_warm flips readiness; swap flips active iff inactive has
+  version + warm; rollback = another swap; new stage resets warm)
+
+Total this resume: 208 selfdef IPS-authority crates. Workspace 373.
