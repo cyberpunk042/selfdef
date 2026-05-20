@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-patch-set"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Patch ops over key→value map — Set/Remove/Test with all-or-none semantics."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
