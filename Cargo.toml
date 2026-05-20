@@ -130,6 +130,7 @@ selfdef-ssh-wrap = { path = "crates/selfdef-ssh-wrap" }
 selfdef-api = { path = "crates/selfdef-api" }
 selfdef-nats = { path = "crates/selfdef-nats" }
 selfdef-signing = { path = "crates/selfdef-signing" }
+selfdef-friction-audit-mirror = { path = "crates/selfdef-friction-audit-mirror" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)

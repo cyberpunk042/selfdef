@@ -10,6 +10,7 @@
 mod doctor;
 mod emit;
 mod follow;
+mod friction_audit;
 mod hardware;
 mod init;
 mod mcp;
@@ -160,6 +161,19 @@ enum Command {
     Hardware {
         #[command(subcommand)]
         action: Option<HardwareAction>,
+        /// Machine-readable JSON output (alternative to subverb).
+        #[arg(long)]
+        json: bool,
+    },
+    /// SDD-027 / MS046: boot-time hardware-integrity gate operator
+    /// surface. Reads the verdict ring buffer that the friction-audit
+    /// boot script writes; surfaces gate verdicts (pcie / zfs /
+    /// memory / immutability / signature / timeout) and operator-
+    /// signed overrides. Read-only by default; mutating actions
+    /// require Ring 0 authority + MS003 multi-sig (deferred).
+    FrictionAudit {
+        #[command(subcommand)]
+        action: Option<FrictionAuditAction>,
         /// Machine-readable JSON output (alternative to subverb).
         #[arg(long)]
         json: bool,
@@ -355,6 +369,29 @@ enum HardwareAction {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+}
+
+/// SDD-027 / MS046 friction-audit subcommand action set.
+///
+/// Default (no subverb) renders the latest verdict per gate from the
+/// ring buffer at `/var/cache/selfdef/friction-audit/ring/`. The buffer
+/// is written by `/usr/local/bin/friction-audit` on every boot via
+/// `sovereign-guard.service`.
+#[derive(Debug, clap::Subcommand)]
+enum FrictionAuditAction {
+    /// Render the latest verdict for each gate (default action when
+    /// no subverb is supplied).
+    Show,
+    /// Render the last N verdicts (oldest-first). Capped at the ring
+    /// buffer size (256).
+    History {
+        /// How many entries to render (default: 32).
+        #[arg(long, default_value_t = 32)]
+        limit: u32,
+    },
+    /// Re-run the gate now (does not require reboot). Operator-
+    /// triggered per MS046 R10927 — never automatic.
+    Replay,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1362,6 +1399,18 @@ async fn main() -> Result<()> {
                 Some(HardwareAction::Probe) if json => hardware::run_json()?,
                 None if json => hardware::run_json()?,
                 _ => hardware::run_human()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::FrictionAudit { action, json } => {
+            let exit = match action {
+                Some(FrictionAuditAction::Show) | None => {
+                    friction_audit::run_show(json)?
+                }
+                Some(FrictionAuditAction::History { limit }) => {
+                    friction_audit::run_history(limit, json)?
+                }
+                Some(FrictionAuditAction::Replay) => friction_audit::run_replay(json)?,
             };
             std::process::exit(exit);
         }

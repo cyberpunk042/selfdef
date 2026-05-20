@@ -2803,6 +2803,7 @@ dependencies = [
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-friction-audit-mirror",
  "selfdef-hardware",
  "selfdef-integration-ntfy",
  "selfdef-notifier",

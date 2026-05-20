@@ -28,6 +28,7 @@ selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-responder = { workspace = true }
+selfdef-friction-audit-mirror = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
