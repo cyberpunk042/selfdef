@@ -1276,3 +1276,13 @@ Total this resume: 170 selfdef IPS-authority crates. Workspace 335.
   RW satisfies all)
 
 Total this resume: 171 selfdef IPS-authority crates. Workspace 336.
+
+### Hundred-and-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-llm-model-fallback-policy` (Chain{models:Vec,
+  health:BTreeMap<id,ModelHealth{fail_streak, cooldown_until,
+  total_success/failure}>}; pick returns first non-cooldown model —
+  Picked{model,rank}/AllInCooldown{next_available}/NoModels;
+  record_failure places in cooldown; record_success clears)
+
+Total this resume: 172 selfdef IPS-authority crates. Workspace 337.
