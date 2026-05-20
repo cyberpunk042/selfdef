@@ -36,6 +36,7 @@
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 mod control;
+mod friction_audit;
 mod handlers;
 pub mod metrics;
 mod state;
@@ -114,6 +115,11 @@ pub fn router(state: ApiState) -> Router {
         .route("/findings", get(handlers::findings))
         .route("/events/stream", get(handlers::events_stream))
         .route("/metrics", get(handlers::metrics))
+        // SDD-027 / MS046: friction-audit operator surface (read-only).
+        // Mutation endpoints (POST /v1/friction-audit/overrides/:gate)
+        // require Ring 0 authority + MS003 multi-sig and are deferred.
+        .route("/v1/friction-audit", get(friction_audit::show))
+        .route("/v1/friction-audit/history", get(friction_audit::history))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

@@ -2395,6 +2395,8 @@ dependencies = [
  "selfdef-bus",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-friction-audit",
+ "selfdef-friction-audit-mirror",
  "selfdef-notifier",
  "selfdef-notifier-engine",
  "selfdef-notifier-orchestrator",

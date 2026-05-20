@@ -28,6 +28,8 @@ selfdef-correlator = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
+selfdef-friction-audit = { workspace = true }
+selfdef-friction-audit-mirror = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
