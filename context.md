@@ -1565,3 +1565,13 @@ Total this resume: 200 selfdef IPS-authority crates. Workspace 365.
   test confirms even spread across shards)
 
 Total this resume: 201 selfdef IPS-authority crates. Workspace 366.
+
+### Hundred-and-thirty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-alert-escalation-policy` (Stage{Notify→Page→Wake→
+  Resolved}; per-alert last_stage_ts drives elapsed; tick(now)
+  advances stages past waits.notify_to_page_ms / page_to_wake_ms
+  and returns changed (id, new_stage) pairs; Wake terminal; ack
+  → Resolved)
+
+Total this resume: 202 selfdef IPS-authority crates. Workspace 367.
