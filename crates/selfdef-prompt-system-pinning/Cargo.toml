@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-prompt-system-pinning"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS pinned system-message ledger. pin(id, body, priority) and unpin(id) maintain an ordered list of operator-pinned messages that must remain in the LLM context across every shrink decision. classify(id) returns Pinned{priority}/Unpinned. Pairs with selfdef-llm-context-shrink-policy — pinned ids are 'Pinned' role, never dropped or summarized."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
