@@ -84,9 +84,30 @@ maintainer = "You <you@example.org>"
 copyright = "You"
 license-file = ["../../LICENSE", "0"]
 extended-description = """
-selfdef is a multi-layered host detection and response service for Debian and
+selfdef is a multi-layered host self-defense (IPS) daemon for Debian and
 Ubuntu systems. It correlates events from auditd, journald, Tetragon, and
 Suricata, raises notifications, and runs configured response actions.
+
+The package also ships the four-watchdog set — four cooperating boundary-
+enforcement layers that operate together as the IPS spine:
+
+ * friction-audit (MS046) — boot-time hardware-integrity gate (PCIe / ZFS
+   / memory) via sovereign-guard.service
+ * perimeter (MS047) — real-time kernel-fence (Tetragon sovereign-perimeter
+   TracingPolicy / sys_execve allowlist + Sigkill)
+ * guardian (MS044) — Tetragon supervisor with 3-step Responder (SIGKILL /
+   ZFS atomic audit-append / /dev/console BEL) via selfdef-guardian.service
+ * scheduler (MS048) — Goldilocks routing layer (7-axis objective + 5
+   backpressure surfaces) via selfdef-scheduler.service
+
+All four watchdogs ship OFF by default. Operators enable per deployment via
+`systemctl enable --now <unit>`; `selfdefctl wizard` walks the full
+enablement path. `selfdefctl doctor` reports deployability; `selfdefctl
+trio` shows the consolidated four-panel snapshot; `selfdefctl trio-tail`
+streams the unified live OCSF log across all four.
+
+Operator runbooks (20 total, 5 per watchdog) ship via the companion
+devops-solutions-information-hub repository's wiki/runbooks/ directory.
 """
 section = "admin"
 priority = "optional"
