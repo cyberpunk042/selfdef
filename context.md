@@ -2885,3 +2885,12 @@ Total this resume: 350 selfdef IPS-authority crates. Workspace 515.
   multiple pins per host for rotation overlap)
 
 Total this resume: 351 selfdef IPS-authority crates. Workspace 516.
+
+### Two-hundred-and-eighty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-byte-budget` (ByteBudget{capacity, in_use,
+  high_watermark}; reserve(n) succeeds iff n <= available
+  then updates in_use + high_watermark; release(n)
+  saturating-subtracts; available, used_bp, reset_watermark)
+
+Total this resume: 352 selfdef IPS-authority crates. Workspace 517.
