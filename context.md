@@ -1125,3 +1125,12 @@ Total this resume: 153 selfdef IPS-authority crates. Workspace 318.
   remove_sink/emitted_to; remove auto-prunes empty entries)
 
 Total this resume: 154 selfdef IPS-authority crates. Workspace 319.
+
+### Eighty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-burst-detector` (per (subject, kind) Vec<ts>; classify
+  count-in-window vs (elevated_threshold, burst_threshold) →
+  Calm/Elevated{count}/Burst{count, threshold}; rotate drops
+  out-of-window)
+
+Total this resume: 155 selfdef IPS-authority crates. Workspace 320.
