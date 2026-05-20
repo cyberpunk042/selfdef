@@ -1833,3 +1833,11 @@ Total this resume: 230 selfdef IPS-authority crates. Workspace 395.
   seen_count} + bumps last_seen; prune drops stale by last_seen)
 
 Total this resume: 231 selfdef IPS-authority crates. Workspace 396.
+
+### Hundred-and-sixty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-secret-binding-store` (per-actor name→ref_path bindings;
+  no raw secrets stored — ref_path points to vault; bind/unbind/
+  resolve/names_of; rebind replaces)
+
+Total this resume: 232 selfdef IPS-authority crates. Workspace 397.
