@@ -2307,3 +2307,11 @@ Total this resume: 285 selfdef IPS-authority crates. Workspace 450.
   keys/values rejected)
 
 Total this resume: 286 selfdef IPS-authority crates. Workspace 451.
+
+### Two-hundred-and-nineteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-url-parts` (parse scheme://host[:port]/path[?query]
+  → UrlParts; validates scheme+host non-empty, port 1..=65535;
+  to_string reassembles; raw fields (no encoding))
+
+Total this resume: 287 selfdef IPS-authority crates. Workspace 452.
