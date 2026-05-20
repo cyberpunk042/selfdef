@@ -2478,3 +2478,11 @@ Total this resume: 305 selfdef IPS-authority crates. Workspace 470.
   sums u128)
 
 Total this resume: 306 selfdef IPS-authority crates. Workspace 471.
+
+### Two-hundred-and-thirty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bounded-fifo` (Policy{DropOldest/Reject}; push at
+  capacity evicts head (Evicted) or errors Full; pop/peek_head
+  head-side ops; drops counts both eviction + rejection)
+
+Total this resume: 307 selfdef IPS-authority crates. Workspace 472.
