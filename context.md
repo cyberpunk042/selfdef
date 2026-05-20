@@ -2015,3 +2015,11 @@ Total this resume: 252 selfdef IPS-authority crates. Workspace 417.
   union, difference, is_subset_of, is_disjoint_from; pure data)
 
 Total this resume: 253 selfdef IPS-authority crates. Workspace 418.
+
+### Hundred-and-eighty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-glob-matcher` (shell-style glob: * (no /), ? (no /),
+  [abc]/[^abc] classes, \x escape; iterative backtracking on *;
+  unterminated classes rejected at construction)
+
+Total this resume: 254 selfdef IPS-authority crates. Workspace 419.
