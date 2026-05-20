@@ -544,3 +544,10 @@ Total this resume: 77 selfdef IPS-authority crates. Workspace 242.
   ExportClass matrix gating trace export destinations)
 
 Total this resume: 79 selfdef IPS-authority crates. Workspace 244.
+
+### Twenty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-namespace-policy` (hierarchical namespace tree with
+  parent_id walk + child-overrides-parent + sealed/mutable flag)
+
+Total this resume: 80 selfdef IPS-authority crates. Workspace 245.
