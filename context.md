@@ -2786,3 +2786,13 @@ Total this resume: 340 selfdef IPS-authority crates. Workspace 505.
   id); prevents starvation while preferring high priority)
 
 Total this resume: 341 selfdef IPS-authority crates. Workspace 506.
+
+### Two-hundred-and-seventy-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-deficit-round-robin` (Flow{id, quantum, deficit,
+  queue VecDeque<u64>}; enqueue appends packet size; service()
+  rotates, adds quantum to deficit, serves head iff size <=
+  deficit; empty flows reset deficit per DRR semantics; two-sweep
+  loop yields None iff all idle)
+
+Total this resume: 342 selfdef IPS-authority crates. Workspace 507.
