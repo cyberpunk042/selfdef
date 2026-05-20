@@ -143,3 +143,53 @@ footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.7
   .event-list li { grid-template-columns: 1fr; }
   .event-list li > span:not(:last-child) { display: inline-block; margin-right: 0.5rem; }
 }
+
+/* ----------- Friction Audit panel (SDD-027 / MS046) ----------- */
+
+#friction-audit-section h2 { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+
+.fa-aggregate {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+}
+.fa-aggregate.fa-ok       { color: var(--low);      border-color: var(--low); }
+.fa-aggregate.fa-fail     { color: var(--critical); border-color: var(--critical); }
+.fa-aggregate.fa-override { color: var(--medium);   border-color: var(--medium); }
+.fa-aggregate.fa-unknown  { color: var(--info);     border-color: var(--info); }
+
+.fa-rows { list-style: none; padding: 0; margin: 0.5rem 0 0; display: grid; gap: 0.4rem; }
+.fa-rows li {
+  display: grid;
+  grid-template-columns: 12rem 4rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radius);
+}
+.fa-rows li.fa-green  { border-left-color: var(--low); }
+.fa-rows li.fa-yellow { border-left-color: var(--medium); }
+.fa-rows li.fa-red    { border-left-color: var(--critical); }
+.fa-rows li.fa-gray   { border-left-color: var(--info); }
+.fa-rows .fa-gate-label { font-weight: bold; }
+.fa-rows .fa-badge {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+}
+.fa-rows .fa-badge.fa-green  { color: var(--low);      border-color: var(--low); }
+.fa-rows .fa-badge.fa-yellow { color: var(--medium);   border-color: var(--medium); }
+.fa-rows .fa-badge.fa-red    { color: var(--critical); border-color: var(--critical); }
+.fa-rows .fa-badge.fa-gray   { color: var(--info);     border-color: var(--info); }
+.fa-rows .fa-detail { color: var(--fg-dim); font-size: 0.85rem; }
+.fa-rows .fa-runbook-link { color: var(--accent); font-size: 0.8rem; }
+.fa-rows li.empty { color: var(--fg-dim); font-style: italic; display: block; }

@@ -127,6 +127,10 @@
   }
 
   async function refresh(kind) {
+    // Special-case the friction-audit panel — different endpoint shape.
+    if (kind === "friction-audit") {
+      return refreshFrictionAudit();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -140,6 +144,120 @@
       }
     } catch (e) {
       setEmpty(ul, `error: ${e.message}`);
+    }
+  }
+
+  // Friction-audit panel — reads GET /v1/friction-audit.
+  // SDD-027 / MS046. Operator-facing surface, read-only.
+  const FA_GATE_LABEL = {
+    pcie: "PCIe Bifurcation",
+    zfs: "ZFS Pool Health",
+    memory: "Memory Geometry",
+    immutability: "Script Immutability",
+    signature: "MS003 Signature",
+    timeout: "Gate Timeout",
+  };
+  const FA_RUNBOOK_BASE = "/wiki/runbooks/friction-audit-";
+  const FA_GATE_ORDER = ["pcie", "zfs", "memory", "immutability", "signature", "timeout"];
+
+  function faStatusToBadgeColor(status) {
+    // Status is the mirror's Status enum (`pass | fail(code) | skipped(detail) | override-active{...}`).
+    if (!status) return { badge: "—", color: "gray", detail: "" };
+    if (status.status === "pass") return { badge: "PASS", color: "green", detail: "" };
+    if (status.status === "skipped")
+      return { badge: "SKIP", color: "green", detail: `operator-extended skip · ${status.detail || ""}` };
+    if (status.status === "fail")
+      return { badge: "FAIL", color: "red", detail: `exit ${status.detail}` };
+    if (status.status === "override-active")
+      return { badge: "OVRD", color: "yellow", detail: `manifest ${(status.manifest_sha256 || "").slice(0, 8)}…` };
+    return { badge: "—", color: "gray", detail: "" };
+  }
+
+  function faFreshness(nowMs, tsMs) {
+    if (!tsMs) return "no verdict yet";
+    const delta = Math.max(0, nowMs - tsMs);
+    const s = Math.floor(delta / 1000);
+    if (s < 5) return "just now";
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago · stale`;
+    return "stale (>30d)";
+  }
+
+  async function refreshFrictionAudit() {
+    const ul = document.getElementById("friction-audit-rows");
+    const aggEl = document.getElementById("fa-aggregate");
+    try {
+      const body = await get("/v1/friction-audit");
+      // Aggregate badge.
+      aggEl.textContent = (body.aggregate || "unknown").toUpperCase();
+      aggEl.className = `fa-aggregate fa-${body.aggregate || "unknown"}`;
+
+      // Index verdicts + overrides by gate.
+      const verdictByGate = {};
+      for (const v of body.verdicts || []) {
+        verdictByGate[v.gate] = v;
+      }
+      const overrideByGate = {};
+      for (const m of body.overrides || []) {
+        overrideByGate[m.gate] = m;
+      }
+
+      ul.innerHTML = "";
+      for (const gate of FA_GATE_ORDER) {
+        const li = document.createElement("li");
+        const v = verdictByGate[gate];
+        let badgeInfo;
+        if (overrideByGate[gate]) {
+          badgeInfo = {
+            badge: "OVRD",
+            color: "yellow",
+            detail: `operator override · expires ${new Date(overrideByGate[gate].expires_at_ms).toISOString().slice(0, 19)}Z`,
+          };
+        } else if (v) {
+          badgeInfo = faStatusToBadgeColor(v.status);
+          if (!badgeInfo.detail) badgeInfo.detail = faFreshness(body.now_ms, v.ts_ms);
+          else badgeInfo.detail = `${badgeInfo.detail} · ${faFreshness(body.now_ms, v.ts_ms)}`;
+        } else {
+          badgeInfo = { badge: "—", color: "gray", detail: "no verdict yet recorded" };
+        }
+
+        li.className = `fa-${badgeInfo.color}`;
+
+        const labelSpan = document.createElement("span");
+        labelSpan.className = "fa-gate-label";
+        labelSpan.textContent = FA_GATE_LABEL[gate] || gate;
+
+        const badgeSpan = document.createElement("span");
+        badgeSpan.className = `fa-badge fa-${badgeInfo.color}`;
+        badgeSpan.textContent = badgeInfo.badge;
+
+        const detailSpan = document.createElement("span");
+        detailSpan.className = "fa-detail";
+        detailSpan.textContent = badgeInfo.detail;
+
+        const linkA = document.createElement("a");
+        linkA.className = "fa-runbook-link";
+        // The runbook is served by the info-hub second brain (gateway
+        // ingress). When the operator's wiki is running on the same
+        // host, the relative path resolves; otherwise the operator
+        // configures their wiki origin separately.
+        linkA.href = `${FA_RUNBOOK_BASE}${gate}`;
+        linkA.target = "_blank";
+        linkA.rel = "noopener";
+        linkA.textContent = "runbook ↗";
+
+        li.appendChild(labelSpan);
+        li.appendChild(badgeSpan);
+        li.appendChild(detailSpan);
+        li.appendChild(linkA);
+        ul.appendChild(li);
+      }
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      aggEl.textContent = "ERROR";
+      aggEl.className = "fa-aggregate fa-fail";
     }
   }
 
@@ -344,8 +462,13 @@
   refreshStatus();
   refresh("findings");
   refresh("events");
+  refreshFrictionAudit();
   refreshActionList();
   setInterval(refreshStatus, 5000);
+  // Friction-audit panel refreshes less often than status; gate state
+  // is rare-change (boot + operator replay). 30s keeps the panel
+  // fresh enough to reflect operator overrides without burning HTTP.
+  setInterval(refreshFrictionAudit, 30000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
