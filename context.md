@@ -1187,3 +1187,11 @@ Total this resume: 160 selfdef IPS-authority crates. Workspace 325.
   / <|endoftext|> / triple-newline)
 
 Total this resume: 161 selfdef IPS-authority crates. Workspace 326.
+
+### Ninety-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-text-redactor` (literal-pattern redactor; longest-
+  needle-first; replaces each occurrence with [REDACTED:<char_
+  count>]; returns (redacted, count))
+
+Total this resume: 162 selfdef IPS-authority crates. Workspace 327.
