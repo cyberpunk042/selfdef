@@ -1717,3 +1717,12 @@ Total this resume: 216 selfdef IPS-authority crates. Workspace 381.
   totals_by_resource queries)
 
 Total this resume: 217 selfdef IPS-authority crates. Workspace 382.
+
+### Hundred-and-fiftieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-schema-migrator` (Step{from, to=from+1, label,
+  reversible}; consecutive registration enforced; plan(from, to)
+  returns forward labels OR backward with "rollback:" prefix;
+  non-reversible blocks backward; missing step → Missing(version))
+
+Total this resume: 218 selfdef IPS-authority crates. Workspace 383.
