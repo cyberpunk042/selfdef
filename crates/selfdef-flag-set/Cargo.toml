@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-flag-set"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Named 64-bit flag set with union / intersection / difference."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
