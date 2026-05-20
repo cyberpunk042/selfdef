@@ -105,6 +105,31 @@ Every operator-facing verb:
 | `panic` | Trigger panic mode (lockdown). Requires `--confirm <hostname>`. |
 | `reload` | SIGHUP the daemon (rules reload). |
 
+### Four-watchdog set (IPS spine, MS046+MS047+MS044+MS048)
+
+The package ships four cooperating boundary-enforcement watchdogs that
+operate together as the IPS spine. All OFF by default;
+`selfdefctl wizard` Step 5 walks the enablement path.
+
+| Layer | Verb | Catalog | Surface |
+| --- | --- | --- | --- |
+| hardware frame | `friction-audit {show,history,replay} [--json]` | MS046 / SDD-027 | Boot-time PCIe/ZFS/memory gate via `sovereign-guard.service`. |
+| kernel syscall | `perimeter {show,history,extend,revoke,check-overlap,status,audit-cycle replay} [--json]` | MS047 / SDD-028 | In-kernel `sys_execve` allowlist via Tetragon `sovereign-perimeter.yaml` (no userspace service). |
+| supervisor tier | `guardian {show,history,replay,rollback} [--json]` | MS044 / SDD-029 | Tetragon UNIX-socket consumer + 3-step Responder (SIGKILL / atomic ZFS audit-append / `/dev/console` BEL) via `selfdef-guardian.service`. |
+| routing layer | `scheduler {show,history,explain,replay,weights,force,audit-cycle replay} [--json]` | MS048 / SDD-031 | Goldilocks 7-axis objective + 5 backpressure surfaces via `selfdef-scheduler.service`. |
+
+Cross-cutting operator surface:
+
+| Verb | Purpose |
+| --- | --- |
+| `trio [--json] [--watch N]` | Consolidated four-panel snapshot (CLI analog of the PWA dashboard's main view). |
+| `trio-tail [--interval-ms N] [--json]` | Unified live OCSF tail of all four watchdog JSONL logs. |
+| `doctor` | The `watchdog-set` category reports per-watchdog deployability (binary present + systemd unit present + ring dir + supporting infrastructure). |
+
+Operator runbooks (20 total, 5 per watchdog) ship in the companion
+`devops-solutions-information-hub` repository:
+`wiki/runbooks/{friction-audit,perimeter,guardian,scheduler}-*.md`.
+
 ### Security opt-ins (audit-shipped)
 
 | Verb | Closes | Purpose |
