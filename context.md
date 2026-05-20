@@ -2953,3 +2953,12 @@ Total this resume: 357 selfdef IPS-authority crates. Workspace 522.
   Conflict (fp mismatch); commit records response)
 
 Total this resume: 358 selfdef IPS-authority crates. Workspace 523.
+
+### Two-hundred-and-ninety-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-hybrid-logical-clock` (Timestamp{wall_ms, counter};
+  now(wall_now) new_wall=max(prev_wall, wall_now), counter+1
+  if same wall else 0; update(remote, wall_now) merges three-way
+  max with appropriate counter; lex Ord)
+
+Total this resume: 359 selfdef IPS-authority crates. Workspace 524.
