@@ -1706,6 +1706,61 @@ async fn watchdog_scheduler_explain_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+async fn watchdog_metrics_values_are_valid_prometheus_numbers() {
+    // Every watchdog gauge must emit a numeric value (i64 or f64) per
+    // Prometheus exposition format spec. Catches a regression where a
+    // series accidentally emits 'NaN' or non-numeric junk that would
+    // silently break Prometheus ingest.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/metrics")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body_bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let body = std::str::from_utf8(&body_bytes).unwrap();
+
+    let mut checked = 0usize;
+    for line in body.lines() {
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+        // Only check the four-watchdog series — other series like
+        // selfdef_events_total carry labels that complicate parsing.
+        if !line.contains("selfdef_friction_audit_")
+            && !line.contains("selfdef_perimeter_")
+            && !line.contains("selfdef_guardian_")
+            && !line.contains("selfdef_scheduler_")
+        {
+            continue;
+        }
+        // No-labels watchdog gauges: "name value". Split on first ' '.
+        let parts: Vec<&str> = line.splitn(2, ' ').collect();
+        assert_eq!(parts.len(), 2, "malformed watchdog metric line: {line:?}");
+        let value = parts[1];
+        // Must parse as i64 OR finite f64. Reject NaN/Inf/non-numeric.
+        let parsed = value.parse::<i64>().is_ok()
+            || value
+                .parse::<f64>()
+                .map(|f| f.is_finite())
+                .unwrap_or(false);
+        assert!(
+            parsed,
+            "watchdog metric line has non-numeric/non-finite value: {line:?}",
+        );
+        checked += 1;
+    }
+    // Sanity check that we actually parsed the 15 watchdog gauges.
+    assert!(
+        checked >= 15,
+        "expected at least 15 watchdog gauge lines, got {checked}"
+    );
+}
+
+#[tokio::test]
 async fn watchdog_metrics_emitted_through_metrics_endpoint() {
     // Verifies the watchdog_metrics::render() output appended in
     // handlers::metrics actually flows through the axum handler. Catches
