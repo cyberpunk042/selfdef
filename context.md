@@ -777,3 +777,12 @@ Total this resume: 114 selfdef IPS-authority crates. Workspace 279.
   commit)
 
 Total this resume: 115 selfdef IPS-authority crates. Workspace 280.
+
+### Forty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-substrate-feature-gate` (Requirement Avx2/Avx512/Neon/
+  NvidiaGpu/RamAtLeastGB/CoresAtLeast over a Snapshot mirror of
+  selfdef-hardware; classify Enabled/Disabled{missing}/Unknown
+  Feature; lets optimized paths opt in honestly per substrate)
+
+Total this resume: 116 selfdef IPS-authority crates. Workspace 281.
