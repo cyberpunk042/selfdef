@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-ranking-table"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Score-keyed ranking table with top-N and rank lookup."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
