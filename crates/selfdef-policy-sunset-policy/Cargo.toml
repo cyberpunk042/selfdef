@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-sunset-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS sunset policy for temporary rules. Each policy_id can declare a sunset_at ts and a warn_window_ms before sunset for operator nudging. classify(policy_id, now) returns Active / Warning{remaining_ms} / Expired. rotate(now) emits + removes the expired set so the audit log can record each sunset."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
