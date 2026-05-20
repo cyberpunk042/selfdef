@@ -1315,3 +1315,13 @@ Total this resume: 174 selfdef IPS-authority crates. Workspace 339.
   active_for lists all currently-applicable)
 
 Total this resume: 175 selfdef IPS-authority crates. Workspace 340.
+
+### Hundred-and-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-credential-rotation-policy` (Credential{created_ms,
+  max_age_ms, grace_ms, rotations}; check(now) returns Fresh{
+  remaining}/DueForRotation{overdue, grace_remaining}/Expired{
+  overdue}/Unknown — three lifecycle phases; rotate resets
+  created_ms; needs_attention lists due-or-expired)
+
+Total this resume: 176 selfdef IPS-authority crates. Workspace 341.
