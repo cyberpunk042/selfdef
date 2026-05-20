@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-retry-backoff-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS exponential-backoff calculator with optional jitter. delay_for_attempt(n, base_ms, max_ms, jitter_ms_for_seed) returns the delay in ms for retry attempt n (1-based). base * 2^(n-1) capped at max, plus deterministic jitter from seed. Pure math."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
