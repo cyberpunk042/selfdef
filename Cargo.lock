@@ -6705,6 +6705,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-topic-stats"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-topo-sort"
 version = "0.1.0"
 dependencies = [
