@@ -25,6 +25,10 @@ use serde::{Deserialize, Serialize};
 /// Default modules directory shipped by the Debian package.
 pub const DEFAULT_MODULES_DIR: &str = "/usr/share/selfdef/modules";
 
+/// Default operator-chosen modules-config file
+/// (presence-of-`[modules.<name>]`-section means active).
+pub const DEFAULT_MODULES_TOML: &str = "/etc/selfdef/modules.toml";
+
 /// Minimal projection of a module's manifest. Fields beyond these
 /// stay in selfdef-cli — dashboards display these; CLI handles
 /// the rest.
@@ -45,6 +49,10 @@ pub(crate) struct ModuleSummary {
     pub provides: Vec<String>,
     #[serde(default)]
     pub consumes: Vec<String>,
+    /// True iff the operator activated this module in modules.toml
+    /// (presence of `[modules.<name>]` section).
+    #[serde(default)]
+    pub active: bool,
 }
 
 /// Response body for `GET /v1/modules`.
@@ -60,6 +68,37 @@ fn modules_dir() -> PathBuf {
     std::env::var("SELFDEF_MODULES_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from(DEFAULT_MODULES_DIR))
+}
+
+fn modules_toml() -> PathBuf {
+    std::env::var("SELFDEF_MODULES_TOML")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_MODULES_TOML))
+}
+
+/// Parse the operator-chosen modules.toml and return the set of
+/// active module names (presence of `[modules.<name>]` section).
+/// Missing file → empty set (graceful: operator hasn't run
+/// `selfdefctl init modules` yet). Malformed file → empty set
+/// (logged elsewhere; dashboard shouldn't break).
+pub(crate) fn active_modules(modules_toml_path: &Path) -> std::collections::BTreeSet<String> {
+    use std::collections::BTreeSet;
+    let mut out = BTreeSet::new();
+    let text = match std::fs::read_to_string(modules_toml_path) {
+        Ok(t) => t,
+        Err(_) => return out,
+    };
+    // Parse as generic toml::Value; only the [modules.<name>] subtables matter.
+    let parsed: toml::Value = match toml::from_str(&text) {
+        Ok(v) => v,
+        Err(_) => return out,
+    };
+    if let Some(modules_tbl) = parsed.get("modules").and_then(|v| v.as_table()) {
+        for name in modules_tbl.keys() {
+            out.insert(name.clone());
+        }
+    }
+    out
 }
 
 /// Read every module.toml at `<dir>/<name>/module.toml`. Sorted by
@@ -93,11 +132,17 @@ pub(crate) fn list_in_dir(dir: &Path) -> std::io::Result<Vec<ModuleSummary>> {
     Ok(modules)
 }
 
-/// `GET /v1/modules` — list every module manifest the host ships.
+/// `GET /v1/modules` — list every module manifest the host ships,
+/// each tagged with its active state (presence of `[modules.<name>]`
+/// in /etc/selfdef/modules.toml).
 pub(crate) async fn list() -> Result<Json<ModulesBody>, ApiError> {
     let dir = modules_dir();
-    let modules = list_in_dir(&dir)
+    let mut modules = list_in_dir(&dir)
         .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
+    let active = active_modules(&modules_toml());
+    for m in &mut modules {
+        m.active = active.contains(&m.name);
+    }
     Ok(Json(ModulesBody { modules_dir: dir, modules }))
 }
 
@@ -176,6 +221,58 @@ provides = ["alpha-thing"]
         let modules = list_in_dir(dir.path()).unwrap();
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].name, "good");
+    }
+
+    #[test]
+    fn active_modules_returns_empty_when_modules_toml_missing() {
+        let active = active_modules(std::path::Path::new(
+            "/tmp/nope-selfdef-modules-toml-does-not-exist",
+        ));
+        assert!(active.is_empty());
+    }
+
+    #[test]
+    fn active_modules_extracts_modules_subtable_keys() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("modules.toml");
+        fs::write(
+            &path,
+            r#"
+[modules.tetragon]
+config = "/etc/selfdef/modules/tetragon.toml"
+
+[modules.observability]
+
+[modules."agent-guard"]
+config = "/etc/selfdef/modules/agent-guard.toml"
+"#,
+        )
+        .unwrap();
+        let active = active_modules(&path);
+        assert_eq!(active.len(), 3);
+        assert!(active.contains("tetragon"));
+        assert!(active.contains("observability"));
+        assert!(active.contains("agent-guard"));
+    }
+
+    #[test]
+    fn active_modules_returns_empty_when_no_modules_subtable() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("modules.toml");
+        // Valid TOML but no [modules.*] sections.
+        fs::write(&path, "# operator hasn't activated anything yet\n").unwrap();
+        let active = active_modules(&path);
+        assert!(active.is_empty());
+    }
+
+    #[test]
+    fn active_modules_returns_empty_when_malformed_toml() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("modules.toml");
+        fs::write(&path, "{not valid toml").unwrap();
+        let active = active_modules(&path);
+        // Malformed file → empty set (graceful; dashboard shouldn't break).
+        assert!(active.is_empty());
     }
 
     #[test]

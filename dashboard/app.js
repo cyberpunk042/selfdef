@@ -557,19 +557,29 @@
     try {
       const body = await get("/v1/modules");
       const modules = body.modules || [];
-      countEl.textContent = `${modules.length}`;
+      const activeCount = modules.filter((m) => m.active).length;
+      countEl.textContent = `${activeCount}/${modules.length}`;
       countEl.className =
         "fa-aggregate " + (modules.length === 0 ? "fa-unknown" : "fa-ok");
-      metaEl.textContent = `dir: ${body.modules_dir || "(missing)"}`;
+      metaEl.textContent = `${activeCount} active / ${modules.length} shipped · dir: ${body.modules_dir || "(missing)"}`;
       ul.innerHTML = "";
       if (modules.length === 0) {
         setEmpty(ul, "no modules found at the configured dir");
         return;
       }
+      // Active first, then alphabetical.
+      modules.sort((a, b) => {
+        if (a.active !== b.active) return b.active - a.active;
+        return (a.name || "").localeCompare(b.name || "");
+      });
       for (const m of modules) {
         const li = document.createElement("li");
-        const color =
-          MODULE_CATEGORY_COLOR[m.category || ""] || "gray";
+        // Active modules render in their category color; inactive
+        // ones render as gray (operator can see what's installed
+        // but not turned on).
+        const color = m.active
+          ? MODULE_CATEGORY_COLOR[m.category || ""] || "gray"
+          : "gray";
         li.className = `fa-${color}`;
 
         const label = document.createElement("span");
@@ -578,13 +588,16 @@
 
         const badge = document.createElement("span");
         badge.className = `fa-badge fa-${color}`;
-        badge.textContent = (m.category || "—").toUpperCase();
+        badge.textContent = m.active
+          ? "ACTIVE"
+          : (m.category || "—").toUpperCase();
 
         const detail = document.createElement("span");
         detail.className = "fa-detail";
         const deps = (m.depends_on || []).length;
         const prov = (m.provides || []).length;
-        detail.textContent = `v${m.version || "?"} · ${m.summary || ""} · ${deps} dep · ${prov} prov`;
+        const cat = m.category || "—";
+        detail.textContent = `v${m.version || "?"} · [${cat}] · ${m.summary || ""} · ${deps} dep · ${prov} prov`;
 
         // No runbook per module yet — link to the module catalog doc.
         const link = document.createElement("a");
