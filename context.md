@@ -1537,3 +1537,12 @@ Total this resume: 197 selfdef IPS-authority crates. Workspace 362.
   OperatorLogout always RequireNewSession regardless of windows)
 
 Total this resume: 198 selfdef IPS-authority crates. Workspace 363.
+
+### Hundred-and-thirty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-delivery-ack-tracker` (MessageEntry{Status{Pending/
+  Delivered/DeadLetter}, retries_left, retry_count, last_nack_reason};
+  enqueue/ack/nack; nack decrements retries until 0 then transitions
+  DeadLettered on next nack; pending_count helper)
+
+Total this resume: 199 selfdef IPS-authority crates. Workspace 364.
