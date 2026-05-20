@@ -2434,3 +2434,11 @@ Total this resume: 300 selfdef IPS-authority crates. Workspace 465.
   position or None; supports negative scores)
 
 Total this resume: 301 selfdef IPS-authority crates. Workspace 466.
+
+### Two-hundred-and-thirty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prefix-sum` (push appends and updates cumulative
+  i128 sum; sum_range(lo, hi) returns cum[hi]-cum[lo] in O(1);
+  total exposes full sum; bad range rejected)
+
+Total this resume: 302 selfdef IPS-authority crates. Workspace 467.
