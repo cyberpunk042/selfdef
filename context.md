@@ -1419,3 +1419,14 @@ Total this resume: 185 selfdef IPS-authority crates. Workspace 350.
   force() bumps without CAS; delete then re-put starts fresh)
 
 Total this resume: 186 selfdef IPS-authority crates. Workspace 351.
+
+### Hundred-and-nineteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-token-bucket-rate-limit` (Bucket{capacity, refill_per_sec,
+  tokens, last_refill_ms, remainder_ms, granted_total, throttled_total};
+  integer math with remainder_ms for sub-second precision;
+  try_acquire refills then attempts consumption, returns Granted/
+  Throttled{available, requested}/Unknown; cap holds during long
+  elapses; zero refill never recovers)
+
+Total this resume: 187 selfdef IPS-authority crates. Workspace 352.
