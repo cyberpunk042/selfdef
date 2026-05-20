@@ -1229,3 +1229,11 @@ Total this resume: 165 selfdef IPS-authority crates. Workspace 330.
   for_policy; immutable once written)
 
 Total this resume: 166 selfdef IPS-authority crates. Workspace 331.
+
+### Ninety-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-stall-detector` (per-subject last_ts; observe monotonic;
+  check(now, stall_ms) returns Active{age}/Stalled{age, threshold}/
+  Unknown; stalled_subjects(now, threshold) lists currently-stalled)
+
+Total this resume: 167 selfdef IPS-authority crates. Workspace 332.
