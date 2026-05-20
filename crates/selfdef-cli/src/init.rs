@@ -773,10 +773,27 @@ runbook for the detail.
   # /etc/systemd/system/selfdef-doctor.timer (hourly)
   # See docs/dev/operator-health-check.md for the unit + timer.
 
+## 12. Four-watchdog set — IPS boundary enforcement (MS046+MS047+MS044+MS048)
+  # The package ships four cooperating watchdogs. All OFF by default;
+  # enable per deployment need. Full walkthrough: `selfdefctl wizard`.
+  $ sudo systemctl enable --now sovereign-guard.service    # MS046 friction-audit (boot-time hardware gate)
+  $ sudo systemctl enable --now selfdef-guardian.service   # MS044 Tetragon supervisor (3-step Responder)
+  $ sudo systemctl enable --now selfdef-scheduler.service  # MS048 Goldilocks routing (7-axis objective)
+  # MS047 perimeter is kernel-fence via Tetragon (no userspace service);
+  # the TracingPolicy is auto-installed by postinst at
+  #   /etc/tetragon/tracing-policies/sovereign-perimeter.yaml
+  # Verify:
+  $ selfdefctl doctor             # watchdog-set category
+  $ selfdefctl trio               # 4-panel snapshot
+  $ selfdefctl trio-tail          # live unified OCSF tail (Ctrl-C exits)
+  # Operator runbooks (20 total, 5 per watchdog):
+  #   ~/devops-solutions-information-hub/wiki/runbooks/
+  #   {friction-audit,perimeter,guardian,scheduler}-*.md
+
 ## Done.
 You now have a deployment that opts into every audit-shipped
-security feature. Re-run `selfdefctl doctor` whenever you
-change config or rotate keys.
+security feature plus the four-watchdog IPS spine. Re-run
+`selfdefctl doctor` whenever you change config or rotate keys.
 "#;
 
 #[cfg(test)]
