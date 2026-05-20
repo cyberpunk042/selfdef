@@ -1266,3 +1266,13 @@ Total this resume: 169 selfdef IPS-authority crates. Workspace 334.
   idempotent; allow/disallow manage the set)
 
 Total this resume: 170 selfdef IPS-authority crates. Workspace 335.
+
+### Hundred-and-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-path-allowlist-policy` (per-substrate SubstratePaths{
+  grants:Vec<PrefixGrant{prefix, Mode{Read/WriteOnly/ReadWrite}}>};
+  decide(path, mode) returns Allowed/DeniedMode{prefix, granted}/
+  DeniedNoMatch/Unknown; first matching prefix wins; grant() upserts;
+  RW satisfies all)
+
+Total this resume: 171 selfdef IPS-authority crates. Workspace 336.
