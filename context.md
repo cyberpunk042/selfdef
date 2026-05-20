@@ -2730,3 +2730,12 @@ Total this resume: 334 selfdef IPS-authority crates. Workspace 499.
   replay defense in the IPS admission path)
 
 Total this resume: 335 selfdef IPS-authority crates. Workspace 500.
+
+### Two-hundred-and-sixty-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tombstone-set` (mark(id, now) records tombstone with
+  expiry now+grace_ttl_ms; is_tombstoned(id, now) true iff
+  non-expired; re-mark extends expiry; compact(now) prunes;
+  prevents distributed delete→insert resurrection races)
+
+Total this resume: 336 selfdef IPS-authority crates. Workspace 501.
