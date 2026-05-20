@@ -1056,3 +1056,12 @@ Total this resume: 145 selfdef IPS-authority crates. Workspace 310.
   release returns Released/WrongLease/UnknownLease)
 
 Total this resume: 146 selfdef IPS-authority crates. Workspace 311.
+
+### Seventy-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-version-event` (actor → policy_id → last_version;
+  observe returns FirstSeen / UnchangedVersion / NewVersion{old,
+  new}; NewVersion fires exactly once per (actor, policy, version);
+  chrome surfaces 'policy updated' banner)
+
+Total this resume: 147 selfdef IPS-authority crates. Workspace 312.
