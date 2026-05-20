@@ -3675,6 +3675,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-exponential-backoff"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-fact-recall-cache-policy"
 version = "0.1.0"
 dependencies = [
