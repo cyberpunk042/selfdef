@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-text-redactor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS text redactor for literal-string patterns. add_literal(needle); redact(text) replaces each occurrence with `[REDACTED:<len>]`. Returns the redacted text and a count of replacements. Pure string crate; pairs with selfdef-secret-detection (which produces candidate needles)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
