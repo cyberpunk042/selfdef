@@ -2041,3 +2041,12 @@ Total this resume: 255 selfdef IPS-authority crates. Workspace 420.
   requires terminal; empty prefix tags the root)
 
 Total this resume: 256 selfdef IPS-authority crates. Workspace 421.
+
+### Hundred-and-eighty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-countdown-latch` (open-once latch on N arrivals;
+  arrive(by, now) decrements remaining; first hit of 0 sets
+  opened_at_ms + flips to Open permanently; post-Open arrivals
+  counted as excess)
+
+Total this resume: 257 selfdef IPS-authority crates. Workspace 422.
