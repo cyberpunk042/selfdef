@@ -1938,3 +1938,11 @@ Total this resume: 243 selfdef IPS-authority crates. Workspace 408.
   removed-node keys)
 
 Total this resume: 244 selfdef IPS-authority crates. Workspace 409.
+
+### Hundred-and-seventy-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-hysteresis-band` (State{Low/High} with two thresholds;
+  Low→High when sample>=upper; High→Low when sample<=lower;
+  in-band samples leave state unchanged; transitions counter)
+
+Total this resume: 245 selfdef IPS-authority crates. Workspace 410.
