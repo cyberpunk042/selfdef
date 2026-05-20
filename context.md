@@ -1672,3 +1672,12 @@ Total this resume: 211 selfdef IPS-authority crates. Workspace 376.
   lists eligible)
 
 Total this resume: 212 selfdef IPS-authority crates. Workspace 377.
+
+### Hundred-and-forty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-lru-cache` (Entry{value, tick}; get touches recency
+  (next_tick++); peek does not; put evicts lowest-tick on capacity
+  overflow + counts evictions; update of existing key touches
+  without evicting; hits/misses telemetry)
+
+Total this resume: 213 selfdef IPS-authority crates. Workspace 378.
