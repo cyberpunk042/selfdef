@@ -1335,3 +1335,12 @@ Total this resume: 176 selfdef IPS-authority crates. Workspace 341.
   advances next-seq past observed but rejects backward recovery)
 
 Total this resume: 177 selfdef IPS-authority crates. Workspace 342.
+
+### Hundred-and-tenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-slo-budget-tracker` (Slo{target_bp 1..=10000, successes,
+  failures}; Budget{total, allowed_failures = total × (1-target),
+  actual_failures, remaining, burn_ratio_bp, exhausted}; targets
+  in basis points (9990 = 99.9%); exhausts when actual >= allowed)
+
+Total this resume: 178 selfdef IPS-authority crates. Workspace 343.
