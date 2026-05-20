@@ -2512,3 +2512,12 @@ Total this resume: 309 selfdef IPS-authority crates. Workspace 474.
   one-way; duplicate/non-required approvers rejected)
 
 Total this resume: 310 selfdef IPS-authority crates. Workspace 475.
+
+### Two-hundred-and-forty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-min-max-tracker` (online tracker over i64 stream;
+  observe updates count + sum (i128) + min + max in O(1);
+  mean = sum/count (None if empty); reset clears; supports
+  negative values)
+
+Total this resume: 311 selfdef IPS-authority crates. Workspace 476.
