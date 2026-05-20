@@ -2613,3 +2613,11 @@ Total this resume: 321 selfdef IPS-authority crates. Workspace 486.
   count; per-key single-flight)
 
 Total this resume: 322 selfdef IPS-authority crates. Workspace 487.
+
+### Two-hundred-and-fifty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-listener-set` (topic→listener-id BTreeSet;
+  subscribe idempotent; unsubscribe drops (and removes empty
+  topic); listeners_for sorted; topics_for filters)
+
+Total this resume: 323 selfdef IPS-authority crates. Workspace 488.
