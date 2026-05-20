@@ -2845,3 +2845,13 @@ Total this resume: 346 selfdef IPS-authority crates. Workspace 511.
   next-highest of EACH key — no hot spot)
 
 Total this resume: 347 selfdef IPS-authority crates. Workspace 512.
+
+### Two-hundred-and-eightieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-denylist-store` (Entry{reason, added_at_ms,
+  expires_at_ms}; add(key, reason, now, ttl_ms) inserts
+  (ttl=0 permanent); denied(key, now) true iff entry exists
+  AND non-expired; reason returns audit string even for
+  expired; compact prunes)
+
+Total this resume: 348 selfdef IPS-authority crates. Workspace 513.
