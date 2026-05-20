@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-feature-gate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS feature gate consulting detected hardware capabilities. Each feature has a Vec<Requirement> (Avx2/Avx512/Neon/NvidiaGpu/RamAtLeastGB/CoresAtLeast); classify(feature_id, snapshot) returns Enabled/Disabled{missing}/UnknownFeature. Pure descriptor; pairs with selfdef-hardware (introspection) so call-sites can opt into optimized paths only when the substrate supports them."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
