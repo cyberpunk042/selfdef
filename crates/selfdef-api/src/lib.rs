@@ -99,6 +99,7 @@ pub const MAX_SSE_SUBSCRIBERS_PER_TOKEN: usize = handlers::MAX_SSE_SUBSCRIBERS_P
 use axum::Router;
 use axum::routing::{get, post};
 use tower_http::cors::CorsLayer;
+use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 /// Build the API router. Exposed so integration tests can call routes
@@ -109,8 +110,37 @@ use tower_http::trace::TraceLayer;
 /// middleware and the TCP transport adds the bearer-token verifier.
 /// Integration tests that want to exercise control endpoints can apply
 /// [`with_full_capability`] to grant the test request the Full grant.
+/// Default filesystem location of the bundled PWA dashboard assets when
+/// installed by the Debian package. Override via the optional
+/// `SELFDEF_DASHBOARD_DIR` env var.
+pub const DEFAULT_DASHBOARD_DIR: &str = "/usr/share/selfdef/dashboard";
+
+/// MS043 F05093 — minimal local web fallback. Returns the dashboard
+/// directory the API should serve under `/dashboard/*`. Honors the env
+/// var override (used during local dev when running from a checkout)
+/// and returns None when the directory doesn't exist (the route is
+/// then simply not mounted; `/v1/*` endpoints still work).
+#[must_use]
+pub fn dashboard_dir() -> Option<std::path::PathBuf> {
+    let p = std::env::var("SELFDEF_DASHBOARD_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from(DEFAULT_DASHBOARD_DIR));
+    if p.is_dir() { Some(p) } else { None }
+}
+
 pub fn router(state: ApiState) -> Router {
-    Router::new()
+    let mut router = Router::new();
+    // MS043 F05093 / F05096 — mount the bundled PWA dashboard under
+    // `/dashboard/*` when its asset directory is present. Operators
+    // running the API on a TCP transport then have the same surface
+    // the dashboard PWA shows, served from selfdefd itself with no
+    // external web server. Skipped (silently) when the asset dir is
+    // missing — e.g. cargo-deb didn't install it OR the operator
+    // overrode SELFDEF_DASHBOARD_DIR to a path that doesn't exist.
+    if let Some(dir) = dashboard_dir() {
+        router = router.nest_service("/dashboard", ServeDir::new(dir));
+    }
+    router
         // ---- read endpoints ----
         .route("/status", get(handlers::status))
         .route("/events", get(handlers::events))

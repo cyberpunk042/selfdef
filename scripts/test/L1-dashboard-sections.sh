@@ -65,9 +65,27 @@ for class in fa-ok fa-fail fa-override fa-unknown fa-alert fa-extended fa-degrad
     check "CSS: .fa-aggregate.${class}" "${CSS}" "\.fa-aggregate\.${class}" || failures=$((failures + 1))
 done
 
+# MS043 F05093 — dashboard assets shipped by cargo-deb to
+# /usr/share/selfdef/dashboard/* so selfdef-api can serve them at
+# runtime under /dashboard/*.
+DAEMON_CARGO="${DAEMON_CARGO:-crates/selfdef-daemon/Cargo.toml}"
+for asset in index.html app.js dashboard.css manifest.json service-worker.js; do
+    check "cargo-deb: ships dashboard/${asset}" "${DAEMON_CARGO}" \
+        "dashboard/${asset}.*usr/share/selfdef/dashboard" || failures=$((failures + 1))
+done
+
+# selfdef-api wires the ServeDir mount.
+API_LIB="${API_LIB:-crates/selfdef-api/src/lib.rs}"
+check "selfdef-api: ServeDir import" "${API_LIB}" 'use tower_http::services::ServeDir' \
+    || failures=$((failures + 1))
+check "selfdef-api: DEFAULT_DASHBOARD_DIR const" "${API_LIB}" 'DEFAULT_DASHBOARD_DIR' \
+    || failures=$((failures + 1))
+check "selfdef-api: nest_service /dashboard" "${API_LIB}" 'nest_service\("/dashboard"' \
+    || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-dashboard-sections FAIL: ${failures} drift(s) detected"
     exit 1
 fi
 
-echo "L1-dashboard-sections PASS: all three-watchdog-trio dashboard sections + handlers + intervals + endpoints + aggregate styles present"
+echo "L1-dashboard-sections PASS: all three-watchdog-trio dashboard sections + handlers + intervals + endpoints + aggregate styles + serving wiring present"

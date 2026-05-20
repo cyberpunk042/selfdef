@@ -103,6 +103,14 @@ assets = [
     ["../../packaging/systemd/sovereign-guard.service",  "/usr/share/selfdef/",                    "644"],
     ["../../packaging/tetragon-policies/sovereign-perimeter.yaml", "/usr/share/selfdef/",          "644"],
     ["../../packaging/systemd/selfdef-guardian.service", "/usr/share/selfdef/",                    "644"],
+    # MS043 F05093 — bundled PWA dashboard assets served by selfdef-api
+    # under /dashboard/* when the directory is present at the path
+    # selfdef_api::DEFAULT_DASHBOARD_DIR (/usr/share/selfdef/dashboard).
+    ["../../dashboard/index.html",                       "/usr/share/selfdef/dashboard/",          "644"],
+    ["../../dashboard/app.js",                           "/usr/share/selfdef/dashboard/",          "644"],
+    ["../../dashboard/dashboard.css",                    "/usr/share/selfdef/dashboard/",          "644"],
+    ["../../dashboard/manifest.json",                    "/usr/share/selfdef/dashboard/",          "644"],
+    ["../../dashboard/service-worker.js",                "/usr/share/selfdef/dashboard/",          "644"],
     ["../../config/selfdef.toml.example",                "/usr/share/selfdef/",                    "644"],
     ["../../README.md",                                  "/usr/share/doc/selfdef-daemon/",         "644"],
     ["../../ARCHITECTURE.md",                            "/usr/share/doc/selfdef-daemon/",         "644"],
