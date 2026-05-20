@@ -1,0 +1,22 @@
+[package]
+name = "selfdef-guardian-mirror"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "MS007 typed-mirror crate exposing selfdef Guardian Daemon (sain-01 §10 guardian-core) Verdict state READ-ONLY for sovereign-os M066 cockpit + selfdef MS043 TUI authority-panel binding. Implements MS044 R10481-R10485."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
+sovereign-os-consumer = []
