@@ -832,3 +832,12 @@ Total this resume: 120 selfdef IPS-authority crates. Workspace 285.
   UnknownProfile; type-mismatch counts as OutOfBound)
 
 Total this resume: 121 selfdef IPS-authority crates. Workspace 286.
+
+### Fifty-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-bus-deadletter-policy` (EventTrack{attempts,
+  dead_lettered}; record_attempt → Delivered (clears) / Retry
+  {attempts} / DeadLetter{attempts} / AlreadyDead; revive
+  resets; dead_letter_ids reports current DLQ set)
+
+Total this resume: 122 selfdef IPS-authority crates. Workspace 287.
