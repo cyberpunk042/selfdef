@@ -914,3 +914,12 @@ Total this resume: 129 selfdef IPS-authority crates. Workspace 294.
   order reviewers→age→operator)
 
 Total this resume: 130 selfdef IPS-authority crates. Workspace 295.
+
+### Sixty-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-scrutiny-amplifier` (Tier Normal<Elevated<High
+  <Critical based on per-actor failures within window_ms; record
+  monotonic; ok=true doesn't count; rotate evicts stale;
+  downstream policies decide what to gate)
+
+Total this resume: 131 selfdef IPS-authority crates. Workspace 296.
