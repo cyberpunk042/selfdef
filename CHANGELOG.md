@@ -6,6 +6,137 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS046 + MS047 + MS048 production landings + four-watchdog operator-discoverability (2026-05-20)
+
+The four-watchdog set (MS046 friction-audit + MS047 perimeter + MS044
+guardian + MS048 Goldilocks scheduler) is now end-to-end deployable as
+a Debian package, with operator-discoverable entry points from
+`dpkg -s selfdef-daemon` all the way through to the PWA dashboard +
+Grafana + 20 operator runbooks.
+
+#### What shipped (MS046 friction-audit — hardware-integrity gate, sain-01 §5)
+
+- `packaging/scripts/friction-audit.sh` — verbatim sain-01 §5 transposition
+  with 3 gates (PCIe ≥ x8/x8 + ZFS healthy + memory geometry), 2000ms
+  timeout watchdog, OCSF + ring-buffer emission
+- `packaging/systemd/sovereign-guard.service` — boot-time gate unit
+  (Type=oneshot, ordered Before=podman/docker/containerd)
+- `crates/selfdef-friction-audit-mirror` (14 tests) — MS007 typed mirror
+- `crates/selfdef-friction-audit` (23 tests) — runtime authority crate
+  (operator-signed override manifests, MS003 multi-sig, audit chain)
+- `crates/selfdef-cli` — `selfdefctl friction-audit {show,history,replay}`
+- `crates/selfdef-api` — `GET /v1/friction-audit{,/history}`
+- 5 operator runbooks (`friction-audit-{pcie,zfs,memory,immutability,signature}.md`)
+- `packaging/test/L2-friction-audit.bats` (20 tests)
+- Sovereign-os cockpit consumer: `sovereign-cockpit-friction-audit-panel`
+
+#### What shipped (MS047 perimeter — kernel-fence, sain-01 §6)
+
+- `packaging/tetragon-policies/sovereign-perimeter.yaml` — verbatim sain-01
+  §6 TracingPolicy (kprobe sys_execve NotIn allowlist + Sigkill matchAction)
+- `crates/selfdef-perimeter-mirror` (17 tests) — MS007 typed mirror
+- `crates/selfdef-perimeter` (30 tests) — runtime authority crate
+  (allowlist-extension manifest loader, MS003 multi-sig, OCSF + ZFS log
+  bridge, SHA-256 audit chain, 30-day TTL bound)
+- `crates/selfdef-cli` — `selfdefctl perimeter {show,history,extend,revoke,audit-cycle replay}`
+- `crates/selfdef-api` — `GET /v1/perimeter{,/history}`
+- `packaging/debian/postinst` — installs TracingPolicy YAML + chattr +i
+- 5 operator runbooks (`perimeter-{tetragon-not-running,policy-load-failure,extension-create,sigkill-investigation,key-rotation}.md`)
+- `packaging/test/L2-perimeter.bats` (23 tests)
+- Sovereign-os cockpit consumer: `sovereign-cockpit-perimeter-panel`
+- SDD-028 spec + MS047 catalog (240 R-rows)
+
+#### What shipped (MS044 guardian — Stage-1 production executable, sain-01 §10)
+
+(MS044 first appeared in the 2026-05-19 entry as a Python scaffold; this
+round delivers the Rust production daemon.)
+
+- `crates/selfdef-guardian-mirror` (16 tests) — MS007 typed mirror
+- `crates/selfdef-guardian` (21 tests + end-to-end mock-socket smoke
+  test) — runtime authority crate (TetragonEvent ingester, classify(),
+  Effector trait, Responder 3-step orchestrator, CircuitBreaker,
+  OCSF emission, audit chain)
+- `crates/selfdef-guardian/src/bin/selfdef-guardian.rs` — **Stage-1
+  daemon executable**: Tetragon UNIX-socket consumer with reconnect-on-
+  EOF + circuit breaker; closes the library→executable production gap.
+- `packaging/systemd/selfdef-guardian.service` — Type=simple Restart=always,
+  hardened (Ring 0 per MS039 + full systemd-analyze security baseline)
+- `crates/selfdef-cli` — `selfdefctl guardian {show,history,replay,rollback}`
+- `crates/selfdef-api` — `GET /v1/guardian{,/history}`
+- 5 operator runbooks (`guardian-{not-running,socket-unreachable,false-positive-rollback,audit-log-corruption,console-alert-investigation}.md`)
+- `packaging/test/L2-guardian.bats` (35 tests)
+- Sovereign-os cockpit consumer: `sovereign-cockpit-guardian-panel`
+- SDD-029 spec
+
+#### What shipped (MS048 Goldilocks Scheduler — routing layer, avx-plus-plus dump tail)
+
+The avx-plus-plus dump tail (lines 18000-18250) cataloged five concrete
+scheduling surfaces + 7-axis objective + per-profile rule tuples; this
+round creates MS048 from a backward-sweep review + ships it end-to-end.
+
+- `backlog/milestones/MS048-*.md` — new milestone catalog (247 R-rows)
+- `docs/sdd/031-goldilocks-scheduler.md` — 11-deliverable production spec
+- `crates/selfdef-scheduler-mirror` (20 tests) — MS007 typed mirror
+- `crates/selfdef-scheduler` (31 tests) — runtime authority crate:
+  - `ProfileRules::for_profile()` — verbatim 6 per-profile rule tuples
+  - `AxisWeights::for_profile()` — per-profile 7-axis weight matrix
+  - `evaluate_objective(signals, profile)` — 7-axis compound scorer
+  - `BackpressureMonitor` — 5 surfaces × thresholds × hysteresis
+  - `emit_audit_entry()` + `audit_chain_check()` — SHA-256 chain
+  - `replay()` — counterfactual replay against alternate profile
+- `crates/selfdef-scheduler/src/bin/selfdef-scheduler.rs` — **Stage-1
+  daemon executable**: PSI ingester + heartbeat decision loop + ring
+  buffer + audit log emission; closes the library→executable production gap.
+- `packaging/systemd/selfdef-scheduler.service` — Type=simple Restart=always,
+  hardened (Ring 0)
+- `crates/selfdef-cli` — `selfdefctl scheduler {show,history,explain,replay,weights,force,audit-cycle replay}` (7 subverbs)
+- `crates/selfdef-api` — `GET /v1/scheduler{,/history,/backpressure,/weights,/explain/:id}` (5 routes)
+- 5 operator runbooks (`scheduler-{not-running,backpressure-stuck-open,weight-matrix-rotation,audit-log-corruption,force-override-investigation}.md`)
+- `packaging/test/L2-scheduler.bats` (18 tests)
+- Sovereign-os cockpit consumer: `sovereign-cockpit-scheduler-panel` (14 tests)
+
+#### Cross-cutting four-watchdog operator surface
+
+- `selfdefctl trio [--json] [--watch N]` — consolidated 4-panel snapshot
+- `selfdefctl trio-tail [--interval-ms N] [--json]` — unified live OCSF
+  tail across all four watchdogs
+- `selfdefctl doctor` — new `watchdog-set` category reports per-watchdog
+  deployability (binary + unit + ring dir + supporting infrastructure)
+- `selfdefctl wizard` Step 5 — first-time-operator four-watchdog enablement
+- `selfdefctl init checklist` Step 12 — same on the first-run checklist
+- README — new "Four-watchdog set (IPS spine)" section
+- Debian package `extended-description` — names all four watchdogs
+- PWA dashboard — 4 panels (friction-audit + perimeter + guardian + scheduler)
+  with auto-refresh + runbook links; `/dashboard/*` now served from
+  selfdef-api when `SELFDEF_DASHBOARD_DIR` resolves
+- Grafana template (`modules/observability/`) — 9 new four-watchdog panels
+  + Prometheus emission via new `selfdef-api::watchdog_metrics` (15 series)
+- `selfdef-doctor.timer` + `.service` — hourly `selfdefctl doctor` periodic
+  run (closes init checklist Step 11 vaporware gap)
+
+#### Coherence harness (lockfile against drift)
+
+- `scripts/test/coherence.sh` — 11-layer orchestrator runs every L1+L2
+  gate + cargo unit suites on demand:
+  - L1-perimeter-yaml-lint.sh (verbatim sain-01 §6 TracingPolicy)
+  - L1-cli-surface.sh (4 watchdog command subverb counts locked)
+  - L1-api-endpoints.sh (11 routes locked)
+  - L1-dashboard-sections.sh (HTML + JS + CSS + cargo-deb shipping)
+  - L1-grafana-template.sh (11 four-watchdog series locked)
+  - L2-{friction-audit,perimeter,guardian,scheduler,doctor-timer}.bats (auto-glob)
+  - cargo test across the 9 four-watchdog crates + selfdef-api
+
+#### Cross-repo + info-hub deliverables
+
+- Sovereign-os: 4 new cockpit panel crates, project-boundary preserved
+  (zero selfdef-crate deps; reads selfdef-emitted JSON at the filesystem
+  boundary)
+- Info-hub: 20 operator runbooks (5 per watchdog) + 1 backward-sweep
+  review note (`2026-05-20-avx-plus-plus-dump-tail-backward-sweep-review.md`)
+  + 1 UX coherence failures runbook
+- Selfdef MS040 + MS034 — source addenda recording the dump-tail
+  elaboration links (without supplanting the original catalog scope)
+
 ### Added — MS007 8/8 SATURATED typed-mirror trio (9 of 9 crates) + MS044 Guardian Daemon + MS045 UX harness + minimal-web bundle (2026-05-19)
 
 The cross-repo cockpit-facing surface (per MS043 IPS operator surface catalog) is now complete: 9 typed-mirror crates exposing READ-ONLY snapshots to sovereign-os D-12..D-18 dashboards, the Guardian Daemon active-defence loop, the UX coherence test harness, and the localhost:7575 minimal-web fallback.
