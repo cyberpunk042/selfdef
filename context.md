@@ -2943,3 +2943,13 @@ Total this resume: 356 selfdef IPS-authority crates. Workspace 521.
   can_undo/can_redo)
 
 Total this resume: 357 selfdef IPS-authority crates. Workspace 522.
+
+### Two-hundred-and-ninetieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-idempotency-key-store` (Entry{request_fingerprint,
+  response_status/body, committed, expires_at_ms};
+  begin(key, fp, now) → New (proceed), InProgress (same fp
+  not committed), Replay{status, body} (committed), or
+  Conflict (fp mismatch); commit records response)
+
+Total this resume: 358 selfdef IPS-authority crates. Workspace 523.
