@@ -652,3 +652,14 @@ Total this resume: 98 selfdef IPS-authority crates. Workspace 263.
   Action/Unconfigured; sequential-depth lane distinct from fanout)
 
 Total this resume: 100 selfdef IPS-authority crates. Workspace 265.
+
+### Thirty-fourth wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-event-bus-backpressure` (per-event-kind (high_water,
+  cap, pending); enqueue → Accepted/HighWater/Saturated/UnknownKind;
+  dequeue saturates at 0)
+- `selfdef-grant-issuance-cooldown` (per-template cooldown_ms;
+  record_issued + classify Ready/Cooldown{ready_at_ms}; per-
+  template independent; rotate drops expired)
+
+Total this resume: 102 selfdef IPS-authority crates. Workspace 267.
