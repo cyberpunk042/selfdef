@@ -5354,6 +5354,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-readiness-gate"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-recovery-snapshot-authority"
 version = "0.1.0"
 dependencies = [
