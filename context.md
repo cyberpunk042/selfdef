@@ -2675,3 +2675,12 @@ Total this resume: 328 selfdef IPS-authority crates. Workspace 493.
   value(now) read-only; reset clears; saturates at zero)
 
 Total this resume: 329 selfdef IPS-authority crates. Workspace 494.
+
+### Two-hundred-and-sixty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-count-min-sketch` (depth*width u64 cell grid;
+  add(key,n) hashes key into d distinct columns FNV-1a-64 +
+  per-row seed and adds n to each; estimate returns min across
+  rows — Count-Min upper bound; reset zeros)
+
+Total this resume: 330 selfdef IPS-authority crates. Workspace 495.
