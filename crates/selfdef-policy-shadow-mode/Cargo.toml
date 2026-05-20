@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-shadow-mode"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS shadow-mode for new/modified policies. Each policy_id has a Mode{Off/Shadow/Enforce}; classify_apply(policy_id, would_block) returns Allow/Block/ShadowBlock{recorded:true}. ShadowBlock means 'this policy would have blocked, but we let it through'. Pure decider; the recorder writes shadow events to the audit log."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
