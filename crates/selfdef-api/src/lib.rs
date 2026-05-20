@@ -176,6 +176,7 @@ pub fn router(state: ApiState) -> Router {
         // Read-only — module activation goes through the CLI's
         // operator-confirmed `selfdefctl modules apply` flow.
         .route("/v1/modules", get(modules::list))
+        .route("/v1/modules/:name", get(modules::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

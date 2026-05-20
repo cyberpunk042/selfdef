@@ -18,6 +18,7 @@
 use std::path::{Path, PathBuf};
 
 use axum::Json;
+use axum::extract::Path as AxumPath;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
@@ -146,16 +147,54 @@ pub(crate) async fn list() -> Result<Json<ModulesBody>, ApiError> {
     Ok(Json(ModulesBody { modules_dir: dir, modules }))
 }
 
+/// `GET /v1/modules/:name` — single-module drill-down. Operator
+/// dashboards link to this from the modules-list panel.
+///
+/// Validates the name to prevent directory traversal — only
+/// `[a-z0-9-]+` accepted (matches the kebab-case convention shipped
+/// modules already use).
+pub(crate) async fn show(
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<ModuleSummary>, ApiError> {
+    // Validate name — only kebab-case + lowercase to defeat directory
+    // traversal + symlink shenanigans. Operator modules are uniformly
+    // [a-z0-9-]+ per docs/dev/modules.md naming convention.
+    if name.is_empty()
+        || name.len() > 64
+        || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err(ApiError::NotFound(format!(
+            "invalid module name: {name:?} (must be kebab-case [a-z0-9-]+)"
+        )));
+    }
+    let dir = modules_dir();
+    let manifest = dir.join(&name).join("module.toml");
+    if !manifest.is_file() {
+        return Err(ApiError::NotFound(format!("module {name:?} not found")));
+    }
+    let bytes = std::fs::read_to_string(&manifest)
+        .map_err(|e| ApiError::Internal(format!("read {}: {e}", manifest.display())))?;
+    let mut module: ModuleSummary = toml::from_str(&bytes)
+        .map_err(|e| ApiError::Internal(format!("parse {}: {e}", manifest.display())))?;
+    // Tag with active state from /etc/selfdef/modules.toml.
+    let active = active_modules(&modules_toml());
+    module.active = active.contains(&module.name);
+    Ok(Json(module))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApiError {
     #[error("internal: {0}")]
     Internal(String),
+    #[error("not found: {0}")]
+    NotFound(String),
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         let (status, msg) = match self {
             Self::Internal(m) => (StatusCode::INTERNAL_SERVER_ERROR, m),
+            Self::NotFound(m) => (StatusCode::NOT_FOUND, m),
         };
         (status, Json(serde_json::json!({"error": msg}))).into_response()
     }

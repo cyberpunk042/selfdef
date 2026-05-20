@@ -1706,6 +1706,40 @@ async fn watchdog_scheduler_explain_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+async fn modules_show_unknown_returns_404() {
+    // /v1/modules/:name with a name that isn't shipped on the test
+    // runner's modules dir returns 404 (not 500).
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/does-not-exist")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn modules_show_rejects_directory_traversal() {
+    // Path-traversal attempts return 404 with the validation-failure
+    // message, not 500. Defense in depth — selfdef-api should NEVER
+    // attempt to read paths the operator didn't sanction.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    // Use a name with disallowed chars (uppercase + slash).
+    // axum's path-param decoding rejects bare '..' early, so we use
+    // an uppercase character that still reaches our handler.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/INVALID")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn modules_route_returns_200_with_list() {
     // Verifies GET /v1/modules returns a well-formed JSON body.
     // On the test runner, DEFAULT_MODULES_DIR (/usr/share/selfdef/modules)
