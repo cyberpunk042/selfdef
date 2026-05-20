@@ -2759,3 +2759,12 @@ Total this resume: 337 selfdef IPS-authority crates. Workspace 502.
   exceed nominal rate)
 
 Total this resume: 338 selfdef IPS-authority crates. Workspace 503.
+
+### Two-hundred-and-seventy-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-warmup-ramp` (cap(now) = floor + (target - floor) *
+  elapsed / warmup_ms, clamped to [floor, target]; elapsed =
+  now - start_ms saturating; ramped(now) true at full target;
+  mitigates thundering-herd on restart)
+
+Total this resume: 339 selfdef IPS-authority crates. Workspace 504.
