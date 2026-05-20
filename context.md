@@ -697,3 +697,11 @@ Total this resume: 105 selfdef IPS-authority crates. Workspace 270.
   tool then Summarize assistant/user; pure descriptor)
 
 Total this resume: 106 selfdef IPS-authority crates. Workspace 271.
+
+### Thirty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-collector-staleness-policy` (per-source freshness budget;
+  set_budget/record/classify; verdicts Fresh{age}/Stale{age,
+  budget}/Unknown/Unconfigured; record is monotonic)
+
+Total this resume: 107 selfdef IPS-authority crates. Workspace 272.
