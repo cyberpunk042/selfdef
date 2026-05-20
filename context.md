@@ -1817,3 +1817,11 @@ Total this resume: 228 selfdef IPS-authority crates. Workspace 393.
   desc with alpha tie-break; grand_total sums; clear resets)
 
 Total this resume: 229 selfdef IPS-authority crates. Workspace 394.
+
+### Hundred-and-sixty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-spec-validator` (Spec{name, required:BTreeSet,
+  forbidden:BTreeSet}; check(name, present) returns Issue list of
+  MissingRequired or ForbiddenPresent per field)
+
+Total this resume: 230 selfdef IPS-authority crates. Workspace 395.
