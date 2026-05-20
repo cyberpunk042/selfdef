@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-cpu-affinity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate per-Profile CPU-affinity mask. classify(profile, requested_core) → Allowed / Denied{allowed} / Unconfigured. The mask is a BTreeSet<u32> of permitted logical-core ids; canonical config carves up the host so Production stays on its dedicated cores and Experimental gets the rest."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
