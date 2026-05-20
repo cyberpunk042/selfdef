@@ -1981,3 +1981,12 @@ Total this resume: 248 selfdef IPS-authority crates. Workspace 413.
   decrement winner by total_weight)
 
 Total this resume: 249 selfdef IPS-authority crates. Workspace 414.
+
+### Hundred-and-eighty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-interval-set` (sorted disjoint closed [lo,hi] intervals;
+  insert merges overlap+adjacent (hi+1==lo); contains uses
+  binary search; cover() sums widths as u128; bridging insert
+  collapses multiple intervals)
+
+Total this resume: 250 selfdef IPS-authority crates. Workspace 415.
