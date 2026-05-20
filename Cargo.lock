@@ -3961,6 +3961,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-network-egress-domain-allowlist"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-network-rule-pack"
 version = "0.1.0"
 dependencies = [

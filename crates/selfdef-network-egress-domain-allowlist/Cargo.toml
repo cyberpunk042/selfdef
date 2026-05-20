@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-network-egress-domain-allowlist"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile FQDN allowlist for outbound traffic. classify(profile, host) returns Allowed{matched} / Denied{allowed_count} / Unconfigured. Matches: exact (api.example.com), wildcard subdomain (*.example.com), full wildcard (*). Pairs with selfdef-network-egress-decision (allow/deny semantics) and selfdef-substrate-network-egress-quota (byte budget)."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
