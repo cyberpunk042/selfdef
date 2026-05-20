@@ -1955,3 +1955,11 @@ Total this resume: 245 selfdef IPS-authority crates. Workspace 410.
 
 Total this resume: 246 selfdef IPS-authority crates. Workspace 411.
 
+
+### Hundred-and-seventy-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-exponential-moving-average` (alpha_bp 1..=10000; first
+  sample seeds; subsequent samples blend ema=(alpha*sample+
+  (10000-alpha)*ema)/10000; state carried as i128 scaled 10000)
+
+Total this resume: 247 selfdef IPS-authority crates. Workspace 412.
