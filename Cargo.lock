@@ -3977,6 +3977,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-mcp-tool-namespace-scope"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-mcp-tool-trust-tier"
 version = "0.1.0"
 dependencies = [

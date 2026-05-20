@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-mcp-tool-namespace-scope"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-MCP-tool allowed-namespace scope. allow(tool_id, namespace); classify(tool_id, namespace) returns Allowed/Denied{allowed}/UnknownTool. The literal '*' admits any namespace. Distinct from selfdef-mcp-tool-trust-tier (per-tool trust) — this is the per-tool caller-scope lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
