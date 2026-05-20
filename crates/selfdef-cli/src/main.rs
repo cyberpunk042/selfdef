@@ -199,6 +199,10 @@ enum Command {
         /// Machine-readable JSON output.
         #[arg(long)]
         json: bool,
+        /// Watch-mode: clear+redraw every N seconds until Ctrl-C.
+        /// Ignored when --json is set. 0 (default) means render once.
+        #[arg(long, default_value_t = 0)]
+        watch: u32,
     },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
@@ -1526,8 +1530,8 @@ async fn main() -> Result<()> {
             };
             std::process::exit(exit);
         }
-        Command::Trio { json } => {
-            let exit = trio::run(json).context("trio")?;
+        Command::Trio { json, watch } => {
+            let exit = trio::run(json, watch).context("trio")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

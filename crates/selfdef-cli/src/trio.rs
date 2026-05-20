@@ -30,7 +30,44 @@ use selfdef_perimeter::{
     DEFAULT_POLICY_PATH, DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR,
 };
 
-pub(crate) fn run(json: bool) -> Result<i32> {
+pub(crate) fn run(json: bool, watch_secs: u32) -> Result<i32> {
+    // --json + --watch is nonsensical (JSON is one-shot machine-readable).
+    // Honor --json and ignore --watch.
+    if json || watch_secs == 0 {
+        return render_once(json);
+    }
+    // Watch mode: clear + redraw every watch_secs seconds.
+    // ANSI escape: ESC[2J clears screen, ESC[H homes cursor.
+    loop {
+        // Clear + home.
+        print!("\x1b[2J\x1b[H");
+        // Inline timestamp banner for at-a-glance freshness.
+        let now = chrono_now_iso();
+        println!("[watch · refresh every {watch_secs}s · {now}] — Ctrl-C to exit");
+        let _ = render_once(false)?;
+        // Sleep — Ctrl-C breaks the sleep + process exits with 130, which
+        // is the standard convention. No explicit signal handler needed
+        // for an interactive CLI.
+        std::thread::sleep(std::time::Duration::from_secs(u64::from(watch_secs)));
+    }
+}
+
+fn chrono_now_iso() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Avoid pulling chrono just for this; render ms-since-epoch + a
+    // human "Hms" derivation from secs % day.
+    let day_secs = secs % 86_400;
+    let h = day_secs / 3600;
+    let m = (day_secs % 3600) / 60;
+    let s = day_secs % 60;
+    format!("{secs}s epoch · {h:02}:{m:02}:{s:02} UTC")
+}
+
+fn render_once(json: bool) -> Result<i32> {
     let now = now_ms();
 
     // friction-audit snapshot
