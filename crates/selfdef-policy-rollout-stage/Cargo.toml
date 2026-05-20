@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-rollout-stage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS staged-rollout selector. Each policy_id has a Stage{Disabled / Canary{percent_ppm} / Beta{percent_ppm} / Stable}. classify(policy_id, actor_hash) returns InScope / OutOfScope / Unknown — InScope when the actor_hash falls below the stage's percent_ppm of 1_000_000. Pure deterministic selector — pairs with selfdef-policy-shadow-mode for gradual enforcement."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
