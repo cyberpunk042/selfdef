@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-block-attempt-counter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS counter of denied/blocked attempts per (actor, action_kind) pair, with cumulative count, last_attempt_ts, and last_block_reason. record(actor, action_kind, ts, blocked, reason). stats(actor, kind) returns the entry. distinct from selfdef-decision-scrutiny-amplifier (scrutiny tier) — this is the dashboard-surfacing lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
