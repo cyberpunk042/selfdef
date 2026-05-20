@@ -992,3 +992,12 @@ Total this resume: 138 selfdef IPS-authority crates. Workspace 303.
   pinned actors on prior bundle while the rest migrate)
 
 Total this resume: 139 selfdef IPS-authority crates. Workspace 304.
+
+### Seventy-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-trace-budget` (Counter{max_spans, used}; start/
+  admit/finish; admit returns Accepted{used}/Exhausted{cap}/
+  UnknownAction; absolute-cap lane distinct from probabilistic
+  trace-sampling-policy)
+
+Total this resume: 140 selfdef IPS-authority crates. Workspace 305.
