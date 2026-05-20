@@ -1,15 +1,22 @@
-//! `selfdefctl trio` — consolidated three-watchdog-trio operator view.
+//! `selfdefctl trio` — consolidated four-watchdog-set operator view.
 //!
-//! Renders friction-audit + perimeter + guardian state in one read-only
-//! snapshot. The CLI analog of the dashboard's main page; useful when
-//! no GUI/browser is available (operator-on-tty scenario).
+//! Renders friction-audit + perimeter + guardian + scheduler state in
+//! one read-only snapshot. The CLI analog of the dashboard's main
+//! page; useful when no GUI/browser is available (operator-on-tty
+//! scenario).
 //!
 //! MS043 R10081 ("Do not minimize the work in selfdef") + F05081 (TUI
-//! main dashboard 4-panel layout — this is the 3-panel CLI projection
-//! covering the three watchdogs in production today).
+//! main dashboard 4-panel layout — this is the 4-panel CLI projection
+//! of the four-watchdog set MS046/MS047/MS044/MS048 in production today).
 //!
 //! Read-only. Composes the existing per-watchdog runtime crates'
 //! `read_ring_buffer` + state functions; no new authority surface.
+//!
+//! Note: the command name `trio` is preserved from the original
+//! three-watchdog scope (commit 83c9749). Renaming the command would
+//! break operator muscle-memory + scripts; the rendered banner +
+//! drill-down pointers were updated to read "four-watchdog set"
+//! when MS048 (Goldilocks Scheduler) was added (commit d12d226).
 
 use std::path::Path;
 

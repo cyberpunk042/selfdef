@@ -199,11 +199,12 @@ enum Command {
         #[command(subcommand)]
         action: SchedulerAction,
     },
-    /// MS043 R10081 + F05081: consolidated three-watchdog-trio operator
-    /// view. Renders friction-audit (hardware frame) + perimeter (kernel
-    /// syscall) + guardian (supervisor tier) state in one read-only
-    /// snapshot. The single-command analog of the dashboard's main
-    /// page — useful when no GUI / no browser available.
+    /// MS043 R10081 + F05081: consolidated four-watchdog-set operator
+    /// view. Renders friction-audit (hardware frame, MS046) + perimeter
+    /// (kernel syscall, MS047) + guardian (supervisor tier, MS044) +
+    /// scheduler (routing layer, MS048) state in one read-only snapshot.
+    /// The single-command analog of the dashboard's main page —
+    /// useful when no GUI / no browser available.
     Trio {
         /// Machine-readable JSON output.
         #[arg(long)]
