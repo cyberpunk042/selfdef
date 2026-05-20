@@ -9,6 +9,10 @@ authors.workspace = true
 publish.workspace = true
 description = "SDD-029 Deliverable 2 — Guardian Daemon runtime: Tetragon UNIX-socket event ingester + violation classifier + 3-step SIGKILL/audit/console response orchestrator + OCSF Detection 2004 emitter + ZFS log bridge writer + circuit-breaker state machine. Implements sain-01 §10 guardian-core natively in Rust."
 
+[[bin]]
+name = "selfdef-guardian"
+path = "src/bin/selfdef-guardian.rs"
+
 [lints]
 workspace = true
 
