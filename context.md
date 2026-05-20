@@ -1295,3 +1295,13 @@ Total this resume: 172 selfdef IPS-authority crates. Workspace 337.
   past now in interval steps — drift-resistant: skips missed ticks)
 
 Total this resume: 173 selfdef IPS-authority crates. Workspace 338.
+
+### Hundred-and-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-concurrent-action-limiter` (ActorState{limit, in_flight,
+  admitted_total, rejected_total}; admit returns Admitted/Rejected{
+  in_flight,limit}/Duplicate; release decrements (idempotent on
+  unknown/already-released); actors independent; un-configured uses
+  default_limit)
+
+Total this resume: 174 selfdef IPS-authority crates. Workspace 339.
