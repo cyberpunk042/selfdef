@@ -2712,3 +2712,12 @@ Total this resume: 332 selfdef IPS-authority crates. Workspace 497.
   skipping saturated; contains true iff all positions non-zero)
 
 Total this resume: 333 selfdef IPS-authority crates. Workspace 498.
+
+### Two-hundred-and-sixty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-epoch-marker` (advance() bumps epoch+1 and resets
+  seq=0; tag() returns (epoch, seq) and increments seq within
+  current epoch; Tag is Ord lexicographically; both counters
+  checked-add → Exhausted on overflow)
+
+Total this resume: 334 selfdef IPS-authority crates. Workspace 499.
