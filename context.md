@@ -663,3 +663,11 @@ Total this resume: 100 selfdef IPS-authority crates. Workspace 265.
   template independent; rotate drops expired)
 
 Total this resume: 102 selfdef IPS-authority crates. Workspace 267.
+
+### Thirty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-decision-conflict-detector` (per-payload_hash window
+  ledger; check returns Consistent/Divergent{outcomes}/Stale;
+  rotate trims; distinct from replay-divergence-detector)
+
+Total this resume: 103 selfdef IPS-authority crates. Workspace 268.
