@@ -1794,3 +1794,11 @@ Total this resume: 225 selfdef IPS-authority crates. Workspace 390.
   IDs monotonic u64)
 
 Total this resume: 226 selfdef IPS-authority crates. Workspace 391.
+
+### Hundred-and-fifty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-capability-token-store` (Token{id, holder, scopes:
+  BTreeSet, expires_at_ms, revoked}; check returns Ok/Expired/
+  Revoked/Unknown/MissingScope; revoke marks token)
+
+Total this resume: 227 selfdef IPS-authority crates. Workspace 392.
