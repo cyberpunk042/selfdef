@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-consistent-hash-ring"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Consistent hash ring with virtual nodes — deterministic key→node assignment."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
