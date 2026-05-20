@@ -204,7 +204,65 @@ fn check_watchdog_set(_cfg: &Config) -> Vec<CheckResult> {
         detail: format!("present={}", zfs_ctx.is_dir()),
     });
 
+    // --- audit chain integrity (per watchdog that emits a chain) -------
+    // Reads each OCSF jsonl path + runs SHA-256 chain verification. Chain
+    // break = CRITICAL signal (file tampered / fsync ignored / disk
+    // corrupt). Missing file = Skipped (watchdog not in production yet).
+    for (name, audit_log, chain_fn) in [
+        (
+            "perimeter audit chain",
+            std::path::Path::new(selfdef_perimeter::DEFAULT_OCSF_PATH),
+            audit_chain_perim as fn(&Path) -> Result<usize, String>,
+        ),
+        (
+            "guardian audit chain",
+            std::path::Path::new(selfdef_guardian::DEFAULT_OCSF_PATH),
+            audit_chain_guardian,
+        ),
+        (
+            "scheduler audit chain",
+            std::path::Path::new(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH),
+            audit_chain_scheduler,
+        ),
+    ] {
+        if !audit_log.exists() {
+            out.push(CheckResult {
+                category: "watchdog-set".into(),
+                name: name.into(),
+                status: CheckStatus::Skipped,
+                detail: format!("log not present at {}", audit_log.display()),
+            });
+            continue;
+        }
+        match chain_fn(audit_log) {
+            Ok(n) => out.push(CheckResult {
+                category: "watchdog-set".into(),
+                name: name.into(),
+                status: CheckStatus::Ok,
+                detail: format!("chain intact, {n} event(s)"),
+            }),
+            Err(e) => out.push(CheckResult {
+                category: "watchdog-set".into(),
+                name: name.into(),
+                status: CheckStatus::Fail,
+                detail: format!("chain broken: {e} (see <watchdog>-audit-log-corruption runbook)"),
+            }),
+        }
+    }
+
     out
+}
+
+fn audit_chain_perim(p: &Path) -> Result<usize, String> {
+    selfdef_perimeter::audit_chain_check(p).map_err(|e| e.to_string())
+}
+
+fn audit_chain_guardian(p: &Path) -> Result<usize, String> {
+    selfdef_guardian::audit_chain_check(p).map_err(|e| e.to_string())
+}
+
+fn audit_chain_scheduler(p: &Path) -> Result<usize, String> {
+    selfdef_scheduler::audit_chain_check(p).map_err(|e| e.to_string())
 }
 
 fn check_shared_audit_summary(cfg: &Config) -> Vec<CheckResult> {
