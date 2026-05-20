@@ -3203,6 +3203,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-denial-appeal-window"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-deny-recurrence"
 version = "0.1.0"
 dependencies = [
