@@ -975,3 +975,12 @@ Total this resume: 136 selfdef IPS-authority crates. Workspace 301.
   thundering-herd synchronisation)
 
 Total this resume: 137 selfdef IPS-authority crates. Workspace 302.
+
+### Seventieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-introduction-policy` (first-touch handshake gate;
+  record_introduction(actor, ts, attested_fingerprint); classify
+  Allowed (recorded) / NeedsIntroduction; revoke for operator-
+  triggered reset; re-record overwrites prior)
+
+Total this resume: 138 selfdef IPS-authority crates. Workspace 303.
