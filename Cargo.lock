@@ -2656,6 +2656,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-clock-skew-tolerance"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "selfdef-collector-arming-state"
 version = "0.1.0"
 dependencies = [
