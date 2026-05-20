@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-fd-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate per-Profile open-file-descriptor cap. open() returns a handle id; close() releases. Distinct from selfdef-substrate-{cpu,gpu,disk,network-egress}-quota — this is the open-FD lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
