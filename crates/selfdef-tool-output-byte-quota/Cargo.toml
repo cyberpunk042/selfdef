@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tool-output-byte-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile cap on the cumulative byte size of a single tool invocation's output (stdout + stderr combined or per-stream). admit_chunk() returns Accept / Truncate / Reject as the stream grows past warn/hard thresholds. Distinct from selfdef-tool-output-truncation-policy (line/char rules) — this is the byte-budget lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
