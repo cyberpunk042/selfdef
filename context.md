@@ -535,3 +535,12 @@ Total this resume: 75 selfdef IPS-authority crates. Workspace 240.
   Disabled + rationale + bounded history)
 
 Total this resume: 77 selfdef IPS-authority crates. Workspace 242.
+
+### Twenty-third wave (same day, +2 more IPS-authority crates)
+
+- `selfdef-emergency-pause-policy` (soft-hold lever: paused denies
+  NewTask/Resume, allows Checkpoint/ReadOnly)
+- `selfdef-decision-trace-export-policy` (4 Sensitivity × 4
+  ExportClass matrix gating trace export destinations)
+
+Total this resume: 79 selfdef IPS-authority crates. Workspace 244.
