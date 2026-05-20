@@ -1632,3 +1632,13 @@ Total this resume: 207 selfdef IPS-authority crates. Workspace 372.
   version + warm; rollback = another swap; new stage resets warm)
 
 Total this resume: 208 selfdef IPS-authority crates. Workspace 373.
+
+### Hundred-and-forty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-service-health-probe` (Health{Healthy/Degraded/Down};
+  record updates consec counters and transitions: Healthy→
+  Degraded on first fail; Degraded→Down after fail_to_down consec;
+  Down→Degraded on first pass; Degraded→Healthy after
+  pass_to_healthy consec; hysteresis prevents thrash)
+
+Total this resume: 209 selfdef IPS-authority crates. Workspace 374.
