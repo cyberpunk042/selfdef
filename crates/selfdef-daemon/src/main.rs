@@ -288,6 +288,46 @@ async fn main() -> Result<()> {
         }
     }
 
+    // SDD-029 / MS044 — Guardian Daemon observability at daemon boot.
+    //
+    // Third leg of the three-watchdog trio (friction-audit at hardware
+    // frame, perimeter at kernel syscall, guardian at supervisor tier).
+    // selfdefd does NOT run Guardian itself — that's selfdef-guardian.service
+    // (a separate systemd unit). selfdefd just surfaces the boot-time
+    // state for operator visibility.
+    let guardian_socket = std::path::Path::new(selfdef_guardian::DEFAULT_SOCKET_PATH);
+    if guardian_socket.exists() {
+        info!(
+            socket = %guardian_socket.display(),
+            "guardian: Tetragon UNIX socket present"
+        );
+    } else {
+        info!(
+            socket = %guardian_socket.display(),
+            "guardian: Tetragon UNIX socket not present yet (Tetragon may not be running)"
+        );
+    }
+    match selfdef_guardian::read_ring_buffer(std::path::Path::new(
+        selfdef_guardian::DEFAULT_RING_DIR,
+    )) {
+        Ok(verdicts) if verdicts.is_empty() => {
+            info!("guardian: no events recorded yet (ring buffer empty)");
+        }
+        Ok(verdicts) => {
+            let failed = verdicts.iter().filter(|v| !v.all_steps_ok()).count();
+            info!(
+                "guardian.verdicts" = verdicts.len(),
+                "guardian.failed_responses" = failed,
+                "guardian: {} event(s) recorded, {} with step failures",
+                verdicts.len(),
+                failed
+            );
+        }
+        Err(e) => {
+            warn!(error = %e, "guardian: ring buffer read failed; daemon continues");
+        }
+    }
+
     let bus = Arc::new(Bus::new(cfg.bus.inproc_capacity));
     let publisher = bus.publisher();
 

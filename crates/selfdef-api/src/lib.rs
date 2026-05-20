@@ -37,6 +37,7 @@
 
 mod control;
 mod friction_audit;
+mod guardian;
 mod handlers;
 mod perimeter;
 pub mod metrics;
@@ -125,6 +126,11 @@ pub fn router(state: ApiState) -> Router {
         // (read-only). Mutation flows through `selfdefctl perimeter extend/revoke`.
         .route("/v1/perimeter", get(perimeter::show))
         .route("/v1/perimeter/history", get(perimeter::history))
+        // SDD-029 / MS044: Guardian Daemon (sain-01 §10 guardian-core)
+        // operator surface (read-only). Mutation flows through
+        // `selfdefctl guardian` (replay / rollback).
+        .route("/v1/guardian", get(guardian::show))
+        .route("/v1/guardian/history", get(guardian::history))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
