@@ -2494,3 +2494,12 @@ Total this resume: 307 selfdef IPS-authority crates. Workspace 472.
   u32::MAX, rejects zero denom; clamp_bp limits to 10000)
 
 Total this resume: 308 selfdef IPS-authority crates. Workspace 473.
+
+### Two-hundred-and-forty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-union-find` (string-keyed disjoint-set; Entry{
+  parent, rank, size}; find returns root with path
+  compression; union joins by rank (ties bump rank);
+  component_size returns set size)
+
+Total this resume: 309 selfdef IPS-authority crates. Workspace 474.
