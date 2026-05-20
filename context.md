@@ -713,3 +713,13 @@ Total this resume: 107 selfdef IPS-authority crates. Workspace 272.
   unsuspend_at}/Unknown; rotate(now) evicts expired)
 
 Total this resume: 108 selfdef IPS-authority crates. Workspace 273.
+
+### Forty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-prompt-system-pinning` (pinned system-message ledger;
+  pin(id, body, priority) replace-by-id; unpin; classify; ordered
+  by priority desc + pin_seq asc; max_pinned cap; pairs with
+  llm-context-shrink-policy — pinned ids are never dropped or
+  summarized)
+
+Total this resume: 109 selfdef IPS-authority crates. Workspace 274.
