@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-llm-thinking-budget"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile cap on extended-thinking / reasoning tokens budgeted on top of the user-visible completion. plan(profile, requested) returns Granted / Capped{adjusted_thinking_tokens} / Unconfigured. Distinct from selfdef-llm-response-size-cap (user-visible response) and selfdef-llm-token-throttle (cumulative window) — this is the per-request thinking-budget lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
