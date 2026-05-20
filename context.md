@@ -558,3 +558,17 @@ Total this resume: 80 selfdef IPS-authority crates. Workspace 245.
   sliding window with admit/age-out)
 
 Total this resume: 81 selfdef IPS-authority crates. Workspace 246.
+
+### Twenty-sixth wave (same day, +3 more IPS-authority crates)
+
+- `selfdef-substrate-gpu-quota` (per-Profile GPU slot-count +
+  max_vram_mb_per_job; acquire returns slot_id, release frees)
+- `selfdef-substrate-disk-quota` (per-Profile rolling-window
+  write-bytes budget + max_file_bytes cap; account/rotate pair)
+- `selfdef-llm-token-throttle` (per-Profile 1-minute rolling
+  token-per-minute throttle with retry_after_ms hint)
+- `selfdef-substrate-network-egress-quota` (per-Profile 5-minute
+  rolling egress byte budget + max_request_bytes cap; account/rotate
+  pair — volumetric lane, distinct from network-egress-decision)
+
+Total this resume: 85 selfdef IPS-authority crates. Workspace 250.
