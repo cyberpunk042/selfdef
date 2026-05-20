@@ -2254,3 +2254,12 @@ Total this resume: 279 selfdef IPS-authority crates. Workspace 444.
   live_count counts non-tombstoned)
 
 Total this resume: 280 selfdef IPS-authority crates. Workspace 445.
+
+### Two-hundred-and-thirteenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-token-estimator` (estimate(text, divisor) = ceil(
+  char_count/divisor) — Unicode chars not bytes; accumulate
+  bumps total + observations; is_over_budget(limit) compares
+  to total; reset clears)
+
+Total this resume: 281 selfdef IPS-authority crates. Workspace 446.
