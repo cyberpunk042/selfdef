@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-tiered-retention-policy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Multi-tier (hot/warm/cold) retention policy with per-tier TTL classification."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
