@@ -1841,3 +1841,11 @@ Total this resume: 231 selfdef IPS-authority crates. Workspace 396.
   resolve/names_of; rebind replaces)
 
 Total this resume: 232 selfdef IPS-authority crates. Workspace 397.
+
+### Hundred-and-sixty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-graceful-shutdown` (Stage{Running→StopAccepting→
+  Draining→Terminated}; begin → next; tick(now) auto-advances past
+  per-stage timeouts; force_drain/force_terminate manual)
+
+Total this resume: 233 selfdef IPS-authority crates. Workspace 398.
