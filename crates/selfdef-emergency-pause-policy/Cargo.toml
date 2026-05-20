@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-emergency-pause-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS emergency-pause lever. Lightweight 'pause everything in flight' that does NOT trigger the kill-switch but freezes new task starts and parks running tasks at their next safe checkpoint. Distinct from emergency-stop (which is the hard kill); this is the soft hold."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
