@@ -2228,3 +2228,11 @@ Total this resume: 276 selfdef IPS-authority crates. Workspace 441.
   traversal; total_duration_ms)
 
 Total this resume: 277 selfdef IPS-authority crates. Workspace 442.
+
+### Two-hundred-and-tenth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-saturation-meter` (utilization_bp = held*10000/cap;
+  classify() Low/Medium/High/Saturated by strictly-increasing
+  thresholds; may exceed 10000 → Saturated)
+
+Total this resume: 278 selfdef IPS-authority crates. Workspace 443.
