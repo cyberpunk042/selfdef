@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-log-histogram"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Log-bucketed histogram of u64 samples with quantile lookup."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
