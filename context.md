@@ -1001,3 +1001,12 @@ Total this resume: 139 selfdef IPS-authority crates. Workspace 304.
   trace-sampling-policy)
 
 Total this resume: 140 selfdef IPS-authority crates. Workspace 305.
+
+### Seventy-third wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-attribute-pack` (per-actor key→value store;
+  set/get/delete; match_all(actor, predicates) returns Matched/
+  Mismatched{missing, wrong:Vec<{key,expected,actual}>}/UnknownActor;
+  exact-string matching)
+
+Total this resume: 141 selfdef IPS-authority crates. Workspace 306.
