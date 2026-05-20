@@ -1029,3 +1029,12 @@ Total this resume: 142 selfdef IPS-authority crates. Workspace 307.
   from substrate-disk-quota write-budget)
 
 Total this resume: 143 selfdef IPS-authority crates. Workspace 308.
+
+### Seventy-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-action-result-cache` (Entry{result, stored_at, ttl_ms};
+  put/get/rotate; get returns Hit{result, age}/Stale{age, ttl}/
+  Miss; deterministic-result lane distinct from action-idempotency-
+  key replay-dedup)
+
+Total this resume: 144 selfdef IPS-authority crates. Workspace 309.
