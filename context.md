@@ -1169,3 +1169,12 @@ Total this resume: 158 selfdef IPS-authority crates. Workspace 323.
   leftover_count}; coordinated bundle-swap lane)
 
 Total this resume: 159 selfdef IPS-authority crates. Workspace 324.
+
+### Ninety-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-event-outbox-policy` (Event{seq, payload, ts};
+  append monotonic seq; pending() / confirm(up_to_seq) prunes;
+  durable transactional-outbox pattern for at-least-once
+  delivery)
+
+Total this resume: 160 selfdef IPS-authority crates. Workspace 325.
