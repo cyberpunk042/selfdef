@@ -2546,3 +2546,11 @@ Total this resume: 313 selfdef IPS-authority crates. Workspace 478.
   via '\t'); unbalanced quote rejected)
 
 Total this resume: 314 selfdef IPS-authority crates. Workspace 479.
+
+### Two-hundred-and-forty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-edit-distance` (Levenshtein distance via two-row
+  DP O(|a|*|b|) time, O(min(|a|,|b|)) space; char-based for
+  Unicode safety; similarity_bp scales to 0..=10000)
+
+Total this resume: 315 selfdef IPS-authority crates. Workspace 480.
