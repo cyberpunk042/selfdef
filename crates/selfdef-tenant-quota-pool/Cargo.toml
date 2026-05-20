@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-tenant-quota-pool"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS multi-tenant quota pool. set_pool(tenant, capacity); request(tenant, units) returns Granted{remaining}/Exhausted{capacity}; release(tenant, units) frees. Pure ledger; pairs with selfdef-grant-spend-ledger (per-grant) — this is the per-tenant pool lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
