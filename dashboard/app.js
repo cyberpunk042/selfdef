@@ -140,6 +140,9 @@
     if (kind === "scheduler") {
       return refreshScheduler();
     }
+    if (kind === "modules") {
+      return refreshModules();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -532,6 +535,78 @@
     }
   }
 
+  // Modules panel — reads GET /v1/modules (MS006 / SDD-009).
+  // Read-only; module activation goes through `selfdefctl modules apply`.
+  // Category → palette color mapping (uses the existing fa-* CSS classes).
+  const MODULE_CATEGORY_COLOR = {
+    detection: "green",
+    hardening: "green",
+    observability: "green",
+    deception: "yellow",
+    response: "yellow",
+    inference: "yellow",
+    network: "green",
+    hardware: "green",
+    "": "gray",
+  };
+
+  async function refreshModules() {
+    const ul = document.getElementById("modules-rows");
+    const countEl = document.getElementById("modules-count");
+    const metaEl = document.getElementById("modules-meta");
+    try {
+      const body = await get("/v1/modules");
+      const modules = body.modules || [];
+      countEl.textContent = `${modules.length}`;
+      countEl.className =
+        "fa-aggregate " + (modules.length === 0 ? "fa-unknown" : "fa-ok");
+      metaEl.textContent = `dir: ${body.modules_dir || "(missing)"}`;
+      ul.innerHTML = "";
+      if (modules.length === 0) {
+        setEmpty(ul, "no modules found at the configured dir");
+        return;
+      }
+      for (const m of modules) {
+        const li = document.createElement("li");
+        const color =
+          MODULE_CATEGORY_COLOR[m.category || ""] || "gray";
+        li.className = `fa-${color}`;
+
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = m.name;
+
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${color}`;
+        badge.textContent = (m.category || "—").toUpperCase();
+
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        const deps = (m.depends_on || []).length;
+        const prov = (m.provides || []).length;
+        detail.textContent = `v${m.version || "?"} · ${m.summary || ""} · ${deps} dep · ${prov} prov`;
+
+        // No runbook per module yet — link to the module catalog doc.
+        const link = document.createElement("a");
+        link.className = "fa-runbook-link";
+        link.href = "/wiki/runbooks/";
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "docs ↗";
+
+        li.appendChild(label);
+        li.appendChild(badge);
+        li.appendChild(detail);
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      countEl.textContent = "ERR";
+      countEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -737,6 +812,7 @@
   refreshPerimeter();
   refreshGuardian();
   refreshScheduler();
+  refreshModules();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -748,6 +824,9 @@
   setInterval(refreshPerimeter, 15000);
   setInterval(refreshGuardian, 30000);
   setInterval(refreshScheduler, 10000);
+  // Modules list is rare-change (only changes on package upgrade or
+  // operator-driven `modules apply`); 60s is plenty.
+  setInterval(refreshModules, 60000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

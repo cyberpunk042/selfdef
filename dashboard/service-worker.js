@@ -3,11 +3,13 @@
 // responses themselves — operators need the freshest data they can get.
 
 // Bump on every shell change so the activate hook can purge stale
-// versions. v2 (2026-05-20): manifest gained scope/categories/512x512
-// icon; index.html gained scheduler panel; app.js gained the
-// four-watchdog refresh handlers; dashboard.css gained the
-// .fa-backpressure aggregate state.
-const SHELL = "selfdef-shell-v2";
+// versions. v3 (2026-05-20): index.html gained modules-section;
+// app.js gained refreshModules() + setInterval; consumes /v1/modules.
+// v2 (2026-05-20): manifest gained scope/categories/512x512 icon;
+// index.html gained scheduler panel; app.js gained the four-watchdog
+// refresh handlers; dashboard.css gained the .fa-backpressure
+// aggregate state.
+const SHELL = "selfdef-shell-v3";
 const SHELL_ASSETS = [
   "./",
   "./index.html",
