@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-policy-version-event"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS first-touch banner emitter for new policy versions. observe(actor, policy_id, version) returns NewVersion{old, new}/UnchangedVersion/FirstSeen. Caller wires the chrome to surface a 'this policy was updated' banner exactly once per (actor, policy, version) tuple."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
