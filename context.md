@@ -1954,3 +1954,12 @@ Total this resume: 245 selfdef IPS-authority crates. Workspace 410.
   returns last+1 with overflow check; regressions counted)
 
 Total this resume: 246 selfdef IPS-authority crates. Workspace 411.
+
+### Hundred-and-seventy-eighth wave (same day, +1 more cockpit crate)
+
+- `sovereign-cockpit-table-of-contents` (Heading{id,label,
+  level 1..=6,offset}; update_scroll sets offset; active picks
+  latest heading offset<=scroll, fallback first; children_of
+  returns immediate-children indices)
+
+Workspace count now 356. Total this resume: 246 cockpit crates.
