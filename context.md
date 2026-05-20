@@ -2357,3 +2357,12 @@ Total this resume: 291 selfdef IPS-authority crates. Workspace 456.
   + key asc)
 
 Total this resume: 292 selfdef IPS-authority crates. Workspace 457.
+
+### Two-hundred-and-twenty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-invariant-set` (Invariant{holds, violations,
+  last_ts}; register inits holds=true; report updates state +
+  bumps violations on holds=false (historical, not reset);
+  failing/all_holding accessors)
+
+Total this resume: 293 selfdef IPS-authority crates. Workspace 458.
