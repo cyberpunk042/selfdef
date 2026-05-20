@@ -48,7 +48,7 @@ run_layer "L1: CLI surface (subverb counts)" \
 run_layer "L1: HTTP API endpoint declarations" \
     bash scripts/test/L1-api-endpoints.sh
 
-run_layer "L1: dashboard sections (three-watchdog trio UX surface)" \
+run_layer "L1: dashboard sections (four-watchdog set UX surface)" \
     bash scripts/test/L1-dashboard-sections.sh
 
 # --- L2 gates (bats) --------------------------------------------------

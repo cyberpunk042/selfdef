@@ -166,6 +166,8 @@ footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.7
 .fa-aggregate.fa-extended { color: var(--medium);   border-color: var(--medium); }
 /* Guardian aggregate states (SDD-029) */
 .fa-aggregate.fa-degraded { color: var(--medium);   border-color: var(--medium); }
+/* Scheduler aggregate states (SDD-031) */
+.fa-aggregate.fa-backpressure { color: var(--medium); border-color: var(--medium); }
 
 .fa-meta {
   margin: 0.4rem 0 0;

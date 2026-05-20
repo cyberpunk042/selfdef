@@ -137,6 +137,9 @@
     if (kind === "guardian") {
       return refreshGuardian();
     }
+    if (kind === "scheduler") {
+      return refreshScheduler();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -449,6 +452,86 @@
     }
   }
 
+  // Scheduler panel — reads GET /v1/scheduler.
+  // SDD-031 / MS048. Operator-facing surface, read-only.
+  const SCHED_RUNBOOK_BASE = "/wiki/runbooks/scheduler-";
+
+  async function refreshScheduler() {
+    const ul = document.getElementById("scheduler-rows");
+    const aggEl = document.getElementById("sched-aggregate");
+    const metaEl = document.getElementById("scheduler-meta");
+    try {
+      const body = await get("/v1/scheduler");
+      aggEl.textContent = (body.aggregate || "unknown").toUpperCase();
+      aggEl.className = `fa-aggregate fa-${body.aggregate || "unknown"}`;
+
+      const chainEvents = body.audit_chain_events;
+      metaEl.textContent =
+        `decisions: ${body.decisions ? body.decisions.length : 0} · ` +
+        `OCSF chain events: ${chainEvents === null || chainEvents === undefined ? "—" : chainEvents}`;
+
+      ul.innerHTML = "";
+      const decisions = body.decisions || [];
+      if (decisions.length === 0) {
+        setEmpty(ul, "no scheduler decisions yet recorded");
+        return;
+      }
+      for (const d of decisions) {
+        const bp = d.backpressure || {};
+        const anyBp =
+          bp.blackwell_vram_high ||
+          bp.gpu3090_busy ||
+          bp.cpu_pressure ||
+          bp.ram_pressure ||
+          bp.io_pressure ||
+          bp.human_gate_queue_high;
+        const isOverride = d.override_signer_kid != null;
+        let badge, color, runbook;
+        if (isOverride) {
+          badge = `OVRD[${d.route}]`;
+          color = "yellow";
+          runbook = `${SCHED_RUNBOOK_BASE}force-override-investigation`;
+        } else if (anyBp) {
+          badge = `BP[${d.route}]`;
+          color = "yellow";
+          runbook = `${SCHED_RUNBOOK_BASE}backpressure-stuck-open`;
+        } else {
+          badge = (d.route || "?").toUpperCase();
+          color = "green";
+          runbook = "";
+        }
+        const li = document.createElement("li");
+        li.className = `fa-${color}`;
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = d.request_id;
+        const badgeSpan = document.createElement("span");
+        badgeSpan.className = `fa-badge fa-${color}`;
+        badgeSpan.textContent = badge;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        const compound = d.axis_scores ? d.axis_scores.compound.toFixed(3) : "?";
+        detail.textContent =
+          `profile=${d.profile} compound=${compound} · ${faFreshness(body.now_ms, d.ts_ms)} · host=${d.hostname}`;
+        const link = document.createElement("a");
+        link.className = "fa-runbook-link";
+        link.href = runbook || `${SCHED_RUNBOOK_BASE}not-running`;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "runbook ↗";
+        li.appendChild(label);
+        li.appendChild(badgeSpan);
+        li.appendChild(detail);
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      aggEl.textContent = "ERROR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -653,15 +736,18 @@
   refreshFrictionAudit();
   refreshPerimeter();
   refreshGuardian();
+  refreshScheduler();
   refreshActionList();
   setInterval(refreshStatus, 5000);
-  // Three-watchdog-trio panels refresh less often than status — gate
+  // Four-watchdog set panels refresh less often than status — gate
   // state is rare-change (boot + operator overrides). 30s for the
   // hardware frame (friction-audit) and supervisor (guardian); 15s for
-  // the perimeter since execve events can land between refreshes.
+  // the perimeter since execve events can land between refreshes; 10s
+  // for the scheduler since routing decisions are high-frequency.
   setInterval(refreshFrictionAudit, 30000);
   setInterval(refreshPerimeter, 15000);
   setInterval(refreshGuardian, 30000);
+  setInterval(refreshScheduler, 10000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
