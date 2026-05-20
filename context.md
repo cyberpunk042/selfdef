@@ -1614,3 +1614,12 @@ Total this resume: 205 selfdef IPS-authority crates. Workspace 370.
   specific; allow_global / allow_for_actor remove entries)
 
 Total this resume: 206 selfdef IPS-authority crates. Workspace 371.
+
+### Hundred-and-thirty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-data-exfil-detector` (Pattern{id, name, needle,
+  severity, total_hits}; scan counts substring matches and returns
+  Hits sorted Critical→Info then alpha; observe = scan + record
+  counts + bytes_scanned; worst_hit filters by min severity)
+
+Total this resume: 207 selfdef IPS-authority crates. Workspace 372.
