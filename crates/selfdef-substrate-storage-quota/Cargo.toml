@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-storage-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile disk-storage cap. (soft_bytes, hard_bytes) per Profile. classify(profile, used_bytes) returns Healthy / OverSoft{soft, used} / OverHard{hard, used} / Unconfigured. Pairs with selfdef-substrate-disk-quota (write-budget-over-window) — this is the persistent-footprint cap lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
