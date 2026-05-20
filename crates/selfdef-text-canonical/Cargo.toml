@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-text-canonical"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Canonical text normalization — trim, lowercase, collapse-whitespace, strip-non-printable."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
