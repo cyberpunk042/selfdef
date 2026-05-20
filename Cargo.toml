@@ -135,6 +135,7 @@ selfdef-friction-audit = { path = "crates/selfdef-friction-audit" }
 selfdef-perimeter-mirror = { path = "crates/selfdef-perimeter-mirror" }
 selfdef-perimeter = { path = "crates/selfdef-perimeter" }
 selfdef-guardian-mirror = { path = "crates/selfdef-guardian-mirror" }
+selfdef-guardian = { path = "crates/selfdef-guardian" }
 
 [workspace.lints.rust]
 # `deny` rather than `forbid`: a handful of crates (selfdef-ebpf-common)
