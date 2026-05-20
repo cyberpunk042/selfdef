@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-gpu-quota"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS substrate GPU quota. Per-Profile concurrent-GPU-slots cap (max parallel inference jobs) + per-job vram_mb limit. acquire/release pair around each job. Distinct from selfdef-substrate-allocator-policy (RAM); this is the GPU lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
