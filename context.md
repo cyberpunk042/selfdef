@@ -2177,3 +2177,12 @@ Total this resume: 270 selfdef IPS-authority crates. Workspace 435.
   pushes counter)
 
 Total this resume: 271 selfdef IPS-authority crates. Workspace 436.
+
+### Two-hundred-and-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-readiness-gate` (Component{required, ready};
+  aggregate(): Unready if any required unready or no required;
+  Degraded if all required ready + some optional unready;
+  Healthy if all ready)
+
+Total this resume: 272 selfdef IPS-authority crates. Workspace 437.
