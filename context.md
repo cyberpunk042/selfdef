@@ -1478,3 +1478,14 @@ Total this resume: 191 selfdef IPS-authority crates. Workspace 356.
   counters; signed i64 skew = event_ts - now)
 
 Total this resume: 192 selfdef IPS-authority crates. Workspace 357.
+
+### Hundred-and-twenty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-actor-liveness-challenge` (Challenge{nonce, actor,
+  issued_at_ms, expires_at_ms, consumed}; issue assigns monotonic
+  nonce + ttl; verify returns Verified/Expired/AlreadyUsed/Unknown/
+  WrongActor{expected_actor}; verified nonces consumed (replay
+  detected); prune drops consumed entries older than
+  history_retention_ms)
+
+Total this resume: 193 selfdef IPS-authority crates. Workspace 358.
