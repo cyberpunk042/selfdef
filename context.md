@@ -932,3 +932,11 @@ Total this resume: 131 selfdef IPS-authority crates. Workspace 296.
   policy and rate-limit-policy)
 
 Total this resume: 132 selfdef IPS-authority crates. Workspace 297.
+
+### Sixty-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-grace-period` (install(policy_id, ts, grace_ms);
+  classify InGrace{installed_at, grace_ms, remaining_ms}/InEffect/
+  Unknown; ramp window for strict policies)
+
+Total this resume: 133 selfdef IPS-authority crates. Workspace 298.
