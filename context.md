@@ -2621,3 +2621,12 @@ Total this resume: 322 selfdef IPS-authority crates. Workspace 487.
   topic); listeners_for sorted; topics_for filters)
 
 Total this resume: 323 selfdef IPS-authority crates. Workspace 488.
+
+### Two-hundred-and-fifty-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-cache-key` (key(policy_version, input) →
+  "<version>:<16-hex>" using FNV-1a-64 of input bytes;
+  deterministic; same inputs → same key; diverges on either
+  version or input change)
+
+Total this resume: 324 selfdef IPS-authority crates. Workspace 489.
