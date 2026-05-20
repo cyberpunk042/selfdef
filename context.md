@@ -2087,3 +2087,12 @@ Total this resume: 260 selfdef IPS-authority crates. Workspace 425.
   sequence overflow rejected; pure deterministic)
 
 Total this resume: 261 selfdef IPS-authority crates. Workspace 426.
+
+### Hundred-and-ninety-fourth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-fault-injector` (per-tag rate_bp 0..=10000;
+  decide(tag, attempt_id) FNV-1a-64-hashes (tag, attempt_id,
+  seed) mod 10000 and returns Inject iff < rate_bp; injects/
+  skips counters; pure deterministic)
+
+Total this resume: 262 selfdef IPS-authority crates. Workspace 427.
