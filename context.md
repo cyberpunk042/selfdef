@@ -2503,3 +2503,12 @@ Total this resume: 308 selfdef IPS-authority crates. Workspace 473.
   component_size returns set size)
 
 Total this resume: 309 selfdef IPS-authority crates. Workspace 474.
+
+### Two-hundred-and-forty-second wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-approval-flow` (Stage{name, required, got};
+  Phase{Pending/Approved/Rejected(reason)}; approve advances
+  when got==required; final stage flips Approved; reject
+  one-way; duplicate/non-required approvers rejected)
+
+Total this resume: 310 selfdef IPS-authority crates. Workspace 475.
