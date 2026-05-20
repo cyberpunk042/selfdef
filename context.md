@@ -888,3 +888,12 @@ Total this resume: 126 selfdef IPS-authority crates. Workspace 291.
   overrides the range)
 
 Total this resume: 127 selfdef IPS-authority crates. Workspace 292.
+
+### Sixtieth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-shadow-mode` (Mode{Off/Shadow/Enforce} per
+  policy_id; classify_apply returns Allow / Block / ShadowBlock
+  (recorder logs but caller proceeds) / Unconfigured; safe-rollout
+  lane for new/modified policies)
+
+Total this resume: 128 selfdef IPS-authority crates. Workspace 293.
