@@ -897,3 +897,11 @@ Total this resume: 127 selfdef IPS-authority crates. Workspace 292.
   lane for new/modified policies)
 
 Total this resume: 128 selfdef IPS-authority crates. Workspace 293.
+
+### Sixty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-rollout-stage` (Stage{Disabled/Canary{ppm}/Beta
+  {ppm}/Stable}; deterministic actor_hash % 1_000_000 < ppm gives
+  InScope; pairs with policy-shadow-mode for gradual enforcement)
+
+Total this resume: 129 selfdef IPS-authority crates. Workspace 294.
