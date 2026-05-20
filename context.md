@@ -2105,3 +2105,12 @@ Total this resume: 262 selfdef IPS-authority crates. Workspace 427.
   its factor; Google-SRE multi-window pattern)
 
 Total this resume: 263 selfdef IPS-authority crates. Workspace 428.
+
+### Hundred-and-ninety-sixth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-delay-queue` (Entry{id, fire_at_ms, payload};
+  schedule binary-inserts to keep sorted; cancel by id;
+  poll(now) drains entries with fire_at<=now; next_fire
+  returns earliest; duplicate ids rejected)
+
+Total this resume: 264 selfdef IPS-authority crates. Workspace 429.
