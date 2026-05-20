@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-topo-sort"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "String-keyed DAG with Kahn topological sort + cycle detection."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
