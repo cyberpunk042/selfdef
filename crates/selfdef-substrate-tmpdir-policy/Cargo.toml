@@ -1,0 +1,21 @@
+[package]
+name = "selfdef-substrate-tmpdir-policy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "IPS per-Profile tmpdir bound (max_bytes, max_age_ms). classify(profile, used_bytes, oldest_age_ms) returns Healthy/OverSize{cap, used}/OverAge{cap, oldest}/Unconfigured. Pairs with the substrate-disk-quota write-budget — this is the ephemeral-tmpdir lane."
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[features]
+default = []
