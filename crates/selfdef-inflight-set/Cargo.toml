@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-inflight-set"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Inflight-id set with per-id timeout and ack/timeout sweep."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
