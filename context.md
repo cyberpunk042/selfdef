@@ -2060,3 +2060,12 @@ Total this resume: 257 selfdef IPS-authority crates. Workspace 422.
   pre-decide)
 
 Total this resume: 258 selfdef IPS-authority crates. Workspace 423.
+
+### Hundred-and-ninety-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-cidr-matcher` (IPv4 dotted-quad → u32 parse;
+  parse_cidr "A.B.C.D/p" masks host bits; matches(ip) tests
+  (ip&mask)==(network&mask); prefix 0 matches all, 32 matches
+  exact)
+
+Total this resume: 259 selfdef IPS-authority crates. Workspace 424.
