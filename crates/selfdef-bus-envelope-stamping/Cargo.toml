@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-bus-envelope-stamping"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Bus emitter envelope stamping with monotonic sequence and FNV-1a digest."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
