@@ -1518,3 +1518,13 @@ Total this resume: 195 selfdef IPS-authority crates. Workspace 360.
   prune drops dismissed past max_age_ms)
 
 Total this resume: 196 selfdef IPS-authority crates. Workspace 361.
+
+### Hundred-and-twenty-ninth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-llm-cost-tracker` (Rates+Usage per model →
+  TierTotals{input/output/cache_read/cache_write micros}; integer
+  precision in micro-units; set_rates configures; record returns
+  delta + accumulates; grand_total_micros sums across models;
+  reset_totals keeps rates)
+
+Total this resume: 197 selfdef IPS-authority crates. Workspace 362.
