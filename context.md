@@ -1440,3 +1440,12 @@ Total this resume: 187 selfdef IPS-authority crates. Workspace 352.
   ContinuityBreak / SeqBreak)
 
 Total this resume: 188 selfdef IPS-authority crates. Workspace 353.
+
+### Hundred-and-twenty-first wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-load-shed-policy` (Priority{Bulk<Low<Normal<High<Critical};
+  Thresholds default 5000/6500/8000/9000/10000 bp; decide returns
+  Admit/Shed when load_ratio_bp >= threshold; observe records
+  per-priority admitted/shed counters; custom thresholds allowed)
+
+Total this resume: 189 selfdef IPS-authority crates. Workspace 354.
