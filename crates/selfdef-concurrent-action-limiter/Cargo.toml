@@ -1,0 +1,12 @@
+[package]
+name = "selfdef-concurrent-action-limiter"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Per-actor concurrent-action limit with admit/release accounting."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
