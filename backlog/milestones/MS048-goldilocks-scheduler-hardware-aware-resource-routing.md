@@ -6,7 +6,7 @@
 - lines 18100-18200 (Blackwell + KV/Context + Memory + Tool + Backpressure scheduling surfaces — five concrete surfaces)
 - lines 18200-18250 (Scheduling Objective — 7-axis Goldilocks function + Concrete Decision Example + Key Scheduling Law)
 **Operator standing direction** (verbatim, 2026-05-19): *"DO NOT MINIMIZE WHAT I SAY, SAID OR ASKED FOR, NOR THE NEED TO EXPLOIT THE STACK AND TECHNO TO THE MAX, avx-plus-plus base reason being"* / *"Do not minimize the work in selfdef"*
-**Cross-references**: MS040 (six-profile authority matrix — scheduling rules elaborate the profiles), MS024 (communication boundary — scheduling surfaces operate within it), MS039 (Ring 0 authority — scheduler decisions are observable not authority-mutating), MS027 (observability — scheduler emits trace points), MS028-MS030 (inference modules — scheduler routes between them), MS044 (Guardian — VRAM/CPU/RAM backpressure affects when replay can run), MS046 (friction-audit — hardware frame produces the resource-availability signal scheduler consumes)
+**Cross-references**: MS040 (six-profile authority matrix — scheduling rules elaborate the profiles), MS034 (communication boundary — scheduling surfaces operate within it), MS039 (Ring 0 authority — scheduler decisions are observable not authority-mutating), MS027 (observability — scheduler emits trace points), MS028-MS030 (inference modules — scheduler routes between them), MS044 (Guardian — VRAM/CPU/RAM backpressure affects when replay can run), MS046 (friction-audit — hardware frame produces the resource-availability signal scheduler consumes)
 **Backward-sweep anchor**: this milestone is created from the avx-plus-plus dump tail backward-sweep review documented at `~/devops-solutions-information-hub/wiki/log/2026-05-20-avx-plus-plus-dump-tail-backward-sweep-review.md`
 **Project boundary**: this milestone catalogs the SELFDEF IPS-side scheduler. Sovereign-os consumes scheduler state via MS007 typed-mirror crates (cockpit M-series); the cockpit displays scheduling decisions but does NOT author them. Per operator standing direction "if I talk about an IPS feature its obviously not in Sovereign-OS. Respect the projects." — the IPS daemon runs the cortex (Ryzen 9900X AVX-512), so the scheduler is selfdef-owned.
 
@@ -436,7 +436,7 @@ the systemd-unit + Debian-packaging surface, and the test contract.)
 
 | MS048 R-row | Bound to | Across milestone |
 |---|---|---|
-| R11241-R11247 | Doctrinal anchors | MS040 + MS024 + MS027 + MS039 |
+| R11241-R11247 | Doctrinal anchors | MS040 + MS034 + MS027 + MS039 |
 | R11248-R11254 | Per-profile rules | MS040 (six-profile envelope) |
 | R11255-R11263 | Blackwell + KV/Context | MS028 (BitNet GPU inference) + MS030 (tensor parallel) |
 | R11264-R11269 | Memory pipeline | MS027 (observability) + future memory-graph crate |
@@ -473,7 +473,7 @@ R11291-R11480 expansion is catalogued.
 
 - avx-plus-plus dump tail backward-sweep review: `~/devops-solutions-information-hub/wiki/log/2026-05-20-avx-plus-plus-dump-tail-backward-sweep-review.md`
 - MS040 (six-profile authority matrix — scheduling rules elaborate the profiles)
-- MS024 (communication boundary — scheduling surfaces operate within it)
+- MS034 (communication boundary — scheduling surfaces operate within it)
 - MS027 (observability — scheduler emits trace points)
 - MS028-MS030 (inference modules — scheduler routes between them)
 - MS044 (Guardian — VRAM/CPU/RAM backpressure affects replay)

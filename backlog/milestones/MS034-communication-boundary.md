@@ -2,6 +2,7 @@
 
 > Parent: `backlog/milestones/INDEX.md` row MS034 (source ref dump 3450–3488).
 > Source: `raw/dumps/2026-05-18-the-ultimate-exploitation-of-the-tech-stack-AVX-plus-plus.md` lines 3450–3488 (Communication Boundary doctrinal block).
+> Source addendum (backward-sweep, 2026-05-20): per `~/devops-solutions-information-hub/wiki/log/2026-05-20-avx-plus-plus-dump-tail-backward-sweep-review.md`, the dump tail at **lines 18100-18200** elaborates the communication boundary into five **concrete scheduling surfaces** (Blackwell GPU + KV/Context + Memory pipeline + Tool routing + Backpressure). Those surfaces are operationalized by MS048 (Goldilocks Scheduler) but operate within the boundary contracts this milestone catalogs. Specifically: MS034 owns "what is communicable across what boundary"; MS048 owns "given a communicable request, what hardware tier + retrieval pipeline + back-pressure response apply." Both surfaces compose without conflict.
 > All entries below extract verbatim from these dump lines or trace to existing selfdef + sovereign-os repo state. No invention.
 
 ## Epics (E0341–E0350)
