@@ -84,4 +84,22 @@ if [[ "${failures}" -gt 0 ]]; then
     exit 1
 fi
 
-echo "L1-prometheus-alerts PASS: all four-watchdog series + runbook_urls locked"
+# Gate 5: modules/observability/install/apply.sh wires the alert
+# template into the deployment path. Drift catcher.
+APPLY_SH="${APPLY_SH:-modules/observability/install/apply.sh}"
+if [[ -f "${APPLY_SH}" ]]; then
+    if grep -q "alerts/selfdef.yml.template" "${APPLY_SH}"; then
+        echo "  PASS apply.sh references the alerts template"
+    else
+        echo "  FAIL apply.sh does not reference alerts/selfdef.yml.template"
+        exit 1
+    fi
+    if grep -q "ALERTS_DST" "${APPLY_SH}"; then
+        echo "  PASS apply.sh has ALERTS_DST destination variable"
+    else
+        echo "  FAIL apply.sh missing ALERTS_DST variable"
+        exit 1
+    fi
+fi
+
+echo "L1-prometheus-alerts PASS: all four-watchdog series + runbook_urls + apply.sh wiring locked"

@@ -43,20 +43,23 @@ case "$PROFILE" in
         PROM_DIR=$(toml_get prometheus_conf_dir    "$CONFIG_FILE" || echo "/etc/prometheus/conf.d")
         PROM_SVC=$(toml_get prometheus_service     "$CONFIG_FILE" || echo "prometheus.service")
         GRAFANA_DIR=$(toml_get grafana_dashboards_dir "$CONFIG_FILE" || echo "/var/lib/grafana/dashboards/selfdef")
+        PROM_RULES_DIR=$(toml_get prometheus_rules_dir "$CONFIG_FILE" || echo "/etc/prometheus/rules.d")
         SCRAPE_DST="${PROM_DIR}/selfdef.yml"
         DASHBOARD_DST="${GRAFANA_DIR}/selfdef.json"
+        ALERTS_DST="${PROM_RULES_DIR}/selfdef.yml"
         ;;
     external)
         STAGING_DIR=$(toml_get staging_dir "$CONFIG_FILE" || echo "/var/lib/selfdef/observability/staging")
         SCRAPE_DST="${STAGING_DIR}/prometheus/selfdef.yml"
         DASHBOARD_DST="${STAGING_DIR}/grafana/selfdef.json"
+        ALERTS_DST="${STAGING_DIR}/prometheus/rules/selfdef.yml"
         ;;
 esac
 
 changes=0
 
 # Ensure destination dirs exist.
-for d in "$(dirname "$SCRAPE_DST")" "$(dirname "$DASHBOARD_DST")"; do
+for d in "$(dirname "$SCRAPE_DST")" "$(dirname "$DASHBOARD_DST")" "$(dirname "$ALERTS_DST")"; do
     if [[ ! -d "$d" ]]; then
         run "create $d" -- mkdir -p "$d"
         changes=$((changes + 1))
@@ -95,6 +98,24 @@ if [[ ! -f "$DASHBOARD_DST" ]] || ! cmp -s "$NEW_DASHBOARD" "$DASHBOARD_DST"; th
     changes=$((changes + 1))
 fi
 module_record_file "$DASHBOARD_DST"
+
+# Drop the Prometheus alert rules (MS027 four-watchdog set — 9 alerts
+# with runbook_url linkage). The template is verbatim copy (no
+# placeholder substitution today), but install via the same pattern
+# so a future template variable can be wired in without changing
+# the deployment shape.
+ALERTS_TEMPLATE="${ASSETS_DIR}/alerts/selfdef.yml.template"
+if [[ -f "$ALERTS_TEMPLATE" ]]; then
+    if [[ ! -f "$ALERTS_DST" ]] || ! cmp -s "$ALERTS_TEMPLATE" "$ALERTS_DST"; then
+        if [[ "$DRY_RUN" == "1" ]]; then
+            log "DRY-RUN: would write $ALERTS_DST"
+        else
+            install -m 0644 "$ALERTS_TEMPLATE" "$ALERTS_DST"
+        fi
+        changes=$((changes + 1))
+    fi
+    module_record_file "$ALERTS_DST"
+fi
 
 # Reload Prometheus if bundled and something changed. Prometheus
 # 2.x reloads its config on SIGHUP without a full restart.
