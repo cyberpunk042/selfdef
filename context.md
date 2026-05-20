@@ -681,3 +681,11 @@ Total this resume: 103 selfdef IPS-authority crates. Workspace 268.
   *_key/aws_*/gcp_*/azure_*)
 
 Total this resume: 104 selfdef IPS-authority crates. Workspace 269.
+
+### Thirty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-policy-namespace-quota` (per-namespace cap on installed
+  policy count; plan_install returns Accepted{remaining}/
+  CapReached{cap}/UnknownNamespace; pairs with namespace-policy)
+
+Total this resume: 105 selfdef IPS-authority crates. Workspace 270.
