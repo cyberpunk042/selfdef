@@ -949,3 +949,11 @@ Total this resume: 133 selfdef IPS-authority crates. Workspace 298.
   re-register preserves last_beat)
 
 Total this resume: 134 selfdef IPS-authority crates. Workspace 299.
+
+### Sixty-seventh wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-block-attempt-counter` (per-(actor, action_kind) Stats
+  {attempts, blocked, last_attempt_ts, last_block_reason};
+  blocked_total per actor across kinds; dashboard-surfacing lane)
+
+Total this resume: 135 selfdef IPS-authority crates. Workspace 300.
