@@ -2123,3 +2123,12 @@ Total this resume: 264 selfdef IPS-authority crates. Workspace 429.
   inserts/hits/misses/expired counters)
 
 Total this resume: 265 selfdef IPS-authority crates. Workspace 430.
+
+### Hundred-and-ninety-eighth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-tier-ladder` (ordered tier names; promote/demote ±1
+  with AtBoundary at endpoints; each transition appended to
+  bounded history (oldest evicted at cap); non-empty reason
+  required)
+
+Total this resume: 266 selfdef IPS-authority crates. Workspace 431.
