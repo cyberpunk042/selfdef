@@ -2096,3 +2096,12 @@ Total this resume: 261 selfdef IPS-authority crates. Workspace 426.
   skips counters; pure deterministic)
 
 Total this resume: 262 selfdef IPS-authority crates. Workspace 427.
+
+### Hundred-and-ninety-fifth wave (same day, +1 more IPS-authority crate)
+
+- `selfdef-burn-rate-alert` (fast+slow windows of total/bad;
+  burn_tenths = observed_bad_bp*10 / slo_bad_rate_bp;
+  Severity{None/Slow/Fast/Both} compares each window burn to
+  its factor; Google-SRE multi-window pattern)
+
+Total this resume: 263 selfdef IPS-authority crates. Workspace 428.
