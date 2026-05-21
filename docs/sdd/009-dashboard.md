@@ -1,15 +1,44 @@
 # SDD-009 — Operator dashboard (requirements + scope)
 
-> Status: **scoping — requirements only, design deferred**
-> Owner: TBD (operator-driven design conversation, separate chat)
-> Last updated: 2026-05-15
-> Closes findings: none yet — net-new
+> Status: **superseded** — Stage-1 scoping requirements captured here
+> have been realized + extended across the following implementation
+> SDDs as of 2026-05-21:
+>   - **SDD-026** (operator dashboard architecture + flex-profile) —
+>     8-tab restructure + 13 Z-vectors; status implemented
+>   - **SDD-054** (dashboard architecture as shipped) — Stage-2
+>     retrospective canonicalizing the 17-panel single-page-with-
+>     anchor-nav layout
+>   - **SDD-056** (dashboard 8-tab restructure) — UX migration plan;
+>     all 5 steps shipped; status implemented
+>   - **SDD-060** (dashboard-prefs persistence + sync) — daemon-side
+>     persistence + PWA sync; status implemented
+> Together these specs cover every requirement originally captured
+> here PLUS:
+>   - per-panel visibility menu (MS043 UX batch 10)
+>   - refresh-rate selector (batch 11)
+>   - operator-named view presets + URL-hash deep-link (batches 12 + post-batch-14)
+>   - daemon-side `GET/PUT /v1/dashboard-prefs` + PWA sync (batches 13 + 14)
+>   - `GET /v1/dashboards` discovery + `selfdefctl dashboards` CLI verb
+> This SDD is retained as the historical scope-capture; consult
+> SDD-026 + SDD-054 + SDD-056 + SDD-060 for current doctrine.
+> Owner: superseded; further evolution lives in the implementation
+> SDDs above.
+> Last updated: 2026-05-21 (status: scoping → superseded).
 > Derived from: `docs/decisions.md` D-001 (dashboard scope requirements)
 
 ## Implementation status
 
-**Requirements captured. Design and implementation deliberately deferred
-to a separate design conversation per operator direction (D-001).**
+**Superseded.** The Stage-1 requirements below were captured before
+SDD-026 / SDD-054 / SDD-056 / SDD-060 ratified the actual shipped
+architecture. Reading order for the current dashboard surface:
+1. SDD-026 — vector-by-vector spec (Z-1 through Z-13)
+2. SDD-054 — as-shipped retrospective (17-panel + 8-tab)
+3. SDD-056 — UX migration plan + the always-visible strip
+4. SDD-060 — daemon-side preference persistence + PWA sync
+
+The remainder of this file preserves the original Stage-1 scope
+capture for historical reference; the implementation has moved
+beyond it.
 
 This SDD intentionally does **not** pick implementation choices. It
 captures the operator's scope-of-required-coverage so that whoever
