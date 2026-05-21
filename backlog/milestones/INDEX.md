@@ -103,8 +103,8 @@
 | MS011 | partial | 7 of 13 Z-vectors shipped end-to-end (Z-4 CPU mode, Z-5 GPU watt, Z-6 composite health, Z-7 network, Z-9 RAID, Z-10 storage, Z-13 SD-R83). Remaining: Z-1 dashboard-tabs UX, Z-2 LM Studio surface, Z-3 flex-profile state, Z-8 docker install paths, Z-11 MCP interop, Z-12 multi-tier REPL, Z-13 SD-R86/SD-R87 |
 | MS012 | done | perimeter coexistence CLI + config + agent-guard module (SDD-015 implemented) |
 | MS013 | partial | 21 SDDs at `implemented` (was 7 pre-session); 1 review; 3 scoping; 18 draft. Ongoing as production catches up to spec authoring |
-| MS014 | partial | SSH-wrap crate shipped; further integration with sain01 deferred |
-| MS015 | partial | NATS crate shipped; cross-host bus integration TBD |
+| MS014 | done | `selfdef-ssh-wrap` crate shipped (drop-in `ssh` replacement with per-host policy + OCSF events) + SDD-052 + `selfdefctl ssh-wrap {doctrine,install}` CLI + L1 gates. HTTP surface intentionally deferred per SDD-052 D-2 (wrapper is per-operator-user, not daemon-owned; HTTP would cross the isolation boundary). Sain-01 integration deferred per SDD-052 D-3. |
+| MS015 | done | `selfdef-nats` crate shipped (two-way bus pump + echo defense + passive/active modes) + SDD-053 + `selfdefctl nats` CLI + `GET /v1/nats` schema discovery + L1 gates. Multi-host operator integration arc (NATS server provisioning + per-fleet subject coordination) is the deferred follow-up — separate from the IPS layer-up. |
 | MS016 | partial | 1 eBPF program (execve) + tetragon TracingPolicy directory + collector crates shipped; 4 deferred programs per SDD-016 |
 | MS017 | done | agent-guard module shipped + /v1/modules/:name/check probe integration |
 | MS018 | done | vpn-bridge module + SDD-003; L2 bats coverage |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS028/MS031 promotion):**
-- `done`: 40 milestones (was 38)
-- `partial`: 8 milestones
+**Tally as of 2026-05-21 (post-MS014/MS015 promotion):**
+- `done`: 42 milestones (was 40)
+- `partial`: 6 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

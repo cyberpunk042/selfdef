@@ -46,6 +46,9 @@ selfdefctl communication-boundary     # MS034 / SDD-048 4 transports + 8 message
 selfdefctl authority                  # MS039+MS040 / SDD-049 7 levels + 5 rings + 6 profiles + 4 gates
 selfdefctl policy clusters            # MS033 / SDD-051 8 policy-cluster taxonomy
 selfdefctl policy crates              # all shipped selfdef-policy-* crates grouped by cluster
+selfdefctl ssh-wrap doctrine          # MS014 / SDD-052 SSH-wrap client-side defense doctrine
+selfdefctl ssh-wrap install           # step-by-step PATH-shadow install instructions
+selfdefctl nats                       # MS015 / SDD-053 two-way pump subject schema + modes
 ```
 
 ## Per-watchdog drill-down
@@ -148,6 +151,7 @@ GET /v1/sandbox-tiers                                (MS032 / SDD-047 D-2 5-tier
 GET /v1/communication-boundary                       (MS034 / SDD-048 D-2 4 transports + 8 message types)
 GET /v1/authority                                    (MS039+MS040 / SDD-049 D-2 7 levels + 5 rings + 6 profiles)
 GET /v1/policy                                       (MS033 / SDD-051 D-2 8 policy-cluster taxonomy + 30 crates)
+GET /v1/nats                                         (MS015 / SDD-053 D-2 NATS bridge subject schema + modes)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

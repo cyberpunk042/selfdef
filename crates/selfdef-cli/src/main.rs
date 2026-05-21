@@ -15,9 +15,11 @@ mod commit_authority;
 mod communication_boundary;
 mod doctor;
 mod filesystem_boundary;
+mod nats;
 mod network_boundary;
 mod policy;
 mod sandbox_tiers;
+mod ssh_wrap;
 mod tool_authority;
 mod emit;
 mod follow;
@@ -357,6 +359,16 @@ enum Command {
         #[command(subcommand)]
         action: PolicyAction,
     },
+    /// MS014 / SDD-052 selfdef-ssh-wrap operator surface. Doctrine +
+    /// install discovery for the drop-in `ssh` replacement.
+    SshWrap {
+        #[command(subcommand)]
+        action: SshWrapAction,
+    },
+    /// MS015 / SDD-053 selfdef-nats bridge operator surface.
+    /// Discovery of the two-way pump subject schema + modes +
+    /// echo-defense rule + cross-host invariants.
+    Nats,
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -634,6 +646,15 @@ enum SchedulerAuditCycleAction {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum SshWrapAction {
+    /// Print the doctrine (per-host policy + OCSF events +
+    /// refuse-to-connect + PATH-shadow drop-in).
+    Doctrine,
+    /// Print step-by-step install instructions.
+    Install,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1941,6 +1962,17 @@ async fn main() -> Result<()> {
                 PolicyAction::Clusters => policy::run_clusters()?,
                 PolicyAction::Crates => policy::run_crates()?,
             };
+            std::process::exit(exit);
+        }
+        Command::SshWrap { action } => {
+            let exit = match action {
+                SshWrapAction::Doctrine => ssh_wrap::run_doctrine()?,
+                SshWrapAction::Install => ssh_wrap::run_install_help()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::Nats => {
+            let exit = nats::run_doctrine()?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

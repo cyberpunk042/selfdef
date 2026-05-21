@@ -56,6 +56,8 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl communication-boundary"
     "selfdefctl authority"
     "selfdefctl policy"
+    "selfdefctl ssh-wrap"
+    "selfdefctl nats"
 )
 
 failures=0

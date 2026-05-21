@@ -39,6 +39,7 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
+mod nats;
 mod policy;
 mod commit_authority;
 mod communication_boundary;
@@ -277,6 +278,10 @@ pub fn router(state: ApiState) -> Router {
         // MS033 / SDD-051 D-2 — policy-cluster discovery. 8 functional
         // clusters organizing the 36-crate selfdef-policy-* ecosystem.
         .route("/v1/policy", get(policy::show))
+        // MS015 / SDD-053 D-2 — NATS bridge schema discovery. Two-way
+        // pump subject schema + modes + echo defense + cross-host
+        // invariants.
+        .route("/v1/nats", get(nats::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
