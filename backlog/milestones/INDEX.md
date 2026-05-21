@@ -91,7 +91,7 @@
 | ID | Status | Notes |
 |---|---|---|
 | MS001 | done | core 6 crates shipped pre-session |
-| MS002 | partial | collector crates exist; eBPF collector + tetragon collector + eventstream + journald + **auditd collector with AVC support** (parses `avc: denied/granted` SELinux/SMACK decisions, maps to ClassUid::PROCESS_ACTIVITY + ProcessActivity::Open + T1083 attack tag on denials) shipped. 3 more eBPF programs deferred per SDD-032 (eBPF substrate + Tetragon policy ledger). Multi-line SYSCALL+EXECVE auditd parsing deferred. |
+| MS002 | partial | collector crates exist; eBPF collector + tetragon collector + eventstream + journald + **auditd collector with AVC + SECCOMP + ANOM_ABEND + ANOM_PROMISCUOUS support** (4 high-signal kernel-emitted record types beyond the M3 USER_AUTH/LOGIN/ACCT baseline; each maps to ClassUid::PROCESS_ACTIVITY with attack tags T1083/T1562/T1040 + severity-tier appropriate to the surface) shipped. 3 more eBPF programs deferred per SDD-032 (eBPF substrate + Tetragon policy ledger). Multi-line SYSCALL+EXECVE auditd parsing deferred. |
 | MS003 | done | correlator + store + responder + signing shipped pre-session |
 | MS004 | done | 12 notifier integrations shipped (SDD-008 implemented); promoted 2026-05-21 |
 | MS005 | done | notifier engine + orchestrator crates shipped |

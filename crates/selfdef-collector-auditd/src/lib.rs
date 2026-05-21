@@ -146,6 +146,9 @@ impl AuditdCollector {
         match record.kind.as_str() {
             "USER_AUTH" | "USER_LOGIN" | "USER_ACCT" => self.build_auth_event(record, seq),
             "AVC" => self.build_avc_event(record, raw_line, seq),
+            "SECCOMP" => self.build_seccomp_event(record, seq),
+            "ANOM_ABEND" => self.build_anom_abend_event(record, seq),
+            "ANOM_PROMISCUOUS" => self.build_anom_promiscuous_event(record, seq),
             _ => self.build_other_event(record, seq),
         }
     }
@@ -264,6 +267,109 @@ impl AuditdCollector {
             ));
         }
         event
+    }
+
+    /// SECCOMP = a seccomp filter trip. The kernel emits one of these
+    /// every time a process tries a syscall its filter doesn't allow.
+    /// Very high signal — a tripped seccomp filter is either a benign
+    /// portability bug OR an attempted defense-evasion / sandbox-escape.
+    /// Maps to ClassUid::PROCESS_ACTIVITY + ProcessActivity::Other with
+    /// severity High. Attack tag: T1562 (Impair Defenses), Tactic::
+    /// DefenseEvasion — seccomp evasion is the relevant threat model.
+    fn build_seccomp_event(&self, record: &AuditRecord, seq: u64) -> Event {
+        let comm = record.get("comm").unwrap_or("?");
+        let exe = record.get("exe").unwrap_or("?");
+        let pid = record.get("pid").unwrap_or("?");
+        let syscall = record.get("syscall").unwrap_or("?");
+        let arch = record.get("arch").unwrap_or("?");
+        let sig = record.get("sig").unwrap_or("?");
+        let code = record.get("code").unwrap_or("?");
+
+        let message = format!(
+            "SECCOMP trip: pid={pid} comm={comm} exe={exe} syscall={syscall} \
+             arch={arch} sig={sig} filter_code={code}"
+        );
+
+        let raw = serde_json::to_value(&record.fields).unwrap_or(serde_json::Value::Null);
+
+        Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            ProcessActivity::Other as u32,
+            SeverityId::High,
+            &self.host_tag,
+            "auditd",
+            seq,
+        )
+        .with_status(StatusId::Failure)
+        .with_message(message)
+        .with_raw(raw)
+        .with_attack(TechniqueRef::new(
+            "T1562",
+            "Impair Defenses",
+            Tactic::DefenseEvasion,
+        ))
+    }
+
+    /// ANOM_ABEND = abnormal program termination via signal (SIGSEGV,
+    /// SIGABRT, SIGILL, SIGBUS, SIGFPE). Could be benign (crash, OOM),
+    /// could be exploit-attempt fallout (corrupted SUID binary,
+    /// successful-then-killed shellcode). Severity Medium so the
+    /// correlator can decide whether to escalate based on context
+    /// (e.g. ABEND on a SUID exec).
+    fn build_anom_abend_event(&self, record: &AuditRecord, seq: u64) -> Event {
+        let comm = record.get("comm").unwrap_or("?");
+        let exe = record.get("exe").unwrap_or("?");
+        let pid = record.get("pid").unwrap_or("?");
+        let sig = record.get("sig").unwrap_or("?");
+
+        let message = format!("ANOM_ABEND: pid={pid} comm={comm} exe={exe} sig={sig}");
+        let raw = serde_json::to_value(&record.fields).unwrap_or(serde_json::Value::Null);
+
+        Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            ProcessActivity::Terminate as u32,
+            SeverityId::Medium,
+            &self.host_tag,
+            "auditd",
+            seq,
+        )
+        .with_status(StatusId::Failure)
+        .with_message(message)
+        .with_raw(raw)
+    }
+
+    /// ANOM_PROMISCUOUS = network interface entered promiscuous mode
+    /// (typical of `tcpdump`, `wireshark`, or unauthorized sniffer).
+    /// Maps to ClassUid::PROCESS_ACTIVITY (no NETWORK_ACTIVITY mode-
+    /// change variant exists) with severity High. Attack tag:
+    /// T1040 (Network Sniffing, Tactic::Discovery).
+    fn build_anom_promiscuous_event(&self, record: &AuditRecord, seq: u64) -> Event {
+        let dev = record.get("dev").unwrap_or("?");
+        let prom = record.get("prom").unwrap_or("?");
+        let old_prom = record.get("old_prom").unwrap_or("?");
+        let auid = record.get("auid").unwrap_or("?");
+
+        let message = format!(
+            "ANOM_PROMISCUOUS: dev={dev} old_prom={old_prom} prom={prom} auid={auid}"
+        );
+        let raw = serde_json::to_value(&record.fields).unwrap_or(serde_json::Value::Null);
+
+        Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            ProcessActivity::Other as u32,
+            SeverityId::High,
+            &self.host_tag,
+            "auditd",
+            seq,
+        )
+        .with_status(StatusId::Failure)
+        .with_message(message)
+        .with_raw(raw)
+        .with_attack(TechniqueRef::new(
+            "T1040",
+            "Network Sniffing",
+            Tactic::Discovery,
+        ))
     }
 
     fn build_other_event(&self, record: &AuditRecord, seq: u64) -> Event {
