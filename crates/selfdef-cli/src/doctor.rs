@@ -70,7 +70,99 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     out.extend(check_hardware(cfg));
     // MS046 + MS047 + MS044 + MS048 — four-watchdog set deployability.
     out.extend(check_watchdog_set(cfg));
+    // MS027 — alert state from the daemon's /metrics (CLI parity with
+    // dashboard "Alerts overview" + `selfdefctl alerts`). Folded into
+    // doctor so a single `selfdefctl doctor` covers every alert-
+    // relevant signal alongside the watchdog deployability checks.
+    out.extend(check_alerts(cfg));
     out
+}
+
+/// MS027 — fold `selfdefctl alerts` into doctor. Tries to reach the
+/// local daemon's `/metrics` endpoint; classifies each of the 9 alert-
+/// relevant series. Emits one `CheckResult` per alert (so operators
+/// see WHICH alert is firing in the doctor output, not just a
+/// summary). Connection failure → skipped (daemon not up — that
+/// failure mode is already reported by other checks; don't double-fail).
+fn check_alerts(_cfg: &Config) -> Vec<CheckResult> {
+    use crate::alerts;
+    let mut out = Vec::new();
+    let metrics_text = match try_fetch_metrics_silently() {
+        Some(t) => t,
+        None => {
+            out.push(CheckResult {
+                category: "alerts".to_string(),
+                name: "MS027 alerts overview".to_string(),
+                status: CheckStatus::Skipped,
+                detail: "daemon /metrics unreachable (UNIX socket /run/selfdef.sock + TCP both unavailable); skipping alert classification".to_string(),
+            });
+            return out;
+        }
+    };
+    let series = alerts::parse_prom_exposition(&metrics_text);
+    let rows = alerts::classify(&series);
+    for r in &rows {
+        let status = match r.state {
+            "ok" => CheckStatus::Ok,
+            "warn" => CheckStatus::Warn,
+            "critical" => CheckStatus::Fail,
+            // unknown = series not yet exported; don't mark as fail
+            _ => CheckStatus::Skipped,
+        };
+        let val = match r.value {
+            Some(v) => format!("{v}"),
+            None => "—".to_string(),
+        };
+        out.push(CheckResult {
+            category: "alerts".to_string(),
+            name: format!("{} ({})", r.name, r.ms),
+            status,
+            detail: format!(
+                "{} threshold={} current={}",
+                r.series, r.threshold, val
+            ),
+        });
+    }
+    out
+}
+
+/// Best-effort `/metrics` fetch — never panics, never propagates
+/// errors out of doctor (alerts check is opportunistic).
+fn try_fetch_metrics_silently() -> Option<String> {
+    use std::process::Command;
+    // UNIX socket first.
+    let socket = std::env::var("SELFDEF_SOCKET")
+        .unwrap_or_else(|_| "/run/selfdef.sock".to_string());
+    if std::path::Path::new(&socket).exists() {
+        if let Ok(out) = Command::new("curl")
+            .args(["-s", "--unix-socket", &socket, "http://localhost/metrics"])
+            .output()
+        {
+            if out.status.success() && !out.stdout.is_empty() {
+                return Some(String::from_utf8_lossy(&out.stdout).into_owned());
+            }
+        }
+    }
+    // TCP fallback.
+    if let (Ok(url), Ok(token)) = (
+        std::env::var("SELFDEF_API_URL"),
+        std::env::var("SELFDEF_API_TOKEN"),
+    ) {
+        if let Ok(out) = Command::new("curl")
+            .args([
+                "-s",
+                "-H",
+                &format!("Authorization: Bearer {token}"),
+                &format!("{url}/metrics"),
+            ])
+            .output()
+        {
+            if out.status.success() && !out.stdout.is_empty() {
+                return Some(String::from_utf8_lossy(&out.stdout).into_owned());
+            }
+        }
+    }
+    None
 }
 
 /// SD-R9 + SDD-014: check the shared-audit-summary channel's path is
@@ -1524,5 +1616,24 @@ mod sdd_013_tests {
                 "watchdog-set must include a row about {w}; got {names:?}"
             );
         }
+    }
+
+    /// MS027: the alerts category lands in every doctor run. Since
+    /// the daemon /metrics endpoint won't be reachable in a unit
+    /// test, the row will be Skipped — but the category MUST appear
+    /// so operators see the alert-check ran (even if the daemon was
+    /// down at the time).
+    #[test]
+    fn alerts_category_surfaces_in_doctor_run() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = run(&cfg);
+        let cat_rows: Vec<&CheckResult> = results
+            .iter()
+            .filter(|r| r.category == "alerts")
+            .collect();
+        assert!(
+            !cat_rows.is_empty(),
+            "doctor::run() must surface alerts category (even when /metrics is unreachable; the row goes Skipped instead of being absent)"
+        );
     }
 }
