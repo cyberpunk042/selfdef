@@ -1,0 +1,8 @@
+# Profile: full.
+#
+# Scans home + tmp + srv + var/tmp + opt + usr/local + var/www.
+# Runtime: 30-180 minutes on a populated host.
+# Use on file-serving + dev hosts where operator-introduced files
+# (downloads, /opt installs, web roots) need coverage.
+
+profile = "full"

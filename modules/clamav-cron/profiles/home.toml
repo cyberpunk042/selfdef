@@ -1,0 +1,7 @@
+# Profile: home (default).
+#
+# Scans operator's home + tmp + srv + var/tmp.
+# Runtime: 1-10 minutes on a typical workstation.
+# Suitable for low-overhead daily detection on operator hosts.
+
+profile = "home"

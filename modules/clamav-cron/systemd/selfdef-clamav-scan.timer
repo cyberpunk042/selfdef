@@ -1,0 +1,22 @@
+# selfdef clamav-cron — daily scan timer.
+#
+# Fires daily at 02:30 + 30min jitter. Offset window:
+#   02:30  clamav-cron     (this)
+#   03:30  aide-bridge
+#   04:30  rkhunter-cron
+#   05:30  lynis-cron      (Sun only)
+#   continuous time-skew-watchdog (5min)
+# Persistent=true catches up missed runs.
+
+[Unit]
+Description=selfdef daily ClamAV virus scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/clamav-cron/README.md
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=selfdef-clamav-scan.service
+
+[Install]
+WantedBy=timers.target

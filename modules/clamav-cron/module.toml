@@ -1,0 +1,44 @@
+name        = "clamav-cron"
+version     = "0.1.0"
+summary     = "ClamAV daily scheduled scan + finding emission via logger tagged selfdef-clamav. Mitigates T1204 (User Execution) + T1027 (Obfuscated Files); complements rkhunter (rootkit signatures) with virus/trojan signatures"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["virus-signature-scan"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "clamscan" },
+    { kind = "binary", value = "freshclam" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `home` (default) — scan /home + /tmp + /var/tmp + /srv only
+#                   (~minutes runtime on a workstation).
+# `full`           — scan /home + /tmp + /var/tmp + /srv + /opt
+#                   + /usr/local + /var/www (hours runtime on a
+#                   large host).
+default = "home"
+available = ["home", "full"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-clamav-scan.service",
+    "/etc/systemd/system/selfdef-clamav-scan.timer",
+    "/usr/local/libexec/selfdef/clamav-scan.sh",
+    "/etc/selfdef/modules/clamav-cron.toml",
+]

@@ -1,0 +1,22 @@
+# selfdef clamav-cron — service unit.
+
+[Unit]
+Description=selfdef ClamAV virus signature scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/clamav-cron/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/clamav-scan.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/log/clamav /var/lib/clamav /dev/log
+# clamscan is CPU-bound on signature matching — nice + idle so the
+# operator stays responsive during the daily scan.
+Nice=18
+IOSchedulingClass=idle
+# Wide timeout (2h) for full profile; oneshot terminates naturally
+# when clamscan returns.
+TimeoutStartSec=2h
