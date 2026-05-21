@@ -37,6 +37,7 @@
 
 mod alerts;
 mod audit_chains;
+mod capability_tokens;
 mod commit_authority;
 mod control;
 mod cpu;
@@ -243,6 +244,10 @@ pub fn router(state: ApiState) -> Router {
         // Static 11-crate pipeline contract for the 8 ToolId × 7
         // ExecutionMode × 6 Profile authorization matrix.
         .route("/v1/tool-authority", get(tool_authority::show))
+        // MS035 / SDD-044 D-2 — capability-tokens schema discovery.
+        // Token shape + 5-verdict CheckVerdict ladder + 5-companion
+        // crate ecosystem + caller contract.
+        .route("/v1/capability-tokens", get(capability_tokens::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

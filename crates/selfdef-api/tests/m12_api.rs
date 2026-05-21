@@ -1981,6 +1981,30 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn capability_tokens_route_returns_200_with_canonical_schema() {
+    // MS035 / SDD-044 D-2: /v1/capability-tokens returns the static
+    // schema. Assert canonical counts (5/5/5/5).
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/capability-tokens")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let verdicts = v["verdicts"].as_array().unwrap();
+    assert_eq!(verdicts.len(), 5);
+    assert_eq!(verdicts[0]["variant"].as_str().unwrap(), "Ok");
+    assert_eq!(verdicts[4]["variant"].as_str().unwrap(), "MissingScope");
+    assert_eq!(v["token_shape"].as_array().unwrap().len(), 5);
+    assert_eq!(v["companion_crates"].as_array().unwrap().len(), 5);
+    assert_eq!(v["caller_contract"].as_array().unwrap().len(), 5);
+}
+
+#[tokio::test]
 async fn tool_authority_route_returns_200_with_canonical_schema() {
     // MS042 / SDD-050 D-2: /v1/tool-authority returns the static
     // doctrine schema. Assert canonical counts + first/last tool +

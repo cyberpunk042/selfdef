@@ -9,6 +9,7 @@
 
 mod alerts;
 mod audit_chains;
+mod capability_tokens;
 mod commit_authority;
 mod doctor;
 mod tool_authority;
@@ -306,6 +307,16 @@ enum Command {
         #[command(subcommand)]
         action: ToolAuthorityAction,
     },
+    /// MS035 / SDD-044 capability-tokens operator surface. Offline
+    /// discovery of the typed authority-handle schema (Token shape +
+    /// 5-verdict CheckVerdict ladder + 5-companion-crate ecosystem).
+    /// Mutation surface (issue / revoke) intentionally not exposed
+    /// — the store is in-memory per SDD-044 D-3 and operator-token
+    /// minting goes through MS003-signed config today.
+    CapabilityTokens {
+        #[command(subcommand)]
+        action: CapabilityTokensAction,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -583,6 +594,15 @@ enum SchedulerAuditCycleAction {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum CapabilityTokensAction {
+    /// Print the 5 CheckVerdict variants + their semantics.
+    Verdicts,
+    /// Print the full SDD-044 schema (Token shape + companion
+    /// crates + caller contract + refusal rules).
+    Schema,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1807,6 +1827,13 @@ async fn main() -> Result<()> {
                 ToolAuthorityAction::Permits { tool, mode, profile } => {
                     tool_authority::run_permits_cli(&tool, &mode, &profile)?
                 }
+            };
+            std::process::exit(exit);
+        }
+        Command::CapabilityTokens { action } => {
+            let exit = match action {
+                CapabilityTokensAction::Verdicts => capability_tokens::run_verdicts()?,
+                CapabilityTokensAction::Schema => capability_tokens::run_schema()?,
             };
             std::process::exit(exit);
         }

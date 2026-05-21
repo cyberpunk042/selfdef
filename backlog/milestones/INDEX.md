@@ -124,7 +124,7 @@
 | MS032 | partial | sandbox-tier crates shipped: `selfdef-sandbox-tier-policy` (15 tests), `selfdef-sandbox-dispatcher` (14 tests), `selfdef-sandbox-fs-isolation`, `selfdef-sandbox-network-isolation`, `selfdef-sandbox-mirror` (~1400 LOC total). Missing: HTTP/CLI/dashboard operator surfaces. |
 | MS033 | partial | 122 policy crates shipped under `crates/selfdef-policy-*` (conflict-detector, bundle-signature, diff-classifier, namespace, spec-validator, cooldown-window, traffic-ramp, change-window, decision-batcher, etc). Missing: composite policy-trace operator surface. |
 | MS034 | partial | `selfdef-communication-boundary` crate shipped (372 LOC). Missing: HTTP/CLI surface + dashboard panel. |
-| MS035 | partial | Capability-token crates shipped: `selfdef-capability-token-store` (9 tests), `selfdef-capability-word` (496 LOC), `selfdef-capability-mirror` (416 LOC), `selfdef-tool-capability-policy` (12 tests), `selfdef-profile-authority-gate` (660 LOC). Missing: operator-facing CLI/HTTP. |
+| MS035 | done | 5-crate ecosystem (token-store + word + mirror + tool-capability-policy + profile-authority-gate) + SDD-044 + `selfdefctl capability-tokens {verdicts,schema}` CLI + `GET /v1/capability-tokens` schema discovery + L1 gates. Mutation surface (issue/revoke via CLI) deferred per SDD-044 D-3 (in-memory store; token-minting goes through MS003-signed config + SDD-043 high-risk classifier per D-4). |
 | MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
 | MS037 | partial | `selfdef-filesystem-boundary` crate shipped (496 LOC). Missing: HTTP/CLI surface. |
 | MS038 | partial | `selfdef-network-boundary` crate shipped (459 LOC). Missing: HTTP/CLI surface. |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-survey + MS041/MS042 promotion):**
-- `done`: 29 milestones (was 27 last reconciliation; was ~8 pre-session)
-- `partial`: 19 milestones
+**Tally as of 2026-05-21 (post-MS035 promotion):**
+- `done`: 30 milestones (was 29; was ~8 pre-session)
+- `partial`: 18 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

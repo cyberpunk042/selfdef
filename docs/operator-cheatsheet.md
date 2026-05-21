@@ -35,6 +35,8 @@ selfdefctl commit-authority validate <file>   # offline envelope validation (exi
 selfdefctl commit-authority classify <file>   # high-risk classification (exit 1 if high-risk)
 selfdefctl tool-authority tools       # MS042 / SDD-050 tool-policy pipeline discovery (8 tools + 9 gates)
 selfdefctl tool-authority permits <tool> <mode> <profile>   # is-authorized check (exit 0 ALLOW; 1 NOT)
+selfdefctl capability-tokens verdicts # MS035 / SDD-044 5-verdict CheckVerdict ladder
+selfdefctl capability-tokens schema   # Token shape + 5 companion crates + caller contract
 ```
 
 ## Per-watchdog drill-down
@@ -130,6 +132,7 @@ GET /v1/health                                       (MS011 Z-6 composite aggreg
 GET /v1/audit-chains                                 (MS009 composite chain-check for perimeter/guardian/scheduler)
 GET /v1/commit-authority                             (MS041 / SDD-043 D-3 commit-doctrine schema discovery)
 GET /v1/tool-authority                               (MS042 / SDD-050 D-2 11-crate tool-policy pipeline discovery)
+GET /v1/capability-tokens                            (MS035 / SDD-044 D-2 typed-authority-handles schema discovery)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
