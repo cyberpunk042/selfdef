@@ -8,6 +8,7 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 mod alerts;
+mod audit_chains;
 mod doctor;
 mod emit;
 mod follow;
@@ -267,6 +268,21 @@ enum Command {
         #[arg(long)]
         json: bool,
         /// Single-line `selfdef-health: WORST` for PS1 / status bars.
+        #[arg(long)]
+        quiet: bool,
+    },
+    /// MS009 composite audit-chain replay across the 3 chained-audit
+    /// watchdogs (perimeter / guardian / scheduler). Calls
+    /// GET /v1/audit-chains which runs each watchdog's
+    /// audit_chain_check on its OCSF JSONL file. Renders one row per
+    /// chain with EVENTS_VERIFIED + STATE + DETAIL (error message
+    /// with line number when broken). Exit 0 iff every chain
+    /// verified; 1 otherwise.
+    AuditChains {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+        /// Single-line `selfdef-audit-chains: WORST` for status bars.
         #[arg(long)]
         quiet: bool,
     },
@@ -1699,6 +1715,10 @@ async fn main() -> Result<()> {
         }
         Command::Health { json, quiet } => {
             let exit = health::run(json, quiet).context("health")?;
+            std::process::exit(exit);
+        }
+        Command::AuditChains { json, quiet } => {
+            let exit = audit_chains::run(json, quiet).context("audit-chains")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

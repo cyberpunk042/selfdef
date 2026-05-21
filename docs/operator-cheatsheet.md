@@ -27,6 +27,9 @@ selfdefctl alerts --json              # jq-friendly output (worst + per-row stat
 selfdefctl health                     # MS011 Z-6 composite health (one-line: is the box OK?)
 selfdefctl health --quiet             # `selfdef-health: WORST` for PS1 / gates
 selfdefctl health --json              # composite worst + 6 component rows
+selfdefctl audit-chains               # MS009 chain integrity across 3 chained watchdogs
+selfdefctl audit-chains --quiet       # `selfdef-audit-chains: WORST` exit-coded gate
+selfdefctl audit-chains --json        # raw /v1/audit-chains JSON envelope
 ```
 
 ## Per-watchdog drill-down
