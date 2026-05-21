@@ -1,0 +1,7 @@
+# Profile: audit (default).
+#
+# Installs the 99-selfdef-immutable.rules file with `-e 1` (audit
+# enabled, rules mutable). Operator can freely modify audit rules
+# via auditctl during baseline tuning. Flip to enforce when ready.
+
+profile = "audit"

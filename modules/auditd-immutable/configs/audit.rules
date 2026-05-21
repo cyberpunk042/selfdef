@@ -1,0 +1,12 @@
+# selfdef auditd-immutable — audit profile.
+#
+# This file is loaded LAST in the auditctl ruleset (99- prefix
+# = lex-order last). It sets:
+#
+#   -e 1   — audit enabled, rules MUTABLE (default)
+#
+# Operator can `auditctl -l` + `auditctl -d ...` freely.
+# Use this profile during baseline-tuning of audit-rules.
+# When ready: flip to enforce profile.
+
+-e 1

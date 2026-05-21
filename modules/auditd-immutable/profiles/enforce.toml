@@ -1,0 +1,14 @@
+# Profile: enforce.
+#
+# Sets `-e 2` — kernel locks audit rule set until reboot.
+# Operator MUST set acknowledge_immutable=true because UNDOING
+# requires a reboot AND any operator-side workflow that
+# modifies audit rules (test-then-apply iterations) breaks
+# until reboot.
+
+profile = "enforce"
+
+# Refuse-to-brick gate. Set to true only after baseline-tuning
+# of audit-rules is complete + operator confirms no workflow
+# needs runtime auditctl modification.
+acknowledge_immutable = false

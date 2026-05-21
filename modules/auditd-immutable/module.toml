@@ -1,0 +1,47 @@
+name        = "auditd-immutable"
+version     = "0.1.0"
+summary     = "Append `-e 2` to audit-rules — kernel refuses ALL audit rule modifications until reboot. Defends audit-rules+auditd-tune from runtime-tampering by an attacker who lands root"
+category    = "hardening"
+
+# Pair with audit-rules; this is the immutability cap on its rule set.
+depends_on  = ["audit-rules"]
+conflicts   = []
+provides    = ["auditd-rules-immutable"]
+consumes    = ["auditctl-rules"]
+
+requires    = [
+    { kind = "binary", value = "auditctl" },
+    { kind = "binary", value = "augenrules" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+# phase=post so audit-rules' main-phase apply runs first; then
+# we cap with -e 2.
+phase = "post"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `enforce` (default) — append `-e 2` to /etc/audit/rules.d/
+#                      99-selfdef-immutable.rules. Operator
+#                      MUST set acknowledge_immutable=true
+#                      because UNDOING requires a full reboot.
+# `audit`           — install the rule file BUT commented-out
+#                      (sets `-e 1` audit-enabled-not-immutable).
+#                      Operator collects baseline + flips to
+#                      enforce when ready.
+default = "audit"
+available = ["audit", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/audit/rules.d/99-selfdef-immutable.rules",
+    "/etc/selfdef/modules/auditd-immutable.toml",
+]

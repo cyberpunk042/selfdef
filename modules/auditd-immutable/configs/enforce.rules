@@ -1,0 +1,23 @@
+# selfdef auditd-immutable — enforce profile.
+#
+#   -e 2   — audit enabled, RULES IMMUTABLE until reboot.
+#
+# Once loaded (next augenrules --load OR daemon restart), the
+# kernel REFUSES every subsequent auditctl modification:
+#   - `auditctl -d <rule>` → exit 1 "audit_set_enabled: rejected"
+#   - `auditctl -D` → exit 1
+#   - `auditctl -e 0` → exit 1
+#   - `augenrules --load` of a NEW rule file → kernel ignores
+#     the load attempt; rules stay as-they-were-at-immutability
+#
+# Only a REBOOT can undo. This is the strongest defense against
+# an attacker who lands root + tries to silence audit detection
+# (audit-rules + auditd-tune + selfdef-collector-auditd) before
+# operator notices.
+#
+# Operator-pull rule changes follow the procedure:
+#   1. Edit /etc/audit/rules.d/<file>.rules
+#   2. Reboot the host
+#   3. Verify with `auditctl -s | grep enabled` (expect 2)
+
+-e 2
