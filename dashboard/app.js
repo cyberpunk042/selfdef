@@ -167,6 +167,9 @@
     if (kind === "health") {
       return refreshHealth();
     }
+    if (kind === "audit-chains") {
+      return refreshAuditChains();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -1085,6 +1088,45 @@
     }
   }
 
+  /// MS009: render per-watchdog audit-chain integrity. Each row
+  /// shows watchdog name + events_verified count + error detail
+  /// when the chain broke. Operator-actionable: the error string
+  /// carries the line number where the chain broke (use the matching
+  /// info-hub *-audit-log-corruption.md runbook to recover).
+  async function refreshAuditChains() {
+    const ul = document.getElementById("audit-chains-rows");
+    const meta = document.getElementById("audit-chains-meta");
+    const aggEl = document.getElementById("audit-chains-aggregate");
+    try {
+      const resp = await get("/v1/audit-chains");
+      const worst = resp.worst;
+      const aggClass = worst === "ok" ? "fa-ok"
+                     : worst === "critical" ? "fa-fail"
+                     : "fa-unknown";
+      const lis = resp.chains.map(c => {
+        const css = c.ok ? "fa-ok" : "fa-fail";
+        const label = c.ok ? "OK" : "BROKEN";
+        const detail = c.ok
+          ? `${c.events_verified} events verified · ${c.path}`
+          : `${c.error || "chain broken"} · ${c.path}`;
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${label}</span>
+          <code>${c.watchdog}</code>
+          <small>${detail}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${resp.chains.length} chain(s) · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   /// MS011 Z-6: render the composite health aggregate at the top
   /// of the dashboard. Single panel for "is everything OK?".
   async function refreshHealth() {
@@ -1335,6 +1377,7 @@
   refreshGpu();
   refreshCpu();
   refreshHealth();
+  refreshAuditChains();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1380,6 +1423,10 @@
   // probes. 30 s gives operators a fast top-of-page glance without
   // hammering nvidia-smi / df / ping.
   setInterval(refreshHealth, 30000);
+  // Audit-chain replay walks 3 OCSF JSONL files end-to-end. On a
+  // healthy box the chains grow at ~1 event per Sigkill / supervisor
+  // event / routing decision; replaying every 60 s is fine.
+  setInterval(refreshAuditChains, 60000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
