@@ -1,0 +1,47 @@
+name        = "sysctl-network-baseline"
+version     = "0.1.0"
+summary     = "Default-deny sysctl baseline for net.ipv4 + net.ipv6 — disable source routing, ICMP redirect accept, secure_redirects; enable syn-cookies, rp_filter strict, log_martians; harden the kernel network surface against trivially-known LAN/WAN attacks"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sysctl-network-hardened"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — broad net.ipv4 + net.ipv6 hardening,
+#                       safe for nearly every server +
+#                       workstation. Leaves IPv6 enabled +
+#                       leaves ip_forward at distro default.
+# `router`             — same baseline + sets ip_forward=1
+#                       AND enables conntrack hardening for
+#                       hosts intentionally routing
+#                       (gateway, IPS-bridge, podman-rootful).
+# `paranoid`           — baseline + disable IPv6 entirely +
+#                       disable ICMP echo (silent host).
+#                       Operator-pull only; breaks
+#                       traceroute + several monitoring
+#                       tools.
+default = "baseline"
+available = ["baseline", "router", "paranoid"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sysctl-network-baseline.toml",
+    "/etc/sysctl.d/50-selfdef-network-baseline.conf",
+]
