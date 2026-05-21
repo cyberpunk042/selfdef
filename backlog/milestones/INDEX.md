@@ -117,10 +117,10 @@
 | MS025 | done | detect-host module shipped + L2 bats + /v1/modules/:name/check |
 | MS026 | done | integrity-sentinel module shipped + L2 bats + /v1/modules/:name/check |
 | MS027 | done | observability module + 17 Prometheus gauges + 20-panel Grafana dashboard + 9 alert rules + /v1/alerts server-side classifier + dashboard panel + selfdefctl alerts + doctor integration — end-to-end fullstack |
-| MS028 | partial | bitnet-gpu-inference module shipped; SDD-035 draft (Stage-2 architectural spec retrofitted) |
+| MS028 | done | `modules/bitnet-gpu-inference/` shipped (manifest + apply.sh + check.sh + uninstall.sh) + L2 bats `L2-bitnet-gpu-inference` + cross-cutting `/v1/modules/:name/check` health probe (commit c1f41c6) + `/v1/modules/diff` activation tracking + dashboard "Modules" panel + SDD-035 promoted to `implemented` 2026-05-21. |
 | MS029 | done | slm-cpu-loop module shipped + L2 bats + /v1/modules/:name/check |
 | MS030 | done | tensor-parallel-inference module shipped + L2 bats + /v1/modules/:name/check |
-| MS031 | partial | wasm-aot-cache module shipped + L2 bats; SDD-022 (hardware-exploit doctrine, including wasm AOT) implemented |
+| MS031 | done | `modules/wasm-aot-cache/` shipped + L2 bats `L2-wasm-aot-cache` + cross-cutting `/v1/modules/:name/check` health probe + `/v1/modules/diff` activation tracking + dashboard "Modules" panel + SDD-022 (hardware-exploit doctrine including wasm AOT) implemented. Selfdef-hardware crate's `wasm_aot.target_cpu` / `target_features` / `ternary_kernel_hint` capabilities surfaced through `/v1/hardware/capabilities`. |
 | MS032 | done | 5-crate sandbox set (tier-policy + dispatcher + fs-isolation + network-isolation + mirror, ~1400 LOC, 29 tests) + SDD-047 + `selfdefctl sandbox-tiers` CLI + `GET /v1/sandbox-tiers` schema discovery + L1 gates. Live-state surface (D-3 GET /v1/sandbox-tiers/active) deferred. |
 | MS033 | done | 36 `selfdef-policy-*` crates + SDD-051 + `selfdefctl policy {clusters,crates}` CLI + `GET /v1/policy` schema discovery + L1 gates. Live policy-trace surface (D-3 GET /v1/policy/trace/:id) + integration-test cluster crate (D-4 selfdef-policy-suite) deferred. |
 | MS034 | done | `selfdef-communication-boundary` crate (372 LOC) + SDD-048 + `selfdefctl communication-boundary` CLI + `GET /v1/communication-boundary` schema discovery + L1 gates. Per-message-type Prom counters (D-4) deferred. |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS033 promotion):**
-- `done`: 38 milestones (was 37)
-- `partial`: 10 milestones
+**Tally as of 2026-05-21 (post-MS028/MS031 promotion):**
+- `done`: 40 milestones (was 38)
+- `partial`: 8 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

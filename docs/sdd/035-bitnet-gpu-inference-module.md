@@ -1,13 +1,17 @@
 # SDD-035 — BitNet GPU inference module — MS028
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `bitnet-gpu-inference` module under
 > `modules/bitnet-gpu-inference/`. The module provisions the host for
 > GPU-side BitNet ternary inference (1-bit / ternary kernels exploiting
 > AVX-512 BF16 ZMM utilization per dump line 11187+) and ships in
-> production today.
+> production today: module manifest + install/apply.sh + install/
+> check.sh + L2 bats coverage + `/v1/modules/:name/check` per-module
+> health probe (cross-cutting, commit c1f41c6) + `/v1/modules/diff`
+> activation tracking + dashboard "Modules" panel.
 > Owner: operator-supervised; agent-authored.
-> Last updated: 2026-05-21.
+> Last updated: 2026-05-21 (status: draft → implemented; body always
+> said "ships in production today" — the header had drifted).
 > Implements milestone: MS028 (catalog
 > `backlog/milestones/MS028-bitnet-gpu-inference-module.md`)
 > Builds on: SDD-018 (MS010 hardware-tune-cache — upstream substrate
