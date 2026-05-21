@@ -1,6 +1,6 @@
 # SDD-036 — SLM-on-CPU agent loop module — MS029
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `slm-cpu-loop` module under `modules/slm-cpu-loop/`. The
 > module pins a small language model (Phi-4-mini / Qwen3-1.7B class)
 > to CCD-0 cores for low-latency background agent work per SD-R72

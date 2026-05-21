@@ -1,6 +1,6 @@
 # SDD-033 — Agent-guard host-level invariants on AI agents — MS017
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `agent-guard` module under `modules/agent-guard/`. The
 > module ships in production (5 Tetragon TracingPolicies +
 > `install/apply.sh` with profile + per-policy controls); this SDD

@@ -1,6 +1,6 @@
 # SDD-042 — Integrity-sentinel module — SHA256 baseline + drift — MS026
 
-> Status: **draft** — Stage-2 architectural spec for the shipped
+> Status: **implemented** — Stage-2 architectural spec for the shipped
 > `integrity-sentinel` module under `modules/integrity-sentinel/`.
 > The module provides SHA256 baseline verification for policy
 > artifacts and fails closed on drift.

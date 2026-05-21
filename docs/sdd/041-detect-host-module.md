@@ -1,6 +1,6 @@
 # SDD-041 — Detect-host module — the daemon as a first-class module — MS025
 
-> Status: **draft** — Stage-2 architectural spec for the shipped
+> Status: **implemented** — Stage-2 architectural spec for the shipped
 > `detect-host` module under `modules/detect-host/`. This module is
 > the **canonical reference** for the `install.kind = "debian-package"`
 > contract documented in `docs/dev/modules.md` — it has NO install

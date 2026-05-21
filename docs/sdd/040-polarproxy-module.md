@@ -1,6 +1,6 @@
 # SDD-040 — Polarproxy module — transparent TLS inspection — MS023
 
-> Status: **draft** — Stage-2 architectural spec for the shipped
+> Status: **implemented** — Stage-2 architectural spec for the shipped
 > `polarproxy` module under `modules/polarproxy/`. The module
 > provisions transparent TLS termination → PCAP-over-IP for content
 > visibility, with two profile modes (host-tls-mitm vs bridge-tap).

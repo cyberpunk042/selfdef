@@ -1,6 +1,6 @@
 # SDD-039 — Bridge-L2 module — layer-2 transparent bridge — MS024
 
-> Status: **draft** — Stage-2 architectural spec for the shipped
+> Status: **implemented** — Stage-2 architectural spec for the shipped
 > `bridge-l2` module under `modules/bridge-l2/`. The module provisions
 > a Linux bridge interface + nftables FORWARD chain that inline
 > network modules (Suricata, polarproxy) hook into.

@@ -1,6 +1,6 @@
 # SDD-034 — Observability module + four-watchdog dashboards/alerts — MS027
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `observability` module under `modules/observability/`. The
 > module has been EXPANDED beyond its catalog baseline this cycle —
 > the original 7-panel + scrape-only contract grew to 20 panels +

@@ -1,6 +1,6 @@
 # SDD-037 — Tensor-parallel inference module — MS030
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `tensor-parallel-inference` module under
 > `modules/tensor-parallel-inference/`. The module provisions
 > tensor-parallel inference splits where every GPU hosts a slice —

@@ -1,6 +1,6 @@
 # SDD-038 — WASM AOT cache module — MS031
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
+> Status: **implemented** — Stage-2 architectural spec for the
 > shipped `wasm-aot-cache` module under `modules/wasm-aot-cache/`. The
 > module provisions `/var/lib/selfdef/wasm-aot/` for cached `.cwasm`
 > artifacts produced by `wasmtime compile` against the SD-R30
