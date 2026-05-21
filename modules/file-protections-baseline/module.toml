@@ -1,0 +1,38 @@
+name        = "file-protections-baseline"
+version     = "0.1.0"
+summary     = "Enable kernel fs.protected_{hardlinks,symlinks,fifos,regular} sysctls. Defeats classic /tmp-race local privilege escalation, hardlink-to-root-file gimmicks, FIFO-redirect tricks. Modern distros default to ON; this module guarantees the state across drift"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["file-protections-enabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — all 4 protections ON
+# `strict`             — same; the kernel has no
+#                       higher-level than `1` for these.
+#                       Reserved for future kernel options.
+default = "baseline"
+available = ["baseline", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/file-protections-baseline.toml",
+    "/etc/sysctl.d/50-selfdef-file-protections.conf",
+]
