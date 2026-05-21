@@ -1,0 +1,10 @@
+# Profile: strict.
+#
+# DENY ALL by default + allow ONLY devices in the operator's
+# baseline at /etc/selfdef/usbguard/operator-baseline.rules.
+#
+# apply.sh REFUSES to install this profile if the baseline file
+# is missing or empty (refuse-to-brick). Generate the baseline
+# FIRST with profile=permissive.
+
+profile = "strict"

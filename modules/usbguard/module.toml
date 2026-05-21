@@ -1,0 +1,43 @@
+name        = "usbguard"
+version     = "0.1.0"
+summary     = "USB device authorization (USBGuard) — mitigates T1200 Hardware Additions (BadUSB / rubber-ducky / unauthorized HID injection)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["usb-authorization"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "usbguard" },
+    { kind = "binary", value = "usbguard-daemon" },
+]
+
+# Single bundle per host.
+instanced = false
+
+# `main` phase: usbguard-daemon is an OS-package service. We
+# install rules + restart the daemon so the new policy takes
+# effect.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# DEFAULT is `permissive` (allow-all + log) — NOT `strict`. Operator
+# must consciously opt into strict device-allowlist mode after
+# generating a baseline from currently-attached devices.
+# Bricking-yourself protection: a fresh install of `usbguard` with
+# default-deny rules locks out the operator's keyboard. We refuse
+# to ship that as the default profile.
+default = "permissive"
+available = ["permissive", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = ["/etc/usbguard/rules.conf", "/etc/usbguard/usbguard-daemon.conf.d/50-selfdef.conf", "/etc/selfdef/modules/usbguard.toml"]

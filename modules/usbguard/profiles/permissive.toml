@@ -1,0 +1,9 @@
+# Profile: permissive (default).
+#
+# Allow ALL USB devices but emit a USBGuard event per attach/
+# detach. Audit-only mode — does NOT block. Use to build a
+# baseline before switching to strict.
+#
+# Safe to apply on any host without locking the operator out.
+
+profile = "permissive"
