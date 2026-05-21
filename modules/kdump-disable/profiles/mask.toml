@@ -1,0 +1,10 @@
+# Profile: mask (default).
+#
+# stop + disable + MASK kdump.service + kexec-tools.service (if
+# present). Masking is the strongest disable — systemd refuses
+# to start until manually unmasked. Defends against:
+# - apt/dnf install pulling in a kdump-dependent package + auto-
+#   starting it via Wants=
+# - operator accidentally re-enabling
+
+profile = "mask"

@@ -1,0 +1,7 @@
+# Profile: stop.
+#
+# stop + disable only. Operator can `systemctl start kdump` to
+# re-enable for occasional debug-driven crash capture. Less
+# defense against a package-induced re-enable.
+
+profile = "stop"
