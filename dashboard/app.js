@@ -143,6 +143,9 @@
     if (kind === "modules") {
       return refreshModules();
     }
+    if (kind === "alerts") {
+      return refreshAlerts();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -620,6 +623,95 @@
     }
   }
 
+  // Parse Prometheus exposition format → {series_name: latest_value}.
+  // Comment lines (# ...) are skipped; samples with labels are folded
+  // by stripping the {labels} block (we only use unlabeled series here).
+  function parsePromExposition(text) {
+    const out = {};
+    for (const line of text.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      // Strip any {labels} block.
+      const noLabels = trimmed.replace(/\{[^}]*\}/, "");
+      const parts = noLabels.split(/\s+/);
+      if (parts.length < 2) continue;
+      const name = parts[0];
+      const val = parseFloat(parts[1]);
+      if (Number.isFinite(val)) out[name] = val;
+    }
+    return out;
+  }
+
+  // Alerts overview — surfaces the 9 alert-relevant series from
+  // modules/observability/assets/alerts/selfdef.yml.template so
+  // operators see the four-watchdog set's alert-state directly in
+  // the dashboard without needing an external Prometheus.
+  async function refreshAlerts() {
+    const ul = document.getElementById("alerts-rows");
+    const meta = document.getElementById("alerts-meta");
+    const aggEl = document.getElementById("alerts-aggregate");
+    try {
+      // /metrics returns Prometheus exposition format (text/plain).
+      const url = api("/metrics");
+      const res = await fetch(url, { headers: headers(), cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const series = parsePromExposition(await res.text());
+
+      // Each row: { name, series, value, threshold_label, state }
+      // state ∈ {"ok", "warn", "critical", "unknown"}
+      const rows = [
+        { name: "FrictionAuditFailing",        ms: "MS046", series: "selfdef_friction_audit_failing_total",            threshold: "> 0",           critical: v => v > 0 },
+        { name: "PerimeterSigkill",            ms: "MS047", series: "selfdef_perimeter_sigkills_total",                 threshold: "rate > 0 / 5m", warn:     v => v > 0 },
+        { name: "PerimeterPolicyMissing",      ms: "MS047", series: "selfdef_perimeter_policy_present",                 threshold: "== 0 for 2m",   critical: v => v === 0 },
+        { name: "PerimeterChainBroken",        ms: "MS047", series: "selfdef_perimeter_audit_chain_events",             threshold: "== -1",         critical: v => v === -1 },
+        { name: "GuardianFailedResponse",      ms: "MS044", series: "selfdef_guardian_failed_responses_total",          threshold: "> 0",           critical: v => v > 0 },
+        { name: "GuardianTetragonSocketMissing", ms: "MS044", series: "selfdef_guardian_tetragon_socket_present",       threshold: "== 0 for 2m",   warn:     v => v === 0 },
+        { name: "GuardianChainBroken",         ms: "MS044", series: "selfdef_guardian_audit_chain_events",              threshold: "== -1",         critical: v => v === -1 },
+        { name: "SchedulerSustainedBackpressure", ms: "MS048", series: "selfdef_scheduler_backpressured_decisions_total", threshold: "rate > 0 / 10m", warn:    v => v > 0 },
+        { name: "SchedulerChainBroken",        ms: "MS048", series: "selfdef_scheduler_audit_chain_events",             threshold: "== -1",         critical: v => v === -1 },
+      ];
+
+      let worst = "ok";
+      const lis = rows.map(r => {
+        const v = series[r.series];
+        let state = "unknown", label = "—";
+        if (Number.isFinite(v)) {
+          label = String(v);
+          if (r.critical && r.critical(v))      state = "critical";
+          else if (r.warn && r.warn(v))         state = "warn";
+          else                                  state = "ok";
+        }
+        if (state === "critical")                                       worst = "critical";
+        else if (state === "warn" && worst !== "critical")              worst = "warn";
+        else if (state === "unknown" && worst === "ok")                 worst = "unknown";
+        const cssClass = state === "critical" ? "fa-fail"
+                       : state === "warn"     ? "fa-degraded"
+                       : state === "ok"       ? "fa-ok"
+                       :                        "fa-unknown";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${cssClass}">${state.toUpperCase()}</span>
+          <code>${r.name}</code>
+          <small>${r.ms} · ${r.series} · ${r.threshold} · current = ${label}</small>
+        </li>`;
+      });
+
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${rows.length} alert-relevant series · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + (
+        worst === "critical" ? "fa-fail"
+        : worst === "warn"   ? "fa-degraded"
+        : worst === "ok"     ? "fa-ok"
+        :                      "fa-unknown"
+      );
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -826,6 +918,7 @@
   refreshGuardian();
   refreshScheduler();
   refreshModules();
+  refreshAlerts();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -840,6 +933,10 @@
   // Modules list is rare-change (only changes on package upgrade or
   // operator-driven `modules apply`); 60s is plenty.
   setInterval(refreshModules, 60000);
+  // Alerts overview is the chain-integrity + cumulative-counter
+  // mirror of the Prometheus alert rules — fast refresh keeps
+  // chain-broken signals operator-visible within seconds.
+  setInterval(refreshAlerts, 15000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

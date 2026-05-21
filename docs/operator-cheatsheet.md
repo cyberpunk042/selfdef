@@ -134,6 +134,23 @@ set -g status-right '#(selfdefctl trio --quiet 2>/dev/null)'
 selfdefctl trio --quiet && sudo selfdefctl modules apply
 ```
 
+## Dashboard PWA (operator-facing UI at `/dashboard/`)
+
+The daemon serves a 6-panel single-page operator dashboard. Sections:
+
+| Panel | Refresh interval | Backed by |
+|---|---|---|
+| Friction-audit (MS046) | 30 s | `GET /v1/friction-audit` |
+| Perimeter (MS047) | 15 s | `GET /v1/perimeter` |
+| Guardian (MS044) | 30 s | `GET /v1/guardian` |
+| Scheduler (MS048) | 10 s | `GET /v1/scheduler` |
+| Modules (MS006) | 60 s | `GET /v1/modules` |
+| Alerts overview (MS027) | 15 s | `GET /metrics` — client-side parse of 9 alert-relevant series; surfaces chain-broken + counter alerts without needing an external Prometheus |
+
+Open over UNIX socket (`unix://`) or TCP with `Authorization: Bearer
+<token>`. PWA shell is offline-capable (service-worker cached) but
+API responses are never cached — operators need the freshest data.
+
 ## Coherence harness (local dev / CI)
 
 ```sh

@@ -43,6 +43,8 @@ check "HTML: perimeter-section"         "${HTML}" 'id="perimeter-section"'      
 check "HTML: guardian-section"          "${HTML}" 'id="guardian-section"'       || failures=$((failures + 1))
 check "HTML: scheduler-section"          "${HTML}" 'id="scheduler-section"'      || failures=$((failures + 1))
 check "HTML: modules-section"            "${HTML}" 'id="modules-section"'        || failures=$((failures + 1))
+check "HTML: alerts-section"              "${HTML}" 'id="alerts-section"'         || failures=$((failures + 1))
+check "HTML: alerts aggregate"            "${HTML}" 'id="alerts-aggregate"'       || failures=$((failures + 1))
 check "HTML: friction-audit aggregate"  "${HTML}" 'id="fa-aggregate"'            || failures=$((failures + 1))
 check "HTML: perimeter aggregate"        "${HTML}" 'id="perim-aggregate"'         || failures=$((failures + 1))
 check "HTML: guardian aggregate"         "${HTML}" 'id="guard-aggregate"'         || failures=$((failures + 1))
@@ -54,6 +56,8 @@ check "JS: refreshPerimeter()"           "${JS}"   'function refreshPerimeter'  
 check "JS: refreshGuardian()"            "${JS}"   'function refreshGuardian'       || failures=$((failures + 1))
 check "JS: refreshScheduler()"           "${JS}"   'function refreshScheduler'      || failures=$((failures + 1))
 check "JS: refreshModules()"             "${JS}"   'function refreshModules'        || failures=$((failures + 1))
+check "JS: refreshAlerts()"               "${JS}"   'function refreshAlerts'         || failures=$((failures + 1))
+check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'setInterval\(refreshFrictionAudit' || failures=$((failures + 1))
@@ -61,6 +65,7 @@ check "JS: setInterval refreshPerimeter"       "${JS}" 'setInterval\(refreshPeri
 check "JS: setInterval refreshGuardian"        "${JS}" 'setInterval\(refreshGuardian'      || failures=$((failures + 1))
 check "JS: setInterval refreshScheduler"       "${JS}" 'setInterval\(refreshScheduler'     || failures=$((failures + 1))
 check "JS: setInterval refreshModules"          "${JS}" 'setInterval\(refreshModules'        || failures=$((failures + 1))
+check "JS: setInterval refreshAlerts"            "${JS}" 'setInterval\(refreshAlerts'          || failures=$((failures + 1))
 
 # JS endpoint bindings (must match selfdef-api routes)
 check "JS: GET /v1/friction-audit"      "${JS}"   'get\("/v1/friction-audit"\)' || failures=$((failures + 1))
