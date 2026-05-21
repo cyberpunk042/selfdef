@@ -624,7 +624,11 @@
         const deps = (m.depends_on || []).length;
         const prov = (m.provides || []).length;
         const cat = m.category || "—";
-        detail.textContent = `v${m.version || "?"} · [${cat}] · ${m.summary || ""} · ${deps} dep · ${prov} prov`;
+        // MS011 Z-8 — surface install_paths.scope ("system" | "container")
+        // so operators see container-vs-system distinction at a glance.
+        const scope = (m.install_paths && m.install_paths.scope) || "system";
+        const scopeBadge = scope === "container" ? " · container-scope" : "";
+        detail.textContent = `v${m.version || "?"} · [${cat}]${scopeBadge} · ${m.summary || ""} · ${deps} dep · ${prov} prov`;
 
         // No runbook per module yet — link to the module catalog doc.
         const link = document.createElement("a");
