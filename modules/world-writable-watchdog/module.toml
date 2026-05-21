@@ -1,0 +1,40 @@
+name        = "world-writable-watchdog"
+version     = "0.1.0"
+summary     = "Daily scan for files with world-writable bit set OUTSIDE the safe-by-default whitelist (/tmp /var/tmp /dev/shm /run/lock). Catches accidental chmod 777, malware drop-and-set-writable, package post-install permission slips"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["world-writable-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "find" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 on findings → systemd unit failed
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/world-writable-watchdog.toml",
+    "/usr/local/libexec/selfdef/world-writable-watchdog.sh",
+    "/etc/systemd/system/selfdef-world-writable.service",
+    "/etc/systemd/system/selfdef-world-writable.timer",
+]
