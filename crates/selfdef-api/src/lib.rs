@@ -48,6 +48,7 @@ mod communication_boundary;
 mod control;
 mod cpu;
 mod dashboard_prefs;
+mod dashboards;
 mod filesystem_boundary;
 mod flex_profile;
 mod friction_audit;
@@ -316,6 +317,11 @@ pub fn router(state: ApiState) -> Router {
         // PUT validates enums + atomically writes. localStorage on
         // the PWA side is just a cache; the daemon is source of truth.
         .route("/v1/dashboard-prefs", get(dashboard_prefs::show).put(dashboard_prefs::put))
+        // MS043 UX — operator-pull discovery of the 5 named view
+        // presets (compact / default / inference / performance /
+        // security). Lets CLI + MCP + future per-path dashboards
+        // consume the same catalog the PWA's preset selector uses.
+        .route("/v1/dashboards", get(dashboards::show))
         // MS011 Z-2 / SDD-026 — inference-backend probe surface.
         // Probes for the 4 canonical backends (llama.cpp / vllm /
         // bitnet.cpp / unsloth) + reports installed state + version.

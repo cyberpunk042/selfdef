@@ -1879,6 +1879,35 @@ async fn dashboard_prefs_put_rejects_unknown_active_preset() {
 }
 
 #[tokio::test]
+async fn dashboards_route_returns_5_named_presets() {
+    // MS043 UX: /v1/dashboards lists the 5 operator-named view
+    // presets shipped in batch 12 + ratified via the
+    // /v1/dashboard-prefs active_preset enum.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/dashboards")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 16 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["count"], 5);
+    let dashboards = v["dashboards"].as_array().expect("dashboards array");
+    assert_eq!(dashboards.len(), 5);
+    let names: Vec<&str> = dashboards
+        .iter()
+        .map(|d| d["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        names,
+        vec!["compact", "default", "inference", "performance", "security"]
+    );
+}
+
+#[tokio::test]
 async fn dashboard_prefs_put_rejects_schema_version_mismatch() {
     let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);

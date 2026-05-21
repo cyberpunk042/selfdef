@@ -1,0 +1,191 @@
+//! `GET /v1/dashboards` — operator-pull discovery surface for the
+//! 5 operator-named dashboard view presets shipped under MS043 UX
+//! batch 12 (PWA-side preset selector) + batch 13/14 (daemon-side
+//! persistence + sync).
+//!
+//! Verbatim operator direction (2026-05-19, sacrosanct):
+//!
+//! > "there is over 20 dashboards and a main one and everything can
+//! >  be turned on and off and there are also a tons of modes and
+//! >  profiles."
+//!
+//! The dashboard is one PWA today; the 5 operator-named view presets
+//! act as distinct dashboards within that PWA. This route makes the
+//! preset catalog discoverable so:
+//!   - CLI: `selfdefctl dashboards` lists them
+//!   - MCP: an external `claude-code` client lists them as tools
+//!   - Future: distinct URL paths (`/dashboard-secops/`,
+//!     `/dashboard-perf/`, etc.) consume the same catalog
+//!
+//! Source of truth: this file. The dashboard PWA's `PRESETS` table
+//! in `dashboard/app.js` must stay byte-identical to the names +
+//! refresh_rate + tab values here; L1-api-endpoints + L2 catalog
+//! parity checks (future) enforce that.
+
+use axum::Json;
+use serde::Serialize;
+
+/// One operator-named dashboard view preset.
+#[derive(Debug, Serialize)]
+pub(crate) struct DashboardEntry {
+    /// Machine-readable name (matches the active_preset enum in
+    /// /v1/dashboard-prefs).
+    pub name: &'static str,
+    /// One-line operator-readable label.
+    pub label: &'static str,
+    /// Longer description of what the preset shows.
+    pub description: &'static str,
+    /// The active tab the preset switches to (one of the 8 SDD-056
+    /// tabs + "all" pseudo-tab).
+    pub active_tab: &'static str,
+    /// The refresh rate the preset selects.
+    pub refresh_rate: &'static str,
+    /// Approximate number of panels visible (16 minus hidden). For
+    /// discovery-tier reporting only; the actual visible set is in
+    /// the dashboard's PRESETS table.
+    pub visible_panel_count: u8,
+}
+
+/// Response envelope for `GET /v1/dashboards`.
+#[derive(Debug, Serialize)]
+pub(crate) struct DashboardsBody {
+    /// Total number of preset entries shipped.
+    pub count: usize,
+    /// Operator-readable note about the multi-dashboard architecture.
+    pub note: &'static str,
+    /// Sorted by name.
+    pub dashboards: Vec<DashboardEntry>,
+}
+
+const DASHBOARDS: &[DashboardEntry] = &[
+    DashboardEntry {
+        name: "compact",
+        label: "Compact",
+        description: "Always-visible strip only (composite health + 4 watchdogs + alerts). Smallest footprint; slow refresh.",
+        active_tab: "all",
+        refresh_rate: "slow",
+        visible_panel_count: 6,
+    },
+    DashboardEntry {
+        name: "default",
+        label: "Default",
+        description: "All 16 panels visible, no specific tab focus, normal refresh. The catch-all view.",
+        active_tab: "all",
+        refresh_rate: "normal",
+        visible_panel_count: 16,
+    },
+    DashboardEntry {
+        name: "inference",
+        label: "Inference",
+        description: "Composite health + inference backends + GPU + flex profile. Models tab focus; normal refresh.",
+        active_tab: "models",
+        refresh_rate: "normal",
+        visible_panel_count: 4,
+    },
+    DashboardEntry {
+        name: "performance",
+        label: "Performance",
+        description: "Hardware + network + storage + RAID + GPU + CPU + composite health. Hardware tab focus; fast refresh.",
+        active_tab: "hardware",
+        refresh_rate: "fast",
+        visible_panel_count: 7,
+    },
+    DashboardEntry {
+        name: "security",
+        label: "Security",
+        description: "Composite health + 4 watchdogs + alerts + audit chains. Logs tab focus; normal refresh.",
+        active_tab: "logs",
+        refresh_rate: "normal",
+        visible_panel_count: 7,
+    },
+];
+
+pub(crate) async fn show() -> Json<DashboardsBody> {
+    let dashboards: Vec<DashboardEntry> = DASHBOARDS
+        .iter()
+        .map(|d| DashboardEntry {
+            name: d.name,
+            label: d.label,
+            description: d.description,
+            active_tab: d.active_tab,
+            refresh_rate: d.refresh_rate,
+            visible_panel_count: d.visible_panel_count,
+        })
+        .collect();
+    Json(DashboardsBody {
+        count: dashboards.len(),
+        note: "5 operator-named view presets within the single PWA. Operator-pull deep-link: /dashboard/#preset=<name>. The 'tons of modes' verbatim is served by the visibility + refresh + preset triad; distinct URL paths per dashboard is the Stage-2 arc.",
+        dashboards,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dashboards_table_has_5_entries() {
+        assert_eq!(DASHBOARDS.len(), 5);
+    }
+
+    #[test]
+    fn dashboards_table_names_match_pwa_presets() {
+        // These names MUST stay byte-identical to the keys of the
+        // PRESETS table in `dashboard/app.js`. The dashboard's PUT
+        // /v1/dashboard-prefs validator rejects any other value.
+        let names: Vec<&str> = DASHBOARDS.iter().map(|d| d.name).collect();
+        let expected = vec!["compact", "default", "inference", "performance", "security"];
+        assert_eq!(names, expected);
+    }
+
+    #[test]
+    fn dashboards_refresh_rates_are_valid_enum() {
+        // Refresh rates must be one of the 4 documented in SDD-060.
+        let valid = ["fast", "normal", "slow", "paused"];
+        for d in DASHBOARDS {
+            assert!(
+                valid.contains(&d.refresh_rate),
+                "{} has invalid refresh_rate {}",
+                d.name,
+                d.refresh_rate
+            );
+        }
+    }
+
+    #[test]
+    fn dashboards_tabs_are_one_of_eight_plus_all() {
+        // Tabs must match SDD-056 § 8-tab specification + "all" pseudo.
+        let valid = ["all", "models", "modules", "profiles", "hardware", "network", "logs", "mcp", "repl"];
+        for d in DASHBOARDS {
+            assert!(
+                valid.contains(&d.active_tab),
+                "{} has invalid active_tab {}",
+                d.name,
+                d.active_tab
+            );
+        }
+    }
+
+    #[test]
+    fn dashboards_panel_counts_are_plausible() {
+        for d in DASHBOARDS {
+            assert!(
+                d.visible_panel_count <= 16,
+                "{} claims more than 16 visible panels",
+                d.name
+            );
+            assert!(
+                d.visible_panel_count > 0,
+                "{} claims zero visible panels",
+                d.name
+            );
+        }
+    }
+
+    #[test]
+    fn default_preset_shows_all_panels() {
+        let default = DASHBOARDS.iter().find(|d| d.name == "default").unwrap();
+        assert_eq!(default.visible_panel_count, 16);
+        assert_eq!(default.refresh_rate, "normal");
+    }
+}

@@ -158,6 +158,11 @@ check_route "/v1/oracle-triage"           "SDD-016" || failures=$((failures + 1)
 # TOML; PUT validates enums + atomically writes via temp+rename.
 check_route "/v1/dashboard-prefs"         "MS043 UX dashboard-prefs" || failures=$((failures + 1))
 
+# MS043 UX — operator-pull discovery of the 5 named view presets
+# (compact / default / inference / performance / security). Lets
+# CLI + MCP + future per-path dashboards consume the catalog.
+check_route "/v1/dashboards"              "MS043 UX dashboards catalog" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

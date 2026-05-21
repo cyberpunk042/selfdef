@@ -174,6 +174,7 @@ GET /v1/repl                                         (MS011 Z-12 multi-tier REPL
 GET /v1/oracle-triage                                (SDD-016 oracle-triage channel doctrine + wire format + tier routing)
 GET /v1/dashboard-prefs                              (MS043 UX read operator dashboard preferences — missing file → blank-valid)
 PUT /v1/dashboard-prefs                              (MS043 UX persist {hidden_panels, refresh_rate, active_preset}; validates enums + atomic write)
+GET /v1/dashboards                                   (MS043 UX list 5 operator-named view presets — compact/default/inference/performance/security)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
