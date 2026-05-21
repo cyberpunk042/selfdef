@@ -1,0 +1,10 @@
+# Profile: security-and-reboot.
+#
+# Auto-installs security updates AND auto-reboots at 02:00 if a
+# kernel/libc update requires it (Automatic-Reboot-WithUsers=false
+# still applies — won't reboot if interactive users are logged in).
+#
+# Use on unattended servers where uptime-for-uptime's-sake is less
+# important than guaranteed CVE patching.
+
+profile = "security-and-reboot"

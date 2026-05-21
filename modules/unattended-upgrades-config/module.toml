@@ -1,0 +1,40 @@
+name        = "unattended-upgrades-config"
+version     = "0.1.0"
+summary     = "unattended-upgrades baseline — security-only auto-install with operator-driven reboot policy (apt-based distros). Foundational CVE-mitigation layer for the IPS host"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["auto-security-updates"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "unattended-upgrade" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `security-only` (default) — install ONLY security-pocket
+#                             updates; never auto-reboot.
+# `security-and-reboot`    — security updates + auto-reboot at
+#                             02:00 if a kernel/libc update needs it.
+default = "security-only"
+available = ["security-only", "security-and-reboot"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/apt/apt.conf.d/50selfdef-unattended-upgrades",
+    "/etc/apt/apt.conf.d/20selfdef-periodic",
+    "/etc/selfdef/modules/unattended-upgrades-config.toml",
+]

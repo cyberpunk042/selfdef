@@ -1,0 +1,10 @@
+# Profile: security-only (default).
+#
+# Auto-installs security-pocket updates. Does NOT auto-reboot.
+# Operator reboots manually when convenient (typically next
+# operator-driven window).
+#
+# Safest default — kernel CVEs get patched without operator-action;
+# uptime stays under operator control.
+
+profile = "security-only"
