@@ -1,11 +1,30 @@
 # SDD-026 — Operator dashboard architecture + flexible-profile surface
 
-> Status: **draft** — captures the verbatim operator goal expansion of
-> 2026-05-17 and lays out the multi-cycle vector grid for shipping a
-> non-GUI-by-default dashboard the operator can drive via SSH, HTTP
-> UI, terminal tools, OR AI-mediation.
+> Status: **review** — vector-by-vector shipment in progress; 7 of
+> 13 Z-vectors reached end-to-end production (backend + dashboard
+> + L1 gate) as of 2026-05-21:
+>   - Z-4 CPU mode classification — `/v1/cpu` + dashboard "CPU mode"
+>     panel (commit 5690b8c)
+>   - Z-5 GPU watt deviance — `/v1/gpu` + dashboard "GPU watts" panel
+>     (commit a26a75c)
+>   - Z-6 autohealth composite — `/v1/health` + dashboard top-of-page
+>     panel + `selfdefctl health` CLI (commits fedf693 + 4e90962)
+>   - Z-7 network state — `/v1/network` + dashboard "Network state"
+>     panel (commit aede715)
+>   - Z-9 software RAID — `/v1/raid` + dashboard "Software RAID"
+>     panel (commit b8d2b1a)
+>   - Z-10 storage state — `/v1/storage` + dashboard "Storage state"
+>     panel (commit 7bd0313)
+>   - Z-13 (SD-R83 portion) — `/v1/modules/diff` (commit 09b8385)
+> Remaining Z-vectors at design-stage: Z-1 (8 dashboard tabs UX
+> restructure), Z-2 (LM Studio surface), Z-3 (flex-profile state),
+> Z-8 (Docker vs system-level install paths), Z-11 (MCP interop),
+> Z-12 (Multi-tier REPL), Z-13 SD-R86/SD-R87 (install-options +
+> topological install plan). SDD will move to `implemented` when
+> the remaining 6 Z-vectors land.
 > Owner: operator-supervised; agent-authored.
-> Last updated: 2026-05-17.
+> Last updated: 2026-05-21 (status: draft → review; 7-of-13 Z-vector
+> production landing).
 > Builds on: SDD-022 (hardware-exploit doctrine); SDD-023 (cross-repo
 > model-taxonomy mirror); SDD-024 (cycle-5 vectors); SDD-025 (cycle-6
 > vectors). Sister to sovereign-os SDD-025 (observability CLI

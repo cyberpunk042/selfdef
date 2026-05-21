@@ -1,9 +1,17 @@
 # SDD-008 — Notifications orchestration + integrations taxonomy
 
-> Status: **draft (charter)** — not yet implemented; design under
-> review.
+> Status: **implemented** — all design points D-1..D-8 + D-5e +
+> D-4 HTTP ack shipped (per the Implementation status section
+> below). The channel-adapter set stands at twelve integrations
+> shipped end-to-end (ntfy, signal, slack, discord, smtp, twilio,
+> pagerduty, loki, opensearch, thehive, wall, write). D-024 (write
+> per-user TTY) shipped under PR #170. D-9 (dashboard) remains
+> explicitly deferred to SDD-009.
 > Owner: design team
-> Last updated: 2026-05-14
+> Last updated: 2026-05-21 (status header reconciled with the
+> Implementation status section: draft (charter) → implemented;
+> the body always said "All design points D-1..D-8 + D-5e + D-4
+> HTTP ack shipped" — the header had drifted behind reality).
 > Closes findings: none yet — net-new design.
 
 ## Implementation status
