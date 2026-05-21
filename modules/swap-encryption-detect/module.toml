@@ -1,0 +1,40 @@
+name        = "swap-encryption-detect"
+version     = "0.1.0"
+summary     = "Periodic detection: every /proc/swaps entry is verified encrypted (dm-crypt mapping per /etc/crypttab OR backed by an encrypted LV/luks device). Unencrypted swap can leak memory pages including credentials, keys, and decrypted secrets to disk"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["swap-encryption-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if any swap is unencrypted
+#                     OR zswap+disk-backing is detected
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/swap-encryption-detect.toml",
+    "/usr/local/libexec/selfdef/swap-encryption-detect.sh",
+    "/etc/systemd/system/selfdef-swap-encryption.service",
+    "/etc/systemd/system/selfdef-swap-encryption.timer",
+]

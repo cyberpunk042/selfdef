@@ -1,0 +1,20 @@
+# selfdef swap-encryption-detect — runs at boot + every 12h.
+#
+# Boot trigger catches a swap that came up unencrypted on
+# this boot (e.g. crypttab entry failed). The 12h refresh
+# catches operator-added unencrypted swap (swapon /tmp/swp
+# emergency).
+
+[Unit]
+Description=selfdef swap encryption verification timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/swap-encryption-detect/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=12h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-swap-encryption.service
+
+[Install]
+WantedBy=timers.target
