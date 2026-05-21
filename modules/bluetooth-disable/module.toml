@@ -1,0 +1,43 @@
+name        = "bluetooth-disable"
+version     = "0.1.0"
+summary     = "Mask bluetoothd + rfkill the radio on hosts that don't pair. Removes BlueBorne (CVE-2017-1000251 family), BlueDucky (CVE-2023-45866), KNOB, BIAS + the broader Bluetooth-stack attack surface"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["bluetooth-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask`  (default) — stop + disable + mask bluetooth + obex
+#                    + bluealsa units; rfkill block bluetooth
+#                    radio; modprobe.d blacklist btusb +
+#                    bluetooth modules (load defeated until
+#                    operator-pull unmask).
+# `stop`            — stop + disable only; rfkill block;
+#                    modprobe load remains permitted (defense
+#                    weaker but operator-pull re-enable is
+#                    one-shot).
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/bluetooth-disable.toml",
+    "/etc/modprobe.d/selfdef-bluetooth-blacklist.conf",
+]
