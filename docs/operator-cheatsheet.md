@@ -50,6 +50,8 @@ selfdefctl ssh-wrap doctrine          # MS014 / SDD-052 SSH-wrap client-side def
 selfdefctl ssh-wrap install           # step-by-step PATH-shadow install instructions
 selfdefctl nats                       # MS015 / SDD-053 two-way pump subject schema + modes
 selfdefctl flex-profile               # MS011 Z-3 flex-profile schema (Delta + DeltaOp + RevertRecord)
+selfdefctl inference-backends         # MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth install state
+selfdefctl inference-backends --json  # pass-through of daemon JSON body (jq-friendly)
 ```
 
 ## Per-watchdog drill-down

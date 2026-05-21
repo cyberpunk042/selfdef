@@ -16,6 +16,7 @@ mod communication_boundary;
 mod doctor;
 mod filesystem_boundary;
 mod flex_profile;
+mod inference_backends;
 mod nats;
 mod network_boundary;
 mod policy;
@@ -374,6 +375,15 @@ enum Command {
     /// Discovery of the flex-profile schema (Delta + DeltaOp +
     /// RevertRecord + refusal rules + DEFAULT_STATE_PATH).
     FlexProfile,
+    /// MS011 Z-2 / SDD-026 inference-backend probe surface. Calls
+    /// `GET /v1/inference-backends` + renders the 4-backend install
+    /// state (llama.cpp / vllm / bitnet.cpp / unsloth).
+    InferenceBackends {
+        /// Machine-readable JSON output (passes through the raw
+        /// daemon body).
+        #[arg(long)]
+        json: bool,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -1982,6 +1992,10 @@ async fn main() -> Result<()> {
         }
         Command::FlexProfile => {
             let exit = flex_profile::run_schema()?;
+            std::process::exit(exit);
+        }
+        Command::InferenceBackends { json } => {
+            let exit = inference_backends::run(json).context("inference-backends")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

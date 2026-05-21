@@ -59,6 +59,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl ssh-wrap"
     "selfdefctl nats"
     "selfdefctl flex-profile"
+    "selfdefctl inference-backends"
 )
 
 failures=0
