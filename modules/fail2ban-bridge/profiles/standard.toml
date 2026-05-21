@@ -1,0 +1,6 @@
+# Profile: standard (default).
+#
+# sshd jail only. 5 fails / 10min → 1h ban. Ignore loopback +
+# RFC1918. Safe default for any host.
+
+profile = "standard"

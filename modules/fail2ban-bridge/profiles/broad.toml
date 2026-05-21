@@ -1,0 +1,9 @@
+# Profile: broad.
+#
+# sshd (3 fails / 10min → 2h ban) + sshd-ddos (connection-flood
+# pattern) + recidive (repeat offenders → 7d allports ban).
+#
+# Use on internet-facing hosts where persistent attackers are
+# expected.
+
+profile = "broad"

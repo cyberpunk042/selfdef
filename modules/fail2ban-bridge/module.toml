@@ -1,0 +1,42 @@
+name        = "fail2ban-bridge"
+version     = "0.1.0"
+summary     = "fail2ban network-side brute-force defense — sshd jail (+ broad-profile: auth, recidive). Pairs with pam-faillock (local auth) and ssh-hardening (sshd protocol) as the IP-layer of the auth-defense triad"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ip-brute-force-block"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "fail2ban-server" },
+    { kind = "binary", value = "fail2ban-client" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — sshd jail only. 5 fails / 10min → 1h ban.
+#                        Idempotent + safe default.
+# `broad`              — sshd + recidive (repeat offender → 7d ban)
+#                        + selfdef-aide alerts trigger ban via
+#                        custom action. For high-assurance hosts.
+default = "standard"
+available = ["standard", "broad"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/fail2ban/jail.d/50-selfdef.conf",
+    "/etc/fail2ban/jail.d/60-selfdef-recidive.conf",
+    "/etc/selfdef/modules/fail2ban-bridge.toml",
+]
