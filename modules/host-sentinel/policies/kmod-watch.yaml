@@ -1,0 +1,35 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-host-kmod-watch"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "host-sentinel"
+    selfdef.io/attack: "T1547.006"   # Boot or Logon Autostart Execution: Kernel Modules
+    selfdef.io/substitutes: "MS016 kmod-watch (aya-rs eBPF, deferred)"
+spec:
+  kprobes:
+    # do_init_module fires on every successful kernel module load
+    # (including out-of-tree, unsigned, and rmmod-replacements).
+    # The 2nd arg is the struct module pointer; we record the
+    # caller's identity via the standard Tetragon process fields.
+    - call: "do_init_module"
+      syscall: false
+      return: false
+      args:
+        - index: 0
+          type: "nop"
+      selectors:
+        # Host PID namespace ONLY. Containers loading kernel modules
+        # would also be high-severity but caught by agent-guard's
+        # parallel surface; we don't want to double-fire.
+        - matchNamespaces:
+            - namespace: Pid
+              operator: In
+              values:
+                - "host_ns"
+          matchActions:
+            # Post for both audit + enforce profiles. Killing the
+            # loader after the module is already in-kernel doesn't
+            # un-load the module; the event is the value.
+            - action: Post

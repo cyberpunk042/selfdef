@@ -1,0 +1,44 @@
+apiVersion: cilium.io/v1alpha1
+kind: TracingPolicy
+metadata:
+  name: "selfdef-host-ld-preload-watch"
+  annotations:
+    selfdef.io/severity: "high"
+    selfdef.io/owner: "host-sentinel"
+    selfdef.io/attack: "T1574.006"   # Hijack Execution Flow: Dynamic Linker Hijacking
+    selfdef.io/substitutes: "MS016 ld-preload-watch (aya-rs eBPF, deferred)"
+spec:
+  kprobes:
+    # Writes to /etc/ld.so.preload are the canonical
+    # rootkit-installation primitive on Linux. Any open-for-write
+    # against that path from the host PID namespace is high-signal.
+    - call: "security_file_open"
+      syscall: false
+      return: false
+      args:
+        - index: 0
+          type: "file"
+        - index: 1
+          type: "int"
+      selectors:
+        - matchArgs:
+            - index: 0
+              operator: "Equal"
+              values:
+                - "/etc/ld.so.preload"
+            - index: 1
+              # O_WRONLY (1) or O_RDWR (2). Mask "3" matches both.
+              # Open-for-read is allowed (init, ld.so itself).
+              operator: "Mask"
+              values:
+                - "3"
+          matchNamespaces:
+            - namespace: Pid
+              operator: In
+              values:
+                - "host_ns"
+          matchActions:
+            # apply.sh rewrites this to Sigkill in the `enforce`
+            # profile. In `audit` the default Post lets the operator
+            # observe the call site before deciding whether to block.
+            - action: Post

@@ -1,0 +1,41 @@
+name        = "host-sentinel"
+version     = "0.1.0"
+summary     = "Host-level Tetragon TracingPolicies — kmod-watch + ld-preload-watch (companion to MS016 aya-rs eBPF)"
+category    = "hardening"
+
+depends_on  = ["tetragon"]
+conflicts   = []
+provides    = []
+consumes    = ["tetragon-tracing", "tetragon-policies"]
+
+requires    = [
+    { kind = "binary", value = "tetragon" },
+]
+
+# Single bundle per host. agent-guard targets containers; this
+# module targets the host PID namespace. Both modules can coexist
+# (different selectors, no policy-name collision).
+instanced = false
+
+# `main`: runs after the tetragon substrate is configured + live.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "audit"
+available = ["audit", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest. `scope = "system"`
+# (writes Tetragon's policy_dir + selfdef module config). The
+# `paths` list overlaps with tetragon's path conflicts surface
+# the install-plan's path_conflicts on /etc/tetragon/tetragon.tp.d
+# (expected: agent-guard + host-sentinel + tetragon all write
+# policy files into the shared dir).
+[install_paths]
+scope = "system"
+paths = ["/etc/tetragon/tetragon.tp.d", "/etc/selfdef/modules/host-sentinel.toml"]

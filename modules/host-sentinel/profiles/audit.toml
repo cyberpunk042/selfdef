@@ -1,0 +1,13 @@
+# Profile: audit (default).
+#
+# Both policies install with `action: Post`. Tetragon emits events
+# for every match; nothing is killed. This is the right starting
+# point — flip to `enforce` once the baseline is quiet and the
+# operator has confirmed there are no benign callers.
+
+profile = "audit"
+
+# Per-policy enable flags. Operator can pin either off without
+# uninstalling the module.
+kmod_watch_enabled       = true
+ld_preload_watch_enabled = true

@@ -1,0 +1,15 @@
+# Profile: enforce.
+#
+# ld-preload-watch's action is rewritten to `Sigkill` on apply —
+# any write to /etc/ld.so.preload from the host PID namespace
+# kills the calling process before the write returns.
+#
+# kmod-watch stays Post in both profiles (rationale: by the time
+# do_init_module fires, the module is already loaded; killing the
+# loader doesn't unload it; the event is more useful as
+# notify/audit than as a kill).
+
+profile = "enforce"
+
+kmod_watch_enabled       = true
+ld_preload_watch_enabled = true

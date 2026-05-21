@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS016 host-sentinel module (2026-05-21, batch 9)
+
+New `modules/host-sentinel/` ships 2 host-scope Tetragon TracingPolicies
+as companion implementations to MS016's deferred aya-rs eBPF programs:
+
+- `policies/kmod-watch.yaml` — Tetragon kprobe on `do_init_module`
+  with `matchNamespaces: Pid In host_ns` selector. Companion to MS016
+  `kmod-watch`. Post action in both audit + enforce profiles
+  (killing the loader after the module is already in-kernel is closing
+  the barn door; the event is the value).
+- `policies/ld-preload-watch.yaml` — Tetragon kprobe on
+  `security_file_open` matching `/etc/ld.so.preload` with O_WRONLY/
+  O_RDWR mask. Companion to MS016 `ld-preload-watch`. Post in audit;
+  apply.sh rewrites to Sigkill in enforce — rootkit-installation
+  attempt killed at the open() syscall.
+
+Module structure mirrors agent-guard: `module.toml` declares the
+`[install_paths]` block (writes shared `/etc/tetragon/tetragon.tp.d`
+plus its own config file — `install-plan`'s `path_conflicts`
+surface will flag the policy_dir as informational overlap with
+tetragon + agent-guard, all expected); `install/{apply,check,
+uninstall}.sh` follow the shared `module-lib.sh` pattern;
+`profiles/{audit,enforce}.toml` per-policy enable flags;
+`README.md` documents the architectural difference vs agent-guard
+(host PID ns vs container PID ns).
+
+`selfdef-ebpf/README.md` updated to cross-reference the Tetragon
+companions on each item; 3 deferred programs (proc-ancestry,
+hidden-process, tcp-fingerprint) remain deferred because they
+genuinely need aya-rs eBPF — Tetragon's surface is insufficient.
+
+INDEX MS016 entry promoted from "1 eBPF program shipped" → "1 eBPF
+program + 2 Tetragon companions shipped; 3 deferred".
+
 ### Added — MS011 Z-8 path-conflict surface + MS011 milestone closure (2026-05-21, batch 8)
 
 Closes the last design-stage Z-vector + promotes MS011 from
