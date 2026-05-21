@@ -268,7 +268,7 @@ impl ExtensionStore {
         for dirent in fs::read_dir(dir).map_err(|e| PerimeterError::Io(e.to_string()))? {
             let dirent = dirent.map_err(|e| PerimeterError::Io(e.to_string()))?;
             let path = dirent.path();
-            if path.extension().map_or(true, |e| e != "json") {
+            if path.extension().is_none_or(|e| e != "json") {
                 continue;
             }
             match Self::load_signed(&path, trust_roots_dir, now_ms) {
@@ -397,7 +397,7 @@ fn verify_minisign(
     for dirent in fs::read_dir(trust_roots_dir).map_err(|e| format!("read trust dir: {e}"))? {
         let dirent = dirent.map_err(|e| format!("trust entry: {e}"))?;
         let p = dirent.path();
-        if p.extension().map_or(true, |e| e != "pub") {
+        if p.extension().is_none_or(|e| e != "pub") {
             continue;
         }
         tried += 1;
@@ -437,7 +437,7 @@ pub fn read_ring_buffer(ring: &Path) -> Result<Vec<Verdict>, PerimeterError> {
     for dirent in fs::read_dir(ring).map_err(|e| PerimeterError::Io(e.to_string()))? {
         let dirent = dirent.map_err(|e| PerimeterError::Io(e.to_string()))?;
         let path = dirent.path();
-        if path.extension().map_or(true, |e| e != "json") {
+        if path.extension().is_none_or(|e| e != "json") {
             continue;
         }
         let bytes = match fs::read(&path) {

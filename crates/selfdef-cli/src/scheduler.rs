@@ -44,8 +44,7 @@ fn parse_profile(s: &str) -> Result<Profile> {
         "experimental" => Ok(Profile::Experimental),
         "production" => Ok(Profile::Production),
         other => Err(anyhow!(
-            "unknown profile {:?}: expected one of fast/careful/private/autonomous/experimental/production",
-            other
+            "unknown profile {other:?}: expected one of fast/careful/private/autonomous/experimental/production"
         )),
     }
 }
@@ -58,8 +57,7 @@ fn parse_route(s: &str) -> Result<Route> {
         "hybrid" => Ok(Route::Hybrid),
         "hibernate" => Ok(Route::Hibernate),
         other => Err(anyhow!(
-            "unknown route {:?}: expected one of blackwell/rtx3090/cpu/hybrid/hibernate",
-            other
+            "unknown route {other:?}: expected one of blackwell/rtx3090/cpu/hybrid/hibernate"
         )),
     }
 }
@@ -193,7 +191,7 @@ pub(crate) fn run_replay(request_id: &str, profile: Option<&str>, json: bool) ->
     if json {
         println!("{}", serde_json::to_string_pretty(&result)?);
     } else {
-        println!("scheduler replay: request_id={request_id} against profile={:?}", replay_profile);
+        println!("scheduler replay: request_id={request_id} against profile={replay_profile:?}");
         println!(
             "  original compound:       {:.3} (profile={:?})",
             result.original.axis_scores.compound, result.original.profile
@@ -207,7 +205,7 @@ pub(crate) fn run_replay(request_id: &str, profile: Option<&str>, json: bool) ->
         if result.compound_differs {
             let delta = result.counterfactual.axis_scores.compound
                 - result.original.axis_scores.compound;
-            println!("  delta: {:+.3}", delta);
+            println!("  delta: {delta:+.3}");
         }
     }
     Ok(0)
@@ -241,7 +239,7 @@ pub(crate) fn run_weights(profile_opt: Option<&str>, json: bool) -> Result<i32> 
     } else {
         for p in &profiles {
             let w = AxisWeights::for_profile(*p);
-            println!("{:?}:", p);
+            println!("{p:?}:");
             println!("  latency:           {:.3}", w.latency);
             println!("  cost:              {:.3}", w.cost);
             println!("  risk:              {:.3}", w.risk);
@@ -274,7 +272,7 @@ pub(crate) fn run_force(request_id: &str, route_str: &str, json: bool) -> Result
             }))?
         );
     } else {
-        println!("scheduler force: request_id={request_id} route={:?}", route);
+        println!("scheduler force: request_id={request_id} route={route:?}");
         println!("  Stage-1 surface — operator intent recorded.");
         println!(
             "  Full Ring 0 + MS003 multi-sig dispatch wires through selfdefd's"

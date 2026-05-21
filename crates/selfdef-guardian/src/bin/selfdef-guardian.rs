@@ -196,7 +196,7 @@ fn write_ring_entry(
     verdict: &selfdef_guardian::Verdict,
 ) -> std::io::Result<()> {
     let bytes = serde_json::to_vec(verdict)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
     std::fs::write(path, bytes)
 }
 
@@ -205,7 +205,7 @@ fn evict_old_ring_entries(ring: &Path, cap: usize) -> std::io::Result<()> {
     for d in std::fs::read_dir(ring)? {
         let d = d?;
         let p = d.path();
-        if p.extension().map_or(true, |e| e != "json") {
+        if p.extension().is_none_or(|e| e != "json") {
             continue;
         }
         let m = d.metadata()?;

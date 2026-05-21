@@ -137,7 +137,7 @@ fn load_all(ring: &Path) -> Result<Vec<Verdict>> {
     for entry in fs::read_dir(ring).with_context(|| format!("reading {}", ring.display()))? {
         let entry = entry?;
         let path = entry.path();
-        if path.extension().map_or(true, |e| e != "json") {
+        if path.extension().is_none_or(|e| e != "json") {
             continue;
         }
         let bytes = fs::read(&path).with_context(|| format!("reading {}", path.display()))?;

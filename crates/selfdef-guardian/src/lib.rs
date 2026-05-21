@@ -224,7 +224,7 @@ impl Effector for RealEffector {
             .write(true)
             .open(console)
             .map_err(|e| format!("open {}: {e}", console.display()))?;
-        write!(f, "\x07{message}\n").map_err(|e| format!("write: {e}"))?;
+        writeln!(f, "\x07{message}").map_err(|e| format!("write: {e}"))?;
         Ok(())
     }
 }
@@ -550,7 +550,7 @@ pub fn read_ring_buffer(ring: &Path) -> Result<Vec<Verdict>, GuardianError> {
     for dirent in fs::read_dir(ring).map_err(|e| GuardianError::Io(e.to_string()))? {
         let dirent = dirent.map_err(|e| GuardianError::Io(e.to_string()))?;
         let path = dirent.path();
-        if path.extension().map_or(true, |e| e != "json") {
+        if path.extension().is_none_or(|e| e != "json") {
             continue;
         }
         let bytes = match fs::read(&path) {

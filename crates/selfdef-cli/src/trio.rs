@@ -502,8 +502,7 @@ pub(crate) fn run_tail(interval_ms: u64, json: bool) -> Result<i32> {
                         .unwrap_or(0);
                     let detail = render_detail(tag, &parsed);
                     println!(
-                        "  {:>14}  {:<14}  sev={sev}     {class}   {detail}",
-                        tag, ts
+                        "  {tag:>14}  {ts:<14}  sev={sev}     {class}   {detail}"
                     );
                 }
             }

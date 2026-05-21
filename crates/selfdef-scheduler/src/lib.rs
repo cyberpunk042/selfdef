@@ -317,7 +317,7 @@ impl AxisWeights {
 // ============================================================================
 
 /// 7-axis raw signal inputs the scheduler computes from the request
-/// + the environment before scoring. Each signal is in [0.0, 1.0]
+/// and the environment before scoring. Each signal is in `[0.0, 1.0]`
 /// where 1.0 = ideal (low latency / low cost / etc).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct AxisSignals {
@@ -762,7 +762,7 @@ pub fn read_ring_buffer(ring: &Path) -> Result<Vec<Decision>, SchedulerError> {
     for dirent in fs::read_dir(ring).map_err(|e| SchedulerError::Io(e.to_string()))? {
         let dirent = dirent.map_err(|e| SchedulerError::Io(e.to_string()))?;
         let path = dirent.path();
-        if path.extension().map_or(true, |e| e != "json") {
+        if path.extension().is_none_or(|e| e != "json") {
             continue;
         }
         let bytes = match fs::read(&path) {
@@ -875,7 +875,7 @@ mod tests {
     fn weights_sum_positive_for_all_profiles() {
         for p in Profile::all() {
             let w = AxisWeights::for_profile(*p);
-            assert!(w.sum() > 0.0, "{:?} sum was zero", p);
+            assert!(w.sum() > 0.0, "{p:?} sum was zero");
         }
     }
 
@@ -1015,7 +1015,7 @@ mod tests {
 
     fn sample_decision(ts_ms: u64) -> Decision {
         Decision::new(
-            format!("req-{}", ts_ms),
+            format!("req-{ts_ms}"),
             Profile::Careful,
             Route::Blackwell,
             evaluate_objective(all_one_signals(), Profile::Careful),
