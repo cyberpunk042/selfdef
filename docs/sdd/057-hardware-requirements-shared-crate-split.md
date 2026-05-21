@@ -1,8 +1,13 @@
 # SDD-057 — selfdef-hardware-requirements shared-crate split
 
-> Status: **scoping** — Stage-2 plan for the refactor that unblocks
-> MS011 Z-13 SD-R86 hardware-gate enrichment + the future MS035 +
-> MS042 caller-integration arcs that need the same gate logic.
+> Status: **implemented** — Stage-2 plan was authored 2026-05-21
+> as `scoping`; all 7 migration-sequence steps shipped same day
+> in commits b37f0ef (step 2 scaffold) + e39aabd (step 3 move +
+> 473-LOC type+impl move) + 3710d08 (step 4 remove duplicate +
+> re-export) + 2519d8b (step 5 hook API for hardware-gate
+> enrichment) + (step 6 integration test) + (step 7 this
+> promotion). MS011 Z-13 SD-R86 hardware-gate enrichment closes
+> through this SDD.
 > Owner: operator-supervised; agent-authored.
 > Last updated: 2026-05-21.
 > Implements milestone: MS011 (catalog row Z-13 SD-R86 portion);

@@ -1796,10 +1796,20 @@ async fn modules_install_plan_route_returns_200_with_topological_shape() {
 
 #[tokio::test]
 async fn modules_install_options_route_returns_200_with_canonical_shape() {
-    // MS011 Z-13 / SD-R86: /v1/modules/install-options classifies
-    // AVAILABLE modules by dep-readiness. On CI runner the default
-    // modules dir doesn't exist, so we expect empty `options` but a
-    // well-formed envelope.
+    // MS011 Z-13 / SD-R86 + SDD-057 step 5/6: /v1/modules/install-
+    // options classifies AVAILABLE modules by dep-readiness AND
+    // hardware-gate readiness. The shipped install-options envelope
+    // contains:
+    //   - options: Vec<InstallOption> with recommendation ∈
+    //       ready | blocked-by-missing-deps |
+    //       blocked-by-hardware | needs-review
+    //   - counts: {total, ready, blocked_by_missing_deps,
+    //              blocked_by_hardware, needs_review}
+    //   - options[*].unmet_hardware_predicates: Vec<String>
+    //       (empty unless recommendation == blocked-by-hardware)
+    //
+    // On the CI runner the default modules dir doesn't exist, so we
+    // expect empty `options` + zero counters but a well-formed envelope.
     let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
@@ -1812,9 +1822,38 @@ async fn modules_install_options_route_returns_200_with_canonical_shape() {
     let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(v["options"].is_array(), "options must be array");
+    // Original-shape counters preserved (back-compat).
     assert!(v["counts"]["total"].is_number());
     assert!(v["counts"]["ready"].is_number());
     assert!(v["counts"]["blocked_by_missing_deps"].is_number());
+    // SDD-057 step 5 — new hardware-gate counters MUST appear.
+    assert!(
+        v["counts"]["blocked_by_hardware"].is_number(),
+        "SDD-057 step 5: counts.blocked_by_hardware field MUST be present in the envelope"
+    );
+    assert!(
+        v["counts"]["needs_review"].is_number(),
+        "SDD-057 step 5: counts.needs_review field MUST be present in the envelope"
+    );
+    // Each option (when present) MUST expose the unmet predicates
+    // field as an array (empty for non-hardware-blocked cases).
+    for opt in v["options"].as_array().unwrap() {
+        assert!(
+            opt["unmet_hardware_predicates"].is_array(),
+            "SDD-057 step 5: InstallOption.unmet_hardware_predicates MUST be array"
+        );
+        let rec = opt["recommendation"].as_str().unwrap();
+        assert!(
+            [
+                "ready",
+                "blocked-by-missing-deps",
+                "blocked-by-hardware",
+                "needs-review",
+            ]
+            .contains(&rec),
+            "recommendation must be one of the 4 documented variants; got {rec}"
+        );
+    }
     assert!(v["modules_dir"].is_string());
     assert!(v["modules_toml"].is_string());
 }
