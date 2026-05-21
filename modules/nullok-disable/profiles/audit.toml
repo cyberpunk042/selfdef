@@ -1,0 +1,6 @@
+# Profile: audit (default).
+#
+# Scan /etc/pam.d/* + log every nullok found. DO NOT MODIFY files.
+# Operator inspects findings + decides whether to flip to enforce.
+
+profile = "audit"

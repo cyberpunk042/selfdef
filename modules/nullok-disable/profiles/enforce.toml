@@ -1,0 +1,7 @@
+# Profile: enforce.
+#
+# Scan + sed-remove nullok from pam_unix lines. Backs up every
+# affected /etc/pam.d/* file to <file>.selfdef-nullok-backup
+# before edit. Operator can restore via uninstall.
+
+profile = "enforce"
