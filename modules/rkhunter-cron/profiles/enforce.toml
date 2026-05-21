@@ -1,0 +1,10 @@
+# Profile: enforce.
+#
+# rkhunter --check runs daily. ANY warning OR error → exit 1 →
+# systemctl marks the unit failed → operator-alertable.
+#
+# Switch to enforce AFTER tuning rkhunter's allow-list
+# (/etc/rkhunter.conf.local) so legitimate operator-installed tools
+# don't trip false-positive findings every day.
+
+profile = "enforce"

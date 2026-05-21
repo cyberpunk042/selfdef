@@ -1,0 +1,18 @@
+# selfdef rkhunter-cron — daily scan timer.
+#
+# Fires at 04:30 + 15min jitter — offset from aide-bridge (03:30)
+# so both detection scans don't trample the operator's I/O budget
+# simultaneously. Persistent=true catches up missed runs.
+
+[Unit]
+Description=selfdef daily rkhunter known-rootkit-signature scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/rkhunter-cron/README.md
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=selfdef-rkhunter-check.service
+
+[Install]
+WantedBy=timers.target

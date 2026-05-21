@@ -1,0 +1,11 @@
+# Profile: report (default).
+#
+# rkhunter --check runs daily. Findings (warnings/errors per rkhunter
+# exit-code bitmask) are logged via logger tagged 'selfdef-rkhunter'
+# but the systemd unit exits 0. Operator-pull only; correlator +
+# dashboard surface the findings.
+#
+# Suitable for hosts where rkhunter's known-signature DB is still
+# being tuned against operator's environment.
+
+profile = "report"

@@ -1,0 +1,43 @@
+name        = "rkhunter-cron"
+version     = "0.1.0"
+summary     = "rkhunter daily scheduled scan + finding emission via logger tagged selfdef-rkhunter. Mitigates T1014 Rootkit (known-signature side; complements aide-bridge's diff side)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rootkit-signature-scan"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "rkhunter" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings as selfdef-rkhunter events;
+#                     do NOT fail systemd unit. Operator-pull only.
+# `enforce`          — exit 1 on findings → systemctl marks unit
+#                     failed → operator-alertable via journald
+#                     collector + correlator + notifier.
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-rkhunter-check.service",
+    "/etc/systemd/system/selfdef-rkhunter-check.timer",
+    "/usr/local/libexec/selfdef/rkhunter-check.sh",
+    "/etc/selfdef/modules/rkhunter-cron.toml",
+]
