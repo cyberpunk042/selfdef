@@ -45,6 +45,8 @@ check "HTML: scheduler-section"          "${HTML}" 'id="scheduler-section"'     
 check "HTML: modules-section"            "${HTML}" 'id="modules-section"'        || failures=$((failures + 1))
 check "HTML: alerts-section"              "${HTML}" 'id="alerts-section"'         || failures=$((failures + 1))
 check "HTML: alerts aggregate"            "${HTML}" 'id="alerts-aggregate"'       || failures=$((failures + 1))
+check "HTML: hardware-section"            "${HTML}" 'id="hardware-section"'       || failures=$((failures + 1))
+check "HTML: hardware sain01 badge"       "${HTML}" 'id="hardware-sain01-badge"'  || failures=$((failures + 1))
 check "HTML: friction-audit aggregate"  "${HTML}" 'id="fa-aggregate"'            || failures=$((failures + 1))
 check "HTML: perimeter aggregate"        "${HTML}" 'id="perim-aggregate"'         || failures=$((failures + 1))
 check "HTML: guardian aggregate"         "${HTML}" 'id="guard-aggregate"'         || failures=$((failures + 1))
@@ -57,6 +59,7 @@ check "JS: refreshGuardian()"            "${JS}"   'function refreshGuardian'   
 check "JS: refreshScheduler()"           "${JS}"   'function refreshScheduler'      || failures=$((failures + 1))
 check "JS: refreshModules()"             "${JS}"   'function refreshModules'        || failures=$((failures + 1))
 check "JS: refreshAlerts()"               "${JS}"   'function refreshAlerts'         || failures=$((failures + 1))
+check "JS: refreshHardware()"             "${JS}"   'function refreshHardware'       || failures=$((failures + 1))
 check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
@@ -66,6 +69,7 @@ check "JS: setInterval refreshGuardian"        "${JS}" 'setInterval\(refreshGuar
 check "JS: setInterval refreshScheduler"       "${JS}" 'setInterval\(refreshScheduler'     || failures=$((failures + 1))
 check "JS: setInterval refreshModules"          "${JS}" 'setInterval\(refreshModules'        || failures=$((failures + 1))
 check "JS: setInterval refreshAlerts"            "${JS}" 'setInterval\(refreshAlerts'          || failures=$((failures + 1))
+check "JS: setInterval refreshHardware"          "${JS}" 'setInterval\(refreshHardware'        || failures=$((failures + 1))
 
 # JS endpoint bindings (must match selfdef-api routes)
 check "JS: GET /v1/friction-audit"      "${JS}"   'get\("/v1/friction-audit"\)' || failures=$((failures + 1))
@@ -73,6 +77,8 @@ check "JS: GET /v1/perimeter"            "${JS}"   'get\("/v1/perimeter"\)'     
 check "JS: GET /v1/guardian"             "${JS}"   'get\("/v1/guardian"\)'       || failures=$((failures + 1))
 check "JS: GET /v1/scheduler"            "${JS}"   'get\("/v1/scheduler"\)'      || failures=$((failures + 1))
 check "JS: GET /v1/modules"              "${JS}"   'get\("/v1/modules"\)'        || failures=$((failures + 1))
+check "JS: GET /v1/hardware/capabilities" "${JS}"  'get\("/v1/hardware/capabilities"\)' || failures=$((failures + 1))
+check "JS: GET /v1/hardware/sain01"      "${JS}"   'get\("/v1/hardware/sain01"\)' || failures=$((failures + 1))
 
 # CSS aggregate classes (all 8 states: ok/fail/override/unknown/alert/extended/degraded/backpressure)
 for class in fa-ok fa-fail fa-override fa-unknown fa-alert fa-extended fa-degraded fa-backpressure; do

@@ -146,6 +146,9 @@
     if (kind === "alerts") {
       return refreshAlerts();
     }
+    if (kind === "hardware") {
+      return refreshHardware();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -747,6 +750,87 @@
     }
   }
 
+  /// MS010 + SDD-018: render the host hardware capability summary
+  /// and sain-01 reference-platform match verdict. Consumes
+  /// /v1/hardware/capabilities + /v1/hardware/sain01. The full
+  /// snapshot at /v1/hardware is intentionally NOT rendered in this
+  /// panel — it's verbose (PCIe devices, thermals, GPU details) and
+  /// belongs in a dedicated drill-down page if/when operators ask.
+  async function refreshHardware() {
+    const ul = document.getElementById("hardware-rows");
+    const meta = document.getElementById("hardware-meta");
+    const badge = document.getElementById("hardware-sain01-badge");
+    try {
+      const [caps, sain01Env] = await Promise.all([
+        get("/v1/hardware/capabilities"),
+        get("/v1/hardware/sain01"),
+      ]);
+      const sain01 = sain01Env.sain01;
+      const verdict = sain01.overall;
+      const verdictClass = verdict === "Match" ? "fa-ok"
+                         : verdict === "NearMatch" ? "fa-degraded"
+                         : verdict === "NoMatch" ? "fa-fail"
+                         : "fa-unknown";
+
+      // Build the per-row inventory. Capability flags are booleans;
+      // we render OK/NO/UNKNOWN states matching the alerts panel's
+      // visual language so operators read both panels the same way.
+      const checks = [
+        { name: "CPU AVX-512 VNNI",        ms: "MS010", ok: sain01.cpu_avx512_vnni },
+        { name: "CPU AVX-512 BF16",        ms: "MS010", ok: sain01.cpu_avx512_bf16 },
+        { name: "Memory ≥ 256 GB",         ms: "MS010", ok: sain01.memory_at_least_256gb },
+        { name: "GPU count ≥ 2",           ms: "MS010", ok: sain01.gpu_count_at_least_2 },
+        { name: "PCIe dual x8 (Gen4+)",    ms: "MS010", ok: sain01.pcie_dual_x8_present },
+      ];
+      // Motherboard match is Option<bool> from the server — null
+      // means DMI unreadable (operator can't confirm — neutral).
+      if (sain01.motherboard_proart_x870e === true) {
+        checks.push({ name: "Motherboard ProArt X870E", ms: "MS010", ok: true });
+      } else if (sain01.motherboard_proart_x870e === false) {
+        checks.push({ name: "Motherboard ProArt X870E", ms: "MS010", ok: false });
+      } else {
+        checks.push({ name: "Motherboard ProArt X870E (DMI unreadable)", ms: "MS010", ok: null });
+      }
+
+      const lis = checks.map(c => {
+        const state = c.ok === true ? "ok" : c.ok === false ? "fail" : "unknown";
+        const cssClass = state === "ok" ? "fa-ok"
+                       : state === "fail" ? "fa-fail"
+                       : "fa-unknown";
+        const label = state === "ok" ? "YES" : state === "fail" ? "NO" : "?";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${cssClass}">${label}</span>
+          <code>${c.name}</code>
+          <small>${c.ms}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+
+      // Meta line: surface the snapshot timestamp + key capability
+      // descriptors (operator wants one-glance sufficiency).
+      const metaBits = [];
+      if (caps && typeof caps === "object") {
+        if (caps.has_avx512) metaBits.push("AVX-512");
+        if (caps.has_avx512_vnni) metaBits.push("VNNI");
+        if (caps.has_avx512_bf16) metaBits.push("BF16");
+        if (caps.dual_x8_pcie) metaBits.push("dual-x8 PCIe");
+        if (caps.gpu_count) metaBits.push(`${caps.gpu_count} GPU${caps.gpu_count === 1 ? "" : "s"}`);
+        if (caps.memory_tier) metaBits.push(`mem tier: ${caps.memory_tier}`);
+      }
+      meta.textContent = metaBits.length
+        ? `capabilities: ${metaBits.join(" · ")}`
+        : "capabilities: (none detected)";
+
+      badge.textContent = String(verdict).toUpperCase();
+      badge.className = "fa-aggregate " + verdictClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      badge.textContent = "ERR";
+      badge.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -954,6 +1038,7 @@
   refreshScheduler();
   refreshModules();
   refreshAlerts();
+  refreshHardware();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -972,6 +1057,10 @@
   // mirror of the Prometheus alert rules — fast refresh keeps
   // chain-broken signals operator-visible within seconds.
   setInterval(refreshAlerts, 15000);
+  // Hardware panel reflects MS010 / SDD-018 — hardware doesn't
+  // hot-swap so 5 minutes is plenty (the server caches the probe
+  // anyway via OnceLock).
+  setInterval(refreshHardware, 300000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
