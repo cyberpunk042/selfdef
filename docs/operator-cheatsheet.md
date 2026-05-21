@@ -160,6 +160,8 @@ GET /v1/policy                                       (MS033 / SDD-051 D-2 8 poli
 GET /v1/nats                                         (MS015 / SDD-053 D-2 NATS bridge subject schema + modes)
 GET /v1/mcp                                          (MS011 Z-11 / SD-R84 MCP-interop transports + framings + curation)
 GET /v1/flex-profile                                 (MS011 Z-3 flex-profile schema + live state read when present)
+POST /v1/flex-profile/apply                          (MS011 Z-3 apply Delta to persisted state; first-apply needs `baseline`)
+POST /v1/flex-profile/revert                         (MS011 Z-3 pop most-recent Delta; records revert in history)
 GET /v1/inference-backends                           (MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth probe)
 GET /v1/repl                                         (MS011 Z-12 multi-tier REPL discovery — 3 tiers + Tier 1 callables)
 GET /v1/oracle-triage                                (SDD-016 oracle-triage channel doctrine + wire format + tier routing)

@@ -302,6 +302,13 @@ pub fn router(state: ApiState) -> Router {
         // state schema + (when DEFAULT_STATE_PATH exists) the live
         // state read.
         .route("/v1/flex-profile", get(flex_profile::show))
+        // MS011 Z-3 mutation surfaces — apply a Delta or revert the
+        // most-recent one. Persists to DEFAULT_STATE_PATH (override
+        // via SELFDEF_FLEX_PROFILE_PATH env). Operator-gating via
+        // SDD-043 commit-authority + SDD-044 capability-tokens is
+        // the next caller-integration arc per SDD-055.
+        .route("/v1/flex-profile/apply", post(flex_profile::apply))
+        .route("/v1/flex-profile/revert", post(flex_profile::revert))
         // MS011 Z-2 / SDD-026 — inference-backend probe surface.
         // Probes for the 4 canonical backends (llama.cpp / vllm /
         // bitnet.cpp / unsloth) + reports installed state + version.
