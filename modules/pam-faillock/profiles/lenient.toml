@@ -1,0 +1,7 @@
+# Profile: lenient (default).
+#
+# 10 failed auths in 15min → 15min lockout. Operator-friendly;
+# survives accidental typo storms (laptop wakeup with stale
+# kerberos ticket, fast-typed password).
+
+profile = "lenient"

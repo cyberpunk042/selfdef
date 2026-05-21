@@ -1,0 +1,39 @@
+name        = "pam-faillock"
+version     = "0.1.0"
+summary     = "PAM account lockout via pam_faillock — N failed auths in M seconds → account locked for L seconds. Mitigates T1110 (Brute Force) at the LOCAL-AUTH layer (sudo, su, login)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["pam-account-lockout"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "faillock" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `lenient` (default) — 10 fails / 15min window → 15min lockout.
+#                      Operator-friendly; survives typo storms.
+# `strict`           — 5 fails / 10min → 30min lockout.
+#                      Higher-assurance hosts.
+default = "lenient"
+available = ["lenient", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/security/faillock.conf",
+    "/etc/selfdef/modules/pam-faillock.toml",
+]

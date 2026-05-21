@@ -1,0 +1,7 @@
+# Profile: strict.
+#
+# 5 failed auths in 10min → 30min lockout. Tighter; appropriate
+# for high-assurance hosts or hosts with operator-rare interactive
+# login (mostly key-only ssh).
+
+profile = "strict"
