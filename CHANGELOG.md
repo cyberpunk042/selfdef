@@ -6,6 +6,93 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS011 Z-1 8-tab restructure + landscape SDDs (2026-05-21, batch 4)
+
+Continuation block covering commits a6f3925 → 4f30408. Focus: ship
+the MS011 Z-1 8-tab restructure end-to-end per SDD-026 ratification
++ author 3 retrospective/planning SDDs documenting the dashboard
+architecture, partial-milestone landscape, and 8-tab migration plan.
+
+#### SDD-054 — dashboard as shipped (commit 770cf47)
+
+161-line Stage-2 retrospective documenting the actually-shipped
+17-panel single-page-with-anchor-nav layout. Captures the panel
+taxonomy (5 operator-relevance clusters), refresh interval ladder,
+CSS color taxonomy, service-worker cache invalidation, and L1
+drift-detection gate. 4 open questions including D-1 "migrate to
+8-tab restructure per SDD-026 Z-1" (closed by SDD-056).
+
+#### SDD-055 — partial milestone landscape (commit fdaacfc)
+
+207-line Stage-2 synthesis enumerating all 6 remaining `partial`
+milestones with explicit deferred-for-cause reasons + closure
+conditions + effort estimates + recommended next-session targets.
+Cross-cutting observation: 2 of 6 are eBPF kernel work (MS002 +
+MS016 share deferred list — shipping 1 program closes 2 entries);
+1 is operator-gated (MS008); 1 is intentionally evergreen (MS013);
+2 are MS011 multi-commit arcs.
+
+#### SDD-056 — dashboard 8-tab restructure plan (commit 2251591)
+
+156-line Stage-2 plan locking the 17-panel → 8-tab mapping,
+framework choice (vanilla JS hand-rolled router), URL hash routing,
+active-tab refresh strategy, L1 gate evolution, 5-commit migration
+sequence, and 7-checkbox closure roadmap.
+
+#### SDD-056 implementation (commits 91b8899 + 81ebdca + 4136965 + a9bf06e + 4f30408)
+
+5-commit migration sequence shipped, MS011 Z-1 functionally
+complete:
+
+- **Step 2** (91b8899): 8-tab HTML scaffold + CSS (Models /
+  Modules / Profiles / Hardware / Network / Logs / MCP / REPL),
+  tab UI inert pending JS
+- **Step 3** (81ebdca): tab switching JS + URL hash router.
+  `#tab=<name>` source of truth; hashchange listener; deep-link
+  + back/forward navigation; tab-hidden class toggle
+- **Step 4** (4136965): gated setInterval — 16 raw setInterval
+  calls replaced with `gatedInterval(fn, ms, sectionId)` that
+  pauses fn when its section is tab-hidden. Saves nvidia-smi /
+  df / ping / mdstat / --version probe cost when operator pinned
+  to a single tab.
+- **Step 5** (a9bf06e): "Show all" / "Show tabbed" toggle button
+  + localStorage persistence + 9th "All" pseudo-anchor. Default
+  stays "all" (no UX surprise for existing operators); operator
+  flips once and preference survives reload.
+- **Step 6** (4f30408): SDD-056 ratified scoping → implemented.
+  Functionally complete; SDD-026 + MS011 ratification deferred
+  pending remaining Z-N arcs.
+
+Dashboard now ships its full Z-1 form with operator-toggleable
+mode + the 17-panel scroll-all layout preserved as the default.
+
+#### Operator tooling
+
+- `scripts/test/sdd-tally.sh` (4e20bdb) — MS013 charter-tracking
+  drift detector with 3 status-format tolerance (carried from
+  batch 3)
+
+Final SDD tally:
+  implemented: 46 (was 43 pre-batch-4; +SDD-054 + SDD-055 +
+    SDD-056 promotion)
+  draft:        5
+  review:       2 (SDD-012 + SDD-026 — unchanged)
+  scoping:      3 (SDD-009/010/011 — unchanged; SDD-056 was
+    `scoping` then promoted to `implemented` after impl shipped)
+  living:       1
+  total:       57
+
+Final INDEX tally:
+  done:    42 milestones (unchanged — MS011 stays partial because
+    of Z-2/Z-3/Z-12/Z-13 remaining arcs even though Z-1 itself is
+    functionally complete)
+  partial: 6 milestones
+  stage-1: 0 milestones
+
+Dashboard ships 17 sections + 8 tabs + always-visible strip + URL
+deep-link support + localStorage preference + L1 drift detection
+across HTML / JS / setInterval-pattern / GET-binding axes.
+
 ### Added — MS011 fullstack closures + tooling (2026-05-21, batch 3)
 
 Continuation block covering commits 4e20bdb → 522b427. Focus: MS011
