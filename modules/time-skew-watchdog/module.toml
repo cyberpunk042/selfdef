@@ -1,0 +1,39 @@
+name        = "time-skew-watchdog"
+version     = "0.1.0"
+summary     = "Clock-drift watchdog — systemd timer queries chronyc tracking every 5min + emits selfdef-bus event when drift exceeds threshold. Pairs with chrony-baseline (T1070.006 detection layer)"
+category    = "detection"
+
+# Watchdog only fires when chrony is the actual time source.
+depends_on  = ["chrony-baseline"]
+conflicts   = []
+provides    = ["time-skew-detection"]
+consumes    = ["ntp-baseline"]
+
+requires    = [
+    { kind = "binary", value = "chronyc" },
+    { kind = "binary", value = "systemctl" },
+    { kind = "binary", value = "logger" },
+]
+
+instanced = false
+phase = "post"   # after chrony-baseline runs in `main`
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "default"
+available = ["default"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-time-skew-watchdog.service",
+    "/etc/systemd/system/selfdef-time-skew-watchdog.timer",
+    "/usr/local/libexec/selfdef/time-skew-watchdog.sh",
+    "/etc/selfdef/modules/time-skew-watchdog.toml",
+]

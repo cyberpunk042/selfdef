@@ -1,0 +1,21 @@
+# selfdef time-skew-watchdog — timer unit.
+#
+# Fires every 5 minutes (jittered) starting 30s after boot. Aligned
+# with the operator's audit cadence — neither so frequent that it
+# bumps cron-cost noise, nor so slow that a clock-step attack goes
+# undetected for hours.
+
+[Unit]
+Description=selfdef clock-drift watchdog timer (5min cadence)
+Documentation=https://github.com/cyberpunk042/selfdef modules/time-skew-watchdog/README.md
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=5min
+# Add 30s of jitter so fleets don't synchronize their probes.
+RandomizedDelaySec=30s
+Persistent=true
+Unit=selfdef-time-skew-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,34 @@
+# selfdef time-skew-watchdog — service unit.
+#
+# Runs the watchdog script once. Triggered by the companion timer
+# every 5 minutes; this unit is `Type=oneshot` so completion is
+# the exit semantics.
+#
+# Output (stdout/stderr) goes to the journal where selfdef-collector-
+# journald picks it up. The script also logger(1)-emits a structured
+# JSON line with `tag=selfdef-time-skew` so the correlator can
+# match on tag.
+
+[Unit]
+Description=selfdef clock-drift watchdog (probes chronyc tracking)
+Documentation=https://github.com/cyberpunk042/selfdef modules/time-skew-watchdog/README.md
+After=chronyd.service chrony.service
+Wants=chronyd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/time-skew-watchdog.sh
+# Hardening (defense-in-depth — the script is a small bash one-
+# shot but we lock it down anyway).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Read-only access to the chrony control socket.
+ReadOnlyPaths=/var/run/chrony
+# Allow logger(1) to write to /dev/log.
+ReadWritePaths=/dev/log
