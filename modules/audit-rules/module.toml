@@ -1,0 +1,41 @@
+name        = "audit-rules"
+version     = "0.1.0"
+summary     = "Linux audit subsystem rules — feeds events to the auditd collector (SECCOMP triggers, ld.so.preload watch, sudo/su exec, sensitive-file write watch)"
+category    = "hardening"
+
+# The auditd userspace daemon is an OS package (`audit` / `auditd`).
+# We don't declare it as a selfdef module-dep — `requires` declares
+# the binary contract.
+depends_on  = []
+conflicts   = []
+provides    = ["auditctl-rules"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "auditctl" },
+    { kind = "binary", value = "augenrules" },
+]
+
+# Single bundle per host. Per-rule-set profile selection happens
+# via the module config, not by spawning instances.
+instanced = false
+
+# `main` phase: audit rules need auditd running, which the OS owns
+# (operator-installed via apt/dnf/pacman). We install rules + run
+# `augenrules --load` to atomic-swap the live rule set.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "base"
+available = ["base", "paranoid"]
+
+# MS011 Z-8 / SDD-026 install-path manifest.
+[install_paths]
+scope = "system"
+paths = ["/etc/audit/rules.d", "/etc/selfdef/modules/audit-rules.toml"]

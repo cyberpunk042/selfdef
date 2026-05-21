@@ -1,0 +1,10 @@
+# Profile: paranoid.
+#
+# Loads the base profile + every execve, every ptrace, every
+# uid/gid syscall, cron config writes, systemd unit writes.
+#
+# Measurable audit-overhead (high event volume). Suitable for
+# isolated forensics hosts or paranoia mode during incident
+# response.
+
+profile = "paranoid"

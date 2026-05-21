@@ -1,0 +1,43 @@
+# selfdef audit-rules — base profile.
+#
+# High-signal subset: ld.so.preload + sensitive-file writes +
+# sudo/su exec + kernel-module syscalls + raw-socket creation +
+# loginuid immutability. Designed for minimal audit-overhead +
+# broad detection.
+#
+# Installed at /etc/audit/rules.d/50-selfdef-base.rules.
+# augenrules --load compiles + loads atomically.
+
+# === Dynamic-linker hijack surface (T1574.006) ===
+-w /etc/ld.so.preload -p wa -k selfdef-ldpreload
+
+# === Credential-file watch (T1003.008) ===
+-w /etc/passwd  -p wa -k selfdef-passwd
+-w /etc/shadow  -p wa -k selfdef-shadow
+-w /etc/group   -p wa -k selfdef-group
+-w /etc/gshadow -p wa -k selfdef-gshadow
+-w /etc/sudoers -p wa -k selfdef-sudoers
+-w /etc/sudoers.d -p wa -k selfdef-sudoers
+
+# === Privilege-escalation binary exec (T1548.003) ===
+-w /usr/bin/sudo -p x -k selfdef-sudo-exec
+-w /usr/bin/su   -p x -k selfdef-su-exec
+
+# === Kernel module load/unload (T1547.006) ===
+# Complementary to the host-sentinel kmod-watch Tetragon policy;
+# audit catches the syscall, Tetragon catches the kprobe.
+-a always,exit -F arch=b64 -S init_module  -k selfdef-kmod
+-a always,exit -F arch=b64 -S finit_module -k selfdef-kmod
+-a always,exit -F arch=b64 -S delete_module -k selfdef-kmod
+
+# === Raw socket creation (potential sniffer) ===
+# socket(AF_PACKET=17, ...) — packet sockets are how tcpdump /
+# wireshark sniff. Complements ANOM_PROMISCUOUS but fires at
+# socket creation, not just interface mode change.
+-a always,exit -F arch=b64 -F a0=17 -S socket -k selfdef-rawsock
+
+# === Loginuid immutability ===
+# Once set, the loginuid is sealed for that process's lifetime;
+# stops a privileged process from spoofing its loginuid in the
+# audit trail.
+--loginuid-immutable

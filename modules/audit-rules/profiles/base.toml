@@ -1,0 +1,11 @@
+# Profile: base (default).
+#
+# Installs the high-signal subset of audit rules: ld.so.preload +
+# credential-file watch + sudo/su exec watch + kernel-module
+# syscalls + raw-socket creation + loginuid immutability.
+#
+# Minimal audit-overhead. Suitable for production hosts where
+# operator wants meaningful telemetry without burning audit
+# throughput.
+
+profile = "base"
