@@ -1802,6 +1802,103 @@ async fn modules_install_plan_route_returns_200_with_topological_shape() {
 }
 
 #[tokio::test]
+async fn dashboard_prefs_get_returns_default_when_file_missing() {
+    // MS043 UX: GET /v1/dashboard-prefs returns a blank-valid body
+    // even when the on-disk file doesn't exist. The dashboard must
+    // never see a 500/404 just because the operator hasn't customized
+    // anything yet.
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("missing-dashboard-prefs.toml");
+    // SAFETY: integration test runs single-threaded enough that env
+    // mutation is contained. Mirror the SDD-026 Z-3 unsafe-env carve-
+    // out — the workspace `unsafe_code` forbid bites here, so we
+    // skip the env-mutating part and just hit the default path: the
+    // env var is unset on the CI runner, so the default
+    // /etc/selfdef/dashboard-prefs.toml is used; that file is
+    // ALSO missing on the CI runner.
+    let _ = path;  // (path unused — see env-mutation note above)
+
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/dashboard-prefs")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 16 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["schema_version"], "1.0.0", "default schema 1.0.0");
+    assert!(v["hidden_panels"].is_array());
+    assert_eq!(v["refresh_rate"], "normal");
+    assert_eq!(v["active_preset"], "default");
+}
+
+#[tokio::test]
+async fn dashboard_prefs_put_rejects_unknown_refresh_rate() {
+    // MS043 UX: PUT validates the refresh_rate enum. An operator
+    // running a stale dashboard build that PUTs `"warp"` must get
+    // a 400 + a clear error so the cache can refresh.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let body = serde_json::json!({
+        "schema_version": "1.0.0",
+        "hidden_panels": [],
+        "refresh_rate": "warp",
+        "active_preset": "default"
+    });
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri("/v1/dashboard-prefs")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn dashboard_prefs_put_rejects_unknown_active_preset() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let body = serde_json::json!({
+        "schema_version": "1.0.0",
+        "hidden_panels": [],
+        "refresh_rate": "normal",
+        "active_preset": "ultra-secret"
+    });
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri("/v1/dashboard-prefs")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn dashboard_prefs_put_rejects_schema_version_mismatch() {
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let body = serde_json::json!({
+        "schema_version": "9.9.9",
+        "hidden_panels": [],
+        "refresh_rate": "normal",
+        "active_preset": "default"
+    });
+    let req = Request::builder()
+        .method(Method::PUT)
+        .uri("/v1/dashboard-prefs")
+        .header("content-type", "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
 async fn modules_install_options_route_returns_200_with_canonical_shape() {
     // MS011 Z-13 / SD-R86 + SDD-057 step 5/6: /v1/modules/install-
     // options classifies AVAILABLE modules by dep-readiness AND

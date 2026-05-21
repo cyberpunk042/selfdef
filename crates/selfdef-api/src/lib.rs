@@ -47,6 +47,7 @@ mod commit_authority;
 mod communication_boundary;
 mod control;
 mod cpu;
+mod dashboard_prefs;
 mod filesystem_boundary;
 mod flex_profile;
 mod friction_audit;
@@ -309,6 +310,12 @@ pub fn router(state: ApiState) -> Router {
         // the next caller-integration arc per SDD-055.
         .route("/v1/flex-profile/apply", post(flex_profile::apply))
         .route("/v1/flex-profile/revert", post(flex_profile::revert))
+        // MS043 UX — operator dashboard preferences persisted daemon-
+        // side so view choices survive browser/host switches. GET
+        // returns the current TOML (missing file → blank-valid body),
+        // PUT validates enums + atomically writes. localStorage on
+        // the PWA side is just a cache; the daemon is source of truth.
+        .route("/v1/dashboard-prefs", get(dashboard_prefs::show).put(dashboard_prefs::put))
         // MS011 Z-2 / SDD-026 — inference-backend probe surface.
         // Probes for the 4 canonical backends (llama.cpp / vllm /
         // bitnet.cpp / unsloth) + reports installed state + version.

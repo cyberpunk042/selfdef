@@ -167,6 +167,8 @@ POST /v1/flex-profile/revert                         (MS011 Z-3 pop most-recent 
 GET /v1/inference-backends                           (MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth probe)
 GET /v1/repl                                         (MS011 Z-12 multi-tier REPL discovery — 3 tiers + Tier 1 callables)
 GET /v1/oracle-triage                                (SDD-016 oracle-triage channel doctrine + wire format + tier routing)
+GET /v1/dashboard-prefs                              (MS043 UX read operator dashboard preferences — missing file → blank-valid)
+PUT /v1/dashboard-prefs                              (MS043 UX persist {hidden_panels, refresh_rate, active_preset}; validates enums + atomic write)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

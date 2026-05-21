@@ -153,6 +153,11 @@ check_route "/v1/repl"                    "MS011 Z-12 / SD-R85" || failures=$((f
 # SDD-016 — oracle-triage channel doctrine + wire format + tier routing.
 check_route "/v1/oracle-triage"           "SDD-016" || failures=$((failures + 1))
 
+# MS043 UX — daemon-side persistence of operator dashboard preferences
+# (hidden panels + refresh rate + active preset). GET returns current
+# TOML; PUT validates enums + atomically writes via temp+rename.
+check_route "/v1/dashboard-prefs"         "MS043 UX dashboard-prefs" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

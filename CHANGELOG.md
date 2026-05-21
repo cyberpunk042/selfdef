@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX daemon-side dashboard-prefs persistence (2026-05-21, batch 13)
+
+The three UX-mode pillars shipped in batches 10/11/12 (panel
+visibility + refresh rate + view presets) persist to
+`localStorage` — that's per-browser. The same operator on a phone
+PWA / laptop / different host loses their choices.
+
+This batch promotes the preferences to the **daemon** as the
+source of truth.
+
+- **`GET /v1/dashboard-prefs`** — returns the current persisted
+  preferences. Missing file → `200 OK` with a blank-valid body
+  (schema_version 1.0.0, empty hidden_panels, normal refresh,
+  default preset). Malformed file → also blank-valid (we do NOT
+  500 on disk corruption; the dashboard would lose all UX state).
+- **`PUT /v1/dashboard-prefs`** — atomically persists new
+  preferences via temp-file-then-rename. Validates:
+  - `schema_version` matches server's `1.0.0` → 409 Conflict
+    otherwise
+  - `refresh_rate` ∈ {fast, normal, slow, paused} → 400 otherwise
+  - `active_preset` ∈ {default, security, performance, inference,
+    compact} → 400 otherwise
+- Disk persistence at `/etc/selfdef/dashboard-prefs.toml`; env
+  override `SELFDEF_DASHBOARD_PREFS_PATH`. Server stamps
+  `updated_at_ms` from `SystemTime::now()` on every accepted PUT.
+- 7 unit tests (default constructor, missing-file behavior, disk
+  round-trip, malformed-file resilience, enum-table coverage,
+  atomic-write parent-dir creation) + 4 integration tests against
+  the live axum router (GET default body, PUT rejection on all 3
+  enum mismatches). All 11 pass.
+- L1-api-endpoints gate extended with the new route line. Operator
+  cheatsheet documents the GET + PUT contracts.
+
+The dashboard-side sync (PWA fetches on load, PUTs on
+preference change, falls back to localStorage when offline) is
+the next layer-up and lands in a follow-up commit — this batch
+ships the daemon-side foundation under SDD-026 + the layer-up
+pattern documented in the info-hub lesson.
+
 ### Added — MS043 UX view presets (2026-05-21, batch 12)
 
 Third pillar of the operator's UX-mode requirements. Verbatim:
