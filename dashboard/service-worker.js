@@ -9,6 +9,11 @@
 // index.html gained scheduler panel; app.js gained the four-watchdog
 // refresh handlers; dashboard.css gained the .fa-backpressure
 // aggregate state.
+// v28 (2026-05-21): MS043 UX — URL-hash deep-link for presets.
+// `#preset=security` (with optional &tab=foo extension) loads the
+// dashboard with that preset already applied. Operator-bookmarkable
+// distinct URLs per operator-named view — interim toward verbatim
+// "20 dashboards" requirement before each gets its own URL path.
 // v27 (2026-05-21): MS043 UX — daemon-side dashboard-prefs sync.
 // app.js fetches /v1/dashboard-prefs on load + PUTs on every
 // preference change (debounced 400ms). Server is source of truth;
@@ -35,7 +40,7 @@
 // panel now fetches /v1/modules/install-plan in parallel and renders
 // a yellow conflict badge + meta line when two planned modules
 // declare the same path in [install_paths].
-const SHELL = "selfdef-shell-v27";
+const SHELL = "selfdef-shell-v28";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

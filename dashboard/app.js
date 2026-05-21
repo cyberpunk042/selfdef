@@ -1632,15 +1632,31 @@
   }
 
   function parseTab() {
-    // URL hash like "#tab=hardware". Returns the tab name (one of
-    // the 8 + "all") or null. Hash takes precedence over the
-    // localStorage preference for the current page load.
+    // URL hash like "#tab=hardware" or "#preset=security&tab=logs".
+    // Returns the tab name (one of the 8 + "all") or null. Hash
+    // takes precedence over the localStorage preference for the
+    // current page load.
     const hash = window.location.hash || "";
-    const m = hash.match(/^#tab=([a-z]+)$/);
-    if (m) return m[1];
+    // Accept both single-param (#tab=foo) and multi-param
+    // (#preset=security&tab=logs) hash shapes.
+    const tabMatch = hash.match(/[#&]tab=([a-z]+)(?:&|$)/);
+    if (tabMatch) return tabMatch[1];
     // Fallback: operator preference. "all" → null (no tab active);
     // "tabbed" → "models" (first tab per SDD-056 § 8-tab spec).
     return readTabMode() === "tabbed" ? "models" : null;
+  }
+
+  // MS043 UX — URL-hash deep-link support for presets.
+  // `#preset=security` (with optional &tab=foo extension) loads
+  // the dashboard with that preset already applied. Operator can
+  // bookmark distinct URLs per operator-named view — interim
+  // toward the verbatim "20 dashboards" requirement before each
+  // gets its own URL path + service worker shell.
+  function parsePresetFromHash() {
+    const hash = window.location.hash || "";
+    const m = hash.match(/[#&]preset=([a-z]+)(?:&|$)/);
+    if (!m) return null;
+    return PRESETS[m[1]] !== undefined ? m[1] : null;
   }
 
   function switchTab(name) {
@@ -2043,9 +2059,10 @@
     applyHiddenPanels();
     writeRefreshRate(p.refreshRate);
     if (refreshSelect) refreshSelect.value = p.refreshRate;
-    // Snap the tab via hash so switchTab() + the existing hashchange
-    // listener pick it up.
-    window.location.hash = `tab=${p.tab}`;
+    // Snap both preset + tab into the URL hash so the operator
+    // can copy the address bar contents as a shareable / bookmarkable
+    // deep-link. switchTab + the hashchange listener pick this up.
+    window.location.hash = `preset=${name}&tab=${p.tab}`;
   }
   const presetSelect = document.getElementById("preset-select");
   if (presetSelect) {
@@ -2056,7 +2073,16 @@
   }
 
   // Apply initial state from URL hash (deep-link support).
-  switchTab(parseTab());
+  // If `#preset=<name>` is in the URL, snap to that preset first
+  // (which writes its own hash including tab). Otherwise fall
+  // back to the existing tab-only deep-link path.
+  const initialPreset = parsePresetFromHash();
+  if (initialPreset) {
+    applyPreset(initialPreset);
+    if (presetSelect) presetSelect.value = initialPreset;
+  } else {
+    switchTab(parseTab());
+  }
 
   // MS043 UX — fire-and-forget initial fetch of server-side
   // preferences. Server wins over localStorage when reachable; if
