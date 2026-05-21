@@ -54,6 +54,40 @@ pub(crate) struct ModuleSummary {
     /// (presence of `[modules.<name>]` section).
     #[serde(default)]
     pub active: bool,
+    /// MS011 Z-8 / SDD-026 — install-path manifest distinguishing
+    /// container-level vs system-level scope. Optional in the
+    /// shipped module.toml (back-compat for the 14 modules that
+    /// pre-date the schema extension); defaults to empty + scope
+    /// `system` when absent.
+    #[serde(default)]
+    pub install_paths: ModuleInstallPaths,
+}
+
+/// MS011 Z-8 install-path classification.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ModuleInstallPaths {
+    /// `"system"` (default sovereignty; writes /etc / /usr / /var)
+    /// or `"container"` (isolated; writes within the module's
+    /// container scope only).
+    #[serde(default = "default_install_scope")]
+    pub scope: String,
+    /// Absolute paths the module writes to on apply. Empty when the
+    /// module hasn't declared its surfaces yet (back-compat default).
+    #[serde(default)]
+    pub paths: Vec<String>,
+}
+
+impl Default for ModuleInstallPaths {
+    fn default() -> Self {
+        Self {
+            scope: default_install_scope(),
+            paths: Vec::new(),
+        }
+    }
+}
+
+fn default_install_scope() -> String {
+    "system".to_string()
 }
 
 /// Response body for `GET /v1/modules`.
@@ -512,5 +546,38 @@ config = "/etc/selfdef/modules/agent-guard.toml"
         assert!(installed.is_empty());
         assert!(available.is_empty());
         assert_eq!(orphaned, vec!["x", "y"]);
+    }
+
+    #[test]
+    fn install_paths_default_back_compat() {
+        // MS011 Z-8 — module.toml WITHOUT [install_paths] block
+        // (every shipped manifest pre-extension) parses cleanly +
+        // gets default scope="system" + empty paths.
+        let body = r#"
+name = "test-module"
+version = "0.1.0"
+summary = "no install_paths block declared"
+category = "test"
+"#;
+        let m: ModuleSummary = toml::from_str(body).unwrap();
+        assert_eq!(m.name, "test-module");
+        assert_eq!(m.install_paths.scope, "system");
+        assert!(m.install_paths.paths.is_empty());
+    }
+
+    #[test]
+    fn install_paths_container_scope_round_trips() {
+        // MS011 Z-8 — module.toml WITH [install_paths] block parses
+        // the scope + paths fields.
+        let body = r#"
+name = "test-module"
+
+[install_paths]
+scope = "container"
+paths = ["/opt/foo", "/var/lib/foo"]
+"#;
+        let m: ModuleSummary = toml::from_str(body).unwrap();
+        assert_eq!(m.install_paths.scope, "container");
+        assert_eq!(m.install_paths.paths, vec!["/opt/foo", "/var/lib/foo"]);
     }
 }
