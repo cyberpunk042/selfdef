@@ -1,0 +1,39 @@
+name        = "usb-storage-mass-disable"
+version     = "0.1.0"
+summary     = "Block usb_storage kernel module via /etc/modprobe.d — no USB mass-storage device can attach regardless of physical access. Stronger than usbguard (which can be unloaded). Mitigates T1052.001 Exfiltration over Physical Medium + T1091 Replication Through Removable Media"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["usb-storage-block"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "modprobe" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `blocked` (default) — modprobe blacklist + install-override
+#                     to /bin/true. usb_storage CANNOT load.
+# `audited`         — install-override pipes through logger
+#                     tagged selfdef-usb-storage but DOES allow
+#                     the module to load (baseline visibility).
+default = "blocked"
+available = ["blocked", "audited"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/modprobe.d/50-selfdef-usb-storage.conf",
+    "/etc/selfdef/modules/usb-storage-mass-disable.toml",
+]

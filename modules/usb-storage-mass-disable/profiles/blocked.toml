@@ -1,0 +1,8 @@
+# Profile: blocked (default).
+#
+# usb_storage + uas + vfat + cdrom kernel modules CANNOT load.
+# Insertion of USB mass-storage devices is invisible to the
+# kernel; nothing mounts. Strongest physical-medium-exfil
+# defense.
+
+profile = "blocked"

@@ -1,0 +1,7 @@
+# Profile: audited.
+#
+# usb_storage + uas load NORMALLY but each load attempt is
+# logged tagged 'selfdef-usb-storage'. Operator-pull baseline
+# visibility to decide whether to flip to blocked.
+
+profile = "audited"
