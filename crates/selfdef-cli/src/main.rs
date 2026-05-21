@@ -9,6 +9,7 @@
 
 mod alerts;
 mod audit_chains;
+mod authority;
 mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
@@ -344,6 +345,11 @@ enum Command {
     /// Discovery of the 4-transport ladder + 8-message-type schema +
     /// proposal→commit mapping + 2 verbatim doctrines.
     CommunicationBoundary,
+    /// MS039 + MS040 / SDD-049 authority operator surface. Discovery
+    /// of the 7-level authority ladder + 5 trust rings + 6-profile
+    /// envelope matrix + 4 TransitionGate variants + 5 authority
+    /// crates.
+    Authority,
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -1907,6 +1913,10 @@ async fn main() -> Result<()> {
         }
         Command::CommunicationBoundary => {
             let exit = communication_boundary::run_schema()?;
+            std::process::exit(exit);
+        }
+        Command::Authority => {
+            let exit = authority::run_matrix()?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

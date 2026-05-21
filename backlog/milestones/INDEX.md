@@ -128,8 +128,8 @@
 | MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
 | MS037 | done | `selfdef-filesystem-boundary` crate (496 LOC) + SDD-045 + `selfdefctl filesystem-boundary {doctrine,schema}` CLI + `GET /v1/filesystem-boundary` schema discovery + L1 gates. Caller-integration arc deferred per SDD-045 D-3/D-4. |
 | MS038 | done | `selfdef-network-boundary` crate (459 LOC) + SDD-046 + `selfdefctl network-boundary {profiles,classify}` CLI + `GET /v1/network-boundary` schema discovery + L1 gates. Host-firewall nftables emission (SDD-046 D-3) + IPv6 (D-4) deferred. |
-| MS039 | partial | Authority-tier crates shipped: `selfdef-mode-transition-authority`, `selfdef-toggle-audit-authority`, `selfdef-config-mutation-authority`, `selfdef-recovery-snapshot-authority`, `selfdef-profile-authority-gate` (660 LOC). Missing: composite operator surface. |
-| MS040 | partial | `selfdef-profile-authority-gate` crate shipped (660 LOC). Missing: operator-facing profile-switch CLI/HTTP surface. |
+| MS039 | done | 5-crate authority stack (mode-transition + toggle-audit + config-mutation + recovery-snapshot + profile-authority-gate, ~1639 LOC) + SDD-049 + `selfdefctl authority` CLI + `GET /v1/authority` schema discovery + L1 gates. Mode-transition log persistence (SDD-049 D-4) + GET /v1/authority/active live state (D-3) deferred. |
+| MS040 | done | Same 5-crate authority stack covers MS040 (the 6-profile envelope matrix is part of `selfdef-profile-authority-gate`) + SDD-049 + `selfdefctl authority` CLI + `GET /v1/authority` schema discovery + L1 gates. |
 | MS041 | done | `selfdef-commit-authority` crate (473 LOC, 22 tests) + SDD-043 + `selfdefctl commit-authority {types,validate,classify}` CLI + `GET /v1/commit-authority` schema discovery + L1 gates. Caller-integration arc (SDD-043 D-2) deferred but doctrine-discovery surface is end-to-end through every operator layer. |
 | MS042 | done | 11-crate tool-policy pipeline (capability-policy + call-latency-budget + cancellation-policy + version-pinning + stream-watchdog + invocation-rate-limit + output-language-policy + arg-redaction-policy + output-truncation-policy + output-trust-veil + output-byte-quota) + SDD-050 + `selfdefctl tool-authority {tools,permits}` CLI + `GET /v1/tool-authority` schema discovery + L1 gates. Caller-integration arc (SDD-050 D-3) deferred. |
 | MS043 | partial | IPS operator surface — CLI shipped (selfdefctl 14 top-level verbs + many subverbs); dashboard partial (13 panels); MS045 coherence harness validates surface |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS032/MS034 promotion):**
-- `done`: 34 milestones (was 32; was ~8 pre-session)
-- `partial`: 14 milestones
+**Tally as of 2026-05-21 (post-MS039/MS040 promotion):**
+- `done`: 36 milestones (was 34; was ~8 pre-session)
+- `partial`: 12 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

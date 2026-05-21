@@ -37,6 +37,7 @@
 
 mod alerts;
 mod audit_chains;
+mod authority;
 mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
@@ -268,6 +269,10 @@ pub fn router(state: ApiState) -> Router {
         // 4 transports + 8 message types + 2 doctrines +
         // proposal→commit mapping.
         .route("/v1/communication-boundary", get(communication_boundary::show))
+        // MS039 + MS040 / SDD-049 D-2 — authority discovery. 7-level
+        // ladder + 5 trust rings + 6 profile envelopes + 4
+        // TransitionGate variants + 5 authority crates.
+        .route("/v1/authority", get(authority::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

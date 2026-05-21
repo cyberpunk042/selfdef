@@ -54,6 +54,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl network-boundary"
     "selfdefctl sandbox-tiers"
     "selfdefctl communication-boundary"
+    "selfdefctl authority"
 )
 
 failures=0

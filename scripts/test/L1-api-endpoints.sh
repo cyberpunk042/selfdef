@@ -114,6 +114,10 @@ check_route "/v1/sandbox-tiers"           "MS032 / SDD-047" || failures=$((failu
 # MS034 / SDD-048 D-2 — communication-boundary schema discovery.
 check_route "/v1/communication-boundary"  "MS034 / SDD-048" || failures=$((failures + 1))
 
+# MS039 + MS040 / SDD-049 D-2 — authority discovery (7 levels + 5
+# rings + 6 profiles + 4 transition gates + 5 authority crates).
+check_route "/v1/authority"               "MS039 + MS040 / SDD-049" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

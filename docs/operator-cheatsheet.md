@@ -43,6 +43,7 @@ selfdefctl network-boundary profiles    # MS038 / SDD-046 5-profile egress ladde
 selfdefctl network-boundary classify <bits>  # u8 → NetworkProfile (exit 0 OK; 1 unknown bits)
 selfdefctl sandbox-tiers              # MS032 / SDD-047 5-tier ladder + 4 promotion gates
 selfdefctl communication-boundary     # MS034 / SDD-048 4 transports + 8 message types
+selfdefctl authority                  # MS039+MS040 / SDD-049 7 levels + 5 rings + 6 profiles + 4 gates
 ```
 
 ## Per-watchdog drill-down
@@ -143,6 +144,7 @@ GET /v1/filesystem-boundary                          (MS037 / SDD-045 D-2 3-dir 
 GET /v1/network-boundary                             (MS038 / SDD-046 D-2 5-profile egress ladder)
 GET /v1/sandbox-tiers                                (MS032 / SDD-047 D-2 5-tier capability ladder + 4 gates)
 GET /v1/communication-boundary                       (MS034 / SDD-048 D-2 4 transports + 8 message types)
+GET /v1/authority                                    (MS039+MS040 / SDD-049 D-2 7 levels + 5 rings + 6 profiles)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
