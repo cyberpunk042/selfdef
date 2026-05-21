@@ -21,8 +21,11 @@
     <!-- SDD-056 8-tab scaffold (currently inert — flips active when
          tab-switching JS lands per § Migration sequence step 3).
          Anchors deep-link via #tab=<name>; tab content is the
-         existing 17-panel set collapsed under the 8 clusters. -->
+         existing 17-panel set collapsed under the 8 clusters.
+         Step 5: a "Show all" toggle button on the right opts back
+         into the scroll-all-panels legacy mode (SDD-056 D-2). -->
     <nav id="tab-nav" aria-label="Tab navigation" data-state="inert">
+      <button id="tab-mode-toggle" type="button" aria-label="Toggle show-all vs tabbed mode">Show tabbed</button>
       <a href="#tab=models" data-tab="models">Models</a>
       <a href="#tab=modules" data-tab="modules">Modules</a>
       <a href="#tab=profiles" data-tab="profiles">Profiles</a>
@@ -31,6 +34,7 @@
       <a href="#tab=logs" data-tab="logs">Logs</a>
       <a href="#tab=mcp" data-tab="mcp">MCP</a>
       <a href="#tab=repl" data-tab="repl">REPL</a>
+      <a href="#tab=all" data-tab="all">All</a>
     </nav>
 
     <nav id="panel-nav" aria-label="Panel navigation">

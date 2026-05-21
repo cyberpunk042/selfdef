@@ -279,3 +279,22 @@ footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.7
 main > section.tab-hidden {
   display: none;
 }
+
+/* SDD-056 step 5 — tab-mode toggle button. Aligns right inside
+ * #tab-nav so the operator's toggle is always one click away. */
+#tab-mode-toggle {
+  margin-left: auto;
+  padding: 0.3rem 0.8rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#tab-mode-toggle:hover {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}

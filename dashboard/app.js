@@ -1555,18 +1555,40 @@
     for (const id of ids) TAB_OWNED.add(id);
   }
 
+  // SDD-056 D-2 — "show all" mode preference. localStorage key
+  // lets the operator's choice survive page reload. Default is
+  // "all" (today's behavior) so existing operators see no change.
+  const TAB_MODE_KEY = "selfdef.tabMode";  // "tabbed" | "all"
+  function readTabMode() {
+    return localStorage.getItem(TAB_MODE_KEY) || "all";
+  }
+  function writeTabMode(mode) {
+    try { localStorage.setItem(TAB_MODE_KEY, mode); } catch (_) { /* private mode */ }
+  }
+
   function parseTab() {
-    // URL hash like "#tab=hardware". Returns the tab name or null.
+    // URL hash like "#tab=hardware". Returns the tab name (one of
+    // the 8 + "all") or null. Hash takes precedence over the
+    // localStorage preference for the current page load.
     const hash = window.location.hash || "";
     const m = hash.match(/^#tab=([a-z]+)$/);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    // Fallback: operator preference. "all" → null (no tab active);
+    // "tabbed" → "models" (first tab per SDD-056 § 8-tab spec).
+    return readTabMode() === "tabbed" ? "models" : null;
   }
 
   function switchTab(name) {
     const tabNav = document.getElementById("tab-nav");
     if (!tabNav) return;
+    // The "all" pseudo-tab is the operator-toggleable "show all"
+    // mode — treat it as "no tab active" for the section
+    // show/hide logic but still mark the anchor active so the
+    // operator sees the visual confirmation.
+    const isAll = name === "all";
+    const effective = isAll ? null : name;
     // Flip data-state so CSS re-styles the strip.
-    tabNav.dataset.state = name ? "active" : "inert";
+    tabNav.dataset.state = effective ? "active" : (isAll ? "active" : "inert");
     // Toggle .active on the anchor.
     for (const a of tabNav.querySelectorAll("a")) {
       if (a.dataset.tab === name) {
@@ -1577,8 +1599,8 @@
     }
     // Show/hide sections.
     const visibleIds = new Set(ALWAYS_VISIBLE);
-    if (name && TAB_PANELS[name]) {
-      for (const id of TAB_PANELS[name]) visibleIds.add(id);
+    if (effective && TAB_PANELS[effective]) {
+      for (const id of TAB_PANELS[effective]) visibleIds.add(id);
     }
     // Walk every <section> in <main>. If the section's id is in
     // the always-visible set OR in the active tab's set, show.
@@ -1587,11 +1609,16 @@
     // etc.) stay visible — they're not under the tab system.
     for (const sec of document.querySelectorAll("main > section")) {
       const id = sec.id || "";
-      if (id && TAB_OWNED.has(id) && !visibleIds.has(id)) {
+      if (effective && id && TAB_OWNED.has(id) && !visibleIds.has(id)) {
         sec.classList.add("tab-hidden");
       } else {
         sec.classList.remove("tab-hidden");
       }
+    }
+    // Update the toggle button label to reflect current mode.
+    const toggle = document.getElementById("tab-mode-toggle");
+    if (toggle) {
+      toggle.textContent = effective ? "Show all" : "Show tabbed";
     }
   }
 
@@ -1604,6 +1631,18 @@
   // hash change fire, then our listener picks it up). Wire up
   // hash-change event for back/forward navigation + deep-link.
   window.addEventListener("hashchange", onHashChange);
+  // Wire the "Show all" / "Show tabbed" toggle button (SDD-056
+  // step 5). Flips the persisted preference + navigates to the
+  // first-tab-or-all hash so switchTab observes the new state.
+  const toggleBtn = document.getElementById("tab-mode-toggle");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      const current = readTabMode();
+      const next = current === "tabbed" ? "all" : "tabbed";
+      writeTabMode(next);
+      window.location.hash = next === "tabbed" ? "tab=models" : "tab=all";
+    });
+  }
   // Apply initial state from URL hash (deep-link support).
   switchTab(parseTab());
 
