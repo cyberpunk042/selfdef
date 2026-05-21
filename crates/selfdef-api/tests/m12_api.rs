@@ -1924,6 +1924,50 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn gpu_route_returns_200_with_well_formed_body() {
+    // MS011 Z-5: /v1/gpu probes nvidia-smi + reads operator policy.
+    // On a host without nvidia-smi installed, gpus list is empty
+    // (parse_nvidia_smi_power_csv returns empty for empty body).
+    // We verify response shape + the policy-path field.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/gpu")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["green", "yellow", "red", "unknown"].contains(&worst),
+        "worst must be green/yellow/red/unknown; got {worst}"
+    );
+    assert!(v["policy_path"].is_string(), "policy_path must be string");
+    assert!(
+        v["policy_present"].is_boolean(),
+        "policy_present must be bool"
+    );
+    let gpus = v["gpus"].as_array().expect("gpus must be array");
+    for (i, g) in gpus.iter().enumerate() {
+        assert!(g["index"].is_number(), "row {i} index must be number");
+        assert!(
+            g["tolerance_watts"].is_number(),
+            "row {i} tolerance_watts must be number"
+        );
+        let s = g["state"].as_str().unwrap();
+        assert!(
+            ["green", "yellow", "red", "unknown"].contains(&s),
+            "row {i} state must be green/yellow/red/unknown; got {s}"
+        );
+        assert!(g["detail"].is_string(), "row {i} detail must be string");
+    }
+}
+
+#[tokio::test]
 async fn raid_route_returns_200_with_well_formed_body() {
     // MS011 Z-9: /v1/raid reads /proc/mdstat (best-effort). On a
     // host without MD support `arrays` is empty + mdstat_present is

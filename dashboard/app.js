@@ -158,6 +158,9 @@
     if (kind === "raid") {
       return refreshRaid();
     }
+    if (kind === "gpu") {
+      return refreshGpu();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -987,6 +990,57 @@
     }
   }
 
+  /// MS011 Z-5: render per-GPU power-draw state vs the operator-
+  /// authored gpu-policy.toml. Shows current draw + expected limit +
+  /// tolerance + classification per row.
+  async function refreshGpu() {
+    const ul = document.getElementById("gpu-rows");
+    const meta = document.getElementById("gpu-meta");
+    const aggEl = document.getElementById("gpu-aggregate");
+    try {
+      const resp = await get("/v1/gpu");
+      const worst = resp.worst;
+      const aggClass = worst === "green" ? "fa-ok"
+                     : worst === "yellow" ? "fa-degraded"
+                     : worst === "red" ? "fa-fail"
+                     : "fa-unknown";
+      if (resp.gpus.length === 0) {
+        ul.innerHTML = `<li class="fa-row">
+          <span class="fa-aggregate fa-unknown">N/A</span>
+          <code>nvidia-smi</code>
+          <small>no NVIDIA GPUs detected (nvidia-smi unavailable or zero devices)</small>
+        </li>`;
+        meta.textContent = `0 GPUs · policy: ${resp.policy_path}${resp.policy_present ? "" : " (absent)"}`;
+        aggEl.textContent = "N/A";
+        aggEl.className = "fa-aggregate fa-unknown";
+        return;
+      }
+      const lis = resp.gpus.map(g => {
+        const css = g.state === "green" ? "fa-ok"
+                  : g.state === "yellow" ? "fa-degraded"
+                  : g.state === "red" ? "fa-fail"
+                  : "fa-unknown";
+        const watts = g.current_watts === null || g.current_watts === undefined
+                    ? "—"
+                    : `${g.current_watts} W`;
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${watts}</span>
+          <code>gpu${g.index}</code>
+          <small>${g.detail}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${resp.gpus.length} GPU(s) · policy: ${resp.policy_path}${resp.policy_present ? "" : " (absent — set expected_power_limit_watts to enable deviance warnings)"} · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1198,6 +1252,7 @@
   refreshNetwork();
   refreshStorage();
   refreshRaid();
+  refreshGpu();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1231,6 +1286,10 @@
   // RAID is /proc/mdstat reads — kernel-side. Cheap; refresh on the
   // same 60 s cadence as storage for symmetry.
   setInterval(refreshRaid, 60000);
+  // GPU power-draw can change second-by-second under load, but we
+  // don't want to thrash nvidia-smi every cycle. 10 s gives operators
+  // responsive deviance signal while keeping the subprocess cost low.
+  setInterval(refreshGpu, 10000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

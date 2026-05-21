@@ -111,6 +111,7 @@ GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + 
 GET /v1/network                                      (MS011 Z-7 internet/DNS/cloudflared/tailscale/traefik)
 GET /v1/storage                                      (MS011 Z-10 per-mount usage + selfdef log dirs)
 GET /v1/raid                                         (MS011 Z-9 software RAID arrays from /proc/mdstat)
+GET /v1/gpu                                          (MS011 Z-5 nvidia-smi power-draw vs operator policy)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

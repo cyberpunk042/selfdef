@@ -38,6 +38,7 @@
 mod alerts;
 mod control;
 mod friction_audit;
+mod gpu;
 mod hardware;
 mod network;
 mod raid;
@@ -205,6 +206,9 @@ pub fn router(state: ApiState) -> Router {
         // MS011 Z-9 / SDD-026 — software RAID state read from
         // /proc/mdstat. selfdef NEVER manipulates the array.
         .route("/v1/raid", get(raid::show))
+        // MS011 Z-5 / SDD-026 — per-GPU watt deviance against the
+        // operator-authored /etc/selfdef/gpu-policy.toml.
+        .route("/v1/gpu", get(gpu::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
