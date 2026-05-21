@@ -47,6 +47,7 @@ mod health;
 mod network;
 mod raid;
 mod storage;
+mod tool_authority;
 mod guardian;
 mod handlers;
 mod modules;
@@ -238,6 +239,10 @@ pub fn router(state: ApiState) -> Router {
         // Static doctrine + classifier rules; agents/tools can learn
         // the durable-change contract without reading the Rust source.
         .route("/v1/commit-authority", get(commit_authority::show))
+        // MS042 / SDD-050 D-2 — tool-authority schema discovery.
+        // Static 11-crate pipeline contract for the 8 ToolId × 7
+        // ExecutionMode × 6 Profile authorization matrix.
+        .route("/v1/tool-authority", get(tool_authority::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

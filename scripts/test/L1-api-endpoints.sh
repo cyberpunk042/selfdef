@@ -96,6 +96,9 @@ check_route "/v1/audit-chains"            "MS009 audit cycles" || failures=$((fa
 # MS041 / SDD-043 D-3 — commit-authority schema discovery surface.
 check_route "/v1/commit-authority"        "MS041 / SDD-043" || failures=$((failures + 1))
 
+# MS042 / SDD-050 D-2 — tool-authority schema discovery surface.
+check_route "/v1/tool-authority"          "MS042 / SDD-050" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

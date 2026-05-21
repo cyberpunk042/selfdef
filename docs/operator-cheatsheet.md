@@ -129,6 +129,7 @@ GET /v1/cpu                                          (MS011 Z-4 scaling_governor
 GET /v1/health                                       (MS011 Z-6 composite aggregate — "is everything OK?")
 GET /v1/audit-chains                                 (MS009 composite chain-check for perimeter/guardian/scheduler)
 GET /v1/commit-authority                             (MS041 / SDD-043 D-3 commit-doctrine schema discovery)
+GET /v1/tool-authority                               (MS042 / SDD-050 D-2 11-crate tool-policy pipeline discovery)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

@@ -1981,6 +1981,46 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn tool_authority_route_returns_200_with_canonical_schema() {
+    // MS042 / SDD-050 D-2: /v1/tool-authority returns the static
+    // doctrine schema. Assert canonical counts + first/last tool +
+    // 9-gate pipeline + monotonic gate ordering.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/tool-authority")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(v["tool_ids"].as_array().unwrap().len(), 8, "8 canonical tools");
+    assert_eq!(
+        v["tool_ids"][0]["id"].as_str().unwrap(),
+        "Shell"
+    );
+    assert_eq!(
+        v["tool_ids"][7]["id"].as_str().unwrap(),
+        "CliBridge"
+    );
+    assert_eq!(v["execution_modes"].as_array().unwrap().len(), 7);
+    assert_eq!(v["profiles"].as_array().unwrap().len(), 6);
+    let gates = v["gate_pipeline"].as_array().unwrap();
+    assert_eq!(gates.len(), 9);
+    assert_eq!(gates[0]["name"].as_str().unwrap(), "admit");
+    assert_eq!(gates[8]["name"].as_str().unwrap(), "truncate");
+    // Monotonic order
+    let mut last = 0u64;
+    for g in gates {
+        let order = g["order"].as_u64().unwrap();
+        assert!(order > last, "gate pipeline must be monotonic");
+        last = order;
+    }
+}
+
+#[tokio::test]
 async fn commit_authority_route_returns_200_with_canonical_schema() {
     // MS041 / SDD-043 D-3: /v1/commit-authority returns the static
     // doctrine schema. Assert canonical counts + verbatim doctrine
