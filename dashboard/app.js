@@ -588,13 +588,24 @@
     const countEl = document.getElementById("modules-count");
     const metaEl = document.getElementById("modules-meta");
     try {
-      const body = await get("/v1/modules");
+      // SDD-057 step 5 — fetch install-options counts in parallel
+      // with the modules list so the meta line surfaces ready /
+      // blocked-by-hardware / blocked-by-missing-deps / needs-review.
+      const [body, opts] = await Promise.all([
+        get("/v1/modules"),
+        get("/v1/modules/install-options").catch(() => null),
+      ]);
       const modules = body.modules || [];
       const activeCount = modules.filter((m) => m.active).length;
       countEl.textContent = `${activeCount}/${modules.length}`;
       countEl.className =
         "fa-aggregate " + (modules.length === 0 ? "fa-unknown" : "fa-ok");
-      metaEl.textContent = `${activeCount} active / ${modules.length} shipped · dir: ${body.modules_dir || "(missing)"}`;
+      let metaText = `${activeCount} active / ${modules.length} shipped · dir: ${body.modules_dir || "(missing)"}`;
+      if (opts && opts.counts) {
+        const c = opts.counts;
+        metaText += ` · install options: ${c.ready ?? 0} ready, ${c.blocked_by_missing_deps ?? 0} blocked-by-deps, ${c.blocked_by_hardware ?? 0} blocked-by-hw, ${c.needs_review ?? 0} needs-review`;
+      }
+      metaEl.textContent = metaText;
       ul.innerHTML = "";
       if (modules.length === 0) {
         setEmpty(ul, "no modules found at the configured dir");
