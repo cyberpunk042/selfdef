@@ -122,10 +122,10 @@
 | MS030 | done | tensor-parallel-inference module shipped + L2 bats + /v1/modules/:name/check |
 | MS031 | partial | wasm-aot-cache module shipped + L2 bats; SDD-022 (hardware-exploit doctrine, including wasm AOT) implemented |
 | MS032 | done | 5-crate sandbox set (tier-policy + dispatcher + fs-isolation + network-isolation + mirror, ~1400 LOC, 29 tests) + SDD-047 + `selfdefctl sandbox-tiers` CLI + `GET /v1/sandbox-tiers` schema discovery + L1 gates. Live-state surface (D-3 GET /v1/sandbox-tiers/active) deferred. |
-| MS033 | partial | 122 policy crates shipped under `crates/selfdef-policy-*` (conflict-detector, bundle-signature, diff-classifier, namespace, spec-validator, cooldown-window, traffic-ramp, change-window, decision-batcher, etc). Missing: composite policy-trace operator surface. |
+| MS033 | partial | 36 `selfdef-policy-*` crates shipped (cluster-organized in SDD-051: conflict+decision, bundle+signing, mutation discipline, dry-run+staging, spec validation, lifecycle, storage+distribution, cross-cutting controls). SDD-051 authored 2026-05-21. Operator-surface (D-1 selfdefctl policy + D-2 GET /v1/policy + D-3 live trace) deferred. |
 | MS034 | done | `selfdef-communication-boundary` crate (372 LOC) + SDD-048 + `selfdefctl communication-boundary` CLI + `GET /v1/communication-boundary` schema discovery + L1 gates. Per-message-type Prom counters (D-4) deferred. |
 | MS035 | done | 5-crate ecosystem (token-store + word + mirror + tool-capability-policy + profile-authority-gate) + SDD-044 + `selfdefctl capability-tokens {verdicts,schema}` CLI + `GET /v1/capability-tokens` schema discovery + L1 gates. Mutation surface (issue/revoke via CLI) deferred per SDD-044 D-3 (in-memory store; token-minting goes through MS003-signed config + SDD-043 high-risk classifier per D-4). |
-| MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
+| MS036 | done | covered by the MS032 sandbox-tiers surfaces (commit aa0f77a) — `selfdef-sandbox-dispatcher` is the route-by-tier engine that owns tool-sandbox dispatch per dump 3528-3549; the SDD-047 + `selfdefctl sandbox-tiers` + `GET /v1/sandbox-tiers` discovery layer surfaces it. Per-tool live dispatch state (D-3 GET /v1/sandbox-tiers/active) deferred. |
 | MS037 | done | `selfdef-filesystem-boundary` crate (496 LOC) + SDD-045 + `selfdefctl filesystem-boundary {doctrine,schema}` CLI + `GET /v1/filesystem-boundary` schema discovery + L1 gates. Caller-integration arc deferred per SDD-045 D-3/D-4. |
 | MS038 | done | `selfdef-network-boundary` crate (459 LOC) + SDD-046 + `selfdefctl network-boundary {profiles,classify}` CLI + `GET /v1/network-boundary` schema discovery + L1 gates. Host-firewall nftables emission (SDD-046 D-3) + IPv6 (D-4) deferred. |
 | MS039 | done | 5-crate authority stack (mode-transition + toggle-audit + config-mutation + recovery-snapshot + profile-authority-gate, ~1639 LOC) + SDD-049 + `selfdefctl authority` CLI + `GET /v1/authority` schema discovery + L1 gates. Mode-transition log persistence (SDD-049 D-4) + GET /v1/authority/active live state (D-3) deferred. |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS039/MS040 promotion):**
-- `done`: 36 milestones (was 34; was ~8 pre-session)
-- `partial`: 12 milestones
+**Tally as of 2026-05-21 (post-MS036 + SDD-051 authoring):**
+- `done`: 37 milestones (MS036 promoted; was 36)
+- `partial`: 11 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from
