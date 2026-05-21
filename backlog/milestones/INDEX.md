@@ -69,6 +69,83 @@
 | MS047 | Real-Time Security Perimeter Engine — Tetragon kernel-fence (sovereign-perimeter.yaml + sys_execve Sigkill) | sain-01 dump §6 lines 380–411 |
 | MS048 | Goldilocks Scheduler — hardware-aware resource routing (Blackwell/3090/CPU + KV/Context + Memory + Tool + Backpressure surfaces + 7-axis objective) | avx-plus-plus dump tail lines 18000–18250 |
 
+## Stage 2+ production status (2026-05-21)
+
+> Tracks which milestones have reached Stage 2+ (SDD specification +
+> implementation + testing reaching production) per the operator's
+> standing directive: *"DO NOT STOP AT DEFINING/REGISTERING THE
+> REQUIREMENT and doing the scaffolds, we expect the full production
+> progressively through the workflow. You cannot mark something done
+> if it hasn't reached Prod."*
+>
+> **`done`** — every layer shipped: SDD + implementation + tests + L1
+> coherence gates + docs + (where applicable) HTTP route + dashboard
+> + CLI + operator runbook. SDD status promoted to `implemented`.
+>
+> **`partial`** — some layers shipped; specific gaps documented in the
+> milestone file or its companion SDD's Status header.
+>
+> **`stage-1`** — catalog identified but no Stage-2 SDD spec OR
+> implementation work landed yet.
+
+| ID | Status | Notes |
+|---|---|---|
+| MS001 | done | core 6 crates shipped pre-session |
+| MS002 | partial | collector crates exist; eBPF collector + tetragon collector + eventstream + journald shipped; 3 more eBPF programs deferred per SDD-016 |
+| MS003 | done | correlator + store + responder + signing shipped pre-session |
+| MS004 | done | 12 notifier integrations shipped (SDD-008 implemented); promoted 2026-05-21 |
+| MS005 | done | notifier engine + orchestrator crates shipped |
+| MS006 | done | 14 modules shipped + /v1/modules + /v1/modules/:name + /v1/modules/diff + /v1/modules/:name/check (cross-cutting health probe across all 12 operator modules) |
+| MS007 | done | 8/8 typed-mirror crates pre-session |
+| MS008 | partial | SDD-010 scoping; SDD-012 review; SDD-017 implemented — Sain-01 hardware inventory + /v1/hardware/sain01 verdict + doctor integration shipped |
+| MS009 | done | per-watchdog audit_chain_check fn + 2 audit-cycle replay CLI verbs + /v1/audit-chains + dashboard panel + selfdefctl audit-chains CLI all shipped 2026-05-21 |
+| MS010 | done | crate + CLI + /v1/hardware* (3 routes) + dashboard panel + L1 gates — end-to-end |
+| MS011 | partial | 7 of 13 Z-vectors shipped end-to-end (Z-4 CPU mode, Z-5 GPU watt, Z-6 composite health, Z-7 network, Z-9 RAID, Z-10 storage, Z-13 SD-R83). Remaining: Z-1 dashboard-tabs UX, Z-2 LM Studio surface, Z-3 flex-profile state, Z-8 docker install paths, Z-11 MCP interop, Z-12 multi-tier REPL, Z-13 SD-R86/SD-R87 |
+| MS012 | done | perimeter coexistence CLI + config + agent-guard module (SDD-015 implemented) |
+| MS013 | partial | 21 SDDs at `implemented` (was 7 pre-session); 1 review; 3 scoping; 18 draft. Ongoing as production catches up to spec authoring |
+| MS014 | partial | SSH-wrap crate shipped; further integration with sain01 deferred |
+| MS015 | partial | NATS crate shipped; cross-host bus integration TBD |
+| MS016 | partial | 1 eBPF program (execve) + tetragon TracingPolicy directory + collector crates shipped; 4 deferred programs per SDD-016 |
+| MS017 | done | agent-guard module shipped + /v1/modules/:name/check probe integration |
+| MS018 | done | vpn-bridge module + SDD-003; L2 bats coverage |
+| MS019 | done | SECURITY.md threat model accurate for all /v1/* surfaces shipped through 2026-05-21 |
+| MS020 | done | L1-L5 layered harness shipped (L1 8 gates, L2 14 modules, cargo) per SDD-030 |
+| MS021 | done | shared module-script lib shipped per SDD-006 (`crates/selfdef-shared-module-script-lib`) |
+| MS022 | done | per-token SSE quota shipped per SDD-007 |
+| MS023 | done | polarproxy module shipped + L2 bats + /v1/modules/:name/check |
+| MS024 | done | bridge-l2 module shipped + L2 bats + /v1/modules/:name/check |
+| MS025 | done | detect-host module shipped + L2 bats + /v1/modules/:name/check |
+| MS026 | done | integrity-sentinel module shipped + L2 bats + /v1/modules/:name/check |
+| MS027 | done | observability module + 17 Prometheus gauges + 20-panel Grafana dashboard + 9 alert rules + /v1/alerts server-side classifier + dashboard panel + selfdefctl alerts + doctor integration — end-to-end fullstack |
+| MS028 | partial | bitnet-gpu-inference module shipped; SDD-035 draft (Stage-2 architectural spec retrofitted) |
+| MS029 | done | slm-cpu-loop module shipped + L2 bats + /v1/modules/:name/check |
+| MS030 | done | tensor-parallel-inference module shipped + L2 bats + /v1/modules/:name/check |
+| MS031 | partial | wasm-aot-cache module shipped + L2 bats; SDD-022 (hardware-exploit doctrine, including wasm AOT) implemented |
+| MS032 | stage-1 | sandbox tiers per Phase-4 dump; design + scaffolding pending |
+| MS033 | stage-1 | policy + trace per Phase-3 dump; design pending |
+| MS034 | stage-1 | communication boundary per dump 3450-3488; design pending |
+| MS035 | stage-1 | capability tokens per dump 3489-3527; design pending |
+| MS036 | stage-1 | tool sandboxes per dump 3528-3549; design pending |
+| MS037 | stage-1 | filesystem boundary per dump 3550-3593; design pending |
+| MS038 | stage-1 | network boundary per dump 3594-3621; design pending |
+| MS039 | stage-1 | 7 authority levels + 5 trust rings per dump 17215-17532; design pending |
+| MS040 | stage-1 | authority + profiles per dump 17468-17489; design pending |
+| MS041 | stage-1 | commit authority per dump 17389-17421; design pending |
+| MS042 | stage-1 | tool authority per dump 17422-17445; design pending |
+| MS043 | partial | IPS operator surface — CLI shipped (selfdefctl 14 top-level verbs + many subverbs); dashboard partial (13 panels); MS045 coherence harness validates surface |
+| MS044 | done | Guardian daemon + binary + systemd unit + 4 CLI subverbs + /v1/guardian{,/history} + dashboard panel + 5 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-029 implemented) |
+| MS045 | done | UX coherence harness — 28 layers (8 L1 + 14 L2 + cargo) + CI gating per push/PR/tag (SDD-030 implemented) |
+| MS046 | done | Friction-audit system — crate + 3 CLI subverbs + /v1/friction-audit{,/history} + dashboard panel + sovereign-guard.service + 5 runbooks + 1 Prom alert — end-to-end fullstack (SDD-027 implemented) |
+| MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
+| MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
+
+**Tally as of 2026-05-21:**
+- `done`: 27 milestones (was ~8 pre-session)
+- `partial`: 10 milestones
+- `stage-1`: 11 milestones (MS032..MS042 — Phase 3+4 + authority/trust
+  surfaces from the avx-plus-plus dump; design + implementation
+  pending; tracked as the next forward queue)
+
 ## Decomposition each milestone owes
 
 Per operator's standing directive:
