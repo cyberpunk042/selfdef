@@ -1770,6 +1770,31 @@ async fn modules_check_route_rejects_invalid_slug() {
 }
 
 #[tokio::test]
+async fn modules_install_plan_route_returns_200_with_topological_shape() {
+    // MS011 Z-13 / SD-R87: /v1/modules/install-plan does a
+    // topological sort over READY modules. On CI runner the default
+    // modules dir doesn't exist, so we expect empty `plan` but a
+    // well-formed envelope.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/install-plan")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["plan"].is_array(), "plan must be array");
+    assert!(v["skipped"].is_array(), "skipped must be array");
+    assert!(v["cycle_detected"].is_boolean());
+    assert!(v["cycle_member_slugs"].is_array());
+    assert!(v["modules_dir"].is_string());
+    assert!(v["modules_toml"].is_string());
+}
+
+#[tokio::test]
 async fn modules_install_options_route_returns_200_with_canonical_shape() {
     // MS011 Z-13 / SD-R86: /v1/modules/install-options classifies
     // AVAILABLE modules by dep-readiness. On CI runner the default

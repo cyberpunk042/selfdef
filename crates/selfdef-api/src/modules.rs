@@ -338,6 +338,168 @@ pub(crate) async fn install_options() -> Result<Json<ModulesInstallOptionsBody>,
     }))
 }
 
+/// Response shape for `GET /v1/modules/install-plan`.
+///
+/// MS011 Z-13 / SD-R87 — topologically-ordered install plan over
+/// the READY (no-missing-deps) modules. Each step's commands
+/// run in order; later steps depend on earlier steps. Operators
+/// can paste each command directly or wrap with `selfdefctl modules
+/// apply --only <slug>` per step.
+#[derive(Debug, Serialize)]
+pub(crate) struct ModulesInstallPlanBody {
+    pub modules_dir: PathBuf,
+    pub modules_toml: PathBuf,
+    /// Topologically-ordered slugs (oldest dependency first).
+    /// Empty when no READY modules exist.
+    pub plan: Vec<String>,
+    /// Modules skipped because they're not in the READY set —
+    /// either already installed, or blocked-by-missing-deps.
+    pub skipped: Vec<SkippedReason>,
+    /// True iff a dependency cycle was detected (rare; would mean
+    /// the catalog is malformed). When true, `plan` is empty +
+    /// `cycle_member_slugs` lists the offending modules.
+    pub cycle_detected: bool,
+    pub cycle_member_slugs: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct SkippedReason {
+    pub slug: String,
+    /// `"installed"` | `"blocked-by-missing-deps"`.
+    pub reason: &'static str,
+    pub missing_deps: Vec<String>,
+}
+
+/// `GET /v1/modules/install-plan` — MS011 Z-13 / SD-R87.
+/// Topological sort (Kahn's algorithm) over the READY set.
+pub(crate) async fn install_plan() -> Result<Json<ModulesInstallPlanBody>, ApiError> {
+    let dir = modules_dir();
+    let toml_path = modules_toml();
+    let modules = list_in_dir(&dir)
+        .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
+    let active = active_modules(&toml_path);
+
+    // Pass 1: classify each manifest into READY / installed /
+    // blocked-by-missing-deps + collect dep edges for Kahn's.
+    use std::collections::{BTreeMap, BTreeSet, VecDeque};
+    let mut ready: BTreeSet<String> = BTreeSet::new();
+    let mut skipped: Vec<SkippedReason> = Vec::new();
+    // dep edges: dep_slug → set of dependents
+    let mut dependents: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    // indegree: slug → count of unresolved deps that are in READY
+    let mut indegree: BTreeMap<String, usize> = BTreeMap::new();
+
+    for m in &modules {
+        let slug = m.name.clone();
+        if active.contains(&slug) {
+            skipped.push(SkippedReason {
+                slug,
+                reason: "installed",
+                missing_deps: Vec::new(),
+            });
+            continue;
+        }
+        let missing: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| !active.contains(*d))
+            .filter(|d| {
+                // dep is missing if NOT active AND not in any catalog manifest
+                // (catalog manifests are the modules vec) — if it IS in the
+                // catalog but not active, it's a candidate for the plan, not
+                // a "missing" dep.
+                !modules.iter().any(|c| c.name == **d)
+            })
+            .cloned()
+            .collect();
+        if !missing.is_empty() {
+            skipped.push(SkippedReason {
+                slug,
+                reason: "blocked-by-missing-deps",
+                missing_deps: missing,
+            });
+            continue;
+        }
+        ready.insert(slug);
+    }
+
+    // Pass 2: build the dep graph over READY-only modules.
+    for m in &modules {
+        if !ready.contains(&m.name) {
+            continue;
+        }
+        let mut deg = 0usize;
+        for d in &m.depends_on {
+            // dep is either active (skip; already there) or also
+            // in READY (need to wait for it)
+            if ready.contains(d) {
+                dependents
+                    .entry(d.clone())
+                    .or_default()
+                    .insert(m.name.clone());
+                deg += 1;
+            }
+            // Active deps don't count toward indegree
+        }
+        indegree.insert(m.name.clone(), deg);
+    }
+
+    // Pass 3: Kahn's algorithm.
+    let mut queue: VecDeque<String> = indegree
+        .iter()
+        .filter(|&(_, &d)| d == 0)
+        .map(|(k, _)| k.clone())
+        .collect();
+    // Sort initial frontier for determinism (BTreeMap iteration is
+    // ordered already; this just guards against future refactors).
+    let mut frontier: Vec<String> = queue.drain(..).collect();
+    frontier.sort();
+    for s in frontier {
+        queue.push_back(s);
+    }
+    let mut plan: Vec<String> = Vec::new();
+    while let Some(slug) = queue.pop_front() {
+        plan.push(slug.clone());
+        // Discover newly-zero-indegree dependents.
+        if let Some(deps) = dependents.get(&slug) {
+            let mut next: Vec<String> = Vec::new();
+            for d in deps {
+                if let Some(deg) = indegree.get_mut(d) {
+                    if *deg > 0 {
+                        *deg -= 1;
+                        if *deg == 0 {
+                            next.push(d.clone());
+                        }
+                    }
+                }
+            }
+            next.sort();
+            for s in next {
+                queue.push_back(s);
+            }
+        }
+    }
+
+    // Cycle detection: anything still in indegree > 0 is cyclic.
+    let cycle_members: Vec<String> = indegree
+        .iter()
+        .filter(|&(_, &d)| d > 0)
+        .map(|(k, _)| k.clone())
+        .collect();
+    let cycle_detected = !cycle_members.is_empty();
+
+    let plan_final = if cycle_detected { Vec::new() } else { plan };
+
+    Ok(Json(ModulesInstallPlanBody {
+        modules_dir: dir,
+        modules_toml: toml_path,
+        plan: plan_final,
+        skipped,
+        cycle_detected,
+        cycle_member_slugs: cycle_members,
+    }))
+}
+
 /// `GET /v1/modules/:name/check` — MS006/MS016/MS017/MS018/MS022..MS031
 /// per-module health surface. Invokes `<modules_dir>/<name>/install/
 /// check.sh` and returns the structured result. Read-token gated

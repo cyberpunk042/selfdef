@@ -55,6 +55,9 @@ check_route "/v1/modules/diff"            "MS011 Z-13 / SD-R83" || failures=$((f
 # MS011 Z-13 / SD-R86 — modules install-options (dep-readiness)
 check_route "/v1/modules/install-options" "MS011 Z-13 / SD-R86" || failures=$((failures + 1))
 
+# MS011 Z-13 / SD-R87 — modules install-plan (Kahn's topological sort)
+check_route "/v1/modules/install-plan"    "MS011 Z-13 / SD-R87" || failures=$((failures + 1))
+
 # MS006 / MS016..MS031 — per-module install/check.sh invocation.
 check_route "/v1/modules/:name/check"     "MS006 / per-module check" || failures=$((failures + 1))
 
