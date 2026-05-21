@@ -102,6 +102,12 @@ check_route "/v1/tool-authority"          "MS042 / SDD-050" || failures=$((failu
 # MS035 / SDD-044 D-2 — capability-tokens schema discovery surface.
 check_route "/v1/capability-tokens"       "MS035 / SDD-044" || failures=$((failures + 1))
 
+# MS037 / SDD-045 D-2 — filesystem-boundary schema discovery.
+check_route "/v1/filesystem-boundary"     "MS037 / SDD-045" || failures=$((failures + 1))
+
+# MS038 / SDD-046 D-2 — network-boundary schema discovery.
+check_route "/v1/network-boundary"        "MS038 / SDD-046" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

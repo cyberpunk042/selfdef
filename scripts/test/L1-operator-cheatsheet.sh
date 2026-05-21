@@ -50,6 +50,8 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl commit-authority"
     "selfdefctl tool-authority"
     "selfdefctl capability-tokens"
+    "selfdefctl filesystem-boundary"
+    "selfdefctl network-boundary"
 )
 
 failures=0

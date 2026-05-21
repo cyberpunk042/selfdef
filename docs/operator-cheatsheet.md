@@ -37,6 +37,10 @@ selfdefctl tool-authority tools       # MS042 / SDD-050 tool-policy pipeline dis
 selfdefctl tool-authority permits <tool> <mode> <profile>   # is-authorized check (exit 0 ALLOW; 1 NOT)
 selfdefctl capability-tokens verdicts # MS035 / SDD-044 5-verdict CheckVerdict ladder
 selfdefctl capability-tokens schema   # Token shape + 5 companion crates + caller contract
+selfdefctl filesystem-boundary doctrine  # MS037 / SDD-045 3-dir + 6-step + 5-field + 6-predicate
+selfdefctl filesystem-boundary schema    # full SDD-045 contract incl. caller sequence
+selfdefctl network-boundary profiles    # MS038 / SDD-046 5-profile egress ladder
+selfdefctl network-boundary classify <bits>  # u8 → NetworkProfile (exit 0 OK; 1 unknown bits)
 ```
 
 ## Per-watchdog drill-down
@@ -133,6 +137,8 @@ GET /v1/audit-chains                                 (MS009 composite chain-chec
 GET /v1/commit-authority                             (MS041 / SDD-043 D-3 commit-doctrine schema discovery)
 GET /v1/tool-authority                               (MS042 / SDD-050 D-2 11-crate tool-policy pipeline discovery)
 GET /v1/capability-tokens                            (MS035 / SDD-044 D-2 typed-authority-handles schema discovery)
+GET /v1/filesystem-boundary                          (MS037 / SDD-045 D-2 3-dir + pipeline + schema + predicates)
+GET /v1/network-boundary                             (MS038 / SDD-046 D-2 5-profile egress ladder)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

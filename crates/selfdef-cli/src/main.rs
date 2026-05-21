@@ -12,6 +12,8 @@ mod audit_chains;
 mod capability_tokens;
 mod commit_authority;
 mod doctor;
+mod filesystem_boundary;
+mod network_boundary;
 mod tool_authority;
 mod emit;
 mod follow;
@@ -317,6 +319,21 @@ enum Command {
         #[command(subcommand)]
         action: CapabilityTokensAction,
     },
+    /// MS037 / SDD-045 filesystem-boundary operator surface.
+    /// Discovery of the explicit-exchange directory discipline
+    /// (3-dir layout + 6-step import pipeline + 5-field patch
+    /// schema + 6 application predicates + 2 verbatim doctrines).
+    FilesystemBoundary {
+        #[command(subcommand)]
+        action: FilesystemBoundaryAction,
+    },
+    /// MS038 / SDD-046 network-boundary operator surface. Discovery
+    /// of the 5-profile egress ladder + cross-cycle bindings to
+    /// MS032 sandbox tiers + MS039 authority rings.
+    NetworkBoundary {
+        #[command(subcommand)]
+        action: NetworkBoundaryAction,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -593,6 +610,29 @@ enum SchedulerAuditCycleAction {
     Replay {
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum FilesystemBoundaryAction {
+    /// Print the 3-dir layout + 6-step pipeline + 5-field schema +
+    /// 6 predicates + verbatim doctrines.
+    Doctrine,
+    /// Print the full SDD-045 contract including the caller-side
+    /// 9-step sequence.
+    Schema,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum NetworkBoundaryAction {
+    /// Print the 5-profile NetworkProfile ladder with bit values +
+    /// cross-cycle bindings.
+    Profiles,
+    /// Parse a u8 (decimal or 0bXXXX) and report which NetworkProfile
+    /// it encodes. Exit 0 if recognized; 1 otherwise.
+    Classify {
+        /// policy bits — `5` or `0b101` etc.
+        bits: String,
     },
 }
 
@@ -1834,6 +1874,20 @@ async fn main() -> Result<()> {
             let exit = match action {
                 CapabilityTokensAction::Verdicts => capability_tokens::run_verdicts()?,
                 CapabilityTokensAction::Schema => capability_tokens::run_schema()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::FilesystemBoundary { action } => {
+            let exit = match action {
+                FilesystemBoundaryAction::Doctrine => filesystem_boundary::run_doctrine()?,
+                FilesystemBoundaryAction::Schema => filesystem_boundary::run_schema()?,
+            };
+            std::process::exit(exit);
+        }
+        Command::NetworkBoundary { action } => {
+            let exit = match action {
+                NetworkBoundaryAction::Profiles => network_boundary::run_profiles()?,
+                NetworkBoundaryAction::Classify { bits } => network_boundary::run_classify(&bits)?,
             };
             std::process::exit(exit);
         }

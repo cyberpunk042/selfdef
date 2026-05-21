@@ -126,8 +126,8 @@
 | MS034 | partial | `selfdef-communication-boundary` crate shipped (372 LOC). Missing: HTTP/CLI surface + dashboard panel. |
 | MS035 | done | 5-crate ecosystem (token-store + word + mirror + tool-capability-policy + profile-authority-gate) + SDD-044 + `selfdefctl capability-tokens {verdicts,schema}` CLI + `GET /v1/capability-tokens` schema discovery + L1 gates. Mutation surface (issue/revoke via CLI) deferred per SDD-044 D-3 (in-memory store; token-minting goes through MS003-signed config + SDD-043 high-risk classifier per D-4). |
 | MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
-| MS037 | partial | `selfdef-filesystem-boundary` crate shipped (496 LOC). Missing: HTTP/CLI surface. |
-| MS038 | partial | `selfdef-network-boundary` crate shipped (459 LOC). Missing: HTTP/CLI surface. |
+| MS037 | done | `selfdef-filesystem-boundary` crate (496 LOC) + SDD-045 + `selfdefctl filesystem-boundary {doctrine,schema}` CLI + `GET /v1/filesystem-boundary` schema discovery + L1 gates. Caller-integration arc deferred per SDD-045 D-3/D-4. |
+| MS038 | done | `selfdef-network-boundary` crate (459 LOC) + SDD-046 + `selfdefctl network-boundary {profiles,classify}` CLI + `GET /v1/network-boundary` schema discovery + L1 gates. Host-firewall nftables emission (SDD-046 D-3) + IPv6 (D-4) deferred. |
 | MS039 | partial | Authority-tier crates shipped: `selfdef-mode-transition-authority`, `selfdef-toggle-audit-authority`, `selfdef-config-mutation-authority`, `selfdef-recovery-snapshot-authority`, `selfdef-profile-authority-gate` (660 LOC). Missing: composite operator surface. |
 | MS040 | partial | `selfdef-profile-authority-gate` crate shipped (660 LOC). Missing: operator-facing profile-switch CLI/HTTP surface. |
 | MS041 | done | `selfdef-commit-authority` crate (473 LOC, 22 tests) + SDD-043 + `selfdefctl commit-authority {types,validate,classify}` CLI + `GET /v1/commit-authority` schema discovery + L1 gates. Caller-integration arc (SDD-043 D-2) deferred but doctrine-discovery surface is end-to-end through every operator layer. |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS035 promotion):**
-- `done`: 30 milestones (was 29; was ~8 pre-session)
-- `partial`: 18 milestones
+**Tally as of 2026-05-21 (post-MS037/MS038 promotion):**
+- `done`: 32 milestones (was 30; was ~8 pre-session)
+- `partial`: 16 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

@@ -41,11 +41,13 @@ mod capability_tokens;
 mod commit_authority;
 mod control;
 mod cpu;
+mod filesystem_boundary;
 mod friction_audit;
 mod gpu;
 mod hardware;
 mod health;
 mod network;
+mod network_boundary;
 mod raid;
 mod storage;
 mod tool_authority;
@@ -248,6 +250,14 @@ pub fn router(state: ApiState) -> Router {
         // Token shape + 5-verdict CheckVerdict ladder + 5-companion
         // crate ecosystem + caller contract.
         .route("/v1/capability-tokens", get(capability_tokens::show))
+        // MS037 / SDD-045 D-2 — filesystem-boundary discovery.
+        // 3 exchange dirs + 6-step pipeline + 5-field patch schema +
+        // 6 predicates + 2 doctrines.
+        .route("/v1/filesystem-boundary", get(filesystem_boundary::show))
+        // MS038 / SDD-046 D-2 — network-boundary discovery. 5-
+        // profile NetworkProfile ladder with bit values + cross-
+        // cycle bindings to MS032 + MS039.
+        .route("/v1/network-boundary", get(network_boundary::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
