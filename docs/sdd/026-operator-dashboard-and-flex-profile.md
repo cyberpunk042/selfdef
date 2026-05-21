@@ -1,8 +1,19 @@
 # SDD-026 — Operator dashboard architecture + flexible-profile surface
 
-> Status: **review** — vector-by-vector shipment in progress; 7 of
+> Status: **review** — vector-by-vector shipment in progress; 12 of
 > 13 Z-vectors reached end-to-end production (backend + dashboard
-> + L1 gate) as of 2026-05-21:
+> + L1 gate, sometimes + CLI verb) as of 2026-05-21 batch 7:
+>   - Z-1 8-tab dashboard restructure — ratified under SDD-056;
+>     all 5 migration steps shipped (commits 2251591 → 4f30408)
+>   - Z-2 LM Studio / inference-backend surface — `/v1/inference-
+>     backends` probe (commit 222c9a1) + `selfdefctl inference-
+>     backends show` table + `selfdefctl inference-backends version
+>     <backend>` invocation seed shell-out (commit f763930);
+>     dashboard "Inference backends" panel
+>   - Z-3 flex-profile — `/v1/flex-profile` GET (commit 515c76d) +
+>     `selfdefctl flex-profile {schema,show}` + POST `/v1/flex-
+>     profile/{apply,revert}` atomic-persisted mutation surface
+>     (commit 502a96d); dashboard "Flex profile" panel
 >   - Z-4 CPU mode classification — `/v1/cpu` + dashboard "CPU mode"
 >     panel (commit 5690b8c)
 >   - Z-5 GPU watt deviance — `/v1/gpu` + dashboard "GPU watts" panel
@@ -15,13 +26,27 @@
 >     panel (commit b8d2b1a)
 >   - Z-10 storage state — `/v1/storage` + dashboard "Storage state"
 >     panel (commit 7bd0313)
->   - Z-13 (SD-R83 portion) — `/v1/modules/diff` (commit 09b8385)
-> Remaining Z-vectors at design-stage: Z-1 (8 dashboard tabs UX
-> restructure), Z-2 (LM Studio surface), Z-3 (flex-profile state),
-> Z-8 (Docker vs system-level install paths), Z-11 (MCP interop),
-> Z-12 (Multi-tier REPL), Z-13 SD-R86/SD-R87 (install-options +
-> topological install plan). SDD will move to `implemented` when
-> the remaining 6 Z-vectors land.
+>   - Z-11 MCP interop foundation — `/v1/mcp` manifest + `selfdefctl
+>     mcp {tools,serve}` (SD-R94 TCP bridge) + SD-R101 REPL→MCP
+>     transport translation
+>   - Z-12 multi-tier REPL — `/v1/repl` 3-tier discovery + `selfdefctl
+>     repl {tiers,bootstrap,tier2-examples,history}` + Tier 1 bootstrap
+>     (15+ callables) + SD-R97 token aliases + SD-R98 `@selfdef_macro`
+>     registry + SD-R101 zero-subprocess MCP transport + **SD-R102
+>     operator-macro auto-load** (commit f76aa8a, ratified under
+>     SDD-058)
+>   - Z-13 modules discoverability — `/v1/modules/diff` (commit 09b8385)
+>     + `/v1/modules/install-options` SD-R86 (commit 104f661, hardware-
+>     gate enrichment under SDD-057) + `/v1/modules/install-plan`
+>     SD-R87 Kahn's topological sort
+> Remaining Z-vector at design-stage:
+>   - Z-8 (Docker vs system-level install paths) — LOW priority
+>     per the cycle-7+ ranking; awaits per-module `install_paths`
+>     metadata table. Bigger follow-up arcs remain on shipped
+>     vectors (Z-2 module-driven install pipeline, Z-12 dashboard
+>     REPL pop-out UI) but they are *next* surfaces over a
+>     functioning end-to-end foundation, not blockers.
+> SDD will move to `implemented` when Z-8 lands.
 > Owner: operator-supervised; agent-authored.
 > Last updated: 2026-05-21 (status: draft → review; 7-of-13 Z-vector
 > production landing).
