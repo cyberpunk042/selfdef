@@ -1,0 +1,41 @@
+name        = "lynis-cron"
+version     = "0.1.0"
+summary     = "Lynis CIS-style security audit — weekly systemd-timer; emits hardening-index + finding-counts via logger tagged selfdef-lynis (broader-than-rkhunter compliance side)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["security-audit"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "lynis" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `quick` (default) — `lynis audit system --quick` (skip plugins +
+#                    interactive checks; ~3-5 min on a workstation)
+# `full`           — `lynis audit system` (full battery; ~10-30 min)
+default = "quick"
+available = ["quick", "full"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-lynis-audit.service",
+    "/etc/systemd/system/selfdef-lynis-audit.timer",
+    "/usr/local/libexec/selfdef/lynis-audit.sh",
+    "/etc/selfdef/modules/lynis-cron.toml",
+]

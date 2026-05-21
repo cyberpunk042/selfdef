@@ -1,0 +1,24 @@
+# selfdef lynis-cron — weekly audit timer.
+#
+# Fires Sundays at 05:30 + 30min jitter — offset from aide-bridge
+# (03:30) and rkhunter-cron (04:30) so the three detection scans
+# stagger their I/O budgets across the early-morning window.
+# Lynis on weekly cadence (vs daily for aide+rkhunter) because:
+#   - the compliance battery is broader-but-slower-changing
+#   - false-positive churn on daily would generate notifier noise
+#   - a weekly summary feeds the operator's review cadence
+#
+# Persistent=true catches up missed runs.
+
+[Unit]
+Description=selfdef weekly Lynis security audit
+Documentation=https://github.com/cyberpunk042/selfdef modules/lynis-cron/README.md
+
+[Timer]
+OnCalendar=Sun *-*-* 05:30:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=selfdef-lynis-audit.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+# Profile: full.
+#
+# `lynis audit system` — full battery including plugins (database
+# servers, container runtimes, mail servers, etc.). ~10-30 min
+# wall-clock. Use on hosts where the broader coverage is worth the
+# scan cost (incident response, compliance audit prep).
+
+profile = "full"

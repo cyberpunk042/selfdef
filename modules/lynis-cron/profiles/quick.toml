@@ -1,0 +1,10 @@
+# Profile: quick (default).
+#
+# `lynis audit system --quick` — skips plugins + interactive
+# checks. ~3-5 minute runtime on a typical workstation. Emits a
+# hardening-index + warning/suggestion counts per run.
+#
+# Quick is the right default for a weekly cadence — full mode's
+# 10-30 minute scan is too heavy for most operator-pull workflows.
+
+profile = "quick"
