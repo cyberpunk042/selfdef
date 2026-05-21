@@ -130,8 +130,8 @@
 | MS038 | partial | `selfdef-network-boundary` crate shipped (459 LOC). Missing: HTTP/CLI surface. |
 | MS039 | partial | Authority-tier crates shipped: `selfdef-mode-transition-authority`, `selfdef-toggle-audit-authority`, `selfdef-config-mutation-authority`, `selfdef-recovery-snapshot-authority`, `selfdef-profile-authority-gate` (660 LOC). Missing: composite operator surface. |
 | MS040 | partial | `selfdef-profile-authority-gate` crate shipped (660 LOC). Missing: operator-facing profile-switch CLI/HTTP surface. |
-| MS041 | partial | `selfdef-commit-authority` crate shipped (473 LOC, 22 tests). Missing: HTTP/CLI surface + dashboard integration. |
-| MS042 | partial | `selfdef-tool-capability-policy` crate shipped (12 tests) + `selfdef-tool-authority` enforcement in `selfdef-tool-capability-policy`. Missing: HTTP/CLI surface. |
+| MS041 | done | `selfdef-commit-authority` crate (473 LOC, 22 tests) + SDD-043 + `selfdefctl commit-authority {types,validate,classify}` CLI + `GET /v1/commit-authority` schema discovery + L1 gates. Caller-integration arc (SDD-043 D-2) deferred but doctrine-discovery surface is end-to-end through every operator layer. |
+| MS042 | done | 11-crate tool-policy pipeline (capability-policy + call-latency-budget + cancellation-policy + version-pinning + stream-watchdog + invocation-rate-limit + output-language-policy + arg-redaction-policy + output-truncation-policy + output-trust-veil + output-byte-quota) + SDD-050 + `selfdefctl tool-authority {tools,permits}` CLI + `GET /v1/tool-authority` schema discovery + L1 gates. Caller-integration arc (SDD-050 D-3) deferred. |
 | MS043 | partial | IPS operator surface — CLI shipped (selfdefctl 14 top-level verbs + many subverbs); dashboard partial (13 panels); MS045 coherence harness validates surface |
 | MS044 | done | Guardian daemon + binary + systemd unit + 4 CLI subverbs + /v1/guardian{,/history} + dashboard panel + 5 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-029 implemented) |
 | MS045 | done | UX coherence harness — 28 layers (8 L1 + 14 L2 + cargo) + CI gating per push/PR/tag (SDD-030 implemented) |
@@ -139,21 +139,24 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-survey reconciliation):**
-- `done`: 27 milestones (was ~8 pre-session)
-- `partial`: 21 milestones — including MS032-MS042 whose Rust crates
-  already shipped substantively (~5000+ LOC across 30+ sandbox /
-  authority / policy / boundary crates with passing test suites; the
-  initial INDEX entry marked these as `stage-1` but a 2026-05-21
-  survey of `crates/selfdef-{sandbox,capability,authority,*-boundary,
-  policy}*` found significant existing implementation that just
-  hadn't been wired to higher-level operator surfaces yet)
+**Tally as of 2026-05-21 (post-survey + MS041/MS042 promotion):**
+- `done`: 29 milestones (was 27 last reconciliation; was ~8 pre-session)
+- `partial`: 19 milestones
 - `stage-1`: 0 milestones
 
-Forward queue is now about LAYER-UP work for the MS032-MS042 partials:
+MS041 (commit-authority) + MS042 (tool-authority) promoted from
+`partial` to `done` this session — both now have crate + SDD-043/050
++ selfdefctl CLI + GET /v1/* schema discovery + L1 gates. The
+caller-integration arcs (durable-change call sites routing through
+validate(); tool-invocation call sites routing through the 9-gate
+pipeline) remain deferred but the doctrine-discovery surfaces are
+end-to-end across every operator-facing layer.
+
+Forward queue is now LAYER-UP work for the remaining 19 partials:
 each milestone has its core Rust crates but needs the HTTP/CLI/
 dashboard/runbook layers to reach `done`. That's the same pattern
-this session executed for MS010/MS011/MS027/MS044-MS048.
+this session executed for MS009/MS010/MS011/MS027/MS041/MS042 +
+the four-watchdog set + the cross-cutting module check.sh probe.
 
 ## Decomposition each milestone owes
 
