@@ -37,6 +37,7 @@
 
 mod alerts;
 mod audit_chains;
+mod commit_authority;
 mod control;
 mod cpu;
 mod friction_audit;
@@ -233,6 +234,10 @@ pub fn router(state: ApiState) -> Router {
         // watchdogs (perimeter / guardian / scheduler). Surfaces per-
         // chain ok/error + events_verified count.
         .route("/v1/audit-chains", get(audit_chains::show))
+        // MS041 / SDD-043 D-3 — commit-authority schema discovery.
+        // Static doctrine + classifier rules; agents/tools can learn
+        // the durable-change contract without reading the Rust source.
+        .route("/v1/commit-authority", get(commit_authority::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

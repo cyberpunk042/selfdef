@@ -1981,6 +1981,49 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn commit_authority_route_returns_200_with_canonical_schema() {
+    // MS041 / SDD-043 D-3: /v1/commit-authority returns the static
+    // doctrine schema. Assert canonical counts + verbatim doctrine
+    // phrase (drift detector).
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/commit-authority")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        v["commit_types"].as_array().unwrap().len(),
+        8,
+        "8 commit types per R09611..R09648"
+    );
+    assert_eq!(
+        v["mandatory_fields"].as_array().unwrap().len(),
+        5,
+        "5 mandatory fields per R09602..R09606"
+    );
+    assert_eq!(
+        v["high_risk_gate_fields"].as_array().unwrap().len(),
+        3,
+        "3 high-risk gates per R09607..R09609"
+    );
+    assert_eq!(
+        v["high_risk_classifier_rules"].as_array().unwrap().len(),
+        5,
+        "5 classifier rules per F04871..F04875"
+    );
+    // Verbatim doctrine phrase per R09601 dump 17389 — drift detector.
+    assert_eq!(
+        v["doctrine_phrase"].as_str().unwrap(),
+        "A commit is any durable change"
+    );
+}
+
+#[tokio::test]
 async fn audit_chains_route_returns_200_with_three_chains() {
     // MS009: /v1/audit-chains runs the 3 watchdog audit-chain checks.
     // On a CI runner the OCSF files don't exist so every chain will

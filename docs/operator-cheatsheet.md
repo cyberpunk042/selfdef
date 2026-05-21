@@ -126,6 +126,7 @@ GET /v1/gpu                                          (MS011 Z-5 nvidia-smi power
 GET /v1/cpu                                          (MS011 Z-4 scaling_governor × SMT → named mode)
 GET /v1/health                                       (MS011 Z-6 composite aggregate — "is everything OK?")
 GET /v1/audit-chains                                 (MS009 composite chain-check for perimeter/guardian/scheduler)
+GET /v1/commit-authority                             (MS041 / SDD-043 D-3 commit-doctrine schema discovery)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
