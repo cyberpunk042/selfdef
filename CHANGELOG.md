@@ -6,6 +6,82 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — SDD-057 shared-crate refactor + MS011 Z-13 closure (2026-05-21, batch 5)
+
+Continuation block covering commits 145effb → 78e0456. Focus: extract
+HardwareRequirements gate logic from selfdef-cli into a shared crate,
+extend `/v1/modules/install-options` with hardware-gate enrichment,
+ship the topological install plan, and surface the new classification
+on the dashboard Modules panel.
+
+#### SDD-057 — 7-step refactor (all shipped same day)
+
+Authored as `scoping` in commit 3e37517; full 7-step migration
+sequence executed in commits b37f0ef → 563b9bb. Promoted to
+`implemented` in step 7.
+
+- **Step 1** (3e37517) — SDD-057 authored: scope locked, migration
+  sequence + risk/benefit + 4 open questions
+- **Step 2** (b37f0ef) — `crates/selfdef-hardware-requirements/`
+  scaffolded with stub + 2 sanity tests; workspace dep entry
+- **Step 3** (e39aabd) — 473-LOC HardwareRequirements struct + impl
+  moved verbatim from `crates/selfdef-cli/src/modules.rs` (original
+  lines 185-613). `pub(crate)` → `pub`. 2 unit tests added (schema
+  version pin + toml round-trip).
+- **Step 4** (3710d08) — 420-LOC duplicate removed from selfdef-cli;
+  replaced with `pub(crate) use selfdef_hardware_requirements::
+  HardwareRequirements;`. All 244 + sibling tests pass — re-export
+  bridge worked exactly as designed; zero call-site changes.
+- **Step 5** (2519d8b) — `/v1/modules/install-options` extended:
+  ModuleSummary gains `requires_hardware` field; install_options()
+  derives capabilities via `selfdef_hardware::derive_capabilities`
+  + calls `req.evaluate(&caps)`; 4-way classification (ready /
+  blocked-by-missing-deps / blocked-by-hardware / needs-review);
+  new counts fields (blocked_by_hardware + needs_review);
+  unmet_hardware_predicates surfaces the failed predicate list
+- **Step 6** (563b9bb) — integration test extended: asserts the 4
+  classification variants + the new envelope fields; catches drift
+  if a future variant lands without updating the gate
+- **Step 7** (563b9bb) — SDD-057 scoping → implemented; INDEX MS011
+  row updated to cite Z-13 SD-R86 hardware-gate enrichment as
+  **closed**
+
+7 of 7 closure boxes checked in a single multi-cycle session.
+
+#### MS011 Z-13 SD-R87 topological install plan (commit 145effb)
+
+`GET /v1/modules/install-plan` — Kahn's algorithm over the READY
+set (no-missing-deps modules). Returns
+`{plan, skipped, cycle_detected, cycle_member_slugs}` with the
+plan list giving deterministic install order. Cycle detection
+surfaces any malformed catalog. Edition-2024 match-ergonomics fix
+shipped alongside (2 instances of `.filter(|(_, &d)|` needed
+explicit `|&(_, &d)|`).
+
+#### Dashboard hookup (commit 78e0456)
+
+PWA Modules panel now surfaces the install-options counts in its
+meta line — operators see `ready / blocked-by-deps /
+blocked-by-hardware / needs-review` at a glance without opening
+a separate tab. Promise.all parallel fetch with graceful degradation
+when /v1/modules/install-options is unavailable.
+
+#### Cross-cutting metrics after batch 5
+
+- Workspace crate count: 536 (was 535; +selfdef-hardware-requirements)
+- selfdef-cli LOC: -420 in modules.rs (the duplicate code removed)
+- /v1/modules surface: 4 routes now ship (list + show + check + diff
+  + install-options + install-plan)
+- Dashboard meta lines: install-options counts visible
+- SDD-057 closes 1 of 4 remaining MS011 Z-13 follow-up items
+  (SD-R86 hardware-gate enrichment); SD-R87 also closed in batch 5
+- SDD ledger: 47 implemented / 5 draft / 2 review / 3 scoping / 1
+  living / 58 total (was 46 / 5 / 2 / 4 / 1 / 58 pre-batch-5;
+  +SDD-057 promotion)
+- INDEX milestones: 42 done / 6 partial / 0 stage-1 (MS011 stays
+  partial because of Z-2/Z-3/Z-12 still-open arcs — Z-13 SD-R86 +
+  SD-R87 closed this batch)
+
 ### Added — MS011 Z-1 8-tab restructure + landscape SDDs (2026-05-21, batch 4)
 
 Continuation block covering commits a6f3925 → 4f30408. Focus: ship
