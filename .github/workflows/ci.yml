@@ -106,10 +106,18 @@ jobs:
           python3 scripts/ux-harness/selfdef-ux-harness --json --verbose
 
   coherence:
-    name: four-watchdog coherence harness (SDD-030 / MS045 — 10 layers)
+    name: four-watchdog coherence harness (SDD-030 / MS045 — 13 layers)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout sister repo (info-hub) for runbook-URL existence checks
+        uses: actions/checkout@v4
+        with:
+          repository: cyberpunk042/devops-solutions-information-hub
+          path: _infohub
+          # Read-only checkout — no token needed; the repo is public-ish
+          # from CI's perspective. If repo becomes private, switch to a
+          # PAT secret here.
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.88.0
@@ -120,7 +128,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends bats yamllint shellcheck python3-yaml
       - name: Build selfdefctl (required by L1-cli-surface gate)
         run: cargo build -p selfdef-cli --locked
-      - name: Run scripts/test/coherence.sh (10 layers)
+      - name: Run scripts/test/coherence.sh (13 layers)
+        env:
+          # Enables Gate 3b in L1-prometheus-alerts.sh — verifies every
+          # alert runbook_url target file actually exists in info-hub.
+          INFOHUB_RUNBOOKS: ${{ github.workspace }}/_infohub/wiki/runbooks
         run: bash scripts/test/coherence.sh
 
   build:

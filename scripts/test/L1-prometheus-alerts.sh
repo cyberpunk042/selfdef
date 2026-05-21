@@ -56,6 +56,42 @@ if [[ -n "${missing_runbook}" ]]; then
 fi
 echo "  PASS all alerts carry info-hub wiki/runbooks/ runbook_url"
 
+# Gate 3b: when the info-hub clone is available locally, verify every
+# runbook_url's target file actually exists. Drift catcher — the
+# perimeter-chain-broken alert was previously pointing at the wrong
+# (existing) runbook; this gate would catch the case where an alert
+# points at a non-existent runbook entirely. Skipped cleanly in CI
+# where the sister repo isn't checked out.
+INFOHUB_RUNBOOKS="${INFOHUB_RUNBOOKS:-${HOME}/devops-solutions-information-hub/wiki/runbooks}"
+if [[ -d "${INFOHUB_RUNBOOKS}" ]]; then
+    missing_files="$(python3 -c "
+import yaml, os
+d = yaml.safe_load(open('${ALERTS}'))
+bad = []
+for g in d['groups']:
+    for r in g['rules']:
+        url = (r.get('annotations') or {}).get('runbook_url', '')
+        # extract basename after wiki/runbooks/
+        marker = 'wiki/runbooks/'
+        i = url.find(marker)
+        if i < 0:
+            continue
+        fname = url[i + len(marker):]
+        path = os.path.join('${INFOHUB_RUNBOOKS}', fname)
+        if not os.path.isfile(path):
+            bad.append(r['alert'] + ' -> ' + fname)
+print('\n'.join(bad))
+")"
+    if [[ -n "${missing_files}" ]]; then
+        echo "  FAIL alerts whose runbook_url target does not exist in info-hub:"
+        echo "${missing_files}" | sed 's/^/        /'
+        exit 1
+    fi
+    echo "  PASS all runbook_url targets exist in ${INFOHUB_RUNBOOKS}"
+else
+    echo "  SKIP runbook-file existence check (${INFOHUB_RUNBOOKS} not present; set INFOHUB_RUNBOOKS to enable)"
+fi
+
 # Gate 4: every SDD-promised emission series referenced by ≥ 1 alert expr.
 declare -a SERIES=(
     "selfdef_friction_audit_failing_total"
