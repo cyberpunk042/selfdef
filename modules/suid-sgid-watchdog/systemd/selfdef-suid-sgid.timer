@@ -1,0 +1,19 @@
+# selfdef suid-sgid-watchdog — daily 05:15.
+#
+# Slot rationale: 02:30=aide, 03:30=clamav, 04:30=rkhunter,
+# 05:00=world-writable, 05:15=suid-sgid, Sun-05:30=lynis,
+# Sun-06:00=unowned-files. 15min after world-writable so the
+# I/O ramps down before the SUID inventory hashing starts.
+
+[Unit]
+Description=selfdef daily SUID/SGID inventory + delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/suid-sgid-watchdog/README.md
+
+[Timer]
+OnCalendar=*-*-* 05:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-suid-sgid.service
+
+[Install]
+WantedBy=timers.target

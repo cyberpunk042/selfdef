@@ -1,0 +1,44 @@
+name        = "suid-sgid-watchdog"
+version     = "0.1.0"
+summary     = "Daily scan for setuid/setgid binary inventory drift vs a learned baseline. First-run captures the inventory; subsequent runs delta + emit added/removed/perm-changed events. Catches attacker-installed SUID backdoors + accidental chmod u+s"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["suid-sgid-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "find" },
+    { kind = "binary", value = "stat" },
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on ANY added or perm-changed
+#                     (removed is operator-cleanup; never alerts)
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/suid-sgid-watchdog.toml",
+    "/usr/local/libexec/selfdef/suid-sgid-watchdog.sh",
+    "/etc/systemd/system/selfdef-suid-sgid.service",
+    "/etc/systemd/system/selfdef-suid-sgid.timer",
+    "/var/lib/selfdef/suid-sgid-baseline.tsv",
+]
