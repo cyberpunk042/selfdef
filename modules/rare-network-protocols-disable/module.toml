@@ -1,0 +1,36 @@
+name        = "rare-network-protocols-disable"
+version     = "0.1.0"
+summary     = "Blacklist rare network-protocol kernel modules (dccp, sctp, rds, tipc) via /etc/modprobe.d. Reduces kernel-network attack surface — these are network-reachable protocol parsers nearly nobody uses; kernel CVEs in them affect ALL hosts with the module loaded. Per CIS Benchmark 3.4"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rare-network-protocols-blocked"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — dccp, sctp, rds, tipc
+# `strict`             — baseline + atm + can + appletalk +
+#                       decnet + ipx + x25 + ax25 + netrom
+#                       + rose (per DISA-STIG legacy)
+default = "baseline"
+available = ["baseline", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/rare-network-protocols-disable.toml",
+    "/etc/modprobe.d/selfdef-rare-network-protocols-blacklist.conf",
+]
