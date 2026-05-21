@@ -1,0 +1,7 @@
+# Profile: monitor (default).
+#
+# Probe + emit selfdef-secure-boot events at boot + every 6
+# hours via systemd timer. No enforcement; just visibility.
+# Operator's correlator + notifier surface the state changes.
+
+profile = "monitor"

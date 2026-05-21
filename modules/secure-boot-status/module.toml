@@ -1,0 +1,43 @@
+name        = "secure-boot-status"
+version     = "0.1.0"
+summary     = "UEFI Secure Boot status probe + boot-time emission. Reports SB state to selfdef-bus via journald tag selfdef-secure-boot. Mitigates T1542.003 Pre-OS Boot: Bootkit by surfacing operator-visible SB-enabled/disabled state at every boot + periodically"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["secure-boot-status"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+    { kind = "binary", value = "logger" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `monitor` (default) — probe + emit selfdef-secure-boot events
+#                      at every boot + every 6 hours. Operator-
+#                      pull only; no enforcement.
+# `require`           — same probe; ALSO exits 1 (systemctl
+#                      marks unit failed) when SB is disabled.
+#                      Operator-alertable via the notifier engine.
+default = "monitor"
+available = ["monitor", "require"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-secure-boot-status.service",
+    "/etc/systemd/system/selfdef-secure-boot-status.timer",
+    "/usr/local/libexec/selfdef/secure-boot-status.sh",
+    "/etc/selfdef/modules/secure-boot-status.toml",
+]

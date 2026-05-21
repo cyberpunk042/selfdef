@@ -1,0 +1,13 @@
+[Unit]
+Description=selfdef UEFI Secure Boot status periodic probe
+
+[Timer]
+# Fire 60s after boot + every 6 hours afterward.
+OnBootSec=60s
+OnUnitActiveSec=6h
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-secure-boot-status.service
+
+[Install]
+WantedBy=timers.target

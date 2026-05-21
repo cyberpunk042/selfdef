@@ -1,0 +1,15 @@
+[Unit]
+Description=selfdef UEFI Secure Boot status probe
+Documentation=https://github.com/cyberpunk042/selfdef modules/secure-boot-status/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/secure-boot-status.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Read-only access to the efivars filesystem.
+ReadOnlyPaths=/sys/firmware/efi
+ReadWritePaths=/dev/log

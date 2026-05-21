@@ -1,0 +1,10 @@
+# Profile: require.
+#
+# Same probe AS monitor. Additionally: when SB is disabled OR
+# in setup-mode OR no UEFI firmware present, the wrapper script
+# exits 1. systemctl marks the unit failed; operator-alertable.
+#
+# Use on hosts where SB-enabled is a hard requirement (servers
+# with HSM-attested boot, regulated environments).
+
+profile = "require"
