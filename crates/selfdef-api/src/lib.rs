@@ -47,6 +47,7 @@ mod communication_boundary;
 mod control;
 mod cpu;
 mod filesystem_boundary;
+mod flex_profile;
 mod friction_audit;
 mod gpu;
 mod hardware;
@@ -290,6 +291,10 @@ pub fn router(state: ApiState) -> Router {
         // discovery. Transports + framings + curation policy +
         // pointer to the CLI catalog source.
         .route("/v1/mcp", get(mcp::show))
+        // MS011 Z-3 / SDD-026 + `selfdef-flex-profile` — flex-profile
+        // state schema + (when DEFAULT_STATE_PATH exists) the live
+        // state read.
+        .route("/v1/flex-profile", get(flex_profile::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

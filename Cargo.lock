@@ -2395,6 +2395,7 @@ dependencies = [
  "selfdef-bus",
  "selfdef-core",
  "selfdef-correlator",
+ "selfdef-flex-profile",
  "selfdef-friction-audit",
  "selfdef-friction-audit-mirror",
  "selfdef-guardian",

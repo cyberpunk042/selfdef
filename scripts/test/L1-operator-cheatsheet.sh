@@ -58,6 +58,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl policy"
     "selfdefctl ssh-wrap"
     "selfdefctl nats"
+    "selfdefctl flex-profile"
 )
 
 failures=0

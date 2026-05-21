@@ -131,6 +131,9 @@ check_route "/v1/nats"                    "MS015 / SDD-053" || failures=$((failu
 # MS011 Z-11 / SDD-026 + SD-R84 — MCP-interop foundation discovery.
 check_route "/v1/mcp"                     "MS011 Z-11 / SDD-026" || failures=$((failures + 1))
 
+# MS011 Z-3 / `selfdef-flex-profile` — flex-profile state discovery.
+check_route "/v1/flex-profile"            "MS011 Z-3" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

@@ -15,6 +15,7 @@ mod commit_authority;
 mod communication_boundary;
 mod doctor;
 mod filesystem_boundary;
+mod flex_profile;
 mod nats;
 mod network_boundary;
 mod policy;
@@ -369,6 +370,10 @@ enum Command {
     /// Discovery of the two-way pump subject schema + modes +
     /// echo-defense rule + cross-host invariants.
     Nats,
+    /// MS011 Z-3 / `selfdef-flex-profile` operator surface.
+    /// Discovery of the flex-profile schema (Delta + DeltaOp +
+    /// RevertRecord + refusal rules + DEFAULT_STATE_PATH).
+    FlexProfile,
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -1973,6 +1978,10 @@ async fn main() -> Result<()> {
         }
         Command::Nats => {
             let exit = nats::run_doctrine()?;
+            std::process::exit(exit);
+        }
+        Command::FlexProfile => {
+            let exit = flex_profile::run_schema()?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {
