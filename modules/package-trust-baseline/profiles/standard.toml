@@ -1,0 +1,7 @@
+# Profile: standard (default).
+#
+# Block insecure repos + insecure downgrade + AllowUnauthenticated.
+# Sandbox apt workers. Disable deprecated apt-key. Safe defaults
+# for any apt-based host.
+
+profile = "standard"

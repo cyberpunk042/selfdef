@@ -1,0 +1,7 @@
+# Profile: strict.
+#
+# standard + reject SHA1 + cap Valid-Until at 7 days + forbid
+# operator-pull suite/codename changes. Use on high-assurance
+# hosts where the operator's repo set is stable + auditable.
+
+profile = "strict"
