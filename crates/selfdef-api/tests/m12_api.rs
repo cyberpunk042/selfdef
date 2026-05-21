@@ -1770,6 +1770,31 @@ async fn modules_check_route_rejects_invalid_slug() {
 }
 
 #[tokio::test]
+async fn modules_install_options_route_returns_200_with_canonical_shape() {
+    // MS011 Z-13 / SD-R86: /v1/modules/install-options classifies
+    // AVAILABLE modules by dep-readiness. On CI runner the default
+    // modules dir doesn't exist, so we expect empty `options` but a
+    // well-formed envelope.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/install-options")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["options"].is_array(), "options must be array");
+    assert!(v["counts"]["total"].is_number());
+    assert!(v["counts"]["ready"].is_number());
+    assert!(v["counts"]["blocked_by_missing_deps"].is_number());
+    assert!(v["modules_dir"].is_string());
+    assert!(v["modules_toml"].is_string());
+}
+
+#[tokio::test]
 async fn modules_diff_route_returns_200_with_three_buckets() {
     // MS011 Z-13 / SD-R83: /v1/modules/diff partitions catalog vs
     // host config into installed / available / orphaned. On the CI

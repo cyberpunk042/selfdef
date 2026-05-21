@@ -248,6 +248,96 @@ fn valid_module_name(name: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// Response shape for `GET /v1/modules/install-options`.
+///
+/// MS011 Z-13 / SD-R86 — surface UNINSTALLED-but-AVAILABLE catalog
+/// modules with operator-actionable recommendations. Mirrors the
+/// CLI's `selfdefctl modules install-options` but performs the
+/// deps-only classification (the full hardware-gate enrichment from
+/// the CLI is deferred until HardwareRequirements moves to a shared
+/// crate per a follow-up arc).
+#[derive(Debug, Serialize)]
+pub(crate) struct ModulesInstallOptionsBody {
+    pub modules_dir: PathBuf,
+    pub modules_toml: PathBuf,
+    pub options: Vec<InstallOption>,
+    pub counts: InstallOptionsCounts,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct InstallOption {
+    pub slug: String,
+    pub version: String,
+    pub summary: String,
+    pub category: String,
+    /// One of: `ready` | `blocked-by-missing-deps`. Hardware-gated
+    /// recommendation (`blocked-by-hardware` / `needs-review`) is
+    /// the deferred enrichment.
+    pub recommendation: &'static str,
+    pub missing_deps: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct InstallOptionsCounts {
+    pub total: usize,
+    pub ready: usize,
+    pub blocked_by_missing_deps: usize,
+}
+
+/// `GET /v1/modules/install-options` — MS011 Z-13 / SD-R86 partial.
+/// Classifies AVAILABLE modules (catalog \ active) by dep-readiness.
+pub(crate) async fn install_options() -> Result<Json<ModulesInstallOptionsBody>, ApiError> {
+    let dir = modules_dir();
+    let toml_path = modules_toml();
+    let modules = list_in_dir(&dir)
+        .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
+    let active = active_modules(&toml_path);
+
+    let mut options: Vec<InstallOption> = Vec::new();
+    let mut ready = 0usize;
+    let mut blocked = 0usize;
+
+    for m in &modules {
+        if active.contains(&m.name) {
+            continue; // installed — skip
+        }
+        // Resolve dependencies against the active set.
+        let missing_deps: Vec<String> = m
+            .depends_on
+            .iter()
+            .filter(|d| !active.contains(*d))
+            .cloned()
+            .collect();
+        let recommendation: &'static str = if missing_deps.is_empty() {
+            ready += 1;
+            "ready"
+        } else {
+            blocked += 1;
+            "blocked-by-missing-deps"
+        };
+        options.push(InstallOption {
+            slug: m.name.clone(),
+            version: m.version.clone(),
+            summary: m.summary.clone(),
+            category: m.category.clone(),
+            recommendation,
+            missing_deps,
+        });
+    }
+
+    let counts = InstallOptionsCounts {
+        total: options.len(),
+        ready,
+        blocked_by_missing_deps: blocked,
+    };
+    Ok(Json(ModulesInstallOptionsBody {
+        modules_dir: dir,
+        modules_toml: toml_path,
+        options,
+        counts,
+    }))
+}
+
 /// `GET /v1/modules/:name/check` — MS006/MS016/MS017/MS018/MS022..MS031
 /// per-module health surface. Invokes `<modules_dir>/<name>/install/
 /// check.sh` and returns the structured result. Read-token gated

@@ -132,6 +132,7 @@ GET /v1/guardian{,/history}
 GET /v1/scheduler{,/history,/backpressure,/weights,/explain/:request_id}
 GET /v1/modules{,/:name}
 GET /v1/modules/diff                                 (MS011 Z-13 SD-R83 installed/available/orphaned)
+GET /v1/modules/install-options                      (MS011 Z-13 SD-R86 dep-readiness for AVAILABLE modules)
 GET /v1/modules/:name/check                          (per-module install/check.sh invocation; JSON exit + stdout/stderr)
 GET /v1/alerts                                       (MS027 server-side classifier)
 GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + derived caps + sain-01 verdict)

@@ -201,6 +201,9 @@ pub fn router(state: ApiState) -> Router {
         // so the literal segment `diff` doesn't get captured as a
         // slug name.
         .route("/v1/modules/diff", get(modules::diff))
+        // MS011 Z-13 / SD-R86 — modules install-options (deps-only
+        // classification; hardware-gate enrichment deferred).
+        .route("/v1/modules/install-options", get(modules::install_options))
         // MS006/MS016..MS031 — per-module install/check.sh invocation.
         // Registered as a SPECIFIC subpath under :name so the show
         // handler still handles the bare `/v1/modules/:name`.
