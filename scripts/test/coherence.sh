@@ -60,6 +60,9 @@ run_layer "L1: Prometheus alert rules (MS027 four-watchdog alerts)" \
 run_layer "L1: operator cheatsheet (daily-driver doc coverage)" \
     bash scripts/test/L1-operator-cheatsheet.sh
 
+run_layer "L1: module-system contracts (14 modules cross-wired)" \
+    bash scripts/test/L1-module-contracts.sh
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then
