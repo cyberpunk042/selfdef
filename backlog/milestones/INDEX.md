@@ -91,7 +91,7 @@
 | ID | Status | Notes |
 |---|---|---|
 | MS001 | done | core 6 crates shipped pre-session |
-| MS002 | partial | collector crates exist; eBPF collector + tetragon collector + eventstream + journald shipped; 3 more eBPF programs deferred per SDD-016 |
+| MS002 | partial | collector crates exist; eBPF collector + tetragon collector + eventstream + journald shipped; 3 more eBPF programs deferred per SDD-032 (eBPF substrate + Tetragon policy ledger) |
 | MS003 | done | correlator + store + responder + signing shipped pre-session |
 | MS004 | done | 12 notifier integrations shipped (SDD-008 implemented); promoted 2026-05-21 |
 | MS005 | done | notifier engine + orchestrator crates shipped |
@@ -105,7 +105,7 @@
 | MS013 | partial | 21 SDDs at `implemented` (was 7 pre-session); 1 review; 3 scoping; 18 draft. Ongoing as production catches up to spec authoring |
 | MS014 | done | `selfdef-ssh-wrap` crate shipped (drop-in `ssh` replacement with per-host policy + OCSF events) + SDD-052 + `selfdefctl ssh-wrap {doctrine,install}` CLI + L1 gates. HTTP surface intentionally deferred per SDD-052 D-2 (wrapper is per-operator-user, not daemon-owned; HTTP would cross the isolation boundary). Sain-01 integration deferred per SDD-052 D-3. |
 | MS015 | done | `selfdef-nats` crate shipped (two-way bus pump + echo defense + passive/active modes) + SDD-053 + `selfdefctl nats` CLI + `GET /v1/nats` schema discovery + L1 gates. Multi-host operator integration arc (NATS server provisioning + per-fleet subject coordination) is the deferred follow-up — separate from the IPS layer-up. |
-| MS016 | partial | 1 eBPF program (execve) + tetragon TracingPolicy directory + collector crates shipped; 4 deferred programs per SDD-016 |
+| MS016 | partial | 1 eBPF program (execve) + tetragon TracingPolicy directory + collector crates shipped; 4 deferred programs per SDD-032 (eBPF substrate + Tetragon policy ledger) — proc-ancestry / hidden-process / ld-preload-watch / kmod-watch / tcp-fingerprint enumerated in `selfdef-ebpf/README.md` |
 | MS017 | done | agent-guard module shipped + /v1/modules/:name/check probe integration |
 | MS018 | done | vpn-bridge module + SDD-003; L2 bats coverage |
 | MS019 | done | SECURITY.md threat model accurate for all /v1/* surfaces shipped through 2026-05-21 |

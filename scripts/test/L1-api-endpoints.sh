@@ -142,6 +142,9 @@ check_route "/v1/inference-backends"      "MS011 Z-2" || failures=$((failures + 
 # + 11+ Tier 1 Python callables enumerated).
 check_route "/v1/repl"                    "MS011 Z-12 / SD-R85" || failures=$((failures + 1))
 
+# SDD-016 — oracle-triage channel doctrine + wire format + tier routing.
+check_route "/v1/oracle-triage"           "SDD-016" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

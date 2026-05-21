@@ -41,6 +41,7 @@ mod authority;
 mod capability_tokens;
 mod mcp;
 mod nats;
+mod oracle_triage;
 mod policy;
 mod commit_authority;
 mod communication_boundary;
@@ -305,6 +306,10 @@ pub fn router(state: ApiState) -> Router {
         // 3 tiers (Programming / Proto-Programming / Proto-Proto-
         // Programming) with Tier 1's 11+ Python callables enumerated.
         .route("/v1/repl", get(repl::show))
+        // SDD-016 — oracle-triage channel doctrine + wire format +
+        // tier-routing. Operators verify the daemon's notifier
+        // configuration without parsing the source crate.
+        .route("/v1/oracle-triage", get(oracle_triage::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
