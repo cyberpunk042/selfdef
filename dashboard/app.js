@@ -164,6 +164,9 @@
     if (kind === "cpu") {
       return refreshCpu();
     }
+    if (kind === "flex-profile") {
+      return refreshFlexProfile();
+    }
     if (kind === "health") {
       return refreshHealth();
     }
@@ -1092,6 +1095,56 @@
     }
   }
 
+  /// MS011 Z-3: render the flex-profile live state. When no state
+  /// file exists on disk the panel shows a guidance row pointing at
+  /// the default path; when state exists, surface the baseline +
+  /// active-delta-count + revert-count + the latest delta.
+  async function refreshFlexProfile() {
+    const ul = document.getElementById("flex-profile-rows");
+    const meta = document.getElementById("flex-profile-meta");
+    const aggEl = document.getElementById("flex-profile-aggregate");
+    try {
+      const resp = await get("/v1/flex-profile");
+      if (!resp.state_present || !resp.state) {
+        ul.innerHTML = `<li class="fa-row">
+          <span class="fa-aggregate fa-unknown">EMPTY</span>
+          <code>${resp.state_path}</code>
+          <small>no flex-profile persisted yet — operator hasn't applied any deltas</small>
+        </li>`;
+        meta.textContent = `0 deltas · 0 reverts · state path: ${resp.state_path}`;
+        aggEl.textContent = "EMPTY";
+        aggEl.className = "fa-aggregate fa-unknown";
+        return;
+      }
+      const s = resp.state;
+      const deltaCount = (s.deltas || []).length;
+      const revertCount = (s.history || []).length;
+      const aggClass = deltaCount > 0 ? "fa-ok" : "fa-unknown";
+      const rows = [
+        { label: "BASELINE", code: s.baseline, detail: `schema_version=${s.schema_version}`, css: "fa-ok" },
+        { label: `${deltaCount} ACTIVE`, code: "deltas", detail: deltaCount > 0
+            ? `latest: id=${s.deltas[s.deltas.length-1].id} by ${s.deltas[s.deltas.length-1].actor}`
+            : "(no active deltas)", css: deltaCount > 0 ? "fa-ok" : "fa-unknown" },
+        { label: `${revertCount} HISTORY`, code: "reverts", detail: revertCount > 0
+            ? `latest revert: ${s.history[s.history.length-1].original.id} by ${s.history[s.history.length-1].actor}`
+            : "(no reverts)", css: "fa-ok" },
+      ];
+      ul.innerHTML = rows.map(r => `<li class="fa-row">
+        <span class="fa-aggregate ${r.css}">${r.label}</span>
+        <code>${r.code}</code>
+        <small>${r.detail}</small>
+      </li>`).join("");
+      meta.textContent = `baseline = ${s.baseline} · ${deltaCount} deltas · ${revertCount} reverts`;
+      aggEl.textContent = deltaCount > 0 ? "ACTIVE" : "BASELINE";
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   /// MS009: render per-watchdog audit-chain integrity. Each row
   /// shows watchdog name + events_verified count + error detail
   /// when the chain broke. Operator-actionable: the error string
@@ -1380,6 +1433,7 @@
   refreshRaid();
   refreshGpu();
   refreshCpu();
+  refreshFlexProfile();
   refreshHealth();
   refreshAuditChains();
   refreshActionList();
@@ -1423,6 +1477,9 @@
   // but mode-changes are rare (operator-driven, not background
   // drift). 60 s is plenty.
   setInterval(refreshCpu, 60000);
+  // Flex profile changes are operator-driven (no background drift);
+  // 60 s refresh is plenty.
+  setInterval(refreshFlexProfile, 60000);
   // Composite health aggregates 6 surfaces — costs the union of all
   // probes. 30 s gives operators a fast top-of-page glance without
   // hammering nvidia-smi / df / ping.
