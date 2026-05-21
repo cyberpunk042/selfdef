@@ -1,0 +1,6 @@
+selfdef sudo-tune is active on this host. Every sudo invocation
+is being logged + recorded:
+  - command + arguments → /var/log/sudo.log
+  - I/O session (keystrokes + terminal output) → /var/log/sudo-io/<session-id>
+  - replay via: sudoreplay <session-id>
+Timestamp cache is 2 minutes, per-tty.

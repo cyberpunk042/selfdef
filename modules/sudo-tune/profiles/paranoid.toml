@@ -1,0 +1,8 @@
+# Profile: paranoid.
+#
+# audit-trail + 2min timestamp + lecture=always + secure_path
+# reset + env_reset. Use on incident-response hosts or
+# high-assurance servers where every elevated action must be
+# explicitly authenticated.
+
+profile = "paranoid"

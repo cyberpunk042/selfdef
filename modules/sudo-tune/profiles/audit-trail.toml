@@ -1,0 +1,7 @@
+# Profile: audit-trail (default).
+#
+# Full I/O session recording + log_year + per-tty timestamps +
+# 5min timeout. Operator-readable forensic trail without
+# excessive prompts.
+
+profile = "audit-trail"

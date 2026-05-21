@@ -1,0 +1,39 @@
+name        = "sudo-tune"
+version     = "0.1.0"
+summary     = "sudo tightened defaults — full I/O session recording + log_year + tighter timestamp_timeout + lecture=always. Mitigates T1548.003 (Sudo Caching) + provides forensic audit trail"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sudo-tightening"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sudo" },
+    { kind = "binary", value = "visudo" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `audit-trail` (default) — log_year + iolog + tighter timestamp
+# `paranoid`             — audit-trail + lecture=always +
+#                          timestamp_timeout=2min + pwfeedback=no
+default = "audit-trail"
+available = ["audit-trail", "paranoid"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/sudoers.d/50-selfdef-tune",
+    "/var/log/sudo-io",
+    "/etc/selfdef/modules/sudo-tune.toml",
+]
