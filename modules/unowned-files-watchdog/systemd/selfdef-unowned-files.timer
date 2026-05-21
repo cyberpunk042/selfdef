@@ -1,0 +1,19 @@
+# selfdef unowned-files-watchdog — weekly Sunday 06:00.
+#
+# Slot rationale: 02:30=aide-bridge, 03:30=clamav-cron,
+# 04:30=rkhunter-cron, Sun-05:30=lynis-cron, Sun-06:00=unowned-
+# files. Each weekly/daily slot is staggered to spread the
+# operator-host I/O budget across early-morning hours.
+
+[Unit]
+Description=selfdef weekly unowned-files forensic scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/unowned-files-watchdog/README.md
+
+[Timer]
+OnCalendar=Sun *-*-* 06:00:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=selfdef-unowned-files.service
+
+[Install]
+WantedBy=timers.target

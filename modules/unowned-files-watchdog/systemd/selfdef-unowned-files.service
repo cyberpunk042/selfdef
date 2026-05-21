@@ -1,0 +1,22 @@
+# selfdef unowned-files-watchdog — service unit.
+
+[Unit]
+Description=selfdef weekly unowned-files forensic scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/unowned-files-watchdog/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/unowned-files-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log
+# find is I/O bound walking the tree — nice + idle so it
+# yields to interactive operator work.
+Nice=15
+IOSchedulingClass=idle
+# Bound the scan so a runaway find on a huge tree can't block
+# the timer from firing again next week.
+TimeoutStartSec=2h

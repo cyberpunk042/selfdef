@@ -1,0 +1,42 @@
+name        = "unowned-files-watchdog"
+version     = "0.1.0"
+summary     = "Weekly find / -nouser -o -nogroup scan emitting selfdef-unowned-files events. Detects orphaned-uid/gid files — classic post-cleanup forensic indicator (attacker removed an account but left files; user-account-deletion cleanup gap)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["unowned-file-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "find" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — emit findings; exit 0 (timer marked ok)
+# `enforce`          — exit 1 if any unowned file found (timer
+#                     marked failed; operator-alertable via
+#                     journald-collector severity=warn watch)
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/unowned-files-watchdog.toml",
+    "/usr/local/libexec/selfdef/unowned-files-watchdog.sh",
+    "/etc/systemd/system/selfdef-unowned-files.service",
+    "/etc/systemd/system/selfdef-unowned-files.timer",
+]
