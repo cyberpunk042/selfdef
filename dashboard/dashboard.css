@@ -387,3 +387,28 @@ main > section.operator-hidden {
 #tab-nav {
   position: relative;
 }
+
+/* MS043 UX — refresh-rate selector inside #tab-nav.
+ * "Tons of modes" (operator verbatim). */
+#refresh-rate-label {
+  margin-left: 0.5rem;
+  color: var(--fg-2);
+  font-size: 0.85rem;
+  font-weight: 500;
+  align-self: center;
+}
+#refresh-rate-select {
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+#refresh-rate-select:hover,
+#refresh-rate-select:focus {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}

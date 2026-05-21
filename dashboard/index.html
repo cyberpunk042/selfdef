@@ -41,6 +41,17 @@
            reset clears the set so all 17 panels become visible again. -->
       <button id="panel-visibility-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="panel-visibility-menu" aria-label="Show panel visibility menu">View ▾</button>
       <div id="panel-visibility-menu" role="menu" aria-labelledby="panel-visibility-btn" hidden></div>
+      <!-- Refresh-rate selector (MS043 UX). "Tons of modes" (operator
+           verbatim) — operator picks how aggressively the panels probe
+           (Fast = 0.25× / Normal = baseline / Slow = 4× / Paused).
+           Survives reload via localStorage selfdef.refreshRate. -->
+      <label for="refresh-rate-select" id="refresh-rate-label">Refresh:</label>
+      <select id="refresh-rate-select" aria-label="Dashboard refresh rate">
+        <option value="fast">Fast</option>
+        <option value="normal" selected>Normal</option>
+        <option value="slow">Slow</option>
+        <option value="paused">Paused</option>
+      </select>
     </nav>
 
     <nav id="panel-nav" aria-label="Panel navigation">

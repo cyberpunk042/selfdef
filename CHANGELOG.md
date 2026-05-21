@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX refresh-rate selector (2026-05-21, batch 11)
+
+Second pillar of the operator's "tons of modes" verbatim
+requirement. The Fast/Normal/Slow/Paused selector sits next to
+View ▾ in `#tab-nav`. Operators on flaky links pick Slow; operators
+debugging a flapping watchdog pick Fast; long-running idle sessions
+pick Paused to stop probing entirely.
+
+- `index.html` adds `#refresh-rate-label` + `#refresh-rate-select`
+  with 4 options (fast/normal/slow/paused).
+- `app.js` factor table (fast=0.25× / normal=1× / slow=4× /
+  paused=∞), localStorage key `selfdef.refreshRate` persisting
+  the operator's choice across reloads.
+- `gatedInterval()` refactored from `setInterval(fn, ms)` to a
+  self-rescheduling `setTimeout` chain. Each cycle reads the
+  current rate factor + multiplies the base interval. Rate flips
+  apply on the NEXT cycle of every panel — no need to clear or
+  re-arm any handles. Hidden panels (either tab-hidden OR new
+  operator-hidden) skip their probe entirely; the chain self-
+  reschedules to keep checking.
+- `dashboard.css` styles the label + select to match the existing
+  dark theme + hover/focus interactive states.
+- Service worker SHELL cache bumped v24 → v25.
+
+Together with batch 10's per-panel visibility menu, the operator
+now has both *what* to show (panel set) and *how often* to refresh
+it. Both pieces sit in the always-visible `#tab-nav` strip so no
+tab switch is needed to access them.
+
 ### Added — MS043 UX per-panel visibility menu (2026-05-21, batch 10)
 
 Operator-facing per-panel visibility toggle. Verbatim operator

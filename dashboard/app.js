@@ -1507,19 +1507,58 @@
   refreshAuditChains();
   refreshActionList();
 
-  /// SDD-056 step 4 — gated setInterval wrapper. Calls `fn` only
-  /// when the named section is NOT tab-hidden. Saves probe cost
-  /// (nvidia-smi / df / ping / mdstat / etc.) when the operator is
-  /// looking at a different tab. `sectionId === null` = always-fire
-  /// (used for status header + always-visible-strip panels).
-  function gatedInterval(fn, ms, sectionId) {
-    return setInterval(() => {
-      if (sectionId !== null) {
-        const sec = document.getElementById(sectionId);
-        if (sec && sec.classList.contains("tab-hidden")) return;
+  /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
+  /// the named section is NOT tab-hidden AND the operator hasn't
+  /// paused refresh globally. Saves probe cost (nvidia-smi / df /
+  /// ping / mdstat / etc.) when the operator is looking at a
+  /// different tab. `sectionId === null` = always-fire (used for
+  /// status header + always-visible-strip panels).
+  ///
+  /// MS043 UX extension — `gatedInterval` is now a self-rescheduling
+  /// setTimeout chain instead of setInterval, so the operator-
+  /// selected REFRESH_RATE_FACTOR (Fast/Normal/Slow/Paused) applies
+  /// on the NEXT cycle of every panel without needing to clear+
+  /// re-arm any handles.
+  const REFRESH_RATE_KEY = "selfdef.refreshRate";
+  const REFRESH_RATE_FACTORS = {
+    fast:    0.25,            // 4x more frequent
+    normal:  1.0,             // baseline (default)
+    slow:    4.0,             // 4x less frequent
+    paused:  Number.POSITIVE_INFINITY, // skip until rate flips back
+  };
+  function readRefreshRate() {
+    const v = localStorage.getItem(REFRESH_RATE_KEY);
+    return REFRESH_RATE_FACTORS[v] !== undefined ? v : "normal";
+  }
+  function writeRefreshRate(name) {
+    try { localStorage.setItem(REFRESH_RATE_KEY, name); } catch (_) { /* private mode */ }
+  }
+  function refreshFactor() {
+    return REFRESH_RATE_FACTORS[readRefreshRate()];
+  }
+  function gatedInterval(fn, baseMs, sectionId) {
+    function schedule() {
+      const factor = refreshFactor();
+      if (factor === Number.POSITIVE_INFINITY) {
+        // Paused — re-check in 5 seconds so resume is responsive.
+        setTimeout(schedule, 5000);
+        return;
       }
-      fn();
-    }, ms);
+      const ms = Math.max(500, Math.round(baseMs * factor));
+      setTimeout(() => {
+        if (sectionId !== null) {
+          const sec = document.getElementById(sectionId);
+          if (sec && (sec.classList.contains("tab-hidden")
+                   || sec.classList.contains("operator-hidden"))) {
+            schedule();
+            return;
+          }
+        }
+        try { fn(); } catch (_) { /* never break the chain */ }
+        schedule();
+      }, ms);
+    }
+    schedule();
   }
 
   // status header is part of the always-visible chrome — always fires.
@@ -1800,6 +1839,16 @@
   // Apply hidden set on initial load — before switchTab() so the
   // first tab render reflects operator preferences.
   applyHiddenPanels();
+
+  // MS043 UX — refresh-rate selector wiring. Sync the <select> with
+  // the persisted preference, then listen for changes and persist.
+  const refreshSelect = document.getElementById("refresh-rate-select");
+  if (refreshSelect) {
+    refreshSelect.value = readRefreshRate();
+    refreshSelect.addEventListener("change", (ev) => {
+      writeRefreshRate(ev.target.value);
+    });
+  }
 
   // Apply initial state from URL hash (deep-link support).
   switchTab(parseTab());
