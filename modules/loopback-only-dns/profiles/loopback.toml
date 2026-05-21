@@ -1,0 +1,6 @@
+# Profile: loopback (default).
+#
+# DNSStubListener=yes (bind to 127.0.0.53). LLMNR + mDNS off.
+# DoT opportunistic. Default for most operator hosts.
+
+profile = "loopback"

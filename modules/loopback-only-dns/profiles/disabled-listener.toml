@@ -1,0 +1,8 @@
+# Profile: disabled-listener.
+#
+# DNSStubListener=no. systemd-resolved still runs as a name-
+# resolution backend for NSS callers but doesn't expose a
+# 127.0.0.53 listener. Use on hosts where operator runs their
+# own local resolver (unbound, pi-hole) on 127.0.0.1:53.
+
+profile = "disabled-listener"

@@ -1,0 +1,42 @@
+name        = "loopback-only-dns"
+version     = "0.1.0"
+summary     = "systemd-resolved bound to 127.0.0.1 + ::1 only — blocks off-host DNS recursion abuse (T1498.002 reflection amp) + T1018 remote DNS probing. Pairs with dns-shield (sinkhole)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dns-loopback-bind"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+    { kind = "binary", value = "resolvectl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `loopback` (default) — DNSStubListener=yes (listens on 127.0.0.53)
+#                       + Domains restricted to localhost.
+# `disabled-listener`  — DNSStubListener=no entirely. Forces every
+#                       resolver client to use /etc/resolv.conf
+#                       (operator-pull upstream DNS only). For
+#                       hosts that already run unbound + don't
+#                       need the systemd-resolved stub.
+default = "loopback"
+available = ["loopback", "disabled-listener"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/resolved.conf.d/50-selfdef-loopback.conf",
+    "/etc/selfdef/modules/loopback-only-dns.toml",
+]
