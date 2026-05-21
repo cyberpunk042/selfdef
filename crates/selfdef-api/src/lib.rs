@@ -39,6 +39,7 @@ mod alerts;
 mod audit_chains;
 mod capability_tokens;
 mod commit_authority;
+mod communication_boundary;
 mod control;
 mod cpu;
 mod filesystem_boundary;
@@ -49,6 +50,7 @@ mod health;
 mod network;
 mod network_boundary;
 mod raid;
+mod sandbox_tiers;
 mod storage;
 mod tool_authority;
 mod guardian;
@@ -258,6 +260,14 @@ pub fn router(state: ApiState) -> Router {
         // profile NetworkProfile ladder with bit values + cross-
         // cycle bindings to MS032 + MS039.
         .route("/v1/network-boundary", get(network_boundary::show))
+        // MS032 / SDD-047 D-2 — sandbox-tiers discovery. 5-tier
+        // capability ladder + 4 PromotionGate variants + 5
+        // companion crates.
+        .route("/v1/sandbox-tiers", get(sandbox_tiers::show))
+        // MS034 / SDD-048 D-2 — communication-boundary discovery.
+        // 4 transports + 8 message types + 2 doctrines +
+        // proposal→commit mapping.
+        .route("/v1/communication-boundary", get(communication_boundary::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

@@ -121,9 +121,9 @@
 | MS029 | done | slm-cpu-loop module shipped + L2 bats + /v1/modules/:name/check |
 | MS030 | done | tensor-parallel-inference module shipped + L2 bats + /v1/modules/:name/check |
 | MS031 | partial | wasm-aot-cache module shipped + L2 bats; SDD-022 (hardware-exploit doctrine, including wasm AOT) implemented |
-| MS032 | partial | sandbox-tier crates shipped: `selfdef-sandbox-tier-policy` (15 tests), `selfdef-sandbox-dispatcher` (14 tests), `selfdef-sandbox-fs-isolation`, `selfdef-sandbox-network-isolation`, `selfdef-sandbox-mirror` (~1400 LOC total). Missing: HTTP/CLI/dashboard operator surfaces. |
+| MS032 | done | 5-crate sandbox set (tier-policy + dispatcher + fs-isolation + network-isolation + mirror, ~1400 LOC, 29 tests) + SDD-047 + `selfdefctl sandbox-tiers` CLI + `GET /v1/sandbox-tiers` schema discovery + L1 gates. Live-state surface (D-3 GET /v1/sandbox-tiers/active) deferred. |
 | MS033 | partial | 122 policy crates shipped under `crates/selfdef-policy-*` (conflict-detector, bundle-signature, diff-classifier, namespace, spec-validator, cooldown-window, traffic-ramp, change-window, decision-batcher, etc). Missing: composite policy-trace operator surface. |
-| MS034 | partial | `selfdef-communication-boundary` crate shipped (372 LOC). Missing: HTTP/CLI surface + dashboard panel. |
+| MS034 | done | `selfdef-communication-boundary` crate (372 LOC) + SDD-048 + `selfdefctl communication-boundary` CLI + `GET /v1/communication-boundary` schema discovery + L1 gates. Per-message-type Prom counters (D-4) deferred. |
 | MS035 | done | 5-crate ecosystem (token-store + word + mirror + tool-capability-policy + profile-authority-gate) + SDD-044 + `selfdefctl capability-tokens {verdicts,schema}` CLI + `GET /v1/capability-tokens` schema discovery + L1 gates. Mutation surface (issue/revoke via CLI) deferred per SDD-044 D-3 (in-memory store; token-minting goes through MS003-signed config + SDD-043 high-risk classifier per D-4). |
 | MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
 | MS037 | done | `selfdef-filesystem-boundary` crate (496 LOC) + SDD-045 + `selfdefctl filesystem-boundary {doctrine,schema}` CLI + `GET /v1/filesystem-boundary` schema discovery + L1 gates. Caller-integration arc deferred per SDD-045 D-3/D-4. |
@@ -139,9 +139,9 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21 (post-MS037/MS038 promotion):**
-- `done`: 32 milestones (was 30; was ~8 pre-session)
-- `partial`: 16 milestones
+**Tally as of 2026-05-21 (post-MS032/MS034 promotion):**
+- `done`: 34 milestones (was 32; was ~8 pre-session)
+- `partial`: 14 milestones
 - `stage-1`: 0 milestones
 
 MS041 (commit-authority) + MS042 (tool-authority) promoted from

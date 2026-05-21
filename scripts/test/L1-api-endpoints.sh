@@ -108,6 +108,12 @@ check_route "/v1/filesystem-boundary"     "MS037 / SDD-045" || failures=$((failu
 # MS038 / SDD-046 D-2 — network-boundary schema discovery.
 check_route "/v1/network-boundary"        "MS038 / SDD-046" || failures=$((failures + 1))
 
+# MS032 / SDD-047 D-2 — sandbox-tiers schema discovery.
+check_route "/v1/sandbox-tiers"           "MS032 / SDD-047" || failures=$((failures + 1))
+
+# MS034 / SDD-048 D-2 — communication-boundary schema discovery.
+check_route "/v1/communication-boundary"  "MS034 / SDD-048" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

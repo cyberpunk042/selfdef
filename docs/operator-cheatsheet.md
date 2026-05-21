@@ -41,6 +41,8 @@ selfdefctl filesystem-boundary doctrine  # MS037 / SDD-045 3-dir + 6-step + 5-fi
 selfdefctl filesystem-boundary schema    # full SDD-045 contract incl. caller sequence
 selfdefctl network-boundary profiles    # MS038 / SDD-046 5-profile egress ladder
 selfdefctl network-boundary classify <bits>  # u8 → NetworkProfile (exit 0 OK; 1 unknown bits)
+selfdefctl sandbox-tiers              # MS032 / SDD-047 5-tier ladder + 4 promotion gates
+selfdefctl communication-boundary     # MS034 / SDD-048 4 transports + 8 message types
 ```
 
 ## Per-watchdog drill-down
@@ -139,6 +141,8 @@ GET /v1/tool-authority                               (MS042 / SDD-050 D-2 11-cra
 GET /v1/capability-tokens                            (MS035 / SDD-044 D-2 typed-authority-handles schema discovery)
 GET /v1/filesystem-boundary                          (MS037 / SDD-045 D-2 3-dir + pipeline + schema + predicates)
 GET /v1/network-boundary                             (MS038 / SDD-046 D-2 5-profile egress ladder)
+GET /v1/sandbox-tiers                                (MS032 / SDD-047 D-2 5-tier capability ladder + 4 gates)
+GET /v1/communication-boundary                       (MS034 / SDD-048 D-2 4 transports + 8 message types)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

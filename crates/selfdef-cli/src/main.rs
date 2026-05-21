@@ -11,9 +11,11 @@ mod alerts;
 mod audit_chains;
 mod capability_tokens;
 mod commit_authority;
+mod communication_boundary;
 mod doctor;
 mod filesystem_boundary;
 mod network_boundary;
+mod sandbox_tiers;
 mod tool_authority;
 mod emit;
 mod follow;
@@ -334,6 +336,14 @@ enum Command {
         #[command(subcommand)]
         action: NetworkBoundaryAction,
     },
+    /// MS032 / SDD-047 sandbox-tiers operator surface. Discovery of
+    /// the 5-tier capability ladder + 4 PromotionGate variants + 5
+    /// companion crates.
+    SandboxTiers,
+    /// MS034 / SDD-048 communication-boundary operator surface.
+    /// Discovery of the 4-transport ladder + 8-message-type schema +
+    /// proposal→commit mapping + 2 verbatim doctrines.
+    CommunicationBoundary,
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -1889,6 +1899,14 @@ async fn main() -> Result<()> {
                 NetworkBoundaryAction::Profiles => network_boundary::run_profiles()?,
                 NetworkBoundaryAction::Classify { bits } => network_boundary::run_classify(&bits)?,
             };
+            std::process::exit(exit);
+        }
+        Command::SandboxTiers => {
+            let exit = sandbox_tiers::run_tiers()?;
+            std::process::exit(exit);
+        }
+        Command::CommunicationBoundary => {
+            let exit = communication_boundary::run_schema()?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {
