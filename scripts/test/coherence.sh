@@ -57,6 +57,9 @@ run_layer "L1: Grafana template (MS027 four-watchdog series)" \
 run_layer "L1: Prometheus alert rules (MS027 four-watchdog alerts)" \
     bash scripts/test/L1-prometheus-alerts.sh
 
+run_layer "L1: operator cheatsheet (daily-driver doc coverage)" \
+    bash scripts/test/L1-operator-cheatsheet.sh
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then
