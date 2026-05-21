@@ -109,6 +109,7 @@ GET /v1/perimeter{,/history}
 GET /v1/guardian{,/history}
 GET /v1/scheduler{,/history,/backpressure,/weights,/explain/:request_id}
 GET /v1/modules{,/:name}
+GET /v1/modules/diff                                 (MS011 Z-13 SD-R83 installed/available/orphaned)
 GET /v1/alerts                                       (MS027 server-side classifier)
 GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + derived caps + sain-01 verdict)
 GET /v1/network                                      (MS011 Z-7 internet/DNS/cloudflared/tailscale/traefik)

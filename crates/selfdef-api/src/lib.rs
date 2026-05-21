@@ -184,6 +184,11 @@ pub fn router(state: ApiState) -> Router {
         // Read-only — module activation goes through the CLI's
         // operator-confirmed `selfdefctl modules apply` flow.
         .route("/v1/modules", get(modules::list))
+        // MS011 Z-13 / SD-R83 — modules diff (installed / available /
+        // orphaned partition). Registered BEFORE the :name catch-all
+        // so the literal segment `diff` doesn't get captured as a
+        // slug name.
+        .route("/v1/modules/diff", get(modules::diff))
         .route("/v1/modules/:name", get(modules::show))
         // MS027: server-side classification of the 9 four-watchdog
         // alert series. PWA dashboard + `selfdefctl alerts` both

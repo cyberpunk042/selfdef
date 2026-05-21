@@ -150,6 +150,7 @@ socket = trusted; TCP = read token).
 | GET    | `/v1/scheduler/explain/:request_id`   | Single-decision detail (factors + chosen route) |
 | GET    | `/v1/modules`                         | All shipped modules with `{slug, summary, active, …}` |
 | GET    | `/v1/modules/:name`                   | Single-module detail (404 if unknown, 400 on invalid slug) |
+| GET    | `/v1/modules/diff`                    | MS011 Z-13 / SD-R83: partitions catalog × host-active set into `{installed, available, orphaned}` + counts envelope. `installed` = slug in catalog AND active in modules.toml; `available` = catalog only (operator can activate via `selfdefctl modules apply --only <slug>`); `orphaned` = modules.toml only (operator has a stale slug). |
 | GET    | `/v1/alerts`                          | MS027 alerts: server-side classification of the 9 alert series. Returns `{worst, alerts: [{name, ms, series, threshold, value, state}]}`. Consumed by both the PWA dashboard "Alerts overview" panel and `selfdefctl alerts`. |
 | GET    | `/v1/hardware`                        | MS010 / SDD-018: full host hardware snapshot (CPU, memory, GPUs, motherboard, PCIe inventory, thermals, probed_at). Probe is cached per-process — hardware doesn't hot-swap at runtime. |
 | GET    | `/v1/hardware/capabilities`           | MS010 / SDD-018: derived capability flags (AVX-512 family, GPU classes, memory tiers) computed from the snapshot. Drives hardware-aware module activation in `selfdefctl modules apply`. |

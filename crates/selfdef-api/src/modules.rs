@@ -182,6 +182,75 @@ pub(crate) async fn show(
     Ok(Json(module))
 }
 
+/// Response shape for `GET /v1/modules/diff`.
+///
+/// Partitions the shipped catalog × operator-activated host config
+/// into three buckets per SD-R83 / MS011 Z-13:
+///
+/// - **installed** — slug in catalog AND active in modules.toml
+/// - **available** — slug in catalog only (operator could activate
+///   via `selfdefctl modules apply --only <slug>`)
+/// - **orphaned**  — slug in modules.toml only (operator has a stale
+///   entry — either restore the manifest or prune)
+#[derive(Debug, Serialize)]
+pub(crate) struct ModulesDiffBody {
+    pub modules_dir: PathBuf,
+    pub modules_toml: PathBuf,
+    pub installed: Vec<String>,
+    pub available: Vec<String>,
+    pub orphaned: Vec<String>,
+    pub counts: ModulesDiffCounts,
+}
+
+#[derive(Debug, Serialize)]
+pub(crate) struct ModulesDiffCounts {
+    pub installed: usize,
+    pub available: usize,
+    pub orphaned: usize,
+}
+
+/// Pure set-difference helper extracted from `diff()` so it can be
+/// unit-tested without touching `OnceLock` env / FS state. Mirrors
+/// SD-R83 semantics: installed = catalog ∩ active; available =
+/// catalog \ active; orphaned = active \ catalog. Each output is
+/// sorted (BTreeSet input ordering).
+pub(crate) fn partition_modules(
+    catalog: &std::collections::BTreeSet<String>,
+    active: &std::collections::BTreeSet<String>,
+) -> (Vec<String>, Vec<String>, Vec<String>) {
+    let installed: Vec<String> = catalog.intersection(active).cloned().collect();
+    let available: Vec<String> = catalog.difference(active).cloned().collect();
+    let orphaned: Vec<String> = active.difference(catalog).cloned().collect();
+    (installed, available, orphaned)
+}
+
+/// `GET /v1/modules/diff` — MS011 Z-13 / SD-R83 modules-diff surface.
+/// Pure set operations over the existing `list_in_dir` + `active_modules`
+/// helpers; no manifest re-parsing.
+pub(crate) async fn diff() -> Result<Json<ModulesDiffBody>, ApiError> {
+    let dir = modules_dir();
+    let toml_path = modules_toml();
+    let modules = list_in_dir(&dir)
+        .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
+    let active = active_modules(&toml_path);
+    let catalog: std::collections::BTreeSet<String> =
+        modules.into_iter().map(|m| m.name).collect();
+    let (installed, available, orphaned) = partition_modules(&catalog, &active);
+    let counts = ModulesDiffCounts {
+        installed: installed.len(),
+        available: available.len(),
+        orphaned: orphaned.len(),
+    };
+    Ok(Json(ModulesDiffBody {
+        modules_dir: dir,
+        modules_toml: toml_path,
+        installed,
+        available,
+        orphaned,
+        counts,
+    }))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ApiError {
     #[error("internal: {0}")]
@@ -323,5 +392,44 @@ config = "/etc/selfdef/modules/agent-guard.toml"
         let modules = list_in_dir(dir.path()).unwrap();
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].name, "real");
+    }
+
+    #[test]
+    fn partition_modules_three_way_split() {
+        use std::collections::BTreeSet;
+        let catalog: BTreeSet<String> = ["module-a", "module-b", "module-c"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let active: BTreeSet<String> = ["module-b", "stale-slug"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let (installed, available, orphaned) = partition_modules(&catalog, &active);
+        assert_eq!(installed, vec!["module-b"]);
+        assert_eq!(available, vec!["module-a", "module-c"]);
+        assert_eq!(orphaned, vec!["stale-slug"]);
+    }
+
+    #[test]
+    fn partition_modules_empty_active_set() {
+        use std::collections::BTreeSet;
+        let catalog: BTreeSet<String> = ["a", "b"].iter().map(|s| s.to_string()).collect();
+        let active: BTreeSet<String> = BTreeSet::new();
+        let (installed, available, orphaned) = partition_modules(&catalog, &active);
+        assert!(installed.is_empty());
+        assert_eq!(available, vec!["a", "b"]);
+        assert!(orphaned.is_empty());
+    }
+
+    #[test]
+    fn partition_modules_all_orphaned_no_catalog() {
+        use std::collections::BTreeSet;
+        let catalog: BTreeSet<String> = BTreeSet::new();
+        let active: BTreeSet<String> = ["x", "y"].iter().map(|s| s.to_string()).collect();
+        let (installed, available, orphaned) = partition_modules(&catalog, &active);
+        assert!(installed.is_empty());
+        assert!(available.is_empty());
+        assert_eq!(orphaned, vec!["x", "y"]);
     }
 }
