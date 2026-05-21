@@ -60,6 +60,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl nats"
     "selfdefctl flex-profile"
     "selfdefctl inference-backends"
+    "selfdefctl dashboard-prefs"
 )
 
 failures=0

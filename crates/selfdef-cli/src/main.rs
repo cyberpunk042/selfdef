@@ -13,6 +13,7 @@ mod authority;
 mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
+mod dashboard_prefs;
 mod doctor;
 mod filesystem_boundary;
 mod flex_profile;
@@ -378,6 +379,17 @@ enum Command {
         #[command(subcommand)]
         action: FlexProfileAction,
     },
+    /// MS043 UX / SDD-060 — operator-pull view of the dashboard-
+    /// prefs surface. `show` GETs the persisted prefs from the
+    /// daemon; `set <field> <value>` PUTs a mutation for one of
+    /// refresh_rate | active_preset | hidden_panels.
+    DashboardPrefs {
+        #[command(subcommand)]
+        action: Option<DashboardPrefsAction>,
+        /// JSON pass-through for the default `show` action (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
     /// MS011 Z-2 / SDD-026 inference-backend surface. `show` calls
     /// `GET /v1/inference-backends` + renders the 4-backend install
     /// state. `version <backend>` shells out directly to the local
@@ -714,6 +726,23 @@ enum InferenceBackendsAction {
     Version {
         /// One of: llama.cpp, vllm, bitnet.cpp, unsloth.
         backend: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum DashboardPrefsAction {
+    /// Default: fetch the current prefs via GET /v1/dashboard-prefs
+    /// and render the human table (or JSON with --json).
+    Show,
+    /// PUT a mutation. `field` is one of:
+    ///   - refresh_rate ∈ {fast, normal, slow, paused}
+    ///   - active_preset ∈ {default, security, performance, inference, compact}
+    ///   - hidden_panels — comma-separated section IDs (empty string clears)
+    Set {
+        /// refresh_rate | active_preset | hidden_panels
+        field: String,
+        /// New value for the field.
+        value: String,
     },
 }
 
@@ -2030,6 +2059,17 @@ async fn main() -> Result<()> {
                 FlexProfileAction::Schema => flex_profile::run_schema()?,
                 FlexProfileAction::Show { json } => flex_profile::run_show(json)
                     .context("flex-profile show")?,
+            };
+            std::process::exit(exit);
+        }
+        Command::DashboardPrefs { action, json } => {
+            let exit = match action {
+                Some(DashboardPrefsAction::Set { field, value }) => {
+                    dashboard_prefs::run_set(&field, &value).context("dashboard-prefs set")?
+                }
+                Some(DashboardPrefsAction::Show) | None => {
+                    dashboard_prefs::run_show(json).context("dashboard-prefs show")?
+                }
             };
             std::process::exit(exit);
         }

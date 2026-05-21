@@ -6,6 +6,43 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX `selfdefctl dashboard-prefs` CLI verb (2026-05-21, batch 15)
+
+Closes the layer-up pattern for the dashboard-prefs arc. After
+the daemon-side HTTP surface (batch 13) + PWA sync (batch 14),
+the CLI verb gives headless / scriptable access:
+
+- `selfdefctl dashboard-prefs` (or `show`) — GETs the persisted
+  prefs + renders the human table (active_preset / refresh_rate /
+  hidden_panels list + updated_at_ms).
+- `selfdefctl dashboard-prefs show --json` — pass-through of the
+  daemon JSON body for jq.
+- `selfdefctl dashboard-prefs set refresh_rate <fast|normal|slow|paused>`
+  — PUTs the mutation. Client-side enum check before round-trip
+  (saves a network round-trip on operator typo).
+- `selfdefctl dashboard-prefs set active_preset <default|security|performance|inference|compact>`
+  — same shape, validates the 5-preset table.
+- `selfdefctl dashboard-prefs set hidden_panels "a,b,c"` — PUTs
+  the comma-separated section IDs. Empty string clears the set
+  (D-6 in SDD-060: hidden_panels is unconstrained `Vec<String>`).
+
+Exit codes per the operator's standing 4-tier ladder for
+operator-visible CLI verbs:
+  0 = ok
+  1 = daemon not reachable / fetch failed
+  2 = invalid arg (unknown field / unknown enum value, caught
+      client-side)
+  3 = server rejected the PUT (400/409 from the daemon)
+
+Operator cheatsheet documents the 5 invocations. L1-operator-
+cheatsheet gate updated to require the `selfdefctl dashboard-prefs`
+literal in the doc.
+
+This closes the dashboard-prefs layer-up chain: crate (HTTP
+module) → SDD-060 → CLI verb → HTTP discovery → L1 (api endpoints
++ cheatsheet) → INDEX. Per the layer-up lesson in info-hub
+(commit c48e19d).
+
 ### Added — MS043 UX dashboard-prefs PWA sync (2026-05-21, batch 14)
 
 Closes the dashboard-prefs arc end-to-end. Batch 13 shipped the
