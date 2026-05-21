@@ -1,0 +1,7 @@
+# Profile: disabled.
+#
+# Process accounting OFF (accton off). Operator suspend without
+# uninstalling. Preserves existing /var/account/pacct files +
+# logrotate config; just stops appending new records.
+
+profile = "disabled"

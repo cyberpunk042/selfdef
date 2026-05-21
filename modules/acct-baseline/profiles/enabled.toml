@@ -1,0 +1,6 @@
+# Profile: enabled (default).
+#
+# Process accounting ON. /var/account/pacct receives a record
+# per exit. Daily rotation, 30-day retention via logrotate.
+
+profile = "enabled"

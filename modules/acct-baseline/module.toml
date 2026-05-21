@@ -1,0 +1,42 @@
+name        = "acct-baseline"
+version     = "0.1.0"
+summary     = "GNU process accounting (psacct/acct) baseline — every process exit recorded with PID + UID + comm + CPU + wall-time + exit-code. Forensic-grade post-mortem audit complementary to auditd's syscall-level events"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["process-accounting"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "accton" },
+    { kind = "binary", value = "lastcomm" },
+    { kind = "binary", value = "sa" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `enabled` (default) — process accounting on, /var/account/pacct
+#                      written, 30-day rotation via logrotate.
+# `disabled`          — turn accounting OFF without uninstalling
+#                      the module (operator-pull suspend).
+default = "enabled"
+available = ["enabled", "disabled"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/logrotate.d/selfdef-acct",
+    "/var/account/pacct",
+    "/etc/selfdef/modules/acct-baseline.toml",
+]

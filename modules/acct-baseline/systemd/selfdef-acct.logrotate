@@ -1,0 +1,23 @@
+# selfdef acct-baseline — /var/account/pacct rotation.
+#
+# Process-accounting files grow indefinitely (every exit appends).
+# A busy server can produce 100s of MB/day of pacct entries.
+# Daily rotation + 30-day retention keeps the on-disk footprint
+# bounded while preserving the forensic window.
+
+/var/account/pacct {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root root
+    postrotate
+        # Restart accounting so it writes to the new pacct file.
+        if [ -x /usr/sbin/accton ]; then
+            /usr/sbin/accton off
+            /usr/sbin/accton on
+        fi
+    endscript
+}
