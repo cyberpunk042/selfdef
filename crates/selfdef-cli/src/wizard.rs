@@ -355,6 +355,22 @@ pub(crate) fn render_human(caps: &HardwareCapabilities, rec: &WizardRecommendati
     writeln!(&mut buf).unwrap();
     writeln!(
         &mut buf,
+        "  Enable hourly periodic doctor (results to journald):"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  $ sudo systemctl enable --now selfdef-doctor.timer"
+    )
+    .unwrap();
+    writeln!(
+        &mut buf,
+        "  $ journalctl -u selfdef-doctor.service -n 50    # last run output"
+    )
+    .unwrap();
+    writeln!(&mut buf).unwrap();
+    writeln!(
+        &mut buf,
         "  Operator runbooks: ~/devops-solutions-information-hub/wiki/runbooks/"
     )
     .unwrap();
@@ -539,6 +555,7 @@ mod tests {
             "selfdefctl doctor",
             "selfdefctl trio",
             "selfdefctl trio-tail",
+            "selfdef-doctor.timer",
             "AVX-512 VNNI",
             "FullMatch",
             "Cross-repo bridge",
