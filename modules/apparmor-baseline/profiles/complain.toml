@@ -1,0 +1,11 @@
+# Profile: complain (default).
+#
+# Curated profile set flipped to complain mode. Violations are
+# LOGGED to journald + audit but NOT BLOCKED. Operator collects
+# the baseline (1-2 weeks) + tunes profile per-host before
+# enforcing.
+#
+# Safe starting point — no operator-workflow can break from
+# AppArmor blocking an unexpected syscall.
+
+profile = "complain"

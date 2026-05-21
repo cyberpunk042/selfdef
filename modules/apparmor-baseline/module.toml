@@ -1,0 +1,44 @@
+name        = "apparmor-baseline"
+version     = "0.1.0"
+summary     = "AppArmor MAC baseline — flip operator-curated profile set from complain → enforce mode. Defense-in-depth alongside Tetragon (host-sentinel + agent-guard) at the LSM layer"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["lsm-mac-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "aa-status" },
+    { kind = "binary", value = "aa-enforce" },
+    { kind = "binary", value = "aa-complain" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `complain` (default) — selfdef-curated profile set in complain
+#                       mode (LOG violations; don't BLOCK). Safe
+#                       starting point for baseline tuning.
+# `enforce`            — selfdef-curated set flipped to enforce
+#                       mode (BLOCK violations). After operator
+#                       has confirmed no false-positive denials
+#                       in complain-mode baseline.
+default = "complain"
+available = ["complain", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/apparmor/selfdef-curated-profiles.list",
+    "/etc/selfdef/modules/apparmor-baseline.toml",
+]

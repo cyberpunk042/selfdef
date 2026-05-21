@@ -1,0 +1,46 @@
+# selfdef apparmor-baseline — curated profile set.
+#
+# One AppArmor profile name per line; blank + #-comment lines
+# ignored. apply.sh runs `aa-enforce <name>` (or aa-complain)
+# for every line that has an installed-and-loaded profile.
+# Missing profiles are SKIPPED (operator may not have all
+# packages installed).
+#
+# These profiles ship with apparmor-profiles + apparmor-profiles-
+# extra packages on Debian/Ubuntu. RHEL/Fedora ship a subset via
+# apparmor + apparmor-utils.
+
+# === Browser sandboxes ===
+firefox
+chromium
+google-chrome
+
+# === Document viewers (PDF + image; common phishing-payload
+#     surface) ===
+evince
+okular
+
+# === Network tools (operator-pull; not always operator-needed) ===
+dhclient
+ntpd
+chronyd
+
+# === Language interpreters (operator scripts) ===
+# These profiles are operator-tunable; many distros ship
+# permissive defaults that allow most paths. Enforce mode
+# tightens them.
+/usr/sbin/sshd
+/usr/sbin/nginx
+/usr/bin/man
+
+# === Audit + log tooling ===
+/usr/sbin/auditd
+/usr/sbin/syslog-ng
+
+# === Container runtimes (operator-pull; only if installed) ===
+/usr/bin/lxc-start
+/usr/bin/docker
+
+# === Mail tooling (often-targeted surface) ===
+/usr/sbin/postfix
+/usr/sbin/dovecot

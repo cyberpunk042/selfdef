@@ -1,0 +1,8 @@
+# Profile: enforce.
+#
+# Curated profile set flipped to enforce mode. Violations are
+# BLOCKED at the LSM hook. Use AFTER baseline-mode tuning + after
+# audit.log shows zero apparmor=DENIED events for legitimate
+# operator workflows over a 1-2 week window.
+
+profile = "enforce"
