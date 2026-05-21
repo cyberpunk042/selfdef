@@ -47,6 +47,8 @@ check "HTML: alerts-section"              "${HTML}" 'id="alerts-section"'       
 check "HTML: alerts aggregate"            "${HTML}" 'id="alerts-aggregate"'       || failures=$((failures + 1))
 check "HTML: panel-nav"                   "${HTML}" 'id="panel-nav"'              || failures=$((failures + 1))
 check "HTML: tab-nav scaffold (SDD-056)"  "${HTML}" 'id="tab-nav"'                || failures=$((failures + 1))
+check "JS: switchTab() (SDD-056 step 3)"  "${JS}"   'function switchTab'           || failures=$((failures + 1))
+check "JS: hashchange listener (SDD-056)" "${JS}"   'addEventListener\("hashchange"' || failures=$((failures + 1))
 check "HTML: hardware-section"            "${HTML}" 'id="hardware-section"'       || failures=$((failures + 1))
 check "HTML: hardware sain01 badge"       "${HTML}" 'id="hardware-sain01-badge"'  || failures=$((failures + 1))
 check "HTML: network-section"             "${HTML}" 'id="network-section"'        || failures=$((failures + 1))

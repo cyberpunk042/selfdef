@@ -1537,6 +1537,91 @@
   // event / routing decision; replaying every 60 s is fine.
   setInterval(refreshAuditChains, 60000);
 
+  // SDD-056 step 3 — tab switching JS + URL hash router.
+  //
+  // 17-panel → 8-tab mapping per SDD-056 § 8-tab specification.
+  // Each tab carries the section ids that belong under it. The
+  // "all" pseudo-tab is the operator-toggleable "show all (legacy)"
+  // mode per SDD-056 D-2 — when no tab anchor selected (or
+  // #tab=all), every section is visible (today's default).
+  const TAB_PANELS = {
+    models:   ["inference-backends-section"],
+    modules:  ["modules-section", "audit-chains-section"],
+    profiles: ["flex-profile-section"],
+    hardware: ["hardware-section", "gpu-section", "cpu-section", "raid-section"],
+    network:  ["network-section"],
+    logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
+    mcp:      [], // placeholder per SDD-056 D-3
+    repl:     [], // placeholder per SDD-056 D-3
+  };
+  // Sections that stay visible regardless of which tab is active
+  // (always-visible strip per SDD-056 § Always-visible strip).
+  const ALWAYS_VISIBLE = new Set([
+    "health-section",
+    "friction-audit-section",
+    "perimeter-section",
+    "guardian-section",
+    "scheduler-section",
+    "alerts-section",
+  ]);
+  // Sections owned by tabs (used to compute the hide-set quickly).
+  const TAB_OWNED = new Set();
+  for (const ids of Object.values(TAB_PANELS)) {
+    for (const id of ids) TAB_OWNED.add(id);
+  }
+
+  function parseTab() {
+    // URL hash like "#tab=hardware". Returns the tab name or null.
+    const hash = window.location.hash || "";
+    const m = hash.match(/^#tab=([a-z]+)$/);
+    return m ? m[1] : null;
+  }
+
+  function switchTab(name) {
+    const tabNav = document.getElementById("tab-nav");
+    if (!tabNav) return;
+    // Flip data-state so CSS re-styles the strip.
+    tabNav.dataset.state = name ? "active" : "inert";
+    // Toggle .active on the anchor.
+    for (const a of tabNav.querySelectorAll("a")) {
+      if (a.dataset.tab === name) {
+        a.classList.add("active");
+      } else {
+        a.classList.remove("active");
+      }
+    }
+    // Show/hide sections.
+    const visibleIds = new Set(ALWAYS_VISIBLE);
+    if (name && TAB_PANELS[name]) {
+      for (const id of TAB_PANELS[name]) visibleIds.add(id);
+    }
+    // Walk every <section> in <main>. If the section's id is in
+    // the always-visible set OR in the active tab's set, show.
+    // If the section is a tab-owned panel NOT in the active set,
+    // hide. Other sections (control panel, modules placeholder,
+    // etc.) stay visible — they're not under the tab system.
+    for (const sec of document.querySelectorAll("main > section")) {
+      const id = sec.id || "";
+      if (id && TAB_OWNED.has(id) && !visibleIds.has(id)) {
+        sec.classList.add("tab-hidden");
+      } else {
+        sec.classList.remove("tab-hidden");
+      }
+    }
+  }
+
+  function onHashChange() {
+    const name = parseTab();
+    switchTab(name);
+  }
+
+  // Wire up anchor clicks (don't replace the default — let the
+  // hash change fire, then our listener picks it up). Wire up
+  // hash-change event for back/forward navigation + deep-link.
+  window.addEventListener("hashchange", onHashChange);
+  // Apply initial state from URL hash (deep-link support).
+  switchTab(parseTab());
+
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("service-worker.js").catch(() => {

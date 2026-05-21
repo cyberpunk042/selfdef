@@ -9,7 +9,7 @@
 // index.html gained scheduler panel; app.js gained the four-watchdog
 // refresh handlers; dashboard.css gained the .fa-backpressure
 // aggregate state.
-const SHELL = "selfdef-shell-v18";
+const SHELL = "selfdef-shell-v19";
 const SHELL_ASSETS = [
   "./",
   "./index.html",
