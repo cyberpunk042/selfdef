@@ -137,7 +137,8 @@ selfdefctl trio --quiet && sudo selfdefctl modules apply
 ## Coherence harness (local dev / CI)
 
 ```sh
-bash scripts/test/coherence.sh        # 12-layer L1+L2+cargo gate
+make coherence                        # 13-layer L1+L2+cargo gate (preferred)
+bash scripts/test/coherence.sh        # same thing, direct invocation
 ```
 
 CI runs the same harness on every push + PR + tag. See
