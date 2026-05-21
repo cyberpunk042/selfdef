@@ -11,6 +11,7 @@ mod alerts;
 mod audit_chains;
 mod commit_authority;
 mod doctor;
+mod tool_authority;
 mod emit;
 mod follow;
 mod friction_audit;
@@ -297,6 +298,14 @@ enum Command {
         #[command(subcommand)]
         action: CommitAuthorityAction,
     },
+    /// MS042 / SDD-050 tool-authority operator surface. Offline
+    /// discovery of the 11-crate tool-policy pipeline (8 ToolId
+    /// variants × 7 ExecutionMode × 6 Profile) + per-triple
+    /// permits check.
+    ToolAuthority {
+        #[command(subcommand)]
+        action: ToolAuthorityAction,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -573,6 +582,30 @@ enum SchedulerAuditCycleAction {
     Replay {
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum ToolAuthorityAction {
+    /// Print the 8 canonical ToolId variants + the 9-gate
+    /// composition pipeline + per-gate decision vocabulary +
+    /// refusal rules. Operator + agent discovery of the SDD-050
+    /// contract.
+    Tools,
+    /// Call `selfdef_tool_capability_policy::is_authorized(tool,
+    /// mode, profile)` and print Allow / NotAuthorized. Exit 0 if
+    /// allowed; 1 otherwise (shell-gate friendly).
+    Permits {
+        /// Tool id (shell | fs-read | fs-write | web-fetch |
+        /// model-inference | mcp-bridge | replay-control |
+        /// cli-bridge).
+        tool: String,
+        /// Execution mode (plan | dry-run | shadow | sandbox |
+        /// execute | replay | debug).
+        mode: String,
+        /// Profile (private | fast | careful | autonomous |
+        /// experimental | production).
+        profile: String,
     },
 }
 
@@ -1764,6 +1797,15 @@ async fn main() -> Result<()> {
                 }
                 CommitAuthorityAction::Classify { file } => {
                     commit_authority::run_classify(&file).context("commit-authority classify")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::ToolAuthority { action } => {
+            let exit = match action {
+                ToolAuthorityAction::Tools => tool_authority::run_tools()?,
+                ToolAuthorityAction::Permits { tool, mode, profile } => {
+                    tool_authority::run_permits_cli(&tool, &mode, &profile)?
                 }
             };
             std::process::exit(exit);

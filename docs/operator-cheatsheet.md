@@ -33,6 +33,8 @@ selfdefctl audit-chains --json        # raw /v1/audit-chains JSON envelope
 selfdefctl commit-authority types     # MS041 / SDD-043 schema discovery (8 types + 5 fields + 3 gates)
 selfdefctl commit-authority validate <file>   # offline envelope validation (exit 0/1)
 selfdefctl commit-authority classify <file>   # high-risk classification (exit 1 if high-risk)
+selfdefctl tool-authority tools       # MS042 / SDD-050 tool-policy pipeline discovery (8 tools + 9 gates)
+selfdefctl tool-authority permits <tool> <mode> <profile>   # is-authorized check (exit 0 ALLOW; 1 NOT)
 ```
 
 ## Per-watchdog drill-down

@@ -48,6 +48,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl health"
     "selfdefctl audit-chains"
     "selfdefctl commit-authority"
+    "selfdefctl tool-authority"
 )
 
 failures=0
