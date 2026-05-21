@@ -109,7 +109,7 @@ GET /v1/modules{,/:name}
 
 ```text
 friction-audit-{pcie,zfs,memory,immutability,signature}.md  (5)
-perimeter-{tetragon-not-running,policy-load-failure,extension-create,sigkill-investigation,key-rotation}.md  (5)
+perimeter-{tetragon-not-running,policy-load-failure,extension-create,sigkill-investigation,key-rotation,audit-log-corruption}.md  (6)
 guardian-{not-running,socket-unreachable,false-positive-rollback,audit-log-corruption,console-alert-investigation}.md  (5)
 scheduler-{not-running,backpressure-stuck-open,weight-matrix-rotation,audit-log-corruption,force-override-investigation}.md  (5)
 ux-coherence-failures.md  (1)

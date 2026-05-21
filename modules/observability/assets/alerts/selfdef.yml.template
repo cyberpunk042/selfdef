@@ -60,7 +60,7 @@ groups:
         annotations:
           summary: "perimeter: OCSF audit chain broken on {{ $labels.instance }}"
           description: "MS047 SHA-256 audit chain integrity verification failed. Storage corruption, log tampering, or concurrent writer. CRITICAL — investigate per runbook."
-          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/perimeter-policy-load-failure.md"
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/perimeter-audit-log-corruption.md"
 
       # ----- MS044 guardian (Tetragon supervisor) -----
       - alert: SelfdefGuardianFailedResponse
