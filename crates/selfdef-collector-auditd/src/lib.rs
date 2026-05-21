@@ -10,15 +10,15 @@
 
 mod parser;
 
-pub use parser::AuditRecord;
+pub use parser::{parse_avc_decision, AuditRecord};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use selfdef_bus::Publisher;
-use selfdef_core::activity::AuthenticationActivity;
-use selfdef_core::attack::TechniqueRef;
+use selfdef_core::activity::{AuthenticationActivity, ProcessActivity};
+use selfdef_core::attack::{Tactic, TechniqueRef};
 use selfdef_core::category::ClassUid;
 use selfdef_core::prelude::*;
 use thiserror::Error;
@@ -127,7 +127,7 @@ impl AuditdCollector {
 
             match parser::parse_line(line) {
                 Some(record) => {
-                    let event = self.build_event(&record);
+                    let event = self.build_event(&record, line);
                     self.publisher.publish_lossy(event);
                 }
                 None => {
@@ -141,10 +141,11 @@ impl AuditdCollector {
         self.sequence.fetch_add(1, Ordering::Relaxed)
     }
 
-    fn build_event(&self, record: &AuditRecord) -> Event {
+    fn build_event(&self, record: &AuditRecord, raw_line: &str) -> Event {
         let seq = self.next_sequence();
         match record.kind.as_str() {
             "USER_AUTH" | "USER_LOGIN" | "USER_ACCT" => self.build_auth_event(record, seq),
+            "AVC" => self.build_avc_event(record, raw_line, seq),
             _ => self.build_other_event(record, seq),
         }
     }
@@ -209,6 +210,58 @@ impl AuditdCollector {
         }
         if !success {
             event = event.with_attack(TechniqueRef::brute_force());
+        }
+        event
+    }
+
+    /// AVC = SELinux / SMACK access-vector-cache decision. Two outcomes:
+    /// `denied` (the usual operator-actionable case — high signal) and
+    /// `granted` (rare; only logged when explicitly configured). Maps to
+    /// ClassUid::PROCESS_ACTIVITY with `ProcessActivity::Open` because
+    /// AVC fires at the security_*_open / security_*_access LSM hook
+    /// point. Severity High for denied, Informational for granted.
+    fn build_avc_event(&self, record: &AuditRecord, raw_line: &str, seq: u64) -> Event {
+        let decision = parser::parse_avc_decision(raw_line).unwrap_or("unknown");
+        let denied = decision == "denied";
+        let severity = if denied { SeverityId::High } else { SeverityId::Informational };
+        let status = if denied { StatusId::Failure } else { StatusId::Success };
+
+        let comm = record.get("comm").unwrap_or("?");
+        let target_name = record.get("name").unwrap_or("?");
+        let tclass = record.get("tclass").unwrap_or("?");
+        let scontext = record.get("scontext").unwrap_or("?");
+        let tcontext = record.get("tcontext").unwrap_or("?");
+        let permissive = record.get("permissive").unwrap_or("0");
+
+        let message = format!(
+            "AVC {decision}: comm={comm} target={target_name} tclass={tclass} \
+             scontext={scontext} tcontext={tcontext} permissive={permissive}"
+        );
+
+        let raw = serde_json::to_value(&record.fields).unwrap_or(serde_json::Value::Null);
+
+        let mut event = Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            ProcessActivity::Open as u32,
+            severity,
+            &self.host_tag,
+            "auditd",
+            seq,
+        )
+        .with_status(status)
+        .with_message(message)
+        .with_raw(raw);
+
+        if denied {
+            // T1083 covers File and Directory Discovery — the most common
+            // discovery vector flagged by AVC denials (denied read on
+            // /etc/shadow, /proc/kcore, etc.). When tclass != file the
+            // technique is approximate but still in the Discovery tactic.
+            event = event.with_attack(TechniqueRef::new(
+                "T1083",
+                "File and Directory Discovery",
+                Tactic::Discovery,
+            ));
         }
         event
     }

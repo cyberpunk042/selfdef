@@ -31,6 +31,35 @@ impl AuditRecord {
     }
 }
 
+/// AVC records have a non-key=value preamble (`avc:  denied  { read } for`)
+/// that the generic key=value parser skips silently. This helper scans the
+/// preamble + returns the decision verb when present. `None` otherwise.
+///
+/// Format reference (Linux audit subsystem AVC record):
+/// ```text
+/// type=AVC msg=audit(<ts>:<serial>): avc:  denied  { read }  for  pid=<n> comm=<...>
+/// ```
+pub fn parse_avc_decision(line: &str) -> Option<&str> {
+    // Walk the line looking for the literal `avc:` token followed by
+    // exactly one of `denied` / `granted`. We do NOT require any
+    // surrounding whitespace count; auditd has used 1 + 2 spaces
+    // across kernels.
+    let after_avc = line.find("avc:")?;
+    let tail = &line[after_avc + "avc:".len()..];
+    let trimmed = tail.trim_start();
+    if let Some(rest) = trimmed.strip_prefix("denied") {
+        if rest.starts_with(|c: char| c.is_whitespace()) || rest.is_empty() {
+            return Some("denied");
+        }
+    }
+    if let Some(rest) = trimmed.strip_prefix("granted") {
+        if rest.starts_with(|c: char| c.is_whitespace()) || rest.is_empty() {
+            return Some("granted");
+        }
+    }
+    None
+}
+
 /// Parse one audit log line. Returns `None` for lines that don't look like
 /// audit records (blank, comments, malformed); callers can warn or ignore.
 #[allow(clippy::manual_map)] // explicit None branch is clearer here
@@ -206,5 +235,41 @@ mod tests {
         let r = parse_line(line).unwrap();
         assert_eq!(r.kind, "ANOM_PROMISCUOUS");
         assert_eq!(r.get("dev"), Some("eth0"));
+    }
+
+    #[test]
+    fn parses_avc_denied_record_fields() {
+        // Real AVC log shape — note the non-key=value `avc:  denied  { read } for`
+        // preamble that the generic tokenizer skips, plus the trailing
+        // key=value pairs the tokenizer DOES pick up.
+        let line = r#"type=AVC msg=audit(1736944700.000:1234580): avc:  denied  { read } for  pid=4242 comm="sshd" name="shadow" dev="sda1" ino=12345 scontext=system_u:system_r:sshd_t:s0 tcontext=system_u:object_r:shadow_t:s0 tclass=file permissive=0"#;
+        let r = parse_line(line).unwrap();
+        assert_eq!(r.kind, "AVC");
+        assert_eq!(r.get("pid"),       Some("4242"));
+        assert_eq!(r.get("comm"),      Some("sshd"));
+        assert_eq!(r.get("name"),      Some("shadow"));
+        assert_eq!(r.get("tclass"),    Some("file"));
+        assert_eq!(r.get("permissive"),Some("0"));
+        assert_eq!(parse_avc_decision(line), Some("denied"));
+    }
+
+    #[test]
+    fn parses_avc_granted_record_decision() {
+        let line = r#"type=AVC msg=audit(1736944710.000:1234581): avc:  granted  { execute } for  pid=99 comm="bash" tclass=file"#;
+        assert_eq!(parse_avc_decision(line), Some("granted"));
+    }
+
+    #[test]
+    fn avc_decision_missing_returns_none() {
+        // No `avc:` preamble — a USER_AUTH line.
+        let line = r#"type=USER_AUTH msg=audit(1736944496.789:1234567): pid=1234"#;
+        assert_eq!(parse_avc_decision(line), None);
+    }
+
+    #[test]
+    fn avc_decision_partial_word_does_not_match() {
+        // Substring `deniedfoo` must NOT match `denied`.
+        let line = r#"type=AVC msg=audit(1.0:1): avc:  deniedfoo  { read }"#;
+        assert_eq!(parse_avc_decision(line), None);
     }
 }
