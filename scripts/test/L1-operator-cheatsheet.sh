@@ -45,6 +45,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl modules"
     "selfdefctl init"
     "selfdefctl alerts"
+    "selfdefctl health"
 )
 
 failures=0

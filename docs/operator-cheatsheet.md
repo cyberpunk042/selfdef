@@ -24,6 +24,9 @@ selfdefctl trio-tail                  # unified live OCSF tail (Ctrl-C exits)
 selfdefctl alerts                     # MS027 alerts overview (CLI parity with dashboard)
 selfdefctl alerts --quiet             # single-line gate-friendly: `selfdef-alerts: OK`
 selfdefctl alerts --json              # jq-friendly output (worst + per-row state)
+selfdefctl health                     # MS011 Z-6 composite health (one-line: is the box OK?)
+selfdefctl health --quiet             # `selfdef-health: WORST` for PS1 / gates
+selfdefctl health --json              # composite worst + 6 component rows
 ```
 
 ## Per-watchdog drill-down

@@ -16,6 +16,7 @@ mod guardian;
 mod scheduler;
 mod trio;
 mod hardware;
+mod health;
 mod init;
 mod mcp;
 mod models;
@@ -251,6 +252,21 @@ enum Command {
         json: bool,
         /// Single-line `selfdef-alerts: WORST` mode for PS1 / status
         /// bars + as a gate-friendly exit-code-only invocation.
+        #[arg(long)]
+        quiet: bool,
+    },
+    /// MS011 Z-6 composite health CLI parity with the dashboard's
+    /// "Composite health" top panel + GET /v1/health. One-command
+    /// answer to "is the box OK?". Aggregates alerts + network +
+    /// storage + raid + gpu + cpu into 6 rows + a composite worst.
+    /// Exit code 0 iff worst is OK or UNKNOWN; 1 if WARN or
+    /// CRITICAL. Pair with shell gates:
+    ///   selfdefctl health --quiet && safe-action.sh
+    Health {
+        /// Machine-readable JSON output.
+        #[arg(long)]
+        json: bool,
+        /// Single-line `selfdef-health: WORST` for PS1 / status bars.
         #[arg(long)]
         quiet: bool,
     },
@@ -1679,6 +1695,10 @@ async fn main() -> Result<()> {
         }
         Command::Alerts { json, quiet } => {
             let exit = alerts::run(json, quiet).context("alerts")?;
+            std::process::exit(exit);
+        }
+        Command::Health { json, quiet } => {
+            let exit = health::run(json, quiet).context("health")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {
