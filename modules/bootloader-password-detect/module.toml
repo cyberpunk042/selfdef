@@ -1,0 +1,42 @@
+name        = "bootloader-password-detect"
+version     = "0.1.0"
+summary     = "Detection: GRUB2 password protection presence + correct mode (superuser/per-entry) check at boot + weekly. Catches physical-access attacker who can edit boot params (init=/bin/sh, single-user mode) to bypass the OS userland entirely"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["bootloader-password-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if no password OR password
+#                     is in plaintext (deprecated grub.cfg
+#                     `password` directive vs PBKDF2
+#                     `password_pbkdf2`)
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/bootloader-password-detect.toml",
+    "/usr/local/libexec/selfdef/bootloader-password-detect.sh",
+    "/etc/systemd/system/selfdef-bootloader-password.service",
+    "/etc/systemd/system/selfdef-bootloader-password.timer",
+]
