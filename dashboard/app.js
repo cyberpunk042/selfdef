@@ -1668,6 +1668,139 @@
       window.location.hash = next === "tabbed" ? "tab=models" : "tab=all";
     });
   }
+  // ----------------------------------------------------------------
+  // MS043 UX — operator-facing per-panel visibility menu.
+  //
+  // Operator verbatim: "everything can be turned on and off". The
+  // 8-tab nav groups panels logically; this menu lets the operator
+  // permanently hide a panel they don't care about (e.g. an
+  // operator on a host without RAID hides the RAID panel). The
+  // hidden set is ANDed against the tab-driven hide-set in
+  // switchTab() so hidden panels stay hidden across tabs.
+  //
+  // Persistence: localStorage key `selfdef.hiddenPanels` = JSON
+  // array of section IDs. Missing/malformed = no panels hidden.
+  const PANEL_HIDDEN_KEY = "selfdef.hiddenPanels";
+  const ALL_PANEL_SECTIONS = [
+    ["health-section",             "Composite health"],
+    ["friction-audit-section",     "Friction audit"],
+    ["perimeter-section",          "Perimeter"],
+    ["guardian-section",           "Guardian"],
+    ["scheduler-section",          "Scheduler"],
+    ["modules-section",            "Modules"],
+    ["audit-chains-section",       "Audit chains"],
+    ["alerts-section",             "Alerts"],
+    ["hardware-section",           "Hardware"],
+    ["network-section",            "Network"],
+    ["storage-section",            "Storage"],
+    ["raid-section",               "Software RAID"],
+    ["gpu-section",                "GPU watts"],
+    ["cpu-section",                "CPU mode"],
+    ["flex-profile-section",       "Flex profile"],
+    ["inference-backends-section", "Inference backends"],
+  ];
+  function readHiddenPanels() {
+    try {
+      const raw = localStorage.getItem(PANEL_HIDDEN_KEY);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+  function writeHiddenPanels(set) {
+    try {
+      localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify([...set]));
+    } catch (_) { /* private mode */ }
+  }
+  function applyHiddenPanels() {
+    const hidden = readHiddenPanels();
+    for (const [id] of ALL_PANEL_SECTIONS) {
+      const sec = document.getElementById(id);
+      if (!sec) continue;
+      if (hidden.has(id)) {
+        sec.classList.add("operator-hidden");
+      } else {
+        sec.classList.remove("operator-hidden");
+      }
+    }
+  }
+  function buildPanelVisibilityMenu() {
+    const menu = document.getElementById("panel-visibility-menu");
+    if (!menu) return;
+    const hidden = readHiddenPanels();
+    const visibleCount = ALL_PANEL_SECTIONS.length - hidden.size;
+    menu.innerHTML = "";
+    const header = document.createElement("div");
+    header.className = "panel-vis-header";
+    header.textContent = `${visibleCount}/${ALL_PANEL_SECTIONS.length} panels visible`;
+    menu.appendChild(header);
+    for (const [id, label] of ALL_PANEL_SECTIONS) {
+      const row = document.createElement("label");
+      row.className = "panel-vis-row";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = !hidden.has(id);
+      cb.dataset.sectionId = id;
+      cb.addEventListener("change", (ev) => {
+        const sectionId = ev.target.dataset.sectionId;
+        const set = readHiddenPanels();
+        if (ev.target.checked) {
+          set.delete(sectionId);
+        } else {
+          set.add(sectionId);
+        }
+        writeHiddenPanels(set);
+        applyHiddenPanels();
+        // Rebuild to update the count.
+        buildPanelVisibilityMenu();
+      });
+      const span = document.createElement("span");
+      span.textContent = label;
+      row.appendChild(cb);
+      row.appendChild(span);
+      menu.appendChild(row);
+    }
+    // "Show all" reset row.
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "panel-vis-reset";
+    reset.textContent = "Show all panels";
+    reset.addEventListener("click", () => {
+      writeHiddenPanels(new Set());
+      applyHiddenPanels();
+      buildPanelVisibilityMenu();
+    });
+    menu.appendChild(reset);
+  }
+  const visBtn = document.getElementById("panel-visibility-btn");
+  const visMenu = document.getElementById("panel-visibility-menu");
+  if (visBtn && visMenu) {
+    visBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const open = !visMenu.hidden;
+      if (open) {
+        visMenu.hidden = true;
+        visBtn.setAttribute("aria-expanded", "false");
+      } else {
+        buildPanelVisibilityMenu();
+        visMenu.hidden = false;
+        visBtn.setAttribute("aria-expanded", "true");
+      }
+    });
+    // Close on outside click.
+    document.addEventListener("click", (ev) => {
+      if (visMenu.hidden) return;
+      if (visMenu.contains(ev.target) || ev.target === visBtn) return;
+      visMenu.hidden = true;
+      visBtn.setAttribute("aria-expanded", "false");
+    });
+  }
+  // Apply hidden set on initial load — before switchTab() so the
+  // first tab render reflects operator preferences.
+  applyHiddenPanels();
+
   // Apply initial state from URL hash (deep-link support).
   switchTab(parseTab());
 

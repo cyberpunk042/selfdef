@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX per-panel visibility menu (2026-05-21, batch 10)
+
+Operator-facing per-panel visibility toggle. Verbatim operator
+direction: "everything can be turned on and off". The 8-tab nav
+already groups the 17 panels logically; this batch adds a "View ▾"
+menu in `#tab-nav` that lets the operator permanently hide
+individual panels they don't care about (e.g. operator on a host
+without RAID hides the RAID panel; operator with no GPU hides the
+GPU panel).
+
+- `index.html`: new `#panel-visibility-btn` (View ▾) + collapsible
+  `#panel-visibility-menu` container inside `#tab-nav`.
+- `app.js`: 137-LOC visibility subsystem. `selfdef.hiddenPanels`
+  localStorage key holds a JSON array of section IDs to hide;
+  `applyHiddenPanels()` toggles the `.operator-hidden` class on
+  each section; `buildPanelVisibilityMenu()` renders 16 panel-row
+  checkboxes + a "Show all panels" reset row + a `N/16 panels
+  visible` header counter. Menu opens/closes on button click,
+  closes on outside-click, full ARIA wiring (`aria-haspopup`,
+  `aria-expanded`, `aria-controls`).
+- `dashboard.css`: `.operator-hidden { display: none; }` (parallel
+  to `.tab-hidden`; either flag hides the section, so operator
+  preference survives tab switches). 90+ LOC styling the View
+  button + menu + rows + reset to match the existing dark theme
+  + interactive states.
+- Service worker SHELL cache bumped v23 → v24.
+
+The hidden set is ANDed against the tab-driven hide set in
+`switchTab()` so hidden panels stay hidden across all tabs +
+"Show all" mode. Default = all visible (back-compat for existing
+operators). Reset clears the set instantly via the in-menu button.
+
 ### Added — MS016 host-sentinel module (2026-05-21, batch 9)
 
 New `modules/host-sentinel/` ships 2 host-scope Tetragon TracingPolicies

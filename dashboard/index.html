@@ -35,6 +35,12 @@
       <a href="#tab=mcp" data-tab="mcp">MCP</a>
       <a href="#tab=repl" data-tab="repl">REPL</a>
       <a href="#tab=all" data-tab="all">All</a>
+      <!-- Operator-facing per-panel visibility menu (MS043 UX).
+           "Everything can be turned on and off" (operator verbatim).
+           Hidden panels survive reload via localStorage selfdef.hiddenPanels;
+           reset clears the set so all 17 panels become visible again. -->
+      <button id="panel-visibility-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="panel-visibility-menu" aria-label="Show panel visibility menu">View ▾</button>
+      <div id="panel-visibility-menu" role="menu" aria-labelledby="panel-visibility-btn" hidden></div>
     </nav>
 
     <nav id="panel-nav" aria-label="Panel navigation">

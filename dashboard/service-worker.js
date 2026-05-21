@@ -9,11 +9,16 @@
 // index.html gained scheduler panel; app.js gained the four-watchdog
 // refresh handlers; dashboard.css gained the .fa-backpressure
 // aggregate state.
+// v24 (2026-05-21): MS043 UX — operator-facing per-panel visibility
+// menu in #tab-nav. localStorage selfdef.hiddenPanels persists the
+// hidden set. .operator-hidden CSS class hides sections. View ▾
+// button toggles the menu; checkboxes per panel; "Show all panels"
+// reset row.
 // v23 (2026-05-21): MS011 Z-8 path-conflict surface — app.js modules
 // panel now fetches /v1/modules/install-plan in parallel and renders
 // a yellow conflict badge + meta line when two planned modules
 // declare the same path in [install_paths].
-const SHELL = "selfdef-shell-v23";
+const SHELL = "selfdef-shell-v24";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

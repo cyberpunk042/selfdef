@@ -298,3 +298,92 @@ main > section.tab-hidden {
   color: var(--bg);
   border-color: var(--info);
 }
+
+/* MS043 UX — operator-facing per-panel visibility menu.
+ * "Everything can be turned on and off" (operator verbatim). The
+ * .operator-hidden class is OR'd with .tab-hidden in the layout
+ * (either flag wins → section hidden). */
+main > section.operator-hidden {
+  display: none;
+}
+#panel-visibility-btn {
+  padding: 0.3rem 0.8rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+#panel-visibility-btn:hover,
+#panel-visibility-btn[aria-expanded="true"] {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}
+#panel-visibility-menu {
+  position: absolute;
+  right: 1rem;
+  top: 100%;
+  margin-top: 0.4rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  min-width: 14rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  z-index: 100;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+#panel-visibility-menu[hidden] {
+  display: none;
+}
+.panel-vis-header {
+  font-size: 0.75rem;
+  color: var(--fg-2);
+  padding: 0.25rem 0 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.panel-vis-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--fg);
+}
+.panel-vis-row:hover {
+  color: var(--info);
+}
+.panel-vis-row input[type="checkbox"] {
+  accent-color: var(--info);
+  cursor: pointer;
+}
+.panel-vis-reset {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.7rem;
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.panel-vis-reset:hover {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}
+/* Position #tab-nav as relative so #panel-visibility-menu can
+ * position itself with `position: absolute` against it. */
+#tab-nav {
+  position: relative;
+}
