@@ -1,0 +1,12 @@
+# Profile: standard (default).
+#
+# Sized for audit-rules `base` profile event rate (~10-50/sec).
+# kernel.audit_backlog_limit = 8192 (8x default 1024).
+# max_log_file = 100MB, num_logs = 10 (1GB retention).
+# disk_full_action = SUSPEND.
+
+profile = "standard"
+
+# auditctl -b argument (kernel audit backlog limit).
+# Operator can override via env: SELFDEF_AUDITD_BACKLOG_LIMIT.
+backlog_limit = 8192

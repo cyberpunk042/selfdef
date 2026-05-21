@@ -1,0 +1,42 @@
+name        = "auditd-tune"
+version     = "0.1.0"
+summary     = "auditd daemon tuning — buffer + flush + max_log_file sizing for the audit-rules workload. Without proper sizing, kernel audit events get DROPPED under load (silent visibility gap)"
+category    = "hardening"
+
+# Paired with audit-rules: this tunes the daemon; audit-rules
+# tunes the kernel-side ruleset. Together they form the auditd
+# half of selfdef's detection stack.
+depends_on  = ["audit-rules"]
+conflicts   = []
+provides    = ["auditd-tuning"]
+consumes    = ["auditctl-rules"]
+
+requires    = [
+    { kind = "binary", value = "auditctl" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "post"   # after audit-rules' main-phase apply
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — daemon defaults + larger buffer (128MB)
+#                       sufficient for the audit-rules `base` profile
+# `high-volume`        — bigger buffer + more log retention; sized for
+#                       the audit-rules `paranoid` profile's event rate
+default = "standard"
+available = ["standard", "high-volume"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/audit/auditd.conf",
+    "/etc/selfdef/modules/auditd-tune.toml",
+]

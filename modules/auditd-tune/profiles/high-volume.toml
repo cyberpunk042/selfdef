@@ -1,0 +1,11 @@
+# Profile: high-volume.
+#
+# Sized for audit-rules `paranoid` profile event rate (~500-5000/sec).
+# kernel.audit_backlog_limit = 65536 (64x default).
+# max_log_file = 500MB, num_logs = 20 (10GB retention).
+#
+# Use after measuring actual event rate on the host — paranoid
+# audit-rules + standard auditd-tune will drop events under load.
+
+profile = "high-volume"
+backlog_limit = 65536
