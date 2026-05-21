@@ -6,6 +6,131 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS009 + MS010 + MS011 + MS019 + MS013 charter-tracking (2026-05-21)
+
+Multi-cycle session brought 5+ milestones across additional Stage-2+
+production layers. 27 commits this session on selfdef main + 2 on
+info-hub PR #12.
+
+#### MS027 alerts surface — full fullstack
+
+- `selfdefctl alerts` CLI verb — classifies 9 alert-relevant series
+  via `/metrics` parsing OR (preferred) `/v1/alerts` typed endpoint
+  with client-side fallback (cedf4e0)
+- `selfdefctl doctor` extended — folds MS027 alert classification
+  into the cross-cutting health check (64e98d1)
+- `GET /v1/alerts` — server-side classifier (worst + 9 alert rows
+  with name/ms/series/threshold/value/state) consumed by both the
+  dashboard panel + CLI. 4 unit + 1 integration test (c9d648d)
+- Dashboard "Alerts overview" panel migrated from /metrics parse
+  to /v1/alerts (0b25f57)
+- `selfdefctl alerts` migrated to prefer /v1/alerts (f5b367e)
+
+#### MS010 hardware-aware modules — HTTP + dashboard fullstack
+
+- `GET /v1/hardware`, `/v1/hardware/capabilities`, `/v1/hardware/sain01`
+  — OnceLock-cached probe (hardware doesn't hot-swap); JSON envelopes
+  for snapshot + derived capabilities + sain-01 reference-platform
+  match verdict (520501d)
+- Dashboard "Host hardware" panel rendering sain-01 verdict + per-
+  axis capability checks (AVX-512 VNNI/BF16, ≥256 GB memory, ≥2 GPUs,
+  PCIe dual-x8, motherboard ProArt X870E) (757a323)
+
+#### MS011 (operator dashboard + flex profile) — 7 of 13 Z-vectors
+
+- Z-4 (CPU mode classification): `/v1/cpu` + dashboard panel.
+  Reads `/sys/devices/system/cpu/*/cpufreq/scaling_governor` + SMT
+  state; classifies into `ultra-low-power` / `balanced` /
+  `sustained-burst` / `peak-inference` / `custom` (5690b8c)
+- Z-5 (GPU watt deviance): `/v1/gpu` + dashboard panel.
+  `nvidia-smi --query-gpu=index,power.draw,power.limit` parsed +
+  classified against operator-authored `/etc/selfdef/gpu-policy.toml`.
+  4 classification levels with configurable tolerance (a26a75c)
+- Z-6 (composite autohealth): `/v1/health` + dashboard top panel +
+  `selfdefctl health` CLI. Aggregates alerts/network/storage/raid/
+  gpu/cpu into single composite worst-state (fedf693 + 4e90962)
+- Z-7 (network state): `/v1/network` + dashboard panel.
+  Probes internet (ping -c 1 -W 2), DNS (getent), cloudflared /
+  tailscaled / traefik (systemctl is-active). 4 unit + 1 integration
+  test (aede715)
+- Z-9 (software RAID): `/v1/raid` + dashboard panel.
+  `/proc/mdstat` parser with level-aware degraded/failed thresholds
+  (raid0/linear → red on any missing; raid1/5/10 → yellow on 1, red
+  on 2+; raid6 → yellow on 1-2, red on 3+). 10 unit + 1 integration
+  test (b8d2b1a)
+- Z-10 (storage state): `/v1/storage` + dashboard panel.
+  `df -P` parser (excludes tmpfs/devtmpfs/squashfs/etc. by default,
+  `SELFDEF_STORAGE_INCLUDE_PSEUDO=1` to include) + walks 3 selfdef-
+  managed log dirs for bytes + file counts. Thresholds: green
+  (< 70 %), yellow (70-89 %), red (≥ 90 %). 6 unit + 1 integration
+  test (7bd0313)
+- Z-13 (SD-R83 modules-diff portion): `GET /v1/modules/diff`.
+  Pure set-difference partitions catalog × host-active modules.toml
+  into installed/available/orphaned buckets. 3 unit + 1 integration
+  test (09b8385)
+
+#### Cross-cutting module check surface
+
+- `GET /v1/modules/:name/check` — invokes `<modules_dir>/<name>/
+  install/check.sh` per the module-author contract; structured
+  envelope with exit_code + ok + stdout/stderr (each truncated at
+  64 KiB). Slug regex-validated against directory traversal. Closes
+  health-probe gap across 12 operator modules (MS016/17/18/22/23/
+  24/25/26/28/29/30/31) (c1f41c6)
+
+#### MS009 audit-cycles fullstack
+
+- `GET /v1/audit-chains` — composite chain-check across the 3
+  chained-audit watchdogs (perimeter/guardian/scheduler). Each
+  watchdog's `audit_chain_check` runs against its OCSF JSONL file;
+  per-chain ok + events_verified + error string (line number when
+  broken) (f70f231)
+- Dashboard "Audit chains" panel (8c1cbba)
+- `selfdefctl audit-chains` CLI verb (0888979)
+
+#### MS019 security threat model — /v1/* surface coverage
+
+- `SECURITY.md` Assets table + API surface section updated for the
+  11 new /v1/* endpoints shipped this session. Information-disclosure
+  + subprocess-DoS profile documented; cached-vs-live probe contract
+  documented for operators (2a81cc4)
+
+#### MS013 SDD charter-tracking
+
+- 11 SDDs promoted from review or draft → implemented as production
+  caught up to spec status: SDD-008 (notifications, body said
+  shipped but header said draft — reconciled), SDD-013/014/016/017
+  (Stage-2 SDDs), SDD-015 (perimeter coexistence), SDD-018
+  (hardware-aware modules), SDD-022 (hardware exploit doctrine),
+  SDD-023 (cross-repo model taxonomy), SDD-027/028/029/030/031
+  (four-watchdog set + UX coherence harness) (986388a + 74d6a13 +
+  6a8c222 + 63a3616 + 9a61b87)
+- SDD-026 (operator dashboard) promoted draft → review with
+  7-of-13 Z-vectors enumerated with commit hashes (9a61b87)
+- MS013 status tally after session: 21 implemented (was 7 pre-
+  session), 1 review (was 9), 3 scoping, 18 draft (was 24)
+
+#### Info-hub knowledge layer (PR #12)
+
+- `perimeter-audit-log-corruption.md` — fills SelfdefPerimeterChainBroken
+  alert runbook gap (077e7c2)
+- `network-degraded.md` — operator runbook for /v1/network failures
+  with 5-pattern triage matrix + recovery procedures + opt-out
+  section (b9ee3f9)
+- `storage-degraded.md` — operator runbook for /v1/storage failures
+  with 7-pattern triage matrix + cross-reference to audit-log-
+  corruption runbooks (b9ee3f9)
+
+#### Workspace hygiene
+
+- 4 workspace warnings cleared (selfdef-trust-score-engine +
+  selfdef-context-sensitivity-policy + selfdef-jump-hash unused
+  imports; selfdef-cuckoo-filter needless mut) (fb00800)
+- Clippy lints cleared across the four-watchdog ship-surface
+  (4926422)
+- `docs/src/ops/api.md` extended with the full /v1/* route table
+  (98b1dbe)
+
 ### Added — MS006 / SDD-009: modules surface + MS027 Prometheus alerts + cross-cutting CI/release coherence gating (2026-05-20)
 
 Follow-on round after the four-watchdog production landing. Closes
