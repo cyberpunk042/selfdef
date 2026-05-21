@@ -1,0 +1,10 @@
+# Profile: enforce.
+#
+# AIDE check runs daily. ANY diff → exit 1 → systemd marks the
+# unit failed → operator-alertable via `systemctl status` and
+# the journald collector + correlator + notifier surfaces.
+#
+# Use after baseline maturation. Switching to enforce too early
+# generates false-positive churn from legitimate package updates.
+
+profile = "enforce"

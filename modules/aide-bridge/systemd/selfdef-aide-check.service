@@ -1,0 +1,26 @@
+# selfdef aide-bridge — AIDE check service unit.
+#
+# Runs the wrapper script which invokes aide --check and emits
+# a structured diff event tagged 'selfdef-aide'.
+
+[Unit]
+Description=selfdef AIDE filesystem integrity check
+Documentation=https://github.com/cyberpunk042/selfdef modules/aide-bridge/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/aide-check.sh
+# AIDE needs to read EVERYTHING in the watch set — broader privs
+# than time-skew-watchdog. Run as root + lock down at the
+# systemd-hardening layer (the script itself is read-only against
+# the filesystem).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/var/lib/aide /dev/log
+# AIDE is CPU-bound on hashing; nice the unit so the host stays
+# responsive during the daily check.
+Nice=10
+IOSchedulingClass=idle

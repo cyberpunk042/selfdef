@@ -1,0 +1,19 @@
+# selfdef aide-bridge — daily AIDE check timer.
+#
+# Fires at 03:30 + 15min jitter. Persistent=true catches up after
+# missed runs (host was asleep). Runs in background — the service
+# unit is nice 10 + IOSchedulingClass idle so the operator
+# doesn't notice.
+
+[Unit]
+Description=selfdef daily AIDE filesystem integrity check
+Documentation=https://github.com/cyberpunk042/selfdef modules/aide-bridge/README.md
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=selfdef-aide-check.service
+
+[Install]
+WantedBy=timers.target

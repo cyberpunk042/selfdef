@@ -1,0 +1,10 @@
+# Profile: baseline (default).
+#
+# AIDE check runs daily. Diffs from the baseline DB are logged via
+# logger tagged 'selfdef-aide' but the systemd unit EXITS 0 even on
+# diff. Operator-pull surface: dashboard/correlator surfaces the
+# diff events; no automatic alerting / blocking.
+#
+# Suitable for hosts where baseline is still maturing.
+
+profile = "baseline"

@@ -1,0 +1,47 @@
+name        = "aide-bridge"
+version     = "0.1.0"
+summary     = "AIDE file integrity monitoring — daily baseline check + diff-emit via logger tagged selfdef-aide. Mitigates T1014 Rootkit + T1547.001 Boot/Logon Autostart + T1554 Compromise Client Software Binary"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["filesystem-integrity"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "aide" },
+    { kind = "binary", value = "aideinit" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — snapshots filesystem state + records diff
+#                        to journal/selfdef-aide tag; does NOT
+#                        alarm/fail systemd unit.
+# `enforce`            — same probe; exits 1 on any diff (systemd
+#                        marks the unit failed; correlator picks
+#                        up the operator-alertable state).
+default = "baseline"
+available = ["baseline", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/aide/aide.conf.d/50-selfdef.conf",
+    "/etc/systemd/system/selfdef-aide-check.service",
+    "/etc/systemd/system/selfdef-aide-check.timer",
+    "/usr/local/libexec/selfdef/aide-check.sh",
+    "/var/lib/aide",
+    "/etc/selfdef/modules/aide-bridge.toml",
+]
