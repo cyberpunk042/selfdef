@@ -60,6 +60,8 @@ check "HTML: cpu-section"                 "${HTML}" 'id="cpu-section"'          
 check "HTML: cpu aggregate"               "${HTML}" 'id="cpu-aggregate"'          || failures=$((failures + 1))
 check "HTML: flex-profile-section"        "${HTML}" 'id="flex-profile-section"'   || failures=$((failures + 1))
 check "HTML: flex-profile aggregate"      "${HTML}" 'id="flex-profile-aggregate"' || failures=$((failures + 1))
+check "HTML: inference-backends-section"  "${HTML}" 'id="inference-backends-section"'   || failures=$((failures + 1))
+check "HTML: inference-backends aggregate" "${HTML}" 'id="inference-backends-aggregate"' || failures=$((failures + 1))
 check "HTML: health-section"              "${HTML}" 'id="health-section"'         || failures=$((failures + 1))
 check "HTML: health aggregate"            "${HTML}" 'id="health-aggregate"'       || failures=$((failures + 1))
 check "HTML: audit-chains-section"        "${HTML}" 'id="audit-chains-section"'   || failures=$((failures + 1))
@@ -83,6 +85,7 @@ check "JS: refreshRaid()"                 "${JS}"   'function refreshRaid'      
 check "JS: refreshGpu()"                  "${JS}"   'function refreshGpu'            || failures=$((failures + 1))
 check "JS: refreshCpu()"                  "${JS}"   'function refreshCpu'            || failures=$((failures + 1))
 check "JS: refreshFlexProfile()"          "${JS}"   'function refreshFlexProfile'    || failures=$((failures + 1))
+check "JS: refreshInferenceBackends()"    "${JS}"   'function refreshInferenceBackends' || failures=$((failures + 1))
 check "JS: refreshHealth()"               "${JS}"   'function refreshHealth'         || failures=$((failures + 1))
 check "JS: refreshAuditChains()"          "${JS}"   'function refreshAuditChains'    || failures=$((failures + 1))
 check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
@@ -101,6 +104,7 @@ check "JS: setInterval refreshRaid"              "${JS}" 'setInterval\(refreshRa
 check "JS: setInterval refreshGpu"               "${JS}" 'setInterval\(refreshGpu'             || failures=$((failures + 1))
 check "JS: setInterval refreshCpu"               "${JS}" 'setInterval\(refreshCpu'             || failures=$((failures + 1))
 check "JS: setInterval refreshFlexProfile"       "${JS}" 'setInterval\(refreshFlexProfile'     || failures=$((failures + 1))
+check "JS: setInterval refreshInferenceBackends" "${JS}" 'setInterval\(refreshInferenceBackends' || failures=$((failures + 1))
 check "JS: setInterval refreshHealth"            "${JS}" 'setInterval\(refreshHealth'          || failures=$((failures + 1))
 check "JS: setInterval refreshAuditChains"       "${JS}" 'setInterval\(refreshAuditChains'     || failures=$((failures + 1))
 
@@ -118,6 +122,7 @@ check "JS: GET /v1/raid"                 "${JS}"   'get\("/v1/raid"\)'          
 check "JS: GET /v1/gpu"                  "${JS}"   'get\("/v1/gpu"\)'            || failures=$((failures + 1))
 check "JS: GET /v1/cpu"                  "${JS}"   'get\("/v1/cpu"\)'            || failures=$((failures + 1))
 check "JS: GET /v1/flex-profile"         "${JS}"   'get\("/v1/flex-profile"\)'   || failures=$((failures + 1))
+check "JS: GET /v1/inference-backends"   "${JS}"   'get\("/v1/inference-backends"\)' || failures=$((failures + 1))
 check "JS: GET /v1/health"               "${JS}"   'get\("/v1/health"\)'         || failures=$((failures + 1))
 check "JS: GET /v1/audit-chains"         "${JS}"   'get\("/v1/audit-chains"\)'   || failures=$((failures + 1))
 

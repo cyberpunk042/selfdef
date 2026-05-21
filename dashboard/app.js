@@ -167,6 +167,9 @@
     if (kind === "flex-profile") {
       return refreshFlexProfile();
     }
+    if (kind === "inference-backends") {
+      return refreshInferenceBackends();
+    }
     if (kind === "health") {
       return refreshHealth();
     }
@@ -1145,6 +1148,46 @@
     }
   }
 
+  /// MS011 Z-2: render the inference-backend probe state. Shows
+  /// llama.cpp / vllm / bitnet.cpp / unsloth installed-state +
+  /// captured version. Operator can spot at a glance which backends
+  /// are missing from this host vs the others in the fleet.
+  async function refreshInferenceBackends() {
+    const ul = document.getElementById("inference-backends-rows");
+    const meta = document.getElementById("inference-backends-meta");
+    const aggEl = document.getElementById("inference-backends-aggregate");
+    try {
+      const resp = await get("/v1/inference-backends");
+      const backends = resp.backends || [];
+      const installedCount = backends.filter(b => b.installed).length;
+      const worst = resp.worst;
+      const aggClass = worst === "green" ? "fa-ok"
+                     : worst === "yellow" ? "fa-degraded"
+                     : "fa-unknown";
+      ul.innerHTML = backends.map(b => {
+        const css = b.state === "green" ? "fa-ok"
+                  : b.state === "yellow" ? "fa-degraded"
+                  : "fa-unknown";
+        const label = b.installed
+          ? (b.version ? b.version.slice(0, 24) : "INSTALLED")
+          : "MISSING";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${label}</span>
+          <code>${b.name}</code>
+          <small>binary: ${b.binary} · state: ${b.state}</small>
+        </li>`;
+      }).join("");
+      meta.textContent = `${installedCount}/${backends.length} installed · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = `${installedCount}/${backends.length}`;
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   /// MS009: render per-watchdog audit-chain integrity. Each row
   /// shows watchdog name + events_verified count + error detail
   /// when the chain broke. Operator-actionable: the error string
@@ -1434,6 +1477,7 @@
   refreshGpu();
   refreshCpu();
   refreshFlexProfile();
+  refreshInferenceBackends();
   refreshHealth();
   refreshAuditChains();
   refreshActionList();
@@ -1480,6 +1524,10 @@
   // Flex profile changes are operator-driven (no background drift);
   // 60 s refresh is plenty.
   setInterval(refreshFlexProfile, 60000);
+  // Inference backends are installed/uninstalled at module-apply
+  // time — 120 s refresh is fine (probes shell out to `command -v`
+  // + `--version` per backend, so we don't want it too frequent).
+  setInterval(refreshInferenceBackends, 120000);
   // Composite health aggregates 6 surfaces — costs the union of all
   // probes. 30 s gives operators a fast top-of-page glance without
   // hammering nvidia-smi / df / ping.
