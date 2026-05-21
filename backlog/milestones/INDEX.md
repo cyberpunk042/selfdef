@@ -121,17 +121,17 @@
 | MS029 | done | slm-cpu-loop module shipped + L2 bats + /v1/modules/:name/check |
 | MS030 | done | tensor-parallel-inference module shipped + L2 bats + /v1/modules/:name/check |
 | MS031 | partial | wasm-aot-cache module shipped + L2 bats; SDD-022 (hardware-exploit doctrine, including wasm AOT) implemented |
-| MS032 | stage-1 | sandbox tiers per Phase-4 dump; design + scaffolding pending |
-| MS033 | stage-1 | policy + trace per Phase-3 dump; design pending |
-| MS034 | stage-1 | communication boundary per dump 3450-3488; design pending |
-| MS035 | stage-1 | capability tokens per dump 3489-3527; design pending |
-| MS036 | stage-1 | tool sandboxes per dump 3528-3549; design pending |
-| MS037 | stage-1 | filesystem boundary per dump 3550-3593; design pending |
-| MS038 | stage-1 | network boundary per dump 3594-3621; design pending |
-| MS039 | stage-1 | 7 authority levels + 5 trust rings per dump 17215-17532; design pending |
-| MS040 | stage-1 | authority + profiles per dump 17468-17489; design pending |
-| MS041 | stage-1 | commit authority per dump 17389-17421; design pending |
-| MS042 | stage-1 | tool authority per dump 17422-17445; design pending |
+| MS032 | partial | sandbox-tier crates shipped: `selfdef-sandbox-tier-policy` (15 tests), `selfdef-sandbox-dispatcher` (14 tests), `selfdef-sandbox-fs-isolation`, `selfdef-sandbox-network-isolation`, `selfdef-sandbox-mirror` (~1400 LOC total). Missing: HTTP/CLI/dashboard operator surfaces. |
+| MS033 | partial | 122 policy crates shipped under `crates/selfdef-policy-*` (conflict-detector, bundle-signature, diff-classifier, namespace, spec-validator, cooldown-window, traffic-ramp, change-window, decision-batcher, etc). Missing: composite policy-trace operator surface. |
+| MS034 | partial | `selfdef-communication-boundary` crate shipped (372 LOC). Missing: HTTP/CLI surface + dashboard panel. |
+| MS035 | partial | Capability-token crates shipped: `selfdef-capability-token-store` (9 tests), `selfdef-capability-word` (496 LOC), `selfdef-capability-mirror` (416 LOC), `selfdef-tool-capability-policy` (12 tests), `selfdef-profile-authority-gate` (660 LOC). Missing: operator-facing CLI/HTTP. |
+| MS036 | partial | `selfdef-sandbox-dispatcher` crate (tool-sandbox dispatching) + sandbox-tier policy shipped. Missing: per-tool sandbox status HTTP route. |
+| MS037 | partial | `selfdef-filesystem-boundary` crate shipped (496 LOC). Missing: HTTP/CLI surface. |
+| MS038 | partial | `selfdef-network-boundary` crate shipped (459 LOC). Missing: HTTP/CLI surface. |
+| MS039 | partial | Authority-tier crates shipped: `selfdef-mode-transition-authority`, `selfdef-toggle-audit-authority`, `selfdef-config-mutation-authority`, `selfdef-recovery-snapshot-authority`, `selfdef-profile-authority-gate` (660 LOC). Missing: composite operator surface. |
+| MS040 | partial | `selfdef-profile-authority-gate` crate shipped (660 LOC). Missing: operator-facing profile-switch CLI/HTTP surface. |
+| MS041 | partial | `selfdef-commit-authority` crate shipped (473 LOC, 22 tests). Missing: HTTP/CLI surface + dashboard integration. |
+| MS042 | partial | `selfdef-tool-capability-policy` crate shipped (12 tests) + `selfdef-tool-authority` enforcement in `selfdef-tool-capability-policy`. Missing: HTTP/CLI surface. |
 | MS043 | partial | IPS operator surface — CLI shipped (selfdefctl 14 top-level verbs + many subverbs); dashboard partial (13 panels); MS045 coherence harness validates surface |
 | MS044 | done | Guardian daemon + binary + systemd unit + 4 CLI subverbs + /v1/guardian{,/history} + dashboard panel + 5 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-029 implemented) |
 | MS045 | done | UX coherence harness — 28 layers (8 L1 + 14 L2 + cargo) + CI gating per push/PR/tag (SDD-030 implemented) |
@@ -139,12 +139,21 @@
 | MS047 | done | Perimeter engine — crate + 7 CLI subverbs + /v1/perimeter{,/history} + dashboard panel + 6 runbooks + 3 Prom alerts — end-to-end fullstack (SDD-028 implemented) |
 | MS048 | done | Goldilocks scheduler — crate + 7 CLI subverbs + /v1/scheduler{,/history,/backpressure,/weights,/explain/:id} + dashboard panel + 5 runbooks + 2 Prom alerts — end-to-end fullstack (SDD-031 implemented) |
 
-**Tally as of 2026-05-21:**
+**Tally as of 2026-05-21 (post-survey reconciliation):**
 - `done`: 27 milestones (was ~8 pre-session)
-- `partial`: 10 milestones
-- `stage-1`: 11 milestones (MS032..MS042 — Phase 3+4 + authority/trust
-  surfaces from the avx-plus-plus dump; design + implementation
-  pending; tracked as the next forward queue)
+- `partial`: 21 milestones — including MS032-MS042 whose Rust crates
+  already shipped substantively (~5000+ LOC across 30+ sandbox /
+  authority / policy / boundary crates with passing test suites; the
+  initial INDEX entry marked these as `stage-1` but a 2026-05-21
+  survey of `crates/selfdef-{sandbox,capability,authority,*-boundary,
+  policy}*` found significant existing implementation that just
+  hadn't been wired to higher-level operator surfaces yet)
+- `stage-1`: 0 milestones
+
+Forward queue is now about LAYER-UP work for the MS032-MS042 partials:
+each milestone has its core Rust crates but needs the HTTP/CLI/
+dashboard/runbook layers to reach `done`. That's the same pattern
+this session executed for MS010/MS011/MS027/MS044-MS048.
 
 ## Decomposition each milestone owes
 
