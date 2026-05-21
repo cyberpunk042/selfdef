@@ -1,0 +1,39 @@
+name        = "kernel-lockdown"
+version     = "0.1.0"
+summary     = "Kernel hardening sysctl baseline — disable kexec / unprivileged BPF / userfaultfd / module load (after baseline) — mitigates T1014 Rootkit + T1547.006 Kernel Modules + T1611 Escape to Host"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-sysctl-baseline"]
+consumes    = []
+
+# Pure sysctl writes via systemd-sysctl drop-ins; no daemon, no new
+# binary. The `sysctl` binary is OS-mandatory but we still declare it
+# as a requirement for explicit failure mode.
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `balanced` (default) — disable the highest-signal vectors without
+# breaking common operator workflows. `strict` — adds module-load
+# lockdown (kernel.modules_disabled=1) which BLOCKS late module
+# load; only flip after every kernel module the operator needs is
+# already loaded.
+default = "balanced"
+available = ["balanced", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = ["/etc/sysctl.d/50-selfdef-kernel-lockdown.conf", "/etc/selfdef/modules/kernel-lockdown.toml"]

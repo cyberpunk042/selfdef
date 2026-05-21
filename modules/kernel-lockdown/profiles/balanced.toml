@@ -1,0 +1,9 @@
+# Profile: balanced (default).
+#
+# Applies the high-signal sysctl baseline (kexec disabled +
+# unprivileged BPF off + userfaultfd off + ptrace_scope 1 +
+# dmesg_restrict + perf_event_paranoid 3 + suid_dumpable 0).
+#
+# Safe to apply on any host — operator workflows are preserved.
+
+profile = "balanced"

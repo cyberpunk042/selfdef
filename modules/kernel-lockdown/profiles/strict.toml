@@ -1,0 +1,18 @@
+# Profile: strict.
+#
+# Loads balanced + strict additions:
+#   - kernel.modules_disabled = 1 (IRREVERSIBLE until reboot)
+#   - kernel.sysrq = 0
+#   - net.ipv4.conf.*.send_redirects = 0
+#
+# Operator MUST set acknowledge_modules_disabled = true in this
+# config to apply. Once set, late module loading is BLOCKED — any
+# kmod the operator forgot to load before applying will fail.
+# The host needs a reboot to relax it.
+
+profile = "strict"
+
+# Refuse-to-brick gate. Default false; operator must consciously
+# flip to true after confirming every needed kernel module is
+# already loaded.
+acknowledge_modules_disabled = false
