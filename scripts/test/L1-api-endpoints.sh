@@ -118,6 +118,10 @@ check_route "/v1/communication-boundary"  "MS034 / SDD-048" || failures=$((failu
 # rings + 6 profiles + 4 transition gates + 5 authority crates).
 check_route "/v1/authority"               "MS039 + MS040 / SDD-049" || failures=$((failures + 1))
 
+# MS033 / SDD-051 D-2 — policy-cluster discovery (8 functional
+# clusters organizing the 36-crate selfdef-policy-* ecosystem).
+check_route "/v1/policy"                  "MS033 / SDD-051" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

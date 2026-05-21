@@ -16,6 +16,7 @@ mod communication_boundary;
 mod doctor;
 mod filesystem_boundary;
 mod network_boundary;
+mod policy;
 mod sandbox_tiers;
 mod tool_authority;
 mod emit;
@@ -350,6 +351,12 @@ enum Command {
     /// envelope matrix + 4 TransitionGate variants + 5 authority
     /// crates.
     Authority,
+    /// MS033 / SDD-051 policy-and-trace operator surface. Cluster +
+    /// crate discovery for the 36-crate `selfdef-policy-*` ecosystem.
+    Policy {
+        #[command(subcommand)]
+        action: PolicyAction,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -627,6 +634,16 @@ enum SchedulerAuditCycleAction {
         #[arg(long)]
         json: bool,
     },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum PolicyAction {
+    /// Print the 8 functional clusters with their member crates
+    /// per SDD-051 § Recommended design.
+    Clusters,
+    /// Print every shipped `selfdef-policy-*` crate organized
+    /// under its cluster.
+    Crates,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1917,6 +1934,13 @@ async fn main() -> Result<()> {
         }
         Command::Authority => {
             let exit = authority::run_matrix()?;
+            std::process::exit(exit);
+        }
+        Command::Policy { action } => {
+            let exit = match action {
+                PolicyAction::Clusters => policy::run_clusters()?,
+                PolicyAction::Crates => policy::run_crates()?,
+            };
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

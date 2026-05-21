@@ -39,6 +39,7 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
+mod policy;
 mod commit_authority;
 mod communication_boundary;
 mod control;
@@ -273,6 +274,9 @@ pub fn router(state: ApiState) -> Router {
         // ladder + 5 trust rings + 6 profile envelopes + 4
         // TransitionGate variants + 5 authority crates.
         .route("/v1/authority", get(authority::show))
+        // MS033 / SDD-051 D-2 — policy-cluster discovery. 8 functional
+        // clusters organizing the 36-crate selfdef-policy-* ecosystem.
+        .route("/v1/policy", get(policy::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

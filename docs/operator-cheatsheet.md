@@ -44,6 +44,8 @@ selfdefctl network-boundary classify <bits>  # u8 → NetworkProfile (exit 0 OK;
 selfdefctl sandbox-tiers              # MS032 / SDD-047 5-tier ladder + 4 promotion gates
 selfdefctl communication-boundary     # MS034 / SDD-048 4 transports + 8 message types
 selfdefctl authority                  # MS039+MS040 / SDD-049 7 levels + 5 rings + 6 profiles + 4 gates
+selfdefctl policy clusters            # MS033 / SDD-051 8 policy-cluster taxonomy
+selfdefctl policy crates              # all shipped selfdef-policy-* crates grouped by cluster
 ```
 
 ## Per-watchdog drill-down
@@ -145,6 +147,7 @@ GET /v1/network-boundary                             (MS038 / SDD-046 D-2 5-prof
 GET /v1/sandbox-tiers                                (MS032 / SDD-047 D-2 5-tier capability ladder + 4 gates)
 GET /v1/communication-boundary                       (MS034 / SDD-048 D-2 4 transports + 8 message types)
 GET /v1/authority                                    (MS039+MS040 / SDD-049 D-2 7 levels + 5 rings + 6 profiles)
+GET /v1/policy                                       (MS033 / SDD-051 D-2 8 policy-cluster taxonomy + 30 crates)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
