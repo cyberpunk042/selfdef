@@ -1,0 +1,35 @@
+name        = "umask-baseline"
+version     = "0.1.0"
+summary     = "Operator-default umask 0027 (group-readable, world-denied) — reduces information-leak surface. Mitigates T1222 File and Directory Permissions Modification + T1083 File and Directory Discovery"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["umask-baseline"]
+consumes    = []
+
+requires    = []   # pure config; no binary requirements
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `group` (default) — 0027: owner=rwx, group=r-x, world=---.
+# `strict`          — 0077: owner=rwx, group=---, world=---.
+default = "group"
+available = ["group", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/profile.d/50-selfdef-umask.sh",
+    "/etc/login.defs.d/50-selfdef-umask.conf",
+    "/etc/selfdef/modules/umask-baseline.toml",
+]

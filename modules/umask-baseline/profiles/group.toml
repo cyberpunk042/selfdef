@@ -1,0 +1,7 @@
+# Profile: group (default).
+#
+# umask 0027 — owner-rwx + group-r-x + world-denied. Group
+# members can read shared dirs (typical operator-team workflow);
+# world (everyone else) is denied.
+
+profile = "group"

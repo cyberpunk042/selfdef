@@ -1,0 +1,7 @@
+# Profile: strict.
+#
+# umask 0077 — owner-rwx only; group + world denied. Highest-
+# assurance default for single-operator hosts where no group-
+# based sharing is wanted.
+
+profile = "strict"
