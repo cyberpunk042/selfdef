@@ -127,6 +127,49 @@ Rotate either token by replacing its file and `systemctl reload selfdefd`.
 Every response is content-typed `application/json` (except the SSE
 stream). The event body shape is the [OCSF-aligned envelope](../crates/selfdef-core/src/envelope.rs).
 
+### `/v1` — four-watchdog + modules read surface
+
+The `/v1/*` namespace exposes the per-watchdog state surface (MS044
+guardian, MS046 friction-audit, MS047 perimeter, MS048 scheduler) plus
+the MS006 modules inventory. Every route is read-only and returns
+JSON. The same auth boundary as the read endpoints above applies (UNIX
+socket = trusted; TCP = read token).
+
+| Method | Path                                  | Returns |
+|--------|---------------------------------------|---------|
+| GET    | `/v1/friction-audit`                  | Latest verdict for every shipped MS046 gate |
+| GET    | `/v1/friction-audit/history`          | Ring-buffer of historical verdicts |
+| GET    | `/v1/perimeter`                       | Active perimeter policy + last 16 verdicts |
+| GET    | `/v1/perimeter/history`               | Sigkill verdict log |
+| GET    | `/v1/guardian`                        | Guardian state + recent events |
+| GET    | `/v1/guardian/history`                | Guardian event log |
+| GET    | `/v1/scheduler`                       | Scheduler state + last 16 routing decisions |
+| GET    | `/v1/scheduler/history`               | Scheduler decision log |
+| GET    | `/v1/scheduler/backpressure`          | Per-route backpressure counters |
+| GET    | `/v1/scheduler/weights`               | Active 7-axis weight matrix per profile |
+| GET    | `/v1/scheduler/explain/:request_id`   | Single-decision detail (factors + chosen route) |
+| GET    | `/v1/modules`                         | All shipped modules with `{slug, summary, active, …}` |
+| GET    | `/v1/modules/:name`                   | Single-module detail (404 if unknown, 400 on invalid slug) |
+
+Module `:name` slugs are validated against `[a-z0-9-]{1,64}`. Any
+mismatch is `400 Bad Request` — this is the directory-traversal guard
+for the manifest-on-disk reader.
+
+The dashboard's four-watchdog panels (and the `selfdefctl trio`
+consolidated view) consume these routes. They are stable in the
+sense that any breakage is caught by the L1 + integration test
+gates in `scripts/test/coherence.sh` before a release tag.
+
+### Prometheus exposition (`/metrics`)
+
+The daemon also exposes `GET /metrics` in standard Prometheus
+exposition format. The four-watchdog series (17 gauges as of MS048)
++ the modules series (`selfdef_modules_shipped_total`,
+`selfdef_modules_active_total`) are emitted here. The MS027
+observability module ships a Grafana dashboard + Prometheus alert
+rules that consume these. No authentication is performed on
+`/metrics` over the UNIX socket; on TCP, the read token is required.
+
 ### SSE live tail
 
 The `/events/stream` endpoint subscribes to a fresh bus subscriber per
