@@ -1,0 +1,41 @@
+name        = "cron-baseline"
+version     = "0.1.0"
+summary     = "cron + at access restriction via cron.allow/at.allow — only operator-named users can schedule jobs. Mitigates T1053.003 (Scheduled Task: Cron) persistence vector"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["cron-access-restriction"]
+consumes    = []
+
+requires    = []   # /etc/cron.allow + /etc/at.allow are file-only
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `root-only` (default) — only root can use cron/at. Operator-pull
+#                        scheduled jobs go via systemd-timer (the
+#                        modern equivalent — already used by
+#                        selfdef's own detection modules).
+# `operator-list`      — root + operator-listed users via the
+#                        operator_users config field.
+default = "root-only"
+available = ["root-only", "operator-list"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/cron.allow",
+    "/etc/at.allow",
+    "/etc/cron.deny",
+    "/etc/at.deny",
+    "/etc/selfdef/modules/cron-baseline.toml",
+]

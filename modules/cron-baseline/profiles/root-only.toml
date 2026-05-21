@@ -1,0 +1,13 @@
+# Profile: root-only (default).
+#
+# /etc/cron.allow contains only `root`. No other user can run
+# `crontab -e` to install a per-user cron schedule. Same for at.
+# Reduces T1053.003 (Cron persistence) attack surface — an
+# attacker who compromises an unprivileged account cannot use
+# crontab as their persistence mechanism.
+#
+# Operator-pull scheduled jobs go via systemd-timer (e.g.
+# selfdef's aide-bridge + rkhunter-cron + lynis-cron + clamav-cron
+# all use systemd-timer, not cron).
+
+profile = "root-only"

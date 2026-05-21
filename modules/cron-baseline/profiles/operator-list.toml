@@ -1,0 +1,11 @@
+# Profile: operator-list.
+#
+# /etc/cron.allow contains root + the named operator users.
+# Operator MUST set operator_users (comma-separated) before apply
+# — empty list = root-only fallback.
+
+profile = "operator-list"
+
+# Comma-separated usernames. apply.sh trims whitespace per entry.
+# Example: operator_users = "alice,bob,maintainer"
+operator_users = ""
