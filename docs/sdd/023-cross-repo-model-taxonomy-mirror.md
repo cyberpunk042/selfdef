@@ -1,10 +1,18 @@
 # SDD-023 — Cross-repo model-taxonomy mirror doctrine
 
-> Status: **review** — codifies the SD-R71 ↔ sovereign-os R212
-> lockstep cadence as standing doctrine for the model-class
-> taxonomy.
+> Status: **implemented** — codifies the SD-R71 ↔ sovereign-os R212
+> lockstep cadence as standing doctrine for the model-class taxonomy;
+> shipped:
+>  - `selfdefctl models list` surfaces the R212 model-class taxonomy
+>    (class, size_class, quantization/weight_format) — operator-
+>    readable registry in lockstep with sovereign-os catalog
+>  - SD-R34 registry layout `<dir>/<slug>/model.toml` enforced
+>  - Cross-repo schema 1.1.0 (sovereign-os R212) honored
+>  - Surface pinned by integration test
+>    `crates/selfdef-cli/tests/cli_models_taxonomy.rs` — a future
+>    round can't silently regress the taxonomy projection
 > Owner: operator-supervised; agent-authored.
-> Last updated: 2026-05-17 (cycle 3 in progress).
+> Last updated: 2026-05-21 (status: review → implemented).
 > Builds on: SDD-022 (hardware-exploit doctrine — same 5-layer
 > pattern for hw rollups); sovereign-os R212 (schema 1.1.0); SD-R71
 > (registry mirror); R213/R214/R215/R216 (sovereign-os consumers
