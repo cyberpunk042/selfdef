@@ -134,6 +134,10 @@ check_route "/v1/mcp"                     "MS011 Z-11 / SDD-026" || failures=$((
 # MS011 Z-3 / `selfdef-flex-profile` — flex-profile state discovery.
 check_route "/v1/flex-profile"            "MS011 Z-3" || failures=$((failures + 1))
 
+# MS011 Z-2 / SDD-026 — inference-backend probe (llama.cpp / vllm /
+# bitnet.cpp / unsloth installed-state + version).
+check_route "/v1/inference-backends"      "MS011 Z-2" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

@@ -52,6 +52,7 @@ mod friction_audit;
 mod gpu;
 mod hardware;
 mod health;
+mod inference_backends;
 mod network;
 mod network_boundary;
 mod raid;
@@ -295,6 +296,10 @@ pub fn router(state: ApiState) -> Router {
         // state schema + (when DEFAULT_STATE_PATH exists) the live
         // state read.
         .route("/v1/flex-profile", get(flex_profile::show))
+        // MS011 Z-2 / SDD-026 — inference-backend probe surface.
+        // Probes for the 4 canonical backends (llama.cpp / vllm /
+        // bitnet.cpp / unsloth) + reports installed state + version.
+        .route("/v1/inference-backends", get(inference_backends::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

@@ -156,6 +156,7 @@ GET /v1/policy                                       (MS033 / SDD-051 D-2 8 poli
 GET /v1/nats                                         (MS015 / SDD-053 D-2 NATS bridge subject schema + modes)
 GET /v1/mcp                                          (MS011 Z-11 / SD-R84 MCP-interop transports + framings + curation)
 GET /v1/flex-profile                                 (MS011 Z-3 flex-profile schema + live state read when present)
+GET /v1/inference-backends                           (MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth probe)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
