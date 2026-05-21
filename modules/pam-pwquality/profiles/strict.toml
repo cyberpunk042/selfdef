@@ -1,0 +1,6 @@
+# Profile: strict.
+#
+# minlen=16, all 4 char classes, 6-char diff, enforce_for_root,
+# dictionary check enabled (requires cracklib-dicts package).
+
+profile = "strict"

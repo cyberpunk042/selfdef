@@ -1,0 +1,38 @@
+name        = "pam-pwquality"
+version     = "0.1.0"
+summary     = "PAM password complexity enforcement via pam_pwquality — minlen + char-class diversity + dictionary check. Mitigates T1110.001 (Password Guessing) at the SET-time layer (before pam-faillock catches brute-force at use-time)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["pam-password-complexity"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "pwscore" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — minlen=12, 3 char classes required, retry=3.
+# `strict`            — minlen=16, all 4 char classes, enforce_for_root,
+#                      no dictionary words.
+default = "standard"
+available = ["standard", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/security/pwquality.conf.d/50-selfdef.conf",
+    "/etc/selfdef/modules/pam-pwquality.toml",
+]

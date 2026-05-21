@@ -1,0 +1,6 @@
+# Profile: standard (default).
+#
+# minlen=12, 3-of-4 char classes, 4-char diff from old. Root
+# bypassed (recovery-friendly).
+
+profile = "standard"
