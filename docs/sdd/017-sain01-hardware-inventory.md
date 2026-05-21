@@ -1,8 +1,21 @@
 # SDD-017 — SAIN-01 hardware inventory awareness
 
-> Status: **review** — fifth Stage-2 SDD (post-Q-A..Q-H complete)
+> Status: **implemented** — fifth Stage-2 SDD; shipped end-to-end
+> alongside the parent SDD-018 (hardware-aware modules):
+>  - `selfdef_hardware::probe` — CPU (AVX-512 family detection),
+>    memory, GPUs (nvidia-smi CSV parsers), motherboard DMI, PCIe
+>    inventory, thermals (/sys/class/hwmon walk)
+>  - `Sain01Match` + `Sain01Verdict` (FullMatch / PartialMatch /
+>    NoMatch) — 5-axis match (CPU AVX-512 VNNI/BF16, ≥256 GB memory,
+>    ≥2 GPUs, motherboard ProArt X870E, PCIe dual x8)
+>  - `selfdefctl hardware {match, posture}` CLI verbs surface the
+>    verdict + per-axis breakdown
+>  - Doctor `check_hardware` integration
+>    (`crates/selfdef-cli/src/doctor.rs:432`)
+>  - `GET /v1/hardware/sain01` HTTP surface (commit 520501d)
+>  - Dashboard "Host hardware" panel renders the sain-01 badge
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-21 (status: review → implemented)
 > Closes findings: net-new — operator goal: "powerhouse OS" with
 > "personalization" + "advanced features so well suited" for the
 > SAIN-01 spec (AVX-512 + RTX PRO 6000 + RTX 3090 + 256GB RAM).

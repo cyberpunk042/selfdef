@@ -1,8 +1,19 @@
 # SDD-014 — `shared-audit-summary` notifier channel (Stage-2 PR 2/4)
 
-> Status: **review** — second Stage-2 SDD per SDD-012 Q-H ordering
+> Status: **implemented** — second Stage-2 SDD per SDD-012 Q-H ordering;
+> shipped end-to-end:
+>  - `[shared_audit_summary]` config block (path + enabled toggle +
+>    JSONL twin per Q14-C)
+>  - Notifier-engine channel emits OCSF Detection-2004 / Audit-1003
+>    events to the shared-audit-summary path
+>  - `check_shared_audit_summary` doctor check
+>    (`crates/selfdef-cli/src/doctor.rs:360`) — verifies path is
+>    writable when channel enabled; skipped on non-SAIN-01 deployments
+>  - Tested via `crates/selfdef-cli/src/doctor.rs::sdd_013_tests::
+>    sdr9_shared_audit_summary_active_on_sain01` +
+>    `sdr9_shared_audit_summary_skipped_on_generic`
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-21 (status: review → implemented)
 > Closes findings: SDD-012 Q-C (audit-log sharing on SAIN-01)
 > Derived from: SDD-012 (integration design); SDD-013 ([deployment.target] config); SDD-008 (notifications orchestration)
 

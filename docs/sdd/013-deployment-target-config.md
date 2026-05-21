@@ -1,8 +1,17 @@
 # SDD-013 — `[deployment.target]` config + path resolution
 
-> Status: **review** — first Stage-2 PR (per SDD-012 Q-H ordering)
+> Status: **implemented** — first Stage-2 PR (per SDD-012 Q-H ordering);
+> shipped end-to-end:
+>  - `selfdef_config::DeploymentTarget` enum (Sain01 / Generic)
+>  - `[deployment]` config block with `target` key
+>  - `check_deployment_target` doctor check
+>    (`crates/selfdef-cli/src/doctor.rs:1045`)
+>  - `selfdef_config::resolve_perimeter_check_overlap` deployment-
+>    target-aware resolver (used by SDD-015)
+>  - Sain-01 vs Generic posture honored across modules (e.g. integrity-
+>    sentinel + perimeter + friction-audit paths)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-21 (status: review → implemented)
 > Closes findings: SDD-012 Q-G (non-SAIN-01 deployment posture)
 > Derived from: SDD-012 (integration design); SDD-002 (defaults-that-work; existing config plumbing)
 

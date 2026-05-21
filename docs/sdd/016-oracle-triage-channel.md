@@ -1,8 +1,19 @@
 # SDD-016 — `oracle-triage` notifier channel (Stage-2 PR 4/4)
 
-> Status: **review** — fourth + final Stage-2 SDD per SDD-012 Q-H ordering
+> Status: **implemented** — fourth + final Stage-2 SDD per SDD-012 Q-H
+> ordering; shipped end-to-end:
+>  - `[oracle_triage]` config block (endpoint + rate-limit per
+>    operator policy)
+>  - Notifier-engine channel delivers triage payloads to the operator-
+>    configured Oracle Core endpoint
+>  - `check_oracle_triage` doctor check
+>    (`crates/selfdef-cli/src/doctor.rs:444`) — surfaces rate-limit
+>    state + rejects malformed endpoints + skipped when disabled
+>  - 4 unit tests in `crates/selfdef-cli/src/doctor.rs::sdd_013_tests`
+>    covering rate-limit surfaced, zero-rate warn, bad-endpoint reject,
+>    skipped-when-disabled
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-21 (status: review → implemented)
 > Closes findings: SDD-012 Q-D (selfdef-side Oracle Core integration)
 > Derived from: SDD-012 (integration design); SDD-014 (shared-audit-summary); sovereign-os SDD-011 (inference backend stack); sovereign-os SDD-005 (sain-01 profile)
 
