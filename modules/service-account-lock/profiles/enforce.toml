@@ -1,0 +1,11 @@
+# Profile: enforce.
+#
+# For every service account with an interactive shell:
+#   1. Record original shell to /etc/selfdef/service-accounts-
+#      original.txt (for uninstall restore)
+#   2. chsh user → /usr/sbin/nologin (or /sbin/nologin if
+#      /usr/sbin/nologin missing)
+#   3. passwd -l user (lock the password field; ! prefix in
+#      /etc/shadow)
+
+profile = "enforce"

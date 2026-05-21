@@ -1,0 +1,7 @@
+# Profile: audit (default).
+#
+# Walk /etc/passwd + report every service account (UID < 1000)
+# that has an interactive shell. Do NOT modify. Safe baseline
+# collection.
+
+profile = "audit"
