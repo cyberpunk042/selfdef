@@ -1,0 +1,11 @@
+# Profile: noaccess (default).
+#
+# hidepid=2 (noaccess). Non-root users cannot OPEN /proc/<pid>
+# entries belonging to other users, but the dir entries are
+# still listed by getdents() (so `ls /proc | wc -l` still
+# returns total PID count).
+#
+# Most operator workflows continue to work: htop + ps -u $USER
+# + own-user inspection. Other-user inspection requires sudo.
+
+profile = "noaccess"

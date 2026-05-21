@@ -1,0 +1,24 @@
+# Profile: invisible.
+#
+# hidepid=4 (invisible). Strongest. Non-root users cannot SEE
+# /proc/<pid> entries of other users — getdents() returns them
+# filtered. `ls /proc | wc -l` only shows own-user PIDs.
+#
+# Operator must set acknowledge_hidepid=true after confirming
+# no operator daemon needs cross-user /proc enumeration. Some
+# breakage points:
+# - dbus-daemon needs access to other users' /proc for service
+#   activation tracking
+# - Some monitoring tools (netdata, prometheus node-exporter)
+#   running as non-root cannot collect process metrics
+# - polkit may misbehave for cross-user policy decisions
+
+profile = "invisible"
+
+# Refuse-to-brick gate.
+acknowledge_hidepid = false
+
+# Optional gid that bypasses hidepid (operator-pull). Set to
+# operator's monitoring group (e.g. node-exporter) to keep
+# observability functional.
+bypass_gid = ""

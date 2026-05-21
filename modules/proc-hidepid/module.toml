@@ -1,0 +1,45 @@
+name        = "proc-hidepid"
+version     = "0.1.0"
+summary     = "/proc hidepid mount option — non-root users cannot enumerate other users' processes via /proc/<pid>. Mitigates T1057 Process Discovery + T1083 File and Directory Discovery"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["proc-hidepid"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+    { kind = "binary", value = "mount" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `noaccess` (default) — hidepid=noaccess (2): non-root sees own
+#                        /proc/<pid> only. Compatible with most
+#                        operator workflows (htop, ps for own user).
+# `invisible`          — hidepid=invisible (4): non-root sees own
+#                        + the proc dir itself; other users'
+#                        /proc/<pid> entries are NOT VISIBLE
+#                        (even getdents() returns them filtered).
+#                        Requires acknowledge_hidepid=true (some
+#                        operator daemons fail with this).
+default = "noaccess"
+available = ["noaccess", "invisible"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/proc-sys-fs-binfmt_misc.automount.d/50-selfdef.conf",
+    "/etc/fstab.d/50-selfdef-proc.conf",
+    "/etc/selfdef/modules/proc-hidepid.toml",
+]
