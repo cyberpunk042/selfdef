@@ -1,11 +1,17 @@
 # SDD-032 — eBPF substrate + Tetragon TracingPolicy ledger — MS016
 
-> Status: **draft** — Stage-2 architectural spec retrofitted for the
-> in-tree MS016 eBPF substrate. The substrate ships in production
-> (3 baseline probes + 5 TracingPolicies under modules/agent-guard/
-> + collector pair); this SDD canonicalizes its design so subsequent
-> milestones (MS017 agent-guard, MS044 guardian, MS047 perimeter)
-> can cite it as the shared kernel-visibility contract.
+> Status: **implemented** — Stage-2 architectural spec for the in-tree
+> MS016 eBPF substrate. The substrate ships in production (3 baseline
+> probes + 5 TracingPolicies under modules/agent-guard/ + collector
+> pair); this SDD canonicalizes its design so subsequent milestones
+> (MS017 agent-guard, MS044 guardian, MS047 perimeter) can cite it
+> as the shared kernel-visibility contract. The 4 additional eBPF
+> programs noted in `selfdef-ebpf/README.md` (proc-ancestry /
+> hidden-process / ld-preload-watch / kmod-watch / tcp-fingerprint —
+> 5 listed, 4 deferred after the 1 execve baseline) are the next
+> kernel-side arc per MS016 + this SDD's roadmap section, but the
+> substrate itself (loader infrastructure + collector + TracingPolicy
+> ledger) is end-to-end production today.
 > Owner: operator-supervised; agent-authored.
 > Last updated: 2026-05-21.
 > Implements milestone: MS016 (catalog `backlog/milestones/MS016-ebpf-programs-tetragon-tracingpolicies.md`)

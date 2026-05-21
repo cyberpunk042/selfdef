@@ -6,6 +6,91 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS013-MS050 catalog + SDD layer-up batch (2026-05-21, continued)
+
+Continued from the earlier 2026-05-21 entry below. This block captures
+commits ecf212d → 5cb64fd: 15 milestones promoted partial → done +
+12 retroactive Stage-2 SDDs authored.
+
+#### Milestone promotions (partial → done)
+
+11 milestones promoted to done by layering CLI + HTTP discovery
+surfaces over already-shipped Rust crate clusters:
+
+- MS035 capability-tokens — `selfdefctl capability-tokens` + `GET /v1/capability-tokens` (14e12cc)
+- MS037 filesystem-boundary — `selfdefctl filesystem-boundary` + `GET /v1/filesystem-boundary` (eba43c7)
+- MS038 network-boundary — `selfdefctl network-boundary` + `GET /v1/network-boundary` (eba43c7)
+- MS032 sandbox-tiers — `selfdefctl sandbox-tiers` + `GET /v1/sandbox-tiers` (aa0f77a)
+- MS034 communication-boundary — `selfdefctl communication-boundary` + `GET /v1/communication-boundary` (aa0f77a)
+- MS039 + MS040 authority — `selfdefctl authority` + `GET /v1/authority` (e99caaf)
+- MS036 tool-sandboxes — promoted via MS032 cross-coverage (6f8f088)
+- MS033 policy + trace — `selfdefctl policy` + `GET /v1/policy` (cdd5039)
+- MS028 bitnet-gpu — promoted via cross-cutting modules surface (78c5f64)
+- MS031 wasm-aot-cache — promoted via cross-cutting modules surface (78c5f64)
+- MS014 ssh-wrap — `selfdefctl ssh-wrap` (HTTP intentionally deferred per SDD-052 D-2) (ecf212d)
+- MS015 NATS — `selfdefctl nats` + `GET /v1/nats` (ecf212d)
+- MS041 commit-authority — `selfdefctl commit-authority` + `GET /v1/commit-authority` (a831fdc + 9675521)
+- MS042 tool-authority — `selfdefctl tool-authority` + `GET /v1/tool-authority` (1e28fe4 + b0493e4)
+
+#### MS011 (operator dashboard + flex profile) — all 13 Z-vectors at discovery
+
+- Z-1 panel-nav strip (1c4f885) — 14 anchor links across panels
+- Z-2 `GET /v1/inference-backends` (222c9a1) — probes llama.cpp / vllm / bitnet.cpp / unsloth
+- Z-3 `selfdef-flex-profile` crate + CLI + HTTP discovery (ca44734 + 515c76d)
+- Z-8 `ModuleInstallPaths` field surfaced via `/v1/modules` + dashboard scope badge (e0fab99 + fb9faa4)
+- Z-11 `GET /v1/mcp` MCP-interop foundation discovery (2e95a5c)
+- Z-12 `GET /v1/repl` multi-tier REPL discovery (5cb64fd)
+- Z-13 SD-R86 `GET /v1/modules/install-options` dep-readiness (104f661)
+
+All 13 Z-vectors now have at least probe/discovery HTTP layers
+shipped. Multi-commit follow-up arcs remain: Z-1 full 8-tab UX
+restructure, Z-2 shell-out invocation, Z-3 apply+revert mutation
+surfaces, Z-12 Tier 1 Python implementation completion, Z-13 SD-R87
+topological install + SD-R86 hardware-gate enrichment.
+
+#### MS013 SDD charter-tracking — 12 SDDs authored or promoted
+
+- SDD-043 commit-authority (7c64aec) — MS041, 168 lines
+- SDD-044 capability-tokens (6ede095) — MS035, 195 lines
+- SDD-045 filesystem-boundary (aa53049) — MS037, 187 lines
+- SDD-046 network-boundary (7af029f) — MS038, 176 lines
+- SDD-047 sandbox-tiers (ab7e4e1) — MS032, 185 lines
+- SDD-048 communication-boundary (1a64c78) — MS034, 201 lines
+- SDD-049 authority tiers + trust rings + profile matrix (8333acd) — MS039 + MS040, 216 lines
+- SDD-050 tool authority — 11-crate composable pipeline (eb98cfb) — MS042, 214 lines
+- SDD-051 policy and trace — 36-crate cluster (6f8f088) — MS033, 179 lines
+- SDD-052 ssh-wrap (2ebfe45) — MS014, 114 lines
+- SDD-053 NATS bridge (2ebfe45) — MS015, 107 lines
+- SDD-032 ebpf-substrate (this commit) — MS016 status reconciled: draft → implemented
+
+9 module SDDs batch-promoted (b0c6398): SDD-033 agent-guard, SDD-034
+observability, SDD-036 slm-cpu-loop, SDD-037 tensor-parallel-inference,
+SDD-038 wasm-aot-cache, SDD-039 bridge-l2, SDD-040 polarproxy,
+SDD-041 detect-host, SDD-042 integrity-sentinel.
+
+Final SDD tally:
+  implemented: 43 (was 7 pre-session)
+  draft:        6 (forward-looking cycle vectors)
+  review:       2 (SDD-012 sain-01 + SDD-026 operator-dashboard)
+  scoping:      3 (SDD-009/010/011 operator-gated)
+  total:       54
+
+INDEX.md tally:
+  done:    42 milestones (was ~8 pre-session)
+  partial:  6 milestones (all with explicit deferred-for-cause:
+            MS002 + MS016 eBPF kernel programs, MS008 sain-01
+            integration, MS011 Z-vector substantive arcs, MS013
+            ongoing charter-tracking)
+  stage-1:  0 milestones
+
+#### Cross-cutting infrastructure shipped this round
+
+- `selfdef-flex-profile` (NEW crate, ca44734) — 322 LOC, 8 tests:
+  FlexProfile + Delta + DeltaOp + RevertRecord with apply / revert /
+  inverse / round-trip JSON
+- 26 top-level selfdefctl verbs (was 13 pre-session)
+- 50+ /v1/* HTTP routes (was ~15 pre-session)
+
 ### Added — MS009 + MS010 + MS011 + MS019 + MS013 charter-tracking (2026-05-21)
 
 Multi-cycle session brought 5+ milestones across additional Stage-2+
