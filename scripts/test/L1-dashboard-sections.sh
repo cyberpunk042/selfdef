@@ -45,6 +45,7 @@ check "HTML: scheduler-section"          "${HTML}" 'id="scheduler-section"'     
 check "HTML: modules-section"            "${HTML}" 'id="modules-section"'        || failures=$((failures + 1))
 check "HTML: alerts-section"              "${HTML}" 'id="alerts-section"'         || failures=$((failures + 1))
 check "HTML: alerts aggregate"            "${HTML}" 'id="alerts-aggregate"'       || failures=$((failures + 1))
+check "HTML: panel-nav"                   "${HTML}" 'id="panel-nav"'              || failures=$((failures + 1))
 check "HTML: hardware-section"            "${HTML}" 'id="hardware-section"'       || failures=$((failures + 1))
 check "HTML: hardware sain01 badge"       "${HTML}" 'id="hardware-sain01-badge"'  || failures=$((failures + 1))
 check "HTML: network-section"             "${HTML}" 'id="network-section"'        || failures=$((failures + 1))

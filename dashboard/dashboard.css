@@ -207,3 +207,27 @@ footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.7
 .fa-rows .fa-detail { color: var(--fg-dim); font-size: 0.85rem; }
 .fa-rows .fa-runbook-link { color: var(--accent); font-size: 0.8rem; }
 .fa-rows li.empty { color: var(--fg-dim); font-style: italic; display: block; }
+
+/* MS011 Z-1 partial — top-of-page panel navigation strip. */
+#panel-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+#panel-nav a {
+  padding: 0.2rem 0.6rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+#panel-nav a:hover {
+  background: var(--bg-3);
+  border-color: var(--info);
+}
