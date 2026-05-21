@@ -20,6 +20,7 @@ surfaces the shipped modules introduce.
 | HTTP ack URL leakage | `[notifier.ack_link_base]` + 6 outbound channels (smtp, slack, discord, twilio, wall, write) (per SDD-008 D-4 HTTP ack, Phase 7 F-2032-002, D-024 write-channel addendum) | When `ack_link_base` is configured, the daemon embeds a `<base>/<token>` URL in every outbound notification. **The token IS the auth** for the `GET /notify/ack/:token` route — there is no bearer-token check. UUIDv7 has ~74 bits of post-timestamp entropy → not brute-forceable online. **Realistic attack surface is third-party log leakage**: SMTP relay logs / Slack workspace search / Discord audit log / Twilio dashboard / `wall(1)`-readable TTYs / `write(1)`-targeted TTYs all see the full URL. The `write(1)` channel narrows broadcast vs `wall(1)` (only listed users' TTYs receive it), but each listed user — and anyone reading over their shoulder — still sees the URL in the rendered banner. Operators sharing a Slack channel with non-SOC members, or auto-archiving SMS, leak ack capability to those readers. Mitigation: prefer machine-only Q-G channels (pagerduty / loki / opensearch / thehive — these do NOT include the URL in their wire body) or restrict the human-facing channels to SOC-only delivery destinations. After the token-stability fix (Phase 7 F-2032-005), a leaked token stays valid for the full lifetime of the unacked row, including across rung re-fires. |
 | eBPF programs | embedded in binary | Tampering disables in-kernel detection |
 | `/metrics` endpoint | UNIX socket `/run/selfdef.sock` or TCP `<api.bind>` | Activity-fingerprint information; chained-attack timing of credential edits to daemon restart (see API surface mitigations + F-2026-066 known gap) |
+| `/v1/*` read surface | Same UNIX socket + TCP path | MS010/MS011/MS027 + four-watchdog set state. Read-only; gated by the read bearer token on TCP. Information-disclosure: hardware specs (CPU/memory/GPU inventory, sain-01 verdict), network reachability (internet/DNS/cloudflared/tailscale/traefik), filesystem usage (per-mount + selfdef log dirs), RAID degradation, GPU power draw, CPU mode. See "API surface" mitigations for the leak-on-token-compromise + subprocess-DoS profile. |
 | Tetragon policy directory | `/etc/tetragon/tetragon.tp.d/` | Writable: malicious YAML loads as kernel-level eBPF policy (Sigkill / Override / NotifyKiller / mask). Owned by the `tetragon` module install |
 | Eventstream JSONL paths | Varies — see `[collectors.eventstream].paths`, default `/var/lib/selfdef/eventstream/` | Event-injection vector. Crafted Findings can fire the notifier chain or pollute the multi-host NATS bridge via `host_tag` spoofing |
 
@@ -150,6 +151,44 @@ without per-watchdog drill-down:
   `/actions/*/run`) — those need the separate `control_token_file`.
   Verified by the integration test
   `crates/selfdef-api/tests/m12_api.rs::metrics_allows_read_capability`.
+- **`/v1/*` four-watchdog + dashboard surface** (MS010/MS011/MS027 + the
+  four-watchdog set): all `/v1/*` routes shipped to date are READ-ONLY
+  and gated by the same bearer token + UNIX-socket-filesystem-permission
+  boundary as the legacy read endpoints. The route set as of 2026-05-21:
+  `/v1/{friction-audit,perimeter,guardian,scheduler}` + their `/history`
+  siblings + `/v1/scheduler/{backpressure,weights,explain/:request_id}`
+  + `/v1/modules{,/:name}` (`:name` regex-validated `[a-z0-9-]{1,64}`
+  against directory traversal) + `/v1/alerts` (server-side classifier
+  for the 9 four-watchdog alert series) + `/v1/hardware{,/capabilities,
+  /sain01}` (cached probe, OnceLock) + `/v1/network` (live ping +
+  systemd is-active probe) + `/v1/storage` (live `df` + log-dir walk)
+  + `/v1/raid` (live `/proc/mdstat` read) + `/v1/gpu` (live `nvidia-smi`
+  power-draw vs operator-authored `/etc/selfdef/gpu-policy.toml`) +
+  `/v1/cpu` (live `/sys/devices/system/cpu/*/cpufreq/scaling_governor`
+  + SMT state read). **Information-disclosure profile**: each `/v1/*`
+  route exposes operational state (hardware specs, network reachability,
+  filesystem usage, RAID degradation, GPU power draw, CPU mode). A
+  legitimate read-token holder learns the host's complete sovereign
+  configuration; a leaked read token leaks the same. Mitigation: rotate
+  read tokens on operator action (same as `/metrics`); for hosts where
+  even read access must be operator-only, prefer the UNIX-socket
+  transport and keep TCP off. **Subprocess probe DoS**: `/v1/network`
+  invokes `ping` + `systemctl` + `getent`; `/v1/storage` invokes `df`;
+  `/v1/gpu` invokes `nvidia-smi`. Each is bounded by the OS-level
+  subprocess timeout and probe complexity (ping has `-W 2`; df returns
+  in O(ms); nvidia-smi is one CSV query). A read-token holder can
+  trigger these on every request — bound the resulting load via the
+  same rate-limit / per-token throttle posture as the other read
+  endpoints. No control-verb effect on the host.
+- **Cached vs live probes**: `/v1/hardware*` is cached per-process via
+  `OnceLock` — hardware doesn't hot-swap, so probing once at first
+  request is sufficient. `/v1/network` / `/v1/storage` / `/v1/raid` /
+  `/v1/gpu` / `/v1/cpu` re-probe on every request because their
+  underlying state DOES change (mounts fill, RAID degrades, GPU draw
+  shifts under load, CPU mode is operator-mutable). The cached-vs-live
+  distinction is part of the API contract — operators monitoring
+  hardware drift should NOT use `/v1/hardware` (it won't update);
+  operators monitoring filesystem fill SHOULD use `/v1/storage` (live).
 - **Side channel**: `selfdef_uptime_seconds` lets a scraper observe daemon
   restarts. Rotate notifier credentials via a deliberate operator action,
   not through automated watchers that key on uptime resets. See known gap
