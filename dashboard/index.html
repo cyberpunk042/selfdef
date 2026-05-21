@@ -41,6 +41,20 @@
            reset clears the set so all 17 panels become visible again. -->
       <button id="panel-visibility-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="panel-visibility-menu" aria-label="Show panel visibility menu">View ▾</button>
       <div id="panel-visibility-menu" role="menu" aria-labelledby="panel-visibility-btn" hidden></div>
+      <!-- Operator-named view presets (MS043 UX).
+           Each preset snaps hiddenPanels + activeTab + refreshRate
+           to an operator-meaningful configuration. "20 dashboards"
+           (operator verbatim) — preset-based views are the
+           tractable interim toward distinct dashboard URL paths.
+           Survives reload via localStorage selfdef.activePreset. -->
+      <label for="preset-select" id="preset-label">View preset:</label>
+      <select id="preset-select" aria-label="Operator-named dashboard view preset">
+        <option value="default" selected>Default — all panels</option>
+        <option value="security">Security — watchdogs + alerts + audit</option>
+        <option value="performance">Performance — hardware + GPU + CPU + network</option>
+        <option value="inference">Inference — health + backends + GPU + flex</option>
+        <option value="compact">Compact — always-visible strip only</option>
+      </select>
       <!-- Refresh-rate selector (MS043 UX). "Tons of modes" (operator
            verbatim) — operator picks how aggressively the panels probe
            (Fast = 0.25× / Normal = baseline / Slow = 4× / Paused).

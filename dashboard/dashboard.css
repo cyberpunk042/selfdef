@@ -388,8 +388,10 @@ main > section.operator-hidden {
   position: relative;
 }
 
-/* MS043 UX — refresh-rate selector inside #tab-nav.
- * "Tons of modes" (operator verbatim). */
+/* MS043 UX — operator-named view presets inside #tab-nav.
+ * "20 dashboards" (operator verbatim) — preset-snap views are the
+ * interim toward distinct dashboard URL paths. */
+#preset-label,
 #refresh-rate-label {
   margin-left: 0.5rem;
   color: var(--fg-2);
@@ -397,6 +399,25 @@ main > section.operator-hidden {
   font-weight: 500;
   align-self: center;
 }
+#preset-select {
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  font-size: 0.85rem;
+  cursor: pointer;
+  max-width: 18rem;
+}
+#preset-select:hover,
+#preset-select:focus {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}
+
+/* MS043 UX — refresh-rate selector inside #tab-nav.
+ * "Tons of modes" (operator verbatim). */
 #refresh-rate-select {
   padding: 0.3rem 0.5rem;
   background: var(--bg-3);

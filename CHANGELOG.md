@@ -6,6 +6,46 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX view presets (2026-05-21, batch 12)
+
+Third pillar of the operator's UX-mode requirements. Verbatim:
+*"there is over 20 dashboards"*. Distinct dashboard URL paths
+(each with its own service worker shell) is a Stage-2 arc; this
+batch ships the tractable interim — operator-named view PRESETS
+that snap `{hiddenPanels, activeTab, refreshRate}` atomically to
+a meaningful configuration in one click.
+
+- 5 shipped presets:
+  - **Default** — all 16 panels visible, no tab, normal refresh
+  - **Security** — health + 4-watchdog + alerts + audit-chains;
+    `logs` tab; normal refresh
+  - **Performance** — health + hardware + network + storage + raid
+    + gpu + cpu; `hardware` tab; fast refresh
+  - **Inference** — health + inference-backends + gpu + flex-profile;
+    `models` tab; normal refresh
+  - **Compact** — always-visible strip only (composite-health +
+    4-watchdog + alerts); `all` pseudo-tab; slow refresh
+- `index.html`: `#preset-label` + `#preset-select` placed
+  between View ▾ and Refresh in the always-visible `#tab-nav`
+  strip.
+- `app.js`: `PRESETS` table + `applyPreset(name)` writes the
+  triple (`writeHiddenPanels` → `applyHiddenPanels` →
+  `writeRefreshRate` → refresh-select sync → `window.location.hash
+  = "tab=<name>"`). Operator's post-preset manual overrides are
+  kept (preset is the snap-to point, not a lock).
+- `dashboard.css`: preset-select sized to fit the longest label
+  ("Security — watchdogs + alerts + audit"); hover/focus matches
+  refresh-rate select.
+- localStorage `selfdef.activePreset` persists the choice.
+- Service worker SHELL bumped v25 → v26.
+
+Together with batch 10's per-panel visibility menu + batch 11's
+refresh-rate selector, the always-visible strip now offers three
+operator-facing controls — what panels (View ▾), how often
+(Refresh), and which operator-meaningful view (View preset). Each
+control is independently usable + composable; presets snap all
+three at once for the most common operator workflows.
+
 ### Added — MS043 UX refresh-rate selector (2026-05-21, batch 11)
 
 Second pillar of the operator's "tons of modes" verbatim

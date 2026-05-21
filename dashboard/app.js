@@ -1850,6 +1850,127 @@
     });
   }
 
+  // ----------------------------------------------------------------
+  // MS043 UX — operator-named view presets.
+  //
+  // Verbatim operator direction: "there is over 20 dashboards".
+  // Distinct dashboard URL paths (each with its own service worker
+  // shell) is a larger Stage-2 arc; the tractable interim is
+  // operator-named view PRESETS that snap the existing dashboard's
+  // {hiddenPanels, activeTab, refreshRate} triple to a meaningful
+  // configuration in one click.
+  //
+  // 5 shipped presets:
+  //   default     — all 16 panels visible, no tab, normal refresh
+  //   security    — only watchdogs/alerts/audit-chains/perimeter/
+  //                 guardian/scheduler/friction-audit; "logs" tab
+  //   performance — hardware/network/storage/raid/gpu/cpu;
+  //                 "hardware" tab
+  //   inference   — health/inference-backends/gpu/flex-profile;
+  //                 "models" tab
+  //   compact     — always-visible strip + alerts only; "all" pseudo
+  //                 (so the tabbed nav is irrelevant); slow refresh
+  //
+  // Persistence: localStorage selfdef.activePreset = preset name.
+  // Switching a preset writes its triple atomically (hiddenPanels +
+  // refreshRate + tab hash). Operator's manual overrides AFTER
+  // a preset are kept (the preset is just the snap-to point).
+  const PRESET_KEY = "selfdef.activePreset";
+  const ALL_SECTION_IDS = ALL_PANEL_SECTIONS.map(([id]) => id);
+  function setMinus(all, keep) {
+    const set = new Set(all);
+    for (const k of keep) set.delete(k);
+    return set;
+  }
+  const PRESETS = {
+    default: {
+      label: "Default — all panels",
+      hidden: new Set(),
+      refreshRate: "normal",
+      tab: "all",
+    },
+    security: {
+      label: "Security",
+      // Hide everything EXCEPT the security-relevant set.
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "friction-audit-section",
+        "perimeter-section",
+        "guardian-section",
+        "scheduler-section",
+        "alerts-section",
+        "audit-chains-section",
+      ]),
+      refreshRate: "normal",
+      tab: "logs",
+    },
+    performance: {
+      label: "Performance",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "hardware-section",
+        "network-section",
+        "storage-section",
+        "raid-section",
+        "gpu-section",
+        "cpu-section",
+      ]),
+      refreshRate: "fast",
+      tab: "hardware",
+    },
+    inference: {
+      label: "Inference",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "inference-backends-section",
+        "gpu-section",
+        "flex-profile-section",
+      ]),
+      refreshRate: "normal",
+      tab: "models",
+    },
+    compact: {
+      label: "Compact",
+      // Always-visible strip + alerts.
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "friction-audit-section",
+        "perimeter-section",
+        "guardian-section",
+        "scheduler-section",
+        "alerts-section",
+      ]),
+      refreshRate: "slow",
+      tab: "all",
+    },
+  };
+  function readPreset() {
+    const v = localStorage.getItem(PRESET_KEY);
+    return PRESETS[v] !== undefined ? v : "default";
+  }
+  function writePreset(name) {
+    try { localStorage.setItem(PRESET_KEY, name); } catch (_) { /* private mode */ }
+  }
+  function applyPreset(name) {
+    const p = PRESETS[name];
+    if (!p) return;
+    writePreset(name);
+    writeHiddenPanels(new Set(p.hidden));
+    applyHiddenPanels();
+    writeRefreshRate(p.refreshRate);
+    if (refreshSelect) refreshSelect.value = p.refreshRate;
+    // Snap the tab via hash so switchTab() + the existing hashchange
+    // listener pick it up.
+    window.location.hash = `tab=${p.tab}`;
+  }
+  const presetSelect = document.getElementById("preset-select");
+  if (presetSelect) {
+    presetSelect.value = readPreset();
+    presetSelect.addEventListener("change", (ev) => {
+      applyPreset(ev.target.value);
+    });
+  }
+
   // Apply initial state from URL hash (deep-link support).
   switchTab(parseTab());
 

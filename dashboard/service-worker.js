@@ -9,6 +9,12 @@
 // index.html gained scheduler panel; app.js gained the four-watchdog
 // refresh handlers; dashboard.css gained the .fa-backpressure
 // aggregate state.
+// v26 (2026-05-21): MS043 UX — operator-named view presets in
+// #tab-nav (Default / Security / Performance / Inference / Compact).
+// Each preset snaps {hiddenPanels, activeTab, refreshRate} to an
+// operator-meaningful configuration in one click. localStorage
+// selfdef.activePreset persists the choice. Tractable interim
+// toward the "20 dashboards" verbatim requirement.
 // v25 (2026-05-21): MS043 UX — refresh-rate selector (Fast/Normal/
 // Slow/Paused) in #tab-nav. localStorage selfdef.refreshRate
 // persists the choice; gatedInterval() is now a self-rescheduling
@@ -24,7 +30,7 @@
 // panel now fetches /v1/modules/install-plan in parallel and renders
 // a yellow conflict badge + meta line when two planned modules
 // declare the same path in [install_paths].
-const SHELL = "selfdef-shell-v25";
+const SHELL = "selfdef-shell-v26";
 const SHELL_ASSETS = [
   "./",
   "./index.html",
