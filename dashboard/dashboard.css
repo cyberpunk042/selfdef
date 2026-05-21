@@ -231,3 +231,44 @@ footer { text-align: center; padding: 1rem; color: var(--fg-dim); font-size: 0.7
   background: var(--bg-3);
   border-color: var(--info);
 }
+
+/* SDD-056 8-tab scaffold — Stage-2 inert state.
+ * Visual styling lands now; tab switching JS lands in step 3 per
+ * SDD-056 § Migration sequence. The data-state="inert" attribute
+ * lets the JS step 3 flip to data-state="active" without breaking
+ * the CSS selector — operators see the tab strip as a visible
+ * preview of where the dashboard is going. */
+#tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.95rem;
+}
+#tab-nav a {
+  padding: 0.3rem 0.8rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 600;
+}
+#tab-nav a:hover {
+  background: var(--bg-3);
+  border-color: var(--info);
+}
+#tab-nav[data-state="inert"] a::after {
+  content: "·";
+  margin-left: 0.4rem;
+  opacity: 0.4;
+  font-weight: normal;
+}
+#tab-nav[data-state="active"] a.active {
+  background: var(--info);
+  color: var(--bg);
+  border-color: var(--info);
+}

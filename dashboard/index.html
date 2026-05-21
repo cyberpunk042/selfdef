@@ -18,6 +18,21 @@
       <span class="version">v<span id="crate-version">—</span> · schema <span id="schema-version">—</span></span>
       <span id="conn" class="conn">offline</span>
     </div>
+    <!-- SDD-056 8-tab scaffold (currently inert — flips active when
+         tab-switching JS lands per § Migration sequence step 3).
+         Anchors deep-link via #tab=<name>; tab content is the
+         existing 17-panel set collapsed under the 8 clusters. -->
+    <nav id="tab-nav" aria-label="Tab navigation" data-state="inert">
+      <a href="#tab=models" data-tab="models">Models</a>
+      <a href="#tab=modules" data-tab="modules">Modules</a>
+      <a href="#tab=profiles" data-tab="profiles">Profiles</a>
+      <a href="#tab=hardware" data-tab="hardware">Hardware</a>
+      <a href="#tab=network" data-tab="network">Network</a>
+      <a href="#tab=logs" data-tab="logs">Logs</a>
+      <a href="#tab=mcp" data-tab="mcp">MCP</a>
+      <a href="#tab=repl" data-tab="repl">REPL</a>
+    </nav>
+
     <nav id="panel-nav" aria-label="Panel navigation">
       <a href="#health-section">Health</a>
       <a href="#friction-audit-section">Friction Audit</a>
