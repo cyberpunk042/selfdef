@@ -6,6 +6,55 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS011 fullstack closures + tooling (2026-05-21, batch 3)
+
+Continuation block covering commits 4e20bdb → 522b427. Focus: MS011
+Z-vector fullstack closures (dashboard panels + CLI parity) +
+operator-tooling hygiene + INDEX cross-reference fix.
+
+#### MS011 fullstack closures
+
+- Dashboard "Flex profile" panel (5b815d3) consuming GET /v1/flex-profile
+- Dashboard "Inference backends" panel (b7a60a6) consuming GET /v1/inference-backends
+- `selfdefctl inference-backends` CLI parity (a95ffb2)
+- `selfdefctl flex-profile show` live-state subverb (a8cbb26)
+- Panel-nav strip grew from 14 → 16 anchors
+- 17 panels total: Composite Health + 4 watchdogs + Modules + Audit
+  chains + Alerts + Hardware + Network + Storage + RAID + GPU + CPU
+  + Flex profile + Inference backends + Findings
+
+#### Operator tooling
+
+- `scripts/test/sdd-tally.sh` (4e20bdb) — MS013 charter-tracking
+  drift detector. Walks docs/sdd/ and tallies status counts
+  (implemented / review / scoping / draft / living). Tolerates 3
+  status formats. Read-only, NOT a coherence gate.
+
+#### Cross-reference + doctrine reconciliation
+
+- SDD-032 (eBPF substrate) promoted draft → implemented (358e26e)
+  with explicit note that the 4 deferred kernel programs are the
+  NEXT arc, NOT a blocker for SDD-032's own status
+- INDEX.md MS002 + MS016 partial rows fixed (522b427) — they had
+  cross-referenced "SDD-016" for eBPF (wrong; SDD-016 is the
+  oracle-triage channel). Correct reference is SDD-032. Added
+  enumeration of the 4 deferred programs per selfdef-ebpf/README.md.
+- SDD-016 (oracle-triage) now has HTTP discovery surface
+  GET /v1/oracle-triage (522b427) — doctrine + wire format + tier
+  routing. Previously the doctrine lived only in the
+  selfdef-integration-oracle-triage crate.
+- 9 module SDDs batch-promoted draft → implemented (b0c6398):
+  SDD-033 agent-guard, SDD-034 observability, SDD-036 slm-cpu-loop,
+  SDD-037 tensor-parallel-inference, SDD-038 wasm-aot-cache,
+  SDD-039 bridge-l2, SDD-040 polarproxy, SDD-041 detect-host,
+  SDD-042 integrity-sentinel
+
+Final SDD tally: 43 implemented (was 30 before this batch-2) / 6
+draft / 2 review / 3 scoping / 54 total.
+
+Final INDEX tally: 42 done (was 40 before batch-2) / 6 partial / 0
+stage-1.
+
 ### Added — MS013-MS050 catalog + SDD layer-up batch (2026-05-21, continued)
 
 Continued from the earlier 2026-05-21 entry below. This block captures
