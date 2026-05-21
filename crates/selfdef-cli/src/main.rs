@@ -378,12 +378,15 @@ enum Command {
         #[command(subcommand)]
         action: FlexProfileAction,
     },
-    /// MS011 Z-2 / SDD-026 inference-backend probe surface. Calls
+    /// MS011 Z-2 / SDD-026 inference-backend surface. `show` calls
     /// `GET /v1/inference-backends` + renders the 4-backend install
-    /// state (llama.cpp / vllm / bitnet.cpp / unsloth).
+    /// state. `version <backend>` shells out directly to the local
+    /// binary's `--version` — no daemon round-trip needed.
     InferenceBackends {
-        /// Machine-readable JSON output (passes through the raw
-        /// daemon body).
+        #[command(subcommand)]
+        action: Option<InferenceBackendsAction>,
+        /// Machine-readable JSON output for the default `show` action
+        /// (passes through the raw daemon body). Ignored for `version`.
         #[arg(long)]
         json: bool,
     },
@@ -697,6 +700,20 @@ enum FlexProfileAction {
         /// Pass through the raw JSON body (jq-friendly).
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum InferenceBackendsAction {
+    /// Default: fetch live state via GET /v1/inference-backends and
+    /// render the 4-backend install table.
+    Show,
+    /// Shell out to the local backend binary's `--version` directly
+    /// (no daemon round-trip). Exit 0 on success, 1 if not installed,
+    /// 2 on subprocess error.
+    Version {
+        /// One of: llama.cpp, vllm, bitnet.cpp, unsloth.
+        backend: String,
     },
 }
 
@@ -2016,8 +2033,16 @@ async fn main() -> Result<()> {
             };
             std::process::exit(exit);
         }
-        Command::InferenceBackends { json } => {
-            let exit = inference_backends::run(json).context("inference-backends")?;
+        Command::InferenceBackends { action, json } => {
+            let exit = match action {
+                Some(InferenceBackendsAction::Version { backend }) => {
+                    inference_backends::run_version(&backend)
+                        .context("inference-backends version")?
+                }
+                Some(InferenceBackendsAction::Show) | None => {
+                    inference_backends::run(json).context("inference-backends")?
+                }
+            };
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

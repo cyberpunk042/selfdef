@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS011 Z-2 invocation seed (2026-05-21, batch 6)
+
+- `selfdefctl inference-backends version <backend>` subverb that shells
+  out directly to the local backend binary's `--version` — no daemon
+  round-trip. Backend name validated against the canonical 4-row table
+  (llama.cpp / vllm / bitnet.cpp / unsloth) which mirrors the daemon's
+  `BACKENDS` table byte-identically; binary resolved via the same
+  `SELFDEF_INFERENCE_<NAME>_BIN` env override pattern.
+- Exit code contract: `0` on success, `1` if `command -v <binary>` fails
+  (not installed; message names the env-var override), `2` on subprocess
+  exec failure.
+- `Command::InferenceBackends` restructured from a unit variant with
+  `--json` flag into a `Subcommand` with `Show` (default) + `Version
+  { backend }` actions. Bare `selfdefctl inference-backends` continues
+  to render the daemon-side probe table — operator-facing surface
+  unchanged for the existing call.
+- Operator cheatsheet updated with the new `version` invocation lines.
+
+Per SDD-026 Z-2 verbatim: *"shells out to operator-installed tooling
+(llama.cpp / vllm / bitnet.cpp / unsloth); one-click 'install missing
+tool' via module surface"*. The probe (read) and version (invoke)
+together seed the Z-2 surface; the "install missing tool" arc lands
+next via the module-driven install pipeline (Z-13 install-plan + per-
+backend install/check.sh).
+
 ### Added — SDD-057 shared-crate refactor + MS011 Z-13 closure (2026-05-21, batch 5)
 
 Continuation block covering commits 145effb → 78e0456. Focus: extract

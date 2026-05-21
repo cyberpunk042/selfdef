@@ -51,8 +51,10 @@ selfdefctl ssh-wrap install           # step-by-step PATH-shadow install instruc
 selfdefctl nats                       # MS015 / SDD-053 two-way pump subject schema + modes
 selfdefctl flex-profile schema        # MS011 Z-3 flex-profile static schema (Delta + DeltaOp + RevertRecord)
 selfdefctl flex-profile show          # live state via GET /v1/flex-profile (baseline + delta/revert counts)
-selfdefctl inference-backends         # MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth install state
-selfdefctl inference-backends --json  # pass-through of daemon JSON body (jq-friendly)
+selfdefctl inference-backends                       # MS011 Z-2 llama.cpp / vllm / bitnet.cpp / unsloth install state
+selfdefctl inference-backends show --json           # pass-through of daemon JSON body (jq-friendly)
+selfdefctl inference-backends version llama.cpp     # MS011 Z-2 invocation seed — shells out to <binary> --version
+selfdefctl inference-backends version vllm          # exit 0 ok / 1 not installed / 2 subprocess error
 ```
 
 ## Per-watchdog drill-down

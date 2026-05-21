@@ -58,6 +58,63 @@ fn fetch_endpoint() -> Result<String> {
     ))
 }
 
+/// 4 canonical backends — must stay byte-identical to the daemon-side
+/// `BACKENDS` table in `crates/selfdef-api/src/inference_backends.rs`
+/// (default binary + env-var override name). Mirroring the table here
+/// is intentional per the "no client-side fallback" rule for the live
+/// probe — but the shell-out for `--version` is a direct local action,
+/// not a probe, so it stands alone.
+const BACKENDS: &[(&str, &str, &str)] = &[
+    ("llama.cpp",  "llama-server", "SELFDEF_INFERENCE_LLAMA_CPP_BIN"),
+    ("vllm",       "vllm",         "SELFDEF_INFERENCE_VLLM_BIN"),
+    ("bitnet.cpp", "bitnet-cli",   "SELFDEF_INFERENCE_BITNET_CPP_BIN"),
+    ("unsloth",    "unsloth-cli",  "SELFDEF_INFERENCE_UNSLOTH_BIN"),
+];
+
+pub(crate) fn run_version(backend: &str) -> Result<i32> {
+    let (_, default_bin, env_var) = match BACKENDS.iter().find(|b| b.0 == backend) {
+        Some(row) => *row,
+        None => {
+            let names: Vec<&str> = BACKENDS.iter().map(|b| b.0).collect();
+            return Err(anyhow!(
+                "unknown backend {:?} — expected one of: {}",
+                backend,
+                names.join(", ")
+            ));
+        }
+    };
+    let binary = std::env::var(env_var).unwrap_or_else(|_| default_bin.to_string());
+    let which = Command::new("sh")
+        .arg("-c")
+        .arg(format!("command -v {binary}"))
+        .output()
+        .context("invoking `command -v` to locate the backend binary")?;
+    if !which.status.success() || which.stdout.is_empty() {
+        eprintln!(
+            "{} not installed — `{}` not found on PATH (override via {}=<path>)",
+            backend, binary, env_var
+        );
+        return Ok(1);
+    }
+    let out = Command::new(&binary)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("invoking `{binary} --version`"))?;
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    if !stdout.is_empty() {
+        print!("{}", stdout);
+    }
+    if !stderr.is_empty() {
+        eprint!("{}", stderr);
+    }
+    if out.status.success() {
+        Ok(0)
+    } else {
+        Ok(2)
+    }
+}
+
 pub(crate) fn run(json: bool) -> Result<i32> {
     let body = fetch_endpoint()?;
     if json {
