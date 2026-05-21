@@ -1,0 +1,6 @@
+# Profile: security-only (default).
+#
+# Auto-install dnf security advisories. NEVER auto-reboot.
+# Operator reboots manually at next convenient window.
+
+profile = "security-only"

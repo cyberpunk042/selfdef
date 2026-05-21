@@ -1,0 +1,6 @@
+# Profile: security-and-reboot.
+#
+# Security advisories + auto-reboot with `shutdown -r +5` warning
+# when kernel/glibc updates require it. Use on unattended hosts.
+
+profile = "security-and-reboot"

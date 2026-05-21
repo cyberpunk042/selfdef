@@ -1,0 +1,40 @@
+name        = "dnf-automatic-config"
+version     = "0.1.0"
+summary     = "dnf-automatic baseline — security-only auto-install on RHEL/Fedora/Rocky/Alma. Parallel of unattended-upgrades-config for the dnf ecosystem; foundational CVE-mitigation"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["auto-security-updates"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "dnf" },
+    { kind = "binary", value = "dnf-automatic" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `security-only` (default) — install ONLY security advisory
+#                            updates; never reboot.
+# `security-and-reboot`    — security updates + auto-reboot at
+#                            02:00 when needed.
+default = "security-only"
+available = ["security-only", "security-and-reboot"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/dnf/automatic.conf",
+    "/etc/selfdef/modules/dnf-automatic-config.toml",
+]
