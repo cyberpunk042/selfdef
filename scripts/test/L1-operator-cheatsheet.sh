@@ -44,6 +44,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl scheduler"
     "selfdefctl modules"
     "selfdefctl init"
+    "selfdefctl alerts"
 )
 
 failures=0

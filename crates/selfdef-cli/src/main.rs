@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod alerts;
 mod doctor;
 mod emit;
 mod follow;
@@ -235,6 +236,23 @@ enum Command {
         /// is human-readable). Useful for piping into jq / log shippers.
         #[arg(long)]
         json: bool,
+    },
+    /// MS027 alerts CLI parity with the dashboard PWA "Alerts overview"
+    /// 6th panel. Reads `/metrics` from the local daemon (UNIX socket
+    /// at /run/selfdef.sock by default; SELFDEF_API_URL + token over
+    /// TCP), parses the 9 alert-relevant series, and renders one row
+    /// per alert with NAME · MS · series · threshold · current value
+    /// · STATE. Exit code 0 iff every alert is OK or UNKNOWN; 1 if any
+    /// is WARN or CRITICAL. Pair with shell gates:
+    ///   selfdefctl alerts --quiet && deploy.sh
+    Alerts {
+        /// Machine-readable JSON output (jq-friendly).
+        #[arg(long)]
+        json: bool,
+        /// Single-line `selfdef-alerts: WORST` mode for PS1 / status
+        /// bars + as a gate-friendly exit-code-only invocation.
+        #[arg(long)]
+        quiet: bool,
     },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
@@ -1657,6 +1675,10 @@ async fn main() -> Result<()> {
         }
         Command::TrioTail { interval_ms, json } => {
             let exit = trio::run_tail(interval_ms, json).context("trio-tail")?;
+            std::process::exit(exit);
+        }
+        Command::Alerts { json, quiet } => {
+            let exit = alerts::run(json, quiet).context("alerts")?;
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {

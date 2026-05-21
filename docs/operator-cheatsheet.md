@@ -21,6 +21,9 @@ selfdefctl trio --quiet               # single-line PS1-friendly summary
 selfdefctl trio --watch 5             # human watch, clear+redraw every 5s
 selfdefctl trio --json --watch 5      # JSONL stream for monitoring pipelines
 selfdefctl trio-tail                  # unified live OCSF tail (Ctrl-C exits)
+selfdefctl alerts                     # MS027 alerts overview (CLI parity with dashboard)
+selfdefctl alerts --quiet             # single-line gate-friendly: `selfdef-alerts: OK`
+selfdefctl alerts --json              # jq-friendly output (worst + per-row state)
 ```
 
 ## Per-watchdog drill-down
