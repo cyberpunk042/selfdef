@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS043 UX dashboard-prefs PWA sync (2026-05-21, batch 14)
+
+Closes the dashboard-prefs arc end-to-end. Batch 13 shipped the
+daemon-side HTTP surface; this batch wires the PWA to consume it.
+
+- `app.js` adds `fetchPrefsFromServer()` (GET on load) +
+  `syncPrefsToServer()` (PUT on change, debounced 400ms via
+  `schedulePrefsSync`).
+- Every `writeHiddenPanels` / `writeRefreshRate` / `writePreset`
+  call now schedules a server PUT. Burst-of-changes (operator
+  toggling 5 visibility checkboxes in 2s) collapses to ONE
+  round-trip.
+- Initial `fetchPrefsFromServer()` runs after `switchTab(parseTab())`
+  so server preferences win over localStorage when the daemon is
+  reachable. Refresh-rate select + preset select sync to the
+  server value if different.
+- Offline-safe: any fetch/PUT failure (file:// scheme, daemon
+  down, 5xx) is silent — localStorage remains authoritative; the
+  next change re-attempts.
+- Server-side enum rejections (400) log a console warning so
+  operators on a stale build see the divergence; no infinite
+  retry. Schema mismatch (409) likewise.
+- Service worker SHELL bumped v26 → v27.
+
+The dashboard-prefs UX flow is now: operator changes a
+preference in any browser → 400ms debounce → PUT to daemon →
+atomic write to `/etc/selfdef/dashboard-prefs.toml`. The same
+operator on a different browser fires `fetchPrefsFromServer()` on
+next load and sees the new state. localStorage caches the result
+so offline use stays smooth.
+
 ### Added — MS043 UX daemon-side dashboard-prefs persistence (2026-05-21, batch 13)
 
 The three UX-mode pillars shipped in batches 10/11/12 (panel

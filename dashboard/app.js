@@ -1532,6 +1532,7 @@
   }
   function writeRefreshRate(name) {
     try { localStorage.setItem(REFRESH_RATE_KEY, name); } catch (_) { /* private mode */ }
+    schedulePrefsSync();
   }
   function refreshFactor() {
     return REFRESH_RATE_FACTORS[readRefreshRate()];
@@ -1708,6 +1709,87 @@
     });
   }
   // ----------------------------------------------------------------
+  // MS043 UX — daemon-side dashboard-prefs sync.
+  //
+  // GET /v1/dashboard-prefs on load (server preferences win over
+  // localStorage when server has a newer updated_at_ms OR localStorage
+  // has nothing). PUT on every preference change (debounced 400ms
+  // so a burst of checkbox toggles becomes ONE round-trip). Falls
+  // back silently to localStorage when the network is gone — the
+  // dashboard remains fully usable offline.
+  let prefsSyncTimer = null;
+  let prefsSyncInflight = false;
+  function prefsBodyFromLocalStorage() {
+    return {
+      schema_version: "1.0.0",
+      hidden_panels: [...readHiddenPanels()],
+      refresh_rate: readRefreshRate(),
+      active_preset: readPreset(),
+    };
+  }
+  function schedulePrefsSync() {
+    if (prefsSyncTimer) clearTimeout(prefsSyncTimer);
+    prefsSyncTimer = setTimeout(syncPrefsToServer, 400);
+  }
+  async function syncPrefsToServer() {
+    if (prefsSyncInflight) {
+      schedulePrefsSync();  // re-queue while in-flight
+      return;
+    }
+    prefsSyncInflight = true;
+    try {
+      const body = prefsBodyFromLocalStorage();
+      const res = await fetch("/v1/dashboard-prefs", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        // 400/409 → operator is on a stale build OR sent an unknown
+        // enum; log + don't retry. 5xx → silent (localStorage stays
+        // authoritative).
+        if (res.status >= 400 && res.status < 500) {
+          console.warn(`dashboard-prefs PUT rejected: ${res.status}`);
+        }
+      }
+    } catch (_) {
+      // Offline; localStorage is the fallback. Resume on next change.
+    } finally {
+      prefsSyncInflight = false;
+    }
+  }
+  async function fetchPrefsFromServer() {
+    try {
+      const res = await fetch("/v1/dashboard-prefs");
+      if (!res.ok) return;
+      const body = await res.json();
+      // Adopt server-side preferences. We do NOT do timestamp
+      // arbitration on the client — server is source of truth for
+      // operator-visible preferences. The dashboard's local changes
+      // are PUT immediately on each interaction, so divergence
+      // windows are sub-second.
+      if (Array.isArray(body.hidden_panels)) {
+        const set = new Set(body.hidden_panels);
+        try { localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify([...set])); } catch (_) {}
+      }
+      if (typeof body.refresh_rate === "string"
+          && REFRESH_RATE_FACTORS[body.refresh_rate] !== undefined) {
+        try { localStorage.setItem(REFRESH_RATE_KEY, body.refresh_rate); } catch (_) {}
+        const sel = document.getElementById("refresh-rate-select");
+        if (sel) sel.value = body.refresh_rate;
+      }
+      if (typeof body.active_preset === "string"
+          && PRESETS[body.active_preset] !== undefined) {
+        try { localStorage.setItem(PRESET_KEY, body.active_preset); } catch (_) {}
+        const sel = document.getElementById("preset-select");
+        if (sel) sel.value = body.active_preset;
+      }
+      applyHiddenPanels();
+    } catch (_) {
+      // Offline; localStorage stays authoritative.
+    }
+  }
+  // ----------------------------------------------------------------
   // MS043 UX — operator-facing per-panel visibility menu.
   //
   // Operator verbatim: "everything can be turned on and off". The
@@ -1752,6 +1834,7 @@
     try {
       localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify([...set]));
     } catch (_) { /* private mode */ }
+    schedulePrefsSync();
   }
   function applyHiddenPanels() {
     const hidden = readHiddenPanels();
@@ -1950,6 +2033,7 @@
   }
   function writePreset(name) {
     try { localStorage.setItem(PRESET_KEY, name); } catch (_) { /* private mode */ }
+    schedulePrefsSync();
   }
   function applyPreset(name) {
     const p = PRESETS[name];
@@ -1973,6 +2057,11 @@
 
   // Apply initial state from URL hash (deep-link support).
   switchTab(parseTab());
+
+  // MS043 UX — fire-and-forget initial fetch of server-side
+  // preferences. Server wins over localStorage when reachable; if
+  // offline (file:// or daemon down) localStorage stays authoritative.
+  fetchPrefsFromServer();
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
