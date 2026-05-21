@@ -55,6 +55,8 @@ check "HTML: raid-section"                "${HTML}" 'id="raid-section"'         
 check "HTML: raid aggregate"              "${HTML}" 'id="raid-aggregate"'         || failures=$((failures + 1))
 check "HTML: gpu-section"                 "${HTML}" 'id="gpu-section"'            || failures=$((failures + 1))
 check "HTML: gpu aggregate"               "${HTML}" 'id="gpu-aggregate"'          || failures=$((failures + 1))
+check "HTML: cpu-section"                 "${HTML}" 'id="cpu-section"'            || failures=$((failures + 1))
+check "HTML: cpu aggregate"               "${HTML}" 'id="cpu-aggregate"'          || failures=$((failures + 1))
 check "HTML: friction-audit aggregate"  "${HTML}" 'id="fa-aggregate"'            || failures=$((failures + 1))
 check "HTML: perimeter aggregate"        "${HTML}" 'id="perim-aggregate"'         || failures=$((failures + 1))
 check "HTML: guardian aggregate"         "${HTML}" 'id="guard-aggregate"'         || failures=$((failures + 1))
@@ -72,6 +74,7 @@ check "JS: refreshNetwork()"              "${JS}"   'function refreshNetwork'   
 check "JS: refreshStorage()"              "${JS}"   'function refreshStorage'        || failures=$((failures + 1))
 check "JS: refreshRaid()"                 "${JS}"   'function refreshRaid'           || failures=$((failures + 1))
 check "JS: refreshGpu()"                  "${JS}"   'function refreshGpu'            || failures=$((failures + 1))
+check "JS: refreshCpu()"                  "${JS}"   'function refreshCpu'            || failures=$((failures + 1))
 check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
@@ -86,6 +89,7 @@ check "JS: setInterval refreshNetwork"           "${JS}" 'setInterval\(refreshNe
 check "JS: setInterval refreshStorage"           "${JS}" 'setInterval\(refreshStorage'         || failures=$((failures + 1))
 check "JS: setInterval refreshRaid"              "${JS}" 'setInterval\(refreshRaid'            || failures=$((failures + 1))
 check "JS: setInterval refreshGpu"               "${JS}" 'setInterval\(refreshGpu'             || failures=$((failures + 1))
+check "JS: setInterval refreshCpu"               "${JS}" 'setInterval\(refreshCpu'             || failures=$((failures + 1))
 
 # JS endpoint bindings (must match selfdef-api routes)
 check "JS: GET /v1/friction-audit"      "${JS}"   'get\("/v1/friction-audit"\)' || failures=$((failures + 1))
@@ -99,6 +103,7 @@ check "JS: GET /v1/network"              "${JS}"   'get\("/v1/network"\)'       
 check "JS: GET /v1/storage"              "${JS}"   'get\("/v1/storage"\)'        || failures=$((failures + 1))
 check "JS: GET /v1/raid"                 "${JS}"   'get\("/v1/raid"\)'           || failures=$((failures + 1))
 check "JS: GET /v1/gpu"                  "${JS}"   'get\("/v1/gpu"\)'            || failures=$((failures + 1))
+check "JS: GET /v1/cpu"                  "${JS}"   'get\("/v1/cpu"\)'            || failures=$((failures + 1))
 
 # CSS aggregate classes (all 8 states: ok/fail/override/unknown/alert/extended/degraded/backpressure)
 for class in fa-ok fa-fail fa-override fa-unknown fa-alert fa-extended fa-degraded fa-backpressure; do

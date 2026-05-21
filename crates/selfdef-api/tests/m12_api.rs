@@ -1924,6 +1924,45 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn cpu_route_returns_200_with_well_formed_body() {
+    // MS011 Z-4: /v1/cpu reads /sys/devices/system/cpu/*/cpufreq/
+    // scaling_governor + SMT state, classifies into a named mode.
+    // On a host without cpufreq (container?), governors is empty +
+    // cpufreq_present is false + mode is "custom".
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/cpu")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let mode = v["mode"].as_str().expect("mode must be a string");
+    assert!(
+        [
+            "ultra-low-power",
+            "balanced",
+            "sustained-burst",
+            "peak-inference",
+            "custom",
+        ]
+        .contains(&mode),
+        "mode must be one of the 5 named values; got {mode}"
+    );
+    assert!(v["governors"].is_array(), "governors must be array");
+    assert!(v["smt_enabled"].is_boolean(), "smt_enabled must be bool");
+    assert!(
+        v["cpufreq_present"].is_boolean(),
+        "cpufreq_present must be bool"
+    );
+    assert!(v["smt_present"].is_boolean(), "smt_present must be bool");
+}
+
+#[tokio::test]
 async fn gpu_route_returns_200_with_well_formed_body() {
     // MS011 Z-5: /v1/gpu probes nvidia-smi + reads operator policy.
     // On a host without nvidia-smi installed, gpus list is empty

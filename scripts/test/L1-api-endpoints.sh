@@ -75,6 +75,11 @@ check_route "/v1/raid"                    "MS011 Z-9 / SDD-026" || failures=$((f
 # draw vs operator-set expected_power_limit_watts in gpu-policy.toml).
 check_route "/v1/gpu"                     "MS011 Z-5 / SDD-026" || failures=$((failures + 1))
 
+# MS011 Z-4 / SDD-026 — CPU mode classification surface (governor +
+# SMT → ultra-low-power | balanced | sustained-burst | peak-inference
+# | custom).
+check_route "/v1/cpu"                     "MS011 Z-4 / SDD-026" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

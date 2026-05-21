@@ -37,6 +37,7 @@
 
 mod alerts;
 mod control;
+mod cpu;
 mod friction_audit;
 mod gpu;
 mod hardware;
@@ -209,6 +210,10 @@ pub fn router(state: ApiState) -> Router {
         // MS011 Z-5 / SDD-026 — per-GPU watt deviance against the
         // operator-authored /etc/selfdef/gpu-policy.toml.
         .route("/v1/gpu", get(gpu::show))
+        // MS011 Z-4 / SDD-026 — CPU mode classification (read-only;
+        // SET surface will land when the IPC privilege boundary
+        // supports privileged /sys writes).
+        .route("/v1/cpu", get(cpu::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

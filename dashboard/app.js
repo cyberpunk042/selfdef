@@ -161,6 +161,9 @@
     if (kind === "gpu") {
       return refreshGpu();
     }
+    if (kind === "cpu") {
+      return refreshCpu();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -1041,6 +1044,44 @@
     }
   }
 
+  /// MS011 Z-4: render the named CPU mode classification with the
+  /// underlying scaling_governor + SMT state surfaced so operators
+  /// can confirm. Modes: ultra-low-power, balanced, sustained-burst,
+  /// peak-inference, custom.
+  async function refreshCpu() {
+    const ul = document.getElementById("cpu-rows");
+    const meta = document.getElementById("cpu-meta");
+    const aggEl = document.getElementById("cpu-aggregate");
+    try {
+      const resp = await get("/v1/cpu");
+      const mode = resp.mode;
+      // No green/yellow/red here — modes are operator choice, not
+      // health. We render the mode as an info aggregate using the
+      // unknown class for "custom" and ok for any named mode.
+      const aggClass = mode === "custom" ? "fa-unknown" : "fa-ok";
+      // Distinct governor values, joined for the meta line.
+      const uniqGovs = [...new Set(resp.governors)];
+      const rows = [
+        { label: "MODE",       code: mode,                       detail: "named mode classification per SDD-026 Z-4", css: aggClass },
+        { label: "GOVERNOR",   code: uniqGovs.join(" + ") || "—", detail: `${resp.governors.length} per-cpu governor file(s) read · cpufreq_present=${resp.cpufreq_present}`, css: "fa-ok" },
+        { label: resp.smt_enabled ? "SMT ON" : "SMT OFF", code: "smt", detail: `smt_present=${resp.smt_present}`, css: "fa-ok" },
+      ];
+      ul.innerHTML = rows.map(r => `<li class="fa-row">
+        <span class="fa-aggregate ${r.css}">${r.label}</span>
+        <code>${r.code}</code>
+        <small>${r.detail}</small>
+      </li>`).join("");
+      meta.textContent = `mode = ${mode.toUpperCase()} · ${resp.governors.length} cpu(s)`;
+      aggEl.textContent = mode.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1253,6 +1294,7 @@
   refreshStorage();
   refreshRaid();
   refreshGpu();
+  refreshCpu();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1290,6 +1332,10 @@
   // don't want to thrash nvidia-smi every cycle. 10 s gives operators
   // responsive deviance signal while keeping the subprocess cost low.
   setInterval(refreshGpu, 10000);
+  // CPU mode classification reads /sys files — kernel-side, cheap,
+  // but mode-changes are rare (operator-driven, not background
+  // drift). 60 s is plenty.
+  setInterval(refreshCpu, 60000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
