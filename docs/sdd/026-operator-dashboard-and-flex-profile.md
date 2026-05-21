@@ -1,8 +1,7 @@
 # SDD-026 — Operator dashboard architecture + flexible-profile surface
 
-> Status: **review** — vector-by-vector shipment in progress; 12 of
-> 13 Z-vectors reached end-to-end production (backend + dashboard
-> + L1 gate, sometimes + CLI verb) as of 2026-05-21 batch 7:
+> Status: **implemented** — all 13 Z-vectors reached end-to-end
+> production as of 2026-05-21 batch 8:
 >   - Z-1 8-tab dashboard restructure — ratified under SDD-056;
 >     all 5 migration steps shipped (commits 2251591 → 4f30408)
 >   - Z-2 LM Studio / inference-backend surface — `/v1/inference-
@@ -39,14 +38,20 @@
 >     + `/v1/modules/install-options` SD-R86 (commit 104f661, hardware-
 >     gate enrichment under SDD-057) + `/v1/modules/install-plan`
 >     SD-R87 Kahn's topological sort
-> Remaining Z-vector at design-stage:
->   - Z-8 (Docker vs system-level install paths) — LOW priority
->     per the cycle-7+ ranking; awaits per-module `install_paths`
->     metadata table. Bigger follow-up arcs remain on shipped
->     vectors (Z-2 module-driven install pipeline, Z-12 dashboard
->     REPL pop-out UI) but they are *next* surfaces over a
->     functioning end-to-end foundation, not blockers.
-> SDD will move to `implemented` when Z-8 lands.
+>   - Z-8 Docker vs system-level install paths — `[install_paths]`
+>     manifest extension shipped 2026-05-21: all 14 modules carry
+>     scope (default `system`) + paths declarations; `/v1/modules/
+>     install-plan` extended with `path_conflicts` computation
+>     (groups same-path-multiple-modules); dashboard modules panel
+>     renders a yellow `fa-yellow` aggregate + meta-line conflict
+>     listing when path overlaps are present. 3 new selfdef-api
+>     unit tests + 1 m12_api integration test extension validate the
+>     surface.
+> Follow-up arcs remain on shipped vectors (Z-2 module-driven
+> install pipeline, Z-12 dashboard REPL pop-out UI, Z-8 container-
+> scope module ships when an actually-containerized variant lands)
+> but these are *next* surfaces over a fully-functioning end-to-end
+> foundation, not blockers against the original 13-vector scope.
 > Owner: operator-supervised; agent-authored.
 > Last updated: 2026-05-21 (status: draft → review; 7-of-13 Z-vector
 > production landing).

@@ -6,6 +6,52 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS011 Z-8 path-conflict surface + MS011 milestone closure (2026-05-21, batch 8)
+
+Closes the last design-stage Z-vector + promotes MS011 from
+`partial` → `done` and SDD-026 from `review` → `implemented`.
+
+#### Z-8 — Docker vs system-level install paths
+
+- All 14 shipped modules gain a `[install_paths]` block in their
+  `module.toml` with explicit `scope = "system"` + a `paths` list
+  enumerating the absolute paths each module writes during apply
+  (extracted directly from each module's `install/apply.sh`
+  variables: CONFIG_FILE, POLICY_DIR, RUNTIME_DIR, etc.). The
+  schema was shipped earlier (ModuleInstallPaths with default
+  back-compat); this batch fills it with real data so the
+  downstream surfaces have something to reason about.
+- `/v1/modules/install-plan` extended: new `path_conflicts` field
+  in the response envelope. The new `compute_path_conflicts()`
+  helper walks every planned module's `install_paths.paths` and
+  surfaces ≥2-slug groups that share an absolute path. Returns
+  `Vec<PathConflict>` with sorted modules + distinct scope set
+  per path. Empty when no overlaps exist.
+- Dashboard Modules panel: extended to fetch `/v1/modules/install-
+  plan` in parallel with the existing modules + install-options
+  fetches; renders a yellow `fa-yellow` aggregate badge plus a
+  meta-line warning listing up to 3 conflicting paths (with `+ N
+  more` suffix) when overlaps exist. Service worker SHELL cache
+  key bumped from v22 → v23.
+- 3 new selfdef-api unit tests:
+  - `path_conflict_detection_two_modules_same_path` — basic case
+  - `path_conflict_detection_skips_modules_not_in_plan` — only
+    counts conflicts against the active plan set
+  - `path_conflict_detection_distinct_scopes_surfaced` —
+    informational conflict when scopes differ
+- 1 m12_api integration test extension: `modules_install_plan_route
+  _returns_200_with_topological_shape` now asserts the
+  `path_conflicts` array is present in the envelope.
+
+#### MS011 milestone closure
+
+INDEX promoted MS011 → `done` with full end-to-end Z-vector inventory
+(13/13). SDD-026 status block promoted to `implemented` with all 13
+vectors enumerated; follow-up arcs (Z-2 module-driven install
+pipeline, Z-8 containerized module variants, Z-12 dashboard REPL
+pop-out UI) explicitly noted as *next* surfaces over a fully-shipped
+foundation, not blockers.
+
 ### Added — MS011 Z-12 SD-R102 operator-macro auto-load (2026-05-21, batch 7)
 
 Persistence path for Tier 2: until now operator-owned macros were

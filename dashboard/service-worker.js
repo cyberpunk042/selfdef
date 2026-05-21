@@ -9,7 +9,11 @@
 // index.html gained scheduler panel; app.js gained the four-watchdog
 // refresh handlers; dashboard.css gained the .fa-backpressure
 // aggregate state.
-const SHELL = "selfdef-shell-v22";
+// v23 (2026-05-21): MS011 Z-8 path-conflict surface — app.js modules
+// panel now fetches /v1/modules/install-plan in parallel and renders
+// a yellow conflict badge + meta line when two planned modules
+// declare the same path in [install_paths].
+const SHELL = "selfdef-shell-v23";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

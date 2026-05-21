@@ -30,3 +30,13 @@ uninstall = "install/uninstall.sh"
 [profiles]
 default = "host-tls-mitm"
 available = ["host-tls-mitm", "bridge-tap"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest. `scope = "system"`
+# (default sovereignty: writes /etc, /usr, /var). The `paths` list
+# enumerates the on-disk surfaces this module touches on apply, used
+# by the dashboard's install-options surface + the install-plan
+# topological sorter to surface inter-module path conflicts before
+# they happen.
+[install_paths]
+scope = "system"
+paths = ["/etc/nftables.d/selfdef-polarproxy.conf", "/etc/polarproxy/ca.pfx", "/etc/systemd/system/polarproxy.service"]

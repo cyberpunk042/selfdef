@@ -52,3 +52,13 @@ instanced = false
 
 [profiles.details.cloudflare-tunnel]
 instanced = false
+
+# MS011 Z-8 / SDD-026 — install-path manifest. `scope = "system"`
+# (default sovereignty: writes /etc, /usr, /var). The `paths` list
+# enumerates the on-disk surfaces this module touches on apply, used
+# by the dashboard's install-options surface + the install-plan
+# topological sorter to surface inter-module path conflicts before
+# they happen.
+[install_paths]
+scope = "system"
+paths = ["/etc/selfdef/modules/vpn-bridge.toml", "/etc/wireguard"]

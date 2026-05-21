@@ -426,6 +426,31 @@ pub(crate) struct ModulesInstallPlanBody {
     /// `cycle_member_slugs` lists the offending modules.
     pub cycle_detected: bool,
     pub cycle_member_slugs: Vec<String>,
+    /// MS011 Z-8 / SDD-026 — path-conflict detection across the
+    /// planned modules. When two or more modules in the plan declare
+    /// the same path in their `[install_paths].paths` list, the
+    /// conflict is surfaced here so the operator can resolve it
+    /// (different scope, different config, or operator-chosen
+    /// override) BEFORE running the plan. Empty when no conflicts.
+    pub path_conflicts: Vec<PathConflict>,
+}
+
+/// One on-disk path that two or more planned modules both intend to
+/// write under their `[install_paths].paths` declaration. The
+/// operator-resolution UX is dashboard-side; this struct carries
+/// the data.
+#[derive(Debug, Serialize)]
+pub(crate) struct PathConflict {
+    /// Absolute path that both modules touch.
+    pub path: String,
+    /// Module slugs that all declare this path (sorted, ≥2 entries).
+    pub modules: Vec<String>,
+    /// Distinct scope values across the conflicting modules. When all
+    /// are `"system"` (the common case), the conflict is unambiguous
+    /// — both modules really do write to the same host location.
+    /// When scopes differ (`"system"` + `"container"`), the conflict
+    /// is informational (separate scopes can coexist).
+    pub scopes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -556,6 +581,11 @@ pub(crate) async fn install_plan() -> Result<Json<ModulesInstallPlanBody>, ApiEr
 
     let plan_final = if cycle_detected { Vec::new() } else { plan };
 
+    // MS011 Z-8: path-conflict detection across the planned modules.
+    // Walks every module's [install_paths].paths and groups them
+    // by path string; ≥2 distinct slugs on the same path = conflict.
+    let path_conflicts = compute_path_conflicts(&modules, &plan_final);
+
     Ok(Json(ModulesInstallPlanBody {
         modules_dir: dir,
         modules_toml: toml_path,
@@ -563,7 +593,42 @@ pub(crate) async fn install_plan() -> Result<Json<ModulesInstallPlanBody>, ApiEr
         skipped,
         cycle_detected,
         cycle_member_slugs: cycle_members,
+        path_conflicts,
     }))
+}
+
+/// MS011 Z-8 — group `install_paths.paths` across the planned slugs.
+/// Returns ≥2-slug groups sorted by path then by membership.
+pub(crate) fn compute_path_conflicts(
+    modules: &[ModuleSummary],
+    plan_slugs: &[String],
+) -> Vec<PathConflict> {
+    use std::collections::BTreeMap;
+    let plan_set: std::collections::BTreeSet<&String> = plan_slugs.iter().collect();
+    let mut by_path: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    for m in modules {
+        if !plan_set.contains(&m.name) {
+            continue;
+        }
+        for p in &m.install_paths.paths {
+            by_path
+                .entry(p.clone())
+                .or_default()
+                .insert(m.name.clone(), m.install_paths.scope.clone());
+        }
+    }
+    let mut out: Vec<PathConflict> = Vec::new();
+    for (path, slug_to_scope) in by_path {
+        if slug_to_scope.len() < 2 {
+            continue;
+        }
+        let modules: Vec<String> = slug_to_scope.keys().cloned().collect();
+        let mut scopes: Vec<String> = slug_to_scope.values().cloned().collect();
+        scopes.sort();
+        scopes.dedup();
+        out.push(PathConflict { path, modules, scopes });
+    }
+    out
 }
 
 /// `GET /v1/modules/:name/check` — MS006/MS016/MS017/MS018/MS022..MS031
@@ -897,5 +962,101 @@ paths = ["/opt/foo", "/var/lib/foo"]
         let m: ModuleSummary = toml::from_str(body).unwrap();
         assert_eq!(m.install_paths.scope, "container");
         assert_eq!(m.install_paths.paths, vec!["/opt/foo", "/var/lib/foo"]);
+    }
+
+    #[test]
+    fn path_conflict_detection_two_modules_same_path() {
+        // MS011 Z-8 — when two planned modules declare the same path,
+        // compute_path_conflicts returns a single conflict naming
+        // both slugs sorted alphabetically.
+        let make = |name: &str, paths: Vec<&str>| ModuleSummary {
+            name: name.to_string(),
+            version: String::new(),
+            summary: String::new(),
+            category: String::new(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            active: false,
+            install_paths: ModuleInstallPaths {
+                scope: "system".to_string(),
+                paths: paths.into_iter().map(String::from).collect(),
+            },
+            requires_hardware: Default::default(),
+        };
+        let modules = vec![
+            make("agent-guard", vec!["/etc/tetragon/tetragon.tp.d", "/etc/selfdef/modules/agent-guard.toml"]),
+            make("tetragon",    vec!["/etc/tetragon/tetragon.tp.d", "/etc/tetragon/tetragon.yaml"]),
+            make("unrelated",   vec!["/var/lib/selfdef/wasm-aot"]),
+        ];
+        let plan = vec!["agent-guard".to_string(), "tetragon".to_string(), "unrelated".to_string()];
+        let conflicts = compute_path_conflicts(&modules, &plan);
+        assert_eq!(conflicts.len(), 1, "exactly one shared path");
+        assert_eq!(conflicts[0].path, "/etc/tetragon/tetragon.tp.d");
+        assert_eq!(conflicts[0].modules, vec!["agent-guard", "tetragon"]);
+        assert_eq!(conflicts[0].scopes, vec!["system"]);
+    }
+
+    #[test]
+    fn path_conflict_detection_skips_modules_not_in_plan() {
+        // MS011 Z-8 — conflicts are only computed across the active
+        // plan set. A module that declares a shared path but isn't
+        // in the plan must NOT trigger a conflict.
+        let make = |name: &str, paths: Vec<&str>| ModuleSummary {
+            name: name.to_string(),
+            version: String::new(),
+            summary: String::new(),
+            category: String::new(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            active: false,
+            install_paths: ModuleInstallPaths {
+                scope: "system".to_string(),
+                paths: paths.into_iter().map(String::from).collect(),
+            },
+            requires_hardware: Default::default(),
+        };
+        let modules = vec![
+            make("a", vec!["/shared/path"]),
+            make("b", vec!["/shared/path"]),
+            make("c", vec!["/c/path"]),
+        ];
+        let plan = vec!["a".to_string(), "c".to_string()]; // b not in plan
+        let conflicts = compute_path_conflicts(&modules, &plan);
+        assert!(conflicts.is_empty(), "b's /shared/path declaration must not conflict when b isn't planned");
+    }
+
+    #[test]
+    fn path_conflict_detection_distinct_scopes_surfaced() {
+        // MS011 Z-8 — when two modules share a path but with
+        // different scopes, scopes list contains both (informational
+        // conflict: separate scopes can coexist).
+        let make = |name: &str, scope: &str, paths: Vec<&str>| ModuleSummary {
+            name: name.to_string(),
+            version: String::new(),
+            summary: String::new(),
+            category: String::new(),
+            depends_on: Vec::new(),
+            conflicts: Vec::new(),
+            provides: Vec::new(),
+            consumes: Vec::new(),
+            active: false,
+            install_paths: ModuleInstallPaths {
+                scope: scope.to_string(),
+                paths: paths.into_iter().map(String::from).collect(),
+            },
+            requires_hardware: Default::default(),
+        };
+        let modules = vec![
+            make("host-mod",      "system",    vec!["/etc/foo"]),
+            make("container-mod", "container", vec!["/etc/foo"]),
+        ];
+        let plan = vec!["container-mod".to_string(), "host-mod".to_string()];
+        let conflicts = compute_path_conflicts(&modules, &plan);
+        assert_eq!(conflicts.len(), 1);
+        assert_eq!(conflicts[0].scopes, vec!["container", "system"]);
     }
 }

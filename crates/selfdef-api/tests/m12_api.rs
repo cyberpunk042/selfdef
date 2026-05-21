@@ -1792,6 +1792,13 @@ async fn modules_install_plan_route_returns_200_with_topological_shape() {
     assert!(v["cycle_member_slugs"].is_array());
     assert!(v["modules_dir"].is_string());
     assert!(v["modules_toml"].is_string());
+    // MS011 Z-8: path_conflicts is part of the canonical envelope.
+    // On CI (empty modules dir) the list is empty but the field
+    // must be present + an array.
+    assert!(
+        v["path_conflicts"].is_array(),
+        "path_conflicts must be array (MS011 Z-8)"
+    );
 }
 
 #[tokio::test]

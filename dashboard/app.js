@@ -591,19 +591,33 @@
       // SDD-057 step 5 — fetch install-options counts in parallel
       // with the modules list so the meta line surfaces ready /
       // blocked-by-hardware / blocked-by-missing-deps / needs-review.
-      const [body, opts] = await Promise.all([
+      // SDD-026 Z-8 — also fetch install-plan to surface path
+      // conflicts (modules whose [install_paths].paths overlap).
+      const [body, opts, plan] = await Promise.all([
         get("/v1/modules"),
         get("/v1/modules/install-options").catch(() => null),
+        get("/v1/modules/install-plan").catch(() => null),
       ]);
       const modules = body.modules || [];
       const activeCount = modules.filter((m) => m.active).length;
+      const conflictCount = (plan && plan.path_conflicts && plan.path_conflicts.length) || 0;
       countEl.textContent = `${activeCount}/${modules.length}`;
       countEl.className =
-        "fa-aggregate " + (modules.length === 0 ? "fa-unknown" : "fa-ok");
+        "fa-aggregate " + (modules.length === 0
+          ? "fa-unknown"
+          : conflictCount > 0 ? "fa-yellow" : "fa-ok");
       let metaText = `${activeCount} active / ${modules.length} shipped · dir: ${body.modules_dir || "(missing)"}`;
       if (opts && opts.counts) {
         const c = opts.counts;
         metaText += ` · install options: ${c.ready ?? 0} ready, ${c.blocked_by_missing_deps ?? 0} blocked-by-deps, ${c.blocked_by_hardware ?? 0} blocked-by-hw, ${c.needs_review ?? 0} needs-review`;
+      }
+      if (conflictCount > 0) {
+        const conflictPaths = plan.path_conflicts
+          .slice(0, 3)
+          .map(c => `${c.path} (${c.modules.join(", ")})`)
+          .join("; ");
+        const more = conflictCount > 3 ? ` + ${conflictCount - 3} more` : "";
+        metaText += ` · ⚠ ${conflictCount} path conflict${conflictCount === 1 ? "" : "s"}: ${conflictPaths}${more}`;
       }
       metaEl.textContent = metaText;
       ul.innerHTML = "";
