@@ -238,8 +238,107 @@ pub(crate) fn classify(series: &std::collections::HashMap<String, f64>) -> Vec<A
         .collect()
 }
 
-/// Fetch `/metrics` from the local daemon. Tries the UNIX socket first
+/// Fetch any endpoint from the local daemon. Tries the UNIX socket first
 /// (no auth needed), falls back to TCP with bearer token if configured.
+fn fetch_endpoint(path: &str) -> Result<String> {
+    let socket =
+        std::env::var("SELFDEF_SOCKET").unwrap_or_else(|_| "/run/selfdef.sock".to_string());
+    let socket_path = std::path::Path::new(&socket);
+    if socket_path.exists() {
+        let out = Command::new("curl")
+            .args([
+                "-s",
+                "--fail",
+                "--unix-socket",
+                &socket,
+                &format!("http://localhost{path}"),
+            ])
+            .output()
+            .with_context(|| format!("invoking curl against the UNIX socket for {path}"))?;
+        if out.status.success() {
+            return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+        }
+    }
+    if let (Ok(url), Ok(token)) = (
+        std::env::var("SELFDEF_API_URL"),
+        std::env::var("SELFDEF_API_TOKEN"),
+    ) {
+        let out = Command::new("curl")
+            .args([
+                "-s",
+                "--fail",
+                "-H",
+                &format!("Authorization: Bearer {token}"),
+                &format!("{url}{path}"),
+            ])
+            .output()
+            .with_context(|| format!("invoking curl against the TCP API URL for {path}"))?;
+        if out.status.success() {
+            return Ok(String::from_utf8_lossy(&out.stdout).into_owned());
+        }
+    }
+    Err(anyhow!(
+        "could not fetch {} — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
+        path,
+        socket
+    ))
+}
+
+/// Parse a `/v1/alerts` JSON response body into `(worst, rows)`.
+/// Extracted from `try_fetch_v1_alerts` so the conversion can be
+/// unit-tested without a live daemon. Returns `None` on any shape
+/// mismatch — caller falls through to the `/metrics` fallback.
+fn parse_v1_alerts_response(body: &str) -> Option<(&'static str, Vec<AlertRow>)> {
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    let worst_str = parsed.get("worst")?.as_str()?;
+    let worst: &'static str = match worst_str {
+        "ok" => "ok",
+        "warn" => "warn",
+        "critical" => "critical",
+        "unknown" => "unknown",
+        _ => return None,
+    };
+    let alerts_arr = parsed.get("alerts")?.as_array()?;
+    let mut rows = Vec::with_capacity(alerts_arr.len());
+    for row_val in alerts_arr {
+        let name_str = row_val.get("name")?.as_str()?;
+        // Resolve back to the static ALERTS metadata by name match,
+        // so AlertRow's static-str fields stay consistent with the
+        // /metrics-fallback path's rows.
+        let (name, ms, series, threshold, _) =
+            ALERTS.iter().find(|(n, ..)| *n == name_str).copied()?;
+        let value = row_val.get("value").and_then(|v| v.as_f64());
+        let state_str = row_val.get("state")?.as_str()?;
+        let state: &'static str = match state_str {
+            "ok" => "ok",
+            "warn" => "warn",
+            "critical" => "critical",
+            "unknown" => "unknown",
+            _ => return None,
+        };
+        rows.push(AlertRow {
+            name,
+            ms,
+            series,
+            threshold,
+            value,
+            state,
+        });
+    }
+    Some((worst, rows))
+}
+
+/// Try the typed `/v1/alerts` endpoint — returns `(worst, rows)` if
+/// the daemon serves it, `None` otherwise (older daemon, 404 HTML,
+/// network failure). Caller falls back to client-side classification.
+fn try_fetch_v1_alerts() -> Option<(&'static str, Vec<AlertRow>)> {
+    let body = fetch_endpoint("/v1/alerts").ok()?;
+    parse_v1_alerts_response(&body)
+}
+
+/// Fetch `/metrics` from the local daemon — kept as the fallback when
+/// `/v1/alerts` is unavailable. Tries the UNIX socket first (no auth
+/// needed), falls back to TCP with bearer token if configured.
 fn fetch_metrics() -> Result<String> {
     // First try the curl wrapper against the UNIX socket — the daemon
     // ships at `/run/selfdef.sock` by default. Operators may override
@@ -282,11 +381,23 @@ fn fetch_metrics() -> Result<String> {
 }
 
 /// Entry-point. Returns the process exit code.
+///
+/// Prefers the typed `GET /v1/alerts` endpoint (server-side classifier,
+/// single source of truth shared with the PWA dashboard). Falls back
+/// to `/metrics` + client-side classification when `/v1/alerts` is
+/// unreachable (older daemon / 404 / network failure) so older
+/// deployments keep working.
 pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
-    let metrics_text = fetch_metrics()?;
-    let series = parse_prom_exposition(&metrics_text);
-    let rows = classify(&series);
-    let worst = worst_state(&rows);
+    let (worst, rows) = match try_fetch_v1_alerts() {
+        Some((w, r)) => (w, r),
+        None => {
+            let metrics_text = fetch_metrics()?;
+            let series = parse_prom_exposition(&metrics_text);
+            let rows = classify(&series);
+            let worst = worst_state(&rows);
+            (worst, rows)
+        }
+    };
 
     if quiet {
         // PS1-friendly single-line output: `selfdef-alerts: WORST` —
@@ -409,5 +520,70 @@ mod tests {
             .find(|r| r.name == "PerimeterSigkill")
             .expect("PerimeterSigkill row");
         assert_eq!(row.state, "warn");
+    }
+
+    #[test]
+    fn parse_v1_alerts_response_round_trips_canonical_shape() {
+        // The exact JSON shape the daemon's GET /v1/alerts handler
+        // serves (crates/selfdef-api/src/alerts.rs::list).
+        let body = r#"{
+          "worst": "critical",
+          "alerts": [
+            {"name":"FrictionAuditFailing","ms":"MS046","series":"selfdef_friction_audit_failing_total","threshold":"> 0","value":0.0,"state":"ok"},
+            {"name":"PerimeterSigkill","ms":"MS047","series":"selfdef_perimeter_sigkills_total","threshold":"rate > 0 / 5m","value":42.0,"state":"warn"},
+            {"name":"PerimeterPolicyMissing","ms":"MS047","series":"selfdef_perimeter_policy_present","threshold":"== 0 for 2m","value":1.0,"state":"ok"},
+            {"name":"PerimeterChainBroken","ms":"MS047","series":"selfdef_perimeter_audit_chain_events","threshold":"== -1","value":-1.0,"state":"critical"},
+            {"name":"GuardianFailedResponse","ms":"MS044","series":"selfdef_guardian_failed_responses_total","threshold":"> 0","value":0.0,"state":"ok"},
+            {"name":"GuardianTetragonSocketMissing","ms":"MS044","series":"selfdef_guardian_tetragon_socket_present","threshold":"== 0 for 2m","value":1.0,"state":"ok"},
+            {"name":"GuardianChainBroken","ms":"MS044","series":"selfdef_guardian_audit_chain_events","threshold":"== -1","value":5.0,"state":"ok"},
+            {"name":"SchedulerSustainedBackpressure","ms":"MS048","series":"selfdef_scheduler_backpressured_decisions_total","threshold":"rate > 0 / 10m","value":0.0,"state":"ok"},
+            {"name":"SchedulerChainBroken","ms":"MS048","series":"selfdef_scheduler_audit_chain_events","threshold":"== -1","value":12.0,"state":"ok"}
+          ]
+        }"#;
+        let (worst, rows) = parse_v1_alerts_response(body).expect("expected Some");
+        assert_eq!(worst, "critical");
+        assert_eq!(rows.len(), 9);
+        // PerimeterChainBroken row
+        let chain = rows
+            .iter()
+            .find(|r| r.name == "PerimeterChainBroken")
+            .expect("PerimeterChainBroken row");
+        assert_eq!(chain.state, "critical");
+        assert_eq!(chain.value, Some(-1.0));
+        // The static-str rehydration: ms/series/threshold must come
+        // from the local ALERTS table, not be borrowed from the body
+        // (so the lifetime is 'static).
+        assert_eq!(chain.ms, "MS047");
+        assert_eq!(chain.series, "selfdef_perimeter_audit_chain_events");
+    }
+
+    #[test]
+    fn parse_v1_alerts_response_returns_none_on_malformed_body() {
+        assert!(parse_v1_alerts_response("not json").is_none());
+        assert!(parse_v1_alerts_response("{}").is_none());
+        assert!(parse_v1_alerts_response(r#"{"worst":"ok"}"#).is_none());
+        // Unknown state string → reject (don't silently coerce).
+        let bad_state = r#"{"worst":"ok","alerts":[{"name":"FrictionAuditFailing","ms":"MS046","series":"selfdef_friction_audit_failing_total","threshold":"> 0","value":0.0,"state":"unicorn"}]}"#;
+        assert!(parse_v1_alerts_response(bad_state).is_none());
+        // Unknown alert name → reject (catches drift between server
+        // and CLI's static ALERTS table).
+        let bad_name = r#"{"worst":"ok","alerts":[{"name":"NewAlertName","ms":"MS046","series":"x","threshold":"> 0","value":0.0,"state":"ok"}]}"#;
+        assert!(parse_v1_alerts_response(bad_name).is_none());
+    }
+
+    #[test]
+    fn parse_v1_alerts_response_handles_null_value() {
+        // Server emits value=null when the series isn't exported yet.
+        let body = r#"{
+          "worst": "unknown",
+          "alerts": [
+            {"name":"FrictionAuditFailing","ms":"MS046","series":"selfdef_friction_audit_failing_total","threshold":"> 0","value":null,"state":"unknown"}
+          ]
+        }"#;
+        let (worst, rows) = parse_v1_alerts_response(body).expect("expected Some");
+        assert_eq!(worst, "unknown");
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].value, None);
+        assert_eq!(rows[0].state, "unknown");
     }
 }
