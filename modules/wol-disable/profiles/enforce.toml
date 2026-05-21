@@ -1,0 +1,7 @@
+# Profile: enforce (default).
+#
+# Service runs ethtool -s <iface> wol d on every wired NIC at
+# boot + on resume from suspend/hibernate. Operator's host
+# CANNOT be powered on via magic packet.
+
+profile = "enforce"

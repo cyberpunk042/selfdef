@@ -1,0 +1,40 @@
+name        = "wol-disable"
+version     = "0.1.0"
+summary     = "Disable Wake-on-LAN on every wired NIC. Blocks remote/network-side power-on of a powered-off host. Mitigates T1542 Pre-OS Boot — attacker on the LAN can no longer wake the host to a vulnerable boot state"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["wol-disable"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "ethtool" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `enforce` (default) — at boot + on resume, ethtool -s <iface>
+#                      wol d every wired NIC.
+# `audit`            — service still installs but ONLY REPORTS
+#                      current WoL state without changing it.
+default = "enforce"
+available = ["enforce", "audit"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/selfdef-wol-disable.service",
+    "/usr/local/libexec/selfdef/wol-disable.sh",
+    "/etc/selfdef/modules/wol-disable.toml",
+]

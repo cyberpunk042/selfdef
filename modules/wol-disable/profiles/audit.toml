@@ -1,0 +1,8 @@
+# Profile: audit.
+#
+# Service installs + runs at boot/resume but ONLY REPORTS the
+# current WoL state of each NIC via logger tagged
+# selfdef-wol-disable. Does NOT change anything. Operator
+# inspects then flips to enforce.
+
+profile = "audit"

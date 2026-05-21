@@ -1,0 +1,27 @@
+# selfdef wol-disable — service unit.
+#
+# Fires at boot + after resume from suspend/hibernate so the
+# WoL setting (kernel-resets on resume) gets re-applied.
+
+[Unit]
+Description=selfdef Wake-on-LAN disable on all wired NICs
+Documentation=https://github.com/cyberpunk042/selfdef modules/wol-disable/README.md
+After=network.target
+# Re-fire on resume.
+StopWhenUnneeded=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/libexec/selfdef/wol-disable.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+# Need CAP_NET_ADMIN for ethtool -s.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+ReadWritePaths=/dev/log
+
+[Install]
+WantedBy=multi-user.target sleep.target
