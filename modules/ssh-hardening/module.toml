@@ -1,0 +1,41 @@
+name        = "ssh-hardening"
+version     = "0.1.0"
+summary     = "sshd_config baseline — disable root login, password auth off, X11 off, strong KEX + MAC + cipher set. Front-door hardening with sshd -t refuse-to-brick guard"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sshd-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sshd" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — PermitRootLogin no, password auth off,
+#                       X11 forwarding off, strong crypto set.
+# `paranoid`            — standard + AllowGroups restriction
+#                       (requires `selfdef_acknowledge_allowgroups
+#                       = true` in config) + MaxAuthTries 2 +
+#                       LoginGraceTime 30s.
+default = "standard"
+available = ["standard", "paranoid"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/ssh/sshd_config.d/50-selfdef.conf",
+    "/etc/selfdef/modules/ssh-hardening.toml",
+]

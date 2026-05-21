@@ -1,0 +1,9 @@
+# Profile: standard (default).
+#
+# PermitRootLogin no + password auth off + X11 off + strong
+# crypto-only KEX/MAC/cipher set + MaxAuthTries 4. Operator
+# MUST have a working ssh-key in ~/.ssh/authorized_keys BEFORE
+# applying — refuse-to-brick guard validates SYNTAX via sshd -t,
+# not key viability.
+
+profile = "standard"

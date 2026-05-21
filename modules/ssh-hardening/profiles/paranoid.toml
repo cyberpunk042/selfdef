@@ -1,0 +1,14 @@
+# Profile: paranoid.
+#
+# standard + AllowGroups ssh + MaxAuthTries 2 + LoginGraceTime 30s
+# + MaxStartups 2:30:10 + DisableForwarding yes (umbrella).
+#
+# AllowGroups ssh is HARD — non-ssh-group users CANNOT log in
+# regardless of authorized_keys. Operator MUST set
+# selfdef_acknowledge_allowgroups = true after confirming their
+# user IS in the ssh group.
+
+profile = "paranoid"
+
+# Refuse-to-brick gate for paranoid profile.
+selfdef_acknowledge_allowgroups = false
