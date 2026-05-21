@@ -1,0 +1,38 @@
+name        = "rare-filesystems-disable"
+version     = "0.1.0"
+summary     = "Blacklist rare/legacy filesystem kernel modules (cramfs, freevxfs, jffs2, hfs, hfsplus, udf, ksmbd) via /etc/modprobe.d. Reduces kernel attack surface + defeats USB-with-exotic-fs auto-mount-as-root vectors. Per CIS Benchmark 1.1"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rare-filesystems-blocked"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — block legacy + obscure FS:
+#                       cramfs, freevxfs, jffs2, hfs, hfsplus,
+#                       udf, ksmbd (SMB-server, in-kernel)
+# `strict`             — baseline + squashfs + nfs-server +
+#                       gfs2. Reserved for hosts that NEVER
+#                       use snap (squashfs) or NFS server.
+default = "baseline"
+available = ["baseline", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/rare-filesystems-disable.toml",
+    "/etc/modprobe.d/selfdef-rare-filesystems-blacklist.conf",
+]
