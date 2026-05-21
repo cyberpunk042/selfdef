@@ -1,12 +1,25 @@
 # SDD-018 — Hardware-aware module gating + tune surface (SD-R14..R32 arc)
 
-> Status: **review** — captures the SD-R14..R32 in-arc design + closes
+> Status: **implemented** — captures the SD-R14..R32 in-arc design;
 > the doctrine gap operators asked for ("research and continuously
-> evolving specs to drive and evolve the SDD and TDD"). Cycle 1
-> (SD-R1..R23) merged via PR #190 on 2026-05-16; cycle 2
-> (SD-R24..R32) accumulating in PR #191.
+> evolving specs to drive and evolve the SDD and TDD") is closed.
+> End-to-end production landing 2026-05-21:
+> - `crates/selfdef-hardware/` (probe, sain01 match, capabilities,
+>   thermals, AVX-512 detection)
+> - `selfdefctl hardware {show, match, export, thermals, posture,
+>   aot-script, tune}` CLI subverbs
+> - `GET /v1/hardware{,/capabilities,/sain01}` HTTP surface
+>   (commit 520501d)
+> - Dashboard PWA `Host hardware` panel (commit 757a323)
+> - `modules/hardware-tune-cache/` operator-activatable module
+> - L1 coherence gates: `L1-api-endpoints`, `L1-dashboard-sections`,
+>   `L1-operator-cheatsheet`
+> - Integration tests in `crates/selfdef-api/tests/m12_api.rs` +
+>   `crates/selfdef-cli/tests/`
+> Cycle 1 (SD-R1..R23) merged via PR #190 on 2026-05-16; cycle 2
+> (SD-R24..R32) shipped and verified through every layer.
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16 (cycle 2 amendment)
+> Last updated: 2026-05-21 (status: review → implemented)
 > Builds on: SDD-017 (hardware inventory); sovereign-os R172 (thermal
 > classification + OCSF events); sovereign-os R173 (selfdef-tune.sh).
 

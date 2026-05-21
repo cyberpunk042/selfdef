@@ -1,8 +1,20 @@
 # SDD-015 — Tetragon perimeter coexistence (Stage-2 PR 3/4)
 
-> Status: **review** — third Stage-2 SDD per SDD-012 Q-H ordering
+> Status: **implemented** — third Stage-2 SDD per SDD-012 Q-H ordering;
+> Q15-A through Q15-D shipped end-to-end:
+> - `selfdefctl perimeter check-overlap` + `selfdefctl perimeter status`
+>   CLI verbs (`crates/selfdef-cli/src/perimeter.rs`,
+>   `check_overlap_with_stance` honoring Q15-D third-party stance)
+> - `[perimeter] check_overlap_on_apply` + `overlap_warn_only` +
+>   `third_party_policy_stance` config keys (`crates/selfdef-config/`)
+> - `selfdef_config::resolve_perimeter_check_overlap` deployment-target-
+>   aware resolver (SAIN-01 default-on, generic default-off)
+> - `modules/agent-guard/` ships its TracingPolicy at the canonical
+>   `/etc/tetragon/tracing-policies/` directory alongside sovereign-os'
+>   `sovereign-kernel-fence.yaml`
+> - Coverage in `crates/selfdef-cli/src/perimeter.rs::tests::run_check_overlap`
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-16
+> Last updated: 2026-05-21 (status: review → implemented)
 > Closes findings: SDD-012 Q-A (Tetragon policy authoring authority)
 > Derived from: SDD-012 (integration design); SDD-013 ([deployment.target]); SDD-014 (shared-audit-summary channel); SDD-001 (ai-machine-end-to-end); SDD-004 (security threat model)
 
