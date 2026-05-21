@@ -154,14 +154,20 @@ Operator runbooks (20 total, 5 per watchdog) ship in the companion
 
 ### Operator runbooks
 
-Every audit-shipped feature has a runbook under `docs/dev/`:
+One-page printable reference + per-feature deep dives:
 
+- [`docs/operator-cheatsheet.md`](docs/operator-cheatsheet.md) — **daily-driver commands one-pager**: trio / doctor / per-watchdog drill-down / modules / HTTP API / PS1 integration. Print this and pin it.
 - [`first-run.md`](docs/dev/first-run.md) — `init` family walkthrough.
 - [`operator-health-check.md`](docs/dev/operator-health-check.md) — `doctor` reference + systemd-timer integration.
+- [`modules.md`](docs/dev/modules.md) — module author contract (`module.toml` schema + `[install]` kinds + lifecycle).
 - [`signing.md`](docs/dev/signing.md) — rule + TracingPolicy signing (minisign).
 - [`rbac-posture.md`](docs/dev/rbac-posture.md) — k8s pod-label RBAC verification.
 - [`module-helpers.md`](docs/dev/module-helpers.md) — shared module-script library (`packaging/lib/module-lib.sh`).
 - [`test-contract.md`](docs/dev/test-contract.md) — what "integration-tested" means in this codebase.
+
+For the 20 watchdog-failure-mode runbooks (5 per watchdog × 4 watchdogs)
++ the UX coherence failures runbook, see the companion info-hub repo's
+`wiki/runbooks/` directory.
 
 ## Layout
 
