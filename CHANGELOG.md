@@ -6,6 +6,136 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 11 new modules push 53→63 (2026-05-21, batch 16)
+
+Eleven new modules shipped in one resumed perpetual-/goal turn,
+diversifying the hardening + detection + sysctl + modprobe-blacklist
+surfaces. All follow the established module-template pattern
+(module.toml + profiles/*.toml + install/{apply,check,uninstall,lib}.sh
++ install_paths manifest + README with MITRE-coverage table +
+operator workflow + caveats + coexistence). Module catalog parser
+test suite stays 16/16 green (cargo test -p selfdef-api --lib
+modules::tests) after each add.
+
+**Hardening (4 new modules)**
+
+- `bluetooth-disable` — triple-defense BlueZ stack mask + rfkill
+  + modprobe blacklist of btusb/btintel/btbcm/btmtk/btrtl/bluetooth
+  with install /bin/true. MITRE T1011 / T1200 / T1557 / T1543.002
+  (BlueBorne CVE-2017-1000251 family, BlueDucky CVE-2023-45866,
+  KNOB CVE-2019-9506, BIAS CVE-2020-10135). Two profiles: mask
+  (default; full triple) + stop (services + rfkill only).
+
+- `sysctl-network-baseline` — curated net.ipv4 + net.ipv6
+  hardening: accept_source_route=0, accept_redirects=0,
+  rp_filter=1 strict, log_martians=1, tcp_syncookies=1, ipv6
+  accept_ra/autoconf=0. Three profiles: baseline / router
+  (forwards + conntrack tune) / paranoid (silent host + ipv6
+  disabled). Soft-fails per-key on container-restricted
+  namespaces. MITRE T1557.002 / T1499 / T1590 / T1542.005.
+
+- `kernel-yama-baseline` — kernel.yama.ptrace_scope three-tier
+  control (1 relaxed / 2 strict / 3 paranoid). 10th refuse-to-
+  brick gate: paranoid requires `acknowledge_paranoid = true` in
+  config (irreversible until reboot). MITRE T1055.008 / T1003 /
+  T1611 / T1574 (blocks in-host credential-theft via gdb-attach
+  to ssh-agent / gpg-agent).
+
+- `file-protections-baseline` — fs.protected_{hardlinks,
+  symlinks,fifos,regular} sysctls at kernel-max. Defeats
+  canonical /tmp-race priv-esc class (symlink-race-to-shadow,
+  hardlink-to-root-file, FIFO/regular race-and-replace). MITRE
+  T1068 / T1574.012 / T1222.002 / T1083.
+
+- `rare-filesystems-disable` — modprobe.d blacklist for cramfs,
+  freevxfs, jffs2, hfs, hfsplus, udf, ksmbd (baseline) +
+  squashfs/nfsd/gfs2 (strict). Defeats USB-with-exotic-fs auto-
+  mount kernel-parser-CVE class (CVE-2020-27194 jffs2 type
+  confusion; CVE-2023-32257 ksmbd RCE). MITRE T1068 / T1190 /
+  T1052.001 / T1091 / T1014.
+
+**Patch automation**
+
+- `dnf-automatic-config` — RHEL/Fedora/Rocky/AlmaLinux parallel
+  of unattended-upgrades-config. Renders /etc/dnf/automatic.conf
+  with upgrade_type=security + emit_via=stdio. Two profiles:
+  security-only (default; never auto-reboot) + security-and-
+  reboot (shutdown -r +5 when kernel/glibc requires).
+  Backup-then-render-with-header-marker pattern. MITRE T1190 /
+  T1068 / T1133 / T1059.
+
+**Detection (5 new modules; extends staggered cadence ladder
+from 4 to 9 modules)**
+
+- `unowned-files-watchdog` — Sun 06:00 weekly find -nouser -o
+  -nogroup scan. Two-tier journald events (summary + per-path).
+  Severity: 0=ok, 1-50=warn, 51+=alert. MITRE T1070.004 / T1136
+  / T1078 / T1083.
+
+- `world-writable-watchdog` — daily 05:00 find -perm 0002 scan
+  (files any; non-sticky dirs). Prunes safe-by-design paths
+  (/tmp, /var/tmp, /dev/shm, container storage, virtual fs).
+  Severity: 0=ok, 1-25=warn, 26+=alert. MITRE T1222 / T1574.010
+  / T1083 / T1078.
+
+- `suid-sgid-watchdog` — daily 05:15 SUID/SGID inventory + delta
+  against /var/lib/selfdef/suid-sgid-baseline.tsv. Per-class
+  events: added / removed / perm_changed / hash_changed. Baseline
+  preserved across uninstall (forensic). MITRE T1548.001 / T1546
+  / T1059 / T1574.005.
+
+- `swap-encryption-detect` — boot+5min + every-12h. Per /proc/swaps
+  entry classification: /dev/zram* safe (RAM only), /dev/mapper/<x>
+  safe iff dmsetup table=crypt or crypttab mention, raw devices
+  safe iff lsblk parent-walk finds crypto_LUKS, file-backed safe
+  iff parent fs encrypted. zswap+unsafe_backing=alert (worst
+  case). MITRE T1552.004 / T1003.008 / T1565.001 / T1005.
+
+- `bootloader-password-detect` — boot+10min + Sun 07:00 weekly.
+  Scans GRUB2 grub.cfg + /etc/grub.d/40_custom + 01_users across
+  Debian/Ubuntu/RHEL/Fedora/Rocky/Alma/EFI paths for password
+  directive presence + PBKDF2 form. Severity: pbkdf2+superuser=ok,
+  pbkdf2_no_superuser=warn, plaintext=warn, no_password=alert.
+  MITRE T1542 / T1542.003 / T1078 / T1200 / T1556.
+
+**Detection-ladder slot rationale (early-morning I/O budget)**
+
+| Time | Module | Cadence |
+|---|---|---|
+| 02:30 ±30m | aide-bridge | daily |
+| 03:30 ±30m | clamav-cron | daily |
+| 04:30 ±15m | rkhunter-cron | daily |
+| 05:00 ±15m | world-writable-watchdog | daily (NEW) |
+| 05:15 ±10m | suid-sgid-watchdog | daily (NEW) |
+| Sun 05:30 ±15m | lynis-cron | weekly |
+| Sun 06:00 ±15m | unowned-files-watchdog | weekly (NEW) |
+| Sun 07:00 ±15m | bootloader-password-detect | weekly (NEW) |
+| boot+5m + 12h | swap-encryption-detect | trigger-driven (NEW) |
+
+Three weekly + four daily + two trigger-driven cadences cover
+the early-morning operator-host I/O budget without herd
+collision. Each carries `Persistent=true` to catch up missed
+runs after host downtime.
+
+**Refuse-to-brick gate ledger (now 10)**
+
+10th gate landed with kernel-yama-baseline `acknowledge_paranoid`.
+Full ledger: visudo -cf (sudoers), sshd -t (ssh), backup-then-
+restore (per modify-in-place modules), modprobe blacklist
+ownership marker (per modprobe modules), authselect/pam-auth-
+update soft-fail (per pam modules), audit-rules immutable
+acknowledge flag, firewall-allow-ssh acknowledge (per future
+firewall modules), kernel-lockdown lockdown_mode_acknowledge,
+kernel-yama acknowledge_paranoid (NEW).
+
+**Module total**
+
+After this batch: 63 modules shipped (was 52 at session start).
+Operator-target is 100+; remaining gap ~37 modules. Detection
+ladder 7→9. Compute-stack unchanged (5). Hardening-stack
+expanded 22→26. Total cargo test -p selfdef-api --lib
+modules::tests stays 16/16 across the batch.
+
 ### Added — MS043 UX `selfdefctl dashboard-prefs` CLI verb (2026-05-21, batch 15)
 
 Closes the layer-up pattern for the dashboard-prefs arc. After
