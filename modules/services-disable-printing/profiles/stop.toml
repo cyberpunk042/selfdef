@@ -1,0 +1,7 @@
+# Profile: stop.
+#
+# stop + disable only. Operator-pull systemctl start <service>
+# re-enables. Less defense against a package re-install
+# auto-starting the service.
+
+profile = "stop"

@@ -1,0 +1,38 @@
+name        = "services-disable-printing"
+version     = "0.1.0"
+summary     = "Mask cups + cups-browsed + saned + others — disables print + scan subsystems on hosts that don't print. Removes CUPS RCE surfaces (CVE-2024-47175 family) + scanner-network-discovery attack class"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["printing-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + mask cups + cups-browsed
+#                   + saned (scanner daemon).
+# `stop`           — stop + disable only (operator-pull
+#                   restartable; defense against package re-
+#                   enable is weaker).
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/services-disable-printing.toml",
+]

@@ -1,0 +1,7 @@
+# Profile: mask (default).
+#
+# stop + disable + MASK the print + scan service set. Operator-
+# pull re-enable requires explicit systemctl unmask of each
+# service. Defeats package re-install Wants= chain.
+
+profile = "mask"
