@@ -49,6 +49,10 @@ check_route "/v1/scheduler/explain/:request_id" "SDD-031 D4" || failures=$((fail
 check_route "/v1/modules"                 "MS006 / SDD-009 Q-G" || failures=$((failures + 1))
 check_route "/v1/modules/:name"           "MS006 / SDD-009 Q-G" || failures=$((failures + 1))
 
+# MS027 — server-side alert classification (consumed by PWA dashboard
+# + selfdefctl alerts; single source of truth for the 9 alert series).
+check_route "/v1/alerts"                  "MS027" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

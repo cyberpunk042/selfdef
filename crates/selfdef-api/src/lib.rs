@@ -35,6 +35,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
+mod alerts;
 mod control;
 mod friction_audit;
 mod guardian;
@@ -177,6 +178,10 @@ pub fn router(state: ApiState) -> Router {
         // operator-confirmed `selfdefctl modules apply` flow.
         .route("/v1/modules", get(modules::list))
         .route("/v1/modules/:name", get(modules::show))
+        // MS027: server-side classification of the 9 four-watchdog
+        // alert series. PWA dashboard + `selfdefctl alerts` both
+        // consume this typed JSON shape — single source of truth.
+        .route("/v1/alerts", get(alerts::list))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

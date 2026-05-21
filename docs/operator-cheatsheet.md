@@ -106,6 +106,7 @@ GET /v1/perimeter{,/history}
 GET /v1/guardian{,/history}
 GET /v1/scheduler{,/history,/backpressure,/weights,/explain/:request_id}
 GET /v1/modules{,/:name}
+GET /v1/alerts                                       (MS027 server-side classifier)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

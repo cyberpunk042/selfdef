@@ -1922,3 +1922,67 @@ async fn watchdog_history_routes_honor_limit_query() {
         assert!(v["verdicts"].is_array(), "uri {uri} verdicts not array");
     }
 }
+
+#[tokio::test]
+async fn alerts_route_returns_200_with_nine_classified_rows() {
+    // MS027 + /v1/alerts: server-side classification of the 9 four-
+    // watchdog alert series. Both the PWA dashboard and the
+    // selfdefctl alerts CLI consume this; we verify the shape +
+    // canonical ordering (so client code can index by position).
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/alerts")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["ok", "warn", "critical", "unknown"].contains(&worst),
+        "worst must be one of ok/warn/critical/unknown; got {worst}"
+    );
+
+    let alerts = v["alerts"].as_array().expect("alerts must be array");
+    assert_eq!(alerts.len(), 9, "expected exactly 9 alert rows");
+
+    let expected_names = [
+        "FrictionAuditFailing",
+        "PerimeterSigkill",
+        "PerimeterPolicyMissing",
+        "PerimeterChainBroken",
+        "GuardianFailedResponse",
+        "GuardianTetragonSocketMissing",
+        "GuardianChainBroken",
+        "SchedulerSustainedBackpressure",
+        "SchedulerChainBroken",
+    ];
+    for (i, expected) in expected_names.iter().enumerate() {
+        let row = &alerts[i];
+        assert_eq!(
+            row["name"].as_str().unwrap(),
+            *expected,
+            "row {i} name mismatch"
+        );
+        let state = row["state"].as_str().unwrap();
+        assert!(
+            ["ok", "warn", "critical", "unknown"].contains(&state),
+            "row {i} state must be one of ok/warn/critical/unknown; got {state}"
+        );
+        assert!(row["ms"].is_string(), "row {i} ms must be string");
+        assert!(row["series"].is_string(), "row {i} series must be string");
+        assert!(
+            row["threshold"].is_string(),
+            "row {i} threshold must be string"
+        );
+        // value is either f64 or null (when series isn't exported)
+        assert!(
+            row["value"].is_number() || row["value"].is_null(),
+            "row {i} value must be number or null"
+        );
+    }
+}

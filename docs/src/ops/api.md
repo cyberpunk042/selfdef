@@ -150,6 +150,7 @@ socket = trusted; TCP = read token).
 | GET    | `/v1/scheduler/explain/:request_id`   | Single-decision detail (factors + chosen route) |
 | GET    | `/v1/modules`                         | All shipped modules with `{slug, summary, active, …}` |
 | GET    | `/v1/modules/:name`                   | Single-module detail (404 if unknown, 400 on invalid slug) |
+| GET    | `/v1/alerts`                          | MS027 alerts: server-side classification of the 9 alert series. Returns `{worst, alerts: [{name, ms, series, threshold, value, state}]}`. Consumed by both the PWA dashboard "Alerts overview" panel and `selfdefctl alerts`. |
 
 Module `:name` slugs are validated against `[a-z0-9-]{1,64}`. Any
 mismatch is `400 Bad Request` — this is the directory-traversal guard
