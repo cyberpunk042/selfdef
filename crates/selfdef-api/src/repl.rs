@@ -58,6 +58,7 @@ const TIERS: &[TierDescriptor] = &[
             "lora_list / lora_attach / lora_detach / lora_set_status",
             "SD-R97 aliases: h() p() m() mi(slug) md() mio() mip() lo() la() ld() ls() mt() mtt() rh(N)",
             "SD-R97 @track(name) — wasted-path tracker for Tier 2 macros",
+            "SD-R102 auto-load: $SELFDEF_REPL_MACROS > ~/.config/selfdef/repl-macros.py",
         ],
     },
     TierDescriptor {
@@ -65,8 +66,11 @@ const TIERS: &[TierDescriptor] = &[
         name: "Proto-Proto-Programming",
         language: "Python (operator-defined)",
         status: "operator-pull",
-        description: "Operator-owned layer on TOP of Tier 1. Custom CoT loops + DSL macros + token-saving aliases that wrap Tier 1 calls into operator-meaningful idioms. We ship Tier 1 + the manifest; operator owns Tier 2.",
-        example_callables: &["(operator-supplied macros — register with @selfdef_macro)"],
+        description: "Operator-owned layer on TOP of Tier 1. Custom CoT loops + DSL macros + token-saving aliases that wrap Tier 1 calls into operator-meaningful idioms. We ship Tier 1 + the manifest + the SD-R102 auto-load hook; operator owns the macros file.",
+        example_callables: &[
+            "(operator-supplied macros — register with @selfdef_macro)",
+            "SD-R102 persist: drop the file at $SELFDEF_REPL_MACROS or ~/.config/selfdef/repl-macros.py",
+        ],
     },
 ];
 

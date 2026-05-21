@@ -6,6 +6,45 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS011 Z-12 SD-R102 operator-macro auto-load (2026-05-21, batch 7)
+
+Persistence path for Tier 2: until now operator-owned macros were
+session-volatile — every fresh `python3 -i -c "$(selfdefctl repl
+bootstrap)"` re-imported a blank Tier 1 surface and lost any custom
+`@selfdef_macro` registrations from the previous session. SD-R102
+closes the gap with a single auto-source step at bootstrap time.
+
+- `bootstrap_script()` now defines `_autoload_user_macros()` which
+  resolves a single operator-owned file via:
+    1. `$SELFDEF_REPL_MACROS`                          (explicit override)
+    2. `$XDG_CONFIG_HOME/selfdef/repl-macros.py`       (XDG-compliant)
+    3. `~/.config/selfdef/repl-macros.py`              (XDG fallback)
+- The file is `compile()`d then `exec`d INTO the bootstrap's globals so
+  `@selfdef_macro` / `@track` / Tier 1 callables / SD-R97 aliases are
+  all in scope. Resolved path is stashed in `_USER_MACROS_PATH`.
+- Broken operator-owned files print the exception to stderr but
+  bootstrap continues — a syntax error in `repl-macros.py` MUST NOT
+  brick the REPL. Verified by manual smoke (SyntaxError captured;
+  REPL still functional).
+- Banner block now reports which file (if any) was loaded, or hints
+  at the resolution paths when none was found.
+- TierDescriptor entries (selfdef-api `/v1/repl` + selfdef-cli `repl
+  tiers` JSON) advertise the new SD-R102 hints on both tier 1 (the
+  load mechanism) and tier 2 (the persistence guidance).
+- 2 new unit tests in selfdef-cli's `repl::tests`: bootstrap-script
+  smoke (env-var + paths + compile-then-exec invariants) +
+  tier-descriptor advertising (both tiers reference SD-R102).
+- End-to-end smoke verified with a real `python3`: a fixture file
+  defining `@selfdef_macro def hello_from_file()` + a global
+  `PROOF_OF_LOAD = 42` was loaded; both were accessible in the
+  bootstrap-spawned interactive session.
+
+Per the operator's verbatim direction (SDD-026 Z-12 / SD-R85):
+*"We ship Tier 1 + the manifest; operator owns Tier 2."* SD-R102
+preserves that ownership boundary — the operator still owns the
+macros file 100%, we just provide the auto-load hook so the file
+survives session boundaries.
+
 ### Added — MS011 Z-2 invocation seed (2026-05-21, batch 6)
 
 - `selfdefctl inference-backends version <backend>` subverb that shells

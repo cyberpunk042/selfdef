@@ -114,6 +114,7 @@ pub(crate) fn tiers() -> Vec<Tier> {
                 "lora_set_status(adapter_id, status, state=None)",
                 "SD-R97 aliases: h() p() m() mi(slug) md() mio() mip() lo() la() ld() ls() mt() mtt() rh(N)",
                 "SD-R97 @track(name) — wasted-path tracker for Tier 2 macros",
+                "SD-R102 auto-load: $SELFDEF_REPL_MACROS > ~/.config/selfdef/repl-macros.py",
             ],
         },
         Tier {
@@ -121,11 +122,14 @@ pub(crate) fn tiers() -> Vec<Tier> {
             name: "Proto-Proto-Programming",
             description: "Operator-owned layer on TOP of Tier 1. Custom CoT loops + DSL \
                  macros + token-saving aliases that wrap Tier 1 calls into \
-                 operator-meaningful idioms. We ship Tier 1 + the manifest; \
-                 operator owns Tier 2.",
+                 operator-meaningful idioms. We ship Tier 1 + the manifest + \
+                 the SD-R102 auto-load hook; operator owns the macros file.",
             language: "Python (operator-defined)",
             status: "operator-pull",
-            example_callables: vec!["(operator-supplied macros — register with @selfdef_macro)"],
+            example_callables: vec![
+                "(operator-supplied macros — register with @selfdef_macro)",
+                "SD-R102 persist: drop the file at $SELFDEF_REPL_MACROS or ~/.config/selfdef/repl-macros.py",
+            ],
         },
     ]
 }
@@ -852,6 +856,52 @@ def run_macro(name, *args, **kwargs):
         raise KeyError(f"unknown selfdef_macro {name!r}; known: {known}")
     return m["callable"](*args, **kwargs)
 
+# ============================================================
+# SD-R102 (E8.M7) — Tier 2 macro auto-load from operator-owned file.
+# ------------------------------------------------------------
+# Operator owns Tier 2 (per SD-R85), but Tier 2 macros are session-
+# volatile by default — every fresh REPL re-imports a blank Tier 1.
+# To make operator macros PERSISTENT across sessions without forcing
+# them into selfdef's tree, auto-source a single operator-owned file
+# at bootstrap time. Resolution order:
+#   1. $SELFDEF_REPL_MACROS                      (explicit override)
+#   2. $XDG_CONFIG_HOME/selfdef/repl-macros.py   (XDG-compliant)
+#   3. ~/.config/selfdef/repl-macros.py          (XDG fallback)
+# The file is exec()'d INTO this bootstrap's globals so @selfdef_macro
+# / @track / Tier 1 callables / SD-R97 aliases are all in scope. If
+# the file does not exist, the step is a no-op. If the file raises
+# during exec, the error is printed but bootstrap continues — a
+# broken operator-owned file MUST NOT brick the REPL.
+
+def _autoload_user_macros():
+    """SD-R102: source operator's persistent Tier 2 macros, if any."""
+    candidates = []
+    explicit = _os.environ.get("SELFDEF_REPL_MACROS")
+    if explicit:
+        candidates.append(explicit)
+    else:
+        xdg = _os.environ.get("XDG_CONFIG_HOME")
+        if xdg:
+            candidates.append(_os.path.join(xdg, "selfdef", "repl-macros.py"))
+        home = _os.environ.get("HOME")
+        if home:
+            candidates.append(_os.path.join(home, ".config", "selfdef", "repl-macros.py"))
+    for path in candidates:
+        if not _os.path.isfile(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                src = fh.read()
+            exec(compile(src, path, "exec"), globals(), globals())
+            if hasattr(_sys, "ps1") or _sys.stdin.isatty():
+                print(f"selfdef REPL: loaded operator macros from {path}")
+        except Exception as e:
+            print(f"selfdef REPL: failed to load {path}: {e!r}", file=_sys.stderr)
+        return path
+    return None
+
+_USER_MACROS_PATH = _autoload_user_macros()
+
 # Banner — only print when imported into an interactive session.
 if hasattr(_sys, "ps1") or _sys.stdin.isatty():
     print("selfdef REPL — Tier 1 (Proto-Programming) ready.")
@@ -889,6 +939,14 @@ if hasattr(_sys, "ps1") or _sys.stdin.isatty():
           "SD-R95 history records `transport` field per call.")
     print()
     print("  Tier 2: define your own helpers atop these — the surface is yours.")
+    print()
+    print("  SD-R102 operator macros auto-load:")
+    print("    $SELFDEF_REPL_MACROS  > $XDG_CONFIG_HOME/selfdef/repl-macros.py")
+    print("                          > ~/.config/selfdef/repl-macros.py")
+    if _USER_MACROS_PATH:
+        print(f"    loaded: {_USER_MACROS_PATH}")
+    else:
+        print("    (no operator macros file found — drop one of the above to persist Tier 2)")
 "#
     .to_string()
 }
@@ -1193,6 +1251,50 @@ mod tests {
         assert!(s.contains("def lora_detach"));
         assert!(s.contains("def lora_set_status"));
         assert!(s.contains("def mcp_tools"));
+    }
+
+    #[test]
+    fn sdr102_bootstrap_script_includes_user_macro_autoload() {
+        let s = bootstrap_script();
+        assert!(s.contains("SD-R102"), "must reference SD-R102");
+        assert!(s.contains("_autoload_user_macros"), "must define autoload fn");
+        assert!(s.contains("SELFDEF_REPL_MACROS"), "must check env var");
+        assert!(s.contains("XDG_CONFIG_HOME"), "must check XDG_CONFIG_HOME");
+        assert!(s.contains("repl-macros.py"), "must reference the filename");
+        assert!(s.contains("_USER_MACROS_PATH"), "must store loaded path");
+        assert!(
+            s.contains("compile(src, path, \"exec\")"),
+            "must compile-then-exec for clean tracebacks"
+        );
+    }
+
+    #[test]
+    fn sdr102_tier_descriptors_advertise_autoload() {
+        let s = render_tiers_json();
+        let v: serde_json::Value = serde_json::from_str(&s).unwrap();
+        let tiers = v["tiers"].as_array().unwrap();
+        // Tier 1 advertises the auto-load env+path hints.
+        let tier1_callables = tiers[1]["example_callables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(
+            tier1_callables.iter().any(|s| s.contains("SD-R102")),
+            "Tier 1 advertises SD-R102 auto-load: {tier1_callables:?}"
+        );
+        // Tier 2 advertises the persistence path.
+        let tier2_callables = tiers[2]["example_callables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_str().unwrap())
+            .collect::<Vec<_>>();
+        assert!(
+            tier2_callables.iter().any(|s| s.contains("SD-R102")),
+            "Tier 2 advertises SD-R102 persistence: {tier2_callables:?}"
+        );
     }
 
     #[test]
