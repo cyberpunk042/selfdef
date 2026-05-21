@@ -152,6 +152,9 @@
     if (kind === "network") {
       return refreshNetwork();
     }
+    if (kind === "storage") {
+      return refreshStorage();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -872,6 +875,60 @@
     }
   }
 
+  /// MS011 Z-10: render the storage state surface — per-mount usage
+  /// + selfdef-managed log dirs. Operator-relevant when the daemon's
+  /// ZFS audit logs or perimeter Sigkill verdicts are growing the
+  /// /var/log/selfdef directory faster than logrotate clears it.
+  async function refreshStorage() {
+    const ul = document.getElementById("storage-rows");
+    const meta = document.getElementById("storage-meta");
+    const aggEl = document.getElementById("storage-aggregate");
+    try {
+      const resp = await get("/v1/storage");
+      const worst = resp.worst;
+      const aggClass = worst === "green" ? "fa-ok"
+                     : worst === "yellow" ? "fa-degraded"
+                     : worst === "red" ? "fa-fail"
+                     : "fa-unknown";
+      // Helper to format bytes as a human-readable string.
+      const fmtBytes = (b) => {
+        if (b >= 1024 * 1024 * 1024 * 1024) return (b / (1024 ** 4)).toFixed(1) + " TiB";
+        if (b >= 1024 * 1024 * 1024) return (b / (1024 ** 3)).toFixed(1) + " GiB";
+        if (b >= 1024 * 1024) return (b / (1024 ** 2)).toFixed(1) + " MiB";
+        if (b >= 1024) return (b / 1024).toFixed(1) + " KiB";
+        return String(b) + " B";
+      };
+      const mountRows = resp.mounts.map(m => {
+        const css = m.state === "green" ? "fa-ok"
+                  : m.state === "yellow" ? "fa-degraded"
+                  : "fa-fail";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${m.used_pct}%</span>
+          <code>${m.mountpoint}</code>
+          <small>${m.source} · ${m.fstype} · ${fmtBytes(m.used_bytes)} / ${fmtBytes(m.size_bytes)}</small>
+        </li>`;
+      });
+      const logRows = resp.log_dirs.map(d => {
+        const css = d.exists ? "fa-ok" : "fa-unknown";
+        const label = d.exists ? "LOG" : "—";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${label}</span>
+          <code>${d.path}</code>
+          <small>${d.exists ? `${fmtBytes(d.bytes)} · ${d.files} files` : "(directory not present)"}</small>
+        </li>`;
+      });
+      ul.innerHTML = [...mountRows, ...logRows].join("");
+      meta.textContent = `${resp.mounts.length} mount(s) · ${resp.log_dirs.length} log dir(s) · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1081,6 +1138,7 @@
   refreshAlerts();
   refreshHardware();
   refreshNetwork();
+  refreshStorage();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1107,6 +1165,10 @@
   // 30 s keeps operator latency under control without thrashing the
   // probe subprocesses.
   setInterval(refreshNetwork, 30000);
+  // Storage state probes df + walks 3 log dirs. df is cheap (a kernel
+  // syscall); the walks scale with file count per dir. 60 s is fine
+  // for both — storage doesn't move that fast.
+  setInterval(refreshStorage, 60000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

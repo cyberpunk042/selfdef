@@ -1924,6 +1924,55 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn storage_route_returns_200_with_well_formed_body() {
+    // MS011 Z-10: /v1/storage returns per-mount usage + per-log-dir
+    // byte/file counts. Mount count depends on the runner; we assert
+    // shape + worst-state enum value rather than counts.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/storage")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 256 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["green", "yellow", "red"].contains(&worst),
+        "worst must be green/yellow/red; got {worst}"
+    );
+
+    let mounts = v["mounts"].as_array().expect("mounts must be array");
+    // Every mount row must have the documented shape.
+    for (i, m) in mounts.iter().enumerate() {
+        assert!(m["source"].is_string(), "row {i} source must be string");
+        assert!(m["fstype"].is_string(), "row {i} fstype must be string");
+        assert!(m["mountpoint"].is_string(), "row {i} mountpoint must be string");
+        assert!(m["used_pct"].is_number(), "row {i} used_pct must be number");
+        let s = m["state"].as_str().unwrap();
+        assert!(
+            ["green", "yellow", "red"].contains(&s),
+            "row {i} state must be green/yellow/red; got {s}"
+        );
+    }
+
+    let log_dirs = v["log_dirs"].as_array().expect("log_dirs must be array");
+    assert_eq!(log_dirs.len(), 3, "expected 3 selfdef-managed log dirs");
+    let expected_paths = ["/var/log/selfdef", "/var/cache/selfdef", "/var/lib/selfdef"];
+    for (i, exp) in expected_paths.iter().enumerate() {
+        let d = &log_dirs[i];
+        assert_eq!(d["path"].as_str().unwrap(), *exp);
+        assert!(d["bytes"].is_number());
+        assert!(d["files"].is_number());
+        assert!(d["exists"].is_boolean());
+    }
+}
+
+#[tokio::test]
 async fn network_route_returns_200_with_five_components() {
     // MS011 Z-7: /v1/network returns the 5 operator-relevant network
     // components in canonical order. State values depend on the

@@ -63,6 +63,10 @@ check_route "/v1/hardware/sain01"         "MS010 / SDD-018" || failures=$((failu
 # cloudflared, tailscale, traefik per-component green/yellow/red).
 check_route "/v1/network"                 "MS011 Z-7 / SDD-026" || failures=$((failures + 1))
 
+# MS011 Z-10 / SDD-026 — storage state surface (df-parsed mount
+# usage + selfdef-managed log-dir byte/file counts).
+check_route "/v1/storage"                 "MS011 Z-10 / SDD-026" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

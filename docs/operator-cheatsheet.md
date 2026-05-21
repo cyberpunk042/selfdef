@@ -109,6 +109,7 @@ GET /v1/modules{,/:name}
 GET /v1/alerts                                       (MS027 server-side classifier)
 GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + derived caps + sain-01 verdict)
 GET /v1/network                                      (MS011 Z-7 internet/DNS/cloudflared/tailscale/traefik)
+GET /v1/storage                                      (MS011 Z-10 per-mount usage + selfdef log dirs)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

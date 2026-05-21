@@ -49,6 +49,8 @@ check "HTML: hardware-section"            "${HTML}" 'id="hardware-section"'     
 check "HTML: hardware sain01 badge"       "${HTML}" 'id="hardware-sain01-badge"'  || failures=$((failures + 1))
 check "HTML: network-section"             "${HTML}" 'id="network-section"'        || failures=$((failures + 1))
 check "HTML: network aggregate"           "${HTML}" 'id="network-aggregate"'      || failures=$((failures + 1))
+check "HTML: storage-section"             "${HTML}" 'id="storage-section"'        || failures=$((failures + 1))
+check "HTML: storage aggregate"           "${HTML}" 'id="storage-aggregate"'      || failures=$((failures + 1))
 check "HTML: friction-audit aggregate"  "${HTML}" 'id="fa-aggregate"'            || failures=$((failures + 1))
 check "HTML: perimeter aggregate"        "${HTML}" 'id="perim-aggregate"'         || failures=$((failures + 1))
 check "HTML: guardian aggregate"         "${HTML}" 'id="guard-aggregate"'         || failures=$((failures + 1))
@@ -63,6 +65,7 @@ check "JS: refreshModules()"             "${JS}"   'function refreshModules'    
 check "JS: refreshAlerts()"               "${JS}"   'function refreshAlerts'         || failures=$((failures + 1))
 check "JS: refreshHardware()"             "${JS}"   'function refreshHardware'       || failures=$((failures + 1))
 check "JS: refreshNetwork()"              "${JS}"   'function refreshNetwork'        || failures=$((failures + 1))
+check "JS: refreshStorage()"              "${JS}"   'function refreshStorage'        || failures=$((failures + 1))
 check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
@@ -74,6 +77,7 @@ check "JS: setInterval refreshModules"          "${JS}" 'setInterval\(refreshMod
 check "JS: setInterval refreshAlerts"            "${JS}" 'setInterval\(refreshAlerts'          || failures=$((failures + 1))
 check "JS: setInterval refreshHardware"          "${JS}" 'setInterval\(refreshHardware'        || failures=$((failures + 1))
 check "JS: setInterval refreshNetwork"           "${JS}" 'setInterval\(refreshNetwork'         || failures=$((failures + 1))
+check "JS: setInterval refreshStorage"           "${JS}" 'setInterval\(refreshStorage'         || failures=$((failures + 1))
 
 # JS endpoint bindings (must match selfdef-api routes)
 check "JS: GET /v1/friction-audit"      "${JS}"   'get\("/v1/friction-audit"\)' || failures=$((failures + 1))
@@ -84,6 +88,7 @@ check "JS: GET /v1/modules"              "${JS}"   'get\("/v1/modules"\)'       
 check "JS: GET /v1/hardware/capabilities" "${JS}"  'get\("/v1/hardware/capabilities"\)' || failures=$((failures + 1))
 check "JS: GET /v1/hardware/sain01"      "${JS}"   'get\("/v1/hardware/sain01"\)' || failures=$((failures + 1))
 check "JS: GET /v1/network"              "${JS}"   'get\("/v1/network"\)'        || failures=$((failures + 1))
+check "JS: GET /v1/storage"              "${JS}"   'get\("/v1/storage"\)'        || failures=$((failures + 1))
 
 # CSS aggregate classes (all 8 states: ok/fail/override/unknown/alert/extended/degraded/backpressure)
 for class in fa-ok fa-fail fa-override fa-unknown fa-alert fa-extended fa-degraded fa-backpressure; do

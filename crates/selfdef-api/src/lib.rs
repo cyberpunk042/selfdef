@@ -40,6 +40,7 @@ mod control;
 mod friction_audit;
 mod hardware;
 mod network;
+mod storage;
 mod guardian;
 mod handlers;
 mod modules;
@@ -196,6 +197,10 @@ pub fn router(state: ApiState) -> Router {
         // operator-relevant components (internet, dns, cloudflared,
         // tailscale, traefik) on each request.
         .route("/v1/network", get(network::show))
+        // MS011 Z-10 / SDD-026 — storage state: per-mount disk usage
+        // (df parsed + state-classified) + selfdef-managed log dirs
+        // (recursive byte/file counts).
+        .route("/v1/storage", get(storage::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
