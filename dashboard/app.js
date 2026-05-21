@@ -164,6 +164,9 @@
     if (kind === "cpu") {
       return refreshCpu();
     }
+    if (kind === "health") {
+      return refreshHealth();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -1082,6 +1085,42 @@
     }
   }
 
+  /// MS011 Z-6: render the composite health aggregate at the top
+  /// of the dashboard. Single panel for "is everything OK?".
+  async function refreshHealth() {
+    const ul = document.getElementById("health-rows");
+    const meta = document.getElementById("health-meta");
+    const aggEl = document.getElementById("health-aggregate");
+    try {
+      const resp = await get("/v1/health");
+      const worst = resp.worst;
+      const aggClass = worst === "ok" ? "fa-ok"
+                     : worst === "warn" ? "fa-degraded"
+                     : worst === "critical" ? "fa-fail"
+                     : "fa-unknown";
+      const lis = resp.components.map(c => {
+        const css = c.state === "ok" ? "fa-ok"
+                  : c.state === "warn" ? "fa-degraded"
+                  : c.state === "critical" ? "fa-fail"
+                  : "fa-unknown";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${c.state.toUpperCase()}</span>
+          <code>${c.name}</code>
+          <small>${c.detail}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${resp.components.length} components · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1295,6 +1334,7 @@
   refreshRaid();
   refreshGpu();
   refreshCpu();
+  refreshHealth();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1336,6 +1376,10 @@
   // but mode-changes are rare (operator-driven, not background
   // drift). 60 s is plenty.
   setInterval(refreshCpu, 60000);
+  // Composite health aggregates 6 surfaces — costs the union of all
+  // probes. 30 s gives operators a fast top-of-page glance without
+  // hammering nvidia-smi / df / ping.
+  setInterval(refreshHealth, 30000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

@@ -1924,6 +1924,59 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn health_route_returns_200_with_composite_body() {
+    // MS011 Z-6: /v1/health aggregates alerts/network/storage/raid/
+    // gpu/cpu into a composite worst-state + per-component rows.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/health")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["ok", "warn", "critical", "unknown"].contains(&worst),
+        "worst must be normalized to ok/warn/critical/unknown; got {worst}"
+    );
+
+    let comps = v["components"].as_array().expect("components must be array");
+    let expected_names = ["alerts", "network", "storage", "raid", "gpu", "cpu"];
+    assert_eq!(
+        comps.len(),
+        expected_names.len(),
+        "expected exactly {} components",
+        expected_names.len()
+    );
+    for (i, exp) in expected_names.iter().enumerate() {
+        let c = &comps[i];
+        assert_eq!(
+            c["name"].as_str().unwrap(),
+            *exp,
+            "row {i} name mismatch"
+        );
+        let s = c["state"].as_str().unwrap();
+        assert!(
+            ["ok", "warn", "critical", "unknown"].contains(&s),
+            "row {i} state must be ok/warn/critical/unknown; got {s}"
+        );
+        assert!(c["detail"].is_string(), "row {i} detail must be string");
+    }
+    // cpu component never degrades (always reports ok per the
+    // documented contract — operator choice is not health).
+    let cpu_state = comps[5]["state"].as_str().unwrap();
+    assert_eq!(
+        cpu_state, "ok",
+        "cpu row must always be ok (mode is operator choice, not health)"
+    );
+}
+
+#[tokio::test]
 async fn cpu_route_returns_200_with_well_formed_body() {
     // MS011 Z-4: /v1/cpu reads /sys/devices/system/cpu/*/cpufreq/
     // scaling_governor + SMT state, classifies into a named mode.

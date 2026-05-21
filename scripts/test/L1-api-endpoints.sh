@@ -80,6 +80,10 @@ check_route "/v1/gpu"                     "MS011 Z-5 / SDD-026" || failures=$((f
 # | custom).
 check_route "/v1/cpu"                     "MS011 Z-4 / SDD-026" || failures=$((failures + 1))
 
+# MS011 Z-6 / SDD-026 — composite autohealth aggregate across all
+# read surfaces (alerts + network + storage + raid + gpu + cpu).
+check_route "/v1/health"                  "MS011 Z-6 / SDD-026" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

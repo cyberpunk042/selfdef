@@ -41,6 +41,7 @@ mod cpu;
 mod friction_audit;
 mod gpu;
 mod hardware;
+mod health;
 mod network;
 mod raid;
 mod storage;
@@ -214,6 +215,10 @@ pub fn router(state: ApiState) -> Router {
         // SET surface will land when the IPC privilege boundary
         // supports privileged /sys writes).
         .route("/v1/cpu", get(cpu::show))
+        // MS011 Z-6 / SDD-026 — composite autohealth aggregate
+        // across the read surfaces. Single endpoint for "is the box
+        // OK?". Aggregates alerts/network/storage/raid/gpu/cpu.
+        .route("/v1/health", get(health::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

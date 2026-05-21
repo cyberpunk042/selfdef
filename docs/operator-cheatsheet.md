@@ -113,6 +113,7 @@ GET /v1/storage                                      (MS011 Z-10 per-mount usage
 GET /v1/raid                                         (MS011 Z-9 software RAID arrays from /proc/mdstat)
 GET /v1/gpu                                          (MS011 Z-5 nvidia-smi power-draw vs operator policy)
 GET /v1/cpu                                          (MS011 Z-4 scaling_governor × SMT → named mode)
+GET /v1/health                                       (MS011 Z-6 composite aggregate — "is everything OK?")
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)
