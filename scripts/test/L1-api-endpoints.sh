@@ -67,6 +67,10 @@ check_route "/v1/network"                 "MS011 Z-7 / SDD-026" || failures=$((f
 # usage + selfdef-managed log-dir byte/file counts).
 check_route "/v1/storage"                 "MS011 Z-10 / SDD-026" || failures=$((failures + 1))
 
+# MS011 Z-9 / SDD-026 — software RAID state surface (per-array level
+# + member set + health string + state classification from /proc/mdstat).
+check_route "/v1/raid"                    "MS011 Z-9 / SDD-026" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

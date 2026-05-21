@@ -110,6 +110,7 @@ GET /v1/alerts                                       (MS027 server-side classifi
 GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + derived caps + sain-01 verdict)
 GET /v1/network                                      (MS011 Z-7 internet/DNS/cloudflared/tailscale/traefik)
 GET /v1/storage                                      (MS011 Z-10 per-mount usage + selfdef log dirs)
+GET /v1/raid                                         (MS011 Z-9 software RAID arrays from /proc/mdstat)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

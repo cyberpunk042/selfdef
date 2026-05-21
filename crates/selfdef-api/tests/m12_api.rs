@@ -1924,6 +1924,46 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn raid_route_returns_200_with_well_formed_body() {
+    // MS011 Z-9: /v1/raid reads /proc/mdstat (best-effort). On a
+    // host without MD support `arrays` is empty + mdstat_present is
+    // false; on a host with arrays we just assert response shape.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/raid")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["green", "yellow", "red"].contains(&worst),
+        "worst must be green/yellow/red; got {worst}"
+    );
+    assert!(
+        v["mdstat_present"].is_boolean(),
+        "mdstat_present must be bool"
+    );
+    let arrays = v["arrays"].as_array().expect("arrays must be array");
+    for (i, a) in arrays.iter().enumerate() {
+        assert!(a["name"].is_string(), "row {i} name must be string");
+        assert!(a["level"].is_string(), "row {i} level must be string");
+        assert!(a["health"].is_string(), "row {i} health must be string");
+        assert!(a["members"].is_array(), "row {i} members must be array");
+        let s = a["state"].as_str().unwrap();
+        assert!(
+            ["green", "yellow", "red"].contains(&s),
+            "row {i} state must be green/yellow/red; got {s}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn storage_route_returns_200_with_well_formed_body() {
     // MS011 Z-10: /v1/storage returns per-mount usage + per-log-dir
     // byte/file counts. Mount count depends on the runner; we assert

@@ -155,6 +155,9 @@
     if (kind === "storage") {
       return refreshStorage();
     }
+    if (kind === "raid") {
+      return refreshRaid();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -929,6 +932,61 @@
     }
   }
 
+  /// MS011 Z-9: render the software RAID state surface. On hosts
+  /// without /proc/mdstat (no Linux MD support), the panel shows a
+  /// single "no software RAID configured" row in fa-unknown state.
+  async function refreshRaid() {
+    const ul = document.getElementById("raid-rows");
+    const meta = document.getElementById("raid-meta");
+    const aggEl = document.getElementById("raid-aggregate");
+    try {
+      const resp = await get("/v1/raid");
+      const worst = resp.worst;
+      const aggClass = worst === "green" ? "fa-ok"
+                     : worst === "yellow" ? "fa-degraded"
+                     : worst === "red" ? "fa-fail"
+                     : "fa-unknown";
+      if (!resp.mdstat_present) {
+        ul.innerHTML = `<li class="fa-row">
+          <span class="fa-aggregate fa-unknown">N/A</span>
+          <code>/proc/mdstat</code>
+          <small>no software RAID configured on this host</small>
+        </li>`;
+        meta.textContent = "0 array(s) · mdstat absent";
+        aggEl.textContent = "N/A";
+        aggEl.className = "fa-aggregate fa-unknown";
+        return;
+      }
+      if (resp.arrays.length === 0) {
+        ul.innerHTML = `<li class="empty">no arrays in /proc/mdstat</li>`;
+        meta.textContent = "0 array(s)";
+        aggEl.textContent = "OK";
+        aggEl.className = "fa-aggregate fa-ok";
+        return;
+      }
+      const lis = resp.arrays.map(a => {
+        const css = a.state === "green" ? "fa-ok"
+                  : a.state === "yellow" ? "fa-degraded"
+                  : "fa-fail";
+        const memList = a.members.join(" ");
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${a.health || "?"}</span>
+          <code>${a.name}</code>
+          <small>${a.level} · ${memList}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${resp.arrays.length} array(s) · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1139,6 +1197,7 @@
   refreshHardware();
   refreshNetwork();
   refreshStorage();
+  refreshRaid();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1169,6 +1228,9 @@
   // syscall); the walks scale with file count per dir. 60 s is fine
   // for both — storage doesn't move that fast.
   setInterval(refreshStorage, 60000);
+  // RAID is /proc/mdstat reads — kernel-side. Cheap; refresh on the
+  // same 60 s cadence as storage for symmetry.
+  setInterval(refreshRaid, 60000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {

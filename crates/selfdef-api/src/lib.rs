@@ -40,6 +40,7 @@ mod control;
 mod friction_audit;
 mod hardware;
 mod network;
+mod raid;
 mod storage;
 mod guardian;
 mod handlers;
@@ -201,6 +202,9 @@ pub fn router(state: ApiState) -> Router {
         // (df parsed + state-classified) + selfdef-managed log dirs
         // (recursive byte/file counts).
         .route("/v1/storage", get(storage::show))
+        // MS011 Z-9 / SDD-026 — software RAID state read from
+        // /proc/mdstat. selfdef NEVER manipulates the array.
+        .route("/v1/raid", get(raid::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
