@@ -154,6 +154,7 @@ socket = trusted; TCP = read token).
 | GET    | `/v1/hardware`                        | MS010 / SDD-018: full host hardware snapshot (CPU, memory, GPUs, motherboard, PCIe inventory, thermals, probed_at). Probe is cached per-process — hardware doesn't hot-swap at runtime. |
 | GET    | `/v1/hardware/capabilities`           | MS010 / SDD-018: derived capability flags (AVX-512 family, GPU classes, memory tiers) computed from the snapshot. Drives hardware-aware module activation in `selfdefctl modules apply`. |
 | GET    | `/v1/hardware/sain01`                 | MS010 / SDD-018: Sain-01 reference-platform match verdict (`Match | NearMatch | NoMatch`) + per-component agreement booleans (CPU AVX-512 VNNI/BF16, ≥256 GB memory, ≥2 GPUs, PCIe dual-x8). |
+| GET    | `/v1/network`                         | MS011 Z-7 / SDD-026: network state surface. Probes 5 operator-relevant components per request (internet via `ping`, DNS via `getent`, cloudflared/tailscaled/traefik via `systemctl is-active`). Returns `{worst, components: [{name, detail, state}]}` with state ∈ `green/yellow/red/unknown`. |
 
 Module `:name` slugs are validated against `[a-z0-9-]{1,64}`. Any
 mismatch is `400 Bad Request` — this is the directory-traversal guard

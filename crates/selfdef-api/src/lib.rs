@@ -39,6 +39,7 @@ mod alerts;
 mod control;
 mod friction_audit;
 mod hardware;
+mod network;
 mod guardian;
 mod handlers;
 mod modules;
@@ -191,6 +192,10 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/hardware", get(hardware::snapshot))
         .route("/v1/hardware/capabilities", get(hardware::capabilities))
         .route("/v1/hardware/sain01", get(hardware::sain01))
+        // MS011 Z-7 / SDD-026 — network state surface. Probes the 5
+        // operator-relevant components (internet, dns, cloudflared,
+        // tailscale, traefik) on each request.
+        .route("/v1/network", get(network::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

@@ -1924,6 +1924,48 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn network_route_returns_200_with_five_components() {
+    // MS011 Z-7: /v1/network returns the 5 operator-relevant network
+    // components in canonical order. State values depend on the
+    // runner (most CI hosts don't have cloudflared/tailscale/traefik
+    // running — those will report `unknown`), so we assert shape +
+    // order + that each row has a state in the allowed enum.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/network")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    let worst = v["worst"].as_str().expect("worst must be a string");
+    assert!(
+        ["green", "yellow", "red", "unknown"].contains(&worst),
+        "worst must be green/yellow/red/unknown; got {worst}"
+    );
+
+    let comps = v["components"]
+        .as_array()
+        .expect("components must be array");
+    assert_eq!(comps.len(), 5, "expected exactly 5 components");
+    let expected = ["internet", "dns", "cloudflared", "tailscale", "traefik"];
+    for (i, exp) in expected.iter().enumerate() {
+        let c = &comps[i];
+        assert_eq!(c["name"].as_str().unwrap(), *exp, "row {i} name mismatch");
+        let s = c["state"].as_str().unwrap();
+        assert!(
+            ["green", "yellow", "red", "unknown"].contains(&s),
+            "row {i} state must be green/yellow/red/unknown; got {s}"
+        );
+        assert!(c["detail"].is_string(), "row {i} detail must be string");
+    }
+}
+
+#[tokio::test]
 async fn hardware_routes_return_200_with_well_formed_bodies() {
     // MS010 + SDD-018: the three /v1/hardware* routes must serve
     // JSON. The actual values depend on the host (CI runner may

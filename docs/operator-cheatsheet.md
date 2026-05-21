@@ -108,6 +108,7 @@ GET /v1/scheduler{,/history,/backpressure,/weights,/explain/:request_id}
 GET /v1/modules{,/:name}
 GET /v1/alerts                                       (MS027 server-side classifier)
 GET /v1/hardware{,/capabilities,/sain01}             (MS010 hardware snapshot + derived caps + sain-01 verdict)
+GET /v1/network                                      (MS011 Z-7 internet/DNS/cloudflared/tailscale/traefik)
 ```
 
 ## Operator runbooks (info-hub `wiki/runbooks/`)

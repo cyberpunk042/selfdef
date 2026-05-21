@@ -149,6 +149,9 @@
     if (kind === "hardware") {
       return refreshHardware();
     }
+    if (kind === "network") {
+      return refreshNetwork();
+    }
     const ul = document.getElementById(kind);
     try {
       const data = await get(`/${kind}?n=50`);
@@ -831,6 +834,44 @@
     }
   }
 
+  /// MS011 Z-7: render the network state surface — internet
+  /// reachability, DNS resolution, cloudflared / tailscale / traefik
+  /// systemd unit liveness. The /v1/network endpoint probes each on
+  /// every request.
+  async function refreshNetwork() {
+    const ul = document.getElementById("network-rows");
+    const meta = document.getElementById("network-meta");
+    const aggEl = document.getElementById("network-aggregate");
+    try {
+      const resp = await get("/v1/network");
+      const worst = resp.worst;
+      const aggClass = worst === "green" ? "fa-ok"
+                     : worst === "yellow" ? "fa-degraded"
+                     : worst === "red" ? "fa-fail"
+                     : "fa-unknown";
+      const lis = resp.components.map(c => {
+        const css = c.state === "green" ? "fa-ok"
+                  : c.state === "yellow" ? "fa-degraded"
+                  : c.state === "red" ? "fa-fail"
+                  : "fa-unknown";
+        return `<li class="fa-row">
+          <span class="fa-aggregate ${css}">${c.state.toUpperCase()}</span>
+          <code>${c.name}</code>
+          <small>${c.detail}</small>
+        </li>`;
+      });
+      ul.innerHTML = lis.join("");
+      meta.textContent = `${resp.components.length} components · worst = ${worst.toUpperCase()}`;
+      aggEl.textContent = worst.toUpperCase();
+      aggEl.className = "fa-aggregate " + aggClass;
+    } catch (e) {
+      setEmpty(ul, `error: ${e.message}`);
+      meta.textContent = "";
+      aggEl.textContent = "ERR";
+      aggEl.className = "fa-aggregate fa-fail";
+    }
+  }
+
   async function refreshStatus() {
     const conn = document.getElementById("conn");
     try {
@@ -1039,6 +1080,7 @@
   refreshModules();
   refreshAlerts();
   refreshHardware();
+  refreshNetwork();
   refreshActionList();
   setInterval(refreshStatus, 5000);
   // Four-watchdog set panels refresh less often than status — gate
@@ -1061,6 +1103,10 @@
   // hot-swap so 5 minutes is plenty (the server caches the probe
   // anyway via OnceLock).
   setInterval(refreshHardware, 300000);
+  // Network state probes systemd + ping + getent on every request —
+  // 30 s keeps operator latency under control without thrashing the
+  // probe subprocesses.
+  setInterval(refreshNetwork, 30000);
 
   // Offline-shell registration. Best effort — skipped over file://.
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
