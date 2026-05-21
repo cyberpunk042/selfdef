@@ -138,6 +138,10 @@ check_route "/v1/flex-profile"            "MS011 Z-3" || failures=$((failures + 
 # bitnet.cpp / unsloth installed-state + version).
 check_route "/v1/inference-backends"      "MS011 Z-2" || failures=$((failures + 1))
 
+# MS011 Z-12 / SDD-026 + SD-R85 — multi-tier REPL discovery (3 tiers
+# + 11+ Tier 1 Python callables enumerated).
+check_route "/v1/repl"                    "MS011 Z-12 / SD-R85" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

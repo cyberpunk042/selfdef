@@ -56,6 +56,7 @@ mod inference_backends;
 mod network;
 mod network_boundary;
 mod raid;
+mod repl;
 mod sandbox_tiers;
 mod storage;
 mod tool_authority;
@@ -300,6 +301,10 @@ pub fn router(state: ApiState) -> Router {
         // Probes for the 4 canonical backends (llama.cpp / vllm /
         // bitnet.cpp / unsloth) + reports installed state + version.
         .route("/v1/inference-backends", get(inference_backends::show))
+        // MS011 Z-12 / SDD-026 + SD-R85 — multi-tier REPL discovery.
+        // 3 tiers (Programming / Proto-Programming / Proto-Proto-
+        // Programming) with Tier 1's 11+ Python callables enumerated.
+        .route("/v1/repl", get(repl::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).
