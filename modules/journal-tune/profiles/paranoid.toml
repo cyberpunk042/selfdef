@@ -1,0 +1,9 @@
+# Profile: paranoid.
+#
+# 4GB persistent journal + 2GB SystemKeepFree + 90-day retention
+# + disabled ratelimit + 512KB LineMax + debug-level storage.
+#
+# Use on hosts where audit-rules `paranoid` is active OR multiple
+# verbose AI-tool processes share the journal.
+
+profile = "paranoid"

@@ -1,0 +1,41 @@
+name        = "journal-tune"
+version     = "0.1.0"
+summary     = "systemd-journald tuning — ratelimit + retention + line-size sizing for selfdef's high-volume tagged events (selfdef-aide, selfdef-rkhunter, selfdef-lynis, selfdef-time-skew). Default journald drops events under burst load"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["journald-tuning"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — 500MB persistent journal + 30s/10000-msg
+#                        ratelimit. Sufficient for the daily-cadence
+#                        detection modules.
+# `paranoid`           — 4GB persistent journal + disabled ratelimit.
+#                        Required when audit-rules `paranoid` profile
+#                        is active OR multiple AI-tool processes
+#                        share the host's journal.
+default = "standard"
+available = ["standard", "paranoid"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/journald.conf.d/50-selfdef.conf",
+    "/etc/selfdef/modules/journal-tune.toml",
+]

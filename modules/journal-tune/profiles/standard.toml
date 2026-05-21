@@ -1,0 +1,7 @@
+# Profile: standard (default).
+#
+# 500MB persistent journal + 1GB SystemKeepFree + 30-day
+# retention + 30000/30s ratelimit + 256KB LineMax. Safe defaults
+# for any host running selfdef's detection modules.
+
+profile = "standard"
