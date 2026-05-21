@@ -1,0 +1,46 @@
+name        = "kernel-yama-baseline"
+version     = "0.1.0"
+summary     = "Set kernel.yama.ptrace_scope to restrict ptrace attach — blocks unprivileged-attacker process-to-process credential theft (gdb attach to gpg-agent / ssh-agent / browser-process). Three profiles: relaxed (1), strict (2), admin-only (3)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["yama-ptrace-restricted"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `relaxed` (default) — ptrace_scope = 1 (parent-only attach)
+#                      Distro default on Ubuntu since 10.10;
+#                      breaks zero workflows.
+# `strict`            — ptrace_scope = 2 (admin-only attach;
+#                      operators with CAP_SYS_PTRACE may
+#                      still attach). Breaks gdb attach by
+#                      non-root non-CAP_SYS_PTRACE users.
+# `paranoid`          — ptrace_scope = 3 (no attach at all,
+#                      cannot be re-enabled until reboot).
+#                      Breaks gdb attach entirely; new
+#                      processes can still be started under
+#                      gdb / strace.
+default = "relaxed"
+available = ["relaxed", "strict", "paranoid"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-yama-baseline.toml",
+    "/etc/sysctl.d/50-selfdef-yama.conf",
+]
