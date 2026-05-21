@@ -86,9 +86,8 @@ impl CuckooFilter {
     }
 
     fn alt(&self, i: usize, fp: u8) -> usize {
-        let mut buf = vec![fp];
+        let buf = vec![fp];
         let h = fnv1a_64(&buf) % self.n_buckets as u64;
-        let _ = buf;
         ((i as u64 ^ h) % self.n_buckets as u64) as usize
     }
 

@@ -9,7 +9,6 @@
 #![warn(missing_docs)]
 
 use selfdef_trust_score_mirror::{DeltaEntry, DeltaReason, TrustBand};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Schema version.

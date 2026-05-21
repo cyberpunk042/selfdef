@@ -12,7 +12,6 @@
 
 use selfdef_policy_decision::ContextSensitivity;
 use selfdef_routing_decision_authority::ProviderClass;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Schema version.

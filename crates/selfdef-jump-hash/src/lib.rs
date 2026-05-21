@@ -11,7 +11,6 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Schema version.
