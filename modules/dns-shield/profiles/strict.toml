@@ -1,0 +1,6 @@
+# Profile: strict.
+#
+# Loads base + strict blocklist (broader tracker + URL-shortener +
+# file-host coverage). Operator-additions + allowlist still apply.
+
+profile = "strict"

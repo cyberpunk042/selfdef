@@ -1,0 +1,11 @@
+# Profile: base (default).
+#
+# Loads ONLY the base blocklist (known C2 + phishing + cryptominers).
+# Operator-additions from /etc/selfdef/dns-shield/operator.txt are
+# always merged on top; allowlist.txt removes entries.
+
+profile = "base"
+
+# Operator can override paths via these (optional):
+# operator_path = "/etc/selfdef/dns-shield/operator.txt"
+# allow_path    = "/etc/selfdef/dns-shield/allowlist.txt"

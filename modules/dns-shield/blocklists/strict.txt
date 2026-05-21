@@ -1,0 +1,23 @@
+# selfdef dns-shield — strict blocklist.
+#
+# Loaded on TOP of base.txt when profile = "strict". Adds broader
+# coverage:
+#  - tracker/analytics domains (privacy-grade blocking)
+#  - URL shorteners (operator-discretionary; they're abused by
+#    phishing campaigns, but also legitimately used)
+#  - high-risk file-hosting (often-abused; operator should
+#    allowlist any they actually need)
+#
+# Each line: bare domain. apply.sh prepends 0.0.0.0 + www. variant.
+
+# === Tracker / analytics (samples) ===
+analytics-tracker.example.invalid
+fingerprint-collector.example.invalid
+
+# === URL shorteners (operator can allowlist) ===
+short-link.example.invalid
+tiny-url.example.invalid
+
+# === High-risk file hosting (often abused for malware distribution) ===
+risky-file-host.example.invalid
+sketchy-uploader.example.invalid

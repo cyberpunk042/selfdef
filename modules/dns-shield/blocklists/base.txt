@@ -1,0 +1,26 @@
+# selfdef dns-shield — base blocklist.
+#
+# Conservative set of known-malicious / known-C2 / known-tracker
+# domains. Each line is one domain; comments start with #.
+#
+# Source: curated subset of the operator-defensible public lists
+# (Spamhaus DBL example pattern + URLhaus aggregate). The set is
+# DELIBERATELY SHORT here — the module is a hook; the operator
+# extends via /etc/selfdef/dns-shield/operator.txt (auto-merged
+# by apply.sh into the rendered output).
+#
+# Format: bare domain per line. apply.sh prepends `0.0.0.0 ` +
+# also adds the `www.` variant.
+
+# === Known C2 infrastructure (illustrative samples) ===
+malware-c2.example.invalid
+exfil.example.invalid
+ransomware-pay.example.invalid
+
+# === Phishing kits / credential-harvest landers (samples) ===
+phish-login.example.invalid
+fake-bank.example.invalid
+
+# === Cryptominer pools (block-by-default; operator can opt out
+#      by adding `cryptominer.example` to allowlist.txt) ===
+cryptominer-pool.example.invalid

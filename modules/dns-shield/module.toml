@@ -1,0 +1,37 @@
+name        = "dns-shield"
+version     = "0.1.0"
+summary     = "DNS-level blocklist via /etc/hosts (T1071.004 mitigation) — sinkholes known-malicious + C2 + ad-tracker domains to 0.0.0.0"
+category    = "network"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dns-blocklist"]
+consumes    = []
+
+# We use /etc/hosts because every Linux resolver honors it. Pure
+# data — no daemon, no port, no listener. Operator-installed
+# unbound/dnsmasq/systemd-resolved keep working unchanged; the
+# blocklist just short-circuits at the libc resolver layer
+# (nsswitch.conf hosts: files dns ...).
+requires    = []
+
+instanced = false
+
+# `main` phase: blocklist installation is independent of the
+# detect-host daemon's startup order.
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+default = "base"
+available = ["base", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = ["/etc/hosts", "/etc/selfdef/dns-shield", "/etc/selfdef/modules/dns-shield.toml"]
