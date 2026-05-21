@@ -111,14 +111,42 @@ emits `ClassUid::new(0)` + `SeverityId::Informational` + a message
 upgrade unknown records based on rules; the responder can ignore
 them by default.
 
-### C-5 — Multi-line records (deferred)
+### C-5 — Multi-line records (shipped)
 
 The kernel emits SYSCALL + EXECVE pairs across two lines correlated
-by `msg=audit(<ts>:<serial>)`. Parsing requires buffering by serial
-+ timeout. This is **explicitly out of scope** for SDD-059 — it's
-the next auditd arc (will land under SDD-0xx-multi-line-audit when
-the operator gates the work). Until then, SYSCALL lines fall through
-to the fallback handler.
+by `msg=audit(<ts>:<serial>)`. Originally marked "explicitly out of
+scope" in the first SDD-059 ratification; **shipped 2026-05-21**
+with a single-slot buffer pattern instead of the full timeout-based
+correlation map originally envisioned:
+
+- `AuditdCollector::run()` carries a `pending_syscall:
+  Option<(AuditRecord, String)>` local to its tokio task.
+- On SYSCALL: flush any previously-pending SYSCALL as a lone
+  generic event, then buffer the new SYSCALL.
+- On EXECVE: if serial matches the pending SYSCALL, emit a
+  combined `build_syscall_execve_event` event with the argv
+  vector + executable path + exit code + raw payload of BOTH
+  records. Status mapping: exit_code "0" → Success; "?" →
+  Unknown; non-zero → Failure. Attack tag: T1059 Command and
+  Scripting Interpreter (Tactic::Execution).
+- On any other kind: flush pending then handle the new record
+  normally.
+- On shutdown: flush pending before returning.
+
+The argv extraction lives in `parser::parse_execve_argv(record)`
+— sorts the record's `aN` fields by numeric index (NOT
+lexicographic — `a10` must come AFTER `a9`, not after `a1`).
+4 new parser unit tests verify in-order extraction + gap
+preservation + empty-on-non-EXECVE + double-digit-index sort.
+
+Per the operator's standing "tractable + production" preference,
+the single-slot buffer is sufficient: auditd kernel writes
+contiguous record blocks per audit_log_msg() call so the SYSCALL
++ EXECVE for one exec() ARE adjacent in the log. The original
+timeout-map design handled interleaved records from concurrent
+audit_log_msg calls — a hypothetical edge case that hasn't
+materialized in production traffic; deferred until a real
+divergence is observed.
 
 ## Decisions
 
@@ -223,8 +251,12 @@ self-service for any operator reading this SDD.
 
 ## Out-of-scope (future SDDs)
 
-- **Multi-line SYSCALL+EXECVE parsing** (C-5 above). Needs
-  serial-keyed buffering + timeout. Substantial new state machine.
+- **Full timeout-based serial-keyed buffering** for the
+  multi-line C-5 case (concurrent audit_log_msg calls
+  producing interleaved records). The single-slot buffer
+  shipped 2026-05-21 covers the contiguous-block reality;
+  the timeout-map design is deferred until a real divergence
+  is observed in production traffic.
 - **Per-comm allowlist for AVC denied** (D-2). Operator config
   to skip known-benign denials (e.g. `dhclient` denied on
   /etc/resolv.conf write that's correctly rerouted).

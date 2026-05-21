@@ -60,6 +60,26 @@ pub fn parse_avc_decision(line: &str) -> Option<&str> {
     None
 }
 
+/// Extract the EXECVE argv vector from a parsed record. The auditd
+/// kernel-side encoding is `a0="ls" a1="-la" a2="/tmp"` plus an
+/// `argc` field. Order is preserved (a0, a1, …). Empty vector when
+/// no `aN` fields present (record didn't carry argv, or wasn't an
+/// EXECVE record).
+pub fn parse_execve_argv(record: &AuditRecord) -> Vec<String> {
+    let mut indexed: Vec<(usize, String)> = Vec::new();
+    for (k, v) in &record.fields {
+        // a0, a1, a2, ... — strip the leading "a" + parse the
+        // remaining digits.
+        if let Some(idx_str) = k.strip_prefix('a') {
+            if let Ok(idx) = idx_str.parse::<usize>() {
+                indexed.push((idx, v.clone()));
+            }
+        }
+    }
+    indexed.sort_by_key(|(i, _)| *i);
+    indexed.into_iter().map(|(_, v)| v).collect()
+}
+
 /// Parse one audit log line. Returns `None` for lines that don't look like
 /// audit records (blank, comments, malformed); callers can warn or ignore.
 #[allow(clippy::manual_map)] // explicit None branch is clearer here
@@ -299,6 +319,48 @@ mod tests {
         assert_eq!(r.get("pid"),  Some("4244"));
         assert_eq!(r.get("comm"), Some("crashy"));
         assert_eq!(r.get("sig"),  Some("11"));
+    }
+
+    #[test]
+    fn parses_execve_argv_in_order() {
+        // SDD-059 C-5: EXECVE records carry argv as a0="ls" a1="-la" ...
+        // parse_execve_argv must return the values in numeric-index
+        // order regardless of HashMap iteration order.
+        let line = r#"type=EXECVE msg=audit(1736944800.000:1234582): argc=3 a0="ls" a1="-la" a2="/tmp""#;
+        let r = parse_line(line).unwrap();
+        let argv = parse_execve_argv(&r);
+        assert_eq!(argv, vec!["ls", "-la", "/tmp"]);
+    }
+
+    #[test]
+    fn parses_execve_argv_with_gaps_preserved() {
+        // Real auditd never emits gaps, but the helper sorts by
+        // numeric index — if a0 + a2 + a5 were present (no a1, no
+        // a3, no a4), we'd return them in 0/2/5 order.
+        let line = r#"type=EXECVE msg=audit(1736944800.000:1234583): argc=3 a0="first" a2="third" a5="sixth""#;
+        let r = parse_line(line).unwrap();
+        let argv = parse_execve_argv(&r);
+        assert_eq!(argv, vec!["first", "third", "sixth"]);
+    }
+
+    #[test]
+    fn parses_execve_argv_returns_empty_for_no_args() {
+        let line = r#"type=USER_LOGIN msg=audit(1736944800.000:1234584): pid=4567 res=success"#;
+        let r = parse_line(line).unwrap();
+        let argv = parse_execve_argv(&r);
+        assert!(argv.is_empty(), "USER_LOGIN record has no argv fields");
+    }
+
+    #[test]
+    fn parses_execve_argv_handles_double_digit_indices() {
+        // execve allows up to ~64 args before the kernel truncates.
+        let line = r#"type=EXECVE msg=audit(1736944800.000:1234585): argc=12 a0="cmd" a1="-a" a2="-b" a3="-c" a4="-d" a5="-e" a6="-f" a7="-g" a8="-h" a9="-i" a10="-j" a11="-k""#;
+        let r = parse_line(line).unwrap();
+        let argv = parse_execve_argv(&r);
+        assert_eq!(argv.len(), 12);
+        assert_eq!(argv[0], "cmd");
+        assert_eq!(argv[10], "-j"); // a10 must come AFTER a9, not after a1 (sort-by-numeric, not lex)
+        assert_eq!(argv[11], "-k");
     }
 
     #[test]

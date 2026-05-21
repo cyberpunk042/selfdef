@@ -10,7 +10,7 @@
 
 mod parser;
 
-pub use parser::{parse_avc_decision, AuditRecord};
+pub use parser::{parse_avc_decision, parse_execve_argv, AuditRecord};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -102,9 +102,22 @@ impl AuditdCollector {
         let mut reader = BufReader::new(file);
         let mut buf = String::new();
 
+        // SDD-059 C-5 — pending SYSCALL waiting for a matching EXECVE
+        // companion. The auditd subsystem emits SYSCALL + EXECVE
+        // for each exec call as TWO lines correlated by msg=audit(
+        // <ts>:<serial>); SYSCALL comes first. We buffer the SYSCALL
+        // briefly so we can emit ONE combined event with the argv
+        // extracted instead of two generic events.
+        let mut pending_syscall: Option<(AuditRecord, String)> = None;
+
         loop {
             if shutdown.is_cancelled() {
                 debug!("auditd collector shutdown requested");
+                // Flush any pending SYSCALL before exit.
+                if let Some((rec, line)) = pending_syscall.take() {
+                    let evt = self.build_event(&rec, &line);
+                    self.publisher.publish_lossy(evt);
+                }
                 return Ok(());
             }
 
@@ -127,8 +140,53 @@ impl AuditdCollector {
 
             match parser::parse_line(line) {
                 Some(record) => {
-                    let event = self.build_event(&record, line);
-                    self.publisher.publish_lossy(event);
+                    match record.kind.as_str() {
+                        "SYSCALL" => {
+                            // Flush any previously-pending SYSCALL
+                            // (its EXECVE never arrived) as a lone
+                            // generic event.
+                            if let Some((prev_rec, prev_line)) = pending_syscall.take() {
+                                let evt = self.build_event(&prev_rec, &prev_line);
+                                self.publisher.publish_lossy(evt);
+                            }
+                            pending_syscall = Some((record, line.to_string()));
+                        }
+                        "EXECVE" => {
+                            if let Some((syscall_rec, syscall_line)) = pending_syscall.take() {
+                                if syscall_rec.serial == record.serial {
+                                    // Pair! Emit one combined event.
+                                    let evt = self.build_syscall_execve_event(
+                                        &syscall_rec, &record,
+                                    );
+                                    self.publisher.publish_lossy(evt);
+                                } else {
+                                    // Serial mismatch — flush the
+                                    // pending SYSCALL then emit this
+                                    // EXECVE as generic.
+                                    let evt = self.build_event(&syscall_rec, &syscall_line);
+                                    self.publisher.publish_lossy(evt);
+                                    let evt2 = self.build_event(&record, line);
+                                    self.publisher.publish_lossy(evt2);
+                                }
+                            } else {
+                                // EXECVE without preceding SYSCALL
+                                // (unusual but possible if we tail
+                                // mid-stream) — emit as generic.
+                                let evt = self.build_event(&record, line);
+                                self.publisher.publish_lossy(evt);
+                            }
+                        }
+                        _ => {
+                            // Any other kind: flush pending then
+                            // handle this record normally.
+                            if let Some((prev_rec, prev_line)) = pending_syscall.take() {
+                                let evt = self.build_event(&prev_rec, &prev_line);
+                                self.publisher.publish_lossy(evt);
+                            }
+                            let event = self.build_event(&record, line);
+                            self.publisher.publish_lossy(event);
+                        }
+                    }
                 }
                 None => {
                     debug!(line, "ignored unparseable audit line");
@@ -215,6 +273,96 @@ impl AuditdCollector {
             event = event.with_attack(TechniqueRef::brute_force());
         }
         event
+    }
+
+    /// SYSCALL + EXECVE pair — emitted by the kernel as TWO lines
+    /// per exec() call. SDD-059 C-5 closure: instead of emitting two
+    /// generic events, we pair them and emit ONE PROCESS_ACTIVITY ::
+    /// Launch event with the full argv vector + executable path +
+    /// exit code (0=success, non-zero=execve failed). Severity Medium
+    /// (every exec is signal; severity escalation belongs in the
+    /// correlator). Attack tag: T1059 Command and Scripting Interpreter
+    /// (Tactic::Execution) — every exec IS the technique foundation;
+    /// the correlator narrows to a specific T1059.<sub> at decision
+    /// time based on the argv contents.
+    fn build_syscall_execve_event(
+        &self,
+        syscall: &AuditRecord,
+        execve: &AuditRecord,
+    ) -> Event {
+        let seq = self.next_sequence();
+        let argv = parser::parse_execve_argv(execve);
+        let argc = execve
+            .get("argc")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(argv.len());
+
+        let pid = syscall.get("pid").unwrap_or("?");
+        let ppid = syscall.get("ppid").unwrap_or("?");
+        let uid = syscall.get("uid").unwrap_or("?");
+        let auid = syscall.get("auid").unwrap_or("?");
+        let comm = syscall.get("comm").unwrap_or("?");
+        let exe = syscall.get("exe").unwrap_or("?");
+        let exit_code = syscall.get("exit").unwrap_or("?");
+
+        let argv_display = if argv.is_empty() {
+            "(no argv)".to_string()
+        } else {
+            argv.iter()
+                .map(|a| format!("{a:?}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        let message = format!(
+            "EXECVE: pid={pid} ppid={ppid} auid={auid} uid={uid} comm={comm} exe={exe} \
+             argc={argc} argv=[{argv_display}] exit={exit_code}"
+        );
+
+        // Combined raw payload: SYSCALL fields + execve_argv array +
+        // execve_raw (the original EXECVE record's fields).
+        let mut raw = serde_json::Map::new();
+        if let serde_json::Value::Object(m) =
+            serde_json::to_value(&syscall.fields).unwrap_or(serde_json::Value::Null)
+        {
+            raw.extend(m);
+        }
+        raw.insert(
+            "execve_argv".to_string(),
+            serde_json::Value::Array(
+                argv.iter()
+                    .map(|s| serde_json::Value::String(s.clone()))
+                    .collect(),
+            ),
+        );
+        raw.insert(
+            "execve_raw".to_string(),
+            serde_json::to_value(&execve.fields).unwrap_or(serde_json::Value::Null),
+        );
+
+        Event::new(
+            ClassUid::PROCESS_ACTIVITY,
+            ProcessActivity::Launch as u32,
+            SeverityId::Medium,
+            &self.host_tag,
+            "auditd",
+            seq,
+        )
+        .with_status(if exit_code == "0" {
+            StatusId::Success
+        } else if exit_code == "?" {
+            StatusId::Unknown
+        } else {
+            // Non-zero (including hex-encoded "0xfffffffe" failures on
+            // some kernels) → exec did not succeed.
+            StatusId::Failure
+        })
+        .with_message(message)
+        .with_raw(serde_json::Value::Object(raw))
+        .with_attack(TechniqueRef::new(
+            "T1059",
+            "Command and Scripting Interpreter",
+            Tactic::Execution,
+        ))
     }
 
     /// AVC = SELinux / SMACK access-vector-cache decision. Two outcomes:
