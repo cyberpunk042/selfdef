@@ -30,6 +30,9 @@ selfdefctl health --json              # composite worst + 6 component rows
 selfdefctl audit-chains               # MS009 chain integrity across 3 chained watchdogs
 selfdefctl audit-chains --quiet       # `selfdef-audit-chains: WORST` exit-coded gate
 selfdefctl audit-chains --json        # raw /v1/audit-chains JSON envelope
+selfdefctl commit-authority types     # MS041 / SDD-043 schema discovery (8 types + 5 fields + 3 gates)
+selfdefctl commit-authority validate <file>   # offline envelope validation (exit 0/1)
+selfdefctl commit-authority classify <file>   # high-risk classification (exit 1 if high-risk)
 ```
 
 ## Per-watchdog drill-down

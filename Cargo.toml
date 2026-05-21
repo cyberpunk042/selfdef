@@ -96,6 +96,7 @@ wiremock = "0.6"
 # internal crates
 selfdef-core = { path = "crates/selfdef-core" }
 selfdef-config = { path = "crates/selfdef-config" }
+selfdef-commit-authority = { path = "crates/selfdef-commit-authority" }
 selfdef-bus = { path = "crates/selfdef-bus" }
 selfdef-store = { path = "crates/selfdef-store" }
 selfdef-correlator = { path = "crates/selfdef-correlator" }

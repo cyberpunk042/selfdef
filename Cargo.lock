@@ -2810,6 +2810,7 @@ dependencies = [
  "reqwest",
  "selfdef-api",
  "selfdef-bus",
+ "selfdef-commit-authority",
  "selfdef-config",
  "selfdef-core",
  "selfdef-correlator",

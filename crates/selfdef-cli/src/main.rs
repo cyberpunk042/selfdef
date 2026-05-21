@@ -9,6 +9,7 @@
 
 mod alerts;
 mod audit_chains;
+mod commit_authority;
 mod doctor;
 mod emit;
 mod follow;
@@ -286,6 +287,16 @@ enum Command {
         #[arg(long)]
         quiet: bool,
     },
+    /// MS041 / SDD-043 commit-authority operator surface. Offline
+    /// validation + classification of CommitEnvelope drafts against
+    /// the `selfdef-commit-authority` crate's contract (8 commit
+    /// types + 5 mandatory fields + 3 high-risk gates + F04871..
+    /// F04875 classifier). No daemon round-trip — the crate is the
+    /// authoritative source.
+    CommitAuthority {
+        #[command(subcommand)]
+        action: CommitAuthorityAction,
+    },
     /// SD-R84 (SDD-026 Z-11 foundation): operator-facing MCP tool
     /// manifest surface. The future selfdef-mcp-server consumes the
     /// SAME manifest the operator's `claude-code` (or any MCP client)
@@ -562,6 +573,30 @@ enum SchedulerAuditCycleAction {
     Replay {
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum CommitAuthorityAction {
+    /// Print the 8 commit types + 5 mandatory fields + 3 high-risk
+    /// gates + classifier rules + refusal rules. Operator + agent
+    /// discovery of the SDD-043 contract.
+    Types,
+    /// Read a JSON CommitEnvelope from disk and run
+    /// `selfdef_commit_authority::validate`. Exit 0 if valid; 1 if
+    /// any mandatory field / signature / high-risk gate / rollback
+    /// constraint fails.
+    Validate {
+        /// Path to the JSON envelope file.
+        file: std::path::PathBuf,
+    },
+    /// Read a JSON CommitEnvelope and report whether it's classified
+    /// high-risk per F04871..F04875. Exit 0 if low-risk; 1 if high-
+    /// risk (so operators can shell-gate elevated workflows behind
+    /// `selfdefctl commit-authority classify <file>`).
+    Classify {
+        /// Path to the JSON envelope file.
+        file: std::path::PathBuf,
     },
 }
 
@@ -1719,6 +1754,18 @@ async fn main() -> Result<()> {
         }
         Command::AuditChains { json, quiet } => {
             let exit = audit_chains::run(json, quiet).context("audit-chains")?;
+            std::process::exit(exit);
+        }
+        Command::CommitAuthority { action } => {
+            let exit = match action {
+                CommitAuthorityAction::Types => commit_authority::run_types()?,
+                CommitAuthorityAction::Validate { file } => {
+                    commit_authority::run_validate(&file).context("commit-authority validate")?
+                }
+                CommitAuthorityAction::Classify { file } => {
+                    commit_authority::run_classify(&file).context("commit-authority classify")?
+                }
+            };
             std::process::exit(exit);
         }
         Command::Guardian { action, json } => {
