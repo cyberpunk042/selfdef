@@ -372,9 +372,12 @@ enum Command {
     /// echo-defense rule + cross-host invariants.
     Nats,
     /// MS011 Z-3 / `selfdef-flex-profile` operator surface.
-    /// Discovery of the flex-profile schema (Delta + DeltaOp +
-    /// RevertRecord + refusal rules + DEFAULT_STATE_PATH).
-    FlexProfile,
+    /// 2 subverbs: `schema` (offline doctrine) + `show` (live state
+    /// via GET /v1/flex-profile).
+    FlexProfile {
+        #[command(subcommand)]
+        action: FlexProfileAction,
+    },
     /// MS011 Z-2 / SDD-026 inference-backend probe surface. Calls
     /// `GET /v1/inference-backends` + renders the 4-backend install
     /// state (llama.cpp / vllm / bitnet.cpp / unsloth).
@@ -680,6 +683,21 @@ enum PolicyAction {
     /// Print every shipped `selfdef-policy-*` crate organized
     /// under its cluster.
     Crates,
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum FlexProfileAction {
+    /// Print the static schema (DeltaOp variants, Delta fields,
+    /// RevertRecord shape, refusal rules). Offline — no daemon
+    /// needed.
+    Schema,
+    /// Fetch live state via GET /v1/flex-profile and print
+    /// baseline + delta count + revert count + latest delta.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1990,8 +2008,12 @@ async fn main() -> Result<()> {
             let exit = nats::run_doctrine()?;
             std::process::exit(exit);
         }
-        Command::FlexProfile => {
-            let exit = flex_profile::run_schema()?;
+        Command::FlexProfile { action } => {
+            let exit = match action {
+                FlexProfileAction::Schema => flex_profile::run_schema()?,
+                FlexProfileAction::Show { json } => flex_profile::run_show(json)
+                    .context("flex-profile show")?,
+            };
             std::process::exit(exit);
         }
         Command::InferenceBackends { json } => {
