@@ -26,6 +26,7 @@ selfdef-network-boundary = { workspace = true }
 selfdef-profile-authority-gate = { workspace = true }
 selfdef-tool-capability-policy = { workspace = true }
 selfdef-hardware = { workspace = true }
+selfdef-hardware-requirements = { workspace = true }
 selfdef-store = { workspace = true }
 selfdef-correlator = { workspace = true }
 selfdef-signing = { workspace = true }
