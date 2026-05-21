@@ -1,8 +1,22 @@
 # SDD-029 — Guardian Daemon — Tetragon eBPF supervisor + SIGKILL + atomic ZFS audit logs
 
-> Status: **draft** — Stage-1 (watchdog layer for SDD-027 + SDD-028)
+> Status: **implemented** — MS044 reached end-to-end production
+> 2026-05-20 across every layer:
+>  - `crates/selfdef-guardian` (Tetragon supervisor loop + SIGKILL
+>    response + SHA-256 chained OCSF ZFS audit logs)
+>  - `selfdef-guardian` binary + `selfdef-guardian.service` systemd unit
+>  - `selfdefctl guardian {show, history, replay, rollback}` CLI verbs
+>  - `GET /v1/guardian{,/history}` HTTP surface
+>  - Dashboard "Guardian" panel
+>  - L2 bats coverage: `packaging/test/L2-guardian.bats`
+>  - L1 coherence gates
+>  - Prometheus alerts: `SelfdefGuardianFailedResponse`,
+>    `SelfdefGuardianTetragonSocketMissing`, `SelfdefGuardianChainBroken`
+>  - Operator runbooks: `guardian-{not-running, socket-unreachable,
+>    false-positive-rollback, audit-log-corruption,
+>    console-alert-investigation}.md` (5 runbooks, info-hub)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-20
+> Last updated: 2026-05-21 (status: draft → implemented)
 > Implements milestone: MS044 (catalogued in `backlog/milestones/MS044-guardian-daemon-tetragon-ebpf-supervisor.md`)
 > Source: `~/infohub/raw/dumps/2026-05-15-sain-01-master-spec-other-conversation-transposition.md` §10 lines 513-588 + Phase V lines 712-721 + Trinity Genesis Auditor dump 977-981
 > Companions: SDD-027 (friction-audit, hardware-frame), SDD-028 (perimeter, kernel-syscall), SDD-004 (security threat model)

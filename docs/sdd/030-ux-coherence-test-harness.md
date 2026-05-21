@@ -1,8 +1,24 @@
 # SDD-030 — UX coherence test harness (CLI + TUI + minimal-web) — MS045
 
-> Status: **draft** — Stage-1 (consolidator for MS043 operator-surface UX)
+> Status: **implemented** — MS045 reached end-to-end production
+> 2026-05-20 / 2026-05-21 across every layer:
+>  - `scripts/test/coherence.sh` top-level harness orchestrator
+>    (28 layers as of 2026-05-21: L1 gates + L2 bats + cargo
+>    four-watchdog set)
+>  - L1 gates shipped: `L1-perimeter-yaml-lint`, `L1-cli-surface`,
+>    `L1-api-endpoints`, `L1-dashboard-sections`,
+>    `L1-grafana-template`, `L1-prometheus-alerts`,
+>    `L1-operator-cheatsheet`, `L1-module-contracts`
+>  - L2 bats suites for friction-audit, perimeter, guardian,
+>    scheduler, doctor-timer + all 14 modules
+>  - Cargo test pass for selfdef-{friction-audit,perimeter,
+>    guardian,scheduler}{,-mirror} + selfdef-api
+>  - CI integration: `.github/workflows/ci.yml::coherence` runs the
+>    harness on every push + PR + tag
+>  - Release pre-build gate: `.github/workflows/release.yml`
+>  - Operator runbook: `ux-coherence-failures.md` (info-hub)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-20
+> Last updated: 2026-05-21 (status: draft → implemented)
 > Implements milestone: MS045 (catalogued in `backlog/milestones/MS045-ux-coherence-test-harness-cli-tui-minimal-web.md`)
 > Source: operator standing direction 2026-05-19 *"be an architect first, then a DevOps Software Engineer and Fullstack and UX Design Specialist"* + MS043 operator-surface R-rows + MS046/MS047/MS044 ad-hoc L2 bats suites
 > Companions: SDD-027 (friction-audit L2), SDD-028 (perimeter L2), SDD-029 (guardian L2)

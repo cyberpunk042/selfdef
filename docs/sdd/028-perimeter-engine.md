@@ -1,8 +1,23 @@
 # SDD-028 — Real-Time Security Perimeter Engine — Tetragon kernel-fence
 
-> Status: **draft** — Stage-1 (sister-arc to SDD-027 friction-audit)
+> Status: **implemented** — MS047 reached end-to-end production
+> 2026-05-20 across every layer:
+>  - `crates/selfdef-perimeter` (Tetragon-fed verdict log + SHA-256
+>    chained audit + signed-extension verification + coexistence
+>    overlap detector per SDD-015)
+>  - `selfdefctl perimeter {show, history, extend, revoke, check-
+>    overlap, status, audit-cycle replay}` CLI verbs
+>  - `GET /v1/perimeter{,/history}` HTTP surface
+>  - Dashboard "Perimeter" panel
+>  - L2 bats coverage: `packaging/test/L2-perimeter.bats`
+>  - L1 coherence: `L1-perimeter-yaml-lint` + others
+>  - Prometheus alerts: `SelfdefPerimeterSigkill`,
+>    `SelfdefPerimeterPolicyMissing`, `SelfdefPerimeterChainBroken`
+>  - Operator runbooks: `perimeter-{tetragon-not-running, policy-
+>    load-failure, extension-create, sigkill-investigation,
+>    key-rotation, audit-log-corruption}.md` (6 runbooks, info-hub)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-20
+> Last updated: 2026-05-21 (status: draft → implemented)
 > Implements milestone: MS047 (catalogued in `backlog/milestones/MS047-real-time-security-perimeter-engine-tetragon-kernel-fence.md`)
 > Source: `~/infohub/raw/dumps/2026-05-15-sain-01-master-spec-other-conversation-transposition.md` §6 lines 380–411
 > Companions: SDD-027 (friction-audit), SDD-016 (oracle triage channel), SDD-004 (security threat model)

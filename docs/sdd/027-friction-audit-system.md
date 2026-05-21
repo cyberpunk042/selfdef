@@ -1,8 +1,21 @@
 # SDD-027 — Friction Audit System — boot-time hardware-integrity gate
 
-> Status: **draft** — Stage-1 (Cycle-3 forward-looking artifacts arc, branch into SAIN-01 hardware-tier defense)
+> Status: **implemented** — MS046 reached end-to-end production
+> 2026-05-20 across every layer:
+>  - `crates/selfdef-friction-audit` (probe + gate evaluation + ring
+>    buffer + OCSF audit chain)
+>  - `selfdefctl friction-audit {show, history, replay}` CLI verbs
+>  - `GET /v1/friction-audit{,/history}` HTTP surface
+>  - Dashboard "Friction Audit" panel
+>  - `sovereign-guard.service` systemd unit (postinst auto-enables)
+>  - L2 bats coverage: `packaging/test/L2-friction-audit.bats`
+>  - L1 coherence: `L1-perimeter-yaml-lint`, `L1-cli-surface`,
+>    `L1-api-endpoints`, `L1-dashboard-sections`
+>  - Prometheus alert: `SelfdefFrictionAuditFailing`
+>  - Operator runbooks: `friction-audit-{pcie,zfs,memory,
+>    immutability,signature}.md` (5 runbooks, info-hub)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-20
+> Last updated: 2026-05-21 (status: draft → implemented)
 > Implements milestone: MS046 (catalogued in `backlog/milestones/MS046-friction-audit-system-boot-time-hardware-integrity-gate.md`)
 > Source: `~/infohub/raw/dumps/2026-05-15-sain-01-master-spec-other-conversation-transposition.md` §5 lines 338–378
 > Companions: SDD-013 (deployment.target), SDD-017 (SAIN-01 hardware inventory), SDD-022 (hardware exploit doctrine)

@@ -1,8 +1,24 @@
 # SDD-031 — Goldilocks Scheduler — hardware-aware resource routing (MS048)
 
-> Status: **draft** — Stage-1 (closes the avx-plus-plus dump tail backward-sweep loop)
+> Status: **implemented** — MS048 reached end-to-end production
+> 2026-05-20 across every layer:
+>  - `crates/selfdef-scheduler` (7-axis weight matrix + 6 profiles +
+>    backpressure tracker + explain/replay engine + audit chain)
+>  - `selfdef-scheduler` binary + systemd unit
+>  - `selfdefctl scheduler {show, history, explain, replay, weights,
+>    force, audit-cycle replay}` CLI verbs (7 subverbs)
+>  - `GET /v1/scheduler{,/history,/backpressure,/weights,/explain/
+>    :request_id}` HTTP surface
+>  - Dashboard "Scheduler" panel
+>  - L2 bats coverage: `packaging/test/L2-scheduler.bats`
+>  - L1 coherence gates including subverb-count for `scheduler`
+>  - Prometheus alerts: `SelfdefSchedulerSustainedBackpressure`,
+>    `SelfdefSchedulerChainBroken`
+>  - Operator runbooks: `scheduler-{not-running, backpressure-
+>    stuck-open, weight-matrix-rotation, audit-log-corruption,
+>    force-override-investigation}.md` (5 runbooks, info-hub)
 > Owner: operator-supervised; agent-authored
-> Last updated: 2026-05-20
+> Last updated: 2026-05-21 (status: draft → implemented)
 > Implements milestone: MS048 (catalogued in `backlog/milestones/MS048-goldilocks-scheduler-hardware-aware-resource-routing.md`)
 > Source: avx-plus-plus dump tail lines 18000-18250 (5 scheduling surfaces + 7-axis objective + Key Scheduling Law)
 > Companions: SDD-027 (friction-audit), SDD-028 (perimeter), SDD-029 (guardian) — all sister patterns; SDD-030 (UX coherence harness — locks the surface)
