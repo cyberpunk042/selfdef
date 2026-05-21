@@ -39,6 +39,7 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
+mod mcp;
 mod nats;
 mod policy;
 mod commit_authority;
@@ -282,6 +283,10 @@ pub fn router(state: ApiState) -> Router {
         // pump subject schema + modes + echo defense + cross-host
         // invariants.
         .route("/v1/nats", get(nats::show))
+        // MS011 Z-11 / SDD-026 + SD-R84 — MCP-interop foundation
+        // discovery. Transports + framings + curation policy +
+        // pointer to the CLI catalog source.
+        .route("/v1/mcp", get(mcp::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

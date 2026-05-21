@@ -125,6 +125,9 @@ check_route "/v1/policy"                  "MS033 / SDD-051" || failures=$((failu
 # MS015 / SDD-053 D-2 — NATS bridge schema discovery.
 check_route "/v1/nats"                    "MS015 / SDD-053" || failures=$((failures + 1))
 
+# MS011 Z-11 / SDD-026 + SD-R84 — MCP-interop foundation discovery.
+check_route "/v1/mcp"                     "MS011 Z-11 / SDD-026" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."
