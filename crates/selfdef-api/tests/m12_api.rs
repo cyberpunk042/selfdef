@@ -1740,6 +1740,36 @@ async fn modules_show_rejects_directory_traversal() {
 }
 
 #[tokio::test]
+async fn modules_check_route_returns_404_for_unknown_module() {
+    // MS006/MS016..MS031 per-module check surface. Unknown module
+    // slug → 404 (same shape as show()).
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/no-such-module/check")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn modules_check_route_rejects_invalid_slug() {
+    // Same kebab-case validation as show() — directory traversal
+    // attempts (`../etc`) MUST be rejected without filesystem access.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/modules/foo..bar/check")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn modules_diff_route_returns_200_with_three_buckets() {
     // MS011 Z-13 / SD-R83: /v1/modules/diff partitions catalog vs
     // host config into installed / available / orphaned. On the CI

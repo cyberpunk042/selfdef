@@ -52,6 +52,9 @@ check_route "/v1/modules/:name"           "MS006 / SDD-009 Q-G" || failures=$((f
 # MS011 Z-13 / SD-R83 — modules diff (catalog ∩/Δ host-active set)
 check_route "/v1/modules/diff"            "MS011 Z-13 / SD-R83" || failures=$((failures + 1))
 
+# MS006 / MS016..MS031 — per-module install/check.sh invocation.
+check_route "/v1/modules/:name/check"     "MS006 / per-module check" || failures=$((failures + 1))
+
 # MS027 — server-side alert classification (consumed by PWA dashboard
 # + selfdefctl alerts; single source of truth for the 9 alert series).
 check_route "/v1/alerts"                  "MS027" || failures=$((failures + 1))

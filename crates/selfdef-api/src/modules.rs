@@ -182,6 +182,87 @@ pub(crate) async fn show(
     Ok(Json(module))
 }
 
+/// Response shape for `GET /v1/modules/:name/check`.
+///
+/// Surfaces the module's own `install/check.sh` script result.
+/// Operators get a structured view of per-module health without
+/// needing shell access to the host.
+#[derive(Debug, Serialize)]
+pub(crate) struct ModuleCheckBody {
+    pub module: String,
+    /// Path of the check script that ran.
+    pub script: PathBuf,
+    /// Exit code: 0 = healthy; non-zero = failing per module-author
+    /// contract.
+    pub exit_code: i32,
+    /// Whether the script reported success (exit == 0).
+    pub ok: bool,
+    /// First 64 KiB of stdout (operator-readable diagnostic).
+    pub stdout: String,
+    /// First 64 KiB of stderr (operator-readable diagnostic).
+    pub stderr: String,
+}
+
+/// Validate a module name — only kebab-case + lowercase to defeat
+/// directory traversal + symlink shenanigans. Pulled out of `show`
+/// so `check` can share the predicate.
+fn valid_module_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+/// `GET /v1/modules/:name/check` — MS006/MS016/MS017/MS018/MS022..MS031
+/// per-module health surface. Invokes `<modules_dir>/<name>/install/
+/// check.sh` and returns the structured result. Read-token gated
+/// (same as other /v1/ routes); never executes anything that mutates
+/// host state (check.sh by module-author contract is read-only;
+/// documented in docs/dev/modules.md).
+pub(crate) async fn check(
+    AxumPath(name): AxumPath<String>,
+) -> Result<Json<ModuleCheckBody>, ApiError> {
+    if !valid_module_name(&name) {
+        return Err(ApiError::NotFound(format!(
+            "invalid module name: {name:?} (must be kebab-case [a-z0-9-]+)"
+        )));
+    }
+    let dir = modules_dir();
+    let module_dir = dir.join(&name);
+    let manifest = module_dir.join("module.toml");
+    if !manifest.is_file() {
+        return Err(ApiError::NotFound(format!("module {name:?} not found")));
+    }
+    let script = module_dir.join("install").join("check.sh");
+    if !script.is_file() {
+        return Err(ApiError::NotFound(format!(
+            "module {name:?} has no install/check.sh"
+        )));
+    }
+    let output = std::process::Command::new("bash")
+        .arg(&script)
+        .output()
+        .map_err(|e| ApiError::Internal(format!("invoking {}: {e}", script.display())))?;
+    let exit_code = output.status.code().unwrap_or(-1);
+    let truncate = |bytes: &[u8]| -> String {
+        let s = String::from_utf8_lossy(bytes);
+        if s.len() > 64 * 1024 {
+            format!("{}\n…[truncated, {} bytes total]", &s[..64 * 1024], s.len())
+        } else {
+            s.into_owned()
+        }
+    };
+    Ok(Json(ModuleCheckBody {
+        module: name,
+        script,
+        exit_code,
+        ok: output.status.success(),
+        stdout: truncate(&output.stdout),
+        stderr: truncate(&output.stderr),
+    }))
+}
+
 /// Response shape for `GET /v1/modules/diff`.
 ///
 /// Partitions the shipped catalog × operator-activated host config

@@ -189,6 +189,10 @@ pub fn router(state: ApiState) -> Router {
         // so the literal segment `diff` doesn't get captured as a
         // slug name.
         .route("/v1/modules/diff", get(modules::diff))
+        // MS006/MS016..MS031 — per-module install/check.sh invocation.
+        // Registered as a SPECIFIC subpath under :name so the show
+        // handler still handles the bare `/v1/modules/:name`.
+        .route("/v1/modules/:name/check", get(modules::check))
         .route("/v1/modules/:name", get(modules::show))
         // MS027: server-side classification of the 9 four-watchdog
         // alert series. PWA dashboard + `selfdefctl alerts` both
