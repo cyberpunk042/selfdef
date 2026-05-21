@@ -1,0 +1,8 @@
+# Profile: stop.
+#
+# stop + disable atd.service. Operator can `systemctl start atd`
+# to re-enable on the spot — less defense against a package-
+# induced re-enable. Use only when operator needs at(1)
+# occasionally + reactivates manually.
+
+profile = "stop"

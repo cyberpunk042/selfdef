@@ -1,0 +1,9 @@
+# Profile: mask (default).
+#
+# stop + disable + MASK atd.service. Masking is the strongest
+# form of disable — systemd refuses to start the unit until
+# `systemctl unmask atd` is explicitly run. An attacker who
+# `apt install`s an at-using package can't accidentally re-enable
+# atd via Wants= dependencies.
+
+profile = "mask"

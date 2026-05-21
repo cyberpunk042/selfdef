@@ -1,0 +1,37 @@
+name        = "at-disable"
+version     = "0.1.0"
+summary     = "Disable at(1) scheduler — stops + masks atd.service so the at-job persistence vector (T1053.001) is closed at the OS level. Pairs with cron-baseline (restricts cron) for the full user-scheduling lockdown"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["at-scheduler-disable"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + MASK atd.service. masking
+#                   makes atd un-startable until manually unmasked.
+# `stop`          — stop + disable only (operator-pull undo
+#                   restartable with systemctl start atd).
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/at-disable.toml",
+]
