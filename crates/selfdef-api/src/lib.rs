@@ -36,6 +36,7 @@
 #![allow(clippy::module_name_repetitions, clippy::missing_errors_doc)]
 
 mod alerts;
+mod audit_chains;
 mod control;
 mod cpu;
 mod friction_audit;
@@ -228,6 +229,10 @@ pub fn router(state: ApiState) -> Router {
         // across the read surfaces. Single endpoint for "is the box
         // OK?". Aggregates alerts/network/storage/raid/gpu/cpu.
         .route("/v1/health", get(health::show))
+        // MS009 — composite audit-chain replay across the 3 chained
+        // watchdogs (perimeter / guardian / scheduler). Surfaces per-
+        // chain ok/error + events_verified count.
+        .route("/v1/audit-chains", get(audit_chains::show))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

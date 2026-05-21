@@ -90,6 +90,9 @@ check_route "/v1/cpu"                     "MS011 Z-4 / SDD-026" || failures=$((f
 # read surfaces (alerts + network + storage + raid + gpu + cpu).
 check_route "/v1/health"                  "MS011 Z-6 / SDD-026" || failures=$((failures + 1))
 
+# MS009 — composite audit-chain replay across perimeter/guardian/scheduler.
+check_route "/v1/audit-chains"            "MS009 audit cycles" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

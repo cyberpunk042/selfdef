@@ -1981,6 +1981,52 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn audit_chains_route_returns_200_with_three_chains() {
+    // MS009: /v1/audit-chains runs the 3 watchdog audit-chain checks.
+    // On a CI runner the OCSF files don't exist so every chain will
+    // return ok=false (with an error string). We assert shape + that
+    // exactly 3 chains appear in canonical order.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app = app(state);
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/audit-chains")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let worst = v["worst"].as_str().expect("worst must be string");
+    assert!(
+        ["ok", "critical"].contains(&worst),
+        "worst must be ok/critical; got {worst}"
+    );
+    let chains = v["chains"].as_array().expect("chains must be array");
+    assert_eq!(chains.len(), 3);
+    let names: Vec<&str> = chains.iter().map(|c| c["watchdog"].as_str().unwrap()).collect();
+    assert_eq!(names, vec!["perimeter", "guardian", "scheduler"]);
+    for (i, c) in chains.iter().enumerate() {
+        assert!(c["path"].is_string(), "row {i} path must be string");
+        assert!(
+            c["events_verified"].is_number(),
+            "row {i} events_verified must be number"
+        );
+        assert!(c["ok"].is_boolean(), "row {i} ok must be bool");
+        // error is null when ok=true, string when ok=false
+        let ok = c["ok"].as_bool().unwrap();
+        if ok {
+            assert!(c["error"].is_null(), "row {i} error must be null when ok=true");
+        } else {
+            assert!(
+                c["error"].is_string(),
+                "row {i} error must be string when ok=false"
+            );
+        }
+    }
+}
+
+#[tokio::test]
 async fn health_route_returns_200_with_composite_body() {
     // MS011 Z-6: /v1/health aggregates alerts/network/storage/raid/
     // gpu/cpu into a composite worst-state + per-component rows.
