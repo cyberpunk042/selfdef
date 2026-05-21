@@ -1,0 +1,34 @@
+name        = "chrony-baseline"
+version     = "0.1.0"
+summary     = "Chrony NTP baseline — multi-source pool + NTS-secured + drift logging — mitigates T1029 Scheduled Transfer + T1070.006 Indicator Removal (clock manipulation)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ntp-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "chronyd" },
+    { kind = "binary", value = "chronyc" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `pool` (default) — operator-friendly pool.ntp.org + diverse fallbacks
+# `nts` — Network Time Security (NTS) authenticated time servers
+default = "pool"
+available = ["pool", "nts"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = ["/etc/chrony/conf.d/50-selfdef.conf", "/etc/selfdef/modules/chrony-baseline.toml"]

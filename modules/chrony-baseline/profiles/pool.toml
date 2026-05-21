@@ -1,0 +1,8 @@
+# Profile: pool (default).
+#
+# Multi-pool community NTP (pool.ntp.org + Cloudflare + Google).
+# Plain NTP — fast handshake, broad availability, NO cryptographic
+# authentication (network attacker can spoof). Sufficient for
+# most operator workflows.
+
+profile = "pool"

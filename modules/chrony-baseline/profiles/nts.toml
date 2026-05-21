@@ -1,0 +1,9 @@
+# Profile: nts.
+#
+# Network Time Security (RFC 8915) — HMAC-signed NTP. A network
+# attacker between operator's host and the time server CANNOT
+# return forged time without breaking TLS. Requires chrony >= 4.0
+# and outbound connectivity to NTS servers (Cloudflare,
+# Netnod, PTB, NL Labs).
+
+profile = "nts"
