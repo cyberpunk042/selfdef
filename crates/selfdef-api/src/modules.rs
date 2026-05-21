@@ -61,6 +61,15 @@ pub(crate) struct ModuleSummary {
     /// `system` when absent.
     #[serde(default)]
     pub install_paths: ModuleInstallPaths,
+    /// SDD-057 step 5 — `[requires_hardware]` table from module.toml.
+    /// Parsed via the shared `selfdef-hardware-requirements` crate
+    /// so the install-options handler can evaluate hardware-gate
+    /// readiness for each AVAILABLE module. Skipped from serialization
+    /// because HardwareRequirements doesn't derive Serialize (only
+    /// Deserialize — operators write predicates in module.toml; we
+    /// don't echo them back) + the field is parser-only on this side.
+    #[serde(default, skip_serializing)]
+    pub requires_hardware: selfdef_hardware_requirements::HardwareRequirements,
 }
 
 /// MS011 Z-8 install-path classification.
@@ -270,10 +279,16 @@ pub(crate) struct InstallOption {
     pub version: String,
     pub summary: String,
     pub category: String,
-    /// One of: `ready` | `blocked-by-missing-deps`. Hardware-gated
-    /// recommendation (`blocked-by-hardware` / `needs-review`) is
-    /// the deferred enrichment.
+    /// One of: `ready` | `blocked-by-missing-deps` |
+    /// `blocked-by-hardware` | `needs-review`. SDD-057 step 5
+    /// shipped the hardware-gate enrichment via the shared
+    /// `selfdef-hardware-requirements` crate.
     pub recommendation: &'static str,
+    /// SDD-057 step 5 — when `recommendation == "blocked-by-hardware"`,
+    /// this lists the unmet predicates from the gate evaluation.
+    /// Empty for other recommendations.
+    #[serde(default)]
+    pub unmet_hardware_predicates: Vec<String>,
     pub missing_deps: Vec<String>,
 }
 
@@ -282,10 +297,20 @@ pub(crate) struct InstallOptionsCounts {
     pub total: usize,
     pub ready: usize,
     pub blocked_by_missing_deps: usize,
+    /// SDD-057 step 5 — gate fails against probed capabilities.
+    #[serde(default)]
+    pub blocked_by_hardware: usize,
+    /// SDD-057 step 5 — hardware probe unavailable (e.g. nvidia-smi
+    /// missing on a host that declares GPU predicates); operator
+    /// review needed before classifying.
+    #[serde(default)]
+    pub needs_review: usize,
 }
 
-/// `GET /v1/modules/install-options` — MS011 Z-13 / SD-R86 partial.
-/// Classifies AVAILABLE modules (catalog \ active) by dep-readiness.
+/// `GET /v1/modules/install-options` — MS011 Z-13 / SD-R86 +
+/// SDD-057 step 5. Classifies AVAILABLE modules (catalog \ active)
+/// by dep-readiness AND hardware-gate readiness via the shared
+/// `selfdef-hardware-requirements` crate.
 pub(crate) async fn install_options() -> Result<Json<ModulesInstallOptionsBody>, ApiError> {
     let dir = modules_dir();
     let toml_path = modules_toml();
@@ -293,42 +318,83 @@ pub(crate) async fn install_options() -> Result<Json<ModulesInstallOptionsBody>,
         .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
     let active = active_modules(&toml_path);
 
+    // SDD-057 step 5 — try to derive HardwareCapabilities from the
+    // cached snapshot. When probe fails (e.g. CI runner, no
+    // nvidia-smi, no /sys/devices/system/cpu), gate evaluation
+    // falls back to "needs-review" for any module declaring a
+    // hardware predicate.
+    let caps: Option<selfdef_hardware::HardwareCapabilities> =
+        crate::hardware::cached_snapshot()
+            .ok()
+            .map(selfdef_hardware::derive_capabilities);
+
     let mut options: Vec<InstallOption> = Vec::new();
     let mut ready = 0usize;
-    let mut blocked = 0usize;
+    let mut blocked_deps = 0usize;
+    let mut blocked_hw = 0usize;
+    let mut needs_review = 0usize;
 
     for m in &modules {
         if active.contains(&m.name) {
             continue; // installed — skip
         }
-        // Resolve dependencies against the active set.
+        // 1. Dep-readiness.
         let missing_deps: Vec<String> = m
             .depends_on
             .iter()
             .filter(|d| !active.contains(*d))
             .cloned()
             .collect();
-        let recommendation: &'static str = if missing_deps.is_empty() {
-            ready += 1;
-            "ready"
+        if !missing_deps.is_empty() {
+            blocked_deps += 1;
+            options.push(InstallOption {
+                slug: m.name.clone(),
+                version: m.version.clone(),
+                summary: m.summary.clone(),
+                category: m.category.clone(),
+                recommendation: "blocked-by-missing-deps",
+                missing_deps,
+                unmet_hardware_predicates: Vec::new(),
+            });
+            continue;
+        }
+        // 2. Hardware gate (SDD-057 step 5).
+        let req = &m.requires_hardware;
+        let req_is_disabled = req.is_empty();
+        let (recommendation, unmet_hw): (&'static str, Vec<String>) = if req_is_disabled {
+            ("ready", Vec::new())
         } else {
-            blocked += 1;
-            "blocked-by-missing-deps"
+            match &caps {
+                Some(c) => match req.evaluate(c) {
+                    Ok(()) => ("ready", Vec::new()),
+                    Err(unmet) => ("blocked-by-hardware", unmet),
+                },
+                None => ("needs-review", Vec::new()),
+            }
         };
+        match recommendation {
+            "ready" => ready += 1,
+            "blocked-by-hardware" => blocked_hw += 1,
+            "needs-review" => needs_review += 1,
+            _ => {}
+        }
         options.push(InstallOption {
             slug: m.name.clone(),
             version: m.version.clone(),
             summary: m.summary.clone(),
             category: m.category.clone(),
             recommendation,
-            missing_deps,
+            missing_deps: Vec::new(),
+            unmet_hardware_predicates: unmet_hw,
         });
     }
 
     let counts = InstallOptionsCounts {
         total: options.len(),
         ready,
-        blocked_by_missing_deps: blocked,
+        blocked_by_missing_deps: blocked_deps,
+        blocked_by_hardware: blocked_hw,
+        needs_review,
     };
     Ok(Json(ModulesInstallOptionsBody {
         modules_dir: dir,

@@ -30,7 +30,7 @@ static HARDWARE_SNAPSHOT: OnceLock<Result<HardwareSnapshot, String>> = OnceLock:
 /// Return the cached snapshot (probing it once on first call).
 /// Probe errors are stringified and cached too — repeated requests
 /// don't keep re-attempting a probe that's already known to fail.
-fn cached_snapshot() -> Result<&'static HardwareSnapshot, &'static str> {
+pub(crate) fn cached_snapshot() -> Result<&'static HardwareSnapshot, &'static str> {
     let cell = HARDWARE_SNAPSHOT.get_or_init(|| probe().map_err(|e| e.to_string()));
     cell.as_ref().map_err(|s| s.as_str())
 }
