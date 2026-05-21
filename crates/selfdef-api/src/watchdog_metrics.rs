@@ -74,6 +74,84 @@ pub fn render() -> String {
     render_guardian(&mut out);
     render_scheduler(&mut out);
     render_modules(&mut out);
+    render_storage(&mut out);
+    out
+}
+
+/// MS011 Z-10 — emit per-mount disk-usage gauges so Prometheus can
+/// scrape + alert on filesystem fill. /v1/storage classifies into
+/// green/yellow/red but is per-request; this surface gives the
+/// alert pipeline a long-lived scrapeable series.
+///
+/// Series:
+///   `selfdef_storage_mount_used_pct{mountpoint="..."}` — 0..100
+///   `selfdef_storage_mount_size_bytes{mountpoint="..."}` — total
+///   `selfdef_storage_mount_used_bytes{mountpoint="..."}` — used
+///
+/// Excludes pseudo-filesystems via the same logic as
+/// `crate::storage::run_df` (tmpfs / devtmpfs / squashfs / proc /
+/// sysfs / cgroup2 / overlay) so the gauges only cover operator-
+/// relevant mounts.
+fn render_storage(out: &mut String) {
+    let resp = crate::storage::probe();
+    out.push_str(
+        "# HELP selfdef_storage_mount_used_pct Per-mount disk usage (0..100) — MS011 Z-10. Excludes pseudo-filesystems.\n",
+    );
+    out.push_str("# TYPE selfdef_storage_mount_used_pct gauge\n");
+    for m in &resp.mounts {
+        writeln!(
+            out,
+            "selfdef_storage_mount_used_pct{{mountpoint=\"{}\",fstype=\"{}\"}} {}",
+            escape_label(&m.mountpoint),
+            escape_label(&m.fstype),
+            m.used_pct
+        )
+        .unwrap();
+    }
+    out.push_str(
+        "# HELP selfdef_storage_mount_size_bytes Per-mount total bytes — MS011 Z-10.\n",
+    );
+    out.push_str("# TYPE selfdef_storage_mount_size_bytes gauge\n");
+    for m in &resp.mounts {
+        writeln!(
+            out,
+            "selfdef_storage_mount_size_bytes{{mountpoint=\"{}\",fstype=\"{}\"}} {}",
+            escape_label(&m.mountpoint),
+            escape_label(&m.fstype),
+            m.size_bytes
+        )
+        .unwrap();
+    }
+    out.push_str(
+        "# HELP selfdef_storage_mount_used_bytes Per-mount used bytes — MS011 Z-10.\n",
+    );
+    out.push_str("# TYPE selfdef_storage_mount_used_bytes gauge\n");
+    for m in &resp.mounts {
+        writeln!(
+            out,
+            "selfdef_storage_mount_used_bytes{{mountpoint=\"{}\",fstype=\"{}\"}} {}",
+            escape_label(&m.mountpoint),
+            escape_label(&m.fstype),
+            m.used_bytes
+        )
+        .unwrap();
+    }
+}
+
+/// Escape Prometheus label values per the exposition format spec:
+/// backslash, double-quote, and newline must be backslash-escaped.
+/// Mount paths can contain none of these in practice, but we
+/// defend in depth.
+fn escape_label(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            _ => out.push(c),
+        }
+    }
     out
 }
 
@@ -276,5 +354,37 @@ mod tests {
         // because the test runner may have stale state, but the render
         // succeeded which is the contract.
         assert!(out.contains("selfdef_friction_audit_verdicts_total"));
+    }
+
+    #[test]
+    fn render_emits_storage_mount_series() {
+        // MS011 Z-10: per-mount disk-usage gauges. HELP + TYPE must
+        // appear for each of the 3 storage series. Whether any sample
+        // lines follow depends on whether the test runner has mounts
+        // we'd report (always true on Linux); we don't assert specific
+        // mountpoint names because those vary.
+        let out = render();
+        for s in &[
+            "selfdef_storage_mount_used_pct",
+            "selfdef_storage_mount_size_bytes",
+            "selfdef_storage_mount_used_bytes",
+        ] {
+            assert!(
+                out.contains(&format!("# HELP {s} ")),
+                "missing HELP for {s}"
+            );
+            assert!(
+                out.contains(&format!("# TYPE {s} gauge")),
+                "missing TYPE gauge for {s}"
+            );
+        }
+    }
+
+    #[test]
+    fn escape_label_handles_special_chars() {
+        assert_eq!(escape_label("plain"), "plain");
+        assert_eq!(escape_label(r#"a"b"#), r#"a\"b"#);
+        assert_eq!(escape_label(r"a\b"), r"a\\b");
+        assert_eq!(escape_label("line1\nline2"), r"line1\nline2");
     }
 }

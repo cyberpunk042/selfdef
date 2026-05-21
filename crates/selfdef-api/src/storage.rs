@@ -216,15 +216,22 @@ fn probe_log_dirs() -> Vec<LogDirUsage> {
 }
 
 /// `GET /v1/storage` handler.
-pub(crate) async fn show() -> Json<StorageResponse> {
+/// Sync probe — extracted from `show` so the Prometheus
+/// `watchdog_metrics::render` path (sync) can reuse the same
+/// classified result without spinning up an executor.
+pub(crate) fn probe() -> StorageResponse {
     let mounts = run_df();
     let worst = worst_mount(&mounts);
     let log_dirs = probe_log_dirs();
-    Json(StorageResponse {
+    StorageResponse {
         worst,
         mounts,
         log_dirs,
-    })
+    }
+}
+
+pub(crate) async fn show() -> Json<StorageResponse> {
+    Json(probe())
 }
 
 #[cfg(test)]

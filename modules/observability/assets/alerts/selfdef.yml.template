@@ -125,3 +125,26 @@ groups:
           summary: "scheduler: audit chain broken on {{ $labels.instance }}"
           description: "MS048 SHA-256 audit chain integrity verification failed. Storage corruption, log tampering, or concurrent writer. Counterfactual replay no longer trustworthy. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/scheduler-audit-log-corruption.md"
+
+      # ----- MS011 Z-10 storage thresholds -----
+      - alert: SelfdefStorageMountYellow
+        expr: selfdef_storage_mount_used_pct >= 70 < 90
+        for: 5m
+        labels:
+          severity: warning
+          ms: MS011
+        annotations:
+          summary: "storage: mount {{ $labels.mountpoint }} at {{ $value }}% (>=70%, sustained 5m)"
+          description: "Mount {{ $labels.mountpoint }} ({{ $labels.fstype }}) has been at 70-89% used for >5m. Investigate fill rate + plan capacity per runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/storage-degraded.md"
+
+      - alert: SelfdefStorageMountRed
+        expr: selfdef_storage_mount_used_pct >= 90
+        for: 1m
+        labels:
+          severity: critical
+          ms: MS011
+        annotations:
+          summary: "storage: mount {{ $labels.mountpoint }} CRITICAL at {{ $value }}% (>=90%)"
+          description: "Mount {{ $labels.mountpoint }} ({{ $labels.fstype }}) at >=90% used. Audit-chain append failures imminent for any chain on this mount. Recover per runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/storage-degraded.md"

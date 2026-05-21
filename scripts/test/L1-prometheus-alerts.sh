@@ -30,13 +30,13 @@ if ! python3 -c "import yaml; yaml.safe_load(open('${ALERTS}'))" 2>/dev/null; th
 fi
 echo "  PASS YAML parses"
 
-# Gate 2: alert count >= 9 (one for each documented failure mode).
+# Gate 2: alert count >= 11 (9 four-watchdog set + 2 MS011 Z-10 storage).
 alert_count="$(python3 -c "import yaml; d=yaml.safe_load(open('${ALERTS}')); print(sum(len(g['rules']) for g in d['groups']))")"
-if [[ "${alert_count}" -lt 9 ]]; then
-    echo "  FAIL alert count ${alert_count} < 9 (drift; the 4-watchdog alerts may have been removed)"
+if [[ "${alert_count}" -lt 11 ]]; then
+    echo "  FAIL alert count ${alert_count} < 11 (drift; 9 four-watchdog + 2 storage alerts expected)"
     exit 1
 fi
-echo "  PASS alert count = ${alert_count} (≥ 9)"
+echo "  PASS alert count = ${alert_count} (≥ 11)"
 
 # Gate 3: every alert references a runbook_url in the info-hub.
 missing_runbook="$(python3 -c "
