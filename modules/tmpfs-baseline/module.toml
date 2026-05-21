@@ -1,0 +1,41 @@
+name        = "tmpfs-baseline"
+version     = "0.1.0"
+summary     = "/tmp + /var/tmp hardening — tmpfs mount with noexec,nosuid,nodev. Mitigates T1059 shell-script-in-tmp + T1564.001 hidden-files + T1546 SUID-binary-in-tmp"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["tmp-hardening"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+    { kind = "binary", value = "mount" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `noexec` (default) — /tmp + /var/tmp mounted with noexec,nosuid,nodev.
+#                     Disk-backed (existing OS default).
+# `tmpfs`            — /tmp re-mounted as tmpfs (RAM-backed; ephemeral
+#                     across reboot) with same flags + 25% RAM size
+#                     cap. Operator MUST acknowledge_tmpfs=true.
+default = "noexec"
+available = ["noexec", "tmpfs"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/system/tmp.mount.d/50-selfdef.conf",
+    "/etc/systemd/system/var-tmp.mount.d/50-selfdef.conf",
+    "/etc/selfdef/modules/tmpfs-baseline.toml",
+]

@@ -1,0 +1,14 @@
+# Profile: tmpfs.
+#
+# /tmp re-mounted as RAM-backed tmpfs (size=25% of RAM) +
+# noexec/nosuid/nodev. /var/tmp keeps disk-backed (operator-pull
+# persistent across reboot).
+#
+# Operator MUST set acknowledge_tmpfs=true after confirming no
+# operator workflow (build, video, large-temp processing) needs
+# >25% RAM of /tmp space.
+
+profile = "tmpfs"
+
+# Refuse-to-brick gate.
+acknowledge_tmpfs = false

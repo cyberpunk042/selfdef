@@ -1,0 +1,8 @@
+# Profile: noexec (default).
+#
+# /tmp + /var/tmp keep their existing backing store but gain
+# noexec + nosuid + nodev mount flags. Safe for hosts that have
+# large /tmp use (no size limit imposed). Works on every distro
+# with systemd-managed tmp.mount.
+
+profile = "noexec"
