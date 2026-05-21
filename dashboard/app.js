@@ -1481,61 +1481,46 @@
   refreshHealth();
   refreshAuditChains();
   refreshActionList();
-  setInterval(refreshStatus, 5000);
-  // Four-watchdog set panels refresh less often than status — gate
-  // state is rare-change (boot + operator overrides). 30s for the
-  // hardware frame (friction-audit) and supervisor (guardian); 15s for
-  // the perimeter since execve events can land between refreshes; 10s
-  // for the scheduler since routing decisions are high-frequency.
-  setInterval(refreshFrictionAudit, 30000);
-  setInterval(refreshPerimeter, 15000);
-  setInterval(refreshGuardian, 30000);
-  setInterval(refreshScheduler, 10000);
-  // Modules list is rare-change (only changes on package upgrade or
-  // operator-driven `modules apply`); 60s is plenty.
-  setInterval(refreshModules, 60000);
-  // Alerts overview is the chain-integrity + cumulative-counter
-  // mirror of the Prometheus alert rules — fast refresh keeps
-  // chain-broken signals operator-visible within seconds.
-  setInterval(refreshAlerts, 15000);
-  // Hardware panel reflects MS010 / SDD-018 — hardware doesn't
-  // hot-swap so 5 minutes is plenty (the server caches the probe
-  // anyway via OnceLock).
-  setInterval(refreshHardware, 300000);
-  // Network state probes systemd + ping + getent on every request —
-  // 30 s keeps operator latency under control without thrashing the
-  // probe subprocesses.
-  setInterval(refreshNetwork, 30000);
-  // Storage state probes df + walks 3 log dirs. df is cheap (a kernel
-  // syscall); the walks scale with file count per dir. 60 s is fine
-  // for both — storage doesn't move that fast.
-  setInterval(refreshStorage, 60000);
-  // RAID is /proc/mdstat reads — kernel-side. Cheap; refresh on the
-  // same 60 s cadence as storage for symmetry.
-  setInterval(refreshRaid, 60000);
-  // GPU power-draw can change second-by-second under load, but we
-  // don't want to thrash nvidia-smi every cycle. 10 s gives operators
-  // responsive deviance signal while keeping the subprocess cost low.
-  setInterval(refreshGpu, 10000);
-  // CPU mode classification reads /sys files — kernel-side, cheap,
-  // but mode-changes are rare (operator-driven, not background
-  // drift). 60 s is plenty.
-  setInterval(refreshCpu, 60000);
-  // Flex profile changes are operator-driven (no background drift);
-  // 60 s refresh is plenty.
-  setInterval(refreshFlexProfile, 60000);
-  // Inference backends are installed/uninstalled at module-apply
-  // time — 120 s refresh is fine (probes shell out to `command -v`
-  // + `--version` per backend, so we don't want it too frequent).
-  setInterval(refreshInferenceBackends, 120000);
-  // Composite health aggregates 6 surfaces — costs the union of all
-  // probes. 30 s gives operators a fast top-of-page glance without
-  // hammering nvidia-smi / df / ping.
-  setInterval(refreshHealth, 30000);
-  // Audit-chain replay walks 3 OCSF JSONL files end-to-end. On a
-  // healthy box the chains grow at ~1 event per Sigkill / supervisor
-  // event / routing decision; replaying every 60 s is fine.
-  setInterval(refreshAuditChains, 60000);
+
+  /// SDD-056 step 4 — gated setInterval wrapper. Calls `fn` only
+  /// when the named section is NOT tab-hidden. Saves probe cost
+  /// (nvidia-smi / df / ping / mdstat / etc.) when the operator is
+  /// looking at a different tab. `sectionId === null` = always-fire
+  /// (used for status header + always-visible-strip panels).
+  function gatedInterval(fn, ms, sectionId) {
+    return setInterval(() => {
+      if (sectionId !== null) {
+        const sec = document.getElementById(sectionId);
+        if (sec && sec.classList.contains("tab-hidden")) return;
+      }
+      fn();
+    }, ms);
+  }
+
+  // status header is part of the always-visible chrome — always fires.
+  gatedInterval(refreshStatus, 5000, null);
+
+  // Always-visible strip (composite health + 4 watchdogs + alerts):
+  // these refresh regardless of active tab. SDD-056 § Always-visible
+  // strip.
+  gatedInterval(refreshFrictionAudit, 30000, "friction-audit-section");
+  gatedInterval(refreshPerimeter, 15000, "perimeter-section");
+  gatedInterval(refreshGuardian, 30000, "guardian-section");
+  gatedInterval(refreshScheduler, 10000, "scheduler-section");
+  gatedInterval(refreshAlerts, 15000, "alerts-section");
+  gatedInterval(refreshHealth, 30000, "health-section");
+
+  // Tab-owned panels — pause when their tab isn't active.
+  gatedInterval(refreshModules, 60000, "modules-section");
+  gatedInterval(refreshAuditChains, 60000, "audit-chains-section");
+  gatedInterval(refreshHardware, 300000, "hardware-section");
+  gatedInterval(refreshNetwork, 30000, "network-section");
+  gatedInterval(refreshStorage, 60000, "storage-section");
+  gatedInterval(refreshRaid, 60000, "raid-section");
+  gatedInterval(refreshGpu, 10000, "gpu-section");
+  gatedInterval(refreshCpu, 60000, "cpu-section");
+  gatedInterval(refreshFlexProfile, 60000, "flex-profile-section");
+  gatedInterval(refreshInferenceBackends, 120000, "inference-backends-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
