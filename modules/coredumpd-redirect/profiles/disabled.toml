@@ -1,0 +1,7 @@
+# Profile: disabled.
+#
+# Storage=none. systemd-coredump receives crash metadata (journal
+# entry) but writes NO core file. Operator opt-out for disk-
+# constrained or paranoia-mode hosts.
+
+profile = "disabled"

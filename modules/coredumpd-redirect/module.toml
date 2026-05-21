@@ -1,0 +1,41 @@
+name        = "coredumpd-redirect"
+version     = "0.1.0"
+summary     = "systemd-coredump redirect to /var/lib/selfdef/coredumps/ (mode 0600 root:root) — forensic preservation without leak to /var/crash group-readable"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["coredump-redirect"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `redirect` (default) — coredumps go to /var/lib/selfdef/coredumps/
+#                        mode 0600 root:root; preserved for forensics.
+# `disabled`            — Storage=none. systemd-coredump still
+#                        receives the dump but writes NOTHING (operator
+#                        explicitly opts out of preservation).
+default = "redirect"
+available = ["redirect", "disabled"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/systemd/coredump.conf.d/50-selfdef.conf",
+    "/etc/systemd/system/var-lib-selfdef-coredumps.mount.d/50-selfdef.conf",
+    "/var/lib/selfdef/coredumps",
+    "/etc/selfdef/modules/coredumpd-redirect.toml",
+]

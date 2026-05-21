@@ -1,0 +1,7 @@
+# Profile: redirect (default).
+#
+# Coredumps preserved at /var/lib/selfdef/coredumps/, mode 0600
+# root:root. Compress=no, ProcessSizeMax=4G, MaxUse=20G.
+# Suitable for AI workstations where post-crash forensics matters.
+
+profile = "redirect"
