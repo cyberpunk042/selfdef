@@ -1,0 +1,14 @@
+================================================================================
+                    AUTHORIZED USE ONLY
+================================================================================
+
+This system is for the use of authorized operators only. All activity is
+monitored and recorded by the selfdef IPS (https://github.com/cyberpunk042/
+selfdef). Unauthorized access is prohibited and prosecutable under applicable
+law (CFAA 18 U.S.C. § 1030 + relevant local jurisdiction statutes).
+
+By proceeding, you acknowledge that you have read and understood this notice.
+
+\d \t  \u@\n  (kernel \r on \m)
+
+================================================================================

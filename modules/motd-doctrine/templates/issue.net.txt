@@ -1,0 +1,14 @@
+================================================================================
+                    AUTHORIZED USE ONLY
+================================================================================
+
+This system is for the use of authorized operators only. All activity is
+monitored and recorded by the selfdef IPS. Unauthorized access is prohibited
+and prosecutable under applicable law (CFAA 18 U.S.C. § 1030 + relevant local
+jurisdiction statutes).
+
+The selfdef stack actively logs and bans IPs based on auth-failure patterns
+(see: fail2ban-bridge module). Brute-force attempts will result in immediate
+IP-level blocking + persistent recidive escalation.
+
+================================================================================

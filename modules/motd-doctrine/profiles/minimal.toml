@@ -1,0 +1,10 @@
+# Profile: minimal (default).
+#
+# /etc/issue + /etc/issue.net + /etc/motd carry legal-warning +
+# selfdef-presence content. NO dynamic /etc/update-motd.d/ hook —
+# motd content is static (rendered at apply time).
+#
+# Use this on hosts where login speed matters or where pam-motd
+# is disabled. Compatible with EVERY distro (Debian, RHEL, Arch).
+
+profile = "minimal"

@@ -1,0 +1,19 @@
+================================================================================
+selfdef IPS — operator-pull surface
+
+  selfdefctl modules list      — what's installed + active
+  selfdefctl alerts            — current alerts (4-watchdog + correlator)
+  selfdefctl health            — composite host health
+  selfdefctl dashboards        — operator-named view presets
+  selfdefctl ssh-wrap install  — install per-operator-user ssh wrapper
+
+  Dashboard: http://localhost:<selfdef-port>/dashboard
+
+  Logs:
+    sudo journalctl -t selfdef-aide    (file integrity)
+    sudo journalctl -t selfdef-rkhunter (rootkit signatures)
+    sudo journalctl -t selfdef-clamav  (virus signatures)
+    sudo journalctl -t selfdef-lynis   (compliance audit)
+    sudo journalctl -t selfdef-time-skew (clock drift)
+
+================================================================================

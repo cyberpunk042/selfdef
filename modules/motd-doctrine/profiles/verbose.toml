@@ -1,0 +1,13 @@
+# Profile: verbose.
+#
+# minimal + dynamic /etc/update-motd.d/50-selfdef-presence script.
+# pam-motd composes /etc/motd from the numbered scripts in
+# /etc/update-motd.d/ at each interactive login. Operator sees
+# fresh status (active module count, recent alerts, fail2ban
+# banned IPs, their last login) each time they ssh in.
+#
+# Requires pam_motd.so to be enabled in /etc/pam.d/sshd or login —
+# default on Ubuntu/Debian. RHEL/Fedora need the operator to
+# enable update-motd via systemd-timer or PAM. See README.
+
+profile = "verbose"
