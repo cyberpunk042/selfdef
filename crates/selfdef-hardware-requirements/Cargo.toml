@@ -1,0 +1,14 @@
+[package]
+name = "selfdef-hardware-requirements"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Per-module [requires_hardware] gate evaluator extracted from selfdef-cli per SDD-057."
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+selfdef-hardware = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

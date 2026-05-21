@@ -4381,6 +4381,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-hardware-requirements"
+version = "0.1.0"
+dependencies = [
+ "selfdef-hardware",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "selfdef-high-risk-triple-gate"
 version = "0.1.0"
 dependencies = [
