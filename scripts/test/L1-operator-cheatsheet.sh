@@ -61,6 +61,7 @@ declare -a SHIPPED_COMMANDS=(
     "selfdefctl flex-profile"
     "selfdefctl inference-backends"
     "selfdefctl dashboard-prefs"
+    "selfdefctl dashboards"
 )
 
 failures=0

@@ -55,6 +55,8 @@ selfdefctl inference-backends                       # MS011 Z-2 llama.cpp / vllm
 selfdefctl inference-backends show --json           # pass-through of daemon JSON body (jq-friendly)
 selfdefctl inference-backends version llama.cpp     # MS011 Z-2 invocation seed — shells out to <binary> --version
 selfdefctl inference-backends version vllm          # exit 0 ok / 1 not installed / 2 subprocess error
+selfdefctl dashboards                               # MS043 UX list 5 operator-named view presets (GET /v1/dashboards)
+selfdefctl dashboards --json                        # JSON pass-through (jq-friendly)
 selfdefctl dashboard-prefs                          # MS043 UX read daemon-side dashboard preferences (SDD-060)
 selfdefctl dashboard-prefs show --json              # JSON pass-through (jq-friendly)
 selfdefctl dashboard-prefs set refresh_rate slow    # PUT refresh_rate; client-side enum check; exit 2 on invalid

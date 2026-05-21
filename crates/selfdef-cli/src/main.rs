@@ -14,6 +14,7 @@ mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
 mod dashboard_prefs;
+mod dashboards;
 mod doctor;
 mod filesystem_boundary;
 mod flex_profile;
@@ -378,6 +379,16 @@ enum Command {
     FlexProfile {
         #[command(subcommand)]
         action: FlexProfileAction,
+    },
+    /// MS043 UX — list the 5 operator-named dashboard view presets
+    /// (compact / default / inference / performance / security) via
+    /// `GET /v1/dashboards`. Operator deep-links each via
+    /// `/dashboard/#preset=<name>` OR via
+    /// `selfdefctl dashboard-prefs set active_preset <name>`.
+    Dashboards {
+        /// JSON pass-through for jq.
+        #[arg(long)]
+        json: bool,
     },
     /// MS043 UX / SDD-060 — operator-pull view of the dashboard-
     /// prefs surface. `show` GETs the persisted prefs from the
@@ -2060,6 +2071,10 @@ async fn main() -> Result<()> {
                 FlexProfileAction::Show { json } => flex_profile::run_show(json)
                     .context("flex-profile show")?,
             };
+            std::process::exit(exit);
+        }
+        Command::Dashboards { json } => {
+            let exit = dashboards::run(json).context("dashboards")?;
             std::process::exit(exit);
         }
         Command::DashboardPrefs { action, json } => {
