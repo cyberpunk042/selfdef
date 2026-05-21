@@ -30,6 +30,7 @@ selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-friction-audit-mirror = { workspace = true }
+selfdef-hardware = { workspace = true }
 selfdef-perimeter = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }
 selfdef-guardian = { workspace = true }

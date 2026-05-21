@@ -2399,6 +2399,7 @@ dependencies = [
  "selfdef-friction-audit-mirror",
  "selfdef-guardian",
  "selfdef-guardian-mirror",
+ "selfdef-hardware",
  "selfdef-notifier",
  "selfdef-notifier-engine",
  "selfdef-notifier-orchestrator",

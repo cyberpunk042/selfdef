@@ -1924,6 +1924,93 @@ async fn watchdog_history_routes_honor_limit_query() {
 }
 
 #[tokio::test]
+async fn hardware_routes_return_200_with_well_formed_bodies() {
+    // MS010 + SDD-018: the three /v1/hardware* routes must serve
+    // JSON. The actual values depend on the host (CI runner may
+    // have AVX-512 or not, GPUs or not, etc.), so we assert shape
+    // and presence-of-required-keys, not values.
+    let (state, _bus, _store, _dir) = build_state().await;
+    let app_a = app(state.clone());
+    let app_b = app(state.clone());
+    let app_c = app(state);
+
+    // /v1/hardware — full snapshot.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/hardware")
+        .body(Body::empty())
+        .unwrap();
+    let res = app_a.oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK, "/v1/hardware expected 200");
+    let bytes = to_bytes(res.into_body(), 256 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["cpu"].is_object(), "snapshot must have cpu object");
+    assert!(v["memory"].is_object(), "snapshot must have memory object");
+    assert!(v["gpus"].is_array(), "snapshot must have gpus array");
+    assert!(v["pcie"].is_object(), "snapshot must have pcie object");
+    assert!(
+        v["probed_at"].is_string(),
+        "snapshot must have probed_at timestamp"
+    );
+
+    // /v1/hardware/capabilities — derived flags.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/hardware/capabilities")
+        .body(Body::empty())
+        .unwrap();
+    let res = app_b.oneshot(req).await.unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "/v1/hardware/capabilities expected 200"
+    );
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        v.is_object(),
+        "capabilities response must be a JSON object; got {v}"
+    );
+
+    // /v1/hardware/sain01 — match verdict envelope.
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri("/v1/hardware/sain01")
+        .body(Body::empty())
+        .unwrap();
+    let res = app_c.oneshot(req).await.unwrap();
+    assert_eq!(
+        res.status(),
+        StatusCode::OK,
+        "/v1/hardware/sain01 expected 200"
+    );
+    let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        v["sain01"].is_object(),
+        "sain01 envelope must wrap sain01 object"
+    );
+    // The Sain01Match has an `overall` field (Sain01Verdict enum:
+    // Match/NearMatch/NoMatch) serialized by serde — at minimum it's
+    // a string or has a recognizable enum tag. We just assert presence
+    // + a few of the boolean indicator fields here; the selfdef-
+    // hardware crate has its own unit tests for the verdict semantics.
+    assert!(
+        v["sain01"]["overall"].is_string() || v["sain01"]["overall"].is_object(),
+        "sain01 envelope must include an overall verdict; got {}",
+        v["sain01"]
+    );
+    assert!(
+        v["sain01"]["cpu_avx512_vnni"].is_boolean(),
+        "sain01 envelope must include cpu_avx512_vnni bool"
+    );
+    assert!(
+        v["sain01"]["pcie_dual_x8_present"].is_boolean(),
+        "sain01 envelope must include pcie_dual_x8_present bool"
+    );
+}
+
+#[tokio::test]
 async fn alerts_route_returns_200_with_nine_classified_rows() {
     // MS027 + /v1/alerts: server-side classification of the 9 four-
     // watchdog alert series. Both the PWA dashboard and the

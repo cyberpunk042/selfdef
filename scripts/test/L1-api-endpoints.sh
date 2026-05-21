@@ -53,6 +53,12 @@ check_route "/v1/modules/:name"           "MS006 / SDD-009 Q-G" || failures=$((f
 # + selfdefctl alerts; single source of truth for the 9 alert series).
 check_route "/v1/alerts"                  "MS027" || failures=$((failures + 1))
 
+# MS010 / SDD-018 — hardware-aware modules HTTP surface (snapshot +
+# derived capabilities + sain-01 reference-platform match verdict).
+check_route "/v1/hardware"                "MS010 / SDD-018" || failures=$((failures + 1))
+check_route "/v1/hardware/capabilities"   "MS010 / SDD-018" || failures=$((failures + 1))
+check_route "/v1/hardware/sain01"         "MS010 / SDD-018" || failures=$((failures + 1))
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-api-endpoints FAIL: ${failures} missing route(s)"
     echo "  See ~/devops-solutions-information-hub/wiki/runbooks/ux-coherence-failures.md for fix procedure."

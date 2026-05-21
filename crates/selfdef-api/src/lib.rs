@@ -38,6 +38,7 @@
 mod alerts;
 mod control;
 mod friction_audit;
+mod hardware;
 mod guardian;
 mod handlers;
 mod modules;
@@ -182,6 +183,14 @@ pub fn router(state: ApiState) -> Router {
         // alert series. PWA dashboard + `selfdefctl alerts` both
         // consume this typed JSON shape — single source of truth.
         .route("/v1/alerts", get(alerts::list))
+        // MS010 / SDD-018: hardware-aware-modules HTTP surface. The
+        // probe is cached per-process (OnceLock) — hardware doesn't
+        // hot-swap at runtime. /v1/hardware = full snapshot;
+        // /capabilities = derived flags (AVX-512, GPU presence, …);
+        // /sain01 = match-verdict against the SAIN-01 reference rig.
+        .route("/v1/hardware", get(hardware::snapshot))
+        .route("/v1/hardware/capabilities", get(hardware::capabilities))
+        .route("/v1/hardware/sain01", get(hardware::sain01))
         // SDD-008 D-4 HTTP ack — open auth: the token in the URL
         // IS the auth (UUIDv7, ~122 bits of post-timestamp entropy;
         // rides out-of-band over the operator-trusted channels).

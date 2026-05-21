@@ -151,6 +151,9 @@ socket = trusted; TCP = read token).
 | GET    | `/v1/modules`                         | All shipped modules with `{slug, summary, active, …}` |
 | GET    | `/v1/modules/:name`                   | Single-module detail (404 if unknown, 400 on invalid slug) |
 | GET    | `/v1/alerts`                          | MS027 alerts: server-side classification of the 9 alert series. Returns `{worst, alerts: [{name, ms, series, threshold, value, state}]}`. Consumed by both the PWA dashboard "Alerts overview" panel and `selfdefctl alerts`. |
+| GET    | `/v1/hardware`                        | MS010 / SDD-018: full host hardware snapshot (CPU, memory, GPUs, motherboard, PCIe inventory, thermals, probed_at). Probe is cached per-process — hardware doesn't hot-swap at runtime. |
+| GET    | `/v1/hardware/capabilities`           | MS010 / SDD-018: derived capability flags (AVX-512 family, GPU classes, memory tiers) computed from the snapshot. Drives hardware-aware module activation in `selfdefctl modules apply`. |
+| GET    | `/v1/hardware/sain01`                 | MS010 / SDD-018: Sain-01 reference-platform match verdict (`Match | NearMatch | NoMatch`) + per-component agreement booleans (CPU AVX-512 VNNI/BF16, ≥256 GB memory, ≥2 GPUs, PCIe dual-x8). |
 
 Module `:name` slugs are validated against `[a-z0-9-]{1,64}`. Any
 mismatch is `400 Bad Request` — this is the directory-traversal guard
