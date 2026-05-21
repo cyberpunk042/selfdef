@@ -4387,6 +4387,7 @@ dependencies = [
  "selfdef-hardware",
  "serde",
  "serde_json",
+ "toml",
 ]
 
 [[package]]
