@@ -1,0 +1,40 @@
+name        = "entropy-baseline"
+version     = "0.1.0"
+summary     = "Detection: verify host has sufficient entropy for cryptography (kernel CSPRNG seed). Emits alert if /proc/sys/kernel/random/entropy_avail stays below threshold OR no entropy source daemon (jitterentropy / haveged / rng-tools / hardware RNG) is providing seed. Defeats predictable-nonce CVE class on entropy-starved hosts (early-boot VM, headless server)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["entropy-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if entropy < threshold OR no
+#                     entropy daemon present
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/entropy-baseline.toml",
+    "/usr/local/libexec/selfdef/entropy-baseline.sh",
+    "/etc/systemd/system/selfdef-entropy.service",
+    "/etc/systemd/system/selfdef-entropy.timer",
+]

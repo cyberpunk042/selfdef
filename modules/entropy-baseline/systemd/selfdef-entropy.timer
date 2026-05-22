@@ -1,0 +1,19 @@
+# selfdef entropy-baseline — boot+5min + every 6h.
+# Boot-side catch is the most valuable — entropy-starved
+# early-boot keys are the canonical CVE chain. 6h refresh
+# catches gradual depletion (rare on modern kernels but
+# possible on entropy-poor headless servers).
+
+[Unit]
+Description=selfdef host entropy posture timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/entropy-baseline/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-entropy.service
+
+[Install]
+WantedBy=timers.target
