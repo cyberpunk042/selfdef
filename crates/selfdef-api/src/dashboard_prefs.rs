@@ -136,7 +136,28 @@ pub(crate) async fn show() -> Json<DashboardPrefs> {
 }
 
 const VALID_RATES: &[&str] = &["fast", "normal", "slow", "paused"];
-const VALID_PRESETS: &[&str] = &["default", "security", "performance", "inference", "compact"];
+const VALID_PRESETS: &[&str] = &[
+    "audit-trail",
+    "compact",
+    "cpu-bound",
+    "default",
+    "gpu-monitor",
+    "health-only",
+    "incident-response",
+    "inference",
+    "inference-throughput",
+    "mcp-debug",
+    "mcp-tools",
+    "models-lab",
+    "module-status",
+    "network-ops",
+    "paused-snapshot",
+    "performance",
+    "repl-session",
+    "security",
+    "storage-ops",
+    "watchdog-deep",
+];
 
 /// `PUT /v1/dashboard-prefs` — persist new preferences.
 /// - 409 Conflict on schema-version mismatch
@@ -253,7 +274,28 @@ mod tests {
     fn valid_presets_table_matches_dashboard_presets() {
         assert_eq!(
             VALID_PRESETS,
-            &["default", "security", "performance", "inference", "compact"]
+            &[
+                "audit-trail",
+                "compact",
+                "cpu-bound",
+                "default",
+                "gpu-monitor",
+                "health-only",
+                "incident-response",
+                "inference",
+                "inference-throughput",
+                "mcp-debug",
+                "mcp-tools",
+                "models-lab",
+                "module-status",
+                "network-ops",
+                "paused-snapshot",
+                "performance",
+                "repl-session",
+                "security",
+                "storage-ops",
+                "watchdog-deep",
+            ]
         );
     }
 

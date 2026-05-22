@@ -57,7 +57,7 @@ of truth.
 schema_version = "1.0.0"
 hidden_panels  = ["raid-section", "storage-section"]
 refresh_rate   = "slow"        # fast | normal | slow | paused
-active_preset  = "security"    # default | security | performance | inference | compact
+active_preset  = "security"    # one of 20: audit-trail | compact | cpu-bound | default | gpu-monitor | health-only | incident-response | inference | inference-throughput | mcp-debug | mcp-tools | models-lab | module-status | network-ops | paused-snapshot | performance | repl-session | security | storage-ops | watchdog-deep
 updated_at_ms  = 1737000000000 # server-stamped on every accepted PUT
 ```
 
@@ -81,7 +81,7 @@ Body must be a JSON object matching the `DashboardPrefs` shape minus
 |---|---|---|
 | `schema_version` | must equal server's `"1.0.0"` | **409 Conflict** |
 | `refresh_rate`   | ∈ {fast, normal, slow, paused} | **400 Bad Request** |
-| `active_preset`  | ∈ {default, security, performance, inference, compact} | **400 Bad Request** |
+| `active_preset`  | ∈ {audit-trail, compact, cpu-bound, default, gpu-monitor, health-only, incident-response, inference, inference-throughput, mcp-debug, mcp-tools, models-lab, module-status, network-ops, paused-snapshot, performance, repl-session, security, storage-ops, watchdog-deep} — 20-preset table per batch-17 expansion | **400 Bad Request** |
 | `hidden_panels`  | any `Vec<String>` (no enum constraint — section IDs may grow over time) | n/a |
 
 On success: write the validated body to the on-disk path via

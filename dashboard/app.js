@@ -1959,16 +1959,33 @@
   // {hiddenPanels, activeTab, refreshRate} triple to a meaningful
   // configuration in one click.
   //
-  // 5 shipped presets:
-  //   default     — all 16 panels visible, no tab, normal refresh
-  //   security    — only watchdogs/alerts/audit-chains/perimeter/
-  //                 guardian/scheduler/friction-audit; "logs" tab
-  //   performance — hardware/network/storage/raid/gpu/cpu;
-  //                 "hardware" tab
-  //   inference   — health/inference-backends/gpu/flex-profile;
-  //                 "models" tab
-  //   compact     — always-visible strip + alerts only; "all" pseudo
-  //                 (so the tabbed nav is irrelevant); slow refresh
+  // 20 shipped presets (5 original + 15 batch-17 expansion fulfilling
+  // the operator's verbatim "over 20 dashboards" target):
+  //   default              — all 16 panels visible, no tab, normal refresh
+  //   security             — watchdogs+alerts+audit; "logs" tab
+  //   performance          — hardware+network+storage+raid+gpu+cpu
+  //   inference            — health+inference-backends+gpu+flex
+  //   compact              — always-visible strip + alerts only
+  //   audit-trail          — audit chains + alerts; slow forensic
+  //   cpu-bound            — CPU + hardware + composite-health
+  //   gpu-monitor          — GPU + CPU + flex + composite-health
+  //   health-only          — composite-health alone (smallest)
+  //   incident-response    — 4 watchdogs + alerts + audit + logs (fast)
+  //   inference-throughput — inference + GPU + flex + CPU (fast)
+  //   mcp-debug            — MCP tab + alerts + logs
+  //   mcp-tools            — MCP + modules + alerts
+  //   models-lab           — models tab + inference + GPU
+  //   module-status        — modules + profiles + composite-health
+  //   network-ops          — network + storage + RAID + health
+  //   paused-snapshot      — all 16 BUT paused (one-shot inspection)
+  //   repl-session         — REPL tab + composite-health + alerts
+  //   storage-ops          — storage + RAID + composite-health
+  //   watchdog-deep        — 4 watchdogs + health (fast)
+  //
+  // Source-of-truth is selfdef-api/src/dashboards.rs (DASHBOARDS
+  // const). This table MUST stay byte-identical on names + tabs +
+  // refreshRate to that source — daemon's PUT /v1/dashboard-prefs
+  // VALID_PRESETS validator rejects any other value.
   //
   // Persistence: localStorage selfdef.activePreset = preset name.
   // Switching a preset writes its triple atomically (hiddenPanels +
@@ -1982,15 +1999,66 @@
     return set;
   }
   const PRESETS = {
+    "audit-trail": {
+      label: "Audit trail",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "audit-chains-section",
+        "alerts-section",
+        "health-section",
+      ]),
+      refreshRate: "slow",
+      tab: "logs",
+    },
+    compact: {
+      label: "Compact",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "friction-audit-section",
+        "perimeter-section",
+        "guardian-section",
+        "scheduler-section",
+        "alerts-section",
+      ]),
+      refreshRate: "slow",
+      tab: "all",
+    },
+    "cpu-bound": {
+      label: "CPU bound",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "hardware-section",
+        "cpu-section",
+      ]),
+      refreshRate: "fast",
+      tab: "hardware",
+    },
     default: {
       label: "Default — all panels",
       hidden: new Set(),
       refreshRate: "normal",
       tab: "all",
     },
-    security: {
-      label: "Security",
-      // Hide everything EXCEPT the security-relevant set.
+    "gpu-monitor": {
+      label: "GPU monitor",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "gpu-section",
+        "cpu-section",
+        "flex-profile-section",
+      ]),
+      refreshRate: "fast",
+      tab: "hardware",
+    },
+    "health-only": {
+      label: "Health only",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+      ]),
+      refreshRate: "slow",
+      tab: "all",
+    },
+    "incident-response": {
+      label: "Incident response",
       hidden: setMinus(ALL_SECTION_IDS, [
         "health-section",
         "friction-audit-section",
@@ -2000,8 +2068,87 @@
         "alerts-section",
         "audit-chains-section",
       ]),
-      refreshRate: "normal",
+      refreshRate: "fast",
       tab: "logs",
+    },
+    inference: {
+      label: "Inference",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "inference-backends-section",
+        "gpu-section",
+        "flex-profile-section",
+      ]),
+      refreshRate: "normal",
+      tab: "models",
+    },
+    "inference-throughput": {
+      label: "Inference throughput",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "inference-backends-section",
+        "gpu-section",
+        "flex-profile-section",
+        "cpu-section",
+      ]),
+      refreshRate: "fast",
+      tab: "models",
+    },
+    "mcp-debug": {
+      label: "MCP debug",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "alerts-section",
+        "health-section",
+        "modules-section",
+      ]),
+      refreshRate: "normal",
+      tab: "mcp",
+    },
+    "mcp-tools": {
+      label: "MCP tools",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "modules-section",
+        "alerts-section",
+        "health-section",
+      ]),
+      refreshRate: "normal",
+      tab: "mcp",
+    },
+    "models-lab": {
+      label: "Models lab",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "inference-backends-section",
+        "gpu-section",
+        "health-section",
+      ]),
+      refreshRate: "normal",
+      tab: "models",
+    },
+    "module-status": {
+      label: "Module status",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "modules-section",
+        "health-section",
+      ]),
+      refreshRate: "slow",
+      tab: "modules",
+    },
+    "network-ops": {
+      label: "Network ops",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "network-section",
+        "storage-section",
+        "raid-section",
+      ]),
+      refreshRate: "normal",
+      tab: "network",
+    },
+    "paused-snapshot": {
+      label: "Paused snapshot",
+      hidden: new Set(),
+      refreshRate: "paused",
+      tab: "all",
     },
     performance: {
       label: "Performance",
@@ -2017,20 +2164,17 @@
       refreshRate: "fast",
       tab: "hardware",
     },
-    inference: {
-      label: "Inference",
+    "repl-session": {
+      label: "REPL session",
       hidden: setMinus(ALL_SECTION_IDS, [
         "health-section",
-        "inference-backends-section",
-        "gpu-section",
-        "flex-profile-section",
+        "alerts-section",
       ]),
       refreshRate: "normal",
-      tab: "models",
+      tab: "repl",
     },
-    compact: {
-      label: "Compact",
-      // Always-visible strip + alerts.
+    security: {
+      label: "Security",
       hidden: setMinus(ALL_SECTION_IDS, [
         "health-section",
         "friction-audit-section",
@@ -2038,8 +2182,31 @@
         "guardian-section",
         "scheduler-section",
         "alerts-section",
+        "audit-chains-section",
       ]),
-      refreshRate: "slow",
+      refreshRate: "normal",
+      tab: "logs",
+    },
+    "storage-ops": {
+      label: "Storage ops",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "storage-section",
+        "raid-section",
+      ]),
+      refreshRate: "normal",
+      tab: "all",
+    },
+    "watchdog-deep": {
+      label: "Watchdog deep",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "friction-audit-section",
+        "perimeter-section",
+        "guardian-section",
+        "scheduler-section",
+      ]),
+      refreshRate: "fast",
       tab: "all",
     },
   };

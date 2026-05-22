@@ -1,7 +1,8 @@
 //! `GET /v1/dashboards` — operator-pull discovery surface for the
-//! 5 operator-named dashboard view presets shipped under MS043 UX
+//! 20 operator-named dashboard view presets shipped under MS043 UX
 //! batch 12 (PWA-side preset selector) + batch 13/14 (daemon-side
-//! persistence + sync).
+//! persistence + sync) + batch 17 (5→20 expansion fulfilling the
+//! operator's verbatim "20 dashboards" target).
 //!
 //! Verbatim operator direction (2026-05-19, sacrosanct):
 //!
@@ -9,7 +10,7 @@
 //! >  be turned on and off and there are also a tons of modes and
 //! >  profiles."
 //!
-//! The dashboard is one PWA today; the 5 operator-named view presets
+//! The dashboard is one PWA today; the 20 operator-named view presets
 //! act as distinct dashboards within that PWA. This route makes the
 //! preset catalog discoverable so:
 //!   - CLI: `selfdefctl dashboards` lists them
@@ -59,12 +60,28 @@ pub(crate) struct DashboardsBody {
 
 const DASHBOARDS: &[DashboardEntry] = &[
     DashboardEntry {
+        name: "audit-trail",
+        label: "Audit trail",
+        description: "Audit chains + alerts + logs tab focus; slow refresh — operator-pull forensic posture.",
+        active_tab: "logs",
+        refresh_rate: "slow",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
         name: "compact",
         label: "Compact",
         description: "Always-visible strip only (composite health + 4 watchdogs + alerts). Smallest footprint; slow refresh.",
         active_tab: "all",
         refresh_rate: "slow",
         visible_panel_count: 6,
+    },
+    DashboardEntry {
+        name: "cpu-bound",
+        label: "CPU bound",
+        description: "CPU + hardware + composite health. For operators investigating compute saturation; fast refresh.",
+        active_tab: "hardware",
+        refresh_rate: "fast",
+        visible_panel_count: 3,
     },
     DashboardEntry {
         name: "default",
@@ -75,12 +92,92 @@ const DASHBOARDS: &[DashboardEntry] = &[
         visible_panel_count: 16,
     },
     DashboardEntry {
+        name: "gpu-monitor",
+        label: "GPU monitor",
+        description: "GPU + CPU + flex-profile + composite health. For inference / compute workloads; fast refresh.",
+        active_tab: "hardware",
+        refresh_rate: "fast",
+        visible_panel_count: 4,
+    },
+    DashboardEntry {
+        name: "health-only",
+        label: "Health only",
+        description: "Composite-health panel alone. Smallest footprint; slow refresh — first-glance heartbeat.",
+        active_tab: "all",
+        refresh_rate: "slow",
+        visible_panel_count: 1,
+    },
+    DashboardEntry {
+        name: "incident-response",
+        label: "Incident response",
+        description: "4 watchdogs + alerts + audit chains + logs tab focus; fast refresh — for active-incident triage.",
+        active_tab: "logs",
+        refresh_rate: "fast",
+        visible_panel_count: 7,
+    },
+    DashboardEntry {
         name: "inference",
         label: "Inference",
         description: "Composite health + inference backends + GPU + flex profile. Models tab focus; normal refresh.",
         active_tab: "models",
         refresh_rate: "normal",
         visible_panel_count: 4,
+    },
+    DashboardEntry {
+        name: "inference-throughput",
+        label: "Inference throughput",
+        description: "Inference backends + GPU + flex-profile + composite health + CPU; fast refresh — tuning hot path.",
+        active_tab: "models",
+        refresh_rate: "fast",
+        visible_panel_count: 5,
+    },
+    DashboardEntry {
+        name: "mcp-debug",
+        label: "MCP debug",
+        description: "MCP tab focus + alerts + logs; normal refresh — diagnosing external client problems.",
+        active_tab: "mcp",
+        refresh_rate: "normal",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
+        name: "mcp-tools",
+        label: "MCP tools",
+        description: "MCP + modules + alerts; normal refresh — managing tool-side rollout.",
+        active_tab: "mcp",
+        refresh_rate: "normal",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
+        name: "models-lab",
+        label: "Models lab",
+        description: "Models tab focus + inference backends + GPU; normal refresh — model evaluation / swap workflow.",
+        active_tab: "models",
+        refresh_rate: "normal",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
+        name: "module-status",
+        label: "Module status",
+        description: "Modules + profiles tabs focus + composite health; slow refresh — reviewing apply/check drift.",
+        active_tab: "modules",
+        refresh_rate: "slow",
+        visible_panel_count: 2,
+    },
+    DashboardEntry {
+        name: "network-ops",
+        label: "Network ops",
+        description: "Network + storage + RAID + composite health; network tab focus; normal refresh.",
+        active_tab: "network",
+        refresh_rate: "normal",
+        visible_panel_count: 4,
+    },
+    DashboardEntry {
+        name: "paused-snapshot",
+        label: "Paused snapshot",
+        description: "All panels visible BUT refresh paused. Operator-driven one-shot inspection without polling load.",
+        active_tab: "all",
+        refresh_rate: "paused",
+        visible_panel_count: 16,
     },
     DashboardEntry {
         name: "performance",
@@ -91,12 +188,36 @@ const DASHBOARDS: &[DashboardEntry] = &[
         visible_panel_count: 7,
     },
     DashboardEntry {
+        name: "repl-session",
+        label: "REPL session",
+        description: "REPL tab focus + composite health + alerts; normal refresh — for interactive operator sessions.",
+        active_tab: "repl",
+        refresh_rate: "normal",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
         name: "security",
         label: "Security",
         description: "Composite health + 4 watchdogs + alerts + audit chains. Logs tab focus; normal refresh.",
         active_tab: "logs",
         refresh_rate: "normal",
         visible_panel_count: 7,
+    },
+    DashboardEntry {
+        name: "storage-ops",
+        label: "Storage ops",
+        description: "Storage + RAID + composite health; normal refresh — disk / RAID maintenance posture.",
+        active_tab: "all",
+        refresh_rate: "normal",
+        visible_panel_count: 3,
+    },
+    DashboardEntry {
+        name: "watchdog-deep",
+        label: "Watchdog deep",
+        description: "All four watchdogs (friction-audit + perimeter + guardian + scheduler) + composite health; fast refresh.",
+        active_tab: "all",
+        refresh_rate: "fast",
+        visible_panel_count: 5,
     },
 ];
 
@@ -114,7 +235,7 @@ pub(crate) async fn show() -> Json<DashboardsBody> {
         .collect();
     Json(DashboardsBody {
         count: dashboards.len(),
-        note: "5 operator-named view presets within the single PWA. Operator-pull deep-link: /dashboard/#preset=<name>. The 'tons of modes' verbatim is served by the visibility + refresh + preset triad; distinct URL paths per dashboard is the Stage-2 arc.",
+        note: "20 operator-named view presets within the single PWA (5 original + 15 batch-17 expansion). Operator-pull deep-link: /dashboard/#preset=<name>. Distinct URL paths per dashboard is the Stage-2 arc; the 20 presets fulfill the operator's verbatim 'over 20 dashboards' target via the visibility+refresh+preset triad.",
         dashboards,
     })
 }
@@ -124,8 +245,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dashboards_table_has_5_entries() {
-        assert_eq!(DASHBOARDS.len(), 5);
+    fn dashboards_table_has_20_entries() {
+        assert_eq!(DASHBOARDS.len(), 20);
     }
 
     #[test]
@@ -134,7 +255,28 @@ mod tests {
         // PRESETS table in `dashboard/app.js`. The dashboard's PUT
         // /v1/dashboard-prefs validator rejects any other value.
         let names: Vec<&str> = DASHBOARDS.iter().map(|d| d.name).collect();
-        let expected = vec!["compact", "default", "inference", "performance", "security"];
+        let expected = vec![
+            "audit-trail",
+            "compact",
+            "cpu-bound",
+            "default",
+            "gpu-monitor",
+            "health-only",
+            "incident-response",
+            "inference",
+            "inference-throughput",
+            "mcp-debug",
+            "mcp-tools",
+            "models-lab",
+            "module-status",
+            "network-ops",
+            "paused-snapshot",
+            "performance",
+            "repl-session",
+            "security",
+            "storage-ops",
+            "watchdog-deep",
+        ];
         assert_eq!(names, expected);
     }
 

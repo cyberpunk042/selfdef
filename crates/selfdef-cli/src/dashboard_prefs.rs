@@ -20,7 +20,28 @@ use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 
 const VALID_RATES: &[&str] = &["fast", "normal", "slow", "paused"];
-const VALID_PRESETS: &[&str] = &["default", "security", "performance", "inference", "compact"];
+const VALID_PRESETS: &[&str] = &[
+    "audit-trail",
+    "compact",
+    "cpu-bound",
+    "default",
+    "gpu-monitor",
+    "health-only",
+    "incident-response",
+    "inference",
+    "inference-throughput",
+    "mcp-debug",
+    "mcp-tools",
+    "models-lab",
+    "module-status",
+    "network-ops",
+    "paused-snapshot",
+    "performance",
+    "repl-session",
+    "security",
+    "storage-ops",
+    "watchdog-deep",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DashboardPrefs {

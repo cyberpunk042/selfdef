@@ -54,6 +54,21 @@
         <option value="performance">Performance — hardware + GPU + CPU + network</option>
         <option value="inference">Inference — health + backends + GPU + flex</option>
         <option value="compact">Compact — always-visible strip only</option>
+        <option value="audit-trail">Audit trail — audit chains + alerts (slow)</option>
+        <option value="cpu-bound">CPU bound — CPU + hardware</option>
+        <option value="gpu-monitor">GPU monitor — GPU + CPU + flex (fast)</option>
+        <option value="health-only">Health only — composite-health alone</option>
+        <option value="incident-response">Incident response — watchdogs + audit + logs (fast)</option>
+        <option value="inference-throughput">Inference throughput — inference hot path (fast)</option>
+        <option value="mcp-debug">MCP debug — MCP tab + alerts + logs</option>
+        <option value="mcp-tools">MCP tools — MCP + modules + alerts</option>
+        <option value="models-lab">Models lab — models tab + inference + GPU</option>
+        <option value="module-status">Module status — modules + profiles (slow)</option>
+        <option value="network-ops">Network ops — network + storage + RAID</option>
+        <option value="paused-snapshot">Paused snapshot — all panels, refresh paused</option>
+        <option value="repl-session">REPL session — REPL + alerts</option>
+        <option value="storage-ops">Storage ops — storage + RAID</option>
+        <option value="watchdog-deep">Watchdog deep — 4 watchdogs + health (fast)</option>
       </select>
       <!-- Refresh-rate selector (MS043 UX). "Tons of modes" (operator
            verbatim) — operator picks how aggressively the panels probe
