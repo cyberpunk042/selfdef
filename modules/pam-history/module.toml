@@ -1,0 +1,37 @@
+name        = "pam-history"
+version     = "0.1.0"
+summary     = "Configure pam_pwhistory to require N distinct passwords before reuse. Pairs with pam-pwquality (complexity at SET) + pam-faillock (lockout at USE) — completes the PAM password-attack-defense triad. Defeats T1110.001 password-reuse-after-rotation"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["pam-password-history"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "passwd" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — remember=5, retry=3, enforce_for_root=no
+# `strict`             — remember=24, retry=3, enforce_for_root=yes
+default = "standard"
+available = ["standard", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/pam-history.toml",
+    "/etc/security/pwhistory.conf",
+    "/var/lib/selfdef/pam-history-distro-default.bak",
+]
