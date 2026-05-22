@@ -6,6 +6,62 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — dashboard preset catalog 5→20 (2026-05-22, batch 17)
+
+Operator-verbatim target met: "there is over 20 dashboards and a
+main one and everything can be turned on and off and there are also
+a tons of modes and profiles" (2026-05-19, sacrosanct). The 5-preset
+table that shipped under batch 12 is now a 20-preset table.
+
+**New presets (15 added, alphabetical with focus tab / refresh):**
+
+| Preset | Tab | Refresh | Focus |
+|---|---|---|---|
+| audit-trail | logs | slow | audit chains + alerts (forensic posture) |
+| cpu-bound | hardware | fast | CPU + hardware + composite-health (compute saturation) |
+| gpu-monitor | hardware | fast | GPU + CPU + flex + composite-health (inference) |
+| health-only | all | slow | composite-health alone (smallest footprint) |
+| incident-response | logs | fast | 4 watchdogs + alerts + audit + logs (active triage) |
+| inference-throughput | models | fast | inference + GPU + flex + CPU (hot path tuning) |
+| mcp-debug | mcp | normal | MCP + alerts + logs (external client diagnosis) |
+| mcp-tools | mcp | normal | MCP + modules + alerts (tool-side rollout) |
+| models-lab | models | normal | models + inference + GPU (model swap) |
+| module-status | modules | slow | modules + profiles + health (apply/check drift) |
+| network-ops | network | normal | network + storage + RAID + health |
+| paused-snapshot | all | paused | all 16 panels BUT refresh paused |
+| repl-session | repl | normal | REPL + composite-health + alerts |
+| storage-ops | all | normal | storage + RAID + composite-health |
+| watchdog-deep | all | fast | 4 watchdogs + composite-health |
+
+Plus the 5 original: default, security, performance, inference,
+compact.
+
+**Atomic 7-file update**
+
+- `crates/selfdef-api/src/dashboards.rs` — DASHBOARDS const + 3
+  updated tests (count=20, names enumerated, descriptions).
+- `crates/selfdef-api/src/dashboard_prefs.rs` — VALID_PRESETS
+  validator + matching test assertion.
+- `crates/selfdef-cli/src/dashboard_prefs.rs` — VALID_PRESETS
+  matches daemon (no drift between CLI client + daemon).
+- `dashboard/app.js` — PRESETS object + comment block documenting
+  catalog + source-of-truth invariant.
+- `dashboard/index.html` — `<select>` extended from 5 to 20
+  option rows.
+- `docs/operator-cheatsheet.md` — 3 references updated.
+- `docs/sdd/060-dashboard-prefs-persistence.md` — preset enum in
+  both the TOML example + validation-table row.
+
+**Test posture**: cargo test -p selfdef-api --lib dashboards 6/6
++ dashboard_prefs 7/7 + modules::tests 16/16 (unaffected). All 8
+L1 doc gates remain green. Workspace builds clean.
+
+**Source-of-truth invariant**: `selfdef-api/src/dashboards.rs
+DASHBOARDS` is authoritative. PWA's `PRESETS` keys MUST match
+byte-for-byte; daemon + CLI VALID_PRESETS MUST match. Drift =
+lint failure (Rust-side at compile time; JS/HTML via PUT-
+validator round-trip at runtime).
+
 ### Added — module-ecosystem batch: 11 new modules push 53→63 (2026-05-21, batch 16)
 
 Eleven new modules shipped in one resumed perpetual-/goal turn,
