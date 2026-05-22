@@ -1,0 +1,2 @@
+profile = "deny"
+acknowledge_no_rootless = false

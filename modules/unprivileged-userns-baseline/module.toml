@@ -1,0 +1,43 @@
+name        = "unprivileged-userns-baseline"
+version     = "0.1.0"
+summary     = "Control kernel.unprivileged_userns_clone — disable unprivileged user-namespace creation on hosts that don't run rootless containers. Defeats the user-namespace local privilege escalation class (CVE-2022-0185 / CVE-2023-2640 family)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["unprivileged-userns-controlled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `allow` (default) — kernel.unprivileged_userns_clone = 1
+#                    Compatible with rootless podman/docker,
+#                    bubblewrap, Flatpak. Same as distro default
+#                    on Debian/Ubuntu/Fedora. Documents the
+#                    posture for drift detection.
+# `deny`            — kernel.unprivileged_userns_clone = 0
+#                    Breaks rootless containers + bwrap-based
+#                    Flatpak. Requires acknowledge_no_rootless
+#                    = true.
+default = "allow"
+available = ["allow", "deny"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/unprivileged-userns-baseline.toml",
+    "/etc/sysctl.d/50-selfdef-userns.conf",
+]
