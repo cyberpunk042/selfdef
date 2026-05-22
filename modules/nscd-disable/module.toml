@@ -1,0 +1,35 @@
+name        = "nscd-disable"
+version     = "0.1.0"
+summary     = "Mask nscd.service (Name Service Cache Daemon). Modern hosts use systemd-resolved or sssd; nscd is rarely needed and has a long CVE history (gethostbyname overflows, cache-poisoning). Removes the daemon if it's not in use"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["nscd-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + mask nscd
+# `stop`           — stop + disable only
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nscd-disable.toml",
+]
