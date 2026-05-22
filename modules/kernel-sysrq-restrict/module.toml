@@ -1,0 +1,40 @@
+name        = "kernel-sysrq-restrict"
+version     = "0.1.0"
+summary     = "Restrict kernel.sysrq — defaults to 1 (all SysRq commands allowed) on many distros, granting any user with physical access (or console serial) instant kernel-level reboot/kill/sync/dump primitives. Three profiles: off / safe-subset / full"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-sysrq-restricted"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `off`          (default) — kernel.sysrq = 0; Magic SysRq disabled.
+# `safe-subset`  — kernel.sysrq = 132 (= 4 enable-console-log
+#                  + 128 reboot+poweroff). Operator at the
+#                  console can still reboot a hung system.
+# `full`         — kernel.sysrq = 1 (all commands; distro default
+#                  on some). Reserved for development hosts.
+default = "off"
+available = ["off", "safe-subset", "full"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-sysrq-restrict.toml",
+    "/etc/sysctl.d/50-selfdef-sysrq.conf",
+]
