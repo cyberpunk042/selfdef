@@ -1,0 +1,41 @@
+name        = "gss-mech-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the GSSAPI mechanism config (/etc/gss/mech, /etc/gss/mech.d/*.conf) vs a learned baseline + ownership + mechanism-path scan. Every GSSAPI consumer (Kerberized ssh/sshd, NFSv4 with sec=krb5, OpenLDAP/SASL GSSAPI, sssd, curl --negotiate) loads the mechanism shared object named in field 3 of each mech line — so a planted mech entry whose .so is a writable/attacker path loads attacker code into auth-handling processes (often running as root) whenever GSSAPI is initialized (T1574 hijack execution flow / T1556 modify authentication process). Distinct from ld-preload-watchdog, ld-so-conf-watchdog, and pkcs11-modules-watchdog: this is the GSSAPI/Kerberos mechanism-registration surface. A mechanism .so under /tmp /home /dev/shm /var/tmp or relative-with-slash, a world-writable/non-root mech file, or any added mechanism is the signature. No-ops cleanly when /etc/gss is absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["gss-mech-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any GSSAPI mechanism change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/gss-mech-watchdog.toml",
+    "/usr/local/libexec/selfdef/gss-mech-watchdog.sh",
+    "/etc/systemd/system/selfdef-gss-mech.service",
+    "/etc/systemd/system/selfdef-gss-mech.timer",
+    "/var/lib/selfdef/gss-mech-baseline.tsv",
+]

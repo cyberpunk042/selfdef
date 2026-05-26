@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 92: continuation 174→175 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the GSSAPI/
+Kerberos mechanism-registration surface; L1 module-contracts coherent at
+175, cargo modules::tests 16/16.
+
+- `gss-mech-watchdog` (175) — boot+daily delta of the GSSAPI mechanism
+  config (/etc/gss/mech, /etc/gss/mech.d/*.conf) + ownership +
+  mechanism-path scan. Every GSSAPI consumer (Kerberized ssh/sshd, NFSv4
+  sec=krb5, OpenLDAP/SASL GSSAPI, sssd, curl --negotiate) loads the .so
+  named in field 3 of each mech line, so a planted mech with a writable
+  .so loads attacker code into auth-handling processes (often root) when
+  GSSAPI initializes (T1574/T1556). Distinct from ld-preload, ld-so-conf,
+  and pkcs11-modules watchdogs: this is the GSSAPI/Kerberos
+  mechanism-registration surface. A mech .so under /tmp /var/tmp /dev/shm
+  /home or relative-with-slash, a world-writable/non-root mech file, or
+  any added mechanism is alert/warn. Bare names (mech_krb5.so) + standard
+  /usr/lib paths not flagged. No-ops cleanly when /etc/gss is absent.
+  Cadence boot+73min / 12:20.
+
 ### Added — module-ecosystem batch 91: continuation 173→174 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the p11-kit

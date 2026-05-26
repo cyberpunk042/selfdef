@@ -1,0 +1,20 @@
+# selfdef gss-mech-watchdog — boot+73min + daily 12:20.
+# Extends the staggered ladder after pkcs11-modules (12:15). A
+# planted GSSAPI mechanism takes effect the next time any GSSAPI
+# consumer (kerberized ssh/nfs/ldap, sssd) initializes, so the daily
+# catch bounds dwell time; the boot catch confirms the mech set after
+# a restart.
+
+[Unit]
+Description=selfdef GSSAPI mechanism-config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/gss-mech-watchdog/README.md
+
+[Timer]
+OnBootSec=73min
+OnCalendar=*-*-* 12:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-gss-mech.service
+
+[Install]
+WantedBy=timers.target
