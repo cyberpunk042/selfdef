@@ -1,0 +1,16 @@
+[Unit]
+Description=selfdef timestamp-anomaly (timestomp) scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/timestomp-watchdog/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/timestomp-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=30m

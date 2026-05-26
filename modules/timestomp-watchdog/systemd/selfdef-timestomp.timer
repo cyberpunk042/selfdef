@@ -1,0 +1,17 @@
+# selfdef timestomp-watchdog — daily 06:20.
+# Extends the staggered ladder after systemd-units (06:10).
+# A stateless anomaly scan (no baseline) — runs daily to catch
+# a freshly-timestomped planted binary.
+
+[Unit]
+Description=selfdef timestamp-anomaly scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/timestomp-watchdog/README.md
+
+[Timer]
+OnCalendar=*-*-* 06:20:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=selfdef-timestomp.service
+
+[Install]
+WantedBy=timers.target

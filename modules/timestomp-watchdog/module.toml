@@ -1,0 +1,41 @@
+name        = "timestomp-watchdog"
+version     = "0.1.0"
+summary     = "Scan system binary + config dirs for timestamp-manipulation anomalies — future-dated mtimes, epoch-zero (1970) timestamps, and mtime-newer-than-ctime impossibilities. Attackers timestomp planted/modified files to blend in or break time-based forensics (T1070.006 Indicator Removal: Timestomp)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["timestomp-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "find" },
+    { kind = "binary", value = "stat" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 on any timestamp anomaly
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/timestomp-watchdog.toml",
+    "/usr/local/libexec/selfdef/timestomp-watchdog.sh",
+    "/etc/systemd/system/selfdef-timestomp.service",
+    "/etc/systemd/system/selfdef-timestomp.timer",
+]
