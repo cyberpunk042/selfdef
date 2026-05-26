@@ -1,0 +1,18 @@
+# selfdef network-dispatcher-watchdog — boot+15min + daily 07:20.
+# Extends the staggered ladder after sshd-config (07:15). Boot
+# catch confirms the dispatcher script set after a restart (these
+# scripts fire on the interface-up that happens at boot).
+
+[Unit]
+Description=selfdef network-event dispatcher delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/network-dispatcher-watchdog/README.md
+
+[Timer]
+OnBootSec=15min
+OnCalendar=*-*-* 07:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-network-dispatcher.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "network-dispatcher-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the network-event dispatcher script dirs (NetworkManager dispatcher.d + pre-up.d/pre-down.d, networkd-dispatcher *.d, ifupdown if-{pre-,post-,}up/down.d, ppp ip-up.d/ip-down.d) vs a learned baseline + a suspicious-pattern + ownership scan. These scripts run AS ROOT on network events (interface up/down, DHCP renew, VPN connect, connectivity change) — a script dropped here is root-exec persistence that fires at every boot and network change (T1546). The network-event analog of udev (device), cron (time), shell-init (login). No-ops cleanly if no dispatcher dirs exist"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["network-dispatcher-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any dispatcher-dir change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/network-dispatcher-watchdog.toml",
+    "/usr/local/libexec/selfdef/network-dispatcher-watchdog.sh",
+    "/etc/systemd/system/selfdef-network-dispatcher.service",
+    "/etc/systemd/system/selfdef-network-dispatcher.timer",
+    "/var/lib/selfdef/network-dispatcher-baseline.tsv",
+]

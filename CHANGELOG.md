@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 34: continuation 116→117 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Closes the last common
+root-exec-on-event hook (network events); L1 module-contracts coherent
+at 117, cargo modules::tests 16/16.
+
+- `network-dispatcher-watchdog` (117) — boot+daily delta of the
+  network-event dispatcher script dirs (NetworkManager dispatcher.d +
+  pre-up.d/pre-down.d, networkd-dispatcher *.d, ifupdown
+  if-{pre-,post-,}{up,down}.d, ppp ip-up.d/ip-down.d) vs a learned
+  baseline + an ownership + suspicious-pattern scan. These scripts run
+  AS ROOT on network events (interface up/down, DHCP renew, VPN connect)
+  — events that fire at every boot and transition, so a dropped script
+  is reliable root-exec persistence (T1546). World-writable / non-root-
+  owned script or an injection pattern (curl|sh, /dev/tcp, bash -i, …) =
+  alert; add/change/remove = warn. No-ops cleanly if no dispatcher dirs
+  exist. MITRE T1546/T1059.004/T1037/T1543. Cadence boot+15min / 07:20.
+
+**Persistence-mechanism family** now covers all six common root-exec-
+on-event hooks: cron (time) + systemd-unit (service) + udev-rules
+(device) + shell-init (login) + modprobe-config (module load) +
+network-dispatcher (network event). Module total: 117.
+
 ### Added — module-ecosystem batch 33: continuation 115→116 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Closes the effective-
