@@ -1,0 +1,41 @@
+name        = "polkit-rules-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the admin/local polkit authorization rules (/etc/polkit-1/rules.d/*.rules JS + /etc/polkit-1/localauthority/**/*.pkla + /var/lib/polkit-1/localauthority + /usr/local/share/polkit-1/rules.d + /run/polkit-1/rules.d) vs a learned baseline + ownership + grant scan. polkitd evaluates these as root to decide authorization; a rogue rule returning blanket Result.YES (or a .pkla ResultActive=yes for all) grants privilege escalation to any action — quiet privesc persistence (T1548). These dirs are sparsely populated, so a new rule is high-signal. Distinct from sudoers-integrity-watchdog (sudo grants) — polkit is the D-Bus/desktop-service authority"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["polkit-rules-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any polkit-rules change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/polkit-rules-watchdog.toml",
+    "/usr/local/libexec/selfdef/polkit-rules-watchdog.sh",
+    "/etc/systemd/system/selfdef-polkit-rules.service",
+    "/etc/systemd/system/selfdef-polkit-rules.timer",
+    "/var/lib/selfdef/polkit-rules-baseline.tsv",
+]

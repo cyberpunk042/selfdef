@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 42: continuation 124→125 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the polkit
+authorization surface; L1 module-contracts coherent at 125, cargo
+modules::tests 16/16.
+
+- `polkit-rules-watchdog` (125) — boot+daily delta of the admin/local
+  polkit authorization rules (/etc/polkit-1/rules.d/*.rules JS +
+  /etc/polkit-1/localauthority/**/*.pkla + /var/lib/polkit-1/... +
+  /usr/local/share/polkit-1/rules.d + /run/polkit-1/rules.d) vs a
+  learned baseline + ownership + grant scan. polkitd evaluates these as
+  root to decide authorization; a rogue rule returning blanket
+  Result.YES (or a .pkla ResultActive=yes for Identity=*/Action=*)
+  grants privilege escalation to any action — quiet privesc persistence
+  (T1548). These dirs are sparse, so a NEW rule file (new PATH, not a
+  content edit) or a NEW grant is alert; world-writable/non-root is
+  alert; content change/removal is warn. No-ops cleanly if absent.
+  /usr/share (package-managed) not watched. Distinct from
+  sudoers-integrity-watchdog (sudo grants) — polkit is the D-Bus/
+  desktop-service authority (pkexec, systemctl-via-polkit, package
+  managers). Cadence boot+23min / 08:00.
+
 ### Fixed — unquoted word-split glob expansion in 4 watchdog parsers (2026-05-26)
 
 A scan parser that word-splits attacker-influenceable file content with
