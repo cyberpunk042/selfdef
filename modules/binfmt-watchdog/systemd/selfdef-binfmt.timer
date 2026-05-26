@@ -1,0 +1,21 @@
+# selfdef binfmt-watchdog — boot+57min + daily 10:50.
+# Extends the staggered ladder after ca-certificates-hooks (10:45).
+# A planted binfmt registration takes effect at the next
+# systemd-binfmt apply (boot or `systemctl restart systemd-binfmt`)
+# and then on every execution of a matching file type, so the daily
+# catch bounds dwell time; the boot catch confirms the registration
+# set after a restart.
+
+[Unit]
+Description=selfdef binfmt_misc interpreter-registration delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/binfmt-watchdog/README.md
+
+[Timer]
+OnBootSec=57min
+OnCalendar=*-*-* 10:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-binfmt.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "binfmt-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the binfmt_misc interpreter registrations (/etc/binfmt.d/*.conf, /run/binfmt.d/*.conf) vs a learned baseline + ownership + interpreter-path scan. systemd-binfmt applies these at boot: each line registers an INTERPRETER binary the kernel invokes AS ROOT-or-caller whenever a file matching a magic-byte signature or filename extension is executed. A planted registration whose interpreter is an attacker payload is execution-flow hijack + persistence — every time a matching file type runs, the payload runs first (T1546 event-triggered / T1574 hijack execution flow); the 'C' credential flag additionally runs the interpreter with the target's (possibly setuid) credentials. Distinct from modprobe-config-watchdog and modules-load-watchdog (kernel modules), and from any exec-dir watchdog (this is interpreter registration, not a hook script). An interpreter under /tmp /home /dev/shm /var/tmp, a non-absolute interpreter, a world-writable/non-root config, or any added registration is the signature. No-ops cleanly when no binfmt.d registrations are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["binfmt-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any binfmt registration change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/binfmt-watchdog.toml",
+    "/usr/local/libexec/selfdef/binfmt-watchdog.sh",
+    "/etc/systemd/system/selfdef-binfmt.service",
+    "/etc/systemd/system/selfdef-binfmt.timer",
+    "/var/lib/selfdef/binfmt-baseline.tsv",
+]

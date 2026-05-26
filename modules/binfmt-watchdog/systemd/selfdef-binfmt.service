@@ -1,0 +1,15 @@
+[Unit]
+Description=selfdef binfmt_misc interpreter-registration delta scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/binfmt-watchdog/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/binfmt-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log /var/lib/selfdef
+Nice=15
+TimeoutStartSec=1m

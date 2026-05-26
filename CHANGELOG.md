@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 76: continuation 158→159 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+binfmt_misc interpreter-registration surface — a real execution-flow
+hijack / persistence vector not previously covered; L1 module-contracts
+coherent at 159, cargo modules::tests 16/16.
+
+- `binfmt-watchdog` (159) — boot+daily delta of the binfmt_misc
+  interpreter registrations (/etc/binfmt.d/*.conf, /run/binfmt.d/*.conf)
+  + ownership + interpreter-path scan. systemd-binfmt applies these at
+  boot; each line registers an INTERPRETER the kernel invokes whenever a
+  file matching a magic-byte signature (type M) or filename extension
+  (type E) is executed. A planted registration whose interpreter is an
+  attacker payload is execution-flow hijack + persistence — every run of
+  a matching file type runs the payload (T1546 / T1574); the 'C' flag
+  runs the interpreter with the target's (setuid) credentials. The scan
+  parses each line with its own first-character field delimiter and
+  extracts the interpreter (field 7). Distinct from
+  modprobe-config/modules-load watchdogs (kernel modules) and from
+  exec-dir watchdogs (this is interpreter registration). An interpreter
+  under /tmp /var/tmp /dev/shm /home, a non-absolute interpreter, a
+  world-writable/non-root .conf, or any added registration is alert/warn
+  accordingly. /usr/lib/binfmt.d (package-managed) is intentionally not
+  watched. No-ops cleanly when no registrations present. Cadence
+  boot+57min / 10:50.
+
 ### Added — module-ecosystem batch 75: continuation 157→158 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the CA
