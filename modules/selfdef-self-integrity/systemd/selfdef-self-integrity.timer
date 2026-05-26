@@ -1,0 +1,18 @@
+# selfdef selfdef-self-integrity — every 90 min, offset.
+# The meta-watchdog runs MORE often than the delta-watchdogs
+# it protects (90min) so a tamper-then-act sequence is caught
+# in the window between the tamper and the next watchdog run.
+
+[Unit]
+Description=selfdef trust-root self-integrity timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/selfdef-self-integrity/README.md
+
+[Timer]
+OnBootSec=11min
+OnUnitActiveSec=90min
+RandomizedDelaySec=7min
+Persistent=true
+Unit=selfdef-self-integrity.service
+
+[Install]
+WantedBy=timers.target
