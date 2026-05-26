@@ -1,0 +1,20 @@
+# selfdef resolvconf-hooks-watchdog — boot+54min + daily 10:35.
+# Extends the staggered ladder after dhcpcd-hooks (10:30). A dropped
+# resolvconf update.d script self-triggers on the next resolv.conf
+# regeneration (interface up/down, DHCP lease, VPN connect), so the
+# daily catch bounds dwell time; the boot catch confirms the script
+# set after a restart.
+
+[Unit]
+Description=selfdef resolvconf update-hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/resolvconf-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=54min
+OnCalendar=*-*-* 10:35:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-resolvconf-hooks.service
+
+[Install]
+WantedBy=timers.target

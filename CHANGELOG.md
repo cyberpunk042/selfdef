@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 73: continuation 155→156 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the resolvconf
+regeneration exec surface (the scripts that run on every resolv.conf
+rebuild, distinct from the resolv.conf data surface); L1 module-contracts
+coherent at 156, cargo modules::tests 16/16.
+
+- `resolvconf-hooks-watchdog` (156) — boot+daily delta of the
+  resolvconf/openresolv update-hook dirs (/etc/resolvconf/update.d,
+  /etc/resolvconf/update-libc.d) + ownership + suspicious-pattern scan.
+  resolvconf runs every script in update.d AS ROOT each time
+  /etc/resolv.conf is regenerated — which happens on every DNS/network
+  change (interface up/down, DHCP lease, VPN connect), so a dropped
+  script self-triggers on routine network activity without operator
+  action (T1546). Distinct from dns-resolver-watchdog (which watches
+  resolv.conf CONTENT/nameservers, not the scripts that regenerate it).
+  A script under /tmp /home /dev/shm, world-writable, non-root, or an
+  injection pattern is alert; add/change/remove is warn. No-ops cleanly
+  when resolvconf is not installed (systemd-resolved-only / static
+  resolv.conf). Cadence boot+54min / 10:35.
+
 ### Added — module-ecosystem batch 72: continuation 154→155 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the dhcpcd

@@ -1,0 +1,41 @@
+name        = "resolvconf-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the resolvconf/openresolv update-hook dirs (/etc/resolvconf/update.d, /etc/resolvconf/update-libc.d) vs a learned baseline + ownership + suspicious-pattern scan. resolvconf runs every script in update.d AS ROOT each time /etc/resolv.conf is regenerated — which happens on every DNS/network change (interface up/down, DHCP lease, VPN connect), so a dropped script self-triggers on routine network activity without operator action. A rogue script is root-exec-on-network-event persistence (T1546). Distinct from dns-resolver-watchdog (which watches resolv.conf CONTENT/nameservers, not the update scripts that regenerate it). A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when resolvconf is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["resolvconf-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any resolvconf-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/resolvconf-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/resolvconf-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-resolvconf-hooks.service",
+    "/etc/systemd/system/selfdef-resolvconf-hooks.timer",
+    "/var/lib/selfdef/resolvconf-hooks-baseline.tsv",
+]
