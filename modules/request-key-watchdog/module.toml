@@ -1,0 +1,41 @@
+name        = "request-key-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the kernel key-upcall handlers (/etc/request-key.conf + /etc/request-key.d/*.conf) vs a learned baseline + ownership + callout-path scan. When the kernel needs a key instantiated (dns_resolver, NFS idmap, cifs.spnego, …) it upcalls the callout program named in these files AS ROOT via request-key(8); a rogue callout is root-exec-on-key-request persistence (T1546). A callout program under /tmp /home /dev/shm, world-writable, or a world-writable/non-root config is the signature. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["request-key-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any request-key change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/request-key-watchdog.toml",
+    "/usr/local/libexec/selfdef/request-key-watchdog.sh",
+    "/etc/systemd/system/selfdef-request-key.service",
+    "/etc/systemd/system/selfdef-request-key.timer",
+    "/var/lib/selfdef/request-key-baseline.tsv",
+]

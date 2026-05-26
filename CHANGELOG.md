@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 53: continuation 135→136 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the kernel
+key-upcall surface; L1 module-contracts coherent at 136, cargo
+modules::tests 16/16.
+
+- `request-key-watchdog` (136) — boot+daily delta of the kernel
+  key-upcall handlers (/etc/request-key.conf + /etc/request-key.d/*.conf)
+  vs a learned baseline + ownership + callout-path scan. When the kernel
+  needs a key instantiated (dns_resolver, NFS idmap, cifs.spnego) it
+  upcalls request-key(8), which runs the matching callout program AS ROOT;
+  a rogue callout is root-exec-on-key-request persistence (T1546). A
+  callout under /tmp /home /dev/shm, world-writable, or bare/relative, or
+  a world-writable/non-root config, is alert; add/change/remove is warn.
+  Parses the 5-column format (callout program is field 4, not the
+  callout-info column). No-ops cleanly if absent. Cadence boot+34min /
+  08:55.
+
 ### Added — module-ecosystem batch 52: continuation 134→135 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the root
