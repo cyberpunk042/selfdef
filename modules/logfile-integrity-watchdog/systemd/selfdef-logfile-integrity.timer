@@ -1,0 +1,19 @@
+# selfdef logfile-integrity-watchdog — every 30 min.
+# Log truncation is a fast indicator-removal action right
+# after an attacker's activity; a tighter 30-min cadence
+# catches it while the rest of the response pipeline (notifier)
+# still has the surrounding events.
+
+[Unit]
+Description=selfdef log-integrity scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/logfile-integrity-watchdog/README.md
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=30min
+RandomizedDelaySec=3min
+Persistent=true
+Unit=selfdef-logfile-integrity.service
+
+[Install]
+WantedBy=timers.target
