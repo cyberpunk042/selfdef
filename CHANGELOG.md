@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 50: continuation 132→133 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the pam_cap
+per-user capability-grant surface; L1 module-contracts coherent at 133,
+cargo modules::tests 16/16.
+
+- `capability-conf-watchdog` (133) — boot+daily delta of the pam_cap
+  capability-grant config (/etc/security/capability.conf) vs a learned
+  baseline. When pam_cap.so is in the PAM stack, this file grants Linux
+  capabilities to users at login; a high-power cap (cap_setuid,
+  cap_sys_admin, cap_dac_override, cap_sys_module, cap_sys_ptrace, or
+  `all`) granted to a user is privilege escalation without setuid/sudo
+  (T1548). Any change is warn; a NEWLY-ADDED dangerous-cap grant is alert
+  (delta-based — pre-existing flagged once at baseline). No-ops cleanly
+  if absent. Distinct from file-capabilities-watchdog (setcap xattrs on
+  BINARIES) — this is the per-USER login-cap surface. Cadence boot+31min
+  / 08:40.
+
 ### Added — module-ecosystem batch 49: continuation 131→132 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the graphical-login

@@ -1,0 +1,41 @@
+name        = "capability-conf-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the pam_cap capability-grant config (/etc/security/capability.conf) vs a learned baseline. When pam_cap.so is in the PAM stack, this file grants Linux capabilities to users at login; an attacker who adds a high-power cap (cap_setuid, cap_sys_admin, cap_dac_override, cap_sys_module, cap_sys_ptrace, or `all`) to a user gains privilege escalation without setuid/sudo (T1548). Any change is warn; a NEWLY-ADDED dangerous-cap grant is the privesc signature (alert). Distinct from file-capabilities-watchdog (setcap xattrs on BINARIES) — this is the per-USER login-cap surface. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["capability-conf-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any capability.conf change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/capability-conf-watchdog.toml",
+    "/usr/local/libexec/selfdef/capability-conf-watchdog.sh",
+    "/etc/systemd/system/selfdef-capability-conf.service",
+    "/etc/systemd/system/selfdef-capability-conf.timer",
+    "/var/lib/selfdef/capability-conf-baseline.tsv",
+]
