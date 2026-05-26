@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 4 more modules push 78→82 (2026-05-22, batch 20)
+
+Four further modules: the fifth delta-detection watchdog, the
+account-policy capstone, the RHEL MAC parallel, and the ASLR
+guarantee. Module-catalog parser test 16/16 + L1 module-contracts
+coherent at each step.
+
+- `kernel-module-watchdog` — daily+boot delta of /proc/modules vs
+  baseline; out-of-tree module (no .ko under /lib/modules) = alert
+  (LKM-rootkit signature). Fifth delta-detection watchdog. MITRE
+  T1547.006/T1014/T1562.001/T1205. Real-time complement: host-
+  sentinel's do_init_module kprobe.
+- `login-defs-baseline` — password-aging + strong-hash defaults
+  (PASS_MAX/MIN_DAYS, ENCRYPT_METHOD yescrypt/SHA512, SHA_CRYPT
+  rounds) in /etc/login.defs.d (legacy /etc/login.defs fallback).
+  standard (NIST-leaning) + strict (PCI DSS 90-day) profiles. CIS
+  5.5.x. MITRE T1110.002/T1110.001/T1078. Completes account-policy
+  stack with the pwquality/history/faillock triad.
+- `selinux-baseline` — RHEL/Fedora MAC posture (audit/permissive/
+  enforcing); conflicts=[apparmor-baseline]; 12th refuse-to-brick
+  gate (disabled→enforcing needs acknowledge_relabel + autorelabel
+  + reboot). MITRE T1068/T1611/T1562.001/T1505.003.
+- `aslr-baseline` — guarantee kernel.randomize_va_space=2 (full
+  ASLR), drift-resistant. CIS 1.6.x. MITRE T1203/T1068/T1211/T1055.
+
+**Delta-detection family now 5** (accounts/cron/setuid/listeners/
+kernel-modules). **Refuse-to-brick gates now 12.** **Detection
+ladder 14 cadences.** **MAC coverage** both distros: apparmor-
+baseline (Debian/Ubuntu) + selinux-baseline (RHEL/Fedora), mutually
+exclusive via conflicts wiring. Module total after this batch: 82
+(operator target 100+; remaining gap ~18).
+
 ### Added — module-ecosystem batch: 6 more modules push 72→78 (2026-05-22, batch 19)
 
 Six further modules, completing the persistence-surface delta-
