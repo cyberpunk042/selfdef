@@ -1,0 +1,41 @@
+name        = "hosts-file-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily entry-level delta of /etc/hosts vs a learned baseline. An attacker who adds/edits an entry can MITM or blackhole name resolution before DNS is consulted — redirect a package/update/license/telemetry host to their server, or map a security-update domain to 0.0.0.0 to stop patching (T1565.001 / T1562.001). Records each ip->hostname mapping; any entry change is warn; an entry that maps a sensitive package/security/CA domain (any IP) is the hijack signature (alert). Distinct from dns-resolver-watchdog, which records only the /etc/hosts line COUNT"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["hosts-file-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any /etc/hosts change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/hosts-file-watchdog.toml",
+    "/usr/local/libexec/selfdef/hosts-file-watchdog.sh",
+    "/etc/systemd/system/selfdef-hosts-file.service",
+    "/etc/systemd/system/selfdef-hosts-file.timer",
+    "/var/lib/selfdef/hosts-file-baseline.tsv",
+]

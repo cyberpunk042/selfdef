@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 36: continuation 118→119 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds entry-level
+/etc/hosts hijack detection; L1 module-contracts coherent at 119, cargo
+modules::tests 16/16.
+
+- `hosts-file-watchdog` (119) — boot+daily ENTRY-level delta of
+  /etc/hosts vs a learned baseline. /etc/hosts is consulted before DNS,
+  so an added/edited entry silently MITMs or blackholes resolution
+  host-wide: redirect a package/update/CA host (supply-chain MITM), or
+  map a security-update domain to 0.0.0.0 to stop patching
+  (T1565.001/T1562.001). Records each ip->hostname mapping; any entry
+  add/remove/change is warn; an entry mapping a sensitive package/
+  security/CA domain (distro mirrors, docker/github/npm/pypi/crates, CA/
+  OCSP/CRL, OS update services) — regardless of IP — is the hijack
+  signature (alert). Distinct from dns-resolver-watchdog (records only
+  the /etc/hosts line COUNT) and nsswitch-watchdog (the resolver source
+  map). No-ops cleanly if no /etc/hosts. Cadence boot+17min / 07:30.
+
 ### Added — module-ecosystem batch 35: continuation 117→118 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the legacy-boot

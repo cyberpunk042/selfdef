@@ -1,0 +1,18 @@
+# selfdef hosts-file-watchdog — boot+17min + daily 07:30.
+# Extends the staggered ladder after boot-script (07:25). Boot
+# catch confirms /etc/hosts after a restart (a hijack entry takes
+# effect immediately for every new name lookup).
+
+[Unit]
+Description=selfdef /etc/hosts entry-level delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/hosts-file-watchdog/README.md
+
+[Timer]
+OnBootSec=17min
+OnCalendar=*-*-* 07:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-hosts-file.service
+
+[Install]
+WantedBy=timers.target
