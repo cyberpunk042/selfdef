@@ -1,0 +1,41 @@
+name        = "apt-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the APT config hook directives (/etc/apt/apt.conf + /etc/apt/apt.conf.d/*) vs a learned baseline + ownership + command scan. APT runs DPkg::Pre-Invoke / Post-Invoke / Pre-Install-Pkgs and APT::Update::Post-Invoke[-Success] hooks AS ROOT on every apt/dpkg operation; a rogue hook (`DPkg::Pre-Invoke {\"curl evil|sh\";};`) is root-exec persistence that fires on the next package install/update (T1546). A hook command under /tmp /home /dev/shm, world-writable, bare/relative, an injection pattern, or a world-writable/non-root apt.conf is the signature. Distinct from package-trust-baseline (repo/signature trust). No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["apt-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any apt-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/apt-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/apt-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-apt-hooks.service",
+    "/etc/systemd/system/selfdef-apt-hooks.timer",
+    "/var/lib/selfdef/apt-hooks-baseline.tsv",
+]

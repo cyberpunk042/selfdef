@@ -1,0 +1,18 @@
+# selfdef apt-hooks-watchdog — boot+40min + daily 09:25.
+# Extends the staggered ladder after anacrontab (09:20). Boot catch
+# confirms the apt hooks after a restart (a rogue hook runs on the
+# next apt operation).
+
+[Unit]
+Description=selfdef APT config hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/apt-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=40min
+OnCalendar=*-*-* 09:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-apt-hooks.service
+
+[Install]
+WantedBy=timers.target
