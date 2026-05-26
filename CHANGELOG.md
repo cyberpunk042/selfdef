@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 62: continuation 144→145 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the SysV
+init-table surface (completes the init-system family with boot-script +
+systemd-unit/generator); L1 module-contracts coherent at 145, cargo
+modules::tests 16/16.
+
+- `inittab-watchdog` (145) — boot+daily delta of the SysV init config
+  (/etc/inittab + /etc/init/*.conf upstart jobs) + ownership + process
+  scan. On SysV/upstart init, an inittab line `id:rl:respawn:/path` runs
+  the process AS ROOT at boot and re-spawns it if it exits — self-healing
+  boot persistence (T1037). Only payload-bearing actions (respawn/once/
+  wait/boot/bootwait/sysinit/power*) are recorded. An exec process under
+  /tmp /home /dev/shm, world-writable, bare/relative, an injection
+  pattern, or a world-writable/non-root inittab is alert; add/change/
+  remove is warn. No-ops cleanly on systemd hosts (legacy/embedded
+  coverage). Distinct from boot-script-watchdog (rc.local/init.d). Cadence
+  boot+43min / 09:40.
+
 ### Added — module-ecosystem batch 61: continuation 143→144 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the dnf/RPM

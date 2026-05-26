@@ -1,0 +1,41 @@
+name        = "inittab-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the SysV init config (/etc/inittab + /etc/init/*.conf upstart jobs) vs a learned baseline + ownership + process scan. On SysV/upstart init, an inittab line `id:runlevel:respawn:/path` runs the process AS ROOT at boot and re-spawns it if it exits — a self-restarting boot-persistence vector (T1037). A respawn/once/boot/sysinit process under /tmp /home /dev/shm, world-writable, bare/relative, an injection pattern, or a world-writable/non-root inittab is the signature. No-ops cleanly on systemd hosts (no inittab). Distinct from boot-script-watchdog (rc.local/init.d). Legacy/embedded coverage"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["inittab-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any inittab change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/inittab-watchdog.toml",
+    "/usr/local/libexec/selfdef/inittab-watchdog.sh",
+    "/etc/systemd/system/selfdef-inittab.service",
+    "/etc/systemd/system/selfdef-inittab.timer",
+    "/var/lib/selfdef/inittab-baseline.tsv",
+]

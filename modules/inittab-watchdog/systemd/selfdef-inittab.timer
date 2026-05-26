@@ -1,0 +1,18 @@
+# selfdef inittab-watchdog — boot+43min + daily 09:40.
+# Extends the staggered ladder after dnf-plugins (09:35). Boot catch
+# confirms the SysV init config after a restart (a respawn line runs
+# + re-spawns at the next boot on a SysV/upstart host).
+
+[Unit]
+Description=selfdef SysV /etc/inittab delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/inittab-watchdog/README.md
+
+[Timer]
+OnBootSec=43min
+OnCalendar=*-*-* 09:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-inittab.service
+
+[Install]
+WantedBy=timers.target
