@@ -1,0 +1,40 @@
+name        = "ld-preload-watchdog"
+version     = "0.1.0"
+summary     = "Detect userland-rootkit LD_PRELOAD hooks — flag any /etc/ld.so.preload entry, any LD_PRELOAD/LD_LIBRARY_PATH in global env files (/etc/environment, /etc/profile.d, ~root shell rc), and any preload lib outside a trusted-path allowlist. LD_PRELOAD is the dominant userland-rootkit injection vector (T1574.006)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ld-preload-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if any ld.so.preload entry OR
+#                     any global LD_PRELOAD found
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ld-preload-watchdog.toml",
+    "/usr/local/libexec/selfdef/ld-preload-watchdog.sh",
+    "/etc/systemd/system/selfdef-ld-preload.service",
+    "/etc/systemd/system/selfdef-ld-preload.timer",
+]

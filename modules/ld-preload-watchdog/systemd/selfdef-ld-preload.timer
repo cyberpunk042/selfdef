@@ -1,0 +1,18 @@
+# selfdef ld-preload-watchdog — boot+8min + every 6h.
+# An LD_PRELOAD rootkit can be installed any time; 6h bounds
+# detection latency. Boot catch confirms the preload surface
+# after every restart (a persistence entry fires at boot).
+
+[Unit]
+Description=selfdef LD_PRELOAD scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/ld-preload-watchdog/README.md
+
+[Timer]
+OnBootSec=8min
+OnUnitActiveSec=6h
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-ld-preload.service
+
+[Install]
+WantedBy=timers.target
