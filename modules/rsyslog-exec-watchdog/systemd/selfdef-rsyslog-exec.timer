@@ -1,0 +1,18 @@
+# selfdef rsyslog-exec-watchdog — boot+41min + daily 09:30.
+# Extends the staggered ladder after apt-hooks (09:25). Boot catch
+# confirms the rsyslog exec actions after a restart (a rogue action
+# fires on the next matching log message).
+
+[Unit]
+Description=selfdef rsyslog program-exec action delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/rsyslog-exec-watchdog/README.md
+
+[Timer]
+OnBootSec=41min
+OnCalendar=*-*-* 09:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-rsyslog-exec.service
+
+[Install]
+WantedBy=timers.target

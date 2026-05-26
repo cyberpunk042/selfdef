@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 60: continuation 142→143 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the rsyslog
+log-event exec surface; L1 module-contracts coherent at 143, cargo
+modules::tests 16/16.
+
+- `rsyslog-exec-watchdog` (143) — boot+daily delta of the rsyslog config
+  (/etc/rsyslog.conf + /etc/rsyslog.d/*) for program-exec actions +
+  ownership scan. rsyslog runs a program AS ROOT on a matching log
+  message via the legacy `^program` shell-exec action or the modern
+  omprog output module; a rogue exec action is root-exec-on-log-event
+  persistence (T1546) triggered by causing a matching log line. An exec
+  binary under /tmp /home /dev/shm, world-writable, bare/relative, an
+  injection pattern, or a world-writable/non-root config is alert;
+  add/change/remove is warn. No-ops cleanly if absent. Cadence boot+41min
+  / 09:30.
+
 ### Added — module-ecosystem batch 59: continuation 141→142 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the APT

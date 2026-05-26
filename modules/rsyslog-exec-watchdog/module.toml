@@ -1,0 +1,41 @@
+name        = "rsyslog-exec-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the rsyslog config (/etc/rsyslog.conf + /etc/rsyslog.d/*) for program-exec actions vs a learned baseline + ownership scan. rsyslog runs a program AS ROOT on a matching log message via the legacy `^program` shell-exec action or the modern omprog output module (action(type=\"omprog\" binary=\"...\")); a rogue exec action is root-exec-on-log-event persistence (T1546) that fires whenever a matching message is logged. An exec binary under /tmp /home /dev/shm, world-writable, bare/relative, an injection pattern, or a world-writable/non-root config is the signature. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rsyslog-exec-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any rsyslog-exec change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/rsyslog-exec-watchdog.toml",
+    "/usr/local/libexec/selfdef/rsyslog-exec-watchdog.sh",
+    "/etc/systemd/system/selfdef-rsyslog-exec.service",
+    "/etc/systemd/system/selfdef-rsyslog-exec.timer",
+    "/var/lib/selfdef/rsyslog-exec-baseline.tsv",
+]
