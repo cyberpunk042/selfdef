@@ -1,0 +1,19 @@
+# selfdef boot-script-watchdog — boot+16min + daily 07:25.
+# Extends the staggered ladder after network-dispatcher (07:20).
+# Boot catch confirms the rc.local / init.d set after a restart
+# (these scripts run at boot, so the boot scan catches a
+# boot-persistence edit on its first opportunity).
+
+[Unit]
+Description=selfdef SysV/rc boot-script delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/boot-script-watchdog/README.md
+
+[Timer]
+OnBootSec=16min
+OnCalendar=*-*-* 07:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-boot-script.service
+
+[Install]
+WantedBy=timers.target

@@ -6,6 +6,35 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 35: continuation 117→118 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the legacy-boot
+surface; L1 module-contracts coherent at 118, cargo modules::tests 16/16.
+
+- `boot-script-watchdog` (118) — boot+daily delta of the SysV/rc
+  boot-script surfaces (/etc/rc.local, /etc/rc.d/rc.local, /etc/init.d/*,
+  and the /etc/rc{0..6,S}.d/ runlevel symlinks) vs a learned baseline +
+  an ownership + suspicious-pattern scan. rc.local + init.d scripts run
+  AS ROOT at boot — even on pure-systemd hosts (via
+  systemd-rc-local-generator + systemd-sysv-generator) — so an appended
+  payload or a new init script is boot persistence (T1037.004/T1037).
+  Records script hash + owner:mode + injection patterns + runlevel
+  symlink targets. World-writable/non-root script or an injection
+  pattern = alert; add/change/remove = warn. No-ops cleanly if no boot
+  scripts exist. Distinct from systemd-unit-watchdog (native units).
+  MITRE T1037.004/T1037/T1059.004/T1543. Cadence boot+16min / 07:25.
+
+### Changed
+
+- `shell-init-watchdog` (114) + `network-dispatcher-watchdog` (117) +
+  `boot-script-watchdog` (118): added a low-false-positive pattern to
+  the shared injection-pattern set that flags a `/tmp` `/var/tmp`
+  `/dev/shm` (and `/home` for the system-script modules) path **invoked
+  as a command** (line start or after a `;`/`&`/`|` separator) — bare
+  execution of a dropped payload, which the prior set (curl|sh, reverse
+  shells, obfuscation) did not catch. Legit *references* to a tmp path
+  (e.g. `rm -f /tmp/x.lock`) do not match.
+
 ### Added — module-ecosystem batch 34: continuation 116→117 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Closes the last common

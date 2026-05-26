@@ -61,6 +61,7 @@ PATTERNS=(
     'bash[[:space:]]+-i' 'base64[[:space:]]+-d' 'base64[[:space:]]+--decode'
     'eval[[:space:]]*[`$]' 'python[0-9]*[[:space:]]+-c' 'perl[[:space:]]+-e'
     'mkfifo' 'setsid'
+    '(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm|home)/'  # invoke a tmp/shm/home payload
 )
 
 # Any watched dir exists?

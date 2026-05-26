@@ -1,0 +1,41 @@
+name        = "boot-script-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the SysV/rc boot-script surfaces (/etc/rc.local, /etc/rc.d/rc.local, /etc/init.d/*, and the /etc/rc{0..6,S}.d/ runlevel symlinks) vs a learned baseline + an ownership + suspicious-pattern scan. /etc/rc.local and init.d scripts run AS ROOT at boot — even on pure-systemd hosts (via systemd-rc-local-generator + systemd-sysv-generator) — so an appended payload or a new init script is boot persistence (T1037.004/T1037). World-writable / non-root-owned script or an injection pattern is the signature. Distinct from systemd-unit-watchdog (native units) and shell-init-watchdog (login scripts)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["boot-script-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any boot-script change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/boot-script-watchdog.toml",
+    "/usr/local/libexec/selfdef/boot-script-watchdog.sh",
+    "/etc/systemd/system/selfdef-boot-script.service",
+    "/etc/systemd/system/selfdef-boot-script.timer",
+    "/var/lib/selfdef/boot-script-baseline.tsv",
+]

@@ -68,6 +68,7 @@ PATTERNS=(
     'perl[[:space:]]+-e'
     'mkfifo'                                # named-pipe reverse shell
     'setsid'                                # detached persistence
+    '(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm)/'  # invoke a tmp/shm payload
 )
 
 current="$(mktemp)"
