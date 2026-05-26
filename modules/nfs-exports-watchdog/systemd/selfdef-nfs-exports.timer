@@ -1,0 +1,18 @@
+# selfdef nfs-exports-watchdog — boot+37min + daily 09:10.
+# Extends the staggered ladder after fstab (09:05). Boot catch
+# confirms the export table after a restart (a dangerous export is
+# live once exportfs/nfs-server (re)reads it).
+
+[Unit]
+Description=selfdef NFS server export table delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/nfs-exports-watchdog/README.md
+
+[Timer]
+OnBootSec=37min
+OnCalendar=*-*-* 09:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-nfs-exports.service
+
+[Install]
+WantedBy=timers.target

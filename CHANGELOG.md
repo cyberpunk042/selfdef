@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 56: continuation 138→139 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the NFS
+server-export surface (pairs with nfs-mount-watchdog's client side); L1
+module-contracts coherent at 139, cargo modules::tests 16/16.
+
+- `nfs-exports-watchdog` (139) — boot+daily delta of the NFS server
+  export table (/etc/exports + /etc/exports.d/*.exports) vs a learned
+  baseline. nfs-mount-watchdog covers the CLIENT; this watches the SERVER
+  exports for dangerous grants: no_root_squash (remote root → LOCAL root
+  write), a wildcard host `*` with rw, `insecure` (unprivileged-port
+  mounts), or exporting / or a sensitive path (/etc /home /root /boot
+  /usr …). Any change is warn; a NEWLY-ADDED dangerous export is alert
+  (delta-based — pre-existing flagged once at baseline). No-ops cleanly
+  if absent. MITRE T1199/T1133. Cadence boot+37min / 09:10.
+
 ### Added — module-ecosystem batch 55: continuation 137→138 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the fstab

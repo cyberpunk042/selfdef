@@ -1,0 +1,41 @@
+name        = "nfs-exports-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the NFS server export table (/etc/exports + /etc/exports.d/*.exports) vs a learned baseline. nfs-mount-watchdog covers the CLIENT side; this watches the SERVER exports for dangerous grants: no_root_squash (remote root maps to LOCAL root → remote root write), a wildcard host `*` with rw (export to anyone), `insecure` (allows unprivileged-port mounts), or exporting / or a sensitive path (/etc /home /root /boot). Any change is warn; a NEWLY-ADDED dangerous export is the signature (alert). T1199/T1133. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["nfs-exports-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any exports change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nfs-exports-watchdog.toml",
+    "/usr/local/libexec/selfdef/nfs-exports-watchdog.sh",
+    "/etc/systemd/system/selfdef-nfs-exports.service",
+    "/etc/systemd/system/selfdef-nfs-exports.timer",
+    "/var/lib/selfdef/nfs-exports-baseline.tsv",
+]
