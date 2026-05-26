@@ -1,0 +1,18 @@
+# selfdef sysctl-hardening-watchdog — boot+35min + daily 09:00.
+# Extends the staggered ladder after request-key (08:55). Boot
+# catch confirms the sysctl config after a restart (weakened
+# values take effect at boot or `sysctl -p`).
+
+[Unit]
+Description=selfdef sysctl security-hardening config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sysctl-hardening-watchdog/README.md
+
+[Timer]
+OnBootSec=35min
+OnCalendar=*-*-* 09:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sysctl-hardening.service
+
+[Install]
+WantedBy=timers.target

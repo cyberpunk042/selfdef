@@ -1,0 +1,41 @@
+name        = "sysctl-hardening-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the sysctl config (/etc/sysctl.conf + /etc/sysctl.d/* + /run/sysctl.d + /usr/local/lib/sysctl.d) vs a learned baseline, flagging WEAKENING of security-relevant kernel sysctls (kptr_restrict, dmesg_restrict, unprivileged_bpf_disabled, kexec_load_disabled, yama.ptrace_scope, modules_disabled, sysrq, unprivileged_userns_clone, randomize_va_space, fs.protected_{hardlinks,symlinks,fifos,regular}, fs.suid_dumpable, perf_event_paranoid). An attacker who sets these to their unsafe value re-opens kernel exploitation primitives (T1562.001). Any change is warn; a NEWLY-ADDED weakening is alert. Complements the per-setting baselines (aslr, kernel-yama, sysctl-network) by watching the config files as a whole. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sysctl-hardening-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sysctl-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sysctl-hardening-watchdog.toml",
+    "/usr/local/libexec/selfdef/sysctl-hardening-watchdog.sh",
+    "/etc/systemd/system/selfdef-sysctl-hardening.service",
+    "/etc/systemd/system/selfdef-sysctl-hardening.timer",
+    "/var/lib/selfdef/sysctl-hardening-baseline.tsv",
+]

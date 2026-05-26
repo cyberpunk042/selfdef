@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 54: continuation 136→137 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the sysctl
+security-hardening config-delta surface; L1 module-contracts coherent at
+137, cargo modules::tests 16/16.
+
+- `sysctl-hardening-watchdog` (137) — boot+daily delta of the sysctl
+  config (/etc/sysctl.conf + /etc/sysctl.d/* + runtime/local) flagging
+  WEAKENING of security-relevant kernel sysctls (kptr_restrict,
+  dmesg_restrict, unprivileged_bpf_disabled, kexec_load_disabled,
+  yama.ptrace_scope, modules_disabled, sysrq, unprivileged_userns_clone,
+  randomize_va_space, perf_event_paranoid, fs.protected_{hardlinks,
+  symlinks,fifos,regular}, fs.suid_dumpable). An attacker who sets these
+  to their unsafe value re-opens kernel exploitation primitives
+  (T1562.001). Any change is warn; a NEWLY-ADDED weakening is alert
+  (delta-based — pre-existing flagged once at baseline). No-ops cleanly
+  if absent. Complements the per-setting baselines (aslr, kernel-yama,
+  sysctl-network) by watching the config files as a whole, including
+  sysctls without a dedicated module. Cadence boot+35min / 09:00.
+
 ### Added — module-ecosystem batch 53: continuation 135→136 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the kernel
