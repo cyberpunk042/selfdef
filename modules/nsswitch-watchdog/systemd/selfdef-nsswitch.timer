@@ -1,0 +1,17 @@
+# selfdef nsswitch-watchdog — boot+10min + daily 06:55.
+# Extends the staggered ladder after ld-so-conf (06:50). Boot
+# catch confirms the resolver-source map after a restart.
+
+[Unit]
+Description=selfdef Name Service Switch delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/nsswitch-watchdog/README.md
+
+[Timer]
+OnBootSec=10min
+OnCalendar=*-*-* 06:55:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-nsswitch.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "nsswitch-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of /etc/nsswitch.conf (the Name Service Switch map) vs a learned baseline. An attacker who adds a rogue NSS module to the passwd/group/shadow/hosts databases — e.g. `passwd: files evil` backed by a trojaned libnss_evil.so — backdoors identity + auth resolution for the whole host (T1556 / T1574.001). Distinct from pam-config (PAM stack) + ld-so-conf (linker path)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["nsswitch-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any nsswitch database change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nsswitch-watchdog.toml",
+    "/usr/local/libexec/selfdef/nsswitch-watchdog.sh",
+    "/etc/systemd/system/selfdef-nsswitch.service",
+    "/etc/systemd/system/selfdef-nsswitch.timer",
+    "/var/lib/selfdef/nsswitch-baseline.tsv",
+]

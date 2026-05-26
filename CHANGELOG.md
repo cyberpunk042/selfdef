@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 29: continuation 110→112 (2026-05-26)
+
+Per operator direction ("continue endlessly"). The dynamic-linker /
+name-resolution hijack pair; L1 module-contracts coherent at 112,
+cargo modules::tests 16/16.
+
+- `ld-so-conf-watchdog` (111) — boot+daily delta of the dynamic-linker
+  search-path config (/etc/ld.so.conf + /etc/ld.so.conf.d/*) vs a
+  learned baseline. An attacker who prepends a writable dir to the
+  linker search path makes ld.so prefer a trojaned .so over the real
+  system library — persistent SO-search-order hijack. A path under
+  /tmp /home or world-writable is flagged hard. MITRE T1574.001 (the
+  config-file vector; ld-preload-watchdog covers the LD_PRELOAD env
+  vector T1574.006). Cadence boot+9min / 06:50.
+- `nsswitch-watchdog` (112) — boot+daily delta of the Name Service
+  Switch map (/etc/nsswitch.conf) vs a learned baseline. Each source
+  token resolves to a libnss_<name>.so loaded into every name-resolving
+  process; an appended rogue source (`passwd: files evil`) backdoors
+  identity + auth resolution host-wide — injecting a phantom UID-0
+  account, leaking credential lookups, or redirecting hosts:. A source
+  token outside the known-standard NSS set is flagged as the rogue-
+  module signature; a whole db line removed is alert. MITRE T1556/
+  T1574/T1098/T1564. Cadence boot+10min / 06:55 (extends the ladder
+  after ld-so-conf).
+
+**Dynamic-linker / resolver hijack family** now: ld-preload (env) +
+ld-so-conf (search path) + nsswitch (resolver-source map). nsswitch +
+pam-config cover both authentication substrates (NSS resolver + PAM
+stack); nsswitch + account-watchdog cover both account-fabrication
+layers (resolver vs /etc/passwd file). Module total: 112.
+
 ### Added — module-ecosystem batch 28: continuation 108→110 (2026-05-22)
 
 Per operator direction ("continue endlessly"). Two more distinct
