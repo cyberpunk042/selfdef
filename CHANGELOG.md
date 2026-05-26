@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 91: continuation 173→174 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the p11-kit
+PKCS#11 module-registration surface — attacker .so loaded into
+credential-handling consumers; L1 module-contracts coherent at 174, cargo
+modules::tests 16/16.
+
+- `pkcs11-modules-watchdog` (174) — boot+daily delta of the p11-kit
+  PKCS#11 module configs (/etc/pkcs11/modules/*.module) + ownership +
+  module-path scan. Every p11-kit consumer (GnuPG/gpgsm, ssh/ssh-agent
+  with PKCS#11, NSS browsers, libp11) loads the .so named in each
+  .module's `module:` line, so a planted `module: /tmp/evil.so` loads
+  attacker code into a broad set of credential-handling processes
+  (T1574/T1556). Distinct from ld-preload-watchdog (LD_PRELOAD/
+  ld.so.preload) and ld-so-conf-watchdog (linker search path): this is
+  the p11-kit module-registration surface. A module: path under
+  /tmp /var/tmp /dev/shm /home or relative-with-slash, a
+  world-writable/non-root .module, or any added module is alert/warn.
+  Bare names (opensc-pkcs11.so) + standard /usr/lib paths not flagged.
+  /usr/share/p11-kit/modules (package-managed) not watched. No-ops cleanly
+  when /etc/pkcs11/modules is absent. Cadence boot+72min / 12:15.
+
 ### Added — module-ecosystem batch 90: continuation 172→173 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the sudo

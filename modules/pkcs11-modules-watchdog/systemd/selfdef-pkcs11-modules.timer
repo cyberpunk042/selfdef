@@ -1,0 +1,19 @@
+# selfdef pkcs11-modules-watchdog — boot+72min + daily 12:15.
+# Extends the staggered ladder after sudo-conf (12:10). A planted
+# .module takes effect the next time any p11-kit consumer (gpg, ssh,
+# browser) enumerates PKCS#11 modules, so the daily catch bounds
+# dwell time; the boot catch confirms the module set after a restart.
+
+[Unit]
+Description=selfdef p11-kit PKCS#11 module-config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/pkcs11-modules-watchdog/README.md
+
+[Timer]
+OnBootSec=72min
+OnCalendar=*-*-* 12:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-pkcs11-modules.service
+
+[Install]
+WantedBy=timers.target
