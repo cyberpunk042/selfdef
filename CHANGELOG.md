@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 28: continuation 108→110 (2026-05-22)
+
+Per operator direction ("continue endlessly"). Two more distinct
+detectors; L1 module-contracts coherent at 110, cargo modules::tests
+16/16.
+
+- `group-integrity-watchdog` (109) — delta of /etc/group membership
+  w/ privileged-group denylist (docker/lxd/disk/shadow/kvm/adm/…).
+  Catches `usermod -aG docker attacker` (container-escape-to-root)
+  that account-watchdog's passwd/uid0/sudo-roster view misses.
+  Records group-file + primary-gid members. MITRE T1098/T1548/T1611/
+  T1078.003. Completes account+group capability coverage.
+- `pci-device-watchdog` (110) — boot+daily PCI/PCIe inventory delta
+  (reads /sys/bus/pci, no pciutils dep). NEW device = evil-maid
+  implant / Thunderbolt-DMA / unauthorized passthrough. MITRE T1200/
+  T1011/T1052. Complements usbguard (USB bus) for hardware-addition
+  coverage on both buses.
+
+**Capability-grant detector family** now: account + group + sudoers +
+crontab-allow. **Hardware-addition detection**: usbguard (USB) +
+pci-device-watchdog (PCI/Thunderbolt). Module total: 110.
+
 ### Added — module-ecosystem batch 27: continuation 106→108 (2026-05-22)
 
 Per operator direction ("More selfdef modules"). Two capability-grant
