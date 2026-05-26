@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 64: continuation 146→147 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the syslog-ng
+log-event exec surface (the syslog-ng sibling of rsyslog-exec); L1
+module-contracts coherent at 147, cargo modules::tests 16/16.
+
+- `syslog-ng-exec-watchdog` (147) — boot+daily delta of the syslog-ng
+  config (/etc/syslog-ng/syslog-ng.conf + /etc/syslog-ng/conf.d/*) for
+  program() destinations + ownership scan. A syslog-ng `destination {
+  program("/path"); }` runs a program AS ROOT fed by matching log
+  messages; a rogue program() is root-exec-on-log-event persistence
+  (T1546) triggered by causing a matching log line. A program under
+  /tmp /home /dev/shm, world-writable, bare/relative, an injection
+  pattern, or a world-writable/non-root config is alert; add/change/
+  remove is warn. No-ops cleanly if absent (rsyslog hosts). Pairs with
+  rsyslog-exec-watchdog (a host runs one log daemon or the other). Cadence
+  boot+45min / 09:50.
+
 ### Added — module-ecosystem batch 63: continuation 145→146 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the LUKS

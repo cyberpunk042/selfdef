@@ -1,0 +1,18 @@
+# selfdef syslog-ng-exec-watchdog — boot+45min + daily 09:50.
+# Extends the staggered ladder after crypttab (09:45). Boot catch
+# confirms the syslog-ng program() destinations after a restart (a
+# rogue one fires on the next matching log message).
+
+[Unit]
+Description=selfdef syslog-ng program() destination delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/syslog-ng-exec-watchdog/README.md
+
+[Timer]
+OnBootSec=45min
+OnCalendar=*-*-* 09:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-syslog-ng-exec.service
+
+[Install]
+WantedBy=timers.target
