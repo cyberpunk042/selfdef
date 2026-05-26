@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 26: continuation 103→106 (2026-05-22)
+
+Per operator direction ("More selfdef modules"). Three further
+distinct modules; L1 module-contracts coherent at 106, cargo
+modules::tests 16/16.
+
+- `nfs-mount-watchdog` (104) — verify network mounts (nfs/cifs/sshfs/
+  ceph/gluster) carry nosuid+nodev; a network mount without nosuid
+  lets an attacker-controlled export plant a setuid-root binary →
+  instant client root. MITRE T1080/T1548.001/T1210. Distinct from
+  mount-options-watchdog (local mounts) — network threat model.
+- `wwan-disable` (105) — disable cellular/WWAN modems (rfkill + mask
+  ModemManager + mask-profile modprobe-blacklist cdc_mbim/qmi_wwan/
+  option stack). Removes an out-of-band exfil path + modem-CVE
+  surface. MITRE T1011/T1090/T1190/T1200. Completes the RF-surface
+  family: wireless + bluetooth + wol + wwan.
+- `coredump-pattern-watchdog` (106) — detect kernel.core_pattern
+  hijack (|/tmp/evil runs as root on next crash). Allowlists systemd-
+  coredump + apport. MITRE T1546/T1574/T1548. Pairs with coredumpd-
+  redirect (sets) + coredump-suid-restrict + apport-disable.
+
+Module total: 106. RF-surface family complete (Wi-Fi/BT/WoL/WWAN);
+core-dump defense family complete (redirect + suid-restrict + apport-
+disable + pattern-hijack-detect).
+
 ### Added — module-ecosystem batch 25: past-100 continuation 100→103 (2026-05-22)
 
 Per operator direction ("More selfdef modules") after the 100-module
