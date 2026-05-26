@@ -1,0 +1,41 @@
+name        = "postfix-exec-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the Postfix command-execution config (/etc/postfix/master.cf service command/argv fields + /etc/postfix/main.cf *_command directives) vs a learned baseline + ownership + command scan. Postfix runs external programs from master.cf pipe/spawn services (the argv= / command field) and from main.cf directives like mailbox_command — as root or the mail-delivery user, triggered by mail flow. A planted pipe/spawn service, content_filter target, or mailbox_command pointing at a writable/attacker program is mail-triggered code execution (T1546 / T1071 mail). Distinct from mta-loopback-detect (which watches the MTA's loopback-only listening posture, not command exec). A command/argv under /tmp /home /dev/shm /var/tmp or with an injection pattern, a world-writable/non-root config, or any added exec directive is the signature. No-ops cleanly when Postfix is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["postfix-exec-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any Postfix exec-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/postfix-exec-watchdog.toml",
+    "/usr/local/libexec/selfdef/postfix-exec-watchdog.sh",
+    "/etc/systemd/system/selfdef-postfix-exec.service",
+    "/etc/systemd/system/selfdef-postfix-exec.timer",
+    "/var/lib/selfdef/postfix-exec-baseline.tsv",
+]

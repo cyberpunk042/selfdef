@@ -1,0 +1,20 @@
+# selfdef postfix-exec-watchdog — boot+77min + daily 12:40.
+# Extends the staggered ladder after musl-ld-path (12:35). A planted
+# pipe/spawn service or *_command fires the next time mail of the
+# matching class flows (deliverable on demand by sending mail), so
+# the daily catch bounds dwell time; the boot catch confirms the
+# config after a restart.
+
+[Unit]
+Description=selfdef Postfix command-exec config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/postfix-exec-watchdog/README.md
+
+[Timer]
+OnBootSec=77min
+OnCalendar=*-*-* 12:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-postfix-exec.service
+
+[Install]
+WantedBy=timers.target

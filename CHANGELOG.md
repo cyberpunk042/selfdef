@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 96: continuation 178→179 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)", chosen a 3rd time via
+AskUserQuestion — now mining the fuzzier/complex tier). Adds the Postfix
+mail-triggered command-exec surface; L1 module-contracts coherent at 179,
+cargo modules::tests 16/16.
+
+- `postfix-exec-watchdog` (179) — boot+daily delta of the Postfix
+  command-execution config (/etc/postfix/master.cf pipe/spawn argv= +
+  /etc/postfix/main.cf *_command directives) + ownership + command scan.
+  Postfix runs external programs from master.cf pipe/spawn services
+  (argv=) and from main.cf mailbox_command etc. — as root or the
+  mail-delivery user, triggered by mail flow (deliverable on demand by
+  sending a matching message), so a planted argv=/command pointing at a
+  writable/attacker program is mail-triggered code execution (T1546). The
+  argv= and *_command positions are extracted explicitly (the generic
+  command-position rule misses post-'=' paths, same pattern as the acpid
+  action= fix). A program under /tmp /var/tmp /dev/shm /home or with an
+  injection pattern, a world-writable/non-root config, or any added
+  command is alert/warn. Legit /usr/lib/.../deliver, procmail, and
+  /usr/local filters not flagged. Distinct from mta-loopback-detect
+  (loopback listening posture). No-ops cleanly when Postfix absent.
+  Cadence boot+77min / 12:40.
+
 ### Added — module-ecosystem batch 95: continuation 177→178 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the musl
