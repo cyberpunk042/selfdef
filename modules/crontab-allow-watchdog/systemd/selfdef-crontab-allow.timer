@@ -1,0 +1,17 @@
+# selfdef crontab-allow-watchdog — boot+8min + daily 06:30.
+# Extends the staggered ladder after timestomp (06:20) +
+# kernel-cmdline (06:25). Boot catch confirms the roster.
+
+[Unit]
+Description=selfdef cron/at allow-roster delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/crontab-allow-watchdog/README.md
+
+[Timer]
+OnBootSec=8min
+OnCalendar=*-*-* 06:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-crontab-allow.service
+
+[Install]
+WantedBy=timers.target

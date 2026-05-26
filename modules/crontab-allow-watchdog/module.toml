@@ -1,0 +1,40 @@
+name        = "crontab-allow-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of the who-may-schedule roster — /etc/cron.allow, /etc/cron.deny, /etc/at.allow, /etc/at.deny — vs a learned baseline. An attacker adding themselves to cron.allow (on a deny-by-default host) grants scheduling-persistence capability; distinct from cron-job-watchdog (the jobs) + cron-baseline (sets the policy)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["crontab-allow-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any roster change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/crontab-allow-watchdog.toml",
+    "/usr/local/libexec/selfdef/crontab-allow-watchdog.sh",
+    "/etc/systemd/system/selfdef-crontab-allow.service",
+    "/etc/systemd/system/selfdef-crontab-allow.timer",
+    "/var/lib/selfdef/crontab-allow-baseline.tsv",
+]
