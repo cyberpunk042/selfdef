@@ -1,0 +1,41 @@
+name        = "aliases-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the mail aliases database (/etc/aliases, /etc/mail/aliases, /etc/postfix/aliases) vs a learned baseline + ownership + pipe/include scan. An alias target of the form `name: |command` makes the MTA run that command (as the default delivery user, often nobody/mail, sometimes root) whenever mail is delivered to that alias — the classic Unix mail-alias exec vector (the historic `decode:` alias RCE). A `:include:/path` target reads recipients (and thus pipe/file targets) from another file. A planted `|command` (or one pointing at /tmp etc.), a `:include:` of a writable file, a world-writable/non-root aliases file, or any added pipe alias is mail-triggered code execution / persistence (T1546.004). Distinct from postfix-exec-watchdog (master.cf/main.cf service+command config): this is the alias-recipient pipe surface. No-ops cleanly when no aliases file is present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["aliases-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any aliases change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/aliases-watchdog.toml",
+    "/usr/local/libexec/selfdef/aliases-watchdog.sh",
+    "/etc/systemd/system/selfdef-aliases.service",
+    "/etc/systemd/system/selfdef-aliases.timer",
+    "/var/lib/selfdef/aliases-baseline.tsv",
+]

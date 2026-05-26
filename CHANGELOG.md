@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 97: continuation 179→180 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)", 3rd confirmation).
+Adds the classic mail-alias pipe-exec surface — selfdef ecosystem reaches
+180 modules; L1 module-contracts coherent at 180, cargo modules::tests
+16/16.
+
+- `aliases-watchdog` (180) — boot+daily delta of the mail aliases
+  database (/etc/aliases, /etc/mail/aliases, /etc/postfix/aliases) +
+  ownership + pipe/include scan. An alias `name: |command` makes the MTA
+  run the command (as the delivery user, sometimes root) on mail to that
+  alias — the classic Unix mail-alias exec vector (the historic decode:
+  alias RCE) — and `:include:/path` pulls recipients from another file. A
+  planted pipe alias, one pointing at /tmp etc. or with an injection
+  pattern, a :include: of a writable file, a world-writable/non-root
+  aliases file, or any added pipe/include is mail-triggered code
+  execution / persistence (T1546.004), deliverable on demand by sending
+  mail to the alias. Quoted pipe forms ("|cmd") parsed; legit mailman/
+  vacation pipes with absolute paths not flagged. Distinct from
+  postfix-exec-watchdog (master.cf/main.cf): this is the alias-recipient
+  pipe surface. No-ops cleanly when no aliases file present. Cadence
+  boot+78min / 12:45.
+
 ### Added — module-ecosystem batch 96: continuation 178→179 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)", chosen a 3rd time via
