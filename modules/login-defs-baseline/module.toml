@@ -1,0 +1,38 @@
+name        = "login-defs-baseline"
+version     = "0.1.0"
+summary     = "Set password-aging + strong-hash defaults in /etc/login.defs.d — PASS_MAX_DAYS, PASS_MIN_DAYS, PASS_WARN_AGE, ENCRYPT_METHOD=YESCRYPT/SHA512, SHA_CRYPT rounds. Governs how NEW accounts age + how passwords are hashed. CIS 5.5.x. Complements the pam-pwquality/pam-history/pam-faillock triad"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["login-defs-baseline"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `standard` (default) — 365-day max, 1-day min, 14-day warn,
+#                       YESCRYPT (falls back to SHA512 where
+#                       yescrypt unavailable).
+# `strict`             — 90-day max, 7-day min, 14-day warn,
+#                       SHA512 with 65536 rounds (compliance:
+#                       PCI DSS 90-day rotation).
+default = "standard"
+available = ["standard", "strict"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/login-defs-baseline.toml",
+    "/etc/login.defs.d/50-selfdef-login-defs.conf",
+]
