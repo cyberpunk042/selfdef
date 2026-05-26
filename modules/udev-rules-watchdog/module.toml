@@ -1,0 +1,41 @@
+name        = "udev-rules-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the admin/runtime udev rule dirs (/etc/udev/rules.d + /run/udev/rules.d) vs a learned baseline. A .rules file with RUN+=/PROGRAM/IMPORT{program} executes arbitrary commands AS ROOT (udevd runs as root) on device events — a boot+hotplug persistence + privilege vector (T1546). An exec directive whose target is under /tmp /home /dev/shm, world-writable, or a bare/relative path is the payload signature. Distinct from systemd-unit (service persistence) + cron-job (scheduler persistence)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["udev-rules-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any udev-rules change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/udev-rules-watchdog.toml",
+    "/usr/local/libexec/selfdef/udev-rules-watchdog.sh",
+    "/etc/systemd/system/selfdef-udev-rules.service",
+    "/etc/systemd/system/selfdef-udev-rules.timer",
+    "/var/lib/selfdef/udev-rules-baseline.tsv",
+]

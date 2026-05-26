@@ -1,0 +1,19 @@
+# selfdef udev-rules-watchdog — boot+11min + daily 07:00.
+# Extends the staggered ladder after nsswitch (06:55). Boot
+# catch confirms the udev rule set after a restart (udev rules
+# fire at coldplug, so a boot scan catches a boot-persistence
+# rule on its first opportunity).
+
+[Unit]
+Description=selfdef udev rules delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/udev-rules-watchdog/README.md
+
+[Timer]
+OnBootSec=11min
+OnCalendar=*-*-* 07:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-udev-rules.service
+
+[Install]
+WantedBy=timers.target

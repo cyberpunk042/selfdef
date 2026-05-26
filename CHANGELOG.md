@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 30: continuation 112→113 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Closes the udev
+device-event persistence surface; L1 module-contracts coherent at 113,
+cargo modules::tests 16/16.
+
+- `udev-rules-watchdog` (113) — boot+daily delta of the admin/runtime
+  udev rule dirs (/etc/udev/rules.d + /run/udev/rules.d) vs a learned
+  baseline. udevd runs as root and evaluates *.rules on every device
+  event; a RUN+=/PROGRAM/IMPORT{program} directive runs its target as
+  root at boot coldplug + hotplug — a persistence + privilege vector.
+  Records each rule-file hash + each exec directive's program path
+  (directive-anchored parse, not first-quote). A NEW exec directive is
+  alert (new_exec); an exec target under /tmp /home /dev/shm,
+  world-writable, or bare/relative is the payload signature
+  (suspicious_exec). /usr/lib/udev/rules.d (package-managed) is
+  deliberately NOT watched — integrity-sentinel covers that. MITRE
+  T1546/T1059/T1037/T1200. Cadence boot+11min / 07:00 (extends the
+  ladder after nsswitch).
+
+**Persistence-mechanism family** now complete across the three classic
+root-persistence surfaces: systemd-unit (services) + cron-job
+(scheduler) + udev-rules (device events). udev-rules + usbguard/
+pci-device pair detection-of-device with the rule that weaponizes
+`ACTION=="add"`. Module total: 113.
+
 ### Added — module-ecosystem batch 29: continuation 110→112 (2026-05-26)
 
 Per operator direction ("continue endlessly"). The dynamic-linker /
