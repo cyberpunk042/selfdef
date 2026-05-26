@@ -1,0 +1,36 @@
+name        = "rpcbind-disable"
+version     = "0.1.0"
+summary     = "Mask rpcbind (the SunRPC portmapper on TCP/UDP 111). A network-facing service-locator used only by NFS / NIS / rquotad; rarely needed on modern hosts and a known reflection-amplification DDoS vector (CVE-2017-8779 rpcbomb + portmap-amplification). Masks rpcbind + the rpc statd/idmapd helpers"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rpcbind-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + mask rpcbind + rpc-statd
+#                   + rpc-gssd. Defeats socket re-activation.
+# `stop`           — stop + disable only
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/rpcbind-disable.toml",
+]
