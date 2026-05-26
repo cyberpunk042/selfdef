@@ -1,0 +1,18 @@
+# selfdef dbus-service-watchdog — boot+25min + daily 08:10.
+# Extends the staggered ladder after motd-scripts (08:05). Boot
+# catch confirms the D-Bus activation/policy set after a restart
+# (an activation service launches on the next bus-name call).
+
+[Unit]
+Description=selfdef D-Bus system activation/policy delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dbus-service-watchdog/README.md
+
+[Timer]
+OnBootSec=25min
+OnCalendar=*-*-* 08:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dbus-service.service
+
+[Install]
+WantedBy=timers.target

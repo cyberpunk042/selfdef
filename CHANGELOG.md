@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 44: continuation 126→127 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the D-Bus
+activation/policy IPC surface; L1 module-contracts coherent at 127, cargo
+modules::tests 16/16.
+
+- `dbus-service-watchdog` (127) — boot+daily delta of the admin/local
+  D-Bus system activation services + policy files
+  (/usr/local/share/dbus-1/system-services/*.service, /etc/dbus-1/
+  system-services, /etc/dbus-1/system.d/*.conf, /usr/local/share/dbus-1/
+  system.d) vs a learned baseline + ownership + Exec/User + policy scan.
+  A D-Bus-activated system service runs its Exec= as the configured User=
+  (often root) when any client calls its bus name; a rogue activation
+  file is root-exec-on-demand persistence, and a permissive policy
+  `<allow own=>` lets an attacker hijack a privileged bus name
+  (T1543/T1548). A NEW activation .service (new PATH) or a NEW `<allow
+  own=>` is alert; world-writable/non-root file or an Exec under
+  tmp/home/dev-shm/world-writable is alert; content change/removal is
+  warn. No-ops cleanly if absent. /usr/share (package-managed) not
+  watched. Cadence boot+25min / 08:10.
+
 ### Added — module-ecosystem batch 43: continuation 125→126 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the dynamic-MOTD
