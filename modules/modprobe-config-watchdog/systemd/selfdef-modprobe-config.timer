@@ -1,0 +1,19 @@
+# selfdef modprobe-config-watchdog — boot+13min + daily 07:10.
+# Extends the staggered ladder after shell-init (07:05). Boot
+# catch confirms the modprobe install/blacklist set after a
+# restart (an install directive fires on the next module
+# autoload).
+
+[Unit]
+Description=selfdef modprobe.d delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/modprobe-config-watchdog/README.md
+
+[Timer]
+OnBootSec=13min
+OnCalendar=*-*-* 07:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-modprobe-config.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "modprobe-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the admin/runtime modprobe config dirs (/etc/modprobe.d + /run/modprobe.d) vs a learned baseline. An `install <mod> <command>` directive makes modprobe RUN <command> instead of loading the module — code-exec-on-module-request persistence (T1547.006). The benign disable idiom (`install <mod> /bin/true|/bin/false`, used by selfdef's own *-disable modules) is recognized; any other install command, or one under /tmp /home, world-writable, or bare, is the payload signature. Distinct from kernel-module-watchdog, which watches LOADED modules (/proc/modules)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["modprobe-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any modprobe-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/modprobe-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/modprobe-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-modprobe-config.service",
+    "/etc/systemd/system/selfdef-modprobe-config.timer",
+    "/var/lib/selfdef/modprobe-config-baseline.tsv",
+]

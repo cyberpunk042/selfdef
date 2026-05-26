@@ -53,8 +53,10 @@ is_suspicious_target() {
     local t="$1"
     case "$t" in
         /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
-        /*) # absolute: suspicious only if the file is world-writable
-            [[ -e "$t" && "$(stat -c '%a' "$t" 2>/dev/null)" =~ [2367]$ ]] && return 0
+        /*) # absolute: suspicious only if the executed target is
+            # world-writable. -L follows symlinks (a symlink's own
+            # 0777 is meaningless on Linux; the target's mode matters).
+            [[ -e "$t" && "$(stat -L -c '%a' "$t" 2>/dev/null)" =~ [2367]$ ]] && return 0
             return 1 ;;
         *) return 0 ;;  # bare / relative target — abnormal for udev
     esac

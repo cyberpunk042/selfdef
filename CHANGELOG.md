@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 32: continuation 114→115 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Closes the modprobe
+module-load exec surface; L1 module-contracts coherent at 115, cargo
+modules::tests 16/16.
+
+- `modprobe-config-watchdog` (115) — boot+daily delta of /etc/modprobe.d
+  + /run/modprobe.d vs a learned baseline. An `install <mod> <command>`
+  directive makes modprobe RUN <command> instead of loading the module
+  — code-exec on module request (manual modprobe, kernel autoload,
+  modules-load.d), usually as root (T1547.006). The benign disable
+  idiom `install <mod> /bin/true|/bin/false` (written by selfdef's own
+  *-disable modules) is recognized and not alerted. Any other install
+  command is exec_install (alert); one under /tmp /home /dev/shm,
+  world-writable, or bare is the payload signature. Records each conf
+  hash + install-command first token + blacklist entries. Distinct from
+  kernel-module-watchdog (which watches LOADED modules, /proc/modules).
+  MITRE T1547.006/T1546/T1059.004. Cadence boot+13min / 07:10.
+
+### Fixed
+
+- `udev-rules-watchdog` (113) + `modprobe-config-watchdog` (115):
+  world-writable target check now uses `stat -L` to dereference
+  symlinks. A symlink's own mode is always 0777 on Linux (symlink
+  perms are not enforced), so the prior `stat` mis-flagged symlinked
+  commands (`/bin/sh`, `/bin/bash`, usrmerge links) as world-writable;
+  dereferencing tests the executed target's real mode.
+
 ### Added — module-ecosystem batch 31: continuation 113→114 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Closes the shell-init
