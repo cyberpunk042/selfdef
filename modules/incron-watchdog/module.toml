@@ -1,0 +1,41 @@
+name        = "incron-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the incron tables (/etc/incron.d/*, /var/spool/incron/* system incrontabs incl. root's) vs a learned baseline + ownership + command scan. incron is cron-for-inotify: each table line `<path> <event_mask> <command>` runs the command (as the table's owner — root for the system/root tables) when the named inotify event fires on the watched path. A planted line watching a commonly-touched file (e.g. /etc/passwd, a log, a spool dir) with a malicious command is file-event-triggered code execution / persistence (T1546) that an attacker can fire on demand by touching the watched path. This is the inotify-event exec surface — distinct from cron-job-watchdog/anacrontab (time), the login/network/power/boot watchdogs, and at-jobs (one-shot time). A command under /tmp /home /dev/shm /var/tmp or with an injection pattern, a world-writable/non-root table, or any added line is the signature. No-ops cleanly when incron is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["incron-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any incron table change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/incron-watchdog.toml",
+    "/usr/local/libexec/selfdef/incron-watchdog.sh",
+    "/etc/systemd/system/selfdef-incron.service",
+    "/etc/systemd/system/selfdef-incron.timer",
+    "/var/lib/selfdef/incron-baseline.tsv",
+]

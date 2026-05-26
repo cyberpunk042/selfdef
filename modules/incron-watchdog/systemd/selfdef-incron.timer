@@ -1,0 +1,20 @@
+# selfdef incron-watchdog — boot+82min + daily 13:20.
+# Extends the staggered ladder after kernel-usermodehelper (13:10).
+# A planted incron line fires the next time the watched inotify
+# event occurs (which an attacker can trigger on demand by touching
+# the watched path), so the daily catch bounds dwell time; the boot
+# catch confirms the table set after a restart.
+
+[Unit]
+Description=selfdef incron table (inotify-event exec) delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/incron-watchdog/README.md
+
+[Timer]
+OnBootSec=82min
+OnCalendar=*-*-* 13:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-incron.service
+
+[Install]
+WantedBy=timers.target

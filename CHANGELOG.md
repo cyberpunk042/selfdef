@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 101: continuation 183→184 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the inotify-event
+exec surface — the one event class not previously covered; L1
+module-contracts coherent at 184, cargo modules::tests 16/16.
+
+- `incron-watchdog` (184) — boot+daily delta of the incron tables
+  (/etc/incron.d/*, /var/spool/incron/* incl. root's) + ownership +
+  command scan. incron is cron-for-inotify: each line `<path>
+  <event_mask> <command>` runs the command (as the table owner — root
+  for system/root tables) when the inotify event fires on the watched
+  path, so a planted line watching a commonly-touched file is
+  file-event-triggered code execution / persistence (T1546),
+  fire-on-demand by touching the path. The inotify-event exec surface —
+  distinct from cron/anacron (time), at-jobs (one-shot time), and the
+  login/network/power/boot watchdogs. A command program under
+  /tmp /var/tmp /dev/shm /home or with an injection pattern, a
+  world-writable/non-root table, or any added line is alert/warn. Legit
+  service-reload commands not flagged. No-ops cleanly when incron is not
+  installed. Cadence boot+82min / 13:20.
+
 ### Added — module-ecosystem batch 100: continuation 182→183 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the kernel
