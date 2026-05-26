@@ -1,0 +1,19 @@
+# selfdef auditd-plugins-watchdog — boot+83min + daily 13:30.
+# Extends the staggered ladder after incron (13:20). A planted
+# active auditd plugin runs as root as soon as auditd is (re)started
+# and processes the live event stream, so the daily catch bounds
+# dwell time; the boot catch confirms the plugin set after a restart.
+
+[Unit]
+Description=selfdef auditd dispatcher-plugin delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/auditd-plugins-watchdog/README.md
+
+[Timer]
+OnBootSec=83min
+OnCalendar=*-*-* 13:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-audit-plugins.service
+
+[Install]
+WantedBy=timers.target

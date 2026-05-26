@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 102: continuation 184→185 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the auditd
+dispatcher-plugin exec surface (root exec inside the audit pipeline); L1
+module-contracts coherent at 185, cargo modules::tests 16/16.
+
+- `auditd-plugins-watchdog` (185) — boot+daily delta of the auditd
+  dispatcher-plugin configs (/etc/audit/plugins.d/*.conf and legacy
+  /etc/audisp/plugins.d/*.conf) + ownership + plugin-path scan. auditd
+  launches each active plugin's `path =` program AS ROOT and feeds it the
+  live audit event stream, so a planted plugin (active=yes,
+  path=/tmp/evil) is root-exec persistence driven by audit activity
+  (T1546) that also sits inside the audit pipeline where it can
+  suppress/tamper with events (T1562.001 impair defenses). Distinct from
+  audit-config-watchdog (auditd.conf + audit.rules content): this is the
+  dispatcher-plugin exec surface. A plugin path under
+  /tmp /var/tmp /dev/shm /home or relative-with-slash (flagged even when
+  active=no — one edit from running), a world-writable/non-root .conf, or
+  any added plugin is alert/warn. Standard /sbin/audisp-* plugins not
+  flagged. No-ops cleanly when auditd plugins.d is absent. Cadence
+  boot+83min / 13:30.
+
 ### Added — module-ecosystem batch 101: continuation 183→184 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the inotify-event
