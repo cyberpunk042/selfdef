@@ -1,0 +1,42 @@
+name        = "pam-config-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of the PAM configuration (/etc/pam.d/* lines + the on-disk pam_*.so module set hashes) vs a learned baseline. A NEW pam line or a CHANGED/added PAM module is the T1556.003 pluggable-authentication-module backdoor signature — a magic-password or auth-bypass module injected into the auth stack"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["pam-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED/CHANGED pam line
+#                     or module
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/pam-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/pam-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-pam-config.service",
+    "/etc/systemd/system/selfdef-pam-config.timer",
+    "/var/lib/selfdef/pam-config-baseline.tsv",
+]

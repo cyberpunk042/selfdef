@@ -1,0 +1,18 @@
+# selfdef pam-config-watchdog — boot+7min + every 4h.
+# A PAM backdoor is high-impact auth-bypass persistence; a
+# 4h cadence catches it while keeping the module-hash scan
+# light. Boot catch confirms the auth stack after restart.
+
+[Unit]
+Description=selfdef PAM-config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/pam-config-watchdog/README.md
+
+[Timer]
+OnBootSec=7min
+OnUnitActiveSec=4h
+RandomizedDelaySec=8min
+Persistent=true
+Unit=selfdef-pam-config.service
+
+[Install]
+WantedBy=timers.target
