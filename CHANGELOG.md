@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 46: continuation 128→129 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the sudoers Defaults
+tamper surface (completes sudoers coverage with sudoers-integrity +
+sudo-tune); L1 module-contracts coherent at 129, cargo modules::tests
+16/16.
+
+- `sudoers-defaults-watchdog` (129) — boot+daily delta of the sudoers
+  Defaults directives (/etc/sudoers + /etc/sudoers.d/*) vs a learned
+  baseline. sudoers-integrity-watchdog tracks GRANTS and excludes
+  Defaults; this watches the tunables an attacker abuses for privesc:
+  secure_path with a writable/tmp/home/relative element (sudo finds a
+  trojan binary), env_keep/env_check/env_delete += of a dangerous var
+  (LD_PRELOAD/LD_LIBRARY_PATH/LD_AUDIT/PYTHONPATH/PERL5LIB/RUBYLIB/
+  BASH_ENV/ENV/IFS/PS4 — env injection into the root command), or
+  !env_reset. Any Defaults change is warn; a NEWLY-ADDED dangerous
+  Default is alert (delta-based — pre-existing flagged once at baseline).
+  No-ops cleanly if absent. Complements sudo-tune (which SETS hardened
+  Defaults). MITRE T1548.003/T1574.006. Cadence boot+27min / 08:20.
+
 ### Added — module-ecosystem batch 45: continuation 127→128 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the kernel-module

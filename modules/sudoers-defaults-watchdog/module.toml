@@ -1,0 +1,41 @@
+name        = "sudoers-defaults-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the sudoers Defaults directives (/etc/sudoers + /etc/sudoers.d/*) vs a learned baseline. sudoers-integrity-watchdog tracks GRANTS and excludes Defaults; this watches the Defaults tunables an attacker abuses for privesc: secure_path with a writable/tmp/relative component (sudo finds a trojan binary), env_keep/env_check += LD_PRELOAD/LD_LIBRARY_PATH/PYTHONPATH/BASH_ENV (env injection into the root command), or !env_reset (all env survives into sudo). Any Defaults change is warn; a NEWLY-ADDED dangerous Default is the privesc signature (alert). Complements sudo-tune (which SETS hardened Defaults) by detecting tampering. T1548.003 / T1574"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sudoers-defaults-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sudoers-Defaults change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sudoers-defaults-watchdog.toml",
+    "/usr/local/libexec/selfdef/sudoers-defaults-watchdog.sh",
+    "/etc/systemd/system/selfdef-sudoers-defaults.service",
+    "/etc/systemd/system/selfdef-sudoers-defaults.timer",
+    "/var/lib/selfdef/sudoers-defaults-baseline.tsv",
+]

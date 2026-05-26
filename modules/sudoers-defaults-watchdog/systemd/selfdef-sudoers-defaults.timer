@@ -1,0 +1,18 @@
+# selfdef sudoers-defaults-watchdog — boot+27min + daily 08:20.
+# Extends the staggered ladder after modules-load (08:15). Boot
+# catch confirms the sudoers Defaults after a restart (a Defaults
+# change takes effect on the next sudo invocation).
+
+[Unit]
+Description=selfdef sudoers Defaults directives delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sudoers-defaults-watchdog/README.md
+
+[Timer]
+OnBootSec=27min
+OnCalendar=*-*-* 08:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sudoers-defaults.service
+
+[Install]
+WantedBy=timers.target
