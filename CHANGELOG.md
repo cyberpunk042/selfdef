@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 98: continuation 180→181 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the systemd
+manager-environment LD-injection surface; L1 module-contracts coherent at
+181, cargo modules::tests 16/16.
+
+- `systemd-environment-watchdog` (181) — boot+daily delta of the systemd
+  manager environment config (/etc/systemd/system.conf[.d]
+  DefaultEnvironment=/ManagerEnvironment=, and the user-manager
+  /etc/systemd/user.conf[.d]) + ownership + env-injection scan.
+  DefaultEnvironment= sets env for EVERY service the manager spawns;
+  ManagerEnvironment= sets it for PID 1. A planted
+  DefaultEnvironment=LD_PRELOAD=/tmp/evil.so (or LD_AUDIT/LD_LIBRARY_PATH
+  to a writable dir) injects attacker code into every service on the host
+  (T1574.006). Distinct from ld-preload-watchdog (ld.so.preload + shell/
+  pam env files): this is the systemd-manager env surface. Any
+  LD_PRELOAD/LD_AUDIT/LD_LIBRARY_PATH in Default/ManagerEnvironment, an
+  env value path under /tmp /var/tmp /dev/shm /home, a
+  world-writable/non-root config, or any added env pair is alert/warn.
+  Benign LANG/TZ/http_proxy env not flagged. No-ops cleanly when no
+  override present. Cadence boot+79min / 12:50.
+
 ### Added — module-ecosystem batch 97: continuation 179→180 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)", 3rd confirmation).

@@ -1,0 +1,20 @@
+# selfdef systemd-environment-watchdog — boot+79min + daily 12:50.
+# Extends the staggered ladder after aliases (12:45). A planted
+# DefaultEnvironment LD_PRELOAD takes effect for every service
+# started after the next daemon-reload/reboot, so the daily catch
+# bounds dwell time; the boot catch confirms the manager-env config
+# after a restart.
+
+[Unit]
+Description=selfdef systemd manager-environment delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/systemd-environment-watchdog/README.md
+
+[Timer]
+OnBootSec=79min
+OnCalendar=*-*-* 12:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-systemd-env.service
+
+[Install]
+WantedBy=timers.target

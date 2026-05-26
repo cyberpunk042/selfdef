@@ -1,0 +1,41 @@
+name        = "systemd-environment-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the systemd manager environment config (/etc/systemd/system.conf + system.conf.d/*.conf DefaultEnvironment=/ManagerEnvironment=, and the user-manager /etc/systemd/user.conf[.d]) vs a learned baseline + ownership + env-injection scan. DefaultEnvironment= sets environment variables for EVERY service the systemd manager spawns; ManagerEnvironment= sets them for the manager (PID 1) itself. A planted DefaultEnvironment=LD_PRELOAD=/tmp/evil.so (or LD_AUDIT / LD_LIBRARY_PATH pointing at a writable dir) injects attacker code into the address space of every service on the host — a near-total, persistent code-execution foothold (T1574.006 dynamic linker hijacking via env). Distinct from ld-preload-watchdog (/etc/ld.so.preload + shell/pam env files): this is the systemd-manager env surface. Any LD_PRELOAD/LD_AUDIT/LD_LIBRARY_PATH in DefaultEnvironment/ManagerEnvironment, an env value path under /tmp /home /dev/shm /var/tmp, a world-writable/non-root config, or any added env pair is the signature. No-ops cleanly when no override is present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["systemd-environment-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any systemd env-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/systemd-environment-watchdog.toml",
+    "/usr/local/libexec/selfdef/systemd-environment-watchdog.sh",
+    "/etc/systemd/system/selfdef-systemd-env.service",
+    "/etc/systemd/system/selfdef-systemd-env.timer",
+    "/var/lib/selfdef/systemd-environment-baseline.tsv",
+]
