@@ -6,6 +6,64 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem: 100/100 MODULE TARGET REACHED (2026-05-22, batches 23-24)
+
+The operator's verbatim 100+ module target is met. Modules 90→100
+(plus 85→89 in batch 22) complete the firewall coverage, the auth-
+persistence detection family, the rootkit-detector trio, and the
+meta-watchdog capstone. L1 module-contracts coherent at 100; cargo
+test -p selfdef-api --lib modules::tests stays 16/16.
+
+**Modules 90→100 (this finish):**
+
+- `firewalld-baseline` (90) — RHEL/Fedora firewalld default-deny zone;
+  conflicts=[nftables-baseline]; completes firewall coverage on both
+  distros. MITRE T1190/T1133/T1046/T1571.
+- `ld-preload-watchdog` (91) — userland-rootkit LD_PRELOAD hook
+  detection (/etc/ld.so.preload + global env). MITRE T1574.006/T1014/
+  T1556/T1564. Completes rootkit-detector trio with hidden-process +
+  kernel-module.
+- `shell-timeout-baseline` (92) — TMOUT idle auto-logout (unattended-
+  session defense). MITRE T1078/T1563.
+- `home-perms-baseline` (93) — 0750/0700 /home dirs (cross-user
+  browse block). MITRE T1083/T1552.001/T1078.
+- `logfile-integrity-watchdog` (94) — log truncation/tamper detection
+  (wtmp/btmp/auth.log monotonic-growth + inode tracking). MITRE
+  T1070.002/T1070.006/T1485.
+- `ssh-authkeys-watchdog` (95) — authorized_keys delta (T1098.004 —
+  the most common Linux backdoor-access technique). MITRE T1098.004/
+  T1078/T1556.
+- `sudoers-integrity-watchdog` (96) — sudo grant-set delta (NOPASSWD
+  injection bypassing group membership). MITRE T1548.003/T1098.
+- `systemd-unit-watchdog` (97) — enabled-unit + ExecStart-hash delta
+  (T1543.002 service persistence). Matched sibling to cron-job-
+  watchdog.
+- `pam-config-watchdog` (98) — PAM config-line + module-hash delta
+  (T1556.003 PAM backdoor / magic-password module).
+- `audit-config-watchdog` (99) — auditd disablement/rule-flush
+  detection (T1562.001 Impair Defenses).
+- `selfdef-self-integrity` (100, CAPSTONE) — the meta-watchdog:
+  hashes selfdef's own trust root (delta-watchdog baselines + wrapper
+  scripts + module configs) + alerts on tampering. Closes the
+  who-watches-the-watchers gap. MITRE T1562.001/T1565.001/T1070/T1554.
+
+**Final architecture (100 modules):**
+- **Auth-persistence detection family**: ssh-authkeys + sudoers +
+  account + systemd-unit + cron-job + pam-config watchdogs.
+- **Rootkit-detector trio**: ld-preload (userland) + hidden-process
+  (either) + kernel-module (LKM).
+- **Defense-tamper detection**: audit-config + logfile-integrity +
+  selfdef-self-integrity (the meta-watchdog).
+- **Firewall** both distros: nftables-baseline + firewalld-baseline.
+- **MAC** both distros: apparmor-baseline + selinux-baseline.
+- **Detection ladder**: 23 staggered cadences.
+- **13 refuse-to-brick gates.**
+
+Module total: **100/100 — operator target reached.** Detection-
+heavy second half (delta-watchdogs covering every canonical
+persistence + defense-evasion surface) complements the hardening-
+heavy first half.
+
 ### Added — module-ecosystem batch: 4 more modules push 85→89 (2026-05-22, batch 22)
 
 Four further modules: two new delta-detection surfaces, the rootkit
