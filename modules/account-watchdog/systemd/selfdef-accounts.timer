@@ -1,0 +1,18 @@
+# selfdef account-watchdog — boot+5min + daily 05:50.
+# Boot catch confirms the account-set after every restart
+# (catches an offline-edit-then-boot attack). Daily 05:50
+# extends the staggered ladder right after cron-jobs (05:45).
+
+[Unit]
+Description=selfdef account-surface delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/account-watchdog/README.md
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*-*-* 05:50:00
+RandomizedDelaySec=5m
+Persistent=true
+Unit=selfdef-accounts.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "account-watchdog"
+version     = "0.1.0"
+summary        = "Daily delta of the account surface — /etc/passwd entries, uid=0 set, group membership, sudo/wheel/admin rosters — vs a learned baseline. A NEW account (especially a NEW uid=0 or a NEW sudo member) is the canonical T1136 persistence + T1078 privilege indicator"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["account-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED account OR new uid=0
+#                     OR new sudo member
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/account-watchdog.toml",
+    "/usr/local/libexec/selfdef/account-watchdog.sh",
+    "/etc/systemd/system/selfdef-accounts.service",
+    "/etc/systemd/system/selfdef-accounts.timer",
+    "/var/lib/selfdef/accounts-baseline.tsv",
+]
