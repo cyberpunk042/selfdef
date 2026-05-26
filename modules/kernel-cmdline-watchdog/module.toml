@@ -1,0 +1,40 @@
+name        = "kernel-cmdline-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the kernel command line (/proc/cmdline) vs a learned baseline, with a known-weakening-flag denylist. Catches a GRUB-edit that removed audit=1 / lockdown= / init_on_alloc=1 or added nosmep/nosmap/mitigations=off to weaken kernel security before an attack (T1562.001 / T1601)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-cmdline-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any cmdline change OR weakening flag
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-cmdline-watchdog.toml",
+    "/usr/local/libexec/selfdef/kernel-cmdline-watchdog.sh",
+    "/etc/systemd/system/selfdef-kernel-cmdline.service",
+    "/etc/systemd/system/selfdef-kernel-cmdline.timer",
+    "/var/lib/selfdef/kernel-cmdline-baseline.txt",
+]

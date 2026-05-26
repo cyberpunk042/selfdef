@@ -1,0 +1,19 @@
+# selfdef kernel-cmdline-watchdog — boot+4min + daily.
+# The boot catch is the important one: cmdline only changes
+# across a reboot (you can't edit a running kernel's cmdline),
+# so checking shortly after each boot catches a GRUB-edit
+# weakening. Daily is a backstop.
+
+[Unit]
+Description=selfdef kernel command-line delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/kernel-cmdline-watchdog/README.md
+
+[Timer]
+OnBootSec=4min
+OnCalendar=*-*-* 06:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-kernel-cmdline.service
+
+[Install]
+WantedBy=timers.target
