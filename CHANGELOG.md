@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 68: continuation 150→151 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+kernel-package install-hook surface (boot-image-adjacent root exec on
+kernel transactions); L1 module-contracts coherent at 151, cargo
+modules::tests 16/16.
+
+- `kernel-install-hooks-watchdog` (151) — boot+daily delta of the
+  kernel-package install-hook dirs (/etc/kernel/{postinst,postrm,preinst,
+  prerm,install,header_postinst}.d/*) + ownership + suspicious-pattern
+  scan. dpkg's kernel maintainer scripts and systemd kernel-install run
+  every executable in these dirs AS ROOT on each kernel package
+  transaction (install/upgrade/remove) — this is where update-grub /
+  update-initramfs / bootloader regen live, so an injected hook gets
+  root exec on the next kernel update with a natural place to plant into
+  the initramfs/bootloader (T1542 pre-OS boot / T1546). Distinct from the
+  runtime kernel-* modules (cmdline/lockdown/modules/sysrq/yama params)
+  and from apt-hooks (apt's own Pre/Post-Invoke). A hook under
+  /tmp /home /dev/shm, world-writable, non-root, or an injection pattern
+  is alert; add/change/remove is warn. No-ops cleanly when no kernel hook
+  dirs present. Cadence boot+49min / 10:10.
+
 ### Added — module-ecosystem batch 67: continuation 149→150 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the ISC

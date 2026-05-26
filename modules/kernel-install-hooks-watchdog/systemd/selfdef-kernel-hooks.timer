@@ -1,0 +1,19 @@
+# selfdef kernel-install-hooks-watchdog — boot+49min + daily 10:10.
+# Extends the staggered ladder after dhclient-hooks (10:05). An
+# injected kernel hook fires on the next kernel package transaction
+# (apt/dnf upgrade), so the daily catch bounds dwell time before the
+# next update; the boot catch confirms the hook set after a restart.
+
+[Unit]
+Description=selfdef kernel-package install-hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/kernel-install-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=49min
+OnCalendar=*-*-* 10:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-kernel-hooks.service
+
+[Install]
+WantedBy=timers.target

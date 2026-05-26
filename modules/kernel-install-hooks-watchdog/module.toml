@@ -1,0 +1,41 @@
+name        = "kernel-install-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the kernel-package install-hook dirs (/etc/kernel/postinst.d, postrm.d, preinst.d, prerm.d, install.d, header_postinst.d) vs a learned baseline + ownership + suspicious-pattern scan. dpkg's kernel maintainer scripts and systemd kernel-install run every executable in these dirs AS ROOT on each kernel package transaction (install/upgrade/remove) — this is where update-grub, update-initramfs, and bootloader regen live. An added/tampered hook is root-exec persistence that fires on the next kernel update and can plant into the initramfs/bootloader (T1542 pre-OS boot / T1546). Distinct from the runtime kernel-* modules (cmdline/lockdown/modules/sysrq/yama params) and from apt-hooks (apt's own Pre/Post-Invoke) — these are the kernel-package hook dirs. A hook under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when no kernel hook dirs present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-install-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any kernel-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-install-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/kernel-install-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-kernel-hooks.service",
+    "/etc/systemd/system/selfdef-kernel-hooks.timer",
+    "/var/lib/selfdef/kernel-install-hooks-baseline.tsv",
+]
