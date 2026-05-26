@@ -1,0 +1,41 @@
+name        = "ssh-authkeys-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of every SSH authorized_keys file (per-user ~/.ssh/authorized_keys[2] + sshd_config AuthorizedKeysFile + /etc/ssh/authorized_keys.d) vs a learned baseline. A NEW authorized key is the T1098.004 SSH-Authorized-Keys persistence signature — the single most common Linux backdoor-access technique"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ssh-authkeys-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED key
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ssh-authkeys-watchdog.toml",
+    "/usr/local/libexec/selfdef/ssh-authkeys-watchdog.sh",
+    "/etc/systemd/system/selfdef-ssh-authkeys.service",
+    "/etc/systemd/system/selfdef-ssh-authkeys.timer",
+    "/var/lib/selfdef/ssh-authkeys-baseline.tsv",
+]
