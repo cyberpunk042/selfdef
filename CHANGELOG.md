@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 70: continuation 152→153 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the systemd
+power-event exec surface (self-triggering suspend/resume + shutdown root
+exec); L1 module-contracts coherent at 153, cargo modules::tests 16/16.
+
+- `systemd-power-hooks-watchdog` (153) — boot+daily delta of the systemd
+  power-event exec dirs (system-sleep + system-shutdown under
+  /usr/lib/systemd, /lib/systemd, /etc/systemd) + ownership +
+  suspicious-pattern scan. systemd runs every executable in system-sleep/
+  AS ROOT on suspend/hibernate/resume (pre+post) and every executable in
+  system-shutdown/ AS ROOT at halt/poweroff/reboot/kexec. Suspend/resume
+  fires automatically (laptop lid, idle timer), so a dropped sleep hook
+  self-triggers without operator action; a shutdown hook runs at the last
+  moment before power-off (T1546). Symlinked dirs (/lib→/usr/lib) are
+  de-duplicated by resolved real path. Distinct from
+  systemd-generator-watchdog (unit generators) and systemd-unit-watchdog
+  (unit files). A script under /tmp /home /dev/shm, world-writable,
+  non-root, or an injection pattern is alert; add/change/remove is warn.
+  No-ops cleanly when no power-hook dirs present. Cadence boot+51min / 10:20.
+
 ### Added — module-ecosystem batch 69: continuation 151→152 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the initramfs

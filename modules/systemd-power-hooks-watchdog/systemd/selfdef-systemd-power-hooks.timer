@@ -1,0 +1,20 @@
+# selfdef systemd-power-hooks-watchdog — boot+51min + daily 10:20.
+# Extends the staggered ladder after initramfs-hooks (10:15). A
+# dropped system-sleep hook self-triggers on the next suspend/resume
+# (laptop lid, idle timer) and a system-shutdown hook runs at the
+# next power-off, so the daily catch bounds dwell time; the boot
+# catch confirms the hook set after a restart.
+
+[Unit]
+Description=selfdef systemd power-event hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/systemd-power-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=51min
+OnCalendar=*-*-* 10:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-systemd-power-hooks.service
+
+[Install]
+WantedBy=timers.target
