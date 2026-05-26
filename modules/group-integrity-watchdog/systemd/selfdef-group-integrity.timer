@@ -1,0 +1,17 @@
+# selfdef group-integrity-watchdog — boot+8min + daily 06:40.
+# Extends the staggered ladder after crontab-allow (06:30) +
+# ssh-hostkey (06:35). Boot catch confirms group membership.
+
+[Unit]
+Description=selfdef /etc/group membership delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/group-integrity-watchdog/README.md
+
+[Timer]
+OnBootSec=8min
+OnCalendar=*-*-* 06:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-group-integrity.service
+
+[Install]
+WantedBy=timers.target

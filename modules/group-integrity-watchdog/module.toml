@@ -1,0 +1,40 @@
+name        = "group-integrity-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of /etc/group membership vs a learned baseline, with a privileged-group denylist (docker, lxd, disk, shadow, kvm, adm, systemd-journal, …) where ADDING a member is a root-equivalent privilege escalation. Distinct from account-watchdog (passwd/uid0/sudo-roster) — this covers the full group set incl. the non-sudo root-equivalent groups"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["group-integrity-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any group-membership change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/group-integrity-watchdog.toml",
+    "/usr/local/libexec/selfdef/group-integrity-watchdog.sh",
+    "/etc/systemd/system/selfdef-group-integrity.service",
+    "/etc/systemd/system/selfdef-group-integrity.timer",
+    "/var/lib/selfdef/group-integrity-baseline.tsv",
+]
