@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 65: continuation 147→148 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the X11
+session-startup exec surface (completes the login-time persistence set);
+L1 module-contracts coherent at 148, cargo modules::tests 16/16.
+
+- `xsession-watchdog` (148) — boot+daily delta of the X11 session-init
+  scripts (/etc/X11/Xsession.d/*, /etc/X11/xinit/xinitrc.d/*,
+  /etc/X11/xinit/{xinitrc,Xclients}, root's ~/.xsession ~/.xprofile
+  ~/.xinitrc) + ownership + suspicious-pattern scan. These run on every
+  graphical login during session startup as the logging-in user; a
+  dropped/tampered script is GUI-login exec persistence (T1037/T1546).
+  Distinct from xdg-autostart-watchdog (post-startup .desktop autostart)
+  — this is the session-STARTUP script surface. World-writable/non-root
+  script or an injection pattern is alert; add/change/remove is warn.
+  No-ops cleanly on headless hosts. Cadence boot+46min / 09:55.
+
 ### Added — module-ecosystem batch 64: continuation 146→147 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the syslog-ng

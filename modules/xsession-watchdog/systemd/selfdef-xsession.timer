@@ -1,0 +1,18 @@
+# selfdef xsession-watchdog — boot+46min + daily 09:55.
+# Extends the staggered ladder after syslog-ng-exec (09:50). Boot
+# catch confirms the X session-init scripts after a restart (a
+# rogue one fires on the next graphical login).
+
+[Unit]
+Description=selfdef X11 session-init script delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/xsession-watchdog/README.md
+
+[Timer]
+OnBootSec=46min
+OnCalendar=*-*-* 09:55:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-xsession.service
+
+[Install]
+WantedBy=timers.target

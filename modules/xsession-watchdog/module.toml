@@ -1,0 +1,41 @@
+name        = "xsession-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the X11 session-init scripts (/etc/X11/Xsession.d/*, /etc/X11/xinit/xinitrc.d/*, /etc/X11/xinit/{xinitrc,Xclients}, root's ~/.xsession ~/.xprofile ~/.xinitrc) vs a learned baseline + ownership + suspicious-pattern scan. These run on every graphical login (during session startup, as the logging-in user — root for a root login); a dropped/tampered script is GUI-login exec persistence (T1037/T1546). Distinct from xdg-autostart-watchdog (post-startup .desktop autostart). World-writable/non-root script or an injection pattern is the signature. No-ops cleanly on headless hosts"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["xsession-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any xsession change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/xsession-watchdog.toml",
+    "/usr/local/libexec/selfdef/xsession-watchdog.sh",
+    "/etc/systemd/system/selfdef-xsession.service",
+    "/etc/systemd/system/selfdef-xsession.timer",
+    "/var/lib/selfdef/xsession-baseline.tsv",
+]
