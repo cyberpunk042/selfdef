@@ -1,0 +1,17 @@
+# selfdef ssh-hostkey-watchdog — boot+6min + daily 06:35.
+# Host keys change rarely (only on rotate/reinstall); a daily
+# check + a boot catch (a reinstall reboots) is ample.
+
+[Unit]
+Description=selfdef SSH host-key delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/ssh-hostkey-watchdog/README.md
+
+[Timer]
+OnBootSec=6min
+OnCalendar=*-*-* 06:35:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-ssh-hostkey.service
+
+[Install]
+WantedBy=timers.target

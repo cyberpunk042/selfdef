@@ -1,0 +1,41 @@
+name        = "ssh-hostkey-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the SSH host-key fingerprints (/etc/ssh/ssh_host_*_key.pub) vs a learned baseline. A CHANGED host key means the server's identity was swapped — MITM-preparation (clients that TOFU-accept the new key), an unauthorized reinstall, or key-theft-then-rotate. Distinct from ssh-authkeys-watchdog (client access keys)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ssh-hostkey-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "ssh-keygen" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any host-key change/add/removal
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ssh-hostkey-watchdog.toml",
+    "/usr/local/libexec/selfdef/ssh-hostkey-watchdog.sh",
+    "/etc/systemd/system/selfdef-ssh-hostkey.service",
+    "/etc/systemd/system/selfdef-ssh-hostkey.timer",
+    "/var/lib/selfdef/ssh-hostkey-baseline.tsv",
+]
