@@ -1,0 +1,41 @@
+name        = "coredump-suid-restrict"
+version     = "0.1.0"
+summary     = "Set fs.suid_dumpable=0 + a hard core ulimit of 0 (limits.d). Prevents setuid binaries from dumping their memory on crash — that memory routinely contains credentials, keys, and decrypted secrets the setuid binary was handling. CIS-recommended"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["coredump-suid-restricted"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `suid-only` (default) — fs.suid_dumpable=0 (setuid binaries
+#                        never dump) + leave normal-process
+#                        core dumps to the system default.
+# `all-off`             — suid-dumpable=0 + hard core ulimit 0
+#                        for ALL processes (no core dumps at
+#                        all). Strongest; breaks crash-debug.
+default = "suid-only"
+available = ["suid-only", "all-off"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/coredump-suid-restrict.toml",
+    "/etc/sysctl.d/50-selfdef-suid-dumpable.conf",
+    "/etc/security/limits.d/50-selfdef-coredump.conf",
+]
