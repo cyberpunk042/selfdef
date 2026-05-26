@@ -1,0 +1,19 @@
+# selfdef xorg-config-watchdog — boot+70min + daily 12:05.
+# Extends the staggered ladder after csh-config (12:00). A planted
+# ModulePath/Load takes effect at the next X server start (graphical
+# login / display-manager restart), so the boot catch confirms the
+# config set after a restart and the daily catch bounds dwell time.
+
+[Unit]
+Description=selfdef X server config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/xorg-config-watchdog/README.md
+
+[Timer]
+OnBootSec=70min
+OnCalendar=*-*-* 12:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-xorg-config.service
+
+[Install]
+WantedBy=timers.target

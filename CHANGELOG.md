@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 89: continuation 171→172 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the X-server
+module-load surface (attacker .so loaded into the root X server); L1
+module-contracts coherent at 172, cargo modules::tests 16/16.
+
+- `xorg-config-watchdog` (172) — boot+daily delta of the X server config
+  (/etc/X11/xorg.conf, /etc/X11/xorg.conf.d/*.conf) + ownership +
+  ModulePath/Load scan. On non-rootless setups the X server runs AS ROOT
+  and loads modules from the Section Files ModulePath and Section Module
+  Load directives — so a planted config with a ModulePath under a
+  writable/attacker location loads attacker .so code into the root X
+  server at the next server start (T1574/T1547). ModulePath lists are
+  comma-split and each entry checked; a path under /tmp /var/tmp /dev/shm
+  /home or a relative ModulePath, a world-writable/non-root .conf, or any
+  added directive is alert/warn. Standard /usr/lib/xorg/modules and named
+  Load (glx/dri2) not flagged. Distinct from xsession-watchdog
+  (user-context scripts) and display-manager-hooks-watchdog (DM root login
+  scripts): this is the X-server module-load surface. No-ops cleanly on
+  headless / no-X hosts. Cadence boot+70min / 12:05.
+
 ### Added — module-ecosystem batch 88: continuation 170→171 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Completes the global
