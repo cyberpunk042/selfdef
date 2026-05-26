@@ -1,0 +1,17 @@
+# selfdef dns-resolver-watchdog — service unit.
+
+[Unit]
+Description=selfdef DNS resolver-config delta scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/dns-resolver-watchdog/README.md
+After=network.target nss-lookup.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/dns-resolver-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log /var/lib/selfdef
+Nice=10
+TimeoutStartSec=1m

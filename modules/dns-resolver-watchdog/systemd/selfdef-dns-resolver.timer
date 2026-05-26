@@ -1,0 +1,19 @@
+# selfdef dns-resolver-watchdog — boot+5min + every 6h.
+# DNS hijack can happen any time (resolv.conf rewrite, DHCP
+# lease with malicious DNS, systemd-resolved reconfigure);
+# 6h bounds detection latency. Boot catch confirms resolver
+# config after every restart / DHCP renew.
+
+[Unit]
+Description=selfdef DNS resolver-config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dns-resolver-watchdog/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-dns-resolver.service
+
+[Install]
+WantedBy=timers.target
