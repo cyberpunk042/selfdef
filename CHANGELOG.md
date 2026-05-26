@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for autofs-watchdog (2026-05-26)
+
+Extends watchdog functional-severity coverage to the mount-access exec
+trigger class: autofs runs a `program:` map (or an executable map file) AS
+ROOT to generate mount entries when the autofs mountpoint is accessed. A
+master-map line is `<mountpoint> <map> [options]`; a planted `program:`
+map under a writable root, a relative program map, or a writable map file
+is mount-access-triggered root code execution (T1546), fired on demand by
+anyone who can stat/cd the mountpoint.
+
+- `packaging/test/L2-autofs-watchdog.bats` — 12 tests: ok (no_autofs /
+  baseline_initial / autofs_intact), alert (program: map under a writable
+  root, relative program: map, absolute map file under a writable root),
+  warn (benign entry added → autofs_changed), false-positive guards
+  (/usr/sbin program map not flagged; a network `yp:` map not flagged; a
+  commented-out writable program: map not flagged), enforce exit, and the
+  SDD-061 D-6 `module_lib_missing` fail-loud path. Same logger-shadow +
+  `SELFDEF_AUTOFS_*` sandbox.
+
 ### Added — L2 functional severity coverage for openssl-conf-watchdog (2026-05-26)
 
 Extends watchdog functional-severity coverage to the libcrypto-wide
