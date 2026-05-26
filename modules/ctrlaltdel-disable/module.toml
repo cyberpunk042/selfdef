@@ -1,0 +1,42 @@
+name        = "ctrlaltdel-disable"
+version     = "0.1.0"
+summary     = "Mask ctrl-alt-del.target so a console-present attacker cannot trigger an immediate reboot via Ctrl+Alt+Del. Pairs with kernel-sysrq-restrict for full physical-console DoS lockdown"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ctrlaltdel-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — mask ctrl-alt-del.target (the systemd
+#                   reboot trigger). Console C-A-D becomes a
+#                   no-op.
+# `burst-guard`    — leave the target unmasked BUT set
+#                   CtrlAltDelBurstAction=none in login.conf
+#                   drop-in (systemd 248+). Reboot still works
+#                   via 1 press but the 7-presses-in-2s
+#                   emergency immediate-reboot is disabled.
+default = "mask"
+available = ["mask", "burst-guard"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ctrlaltdel-disable.toml",
+    "/etc/systemd/logind.conf.d/50-selfdef-cad.conf",
+]
