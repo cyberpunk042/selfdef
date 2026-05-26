@@ -1,0 +1,41 @@
+name        = "mta-loopback-detect"
+version     = "0.1.0"
+summary     = "Detection: verify any listening SMTP (port 25/465/587) binds ONLY loopback, not 0.0.0.0/::. A mail transfer agent (postfix/exim/sendmail) reachable from the network is an open-relay + spam-cannon + CVE attack surface; most hosts only need local mail (cron output, logwatch) on 127.0.0.1"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["mta-loopback-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "ss" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if any SMTP port binds a non-
+#                     loopback address
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/mta-loopback-detect.toml",
+    "/usr/local/libexec/selfdef/mta-loopback-detect.sh",
+    "/etc/systemd/system/selfdef-mta-loopback.service",
+    "/etc/systemd/system/selfdef-mta-loopback.timer",
+]

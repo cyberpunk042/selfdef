@@ -1,0 +1,18 @@
+# selfdef mta-loopback-detect — boot+5min + every 6h.
+# An MTA can be reconfigured to expose port 25 any time
+# (operator edit, package reconfigure); 6h bounds detection
+# latency. Boot catch confirms the bind after every restart.
+
+[Unit]
+Description=selfdef SMTP loopback-bind verification timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/mta-loopback-detect/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-mta-loopback.service
+
+[Install]
+WantedBy=timers.target

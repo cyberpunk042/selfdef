@@ -1,0 +1,17 @@
+# selfdef mta-loopback-detect — service unit.
+
+[Unit]
+Description=selfdef SMTP loopback-bind verification
+Documentation=https://github.com/cyberpunk042/selfdef modules/mta-loopback-detect/README.md
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/mta-loopback-detect.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log
+Nice=10
+TimeoutStartSec=1m
