@@ -1,0 +1,18 @@
+# selfdef coredump-pattern-watchdog — boot+5min + every 2h.
+# core_pattern is a runtime sysctl an attacker can flip any
+# time (no reboot needed); a 2h cadence bounds detection.
+# Boot catch confirms it came up un-hijacked.
+
+[Unit]
+Description=selfdef kernel.core_pattern hijack check timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/coredump-pattern-watchdog/README.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-coredump-pattern.service
+
+[Install]
+WantedBy=timers.target
