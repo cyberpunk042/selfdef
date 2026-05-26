@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 4 more modules push 85→89 (2026-05-22, batch 22)
+
+Four further modules: two new delta-detection surfaces, the rootkit
+hidden-process detector, and the foundational host firewall. Module-
+catalog parser 16/16; L1 module-contracts coherent at 89.
+
+- `dns-resolver-watchdog` — daily+boot delta of resolver config
+  (resolv.conf nameservers/search + systemd-resolved upstreams behind
+  the stub + /etc/hosts override count); nameserver change = alert
+  (DNS-hijack signature). MITRE T1584.002/T1565.001/T1557/T1071.004.
+- `file-capabilities-watchdog` — daily+boot delta of getcap -r;
+  covers the suid-sgid blind spot (caps live in security.capability
+  xattr, not mode bits); dangerous-cap (setuid/dac_override/sys_admin
+  /sys_ptrace/sys_module) added = alert. MITRE T1548/T1098/T1546/
+  T1574. Matched sibling to suid-sgid-watchdog.
+- `hidden-process-watchdog` — readdir(/proc) vs direct /proc/<pid>
+  stat asymmetry to surface rootkit-hidden processes; pid_max-aware,
+  capped 200k, Nice=19; every 4h. MITRE T1014/T1564/T1055/T1562.006.
+  Pairs with kernel-module-watchdog (both halves of an LKM rootkit).
+- `nftables-baseline` — default-deny inet host firewall (baseline/web/
+  locked profiles); 13th refuse-to-brick (4-layer anti-lockout: SSH
+  always allowed, nft -c parse-check, SSH-accept verify, ruleset
+  backup). MITRE T1190/T1133/T1046/T1048/T1571.
+
+**Delta-detection family now 7** (account/cron/setuid/file-caps/
+listeners/kernel-modules/dns-resolver) + 2 standalone rootkit/mount
+detectors (hidden-process, mount-options). **Detection ladder 18
+cadences.** **Refuse-to-brick gates 13.** **Foundational firewall**
+landed (nftables-baseline) — the long-standing gap. Module total
+after this batch: 89 (operator target 100+; remaining gap ~11).
+
 ### Added — module-ecosystem batch: 3 more modules push 82→85 (2026-05-22, batch 21)
 
 Three further modules deepening SMTP-surface, SSH-crypto, and mount-
