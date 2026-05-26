@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for sudo-conf-watchdog (2026-05-26)
+
+Extends watchdog functional-severity coverage to the setuid-root sudo
+plugin-load surface. `/etc/sudo.conf` names the policy / I/O-logging
+plugins (.so) that sudo (SETUID-ROOT) loads on every invocation via
+`Plugin <symbol> <path>`, and `Path plugin_dir <dir>` sets where relative
+plugin names resolve — so a Plugin .so under a writable root, a
+relative-with-slash plugin path, or a writable plugin_dir loads attacker
+code into setuid-root sudo (T1574 / privilege escalation). Distinct
+keyword-prefixed grammar (case-insensitive `Plugin`/`Path`).
+
+- `packaging/test/L2-sudo-conf-watchdog.bats` — 11 tests: ok (no_sudo_conf
+  / baseline_initial / sudo_conf_intact), alert (Plugin .so under a
+  writable root, relative-with-slash plugin path, plugin_dir under a
+  writable root), warn (benign directive added → sudo_conf_changed),
+  false-positive guards (a relative plugin NAME without a slash resolves
+  via plugin_dir and is not flagged; a commented-out writable Plugin line
+  is not flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_SUDOCONF_*` sandbox.
+
 ### Added — L2 guard locking the SDD-061 D-6 dedup invariant (2026-05-26)
 
 Capstone for the D-6 migration: a guard that fails if any watchdog scan
