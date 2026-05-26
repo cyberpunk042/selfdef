@@ -1,0 +1,55 @@
+tests:
+  - name: alert-tier watchdog finding over journald fires
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"alert","event":"dhcpd_exec_suspicious","profile":"report","added":1,"removed":0,"suspicious":"execute(/tmp/x)"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+          MESSAGE: '{"tag":"selfdef-dhcpd-exec","severity":"alert","event":"dhcpd_exec_suspicious"}'
+    expected_findings: 1
+
+  - name: warn-tier watchdog finding does NOT page
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"warn","event":"dhcpd_exec_changed","profile":"report","added":1,"removed":0}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0
+
+  - name: ok-tier watchdog tick does NOT page
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"ok","event":"dhcpd_exec_intact","profile":"report"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0
+
+  - name: detail plain-text line does NOT page
+    events:
+      - source: journald
+        severity_id: 1
+        message: 'ADDED on-commit execute /tmp/x'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec-detail"
+    expected_findings: 0
+
+  - name: alert body from a non-selfdef identifier does NOT page
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"some-other-tool","severity":"alert","event":"x"}'
+        raw:
+          SYSLOG_IDENTIFIER: "some-other-tool"
+    expected_findings: 0
+
+  - name: alert-tier selfdef body but non-journald source does NOT page
+    events:
+      - source: tetragon
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"alert","event":"x"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0

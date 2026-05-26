@@ -6,6 +6,40 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — route watchdog alert-tier findings through the notifier (SDD-062) (2026-05-26)
+
+Second slice of the "wire modules into stack" direction. The ~40
+detection-watchdog modules each emit a structured finding via
+`logger -t selfdef-<tag>` whose JSON body carries
+`"severity":"ok|warn|alert"`, but they do not set the syslog PRIORITY — so
+the journald collector mapped every one to Informational/generic and no
+Sigma rule matched the `selfdef-*` identifiers. An alert-tier finding
+(planted execute(), writable-rooted LOLBin, injection-pattern hit,
+world-writable/non-root config) reached journald but never became a
+Detection Finding and never fired the responder's notifier chain. This
+routes that tier through the engine with ONE tag-prefix rule (no per-module
+wiring — same single-source philosophy as SDD-061). SDD-first + test-first.
+
+- `docs/sdd/062-watchdog-severity-routing.md` — spec (D-1 one tag-prefix
+  rule body-matched on `"severity":"alert"`; D-2 test-first; D-3 warn/ok +
+  `-detail` lines deliberately NOT paged, mirroring the agent-guard
+  audit-mode precedent).
+- `rules/sigma/execution/selfdef_watchdog_alert.yml` — promotes any
+  `selfdef-*` journald emission carrying `"severity":"alert"` to a
+  high-severity Detection Finding (ANDed: `source: journald` +
+  `raw.SYSLOG_IDENTIFIER|startswith: "selfdef-"` +
+  `message|contains: '"severity":"alert"'`). Tags attack.t1546 / t1059.
+- `rules/sigma/execution/selfdef_watchdog_alert.tests.yaml` — 6 cases run by
+  the correlator's `every_rule_with_tests_passes` harness: alert fires (1);
+  warn / ok / `-detail` plain-text / non-`selfdef-` identifier / non-journald
+  source each do NOT page (0). Observed RED first (warn/ok/detail over-matched
+  before the severity clause) → GREEN after.
+
+rule-tests 90 cases across 21 rules green. (Pre-existing, unrelated:
+`selfdef-daemon` `auditd_to_sqlite_pipeline` fails on the auditd-collector
+class_uid==0 "unknown record" assertion — reproduces without this change;
+not in scope of this slice.)
+
 ### Added — module-lib v3: shared watchdog scan helpers (SDD-061) (2026-05-26)
 
 First slice of the operator-chosen "wire modules into stack" direction.

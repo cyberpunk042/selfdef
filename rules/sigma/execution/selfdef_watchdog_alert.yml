@@ -1,0 +1,51 @@
+title: selfdef watchdog alert-tier finding
+id: 7f2c9a1d-6e4b-4a82-9c3d-22ee55aa77bb
+status: experimental
+description: |
+  Promotes any selfdef detection-watchdog emission carrying
+  `"severity":"alert"` to a Detection Finding so the responder's notifier
+  chain fires.
+
+  The ~40 detection-watchdog modules each emit a structured JSON finding
+  via `logger -t selfdef-<tag>` whose body carries
+  `"severity":"ok|warn|alert"`. They do not set the syslog PRIORITY, so the
+  journald collector maps every one of them to Informational and classifies
+  them generically — an alert-tier finding (planted execute(), a
+  writable-rooted LOLBin, an injection-pattern hit, a world-writable or
+  non-root config) reached journald but never became a Finding. This single
+  tag-prefix rule routes that alert tier through the engine, with no
+  per-module wiring (one rule, the way SDD-061 made the scan idioms one
+  library helper).
+
+  The warn / ok tiers and the `-detail` plain-text companion lines (ADDED /
+  REMOVED ...) are deliberately NOT paged — local-triage signal, mirroring
+  the agent-guard audit-mode precedent.
+
+  Design context: docs/sdd/062-watchdog-severity-routing.md.
+references:
+  - docs/sdd/062-watchdog-severity-routing.md
+  - docs/sdd/061-shared-watchdog-scan-helpers.md
+author: selfdef
+date: 2026-05-26
+tags:
+  - attack.execution
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1546
+  - attack.t1059
+logsource:
+  service: journald
+detection:
+  watchdog_alert:
+    source: journald
+    raw.SYSLOG_IDENTIFIER|startswith: "selfdef-"
+    message|contains: '"severity":"alert"'
+  condition: watchdog_alert
+level: high
+falsepositives:
+  - An operator deliberately staging a test payload under a writable root
+    while validating a watchdog during bring-up. Confirm against the
+    module's baseline before escalating.
+  - A site-local config legitimately invoking a program under /usr/local;
+    these are not flagged by the watchdogs, so an alert here is a real
+    deviation worth triage.
