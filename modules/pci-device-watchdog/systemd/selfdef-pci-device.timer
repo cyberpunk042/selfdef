@@ -1,0 +1,18 @@
+# selfdef pci-device-watchdog — boot+7min + daily 06:45.
+# The boot catch is primary: a slotted implant appears after
+# the reboot it requires (most PCIe is not hot-plug). Daily
+# catches Thunderbolt/USB4 hot-plug PCIe-tunnel devices.
+
+[Unit]
+Description=selfdef PCI device-inventory delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/pci-device-watchdog/README.md
+
+[Timer]
+OnBootSec=7min
+OnCalendar=*-*-* 06:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-pci-device.service
+
+[Install]
+WantedBy=timers.target

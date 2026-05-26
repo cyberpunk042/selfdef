@@ -1,0 +1,40 @@
+name        = "pci-device-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the PCI/PCIe device inventory (/sys/bus/pci) vs a learned baseline. A NEW PCI device on a host whose hardware is static is an evil-maid hardware implant, a hot-plugged malicious PCIe/Thunderbolt card (DMA attack), or an unauthorized passthrough device (T1200 Hardware Additions)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["pci-device-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any PCI device added/removed
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/pci-device-watchdog.toml",
+    "/usr/local/libexec/selfdef/pci-device-watchdog.sh",
+    "/etc/systemd/system/selfdef-pci-device.service",
+    "/etc/systemd/system/selfdef-pci-device.timer",
+    "/var/lib/selfdef/pci-device-baseline.tsv",
+]
