@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-061 D-6: migrate second watchdog batch (19 modules) onto the shared helpers (2026-05-26)
+
+Continues the D-6 migration. These 19 modules each carried an inline
+PATTERNS array byte-identical to the canonical `selfdef_injection_patterns`
+set, so replacing it with `mapfile -t PATTERNS < <(selfdef_injection_patterns)`
+is provably behavior-preserving (identical pattern set, not merely a
+superset). The writable regex is rewritten to `selfdef_is_writable_path`
+(byte-identical helper); two modules that wrapped it in a local function
+(`is_writable` / `is_writable_path`) now delegate to the shared helper.
+
+Same fail-loud policy as the first batch (source the co-shipped lib; emit
+`module_lib_missing` / `module_lib_outdated` alert + exit non-zero if the
+library is absent or pre-v3).
+
+Modules: bash-completion, ca-certificates-hooks, csh-config,
+dhclient-hooks, dhcpcd-hooks, display-manager-hooks, fail2ban-action,
+hosts-allow, incron, initramfs-hooks, kernel-install-hooks,
+needrestart-hooks, openvpn-config, pm-utils-hooks, postfix-exec,
+resolvconf-hooks, sshrc, systemd-power-hooks, wireguard-config.
+
+Verification: every migrated script is `bash -n` + shellcheck clean; an
+end-to-end smoke run of all 19 (lib present) exits 0 and emits a finding,
+and the fail-loud path (lib absent) emits `module_lib_missing` + exits
+non-zero; L1 188; the four prior L2 suites still 11/11.
+
 ### Changed — SDD-061 D-6: migrate first watchdog batch onto the shared helpers (2026-05-26)
 
 Begins the SDD-061 D-6 migration — making the watchdog scan scripts
