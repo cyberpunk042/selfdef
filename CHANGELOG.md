@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 74: continuation 156→157 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the acpid
+hardware-event exec surface (a separate daemon from systemd-logind);
+L1 module-contracts coherent at 157, cargo modules::tests 16/16.
+
+- `acpi-hooks-watchdog` (157) — boot+daily delta of the acpid
+  event-binding + action-script surface (/etc/acpi/events/* bindings,
+  /etc/acpi/actions/* scripts, top-level /etc/acpi/*.sh handlers) +
+  ownership + suspicious-pattern scan. acpid runs the bound action AS
+  ROOT on each ACPI hardware event (power button, lid, AC adapter,
+  thermal), so a dropped action script or a new event binding pointing
+  at attacker code self-triggers on routine hardware activity without
+  operator action (T1546). acpid is a SEPARATE daemon from
+  systemd-logind, so distinct from systemd-power-hooks-watchdog (systemd
+  system-sleep/system-shutdown). Includes an acpid-specific pattern that
+  flags an `action=` binding invoking a payload from a writable location
+  (/tmp, /var/tmp, /dev/shm, /home) — the generic command-position
+  tmp-exec rule misses it because the path follows `=`. A script under
+  /tmp /home /dev/shm, world-writable, non-root, or an injection pattern
+  is alert; add/change/remove is warn. No-ops cleanly when acpid is not
+  installed. Cadence boot+55min / 10:40.
+
 ### Added — module-ecosystem batch 73: continuation 155→156 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the resolvconf

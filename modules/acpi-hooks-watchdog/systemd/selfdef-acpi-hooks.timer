@@ -1,0 +1,19 @@
+# selfdef acpi-hooks-watchdog — boot+55min + daily 10:40.
+# Extends the staggered ladder after resolvconf-hooks (10:35). A
+# dropped acpid action/binding self-triggers on the next ACPI event
+# (power button, lid, AC plug), so the daily catch bounds dwell
+# time; the boot catch confirms the hook set after a restart.
+
+[Unit]
+Description=selfdef acpid event/action hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/acpi-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=55min
+OnCalendar=*-*-* 10:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-acpi-hooks.service
+
+[Install]
+WantedBy=timers.target

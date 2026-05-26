@@ -1,0 +1,41 @@
+name        = "acpi-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the acpid event-binding + action-script surface (/etc/acpi/events/* bindings, /etc/acpi/actions/* scripts, and the top-level /etc/acpi/*.sh handlers handler.sh/powerbtn.sh/lid.sh) vs a learned baseline + ownership + suspicious-pattern scan. acpid runs the bound action AS ROOT on each ACPI hardware event (power button, lid open/close, AC adapter plug/unplug, thermal), so a dropped action script or a new event binding pointing at attacker code self-triggers on routine hardware activity without operator action. A rogue script/binding is root-exec-on-hardware-event persistence (T1546). acpid is a SEPARATE daemon from systemd-logind, so this is distinct from systemd-power-hooks-watchdog (systemd system-sleep/system-shutdown). A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when acpid is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["acpi-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any acpi-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/acpi-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/acpi-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-acpi-hooks.service",
+    "/etc/systemd/system/selfdef-acpi-hooks.timer",
+    "/var/lib/selfdef/acpi-hooks-baseline.tsv",
+]
