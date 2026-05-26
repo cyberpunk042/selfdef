@@ -1,0 +1,43 @@
+name        = "selinux-baseline"
+version     = "0.1.0"
+summary     = "SELinux MAC posture baseline for RHEL/Fedora/Rocky/Alma — verify + set enforcing/permissive mode via /etc/selinux/config + setenforce. RHEL-side parallel of apparmor-baseline (Debian/Ubuntu). Refuse-to-brick gate on the disabled→enforcing transition (needs autorelabel + reboot)"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = ["apparmor-baseline"]
+provides    = ["selinux-baseline", "mandatory-access-control"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "getenforce" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `audit` (default) — REPORT current SELinux mode + policy +
+#                    recent denial count. No changes. Safe on
+#                    any host.
+# `permissive`      — set SELINUX=permissive (logs would-be
+#                    denials without blocking). Live setenforce 0
+#                    + persist in /etc/selinux/config.
+# `enforcing`       — set SELINUX=enforcing. Live setenforce 1
+#                    ONLY if currently permissive/enforcing.
+#                    disabled→enforcing requires acknowledge_
+#                    relabel=true (autorelabel + reboot).
+default = "audit"
+available = ["audit", "permissive", "enforcing"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/selinux-baseline.toml",
+]
