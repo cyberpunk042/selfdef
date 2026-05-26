@@ -2,16 +2,19 @@
 # selfdef ld-preload-watchdog — surface LD_PRELOAD userland-
 # rootkit hooks.
 #
-# Checks three injection surfaces:
+# Checks four injection surfaces:
 #   1. /etc/ld.so.preload — the system-wide preload file.
 #      ANY entry is suspicious on most hosts (it's empty/absent
 #      by default; legit uses are rare — e.g. some HPC, snoopy).
-#   2. Global LD_PRELOAD / LD_AUDIT in env files:
+#   2. Global LD_PRELOAD / LD_AUDIT in shell env files:
 #      /etc/environment, /etc/profile, /etc/profile.d/*.sh,
 #      /etc/bash.bashrc, root's ~/.bashrc ~/.bash_profile
 #      ~/.profile. (LD_AUDIT is the rtld-audit sibling of
 #      LD_PRELOAD — same .so-into-every-program injection.)
-#   3. Preload libs residing in world-writable / tmp paths
+#   3. pam_env injection: /etc/security/pam_env.conf
+#      (LD_PRELOAD DEFAULT=/...) + /etc/environment.d/*.conf,
+#      applied at login by pam_env (distinct syntax/vector).
+#   4. Preload libs residing in world-writable / tmp paths
 #      (a preload lib in /tmp or /dev/shm is malware-grade).
 #
 # Severity:
@@ -96,6 +99,32 @@ for f in "${ENV_FILES[@]}"; do
             fi
         done
     done < <(grep -E '(^|[^A-Z_])LD_AUDIT=' "$f" 2>/dev/null)
+done
+
+# 3. pam_env injection: /etc/security/pam_env.conf uses the syntax
+#    `LD_PRELOAD DEFAULT=/path` / `LD_PRELOAD OVERRIDE=/path`, and
+#    /etc/environment.d/*.conf uses `LD_PRELOAD=/path`. pam_env
+#    applies these at login — a separate vector from the shell-env
+#    files above, missed by a plain `LD_PRELOAD=` grep.
+PAMENV_FILES=(/etc/security/pam_env.conf)
+for f in /etc/environment.d/*.conf; do [[ -f "$f" ]] && PAMENV_FILES+=("$f"); done
+for f in "${PAMENV_FILES[@]}"; do
+    [[ -r "$f" ]] || continue
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        case "$line" in *LD_PRELOAD*|*LD_AUDIT*) ;; *) continue ;; esac
+        # Pull the path after DEFAULT=/OVERRIDE=/= (pam_env or env.d).
+        val=$(printf '%s' "$line" | sed -E 's/.*(DEFAULT=|OVERRIDE=|=)//; s/[";].*//' | tr ':' ' ')
+        read -r -a _plibs <<< "$val"
+        for lib in "${_plibs[@]}"; do
+            [[ -z "$lib" || "$lib" == LD_PRELOAD || "$lib" == LD_AUDIT ]] && continue
+            if is_suspicious_path "$lib"; then
+                note 1 "${f}:pam_env:${lib}:SUSPICIOUS"
+            else
+                note 0 "${f}:pam_env:${lib}"
+            fi
+        done
+    done < <(grep -E 'LD_PRELOAD|LD_AUDIT' "$f" 2>/dev/null)
 done
 
 severity="ok"; event="no_ld_preload"

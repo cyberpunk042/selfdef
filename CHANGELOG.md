@@ -6,6 +6,17 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — ld-preload-watchdog: add pam_env injection surface (2026-05-26)
+
+- `ld-preload-watchdog` now also scans `/etc/security/pam_env.conf`
+  (syntax `LD_PRELOAD DEFAULT=/path` / `OVERRIDE=`) and
+  `/etc/environment.d/*.conf` for `LD_PRELOAD`/`LD_AUDIT` injection that
+  pam_env applies at login — a distinct vector from the shell env files,
+  missed by a plain `LD_PRELOAD=` grep. Same trusted-path alert logic.
+  The module now covers four injection surfaces (ld.so.preload, shell
+  env files, pam_env/environment.d, and the tmp/world-writable lib
+  location). T1574.006.
+
 ### Added — module-ecosystem batch 46: continuation 128→129 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the sudoers Defaults
