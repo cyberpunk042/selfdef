@@ -1,0 +1,18 @@
+# selfdef mount-options-watchdog — boot+5min + daily 06:05.
+# Boot catch confirms mounts came up with the right flags
+# (an fstab edit takes effect at boot); daily 06:05 extends
+# the staggered ladder after kernel-modules (05:55).
+
+[Unit]
+Description=selfdef mount-options verification timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/mount-options-watchdog/README.md
+
+[Timer]
+OnBootSec=5min
+OnCalendar=*-*-* 06:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-mount-options.service
+
+[Install]
+WantedBy=timers.target

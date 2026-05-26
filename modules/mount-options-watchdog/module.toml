@@ -1,0 +1,40 @@
+name        = "mount-options-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot verification that security-relevant mount points carry the expected nosuid/nodev/noexec flags (/tmp /var/tmp /dev/shm /home /var/log /boot). Detects drift — a remount that dropped a hardening flag (attacker or careless fstab edit). Complements tmpfs-baseline (sets /tmp+/var/tmp) with broad drift detection"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["mount-options-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "findmnt" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if any expected flag is missing
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/mount-options-watchdog.toml",
+    "/usr/local/libexec/selfdef/mount-options-watchdog.sh",
+    "/etc/systemd/system/selfdef-mount-options.service",
+    "/etc/systemd/system/selfdef-mount-options.timer",
+]
