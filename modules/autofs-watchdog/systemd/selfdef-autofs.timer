@@ -1,0 +1,19 @@
+# selfdef autofs-watchdog — boot+85min + daily 13:45.
+# Extends the staggered ladder after snmpd-exec (13:35). A planted
+# program map fires the next time the autofs mountpoint is accessed
+# (triggerable on demand by stat/cd), so the daily catch bounds
+# dwell time; the boot catch confirms the master map after a restart.
+
+[Unit]
+Description=selfdef autofs program-map delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/autofs-watchdog/README.md
+
+[Timer]
+OnBootSec=85min
+OnCalendar=*-*-* 13:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-autofs.service
+
+[Install]
+WantedBy=timers.target

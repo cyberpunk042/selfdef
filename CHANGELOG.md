@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 104: continuation 186→187 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the mount-access
+exec trigger class — completing the trigger-driven root-exec taxonomy
+(time / file-event / query / mail / hardware / connection / login /
+network / power / boot / **mount-access**); L1 module-contracts coherent
+at 187, cargo modules::tests 16/16.
+
+- `autofs-watchdog` (187) — boot+daily delta of the autofs master maps
+  (/etc/auto.master, /etc/auto.master.d/*.autofs) + ownership +
+  program-map scan. autofs runs a `program:` map (or any executable map
+  file) AS ROOT to generate mount entries when the mountpoint is
+  accessed, so a planted `program:/tmp/x` master entry — or a writable
+  executable map file — is mount-access-triggered root code execution
+  (T1546), fired on demand by anyone who can stat/cd the mountpoint.
+  Flags a program:/map path under /tmp /var/tmp /dev/shm /home, an
+  executable map file that is itself world-writable/non-root, or a
+  world-writable/non-root master map; any entry add/change/remove is
+  warn. Legit program:/etc/auto.net and file maps not flagged. Distinct
+  from cron/incron/at, snmpd/mail, and fstab/mount-options watchdogs.
+  No-ops cleanly when autofs is not configured. Cadence boot+85min / 13:45.
+
 ### Added — module-ecosystem batch 103: continuation 185→186 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the
