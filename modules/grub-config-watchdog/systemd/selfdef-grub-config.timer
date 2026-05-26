@@ -1,0 +1,19 @@
+# selfdef grub-config-watchdog — boot+19min + daily 07:40.
+# Extends the staggered ladder after access-conf (07:35). Boot
+# catch confirms the GRUB config source after a restart (a
+# malicious GRUB_CMDLINE / grub.d edit takes effect on the next
+# update-grub + reboot).
+
+[Unit]
+Description=selfdef GRUB config source delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/grub-config-watchdog/README.md
+
+[Timer]
+OnBootSec=19min
+OnCalendar=*-*-* 07:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-grub-config.service
+
+[Install]
+WantedBy=timers.target

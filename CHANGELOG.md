@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 38: continuation 120→121 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the GRUB
+config-source surface; L1 module-contracts coherent at 121, cargo
+modules::tests 16/16.
+
+- `grub-config-watchdog` (121) — boot+daily delta of the GRUB config
+  SOURCE (/etc/grub.d/* generator scripts + /etc/default/grub) vs a
+  learned baseline + ownership + suspicious-pattern scan +
+  GRUB_CMDLINE_LINUX extraction. /etc/grub.d scripts run AS ROOT at
+  grub-mkconfig/update-grub; a rogue/world-writable script executes at
+  config-regen and can inject a menuentry, a malicious initrd, or kernel
+  params. An init= param added to GRUB_CMDLINE_LINUX hijacks PID 1 on the
+  next boot — invisible to kernel-cmdline-watchdog (which reads the LIVE
+  /proc/cmdline) until that reboot. World-writable/non-root grub.d
+  script, an injection pattern, or an init= cmdline param = alert; any
+  other change = warn. No-ops cleanly if no grub config. Complements
+  kernel-cmdline-watchdog (live cmdline) + bootloader-password-detect
+  (the password). MITRE T1542.003/T1037/T1601. Cadence boot+19min /
+  07:40.
+
 ### Added — module-ecosystem batch 37: continuation 119→120 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the pam_access

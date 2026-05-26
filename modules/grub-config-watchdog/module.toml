@@ -1,0 +1,41 @@
+name        = "grub-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the GRUB config SOURCE (/etc/grub.d/* generator scripts + /etc/default/grub) vs a learned baseline + an ownership + suspicious-pattern scan + GRUB_CMDLINE_LINUX extraction. /etc/grub.d scripts run AS ROOT at grub-mkconfig/update-grub; a rogue script executes at config-regen and can inject a menuentry, a malicious initrd, or kernel params. An init= param added to GRUB_CMDLINE_LINUX hijacks PID 1 on the next boot (T1542.003/T1037). Complements kernel-cmdline-watchdog (reads the LIVE /proc/cmdline) by watching the SOURCE that defines the NEXT boot's cmdline, and bootloader-password-detect (the password)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["grub-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any grub-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/grub-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/grub-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-grub-config.service",
+    "/etc/systemd/system/selfdef-grub-config.timer",
+    "/var/lib/selfdef/grub-config-baseline.tsv",
+]
