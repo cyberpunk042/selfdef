@@ -42,6 +42,25 @@ else
     EXTRA_FILES=(/etc/krb5.conf)
 fi
 
+# SDD-061 D-6: consume the shared writable-location policy
+# (selfdef_is_writable_path) instead of a per-module copy. The library is
+# co-shipped by the selfdef package at /usr/share/selfdef/lib/module-lib.sh;
+# in a workspace selfdefctl exports SELFDEF_MODULE_LIB. A missing or pre-v3
+# library is a real misconfiguration that would otherwise leave the watchdog
+# scanning with a divergent policy, so we fail loud with a structured
+# finding rather than silently degrade.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-krb5-plugins -- '{"tag":"selfdef-krb5-plugins","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-krb5-plugins -- '{"tag":"selfdef-krb5-plugins","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 files=()
 for d in "${DIRS[@]}"; do
     [[ -d "$d" ]] || continue
@@ -88,7 +107,7 @@ for f in "${files[@]}"; do
         so="${so#"${so%%[![:space:]]*}"}"; so="${so%"${so##*[![:space:]]}"}"
         [[ -z "$so" ]] && continue
         printf 'module\t%s\t%s:%s\n' "$f" "$name" "$so" >> "$current"
-        if [[ "$so" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]; then
+        if selfdef_is_writable_path "$so"; then
             suspicious+=("${base}:module-writable($name:$so)")
         elif [[ "$so" == */* && "$so" != /* ]]; then
             suspicious+=("${base}:module-relative-path($name:$so)")

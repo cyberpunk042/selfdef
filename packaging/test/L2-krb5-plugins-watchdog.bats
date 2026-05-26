@@ -18,6 +18,8 @@
 # Run with: bats packaging/test/L2-krb5-plugins-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/krb5-plugins-watchdog/systemd/krb5-plugins-watchdog.sh"
+# SDD-061 D-6: scan script now sources the shared module-lib.
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -38,6 +40,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_KRB5_PROFILE="${PROFILE:-report}" \
     SELFDEF_KRB5_BASELINE="${BASELINE}" \
     SELFDEF_KRB5_DIRS="${EMPTY}" \
@@ -126,6 +129,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     ! cap | grep -q '"severity":"alert"'
     cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# SDD-061 D-6 — shared-lib dependency fails loud
+# ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf '[plugins]\n  clpreauth = { module = pkinit:/usr/lib/krb5/plugins/preauth/pkinit.so }\n' > "${CONF}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
 }
 
 # ============================================================

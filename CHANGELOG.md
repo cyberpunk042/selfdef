@@ -6,6 +6,38 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-061 D-6: migrate first watchdog batch onto the shared helpers (2026-05-26)
+
+Begins the SDD-061 D-6 migration — making the watchdog scan scripts
+actually CONSUME the shared module-lib helpers (the single source of truth
+for the injection-pattern set + writable-location policy) rather than each
+carrying a byte-identical inline copy. Until now the v3 library existed but
+nothing used it; this realises the "one-line edit propagates everywhere"
+benefit for the migrated modules.
+
+Per operator direction ("do not minimize the situation, do the work") the
+runtime dependency is handled fail-loud, NOT with a self-contained inline
+fallback: each migrated scan script sources
+`${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}` (co-shipped by
+the .deb) and, if the library is missing or older than v3, emits an
+alert-severity structured finding (`module_lib_missing` / `module_lib_outdated`)
+and exits non-zero — a divergent/absent policy is a real misconfiguration
+made observable rather than silently tolerated.
+
+First batch (the four modules with L2 functional-severity suites, so the
+migration is gated behavior-equivalent):
+- `dhcpd-exec-watchdog`, `snmpd-exec-watchdog` — replace the inline 14-entry
+  PATTERNS array with `mapfile -t PATTERNS < <(selfdef_injection_patterns)`
+  and the writable regex with `selfdef_is_writable_path`.
+- `krb5-plugins-watchdog`, `binfmt-watchdog` — pattern-free modules; source
+  the lib for `selfdef_is_writable_path` (replacing the inline writable regex).
+- The four `packaging/test/L2-*-watchdog.bats` suites now export
+  `SELFDEF_MODULE_LIB` and each adds a `module_lib_missing` fail-loud test.
+  All four green (11 tests each); L1 188; shellcheck clean.
+
+Remaining ~36 watchdog modules migrate in subsequent batches, functional
+tests re-run each time per the SDD-061 D-6 increment.
+
 ### Added — L2 functional severity coverage for binfmt-watchdog (2026-05-26)
 
 Fourth watchdog functional-severity suite, covering yet another detection

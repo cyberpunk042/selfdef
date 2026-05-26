@@ -14,6 +14,10 @@
 # Run with: bats packaging/test/L2-dhcpd-exec-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/dhcpd-exec-watchdog/systemd/dhcpd-exec-watchdog.sh"
+# SDD-061 D-6: the scan script now sources the shared module-lib; point it
+# at the source-tree copy (in production the .deb ships it under
+# /usr/share/selfdef/lib/).
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -38,6 +42,7 @@ teardown() { rm -rf "${TMP}"; }
 # scoped to the sandbox file only (PROFILE defaults to report).
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_DHCPD_PROFILE="${PROFILE:-report}" \
     SELFDEF_DHCPD_BASELINE="${BASELINE}" \
     SELFDEF_DHCPD_DIRS="${EMPTY}" \
@@ -120,6 +125,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     ! cap | grep -q '"severity":"alert"'
     cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# SDD-061 D-6 — shared-lib dependency fails loud
+# ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
 }
 
 # ============================================================

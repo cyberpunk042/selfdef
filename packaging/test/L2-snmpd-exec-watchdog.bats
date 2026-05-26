@@ -16,6 +16,8 @@
 # Run with: bats packaging/test/L2-snmpd-exec-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/snmpd-exec-watchdog/systemd/snmpd-exec-watchdog.sh"
+# SDD-061 D-6: scan script now sources the shared module-lib.
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -36,6 +38,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_SNMPD_PROFILE="${PROFILE:-report}" \
     SELFDEF_SNMPD_BASELINE="${BASELINE}" \
     SELFDEF_SNMPD_DIRS="${EMPTY}" \
@@ -117,6 +120,18 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     run_wd
     ! cap | grep -q '"severity":"alert"'
     cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# SDD-061 D-6 — shared-lib dependency fails loud
+# ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'exec uptimecheck /usr/bin/uptime\n' > "${CONF}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
 }
 
 # ============================================================

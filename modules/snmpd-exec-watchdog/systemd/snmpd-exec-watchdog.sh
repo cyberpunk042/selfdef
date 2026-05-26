@@ -45,13 +45,26 @@ fi
 
 DIRECTIVES='exec|extend|extend-sh|pass|pass_persist|sh'
 
-PATTERNS=(
-    'curl[^|;&]*\|[[:space:]]*(ba)?sh' 'wget[^|;&]*\|[[:space:]]*(ba)?sh'
-    '/dev/tcp/' '/dev/udp/' 'nc[[:space:]]+.*-e' 'ncat[[:space:]]+.*-e'
-    'bash[[:space:]]+-i' 'base64[[:space:]]+-d' 'base64[[:space:]]+--decode'
-    'eval[[:space:]]*[`$]' 'python[0-9]*[[:space:]]+-c' 'perl[[:space:]]+-e'
-    'mkfifo' 'setsid'
-)
+# SDD-061 D-6: consume the shared scan helpers (the single source of
+# truth for the injection-pattern set + the writable-location policy)
+# instead of a per-module copy. The library is co-shipped by the selfdef
+# package at /usr/share/selfdef/lib/module-lib.sh; in a workspace
+# selfdefctl exports SELFDEF_MODULE_LIB. A missing or pre-v3 library is a
+# real misconfiguration that would otherwise leave the watchdog scanning
+# with a divergent/absent pattern set, so we fail loud with a structured
+# finding rather than silently degrade.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-snmpd-exec -- '{"tag":"selfdef-snmpd-exec","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-snmpd-exec -- '{"tag":"selfdef-snmpd-exec","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+mapfile -t PATTERNS < <(selfdef_injection_patterns)
 
 files=()
 for d in "${DIRS[@]}"; do
@@ -91,7 +104,7 @@ for f in "${files[@]}"; do
         # writable location is suspicious (the program / a script arg)
         while read -r p; do
             [[ -z "$p" ]] && continue
-            if [[ "$p" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]; then
+            if selfdef_is_writable_path "$p"; then
                 suspicious+=("${base}:${directive}-writable($p)")
             fi
         done < <(printf '%s\n' "$rest" | grep -oE '/[^[:space:]]+')
