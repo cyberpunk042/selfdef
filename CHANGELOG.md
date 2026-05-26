@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 37: continuation 119→120 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the pam_access
+login-rule surface; **120-module milestone**; L1 module-contracts
+coherent at 120, cargo modules::tests 16/16.
+
+- `access-conf-watchdog` (120) — boot+daily delta of the pam_access
+  login-access-control rules (/etc/security/access.conf + access.d/*)
+  vs a learned baseline. When pam_access.so is in the PAM stack, these
+  rules decide who may log in from where; an attacker who adds a broad
+  permit (`+ : evil : ALL`) grants login access, or removing a deny rule
+  weakens lockdown (T1556/T1098). Records each permit/deny rule; any
+  change is warn; a NEWLY-ADDED permit-from-ALL rule is the backdoor
+  signature (alert) — pre-existing legit broad permits (e.g.
+  `+ : (wheel) : ALL`) are flagged once at baseline for vetting and do
+  not re-alert. No-ops cleanly if access.conf absent. Distinct from
+  pam-config-watchdog (the /etc/pam.d stack + module hashes) and
+  login-defs-baseline (UID ranges / password aging). Cadence boot+18min
+  / 07:35.
+
 ### Added — module-ecosystem batch 36: continuation 118→119 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds entry-level

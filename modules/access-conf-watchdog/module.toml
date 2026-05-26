@@ -1,0 +1,41 @@
+name        = "access-conf-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the pam_access login-access-control rules (/etc/security/access.conf + access.d/*) vs a learned baseline. When pam_access.so is in the PAM stack, these rules decide WHO may log in FROM WHERE. An attacker who adds a broad permit rule (`+ : evil : ALL`) grants themselves login access, or who removes a deny rule weakens lockdown (T1556 / T1098). Records each permit/deny rule; any change is warn; a broad permit-from-anywhere rule is the backdoor-access signature (alert). No-ops cleanly if access.conf is absent. Distinct from pam-config-watchdog (the /etc/pam.d stack) and login-defs-baseline (UID ranges / password aging)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["access-conf-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any access.conf change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/access-conf-watchdog.toml",
+    "/usr/local/libexec/selfdef/access-conf-watchdog.sh",
+    "/etc/systemd/system/selfdef-access-conf.service",
+    "/etc/systemd/system/selfdef-access-conf.timer",
+    "/var/lib/selfdef/access-conf-baseline.tsv",
+]

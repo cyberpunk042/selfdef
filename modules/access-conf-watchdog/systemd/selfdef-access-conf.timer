@@ -1,0 +1,18 @@
+# selfdef access-conf-watchdog — boot+18min + daily 07:35.
+# Extends the staggered ladder after hosts-file (07:30). Boot
+# catch confirms the login-access rules after a restart (a
+# permit rule takes effect on the next login).
+
+[Unit]
+Description=selfdef pam_access access.conf delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/access-conf-watchdog/README.md
+
+[Timer]
+OnBootSec=18min
+OnCalendar=*-*-* 07:35:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-access-conf.service
+
+[Install]
+WantedBy=timers.target
