@@ -1,0 +1,19 @@
+# selfdef skel-watchdog — boot+47min + daily 10:00.
+# Extends the staggered ladder after xsession (09:55). A planted
+# skel file only fires when a NEW account is created and that user
+# first logs in, so the daily catch is the right cadence; the boot
+# catch confirms the template set after a restart.
+
+[Unit]
+Description=selfdef /etc/skel new-account template delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/skel-watchdog/README.md
+
+[Timer]
+OnBootSec=47min
+OnCalendar=*-*-* 10:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-skel.service
+
+[Install]
+WantedBy=timers.target

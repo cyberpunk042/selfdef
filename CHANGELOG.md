@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 66: continuation 148→149 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+new-account template surface (the future-account complement to the
+login-time persistence set); L1 module-contracts coherent at 149,
+cargo modules::tests 16/16.
+
+- `skel-watchdog` (149) — boot+daily recursive delta of /etc/skel (the
+  skeleton dotfiles copied into every NEW user's home at account
+  creation: .bashrc, .bash_profile, .profile, .bash_login, .zshrc,
+  .config/autostart/*.desktop, …) + ownership + suspicious-pattern scan.
+  A planted/tampered skel file silently backdoors every future account —
+  the payload lies dormant until the next account is created, then fires
+  on that user's first login (T1546.004 shell-config / T1136 account-
+  creation). Distinct from shell-init-watchdog (existing root/global rc
+  that runs now) and xdg-autostart-watchdog (the live session's .desktop
+  autostart): this is the template for accounts that don't exist yet.
+  World-writable/non-root file or an injection pattern is alert;
+  add/change/remove is warn. No-ops cleanly when /etc/skel is
+  absent/empty. Cadence boot+47min / 10:00.
+
 ### Added — module-ecosystem batch 65: continuation 147→148 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the X11

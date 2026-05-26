@@ -1,0 +1,41 @@
+name        = "skel-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily recursive delta of /etc/skel (the skeleton dotfiles copied into every NEW user's home at account creation: .bashrc, .bash_profile, .profile, .bash_login, .zshrc, .config/autostart/*.desktop, …) vs a learned baseline + ownership + suspicious-pattern scan. A planted or tampered skel file silently backdoors every future account — the payload executes the first time any newly-created user logs in (T1546.004 / T1136). Distinct from shell-init-watchdog (existing root/global rc that runs now) and xdg-autostart-watchdog (the live session's .desktop autostart): this is the future-account template surface. World-writable/non-root file or an injection pattern is the signature. No-ops cleanly when /etc/skel is absent/empty"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["skel-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any skel change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/skel-watchdog.toml",
+    "/usr/local/libexec/selfdef/skel-watchdog.sh",
+    "/etc/systemd/system/selfdef-skel.service",
+    "/etc/systemd/system/selfdef-skel.timer",
+    "/var/lib/selfdef/skel-baseline.tsv",
+]
