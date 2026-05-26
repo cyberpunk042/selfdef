@@ -1,0 +1,41 @@
+name        = "xdg-autostart-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the XDG desktop autostart entries (/etc/xdg/autostart/*.desktop + root's ~/.config/autostart + /usr/local/share/... ) vs a learned baseline + ownership + Exec scan. A .desktop file with Exec= is launched on every graphical login by the desktop session; a dropped or tampered entry is GUI-login persistence (T1547.013). An Exec under /tmp /home /dev/shm, world-writable, a fetch-pipe-shell payload, or a world-writable/non-root .desktop is the signature. No-ops cleanly on headless hosts. Workstation coverage"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["xdg-autostart-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any autostart change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/xdg-autostart-watchdog.toml",
+    "/usr/local/libexec/selfdef/xdg-autostart-watchdog.sh",
+    "/etc/systemd/system/selfdef-xdg-autostart.service",
+    "/etc/systemd/system/selfdef-xdg-autostart.timer",
+    "/var/lib/selfdef/xdg-autostart-baseline.tsv",
+]

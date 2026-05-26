@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 49: continuation 131→132 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the graphical-login
+autostart surface (completes the login-time persistence trio with
+shell-init + motd-scripts); L1 module-contracts coherent at 132, cargo
+modules::tests 16/16.
+
+- `xdg-autostart-watchdog` (132) — boot+daily delta of the XDG desktop
+  autostart entries (/etc/xdg/autostart/*.desktop + root's
+  ~/.config/autostart + /usr/local/share/.../autostart) vs a learned
+  baseline + ownership + Exec scan. A .desktop with Exec= is launched on
+  every graphical login by the desktop session; a dropped/tampered entry
+  is GUI-login persistence (T1547.013). An Exec target under /tmp /home
+  /dev/shm, world-writable, or a relative-with-slash path; a fetch-pipe-
+  shell payload; or a world-writable/non-root .desktop is alert (a bare
+  PATH command and %-field-codes do NOT alert); add/change/remove is
+  warn. No-ops cleanly on headless hosts (workstation coverage). Cadence
+  boot+30min / 08:35.
+
 ### Added — module-ecosystem batch 48: continuation 130→131 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the SSH outbound
