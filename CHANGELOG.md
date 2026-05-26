@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 90: continuation 172→173 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the sudo
+plugin-load surface — code loaded into setuid-root sudo; L1
+module-contracts coherent at 173, cargo modules::tests 16/16.
+
+- `sudo-conf-watchdog` (173) — boot+daily delta of /etc/sudo.conf +
+  ownership + Plugin/Path scan. sudo (SETUID-ROOT) loads its policy/IO
+  plugins (.so) named in `Plugin` lines, resolving relative names from
+  `Path plugin_dir` — so a planted `Plugin policy /tmp/evil.so`, or a
+  `Path plugin_dir` pointing at a writable dir, loads attacker code into
+  setuid-root sudo on every sudo invocation (T1574 / T1548.003). Distinct
+  from the sudoers watchdogs (which cover /etc/sudoers rule content): this
+  is the plugin-load surface. A Plugin .so / plugin_dir under
+  /tmp /var/tmp /dev/shm /home, a relative-with-slash Plugin path, a
+  world-writable/non-root sudo.conf, or any added directive is alert/warn.
+  Standard sudoers.so (relative) + /usr/libexec/sudo plugin_dir not
+  flagged. No-ops cleanly when /etc/sudo.conf is absent (sudo uses
+  compiled-in defaults). Cadence boot+71min / 12:10.
+
 ### Added — module-ecosystem batch 89: continuation 171→172 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the X-server

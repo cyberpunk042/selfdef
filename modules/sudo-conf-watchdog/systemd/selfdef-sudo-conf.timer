@@ -1,0 +1,19 @@
+# selfdef sudo-conf-watchdog — boot+71min + daily 12:10.
+# Extends the staggered ladder after xorg-config (12:05). A planted
+# Plugin/plugin_dir takes effect on the next sudo invocation (which
+# happens constantly on an admin host), so the daily catch bounds
+# dwell time; the boot catch confirms the config after a restart.
+
+[Unit]
+Description=selfdef /etc/sudo.conf plugin-load delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sudo-conf-watchdog/README.md
+
+[Timer]
+OnBootSec=71min
+OnCalendar=*-*-* 12:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sudo-conf.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,41 @@
+name        = "sudo-conf-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of /etc/sudo.conf vs a learned baseline + ownership + Plugin/Path scan. sudo (which is SETUID-ROOT) loads its policy and I/O-logging plugins (.so) named in /etc/sudo.conf `Plugin` lines, resolving relative names from the dir set by `Path plugin_dir`. A planted `Plugin policy /tmp/evil.so` — or a `Path plugin_dir` pointing at a writable dir so a relative plugin name resolves there — loads attacker code into setuid-root sudo on EVERY sudo invocation (T1574 hijack execution flow / privilege escalation). Distinct from the sudoers watchdogs (which cover /etc/sudoers and /etc/sudoers.d rule content): this is the sudo plugin-load surface. A Plugin/plugin_dir path under /tmp /home /dev/shm /var/tmp or otherwise non-standard absolute, a world-writable/non-root /etc/sudo.conf, or any added Plugin line is the signature. No-ops cleanly when /etc/sudo.conf is absent (sudo uses built-in defaults)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sudo-conf-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sudo.conf change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sudo-conf-watchdog.toml",
+    "/usr/local/libexec/selfdef/sudo-conf-watchdog.sh",
+    "/etc/systemd/system/selfdef-sudo-conf.service",
+    "/etc/systemd/system/selfdef-sudo-conf.timer",
+    "/var/lib/selfdef/sudo-conf-baseline.tsv",
+]
