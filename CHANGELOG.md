@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 94: continuation 176→177 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+NetworkManager VPN plugin-descriptor surface — attacker .so loaded into
+the root NM process; L1 module-contracts coherent at 177, cargo
+modules::tests 16/16.
+
+- `nm-vpn-plugin-watchdog` (177) — boot+daily delta of the NetworkManager
+  VPN plugin descriptors (/etc/NetworkManager/VPN/*.name) + ownership +
+  plugin-path scan. NetworkManager (root) loads the [libnm] plugin= .so
+  and the program= service helper named in each .name descriptor — so a
+  planted .name with plugin=/tmp/evil.so loads attacker code into the root
+  NM process (T1574/T1543). Distinct from network-dispatcher-watchdog
+  (dispatcher.d scripts) and dhclient/dhcpcd hook watchdogs: this is the
+  NM VPN service-plugin-load surface. A plugin/program path under
+  /tmp /var/tmp /dev/shm /home or relative-with-slash, a
+  world-writable/non-root .name, or any added descriptor is alert/warn.
+  Standard /usr/lib plugin/program paths not flagged.
+  /usr/lib/NetworkManager/VPN (package-managed) not watched. No-ops
+  cleanly when absent. Cadence boot+75min / 12:30.
+
 ### Added — module-ecosystem batch 93: continuation 175→176 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the MIT Kerberos

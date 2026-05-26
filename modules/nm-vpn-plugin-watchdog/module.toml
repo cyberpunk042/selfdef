@@ -1,0 +1,41 @@
+name        = "nm-vpn-plugin-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the NetworkManager VPN plugin descriptors (/etc/NetworkManager/VPN/*.name) vs a learned baseline + ownership + plugin-path scan. NetworkManager (which runs AS ROOT) loads the service plugin shared object named in each .name file's [libnm] plugin= (and the older [VPN Connection] properties=) key when a VPN of that service type is used — so a planted .name with plugin=/tmp/evil.so loads attacker code into the root NetworkManager process (T1574 hijack execution flow). Distinct from network-dispatcher-watchdog (dispatcher.d event scripts) and the dhclient/dhcpcd hook watchdogs: this is the NM VPN service-plugin-load surface. A plugin path under /tmp /home /dev/shm /var/tmp or relative-with-slash, a world-writable/non-root .name, or any added descriptor is the signature. No-ops cleanly when no NM VPN descriptors are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["nm-vpn-plugin-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any NM VPN plugin change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nm-vpn-plugin-watchdog.toml",
+    "/usr/local/libexec/selfdef/nm-vpn-plugin-watchdog.sh",
+    "/etc/systemd/system/selfdef-nm-vpn-plugin.service",
+    "/etc/systemd/system/selfdef-nm-vpn-plugin.timer",
+    "/var/lib/selfdef/nm-vpn-plugin-baseline.tsv",
+]

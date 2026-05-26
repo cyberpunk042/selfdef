@@ -1,0 +1,20 @@
+# selfdef nm-vpn-plugin-watchdog — boot+75min + daily 12:30.
+# Extends the staggered ladder after krb5-plugins (12:25). A planted
+# VPN .name plugin takes effect the next time NetworkManager loads
+# its VPN plugins (NM restart / first VPN of that type), so the daily
+# catch bounds dwell time; the boot catch confirms the descriptor set
+# after a restart.
+
+[Unit]
+Description=selfdef NetworkManager VPN plugin-descriptor delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/nm-vpn-plugin-watchdog/README.md
+
+[Timer]
+OnBootSec=75min
+OnCalendar=*-*-* 12:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-nm-vpn-plugin.service
+
+[Install]
+WantedBy=timers.target
