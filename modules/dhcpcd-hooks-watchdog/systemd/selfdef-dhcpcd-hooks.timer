@@ -1,0 +1,20 @@
+# selfdef dhcpcd-hooks-watchdog — boot+53min + daily 10:30.
+# Extends the staggered ladder after dhclient-hooks (10:05) and the
+# DM hooks (10:25). A dropped dhcpcd hook self-triggers on the next
+# lease renewal (an automatic timer event), so the daily catch
+# bounds dwell time; the boot catch confirms the hook set after a
+# restart.
+
+[Unit]
+Description=selfdef dhcpcd hook-script delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dhcpcd-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=53min
+OnCalendar=*-*-* 10:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dhcpcd-hooks.service
+
+[Install]
+WantedBy=timers.target

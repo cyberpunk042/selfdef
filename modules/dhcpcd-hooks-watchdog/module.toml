@@ -1,0 +1,41 @@
+name        = "dhcpcd-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the dhcpcd hook surface (/lib/dhcpcd/dhcpcd-hooks, /usr/lib/dhcpcd/dhcpcd-hooks, /etc/dhcpcd/dhcpcd-hooks dirs, plus /etc/dhcpcd.enter-hook + /etc/dhcpcd.exit-hook) vs a learned baseline + ownership + suspicious-pattern scan. dhcpcd runs every hook AS ROOT on each lease event (CARRIER/BOUND/RENEW/REBIND/EXPIRE/NOCARRIER/...) — and RENEW fires automatically on a timer, so a dropped hook self-triggers without operator action. dhcpcd is the DEFAULT DHCP client on Alpine/Arch/Gentoo/Raspberry Pi OS, where the ISC dhclient-hooks-watchdog no-ops; this fills that gap. A rogue hook is root-exec-on-network-event persistence (T1546). Distinct from dhclient-hooks-watchdog (ISC isc-dhcp-client, different files/code path) and network-dispatcher-watchdog (NM/ifupdown/ppp/networkd). Symlinked dirs (/lib->/usr/lib) are de-duplicated. A hook under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when no dhcpcd hooks present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dhcpcd-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any dhcpcd-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/dhcpcd-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/dhcpcd-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-dhcpcd-hooks.service",
+    "/etc/systemd/system/selfdef-dhcpcd-hooks.timer",
+    "/var/lib/selfdef/dhcpcd-hooks-baseline.tsv",
+]

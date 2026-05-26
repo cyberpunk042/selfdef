@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 72: continuation 154→155 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the dhcpcd
+lease-event exec surface — the second major DHCP client, completing the
+DHCP-client hook coverage pair across distro families; L1
+module-contracts coherent at 155, cargo modules::tests 16/16.
+
+- `dhcpcd-hooks-watchdog` (155) — boot+daily delta of the dhcpcd hook
+  surface (/lib/dhcpcd/dhcpcd-hooks, /usr/lib/dhcpcd/dhcpcd-hooks,
+  /etc/dhcpcd/dhcpcd-hooks dirs + /etc/dhcpcd.enter-hook +
+  /etc/dhcpcd.exit-hook) + ownership + suspicious-pattern scan. dhcpcd
+  runs every hook AS ROOT on each lease event (CARRIER/BOUND/RENEW/
+  REBIND/EXPIRE/...), and RENEW fires automatically on a timer so a
+  dropped hook self-triggers without operator action (T1546). dhcpcd is
+  the DEFAULT DHCP client on Alpine/Arch/Gentoo/Raspberry Pi OS, where
+  the ISC dhclient-hooks-watchdog no-ops — this fills that gap. Distinct
+  from dhclient-hooks-watchdog (ISC isc-dhcp-client, different
+  files/code path) and network-dispatcher-watchdog (NM/ifupdown/ppp/
+  networkd). Symlinked dirs (/lib→/usr/lib) de-duplicated by resolved
+  real path. A hook under /tmp /home /dev/shm, world-writable, non-root,
+  or an injection pattern is alert; add/change/remove is warn. No-ops
+  cleanly when no dhcpcd hooks present. Cadence boot+53min / 10:30.
+
 ### Added — module-ecosystem batch 71: continuation 153→154 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the privileged
