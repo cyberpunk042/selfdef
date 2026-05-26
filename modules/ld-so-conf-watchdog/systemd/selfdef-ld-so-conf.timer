@@ -1,0 +1,17 @@
+# selfdef ld-so-conf-watchdog — boot+9min + daily 06:50.
+# Extends the staggered ladder after pci-device (06:45). Boot
+# catch confirms the linker search path after a restart.
+
+[Unit]
+Description=selfdef dynamic-linker search-path delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/ld-so-conf-watchdog/README.md
+
+[Timer]
+OnBootSec=9min
+OnCalendar=*-*-* 06:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-ld-so-conf.service
+
+[Install]
+WantedBy=timers.target
