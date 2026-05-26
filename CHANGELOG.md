@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for binfmt-watchdog (2026-05-26)
+
+Fourth watchdog functional-severity suite, covering yet another detection
+mechanism: COLON-DELIMITED FIELD extraction. A binfmt.d registration
+`:name:type:offset:magic:mask:interpreter:flags` tells the kernel to run
+`interpreter` whenever a matching file is executed (the C/F flags run it
+with the caller's creds / as an open fd), so a registration whose
+interpreter sits under a writable root or is a non-absolute name is a
+binfmt_misc code-exec primitive (T1546). Alert = writable/non-absolute
+interpreter OR world-writable/non-root .conf.
+
+- `packaging/test/L2-binfmt-watchdog.bats` — 10 tests: ok (no_binfmt /
+  baseline_initial / binfmt_intact), alert (interpreter under a writable
+  root, non-absolute interpreter), warn (benign registration added →
+  binfmt_changed), false-positive guards (/usr/bin interpreter not flagged;
+  commented-out writable registration not flagged), enforce-profile exit
+  codes. Same logger-shadow pattern; binfmt.d dir pointed at a tmp sandbox
+  via `SELFDEF_BINFMT_DIRS`; locks the `"severity":"alert"` token SDD-062
+  routes on.
+
+This rounds out functional-severity coverage across four distinct
+watchdog detection mechanisms: execute()-statement parse (dhcpd-exec),
+directive-token scan (snmpd-exec), .so module-path load (krb5-plugins),
+and colon-delimited field extraction (binfmt).
+
 ### Added — L2 functional severity coverage for krb5-plugins-watchdog (2026-05-26)
 
 Third watchdog functional-severity suite, covering a detection MECHANISM
