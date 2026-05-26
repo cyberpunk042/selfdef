@@ -1,0 +1,36 @@
+name        = "avahi-disable"
+version     = "0.1.0"
+summary     = "Mask avahi-daemon (mDNS / DNS-SD / zeroconf). Broadcasts hostname + service inventory on the LAN (reconnaissance gift to an attacker) and has a recurring CVE history (CVE-2021-3468 / CVE-2021-3502 / CVE-2023-1981 DoS chain). Most servers + IPS hosts never need zeroconf"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["avahi-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + mask avahi-daemon.service
+#                   + avahi-daemon.socket
+# `stop`           — stop + disable only
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/avahi-disable.toml",
+]
