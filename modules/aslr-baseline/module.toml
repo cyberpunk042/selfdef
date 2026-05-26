@@ -1,0 +1,39 @@
+name        = "aslr-baseline"
+version     = "0.1.0"
+summary     = "Guarantee kernel.randomize_va_space=2 (full ASLR — stack, heap, mmap, VDSO, brk all randomized). Foundational exploit mitigation; an attacker or careless operator setting it to 0 cripples every memory-corruption defense. Drift-resistant sysctl baseline. CIS 1.6.x"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["aslr-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sysctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `full` (default) — kernel.randomize_va_space=2 (full ASLR).
+#                   The only secure value; both other values
+#                   (0=off, 1=partial) are weaker. Single
+#                   profile because there's no meaningful
+#                   "stricter than full".
+default = "full"
+available = ["full"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/aslr-baseline.toml",
+    "/etc/sysctl.d/50-selfdef-aslr.conf",
+]
