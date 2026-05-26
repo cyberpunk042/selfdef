@@ -1,0 +1,5 @@
+profile = "baseline"
+# Extra inbound TCP ports to allow (SSH 22 is ALWAYS allowed
+# regardless). Comma-separated. Example: "2222,8443"
+allow_tcp = ""
+allow_udp = ""

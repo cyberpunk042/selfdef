@@ -1,0 +1,43 @@
+name        = "nftables-baseline"
+version     = "0.1.0"
+summary     = "Default-deny inet firewall via nftables — drop inbound by default, allow established/related + loopback + ICMP + operator-declared ports (SSH always included). Refuse-to-brick: never installs a ruleset that would drop the active SSH connection. The foundational host firewall layer"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["host-firewall", "nftables-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "nft" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — drop inbound; allow established/
+#                       related + loopback + ICMP/ICMPv6 +
+#                       SSH (22). Outbound allowed.
+# `web`                — baseline + allow 80/443 inbound.
+# `locked`             — baseline + outbound default-drop too
+#                       (allow only established/related + DNS
+#                       + NTP + HTTPS out). Requires
+#                       acknowledge_egress=true.
+default = "baseline"
+available = ["baseline", "web", "locked"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nftables-baseline.toml",
+    "/etc/nftables.d/selfdef-baseline.nft",
+    "/var/lib/selfdef/nftables-ruleset.bak",
+]

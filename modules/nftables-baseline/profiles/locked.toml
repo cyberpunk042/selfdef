@@ -1,0 +1,7 @@
+profile = "locked"
+allow_tcp = ""
+allow_udp = ""
+# locked drops OUTBOUND by default too — only established/
+# related + DNS(53) + NTP(123) + HTTPS(443) egress allowed.
+# This can break package managers, telemetry, monitoring.
+acknowledge_egress = false

@@ -1,0 +1,3 @@
+profile = "web"
+allow_tcp = "80,443"
+allow_udp = ""
