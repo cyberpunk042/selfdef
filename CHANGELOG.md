@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 100: continuation 182→183 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the kernel
+usermode-helper exec surface — classic local privesc; L1 module-contracts
+coherent at 183, cargo modules::tests 16/16. (Batch 100 — the
+detection-mining arc this session added 35 modules, 148→183.)
+
+- `kernel-usermodehelper-watchdog` (183) — boot+daily delta of the kernel
+  usermode-helper paths (kernel.modprobe, kernel.hotplug,
+  kernel.poweroff_cmd via /proc/sys/kernel + the /etc/sysctl.d/*.conf
+  lines that set them) + baseline. The kernel EXECUTES these paths AS
+  ROOT on triggers an unprivileged user can cause (kernel.modprobe on
+  module autoload — e.g. creating a socket of an unloaded protocol
+  family), so kernel.modprobe=/tmp/x is classic local privilege
+  escalation (T1574/T1548). Reads the live /proc value AND the sysctl
+  config that sets it. A helper path under /tmp /var/tmp /dev/shm /home,
+  a relative helper, or a non-empty kernel.hotplug (deprecated — should
+  be empty on modern udev systems) is alert; any change is warn. usrmerge
+  /usr/sbin paths not flagged. Distinct from coredump-pattern-watchdog
+  (kernel.core_pattern), modprobe-config-watchdog (modprobe.d), and
+  sysctl-hardening-watchdog. No-ops cleanly when /proc/sys/kernel is
+  unreadable and no sysctl config sets a helper. Cadence boot+81min / 13:10.
+
 ### Added — module-ecosystem batch 99: continuation 181→182 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the OpenSSL

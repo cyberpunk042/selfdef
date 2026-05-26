@@ -1,0 +1,20 @@
+# selfdef kernel-usermodehelper-watchdog — boot+81min + daily 13:10.
+# Extends the staggered ladder after openssl-conf (13:00). A planted
+# kernel.modprobe/hotplug path is exploitable the instant any
+# unprivileged module-autoload/hotplug trigger fires, so the daily
+# catch bounds dwell time; the boot catch confirms the helper paths
+# after a restart (sysctl.d is re-applied at boot).
+
+[Unit]
+Description=selfdef kernel usermode-helper path delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/kernel-usermodehelper-watchdog/README.md
+
+[Timer]
+OnBootSec=81min
+OnCalendar=*-*-* 13:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-kernel-usermodehelper.service
+
+[Install]
+WantedBy=timers.target

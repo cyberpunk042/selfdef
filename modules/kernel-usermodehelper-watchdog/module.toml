@@ -1,0 +1,41 @@
+name        = "kernel-usermodehelper-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the kernel usermode-helper paths (kernel.modprobe, kernel.hotplug, kernel.poweroff_cmd via /proc/sys/kernel + the /etc/sysctl.d/*.conf lines that set them) vs a learned baseline. The kernel EXECUTES these paths AS ROOT (full root, kernel context) on triggers an unprivileged user can often cause: kernel.modprobe runs on module autoload (e.g. creating a socket of an unloaded protocol family), kernel.hotplug runs on legacy hotplug events, kernel.poweroff_cmd on orderly poweroff. Setting kernel.modprobe=/tmp/x is a classic local privilege-escalation: trigger an autoload, the kernel runs your program as root (T1574 / T1548 abuse elevation). Distinct from coredump-pattern-watchdog (kernel.core_pattern pipe), modprobe-config-watchdog (modprobe.d), and sysctl-hardening-watchdog (network/hardening sysctls): this is the usermode-helper exec surface. A helper path under /tmp /home /dev/shm /var/tmp, a non-standard/relative helper, or a sysctl.d file setting one is the signature. No-ops cleanly when /proc/sys/kernel is unreadable"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-usermodehelper-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any usermode-helper change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-usermodehelper-watchdog.toml",
+    "/usr/local/libexec/selfdef/kernel-usermodehelper-watchdog.sh",
+    "/etc/systemd/system/selfdef-kernel-usermodehelper.service",
+    "/etc/systemd/system/selfdef-kernel-usermodehelper.timer",
+    "/var/lib/selfdef/kernel-usermodehelper-baseline.tsv",
+]
