@@ -1,0 +1,41 @@
+name        = "modules-load-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the kernel-module auto-load config (/etc/modules-load.d/*.conf + /etc/modules + /run/modules-load.d + /usr/local/lib/modules-load.d) vs a learned baseline + ownership scan. systemd-modules-load (and the legacy /etc/modules) force-load the listed modules AT BOOT; an attacker who adds a module name here makes a malicious out-of-tree or known-vulnerable module load every boot (T1547.006). Records each module-to-load + file hash; any add/remove/change is warn; a world-writable / non-root-owned config is alert. Complements kernel-module-watchdog (LOADED modules, /proc/modules) and modprobe-config-watchdog (install/alias directives) by watching the auto-load SOURCE"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["modules-load-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any modules-load change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/modules-load-watchdog.toml",
+    "/usr/local/libexec/selfdef/modules-load-watchdog.sh",
+    "/etc/systemd/system/selfdef-modules-load.service",
+    "/etc/systemd/system/selfdef-modules-load.timer",
+    "/var/lib/selfdef/modules-load-baseline.tsv",
+]

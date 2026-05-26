@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 45: continuation 127→128 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the kernel-module
+auto-load source surface; L1 module-contracts coherent at 128, cargo
+modules::tests 16/16.
+
+- `modules-load-watchdog` (128) — boot+daily delta of the kernel-module
+  auto-load config (/etc/modules-load.d/*.conf + /etc/modules + /run/
+  modules-load.d + /usr/local/lib/modules-load.d) vs a learned baseline +
+  ownership scan. systemd-modules-load (and the legacy /etc/modules)
+  force-load the listed modules AT BOOT; an attacker who adds a module
+  name makes a malicious out-of-tree or known-vulnerable module load
+  every boot (T1547.006). Records each module-to-load + file hash + owner;
+  any add/remove/change is warn; a world-writable/non-root config is
+  alert (an attacker who controls it can force-load anything). No-ops
+  cleanly if absent. /usr/lib (package-managed) not watched. Completes
+  the module-load family with kernel-module-watchdog (LOADED modules) +
+  modprobe-config-watchdog (install/alias directives). Cadence boot+26min
+  / 08:15.
+
 ### Changed — ld-preload-watchdog: add LD_AUDIT detection (2026-05-26)
 
 - `ld-preload-watchdog` now also scans the global env files for
