@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 105: continuation 187→188 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the ISC DHCP
+SERVER execute() surface, completing DHCP coverage across both ends
+(dhclient client + dhcpcd client + dhcpd server); L1 module-contracts
+coherent at 188, cargo modules::tests 16/16.
+
+- `dhcpd-exec-watchdog` (188) — boot+daily delta of the ISC DHCP server
+  config (/etc/dhcp/dhcpd.conf, dhcpd6.conf, /etc/dhcpd.conf,
+  /etc/dhcp/dhcpd.conf.d/*) + ownership + execute()-statement scan. dhcpd
+  evaluates `execute("/path", args...)` (usually in on commit/release/
+  expiry blocks) and runs the named program AS THE dhcpd USER (often
+  root) on the lease event — so a planted execute() to a writable/attacker
+  program is lease-event-triggered root command execution (T1546), fired
+  by any client obtaining/renewing/releasing a lease. Distinct from
+  dhclient-hooks-watchdog and dhcpcd-hooks-watchdog (the DHCP clients):
+  this is the DHCP server execute() surface. An execute() program under
+  /tmp /var/tmp /dev/shm /home, relative-with-slash, or with an injection
+  pattern in the call, a world-writable/non-root config, or any added
+  execute() is alert/warn. Legit /usr/local and /usr/bin execute() not
+  flagged. No-ops cleanly when dhcpd is not installed. Cadence boot+86min
+  / 13:50.
+
 ### Added — module-ecosystem batch 104: continuation 186→187 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the mount-access

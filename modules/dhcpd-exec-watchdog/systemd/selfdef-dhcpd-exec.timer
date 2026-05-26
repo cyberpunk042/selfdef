@@ -1,0 +1,20 @@
+# selfdef dhcpd-exec-watchdog — boot+86min + daily 13:50.
+# Extends the staggered ladder after autofs (13:45). A planted
+# execute() fires on the next matching DHCP lease event (commit/
+# release/expiry — triggerable by any client obtaining a lease), so
+# the daily catch bounds dwell time; the boot catch confirms the
+# config after a restart.
+
+[Unit]
+Description=selfdef ISC dhcpd execute() delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dhcpd-exec-watchdog/README.md
+
+[Timer]
+OnBootSec=86min
+OnCalendar=*-*-* 13:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dhcpd-exec.service
+
+[Install]
+WantedBy=timers.target

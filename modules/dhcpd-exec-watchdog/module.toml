@@ -1,0 +1,41 @@
+name        = "dhcpd-exec-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the ISC DHCP SERVER config (/etc/dhcp/dhcpd.conf, dhcpd6.conf + /etc/dhcp/dhcpd.conf.d/*) vs a learned baseline + ownership + execute()-statement scan. dhcpd evaluates `execute(\"/path\", args...)` statements (typically inside `on commit { }` / `on release { }` / `on expiry { }` event blocks) and runs the named program AS THE dhcpd USER (often root) on the corresponding DHCP lease event — so a planted execute() pointing at a writable/attacker program is lease-event-triggered root command execution / persistence (T1546), fired by any client obtaining/renewing/releasing a lease. Distinct from dhclient-hooks-watchdog and dhcpcd-hooks-watchdog (the DHCP CLIENTS): this is the DHCP SERVER execute() surface. An execute() program under /tmp /home /dev/shm /var/tmp or with an injection pattern, a world-writable/non-root config, or any added execute() is the signature. No-ops cleanly when no dhcpd config is present (client-only / non-DHCP-server hosts)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dhcpd-exec-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any dhcpd execute() change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/dhcpd-exec-watchdog.toml",
+    "/usr/local/libexec/selfdef/dhcpd-exec-watchdog.sh",
+    "/etc/systemd/system/selfdef-dhcpd-exec.service",
+    "/etc/systemd/system/selfdef-dhcpd-exec.timer",
+    "/var/lib/selfdef/dhcpd-exec-baseline.tsv",
+]
