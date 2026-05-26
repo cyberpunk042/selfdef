@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for openssl-conf-watchdog (2026-05-26)
+
+Extends watchdog functional-severity coverage to the libcrypto-wide
+engine/provider load surface. The OpenSSL config (read by every
+OpenSSL-using process) can load code via `dynamic_path = engine.so`
+(ENGINE), `module = provider.so` (PROVIDER), or `.include extra.cnf`; a
+planted directive pointing at a writable/attacker .so (or relative-with-
+slash path) is a near-ubiquitous code-execution foothold (T1574). Distinct
+key=value + `.include` grammar.
+
+- `packaging/test/L2-openssl-conf-watchdog.bats` — 12 tests: ok
+  (no_openssl_conf / baseline_initial / openssl_conf_intact), alert
+  (dynamic_path under a writable root, module under a writable root,
+  `.include` from a writable root, relative-with-slash module path), warn
+  (benign directive added → openssl_conf_changed), false-positive guards
+  (/usr/lib engine+provider not flagged; commented-out writable module not
+  flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_OPENSSL_*` sandbox.
+
 ### Added — L2 functional severity coverage for sudo-conf-watchdog (2026-05-26)
 
 Extends watchdog functional-severity coverage to the setuid-root sudo
