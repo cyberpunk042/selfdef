@@ -1,0 +1,18 @@
+# selfdef shell-init-watchdog — boot+12min + daily 07:05.
+# Extends the staggered ladder after udev-rules (07:00). Boot
+# catch confirms the login-script set after a restart (a
+# persistence line fires on the next interactive login).
+
+[Unit]
+Description=selfdef shell-init scripts delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/shell-init-watchdog/README.md
+
+[Timer]
+OnBootSec=12min
+OnCalendar=*-*-* 07:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-shell-init.service
+
+[Install]
+WantedBy=timers.target
