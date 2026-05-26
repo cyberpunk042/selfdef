@@ -1,0 +1,18 @@
+# selfdef dnf-plugins-watchdog — boot+42min + daily 09:35.
+# Extends the staggered ladder after rsyslog-exec (09:30). Boot
+# catch confirms the dnf plugin/action set after a restart (a rogue
+# action runs on the next dnf transaction).
+
+[Unit]
+Description=selfdef dnf plugin/post-transaction-action delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dnf-plugins-watchdog/README.md
+
+[Timer]
+OnBootSec=42min
+OnCalendar=*-*-* 09:35:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dnf-plugins.service
+
+[Install]
+WantedBy=timers.target
