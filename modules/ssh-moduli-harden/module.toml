@@ -1,0 +1,37 @@
+name        = "ssh-moduli-harden"
+version     = "0.1.0"
+summary     = "Prune weak Diffie-Hellman moduli from /etc/ssh/moduli (used by diffie-hellman-group-exchange-* KEX). Removes <3072-bit (or <2048 minimum) moduli so the SSH key exchange can't negotiate a weak group. Companion to ssh-hardening (which tightens sshd_config). CIS 5.2.x. Refuse-to-brick: never empties moduli"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ssh-moduli-hardened"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `strong` (default) — keep only moduli >= 3072 bits (CIS).
+# `minimum`          — keep only moduli >= 2048 bits (broader
+#                     compatibility; still drops the genuinely
+#                     weak 1024-bit groups).
+default = "strong"
+available = ["strong", "minimum"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ssh-moduli-harden.toml",
+    "/etc/ssh/moduli",
+    "/var/lib/selfdef/ssh-moduli.bak",
+]
