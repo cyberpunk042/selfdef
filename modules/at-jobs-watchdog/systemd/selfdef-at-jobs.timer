@@ -1,0 +1,18 @@
+# selfdef at-jobs-watchdog — boot+20min + daily 07:45.
+# Extends the staggered ladder after grub-config (07:40). Boot
+# catch confirms the at spool after a restart (an at job persists
+# across reboot and fires at its scheduled time).
+
+[Unit]
+Description=selfdef at/batch job spool delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/at-jobs-watchdog/README.md
+
+[Timer]
+OnBootSec=20min
+OnCalendar=*-*-* 07:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-at-jobs.service
+
+[Install]
+WantedBy=timers.target

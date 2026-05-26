@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 39: continuation 121→122 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Completes the
+scheduler-persistence pair (cron + at); L1 module-contracts coherent at
+122, cargo modules::tests 16/16.
+
+- `at-jobs-watchdog` (122) — boot+daily delta of the at/batch job spool
+  (/var/spool/cron/atjobs Debian, /var/spool/at RHEL) + at.allow/at.deny
+  vs a learned baseline + a suspicious-pattern + self-resubmission scan.
+  atd runs each spooled job as its owner at the scheduled time; an
+  unexpected job — especially one that re-submits itself via `at`/`batch`
+  (a self-perpetuating loop) or contains a reverse shell / tmp payload —
+  is scheduler persistence (T1053.001) that cron-job-watchdog does not
+  see. Records each job hash + owner + acl hash; suspicious pattern or
+  self-resubmit = alert, add/remove = warn. No-ops cleanly if no spool
+  (e.g. when the at-disable module has masked atd). Scheduler-persistence
+  sibling to cron-job-watchdog. Cadence boot+20min / 07:45.
+
 ### Added — module-ecosystem batch 38: continuation 120→121 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the GRUB

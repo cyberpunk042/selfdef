@@ -1,0 +1,41 @@
+name        = "at-jobs-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the at/batch job spool (/var/spool/cron/atjobs Debian, /var/spool/at RHEL) + the at.allow/at.deny access lists vs a learned baseline + a suspicious-pattern + self-resubmission scan. atd runs each spooled job as its owner at the scheduled time; an unexpected at job — especially one that re-submits itself via `at`/`batch` (a self-perpetuating loop) or contains a reverse shell — is scheduler persistence (T1053.001) that cron-job-watchdog does not see. No-ops cleanly if no spool exists. Scheduler-persistence sibling to cron-job-watchdog"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["at-jobs-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any at-spool change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/at-jobs-watchdog.toml",
+    "/usr/local/libexec/selfdef/at-jobs-watchdog.sh",
+    "/etc/systemd/system/selfdef-at-jobs.service",
+    "/etc/systemd/system/selfdef-at-jobs.timer",
+    "/var/lib/selfdef/at-jobs-baseline.tsv",
+]
