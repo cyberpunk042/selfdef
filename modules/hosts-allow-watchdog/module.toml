@@ -1,0 +1,41 @@
+name        = "hosts-allow-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the tcpwrappers access files (/etc/hosts.allow, /etc/hosts.deny) vs a learned baseline + ownership + spawn/twist-command scan. A libwrap-linked daemon (vsftpd, some sshd builds, rpcbind, etc.) evaluates these rules on each connection, and a rule's optional `spawn <cmd>` or `twist <cmd>` shell command runs AS ROOT when the rule matches — so a planted `ALL: ALL: spawn /tmp/x` is root-exec-on-network-connection persistence (T1546), triggered remotely by simply connecting to any wrapped service. Distinct from hosts-file-watchdog (/etc/hosts name resolution) and access-conf-watchdog (PAM /etc/security/access.conf): this is the tcpwrappers spawn/twist exec surface. A spawn/twist command under /tmp /home /dev/shm or with an injection pattern, a world-writable/non-root file, or any added rule is the signature. No-ops cleanly when the files are absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["hosts-allow-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any tcpwrappers change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/hosts-allow-watchdog.toml",
+    "/usr/local/libexec/selfdef/hosts-allow-watchdog.sh",
+    "/etc/systemd/system/selfdef-hosts-allow.service",
+    "/etc/systemd/system/selfdef-hosts-allow.timer",
+    "/var/lib/selfdef/hosts-allow-baseline.tsv",
+]

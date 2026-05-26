@@ -1,0 +1,19 @@
+# selfdef hosts-allow-watchdog — boot+68min + daily 11:50.
+# Extends the staggered ladder after fish-config (11:45). A planted
+# spawn/twist directive fires on the next connection to a wrapped
+# service (remotely triggerable), so the daily catch bounds dwell
+# time; the boot catch confirms the rule set after a restart.
+
+[Unit]
+Description=selfdef tcpwrappers spawn/twist delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/hosts-allow-watchdog/README.md
+
+[Timer]
+OnBootSec=68min
+OnCalendar=*-*-* 11:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-hosts-allow.service
+
+[Install]
+WantedBy=timers.target

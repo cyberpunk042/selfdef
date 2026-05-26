@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 87: continuation 169→170 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the tcpwrappers
+spawn/twist exec surface — remotely-triggerable root exec on connection;
+L1 module-contracts coherent at 170, cargo modules::tests 16/16.
+
+- `hosts-allow-watchdog` (170) — boot+daily delta of the tcpwrappers
+  access files (/etc/hosts.allow, /etc/hosts.deny) + ownership +
+  spawn/twist-command scan. A libwrap-linked daemon evaluates these rules
+  on each connection, and a rule's optional `spawn <cmd>` / `twist <cmd>`
+  runs AS ROOT when the rule matches — so a planted `ALL: ALL: spawn
+  /tmp/x` is root-exec-on-network-connection persistence (T1546),
+  triggered remotely by simply connecting to any wrapped service. Distinct
+  from hosts-file-watchdog (/etc/hosts resolution) and access-conf-watchdog
+  (PAM access.conf). spawn/twist parsed case-insensitively. A spawn/twist
+  command under /tmp /var/tmp /dev/shm /home or with an injection pattern,
+  a world-writable/non-root file, or any added rule is alert/warn; legit
+  spawn /usr/bin/logger is not flagged. No-ops cleanly when the files are
+  absent. Cadence boot+68min / 11:50.
+
 ### Added — module-ecosystem batch 86: continuation 168→169 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Completes the
