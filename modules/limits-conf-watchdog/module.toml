@@ -1,0 +1,41 @@
+name        = "limits-conf-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the pam_limits resource-limit config (/etc/security/limits.conf + limits.d/*) vs a learned baseline. An attacker who re-enables core dumps (`* hard core unlimited`) reverts the coredump-suid hardening and re-opens memory-secret harvest on crash (T1005), or loosens nproc/nofile/maxlogins for DoS/abuse. Records each domain:type:item -> value limit; any change is warn; a NEWLY-ADDED core-dump re-enable is the hardening-revert signature (alert). No-ops cleanly if absent. Complements coredump-suid-restrict (which SETS the core 0 limit) by detecting tampering, and access-conf-watchdog (the other /etc/security file)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["limits-conf-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any limits change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/limits-conf-watchdog.toml",
+    "/usr/local/libexec/selfdef/limits-conf-watchdog.sh",
+    "/etc/systemd/system/selfdef-limits-conf.service",
+    "/etc/systemd/system/selfdef-limits-conf.timer",
+    "/var/lib/selfdef/limits-conf-baseline.tsv",
+]

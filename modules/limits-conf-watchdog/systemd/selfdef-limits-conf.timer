@@ -1,0 +1,18 @@
+# selfdef limits-conf-watchdog — boot+22min + daily 07:55.
+# Extends the staggered ladder after systemd-generator (07:50).
+# Boot catch confirms the pam_limits config after a restart (a
+# limit change takes effect on the next login).
+
+[Unit]
+Description=selfdef pam_limits config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/limits-conf-watchdog/README.md
+
+[Timer]
+OnBootSec=22min
+OnCalendar=*-*-* 07:55:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-limits-conf.service
+
+[Install]
+WantedBy=timers.target

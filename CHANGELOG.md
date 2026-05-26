@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 41: continuation 123→124 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the pam_limits
+config surface (rounds out /etc/security/* with access-conf); L1
+module-contracts coherent at 124, cargo modules::tests 16/16.
+
+- `limits-conf-watchdog` (124) — boot+daily delta of the pam_limits
+  resource-limit config (/etc/security/limits.conf + limits.d/*) vs a
+  learned baseline. An attacker who re-enables core dumps
+  (`* hard core unlimited`) reverts the coredump-suid-restrict hardening
+  and re-opens memory-secret harvest on crash (T1005), or loosens
+  nproc/nofile/maxlogins for DoS. Records each domain:type:item -> value
+  limit; any change is warn; a NEWLY-ADDED core-dump re-enable is the
+  hardening-revert signature (alert) — pre-existing core values flagged
+  once at baseline, not re-alerted. No-ops cleanly if absent. Complements
+  coredump-suid-restrict (which SETS core 0) by detecting tampering, and
+  access-conf-watchdog (the other /etc/security file). Cadence boot+22min
+  / 07:55.
+
 ### Added — module-ecosystem batch 40: continuation 122→123 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the systemd
