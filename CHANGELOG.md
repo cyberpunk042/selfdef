@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 58: continuation 140→141 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the anacron
+catch-up scheduler surface (completes cron+at+anacron); L1
+module-contracts coherent at 141, cargo modules::tests 16/16.
+
+- `anacrontab-watchdog` (141) — boot+daily delta of /etc/anacrontab +
+  ownership + command scan. anacron runs its job commands AS ROOT
+  (catch-up scheduler for daily/weekly/monthly periods); a rogue job line
+  or a tampered command is root-exec persistence (T1053.003) that
+  cron-job-watchdog (crontab/cron.d/periodic dirs) does not cover. A job
+  command under /tmp /home /dev/shm, world-writable, bare/relative, or an
+  injection pattern, or a world-writable/non-root anacrontab, is alert;
+  add/change/remove is warn. No-ops cleanly if absent. Completes the
+  scheduler-persistence trio with cron-job + at-jobs. Cadence boot+39min
+  / 09:20.
+
 ### Added — module-ecosystem batch 57: continuation 139→140 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the

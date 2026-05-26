@@ -1,0 +1,41 @@
+name        = "anacrontab-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of /etc/anacrontab (+ /etc/cron.d-adjacent anacron spool config) vs a learned baseline + ownership + command scan. anacron runs its job commands AS ROOT (catch-up scheduler for daily/weekly/monthly periods); a rogue job line or a tampered command is root-exec persistence (T1053.003) that cron-job-watchdog (crontab/cron.d/periodic dirs) does not cover. A command under /tmp /home /dev/shm, world-writable, bare/relative, or an injection pattern, or a world-writable/non-root anacrontab, is the signature. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["anacrontab-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any anacrontab change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/anacrontab-watchdog.toml",
+    "/usr/local/libexec/selfdef/anacrontab-watchdog.sh",
+    "/etc/systemd/system/selfdef-anacrontab.service",
+    "/etc/systemd/system/selfdef-anacrontab.timer",
+    "/var/lib/selfdef/anacrontab-baseline.tsv",
+]

@@ -1,0 +1,18 @@
+# selfdef anacrontab-watchdog — boot+39min + daily 09:20.
+# Extends the staggered ladder after logrotate (09:15). Boot catch
+# confirms anacrontab after a restart (a rogue job runs on the next
+# anacron catch-up).
+
+[Unit]
+Description=selfdef /etc/anacrontab delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/anacrontab-watchdog/README.md
+
+[Timer]
+OnBootSec=39min
+OnCalendar=*-*-* 09:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-anacrontab.service
+
+[Install]
+WantedBy=timers.target
