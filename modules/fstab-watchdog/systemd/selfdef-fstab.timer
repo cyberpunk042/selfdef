@@ -1,0 +1,18 @@
+# selfdef fstab-watchdog — boot+36min + daily 09:05.
+# Extends the staggered ladder after sysctl-hardening (09:00). Boot
+# catch confirms fstab after a restart (a new mount entry takes
+# effect at the next boot / `mount -a`).
+
+[Unit]
+Description=selfdef /etc/fstab entry-level delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/fstab-watchdog/README.md
+
+[Timer]
+OnBootSec=36min
+OnCalendar=*-*-* 09:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-fstab.service
+
+[Install]
+WantedBy=timers.target

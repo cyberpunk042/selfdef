@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 55: continuation 137→138 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the fstab
+entry-tampering surface; L1 module-contracts coherent at 138, cargo
+modules::tests 16/16.
+
+- `fstab-watchdog` (138) — boot+daily ENTRY-level delta of /etc/fstab (+
+  /etc/fstab.d/*) vs a learned baseline. Distinct from
+  mount-options-watchdog (verifies nosuid/nodev/noexec FLAGS on known
+  mounts) and nfs-mount-watchdog (network-mount flags) — this watches the
+  fstab ENTRIES for tampering: a bind-mount shadowing a sensitive system
+  path (/etc /usr/bin /bin /sbin /boot /root — T1564.005/T1036), a loop/
+  file device under /tmp /home /dev/shm (attacker-image mount), or an
+  explicit `suid` option (privesc). Any entry change is warn; the shadow/
+  loop/suid signatures are alert (delta-based — pre-existing flagged once
+  at baseline). No-ops cleanly if absent. Cadence boot+36min / 09:05.
+
 ### Added — module-ecosystem batch 54: continuation 136→137 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the sysctl

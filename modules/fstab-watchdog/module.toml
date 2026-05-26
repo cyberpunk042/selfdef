@@ -1,0 +1,41 @@
+name        = "fstab-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily ENTRY-level delta of /etc/fstab (+ /etc/fstab.d/*) vs a learned baseline. Distinct from mount-options-watchdog (verifies nosuid/nodev/noexec FLAGS on known mounts) and nfs-mount-watchdog (network-mount flags) — this watches the fstab ENTRIES for tampering: a bind-mount shadowing a sensitive system path (/etc /usr/bin /bin /sbin /boot — T1564.005/T1036), an entry whose device is a loop file under /tmp /home /dev/shm (attacker-image mount), or an explicit `suid` on a normally-hardened path (privesc). Any entry change is warn; the shadow/suid/loop signatures are alert. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["fstab-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any fstab change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/fstab-watchdog.toml",
+    "/usr/local/libexec/selfdef/fstab-watchdog.sh",
+    "/etc/systemd/system/selfdef-fstab.service",
+    "/etc/systemd/system/selfdef-fstab.timer",
+    "/var/lib/selfdef/fstab-baseline.tsv",
+]
