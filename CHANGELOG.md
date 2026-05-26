@@ -6,6 +6,43 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 5 more modules push 67→72 (2026-05-22, batch 18)
+
+Five further modules after the dashboard expansion, deepening the
+hardening + detection surfaces. All follow the established module-
+template pattern; module-catalog parser test stays 16/16 green after
+each add.
+
+- `nscd-disable` — mask Name Service Cache Daemon (CVE-2024-33599
+  family stack overflow + netgroup DoS); modern hosts use systemd-
+  resolved + sssd. mask/stop profiles. MITRE T1190/T1068/T1499.
+- `entropy-baseline` — detection (boot+5min + 6h): verify entropy
+  posture via 5 signals (entropy_avail, entropy daemon, hwrng node,
+  CPU rdrand/rdseed, CRNG-init-done). Catches entropy-starved-VM
+  predictable-key class. MITRE T1552.004/T1600.001/T1190.
+- `ctrlaltdel-disable` — mask ctrl-alt-del.target (mask profile) OR
+  CtrlAltDelBurstAction=none (burst-guard); blocks console-reboot
+  DoS. Pairs with kernel-sysrq-restrict. MITRE T1499/T1529/
+  T1561.001/T1200.
+- `apport-disable` — mask Ubuntu apport/whoopsie + reset core_pattern
+  apport pipe (CVE-2021-3899 TOCTOU, CVE-2022-1242 path traversal,
+  CVE-2023-1326 setuid PE). mask/stop profiles. MITRE T1068/T1055/
+  T1005/T1552.
+- `coredump-suid-restrict` — fs.suid_dumpable=0 (suid-only) + all-
+  process hard core 0 (all-off). Prevents setuid-binary memory-dump
+  credential leak. CIS 1.5.x. MITRE T1003/T1552.001/T1005/T1212.
+
+**Detection ladder** now 10 cadences (added entropy boot+5min+6h
+alongside swap-encryption boot+5min+12h). **Physical-console DoS
+lockdown pair**: kernel-sysrq-restrict + ctrlaltdel-disable. **Memory-
+leak defense quartet**: coredump-suid-restrict + coredumpd-redirect +
+apport-disable + swap-encryption-detect + kdump-disable. **Service-
+mask family**: services-disable-printing + bluetooth-disable +
+nscd-disable + apport-disable.
+
+Module total after this batch: 72 (was 52 at the resumed-session
+start; operator target 100+; remaining gap ~28).
+
 ### Added — dashboard preset catalog 5→20 (2026-05-22, batch 17)
 
 Operator-verbatim target met: "there is over 20 dashboards and a
