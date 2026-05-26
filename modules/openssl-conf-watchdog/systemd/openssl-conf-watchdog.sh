@@ -34,6 +34,24 @@ set -u
 
 PROFILE="${SELFDEF_OPENSSL_PROFILE:-report}"
 BASELINE="${SELFDEF_OPENSSL_BASELINE:-/var/lib/selfdef/openssl-conf-baseline.tsv}"
+
+# SDD-061 D-6: consume the shared writable-location policy
+# (selfdef_is_writable_path) from module-lib instead of a per-module copy.
+# Co-shipped by the .deb at /usr/share/selfdef/lib/module-lib.sh; selfdefctl
+# exports SELFDEF_MODULE_LIB in a workspace. A missing or pre-v3 library is a
+# real misconfiguration that would leave the watchdog scanning with a
+# divergent policy, so we fail loud with a structured finding.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-openssl-conf -- '{"tag":"selfdef-openssl-conf","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-openssl-conf -- '{"tag":"selfdef-openssl-conf","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
 if [[ -n "${SELFDEF_OPENSSL_FILES:-}" ]]; then
     read -r -a RAW_FILES <<< "${SELFDEF_OPENSSL_FILES}"
 else
@@ -42,7 +60,7 @@ fi
 
 flag_path() {
     local p="$1"
-    if [[ "$p" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]; then echo "writable"
+    if selfdef_is_writable_path "$p"; then echo "writable"
     elif [[ "$p" == */* && "$p" != /* ]]; then echo "relative"; fi
 }
 

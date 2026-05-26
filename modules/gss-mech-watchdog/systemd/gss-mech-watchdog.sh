@@ -30,6 +30,24 @@ set -u
 
 PROFILE="${SELFDEF_GSS_PROFILE:-report}"
 BASELINE="${SELFDEF_GSS_BASELINE:-/var/lib/selfdef/gss-mech-baseline.tsv}"
+
+# SDD-061 D-6: consume the shared writable-location policy
+# (selfdef_is_writable_path) from module-lib instead of a per-module copy.
+# Co-shipped by the .deb at /usr/share/selfdef/lib/module-lib.sh; selfdefctl
+# exports SELFDEF_MODULE_LIB in a workspace. A missing or pre-v3 library is a
+# real misconfiguration that would leave the watchdog scanning with a
+# divergent policy, so we fail loud with a structured finding.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-gss-mech -- '{"tag":"selfdef-gss-mech","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-gss-mech -- '{"tag":"selfdef-gss-mech","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
 if [[ -n "${SELFDEF_GSS_DIRS:-}" ]]; then
     read -r -a DIRS <<< "${SELFDEF_GSS_DIRS}"
 else
@@ -75,7 +93,7 @@ for f in "${files[@]}"; do
         read -r oidname _oid so _rest <<< "$line"
         [[ -z "$so" ]] && continue
         printf 'mech\t%s\t%s:%s\n' "$f" "$oidname" "$so" >> "$current"
-        if [[ "$so" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]; then
+        if selfdef_is_writable_path "$so"; then
             suspicious+=("${base}:mech-writable($oidname=$so)")
         elif [[ "$so" == */* && "$so" != /* ]]; then
             suspicious+=("${base}:mech-relative-path($oidname=$so)")

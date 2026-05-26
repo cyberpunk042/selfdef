@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-061 D-6: migrate writable-only watchdog batch (10 modules) (2026-05-26)
+
+Continues the D-6 migration with the 10 modules that scan for an
+attacker-writable path but carry NO injection-pattern array — so they only
+need the shared `selfdef_is_writable_path` policy (no `mapfile`). The
+replacement is byte-identical to each module's inline check, so it is
+behavior-preserving:
+- Simple inline `[[ "$x" =~ … ]]` checks → `selfdef_is_writable_path "$x"`.
+- Function-wrapped checks (`is_writable` / `is_writable_path` in autofs,
+  kernel-usermodehelper, sudo-conf) → delegate to the shared helper.
+- musl-ld-path's compound check keeps its extra exact-match clause
+  (`^/(tmp|…)$`, no trailing slash) and routes the trailing-slash clause
+  through `selfdef_is_writable_path`.
+
+Same fail-loud policy (source the co-shipped lib; `module_lib_missing` /
+`module_lib_outdated` alert + non-zero exit if absent or pre-v3).
+
+Modules: auditd-plugins, gss-mech, autofs, kernel-usermodehelper,
+musl-ld-path, openssl-conf, pkcs11-modules, sudo-conf, xorg-config,
+nm-vpn-plugin.
+
+Verified: no residual inline writable regex; `bash -n` clean; shellcheck
+clean (auditd-plugins retains a pre-existing, unrelated SC2018/2019 info on
+its tr lowercase line); end-to-end smoke of all 10 exits 0 + emits a
+finding, fail-loud path emits `module_lib_missing` + non-zero exit.
+
 ### Changed — SDD-061 D-6: migrate second watchdog batch (19 modules) onto the shared helpers (2026-05-26)
 
 Continues the D-6 migration. These 19 modules each carried an inline
