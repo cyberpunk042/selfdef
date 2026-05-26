@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 63: continuation 145→146 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the LUKS
+volume-unlock keyscript surface; L1 module-contracts coherent at 146,
+cargo modules::tests 16/16.
+
+- `crypttab-watchdog` (146) — boot+daily delta of /etc/crypttab +
+  ownership + keyscript/keyfile scan. The crypttab `keyscript=` option
+  runs a program AS ROOT at early boot to obtain the volume key; a rogue
+  keyscript is root-exec-at-boot persistence, and a keyfile under a
+  writable path is key theft/substitution (T1037/T1552). A keyscript or
+  keyfile under /tmp /home /dev/shm, world-writable, bare/relative, or a
+  world-writable/non-root crypttab is alert; add/change/remove is warn.
+  No-ops cleanly if absent. Distinct from swap-encryption-detect (which
+  verifies swap is encrypted). Cadence boot+44min / 09:45.
+
 ### Added — module-ecosystem batch 62: continuation 144→145 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the SysV

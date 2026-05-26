@@ -1,0 +1,18 @@
+# selfdef crypttab-watchdog — boot+44min + daily 09:45.
+# Extends the staggered ladder after inittab (09:40). Boot catch
+# confirms /etc/crypttab after a restart (a rogue keyscript runs at
+# the next boot's volume unlock).
+
+[Unit]
+Description=selfdef /etc/crypttab delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/crypttab-watchdog/README.md
+
+[Timer]
+OnBootSec=44min
+OnCalendar=*-*-* 09:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-crypttab.service
+
+[Install]
+WantedBy=timers.target
