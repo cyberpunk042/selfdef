@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 86: continuation 168→169 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Completes the
+interactive-shell-init set (bash/zsh + bash-completion + fish) with the
+fish global config surface; L1 module-contracts coherent at 169, cargo
+modules::tests 16/16.
+
+- `fish-config-watchdog` (169) — boot+daily delta of the fish shell
+  global config (/etc/fish/config.fish, /etc/fish/conf.d/*.fish,
+  /etc/fish/functions/*.fish) + ownership + suspicious-pattern scan. fish
+  sources config.fish and every conf.d/*.fish at the start of each
+  interactive/login session and auto-loads functions/*.fish by name, so a
+  planted snippet runs in every fish session (T1546). Completes the
+  interactive-shell-init set with shell-init-watchdog (bash/zsh global rc)
+  and bash-completion-watchdog (bash completion drop-ins) — fish is the
+  third popular shell those do not cover. The eval pattern is fish-aware
+  (matches `eval (cmd)` parens as well as bash `eval $(...)`/backtick). A
+  snippet under /tmp /home /dev/shm, world-writable, non-root, or an
+  injection pattern is alert; add/change/remove is warn. /usr/share/fish
+  (package-managed) not watched. No-ops cleanly when absent. Cadence
+  boot+67min / 11:45.
+
 ### Added — module-ecosystem batch 85: continuation 167→168 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the

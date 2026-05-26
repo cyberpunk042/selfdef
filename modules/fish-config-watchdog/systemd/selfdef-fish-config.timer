@@ -1,0 +1,19 @@
+# selfdef fish-config-watchdog — boot+67min + daily 11:45.
+# Extends the staggered ladder after bash-completion (11:40). A
+# planted fish snippet runs in the next interactive fish session, so
+# the boot catch confirms the set after a restart and the daily
+# catch bounds dwell time on a long-running host.
+
+[Unit]
+Description=selfdef fish shell global-config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/fish-config-watchdog/README.md
+
+[Timer]
+OnBootSec=67min
+OnCalendar=*-*-* 11:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-fish-config.service
+
+[Install]
+WantedBy=timers.target
