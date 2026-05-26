@@ -1,0 +1,19 @@
+# selfdef hidden-process-watchdog — every 4h.
+# Hidden processes are an active-compromise indicator; a 4h
+# cadence catches a rootkit reasonably fast without the
+# weight of continuous probing. Offset via jitter from the
+# other timers.
+
+[Unit]
+Description=selfdef hidden-process scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/hidden-process-watchdog/README.md
+
+[Timer]
+OnBootSec=12min
+OnUnitActiveSec=4h
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-hidden-process.service
+
+[Install]
+WantedBy=timers.target
