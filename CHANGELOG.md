@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for at-jobs-watchdog (2026-05-26)
+
+Extends watchdog functional-severity coverage to the at/batch scheduler-
+persistence surface (the sibling of cron that cron-job-watchdog does not
+see): atd runs each spooled job as its owner at the scheduled time, so a
+job that re-submits itself (a self-perpetuating loop) or carries a reverse
+shell / fetch-pipe-shell / tmp payload is high-signal.
+
+Notably this LOCKS the module-specific pattern that SDD-061 D-6 preserved
+verbatim as a `PATTERNS+=(...)` extra — the at/batch self-resubmission
+pattern — proving the preserved extra still detects after the migration
+onto the shared module-lib helpers.
+
+- `packaging/test/L2-at-jobs-watchdog.bats` — 12 tests: ok (no_at_spool /
+  baseline_initial / at_jobs_intact), alert (self-resubmit via `at`,
+  self-rearm via `batch` — both the preserved extra — plus curl|sh and
+  /dev/tcp from the canonical shared set), warn (benign job added →
+  at_jobs_changed), false-positive guards (benign absolute-command job not
+  flagged; a commented-out self-resubmit line not flagged), enforce exit,
+  and the SDD-061 D-6 `module_lib_missing` fail-loud path. Same
+  logger-shadow + `SELFDEF_ATJOBS_*` sandbox.
+
 ### Added — L2 functional severity coverage for autofs-watchdog (2026-05-26)
 
 Extends watchdog functional-severity coverage to the mount-access exec
