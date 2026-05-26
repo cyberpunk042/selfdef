@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 84: continuation 166→167 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the fail2ban
+action-definition surface — root-exec on attacker-inducible ban events;
+L1 module-contracts coherent at 167, cargo modules::tests 16/16.
+
+- `fail2ban-action-watchdog` (167) — boot+daily delta of the fail2ban
+  action definitions (/etc/fail2ban/action.d/*.conf, *.local) + ownership
+  + action-command scan. fail2ban runs the actionstart/actionstop/
+  actioncheck/actionban/actionunban/actionflush/actionrepair commands AS
+  ROOT on jail start/stop and every ban/unban; the attacker advantage is
+  self-triggering — anyone can deliberately fail auth from a throwaway IP
+  to induce a ban, firing a planted actionban payload on demand (T1546);
+  actionstart also runs at fail2ban startup. Distinct from fail2ban-bridge
+  (the hardening module that deploys jails): this is the detection
+  watchdog over the action command definitions. Directives parsed
+  case-insensitively; comment lines (# / ;) stripped. An action command
+  under /tmp /var/tmp /dev/shm /home or with an injection pattern, a
+  world-writable/non-root .conf, or any added action is alert/warn. Legit
+  iptables/nft/ipset firewall actions not flagged. No-ops cleanly when
+  fail2ban is absent. Cadence boot+65min / 11:30.
+
 ### Added — module-ecosystem batch 83: continuation 165→166 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the needrestart

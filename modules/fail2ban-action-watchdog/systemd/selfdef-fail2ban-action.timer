@@ -1,0 +1,20 @@
+# selfdef fail2ban-action-watchdog — boot+65min + daily 11:30.
+# Extends the staggered ladder after needrestart (11:25). A planted
+# action fires on the next ban/unban (which an attacker can induce
+# by failing auth) or at the next fail2ban start, so the daily catch
+# bounds dwell time; the boot catch confirms the action set after a
+# restart.
+
+[Unit]
+Description=selfdef fail2ban action-definition delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/fail2ban-action-watchdog/README.md
+
+[Timer]
+OnBootSec=65min
+OnCalendar=*-*-* 11:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-fail2ban-action.service
+
+[Install]
+WantedBy=timers.target

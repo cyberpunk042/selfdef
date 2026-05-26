@@ -1,0 +1,41 @@
+name        = "fail2ban-action-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the fail2ban action definitions (/etc/fail2ban/action.d/*.conf, *.local) vs a learned baseline + ownership + action-command scan. fail2ban runs the actionstart/actionstop/actioncheck/actionban/actionunban/actionflush/actionrepair commands AS ROOT on jail start/stop and on every ban/unban. A planted action command is root-exec persistence triggered by a ban event — and an attacker can SELF-INDUCE a ban by failing auth from a throwaway IP, firing their own payload on demand (T1546); actionstart additionally runs at fail2ban startup (boot). Distinct from fail2ban-bridge (the hardening module that DEPLOYS jails): this is the detection watchdog over the action command definitions. An action command under /tmp /home /dev/shm or with an injection pattern, a world-writable/non-root .conf, or any added action is the signature. No-ops cleanly when fail2ban is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["fail2ban-action-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any fail2ban action change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/fail2ban-action-watchdog.toml",
+    "/usr/local/libexec/selfdef/fail2ban-action-watchdog.sh",
+    "/etc/systemd/system/selfdef-fail2ban-action.service",
+    "/etc/systemd/system/selfdef-fail2ban-action.timer",
+    "/var/lib/selfdef/fail2ban-action-baseline.tsv",
+]
