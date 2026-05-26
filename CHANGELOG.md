@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 79: continuation 161→162 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Completes the
+power-event exec triad (systemd-logind + acpid + pm-utils); L1
+module-contracts coherent at 162, cargo modules::tests 16/16.
+
+- `pm-utils-hooks-watchdog` (162) — boot+daily delta of the pm-utils
+  power-event hook dirs (/etc/pm/sleep.d, /etc/pm/power.d,
+  /etc/pm/config.d) + ownership + suspicious-pattern scan. pm-action /
+  pm-powersave run every script in sleep.d AS ROOT around
+  suspend/hibernate/thaw/resume and every script in power.d AS ROOT on
+  AC<->battery transition, so a dropped script self-triggers on routine
+  power activity (lid, AC plug, idle suspend) without operator action
+  (T1546). pm-utils is a THIRD power-event mechanism independent of
+  systemd-logind and acpid — invisible to systemd-power-hooks-watchdog
+  and acpi-hooks-watchdog on hosts that run it. A script under
+  /tmp /home /dev/shm, world-writable, non-root, or an injection pattern
+  is alert; add/change/remove is warn. /usr/lib/pm-utils (package-managed)
+  not watched. No-ops cleanly on pure-systemd hosts. Cadence boot+60min /
+  11:05.
+
 ### Added — module-ecosystem batch 78: continuation 160→161 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Completes the
