@@ -1,0 +1,18 @@
+# selfdef systemd-generator-watchdog — boot+21min + daily 07:50.
+# Extends the staggered ladder after at-jobs (07:45). Boot catch
+# confirms the generator dirs after a restart (a generator runs
+# at the very start of the next boot).
+
+[Unit]
+Description=selfdef systemd generator dirs delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/systemd-generator-watchdog/README.md
+
+[Timer]
+OnBootSec=21min
+OnCalendar=*-*-* 07:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-systemd-generator.service
+
+[Install]
+WantedBy=timers.target

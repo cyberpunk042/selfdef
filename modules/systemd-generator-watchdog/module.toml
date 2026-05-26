@@ -1,0 +1,41 @@
+name        = "systemd-generator-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the admin/local/runtime systemd generator dirs (/etc/systemd/{system,user}-generators, /usr/local/lib/systemd/{system,user}-generators, /run/systemd/{system,user}-generators) vs a learned baseline + an ownership + suspicious-pattern scan. systemd generators are executables run AS ROOT very EARLY at boot (before any unit) to synthesize units dynamically — a dropped generator is stealthy early-boot root persistence (T1543/T1546). These dirs are normally empty, so any new generator is high-signal (alert). Distinct from systemd-unit-watchdog, which watches the UNITS, not the generators that create them. /usr/lib (package-managed) deliberately not watched"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["systemd-generator-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any generator-dir change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/systemd-generator-watchdog.toml",
+    "/usr/local/libexec/selfdef/systemd-generator-watchdog.sh",
+    "/etc/systemd/system/selfdef-systemd-generator.service",
+    "/etc/systemd/system/selfdef-systemd-generator.timer",
+    "/var/lib/selfdef/systemd-generator-baseline.tsv",
+]

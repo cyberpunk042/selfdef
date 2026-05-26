@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 40: continuation 122→123 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the systemd
+early-boot generator surface; L1 module-contracts coherent at 123, cargo
+modules::tests 16/16.
+
+- `systemd-generator-watchdog` (123) — boot+daily delta of the
+  admin/local/runtime systemd generator dirs (/etc/systemd/{system,user}-
+  generators, /usr/local/lib/systemd/*-generators, /run/systemd/*-
+  generators) vs a learned baseline + ownership + suspicious-pattern
+  scan. systemd generators are executables run AS ROOT very early at boot
+  (before any unit) to synthesize units; a dropped generator is stealthy
+  early-boot root persistence (T1543/T1546). These dirs are normally
+  empty, so a NEW generator (new file PATH, not a content edit of an
+  existing one) is alert; world-writable/non-root/suspicious-pattern is
+  alert; content change/removal is warn. No-ops cleanly if no generator
+  dirs. /usr/lib (package-managed) deliberately not watched. Distinct
+  from systemd-unit-watchdog (the units, not the generators that create
+  them). Cadence boot+21min / 07:50.
+
 ### Added — module-ecosystem batch 39: continuation 121→122 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Completes the
