@@ -1,0 +1,19 @@
+# selfdef sshrc-watchdog — boot+61min + daily 11:10.
+# Extends the staggered ladder after pm-utils (11:05). A planted
+# sshrc fires on the next SSH login, so the boot catch confirms the
+# rc set after a restart and the daily catch bounds dwell time on a
+# host that is rarely rebooted.
+
+[Unit]
+Description=selfdef SSH login rc (sshrc) delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sshrc-watchdog/README.md
+
+[Timer]
+OnBootSec=61min
+OnCalendar=*-*-* 11:10:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sshrc.service
+
+[Install]
+WantedBy=timers.target

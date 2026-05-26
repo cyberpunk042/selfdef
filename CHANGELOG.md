@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 80: continuation 162→163 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+sshd-invoked per-login rc surface, completing the SSH watchdog set; L1
+module-contracts coherent at 163, cargo modules::tests 16/16.
+
+- `sshrc-watchdog` (163) — boot+daily delta of the SSH login rc scripts
+  (/etc/ssh/sshrc and root's ~/.ssh/rc) + ownership + suspicious-pattern
+  scan. sshd runs /etc/ssh/sshrc as the logging-in user on EVERY SSH
+  session (for any user with no ~/.ssh/rc), before the user's shell rc —
+  so a planted sshrc is exec-on-every-SSH-login persistence for every
+  account lacking its own rc (T1546 / T1037). Distinct from
+  sshd-config-watchdog (sshd_config), ssh-authkeys-watchdog
+  (authorized_keys), ssh-client-config-watchdog (ssh_config), and
+  shell-init-watchdog (bash/profile rc): this is the sshd-invoked
+  per-login rc surface. World-writable/non-root rc or an injection
+  pattern is alert; add/change/remove is warn. No-ops cleanly when no
+  sshrc is present (the default). Cadence boot+61min / 11:10.
+
 ### Added — module-ecosystem batch 79: continuation 161→162 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Completes the

@@ -1,0 +1,41 @@
+name        = "sshrc-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the SSH login rc scripts (/etc/ssh/sshrc and root's ~/.ssh/rc) vs a learned baseline + ownership + suspicious-pattern scan. sshd runs /etc/ssh/sshrc as the logging-in user on EVERY SSH session (when the user has no ~/.ssh/rc), and ~/.ssh/rc when present — so a planted sshrc is exec-on-every-SSH-login persistence that runs before the user's shell rc, for every account that lacks its own rc (T1546 / T1037). Distinct from sshd-config-watchdog (sshd_config), ssh-authkeys-watchdog (authorized_keys), ssh-client-config-watchdog (ssh_config), and shell-init-watchdog (bash/profile rc): this is the sshd-invoked per-login rc surface. A world-writable/non-root rc or an injection pattern is the signature. No-ops cleanly when no sshrc is present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sshrc-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sshrc change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sshrc-watchdog.toml",
+    "/usr/local/libexec/selfdef/sshrc-watchdog.sh",
+    "/etc/systemd/system/selfdef-sshrc.service",
+    "/etc/systemd/system/selfdef-sshrc.timer",
+    "/var/lib/selfdef/sshrc-baseline.tsv",
+]
