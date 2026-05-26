@@ -1,0 +1,17 @@
+# selfdef listening-ports-watchdog — service unit.
+
+[Unit]
+Description=selfdef listening-ports delta scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/listening-ports-watchdog/README.md
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/listening-ports-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log /var/lib/selfdef
+Nice=10
+TimeoutStartSec=2m

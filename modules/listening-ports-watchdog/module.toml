@@ -1,0 +1,42 @@
+name        = "listening-ports-watchdog"
+version     = "0.1.0"
+summary     = "Daily delta of listening TCP/UDP sockets vs a learned baseline. First run captures the listen-set (proto/addr/port/process); subsequent runs emit added/removed events. A NEW listening port is a high-signal backdoor / reverse-shell-listener / persistence indicator"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["listening-ports-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "ss" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED listener (removed is
+#                     operator-cleanup; never alerts)
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/listening-ports-watchdog.toml",
+    "/usr/local/libexec/selfdef/listening-ports-watchdog.sh",
+    "/etc/systemd/system/selfdef-listening-ports.service",
+    "/etc/systemd/system/selfdef-listening-ports.timer",
+    "/var/lib/selfdef/listening-ports-baseline.tsv",
+]
