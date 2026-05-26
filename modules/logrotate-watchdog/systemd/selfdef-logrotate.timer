@@ -1,0 +1,18 @@
+# selfdef logrotate-watchdog — boot+38min + daily 09:15.
+# Extends the staggered ladder after nfs-exports (09:10). Boot
+# catch confirms the logrotate config after a restart (a rogue
+# postrotate runs on the next daily rotation).
+
+[Unit]
+Description=selfdef logrotate config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/logrotate-watchdog/README.md
+
+[Timer]
+OnBootSec=38min
+OnCalendar=*-*-* 09:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-logrotate.service
+
+[Install]
+WantedBy=timers.target

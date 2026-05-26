@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 57: continuation 139→140 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the
+logrotate root-exec-on-rotation surface; **140-module milestone**; L1
+module-contracts coherent at 140, cargo modules::tests 16/16.
+
+- `logrotate-watchdog` (140) — boot+daily delta of the logrotate config
+  (/etc/logrotate.conf + /etc/logrotate.d/*) + ownership + suspicious-
+  pattern scan of the script blocks. logrotate runs the prerotate/
+  postrotate/firstaction/lastaction/preremove blocks AS ROOT on each
+  rotation (daily via cron.daily/timer); a rogue `postrotate curl|sh
+  endscript` is overlooked root-exec persistence (T1546). World-writable/
+  non-root config or an injection pattern (curl|sh, /dev/tcp, bash -i,
+  tmp/home exec, …) in a script block is alert; add/change/remove is
+  warn. No-ops cleanly if absent. Distinct from logfile-integrity-watchdog
+  (log CONTENT). Cadence boot+38min / 09:15.
+
 ### Added — module-ecosystem batch 56: continuation 138→139 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the NFS
