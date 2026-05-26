@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 93: continuation 175→176 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the MIT Kerberos
+[plugins] module-load surface; L1 module-contracts coherent at 176, cargo
+modules::tests 16/16.
+
+- `krb5-plugins-watchdog` (176) — boot+daily delta of the MIT Kerberos
+  config plugin registrations (/etc/krb5.conf, /etc/krb5.conf.d/*.conf
+  [plugins] section) + ownership + module-path scan. The [plugins]
+  section's `module = <interface>:<path>` lines load .so plugins
+  (clpreauth/kdcpreauth/pwqual/kadm5_hook/certauth/...) into kinit, the
+  KDC, kadmind, sshd-GSSAPI, and sssd — so a planted `module =
+  clpreauth:/tmp/evil.so` loads attacker code into the Kerberos auth path
+  (T1574/T1556). The scan handles both the own-line and inline
+  `subsection = { module = ... }` forms (a parse-coverage gap caught and
+  fixed during functional testing). A module .so under
+  /tmp /var/tmp /dev/shm /home or relative-with-slash, a
+  world-writable/non-root config, or any added module is alert/warn.
+  Standard absolute plugin paths not flagged. Distinct from
+  gss-mech-watchdog and pkcs11-modules-watchdog. No-ops cleanly when no
+  krb5 config present. Cadence boot+74min / 12:25.
+
 ### Added — module-ecosystem batch 92: continuation 174→175 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the GSSAPI/

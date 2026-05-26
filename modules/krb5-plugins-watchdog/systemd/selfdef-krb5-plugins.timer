@@ -1,0 +1,20 @@
+# selfdef krb5-plugins-watchdog — boot+74min + daily 12:25.
+# Extends the staggered ladder after gss-mech (12:20). A planted
+# krb5 [plugins] module takes effect the next time a Kerberos client
+# or service (kinit, krb5kdc, kadmind, sshd-gssapi, sssd) loads its
+# config, so the daily catch bounds dwell time; the boot catch
+# confirms the plugin set after a restart.
+
+[Unit]
+Description=selfdef MIT Kerberos [plugins] module-load delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/krb5-plugins-watchdog/README.md
+
+[Timer]
+OnBootSec=74min
+OnCalendar=*-*-* 12:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-krb5-plugins.service
+
+[Install]
+WantedBy=timers.target
