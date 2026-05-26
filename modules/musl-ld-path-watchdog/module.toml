@@ -1,0 +1,41 @@
+name        = "musl-ld-path-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the musl dynamic-linker library path file(s) (/etc/ld-musl-<arch>.path, e.g. /etc/ld-musl-x86_64.path / aarch64 / armhf) vs a learned baseline + ownership + path-entry scan. On musl-libc systems (Alpine — the most common container base image) this file is the entire library search path the musl loader uses; it is the musl analog of glibc's /etc/ld.so.conf. A prepended writable directory makes the loader resolve shared libraries from there first, hijacking libc/library loads for EVERY dynamically-linked binary on the host — a near-total code-execution foothold (T1574.006 dynamic linker hijacking). Distinct from ld-so-conf-watchdog (glibc /etc/ld.so.conf[.d]) and ld-preload-watchdog (LD_PRELOAD/ld.so.preload): this is the musl loader's search-path surface. A path entry under /tmp /home /dev/shm /var/tmp, a world-writable/non-root path file, or any added directory is the signature. No-ops cleanly on glibc-only hosts (no ld-musl path file)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["musl-ld-path-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any musl path change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/musl-ld-path-watchdog.toml",
+    "/usr/local/libexec/selfdef/musl-ld-path-watchdog.sh",
+    "/etc/systemd/system/selfdef-musl-ld-path.service",
+    "/etc/systemd/system/selfdef-musl-ld-path.timer",
+    "/var/lib/selfdef/musl-ld-path-baseline.tsv",
+]

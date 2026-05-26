@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 95: continuation 177→178 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the musl
+dynamic-linker search-path surface — dynamic-linker hijacking on the huge
+Alpine-container population; L1 module-contracts coherent at 178, cargo
+modules::tests 16/16.
+
+- `musl-ld-path-watchdog` (178) — boot+daily delta of the musl
+  dynamic-linker library path file(s) (/etc/ld-musl-<arch>.path) +
+  ownership + path-entry scan. On musl-libc systems (Alpine — the most
+  common container base) this file is the entire library search path the
+  musl loader uses, the musl analog of glibc's /etc/ld.so.conf. A
+  prepended writable directory hijacks library loads for EVERY
+  dynamically-linked binary (T1574.006 dynamic linker hijacking). The
+  scan splits entries on newline and ':' and flags any library dir under
+  /tmp /var/tmp /dev/shm /home, a world-writable/non-root path file, or
+  any added directory. Standard /lib /usr/lib /opt paths not flagged.
+  Distinct from ld-so-conf-watchdog (glibc) and ld-preload-watchdog
+  (LD_PRELOAD/ld.so.preload). No-ops cleanly on glibc-only hosts. Cadence
+  boot+76min / 12:35.
+
 ### Added — module-ecosystem batch 94: continuation 176→177 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the
