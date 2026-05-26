@@ -1,0 +1,41 @@
+name        = "cron-job-watchdog"
+version     = "0.1.0"
+summary     = "Daily delta of every scheduled-task surface (user crontabs, /etc/crontab, /etc/cron.{d,hourly,daily,weekly,monthly}, systemd timers) vs a learned baseline. A NEW scheduled job is the canonical T1053 persistence indicator — attacker adds a cron line / timer to survive reboot"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["cron-job-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED job
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/cron-job-watchdog.toml",
+    "/usr/local/libexec/selfdef/cron-job-watchdog.sh",
+    "/etc/systemd/system/selfdef-cron-jobs.service",
+    "/etc/systemd/system/selfdef-cron-jobs.timer",
+    "/var/lib/selfdef/cron-jobs-baseline.tsv",
+]

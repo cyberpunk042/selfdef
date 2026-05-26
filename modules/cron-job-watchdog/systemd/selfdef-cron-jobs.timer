@@ -1,0 +1,18 @@
+# selfdef cron-job-watchdog — daily 05:45.
+# Slot rationale extends the staggered detection ladder:
+# 05:00 world-writable, 05:15 suid-sgid, 05:45 cron-jobs,
+# Sun-05:30 lynis. 05:45 fits between the daily suid scan and
+# the weekly lynis slot.
+
+[Unit]
+Description=selfdef scheduled-task delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/cron-job-watchdog/README.md
+
+[Timer]
+OnCalendar=*-*-* 05:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-cron-jobs.service
+
+[Install]
+WantedBy=timers.target
