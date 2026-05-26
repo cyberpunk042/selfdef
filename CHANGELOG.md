@@ -6,6 +6,48 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 6 more modules push 72→78 (2026-05-22, batch 19)
+
+Six further modules, completing the persistence-surface delta-
+detection quartet and deepening the service-mask family. Module-
+catalog parser test stays 16/16 green after each add.
+
+- `avahi-disable` — mask mDNS/DNS-SD daemon (LAN hostname+service
+  broadcast info-leak + CVE-2021-3468/3502/CVE-2023-1981 DoS chain +
+  mDNS reflection-amplification). MITRE T1046/T1590/T1499/T1498.
+- `rpcbind-disable` — mask SunRPC portmapper (TCP/UDP 111) on
+  non-NFS/NIS hosts (portmap reflection-amplification reflector,
+  rpcbomb CVE-2017-8779, rpcinfo recon). Warns if nfs-server active.
+  MITRE T1498.002/T1046/T1190/T1499.
+- `rsh-telnet-disable` — mask legacy cleartext daemons (telnet, rsh/
+  rlogin/rexec, tftp, finger) if present. CIS 2.2.x. No-op on the
+  common modern host. MITRE T1040/T1110/T1078/T1071/T1087.
+- `listening-ports-watchdog` — daily+boot delta of listening TCP/UDP
+  sockets vs baseline; new listener = backdoor/reverse-shell/SOCKS
+  indicator. MITRE T1571/T1090/T1059/T1205.
+- `cron-job-watchdog` — daily delta of all scheduled-task surfaces
+  (crontabs + cron.d + periodic dirs + systemd timers, sha256-hashed
+  so content changes surface). MITRE T1053.003/T1053.006/T1546/T1078.
+- `account-watchdog` — daily+boot delta of account surface (passwd +
+  uid0 set + sudo/wheel/admin roster); new uid=0 / sudo member =
+  alert. MITRE T1136.001/T1078.003/T1098/T1548.003.
+
+**Persistence-surface delta quartet COMPLETE**: the four canonical
+attacker-persistence surfaces each have a baseline+delta watchdog —
+accounts (account-watchdog) + scheduled-tasks (cron-job-watchdog) +
+setuid binaries (suid-sgid-watchdog) + network listeners (listening-
+ports-watchdog). Each pairs with a real-time auditd/eBPF source
+(acct-baseline / audit-rules / tetragon) as the catch-anyway backstop.
+
+**Service-mask family** now 8: services-disable-printing, bluetooth-
+disable, nscd-disable, apport-disable, avahi-disable, rpcbind-disable,
+rsh-telnet-disable (+ at-disable from earlier). avahi + rpcbind are
+the two LAN-facing reflection-amplification daemons — masking both
+shrinks the host's DDoS-reflector surface.
+
+**Detection ladder** now 13 cadences. Module total after this batch:
+78 (operator target 100+; remaining gap ~22).
+
 ### Added — module-ecosystem batch: 5 more modules push 67→72 (2026-05-22, batch 18)
 
 Five further modules after the dashboard expansion, deepening the
