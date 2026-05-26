@@ -7,8 +7,20 @@
 - [x] D-3 — `selfdef_is_writable_path` writable-location policy
 - [x] D-4 — `selfdef_scan_injection` convenience matcher
 - [x] D-5 — L2 bats unit coverage (`L2-module-lib-watchdog.bats`)
-- [ ] D-6 — incremental migration of existing watchdog modules
-      (follow-up; out of scope for this SDD)
+- [x] D-6 — migration of existing watchdog modules onto the shared
+      helpers COMPLETE (2026-05-26). All 46 watchdog scan scripts now
+      source module-lib and consume `selfdef_injection_patterns` /
+      `selfdef_is_writable_path`; 0 inline pattern arrays or raw writable
+      regexes remain. Per operator direction ("do not minimize the
+      situation, do the work") the runtime dependency is fail-loud: a
+      missing or pre-v3 library emits a `module_lib_missing` /
+      `module_lib_outdated` alert finding and exits non-zero rather than
+      silently scanning with a divergent/absent policy. Done in four
+      batches (4 L2-gated pilots → 19 byte-identical → 10 writable-only →
+      13 subset/extra), each verified bash -n + shellcheck + end-to-end
+      smoke; module-specific patterns (acpid `action=`, at/batch
+      self-resubmission, fish broader `eval`) preserved verbatim as
+      `PATTERNS+=(...)` so coverage is a strict superset.
 
 ## Why now
 

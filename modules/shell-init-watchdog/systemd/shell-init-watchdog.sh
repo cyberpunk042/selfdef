@@ -53,22 +53,27 @@ fi
 # Curated command-injection / reverse-shell / obfuscation
 # patterns. High-signal: these almost never appear in a benign
 # distro shell-init script.
-PATTERNS=(
-    'curl[^|;&]*\|[[:space:]]*(ba)?sh'      # curl ... | sh
-    'wget[^|;&]*\|[[:space:]]*(ba)?sh'      # wget ... | sh
-    '/dev/tcp/'                             # bash reverse shell
-    '/dev/udp/'
-    'nc[[:space:]]+.*-e'                    # netcat -e
-    'ncat[[:space:]]+.*-e'
-    'bash[[:space:]]+-i'                    # interactive reverse shell
-    'base64[[:space:]]+-d'                  # base64 payload decode
-    'base64[[:space:]]+--decode'
-    'eval[[:space:]]*[`$]'                  # eval $(...) / eval `...`
-    'python[0-9]*[[:space:]]+-c'            # python -c one-liner
-    'perl[[:space:]]+-e'
-    'mkfifo'                                # named-pipe reverse shell
-    'setsid'                                # detached persistence
-    '(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm)/'  # invoke a tmp/shm payload
+# SDD-061 D-6: consume the shared injection-pattern set + writable-
+# location policy from module-lib instead of a per-module copy. Co-shipped
+# by the .deb at /usr/share/selfdef/lib/module-lib.sh; selfdefctl exports
+# SELFDEF_MODULE_LIB in a workspace. A missing or pre-v3 library is a real
+# misconfiguration that would leave the watchdog scanning with a divergent/
+# absent set, so we fail loud with a structured finding.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-shell-init -- '{"tag":"selfdef-shell-init","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-shell-init -- '{"tag":"selfdef-shell-init","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+mapfile -t PATTERNS < <(selfdef_injection_patterns)
+# Module-specific patterns beyond the shared set (preserved verbatim):
+PATTERNS+=(
+    '(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm)/'
 )
 
 current="$(mktemp)"

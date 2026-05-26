@@ -6,6 +6,37 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-061 D-6 COMPLETE: final watchdog batch (13 modules) + all 46 migrated (2026-05-26)
+
+Final D-6 batch: the 13 modules whose inline PATTERNS block was NOT
+byte-identical to the canonical set (smaller subsets, or sets with
+module-specific extras). Each block is replaced with `mapfile -t PATTERNS
+< <(selfdef_injection_patterns)`, and every non-canonical pattern is
+preserved verbatim as an explicit `PATTERNS+=(...)` append so detection
+coverage is a strict SUPERSET (never decreases) — the convergence the SDD
+intended. Module-specific patterns preserved: acpid `action=<writable>`
+(path follows `=`, which the generic command-position rule misses),
+at/batch self-resubmission (`at`/`batch` persistence loop), and fish's
+broader `eval[[:space:]]*[`$(]`.
+
+Modules: aliases, acpi-hooks, at-jobs, boot-script, fish-config,
+grub-config, logrotate, motd-scripts, network-dispatcher, skel,
+shell-init, systemd-generator, xsession (the aliases writable helper also
+now delegates to the shared policy).
+
+**This completes SDD-061 D-6.** All 46 watchdog scan scripts now source
+module-lib and consume the shared helpers; a global check confirms 0
+inline `PATTERNS=(` arrays and 0 raw writable regexes remain. SDD-061's
+single-source-of-truth is now real: a new LOLBin or writable root is a
+one-line edit in `module-lib.sh` that propagates to every watchdog.
+`docs/sdd/061` D-6 marked done.
+
+Verified: bash -n + shellcheck clean on all 13 (at-jobs/fish-config retain
+a pre-existing, intentional SC2016 info on their literal-regex single
+quotes); end-to-end smoke of all 13 exits 0 + emits a finding; fail-loud
+path emits `module_lib_missing` + non-zero exit; L1 188; the four
+mechanism L2 suites still 11/11 each.
+
 ### Changed — SDD-061 D-6: migrate writable-only watchdog batch (10 modules) (2026-05-26)
 
 Continues the D-6 migration with the 10 modules that scan for an

@@ -40,17 +40,24 @@ RCLOCALS="${SELFDEF_BOOTSCRIPT_RCLOCAL:-/etc/rc.local /etc/rc.d/rc.local}"
 INITD="${SELFDEF_BOOTSCRIPT_INITD:-/etc/init.d}"
 RCDIRS="${SELFDEF_BOOTSCRIPT_RCDIRS:-/etc/rc0.d /etc/rc1.d /etc/rc2.d /etc/rc3.d /etc/rc4.d /etc/rc5.d /etc/rc6.d /etc/rcS.d}"
 
-PATTERNS=(
-    'curl[^|;&]*\|[[:space:]]*(ba)?sh' 'wget[^|;&]*\|[[:space:]]*(ba)?sh'
-    '/dev/tcp/' '/dev/udp/' 'nc[[:space:]]+.*-e' 'ncat[[:space:]]+.*-e'
-    'bash[[:space:]]+-i' 'base64[[:space:]]+-d' 'base64[[:space:]]+--decode'
-    'eval[[:space:]]*[`$]' 'python[0-9]*[[:space:]]+-c' 'perl[[:space:]]+-e'
-    'mkfifo' 'setsid'
-    # a tmp/shm/home path INVOKED as a command (line start or after
-    # a separator) — bare execution of a dropped payload. Low FP:
-    # legit scripts reference but rarely invoke a tmp path.
-    '(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm|home)/'
-)
+# SDD-061 D-6: consume the shared injection-pattern set + writable-
+# location policy from module-lib instead of a per-module copy. Co-shipped
+# by the .deb at /usr/share/selfdef/lib/module-lib.sh; selfdefctl exports
+# SELFDEF_MODULE_LIB in a workspace. A missing or pre-v3 library is a real
+# misconfiguration that would leave the watchdog scanning with a divergent/
+# absent set, so we fail loud with a structured finding.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-boot-script -- '{"tag":"selfdef-boot-script","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-boot-script -- '{"tag":"selfdef-boot-script","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+mapfile -t PATTERNS < <(selfdef_injection_patterns)
 
 # Does any watched target exist?
 have=0
