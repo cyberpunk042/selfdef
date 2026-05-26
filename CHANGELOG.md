@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for krb5-plugins-watchdog (2026-05-26)
+
+Third watchdog functional-severity suite, covering a detection MECHANISM
+distinct from the exec/directive watchdogs: PATH-based, not pattern-based.
+A krb5.conf [plugins] stanza loads a shared object via
+`module = NAME:/path/to/plugin.so`; MIT krb5 dlopen()s it into every
+GSSAPI/preauth-using process, so a module path under a writable root (or a
+relative path) is a code-load primitive (T1574/T1546). Alert here =
+writable/relative .so OR world-writable/non-root config (no injection-pattern
+scan in this module).
+
+- `packaging/test/L2-krb5-plugins-watchdog.bats` — 10 tests: ok
+  (no_krb5_config / baseline_initial / krb5_plugins_intact), alert
+  (inline-brace `{ module = … }` writable, own-line writable, relative
+  path), warn (benign plugin added → krb5_plugins_changed), false-positive
+  guards (/usr/lib64 .so not flagged; a commented-out writable module line
+  not flagged), enforce-profile exit. Exercises BOTH config grammars the
+  scanner handles (own-line + compact inline-brace) and the comment-skip
+  guard. Same logger-shadow + `SELFDEF_KRB5_*` sandbox pattern.
+
 ### Added — L2 functional severity coverage for snmpd-exec-watchdog (2026-05-26)
 
 Broadens the watchdog functional-severity coverage started with
