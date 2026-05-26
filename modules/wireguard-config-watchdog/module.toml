@@ -1,0 +1,41 @@
+name        = "wireguard-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the WireGuard configs (/etc/wireguard/*.conf) vs a learned baseline + ownership + hook-command + key-exposure scan. wg-quick runs the PostUp/PreUp/PostDown/PreDown directives in each .conf AS ROOT when the tunnel is brought up or down — a planted hook is root-exec-on-tunnel-event persistence (T1546), and because these files hold the interface PrivateKey, a world-readable .conf is private-key exposure (T1552.001). Two concerns, one file set: the hook-command exec surface and the key-confidentiality surface. Distinct from vpn-bridge (the functional multi-instance VPN module): this is the detection watchdog over the on-disk configs. A PostUp/etc. command under /tmp /home /dev/shm or with an injection pattern, a world-writable/non-root/world-readable .conf, or any added config is the signature. No-ops cleanly when no WireGuard configs are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["wireguard-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any WireGuard config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/wireguard-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/wireguard-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-wireguard.service",
+    "/etc/systemd/system/selfdef-wireguard.timer",
+    "/var/lib/selfdef/wireguard-config-baseline.tsv",
+]

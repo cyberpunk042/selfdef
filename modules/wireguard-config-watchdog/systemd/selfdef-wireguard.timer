@@ -1,0 +1,19 @@
+# selfdef wireguard-config-watchdog — boot+62min + daily 11:15.
+# Extends the staggered ladder after sshrc (11:10). A planted
+# PostUp/PreUp hook fires the next time the tunnel is brought up
+# (boot, reconnect, wg-quick up), so the daily catch bounds dwell
+# time; the boot catch confirms the config set after a restart.
+
+[Unit]
+Description=selfdef WireGuard config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/wireguard-config-watchdog/README.md
+
+[Timer]
+OnBootSec=62min
+OnCalendar=*-*-* 11:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-wireguard.service
+
+[Install]
+WantedBy=timers.target

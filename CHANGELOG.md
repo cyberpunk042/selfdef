@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 81: continuation 163→164 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the WireGuard
+config surface — two concerns over one file set: PostUp/etc. root-exec
+hooks and PrivateKey exposure; L1 module-contracts coherent at 164,
+cargo modules::tests 16/16.
+
+- `wireguard-config-watchdog` (164) — boot+daily delta of the WireGuard
+  configs (/etc/wireguard/*.conf) + ownership + hook-command +
+  key-exposure scan. wg-quick runs the PostUp/PreUp/PostDown/PreDown
+  directives AS ROOT on tunnel up/down, so a planted hook is
+  root-exec-on-tunnel-event persistence (T1546); and because each .conf
+  holds the [Interface] PrivateKey, a world-readable .conf is private-key
+  exposure (T1552.001). Hooks parsed case-insensitively (wg-quick is
+  case-insensitive). A hook command under /tmp /var/tmp /dev/shm /home or
+  with an injection pattern, a world-writable/non-root .conf, or a
+  world-readable .conf containing a PrivateKey is alert; add/change/remove
+  is warn. Legit firewall/routing hooks (iptables/nft/ip/sysctl) are not
+  flagged. Distinct from vpn-bridge (functional module): this is the
+  config-integrity watchdog. No-ops cleanly when absent. Cadence
+  boot+62min / 11:15.
+
 ### Added — module-ecosystem batch 80: continuation 162→163 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the
