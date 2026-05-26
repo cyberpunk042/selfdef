@@ -1,0 +1,41 @@
+name        = "bash-completion-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the bash-completion drop-in dir (/etc/bash_completion.d/*) vs a learned baseline + ownership + suspicious-pattern scan. The bash-completion package SOURCES every file in /etc/bash_completion.d/ into interactive bash shells (eagerly on older versions, on first completion on newer) — so a planted file runs arbitrary code in the context of every interactive bash session, an often-overlooked login/interactive-shell persistence vector (T1546). Distinct from shell-init-watchdog (which covers /etc/profile, /etc/bash.bashrc, /etc/profile.d, and zsh global rc): this is the bash-completion drop-in surface those do not see. A file under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when /etc/bash_completion.d is absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["bash-completion-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any bash-completion change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/bash-completion-watchdog.toml",
+    "/usr/local/libexec/selfdef/bash-completion-watchdog.sh",
+    "/etc/systemd/system/selfdef-bash-completion.service",
+    "/etc/systemd/system/selfdef-bash-completion.timer",
+    "/var/lib/selfdef/bash-completion-baseline.tsv",
+]

@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 85: continuation 167→168 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+bash-completion drop-in surface — code sourced into every interactive
+bash shell; L1 module-contracts coherent at 168, cargo modules::tests
+16/16.
+
+- `bash-completion-watchdog` (168) — boot+daily delta of the
+  bash-completion drop-in dir (/etc/bash_completion.d/*) + ownership +
+  suspicious-pattern scan. The bash-completion package SOURCES every file
+  in this dir into interactive bash shells (eagerly on older versions,
+  lazily on first completion on newer), so a planted file runs arbitrary
+  code in the context of every interactive bash session — an
+  often-overlooked interactive-shell persistence vector (T1546). Distinct
+  from shell-init-watchdog (/etc/profile, /etc/bash.bashrc, /etc/profile.d,
+  zsh global rc): this is the bash-completion drop-in surface those do not
+  see. Content is hashed/scanned regardless of +x bit (the danger is the
+  source, not execution). A file under /tmp /home /dev/shm, world-writable,
+  non-root, or an injection pattern is alert; add/change/remove is warn.
+  /usr/share/bash-completion/completions (package-managed) not watched.
+  No-ops cleanly when absent. Cadence boot+66min / 11:40.
+
 ### Added — module-ecosystem batch 84: continuation 166→167 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the fail2ban

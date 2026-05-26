@@ -1,0 +1,19 @@
+# selfdef bash-completion-watchdog — boot+66min + daily 11:40.
+# Extends the staggered ladder after fail2ban-action (11:30). A
+# planted completion file runs in the next interactive bash session,
+# so the boot catch confirms the set after a restart and the daily
+# catch bounds dwell time on a long-running host.
+
+[Unit]
+Description=selfdef bash-completion drop-in delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/bash-completion-watchdog/README.md
+
+[Timer]
+OnBootSec=66min
+OnCalendar=*-*-* 11:40:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-bash-completion.service
+
+[Install]
+WantedBy=timers.target
