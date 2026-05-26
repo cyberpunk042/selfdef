@@ -26,7 +26,7 @@
 # exports SELFDEF_MODULE_LIB pointing at this file under the
 # source tree.
 
-SELFDEF_MODULE_LIB_VERSION=2
+SELFDEF_MODULE_LIB_VERSION=3
 
 if [[ "${SELFDEF_MODULE_LIB_VERSION_REQUIRED:-1}" -gt \
       "${SELFDEF_MODULE_LIB_VERSION}" ]]; then
@@ -145,4 +145,64 @@ module_clear_manifest() {
         return 0
     fi
     rm -f "$manifest"
+}
+
+# --- SDD-061 v3 watchdog scan helpers -------------------------
+#
+# The detection-watchdog modules each scan config/script surfaces
+# for high-risk command-injection patterns and flag commands that
+# resolve under an attacker-writable location. Pre-v3 every module
+# carried a byte-identical copy of the pattern set and the
+# writable-location test; v3 hoists both into one source of truth
+# so a refinement (new LOLBin, new writable root) is a one-line
+# edit here instead of ~40 module edits. Pure + side-effect-free.
+
+# Print the canonical high-risk command-injection ERE pattern set,
+# one per line. Callers read it into an array, e.g.
+#   mapfile -t PATTERNS < <(selfdef_injection_patterns)
+# The set is the union actually used across the shipped watchdog
+# modules, so a migrated module scans identically.
+selfdef_injection_patterns() {
+    cat <<'PATSET'
+curl[^|;&]*\|[[:space:]]*(ba)?sh
+wget[^|;&]*\|[[:space:]]*(ba)?sh
+/dev/tcp/
+/dev/udp/
+nc[[:space:]]+.*-e
+ncat[[:space:]]+.*-e
+bash[[:space:]]+-i
+base64[[:space:]]+-d
+base64[[:space:]]+--decode
+eval[[:space:]]*[`$]
+python[0-9]*[[:space:]]+-c
+perl[[:space:]]+-e
+mkfifo
+setsid
+(^|[;&|][[:space:]]*)/(tmp|var/tmp|dev/shm|home)/
+PATSET
+}
+
+# Return 0 iff PATH is an absolute path rooted in an
+# attacker-writable location (/tmp, /var/tmp, /dev/shm, /home) —
+# the canonical "writable location" policy the watchdog modules
+# use. Empty and non-absolute paths return 1 (relative-path
+# suspicion is a separate, module-specific check).
+selfdef_is_writable_path() {
+    [[ "${1:-}" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]
+}
+
+# Print the first injection pattern that matches TEXT (via grep -E)
+# and return 0; print nothing and return 1 if none match.
+# Comment-stripping is the caller's responsibility (it is
+# context-specific). Convenience matcher over the pattern set.
+selfdef_scan_injection() {
+    local text="$1" pat
+    while IFS= read -r pat; do
+        [[ -z "$pat" ]] && continue
+        if printf '%s\n' "$text" | grep -qE "$pat"; then
+            printf '%s\n' "$pat"
+            return 0
+        fi
+    done < <(selfdef_injection_patterns)
+    return 1
 }

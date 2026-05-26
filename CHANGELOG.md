@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-lib v3: shared watchdog scan helpers (SDD-061) (2026-05-26)
+
+First slice of the operator-chosen "wire modules into stack" direction.
+Hoists the three byte-identical idioms the ~40 detection-watchdog modules
+each carry — the high-risk command-injection ERE pattern set, the
+attacker-writable-location policy, and the convenience matcher — into one
+source of truth in the shared module-script library, so a refinement (new
+LOLBin, new writable root) is a one-line edit here instead of ~40 module
+edits. SDD-first + test-first per standing methodology.
+
+- `docs/sdd/061-shared-watchdog-scan-helpers.md` — spec (D-1 additive
+  version bump 2→3; D-2 `selfdef_injection_patterns`; D-3
+  `selfdef_is_writable_path`; D-4 `selfdef_scan_injection`; D-5 test-first;
+  D-6 incremental per-module migration is an explicit out-of-scope
+  follow-up). Non-goal: NOT rewriting the 40 shipped modules in this slice.
+- `packaging/lib/module-lib.sh` — `SELFDEF_MODULE_LIB_VERSION` 2→3
+  (additive; 3≥2 so every existing module still sources clean past the
+  version gate); appends the three pure/side-effect-free v3 helpers. The
+  pattern set is the union actually used across the shipped watchdogs, so a
+  migrated module scans identically.
+- `packaging/test/L2-module-lib-watchdog.bats` — 11 bats unit tests locking
+  the v3 contract (version gate ≥3, require-3 sources clean, require-99
+  fails loud exit 99, pattern-set non-empty ≥8 + load-bearing entries,
+  writable-path flags the four roots / rejects system + empty + relative
+  paths, scan matches curl|sh and /dev/tcp and rejects benign iptables).
+  Calls helpers DIRECTLY (module-lib's own `run()` shadows bats `run`).
+
+L2-module-lib-watchdog 11/11 green; regression clean: L1-module-contracts
+188 modules, cargo modules::tests 16/16, L2-tetragon still green.
+
 ### Added — module-ecosystem batch 105: continuation 187→188 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the ISC DHCP
