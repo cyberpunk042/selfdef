@@ -1,0 +1,41 @@
+name        = "ssh-client-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the SSH CLIENT config (/etc/ssh/ssh_config + /etc/ssh/ssh_config.d/* + root's ~/.ssh/config) vs a learned baseline + ownership + exec-directive scan. A ProxyCommand / LocalCommand / `Match exec` runs a shell command when ssh connects OUT (or evaluates a Match); a directive pointing at /tmp /home /dev/shm, a world-writable target, or a fetch-pipe-shell payload is exec-on-ssh-out persistence/lateral-movement (T1059/T1552). Distinct from sshd-config-watchdog (the SERVER) and ssh-authkeys-watchdog (key files) — this is the outbound client side"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ssh-client-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ssh-client-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ssh-client-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/ssh-client-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-ssh-client-config.service",
+    "/etc/systemd/system/selfdef-ssh-client-config.timer",
+    "/var/lib/selfdef/ssh-client-config-baseline.tsv",
+]

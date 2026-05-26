@@ -1,0 +1,18 @@
+# selfdef ssh-client-config-watchdog — boot+29min + daily 08:30.
+# Extends the staggered ladder after xinetd (08:25). Boot catch
+# confirms the client config after a restart (an exec directive
+# fires on the next outbound ssh).
+
+[Unit]
+Description=selfdef SSH client config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/ssh-client-config-watchdog/README.md
+
+[Timer]
+OnBootSec=29min
+OnCalendar=*-*-* 08:30:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-ssh-client-config.service
+
+[Install]
+WantedBy=timers.target

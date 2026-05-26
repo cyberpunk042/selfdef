@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 48: continuation 130→131 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the SSH outbound
+client-config surface (completes ssh coverage with sshd-config +
+ssh-authkeys); L1 module-contracts coherent at 131, cargo modules::tests
+16/16.
+
+- `ssh-client-config-watchdog` (131) — boot+daily delta of the SSH CLIENT
+  config (/etc/ssh/ssh_config + ssh_config.d/* + root's ~/.ssh/config) vs
+  a learned baseline + ownership + exec-directive scan. A ProxyCommand /
+  LocalCommand / `Match exec` runs a shell command when ssh connects OUT;
+  a directive whose target is under /tmp /home /dev/shm, world-writable,
+  or a relative path with a slash, or that carries a fetch-pipe-shell
+  payload, is exec-on-ssh-out persistence/lateral-movement (T1059/
+  T1552.004). A bare command name (ssh/nc/corkscrew, PATH-resolved) does
+  NOT alert — only suspicious targets/payloads/ownership do. add/change/
+  remove is warn. No-ops cleanly if absent. Distinct from
+  sshd-config-watchdog (server) and ssh-authkeys-watchdog (key files) —
+  this is the outbound client side. Cadence boot+29min / 08:30.
+
 ### Added — module-ecosystem batch 47: continuation 129→130 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the (x)inetd
