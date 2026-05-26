@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch: 3 more modules push 82→85 (2026-05-22, batch 21)
+
+Three further modules deepening SMTP-surface, SSH-crypto, and mount-
+hardening detection. Module-catalog parser test 16/16; L1 module-
+contracts coherent at 85.
+
+- `mta-loopback-detect` — detection: verify SMTP listeners (25/465/
+  587) bind loopback only, not 0.0.0.0/:: (open-relay / spam-cannon /
+  exim-RCE surface). report/enforce; boot+5min+6h. MITRE T1190/
+  T1071.003/T1048/T1046.
+- `ssh-moduli-harden` — prune weak DH moduli from /etc/ssh/moduli
+  (strong >=3072 / minimum >=2048); Logjam-class defense; refuse-to-
+  brick never-empties-moduli; backup+restore. Companion to ssh-
+  hardening. CIS 5.2.x. MITRE T1557/T1040/T1600.001.
+- `mount-options-watchdog` — daily+boot verify nosuid/nodev/noexec on
+  /tmp /var/tmp /dev/shm /var/log /boot (+nosuid/nodev /home);
+  separate-mount aware; drift detection complementing tmpfs-baseline.
+  MITRE T1059/T1548.001/T1546/T1564.
+
+**Detection ladder** now 15 cadences. **Network-surface-reduction**
+family extended (mta-loopback + listening-ports + rpcbind + avahi).
+Module total after this batch: 85 (operator target 100+; remaining
+gap ~15).
+
 ### Added — module-ecosystem batch: 4 more modules push 78→82 (2026-05-22, batch 20)
 
 Four further modules: the fifth delta-detection watchdog, the
