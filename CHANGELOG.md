@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for dhcpd-exec-watchdog (2026-05-26)
+
+Third slice of the "wire modules into stack" direction (the "+ L2 bats
+coverage" piece). The first L2 suite to exercise a detection-watchdog's
+SEVERITY TIERS end-to-end rather than just its file shape — it runs the
+actual scan script with `logger` shadowed on PATH and the config/baseline
+pointed at a tmp sandbox via the script's `SELFDEF_DHCPD_*` env knobs.
+
+- `packaging/test/L2-dhcpd-exec-watchdog.bats` — 10 tests: ok tier
+  (no_dhcpd / baseline_initial / dhcpd_exec_intact), alert tier (execute()
+  under a writable root, a curl|sh injection pattern in the call, a
+  relative-with-slash program), warn tier (benign change →
+  dhcpd_exec_changed), false-positive guard (/usr/local execute() not
+  flagged), and enforce-profile exit codes (non-zero on alert, zero on a
+  benign baseline).
+
+Crucially this locks the exact contract SDD-062's notifier-routing rule
+depends on: a planted writable/injection execute() makes the watchdog emit
+a JSON body containing the verbatim `"severity":"alert"` token that
+`rules/sigma/execution/selfdef_watchdog_alert.yml` matches. L1
+module-contracts still 188; module-lib bats 11/11.
+
 ### Added — route watchdog alert-tier findings through the notifier (SDD-062) (2026-05-26)
 
 Second slice of the "wire modules into stack" direction. The ~40
