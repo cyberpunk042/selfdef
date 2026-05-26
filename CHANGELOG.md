@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 78: continuation 160→161 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Completes the
+boot-time declarative-creation family (accounts + kernel-modules +
+interpreters + FILES) with the systemd-tmpfiles surface; L1
+module-contracts coherent at 161, cargo modules::tests 16/16.
+
+- `tmpfiles-watchdog` (161) — boot+daily delta of the systemd-tmpfiles
+  declarations (/etc/tmpfiles.d/*.conf, /run/tmpfiles.d/*.conf) +
+  ownership + semantic scan. systemd-tmpfiles-setup runs these AS ROOT
+  at boot (and the clean timer daily); each line creates/sets a
+  file/dir/symlink/fifo/device or COPIES a file into place with an
+  explicit Mode. A planted entry can mint a setuid-root file, a
+  world-writable PATH dir, a symlink hijack, or copy an attacker file
+  over a trusted one — idempotently re-applied at every boot
+  (T1546/T1574/T1548). The setuid check flags a 4-digit Mode whose high
+  digit carries the suid (4) bit (4755/6755/~4755), while the
+  common-and-legit setgid 2755 (journal dirs) and sticky 1777 (/tmp) are
+  deliberately NOT flagged — verified false-positive-safe. world-
+  writable/non-root .conf is also alert; any entry add/change/remove is
+  warn. C/L entries are tracked but not alerted (legit-heavy).
+  /usr/lib/tmpfiles.d (package-managed) not watched. No-ops cleanly when
+  absent. Cadence boot+59min / 11:00. Peers the boot-time-creation set:
+  sysusers (accounts), modules-load (kernel modules), binfmt
+  (interpreters), tmpfiles (files).
+
 ### Added — module-ecosystem batch 77: continuation 159→160 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the

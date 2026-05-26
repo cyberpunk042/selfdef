@@ -1,0 +1,41 @@
+name        = "tmpfiles-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the systemd-tmpfiles declarations (/etc/tmpfiles.d/*.conf, /run/tmpfiles.d/*.conf) vs a learned baseline + ownership + semantic scan. systemd-tmpfiles-setup runs these AS ROOT at boot (and periodically): each line creates/sets a file, dir, symlink, fifo, device node, or COPIES a file into place, with an explicit Mode/User/Group. A planted entry can mint a SETUID-root file, a world-writable dir in a PATH location, a symlink hijack into a sensitive path, or copy an attacker file over a trusted one — idempotently re-applied at every boot (T1546 / T1574 hijack execution flow / T1548 setuid abuse). Distinct from the boot-time creation peers sysusers-watchdog (accounts), modules-load-watchdog (kernel modules), and binfmt-watchdog (interpreters): this is the FILE creation surface. A SETUID-bit Mode, a world-writable/non-root .conf, or any added entry is the signature. No-ops cleanly when no admin/runtime tmpfiles.d declarations are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["tmpfiles-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any tmpfiles declaration change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/tmpfiles-watchdog.toml",
+    "/usr/local/libexec/selfdef/tmpfiles-watchdog.sh",
+    "/etc/systemd/system/selfdef-tmpfiles.service",
+    "/etc/systemd/system/selfdef-tmpfiles.timer",
+    "/var/lib/selfdef/tmpfiles-baseline.tsv",
+]

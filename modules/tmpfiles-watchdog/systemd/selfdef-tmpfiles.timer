@@ -1,0 +1,21 @@
+# selfdef tmpfiles-watchdog — boot+59min + daily 11:00.
+# Extends the staggered ladder after sysusers (10:55). A planted
+# tmpfiles declaration re-applies its file/dir/symlink/mode at the
+# next systemd-tmpfiles run (boot + the daily systemd-tmpfiles-clean
+# timer) — idempotently, so a setuid file or world-writable dir
+# returns even if removed — hence the daily catch bounds dwell time;
+# the boot catch confirms the declaration set after a restart.
+
+[Unit]
+Description=selfdef systemd-tmpfiles declaration delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/tmpfiles-watchdog/README.md
+
+[Timer]
+OnBootSec=59min
+OnCalendar=*-*-* 11:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-tmpfiles.service
+
+[Install]
+WantedBy=timers.target
