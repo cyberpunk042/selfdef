@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — unquoted word-split glob expansion in 4 watchdog parsers (2026-05-26)
+
+A scan parser that word-splits attacker-influenceable file content with
+unquoted `$line` / `$var` lets the shell glob-expand any `*` token
+against the scan's cwd, corrupting the parse (and potentially the
+baseline). Surfaced while building limits-conf-watchdog, whose standard
+`*` domain expanded to the cwd file list. Converted the affected
+parsers to `read -ra` (splits on IFS without pathname expansion):
+
+- `nsswitch-watchdog` (112) — `for tok in $sources` (a `*` source token).
+- `modprobe-config-watchdog` (115) — `set -- $line` (`alias net-pf-* off`).
+- `hosts-file-watchdog` (119) — `set -- $line` (a malformed `*` hostname).
+- `ld-preload-watchdog` — `for lib in $val` (a `*` in a preload path).
+
+Behaviour is unchanged for well-formed input; a literal `*` is now
+recorded/flagged verbatim instead of being expanded.
+
 ### Added — module-ecosystem batch 41: continuation 123→124 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the pam_limits

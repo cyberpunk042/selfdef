@@ -68,8 +68,11 @@ if [[ -f "$CONF" ]]; then
         # part of the meaningful config).
         sources="$(printf '%s' "$rest" | tr '\t' ' ' | tr -s ' ' | sed -e 's/^ *//' -e 's/ *$//')"
         printf 'db\t%s\t%s\n' "$db" "$sources" >> "$current"
-        # Scan tokens for unknown providers.
-        for tok in $sources; do
+        # Scan tokens for unknown providers. read -ra (NOT
+        # `for tok in $sources`) so a source token containing a glob
+        # char is not expanded against the cwd.
+        read -r -a toks <<< "$sources"
+        for tok in "${toks[@]}"; do
             [[ "$tok" == \[* ]] && continue       # action bracket
             [[ "$tok" == *\] ]] && continue       # bracket tail
             case " $KNOWN_NSS " in

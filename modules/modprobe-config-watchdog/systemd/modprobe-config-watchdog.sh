@@ -73,13 +73,15 @@ for d in $DIRS; do
         printf 'file\t%s\t%s\n' "$f" "$h" >> "$current"
         while IFS= read -r line; do
             line="${line%%#*}"
-            # collapse whitespace
-            set -- $line
-            [[ $# -eq 0 ]] && continue
-            case "$1" in
+            # read -ra (NOT `set -- $line`) — alias lines like
+            # `alias net-pf-* off` would glob-expand the `*` against
+            # the cwd under word-splitting.
+            read -r -a F <<< "$line"
+            [[ ${#F[@]} -eq 0 ]] && continue
+            case "${F[0]}" in
                 install)
                     # install <modulename> <command...>
-                    mod="${2:-}"; cmd0="${3:-}"
+                    mod="${F[1]:-}"; cmd0="${F[2]:-}"
                     [[ -z "$mod" ]] && continue
                     printf 'install\t%s\t%s\n' "$mod" "${cmd0:-(none)}" >> "$current"
                     if [[ -n "$cmd0" ]] && ! is_benign_cmd "$cmd0"; then
@@ -93,7 +95,7 @@ for d in $DIRS; do
                     fi
                     ;;
                 blacklist)
-                    [[ -n "${2:-}" ]] && printf 'blacklist\t%s\n' "$2" >> "$current"
+                    [[ -n "${F[1]:-}" ]] && printf 'blacklist\t%s\n' "${F[1]}" >> "$current"
                     ;;
             esac
         done < "$f"

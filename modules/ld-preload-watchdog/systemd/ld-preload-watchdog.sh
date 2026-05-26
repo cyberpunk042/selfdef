@@ -69,7 +69,10 @@ for f in "${ENV_FILES[@]}"; do
     while IFS= read -r line; do
         # extract the assigned path(s)
         val=$(echo "$line" | sed -E 's/.*LD_PRELOAD=//; s/[";].*//' | tr ':' ' ')
-        for lib in $val; do
+        # read -ra (NOT `for lib in $val`) so a path containing a glob
+        # char is not expanded against the cwd.
+        read -r -a _libs <<< "$val"
+        for lib in "${_libs[@]}"; do
             [[ -z "$lib" || "$lib" == export ]] && continue
             if is_suspicious_path "$lib"; then
                 note 1 "${f}:LD_PRELOAD=${lib}:SUSPICIOUS"

@@ -63,11 +63,13 @@ declare -a suspicious=()
 
 while IFS= read -r line; do
     line="${line%%#*}"
-    # collapse whitespace into fields: <ip> <host> [host...]
-    set -- $line
-    [[ $# -lt 2 ]] && continue
-    ip="$1"; shift
-    for hn in "$@"; do
+    # fields: <ip> <host> [host...]. read -ra (NOT `set -- $line`)
+    # so a malformed hostname containing a glob char is not expanded
+    # against the cwd.
+    read -r -a F <<< "$line"
+    [[ ${#F[@]} -lt 2 ]] && continue
+    ip="${F[0]}"
+    for hn in "${F[@]:1}"; do
         hnl="${hn,,}"
         printf 'host\t%s\t%s\n' "$ip" "$hnl" >> "$current"
         for s in "${SENSITIVE[@]}"; do
