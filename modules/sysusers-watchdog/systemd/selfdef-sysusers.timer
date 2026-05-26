@@ -1,0 +1,21 @@
+# selfdef sysusers-watchdog — boot+58min + daily 10:55.
+# Extends the staggered ladder after binfmt (10:50). A planted
+# sysusers declaration recreates its account/group at the next
+# systemd-sysusers run (boot or package install) — idempotently, so
+# it returns even if the account is deleted — hence the daily catch
+# bounds dwell time; the boot catch confirms the declaration set
+# after a restart.
+
+[Unit]
+Description=selfdef systemd-sysusers declaration delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sysusers-watchdog/README.md
+
+[Timer]
+OnBootSec=58min
+OnCalendar=*-*-* 10:55:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sysusers.service
+
+[Install]
+WantedBy=timers.target

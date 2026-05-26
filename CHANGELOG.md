@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 77: continuation 159→160 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+systemd-sysusers declarative-account surface — backdoor accounts that
+recreate themselves at every boot; L1 module-contracts coherent at 160,
+cargo modules::tests 16/16.
+
+- `sysusers-watchdog` (160) — boot+daily delta of the systemd-sysusers
+  declarations (/etc/sysusers.d/*.conf, /run/sysusers.d/*.conf) +
+  ownership + semantic scan. systemd-sysusers creates the declared
+  users/groups AT BOOT (and on package install), idempotently — so a
+  planted declaration is a backdoor account/group that reappears at
+  every boot even if deleted (T1136 / T1098). Distinct from
+  account-watchdog (live /etc/passwd state): this watches the
+  declarations that regenerate accounts. Parses the robust field-3
+  (id/group, precedes the quotable GECOS) and alerts on a `u` entry with
+  UID 0, an `m` membership into a privileged group
+  (root/sudo/wheel/adm/docker/lxd/disk/shadow/...), or a
+  world-writable/non-root .conf; any entry add/change/remove is warn.
+  Shell field intentionally not parsed (GECOS-quoting fragility) — cross-
+  check via systemd-sysusers --dry-run. /usr/lib/sysusers.d
+  (package-managed) not watched. No-ops cleanly when absent. Cadence
+  boot+58min / 10:55.
+
 ### Added — module-ecosystem batch 76: continuation 158→159 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the

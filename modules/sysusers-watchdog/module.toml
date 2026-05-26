@@ -1,0 +1,41 @@
+name        = "sysusers-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the systemd-sysusers declarations (/etc/sysusers.d/*.conf, /run/sysusers.d/*.conf) vs a learned baseline + ownership + semantic scan. systemd-sysusers creates the declared users/groups AT BOOT (and on package install) from these files. A planted declaration is a backdoor account/group created automatically and idempotently — it reappears at every boot even if deleted (T1136 create account / T1098 account manipulation). Distinct from account-watchdog (which watches the live /etc/passwd, /etc/shadow, /etc/group state): this watches the DECLARATIONS that regenerate accounts. A `u` entry with UID 0, an `m` membership into a privileged group (root/sudo/wheel/adm/docker/lxd/disk/shadow), a world-writable/non-root .conf, or any added entry is the signature. No-ops cleanly when no sysusers.d declarations are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sysusers-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sysusers declaration change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sysusers-watchdog.toml",
+    "/usr/local/libexec/selfdef/sysusers-watchdog.sh",
+    "/etc/systemd/system/selfdef-sysusers.service",
+    "/etc/systemd/system/selfdef-sysusers.timer",
+    "/var/lib/selfdef/sysusers-baseline.tsv",
+]
