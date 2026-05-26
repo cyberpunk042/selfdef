@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 25: past-100 continuation 100→103 (2026-05-22)
+
+Per operator direction ("More selfdef modules") after the 100-module
+target was reached. Three further genuinely-distinct modules; L1
+module-contracts coherent at 103, cargo modules::tests 16/16.
+
+- `timestomp-watchdog` (101) — timestamp-manipulation anomaly scan
+  (FUTURE / EPOCH / MTIME>CTIME) on system binaries. The MTIME>CTIME
+  check is the strong tell (ctime can't be set by touch). MITRE
+  T1070.006/T1036/T1554.
+- `kernel-cmdline-watchdog` (102) — boot+daily /proc/cmdline delta +
+  weakening-flag denylist (mitigations=off/nosmep/nokaslr/audit=0/
+  init=/bin/sh/...). Boot catch is primary (cmdline only changes
+  across reboot). Matched pair with bootloader-password-detect.
+  MITRE T1562.001/T1601/T1542/T1014.
+- `wireless-disable` (103) — rfkill + modprobe-blacklist Wi-Fi on
+  wired-only servers; anti-lockout wired-carrier guard. Completes the
+  RF-surface family (bluetooth-disable + wol-disable + wireless-
+  disable). MITRE T1011/T1190/T1200/T1542.
+
+**Defense-evasion detection now comprehensive**: timestomp (T1070.006)
++ logfile-integrity (T1070.002) + audit-config (T1562.001) +
+kernel-cmdline (T1562.001/T1601) + selfdef-self-integrity (meta).
+**RF-surface family complete**: bluetooth + wol + wireless. Module
+total: 103.
+
 ### Added — module-ecosystem: 100/100 MODULE TARGET REACHED (2026-05-22, batches 23-24)
 
 The operator's verbatim 100+ module target is met. Modules 90→100
