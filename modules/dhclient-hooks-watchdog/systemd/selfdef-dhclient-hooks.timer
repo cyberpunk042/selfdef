@@ -1,0 +1,19 @@
+# selfdef dhclient-hooks-watchdog — boot+48min + daily 10:05.
+# Extends the staggered ladder after skel (10:00). A dropped
+# dhclient hook self-triggers on the next DHCP lease renewal (an
+# automatic timer event), so the daily catch bounds dwell time;
+# the boot catch confirms the hook set after a restart.
+
+[Unit]
+Description=selfdef ISC dhclient hook-script delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/dhclient-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=48min
+OnCalendar=*-*-* 10:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dhclient-hooks.service
+
+[Install]
+WantedBy=timers.target

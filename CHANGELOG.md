@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 67: continuation 149→150 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the ISC
+dhclient lease-event exec surface (the distinct DHCP-client sibling
+of the network-dispatcher surface); L1 module-contracts coherent at
+150, cargo modules::tests 16/16.
+
+- `dhclient-hooks-watchdog` (150) — boot+daily delta of the ISC
+  dhclient hook surface (/etc/dhcp/dhclient-enter-hooks.d/*,
+  /etc/dhcp/dhclient-exit-hooks.d/*, /etc/dhcp/dhclient.d/*.sh, plus
+  the legacy single-file /etc/dhcp/dhclient-{enter,exit}-hooks and
+  /etc/dhclient-{enter,exit}-hooks) + ownership + suspicious-pattern
+  scan. dhclient-script SOURCES these AS ROOT on every DHCP lease event
+  (BOUND/RENEW/REBIND/EXPIRE/…), and RENEW fires automatically on a
+  timer — so a dropped hook self-triggers without operator action,
+  giving quiet recurring root exec (T1546). Distinct from
+  network-dispatcher-watchdog (NM dispatcher.d / ifupdown if-up.d / ppp
+  ip-up.d / networkd-dispatcher — a different code path; the ISC
+  dhclient chain runs even on hosts using none of those). A hook under
+  /tmp /home /dev/shm, world-writable, non-root, or an injection
+  pattern (curl|sh, /dev/tcp, bash -i, python -c, perl -e, eval $(),
+  base64 -d, …) is alert; add/change/remove is warn. No-ops cleanly
+  when no dhclient hooks present. Cadence boot+48min / 10:05.
+
 ### Added — module-ecosystem batch 66: continuation 148→149 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the

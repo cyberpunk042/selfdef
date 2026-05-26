@@ -1,0 +1,41 @@
+name        = "dhclient-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the ISC dhclient hook surface (/etc/dhcp/dhclient-enter-hooks.d/*, /etc/dhcp/dhclient-exit-hooks.d/*, /etc/dhcp/dhclient.d/*.sh, and the legacy single-file /etc/dhcp/dhclient-{enter,exit}-hooks + /etc/dhclient-{enter,exit}-hooks) vs a learned baseline + ownership + suspicious-pattern scan. dhclient-script SOURCES these AS ROOT on every DHCP lease event (acquire/renew/rebind/release/expire) — and lease renewal fires automatically on a timer, so a dropped hook self-triggers without operator action. A rogue hook is root-exec-on-network-event persistence (T1546). Distinct from network-dispatcher-watchdog (NetworkManager dispatcher.d / ifupdown if-up.d / ppp ip-up.d / networkd-dispatcher — a different code path). A hook under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when no dhclient hooks present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["dhclient-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any dhclient-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/dhclient-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/dhclient-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-dhclient-hooks.service",
+    "/etc/systemd/system/selfdef-dhclient-hooks.timer",
+    "/var/lib/selfdef/dhclient-hooks-baseline.tsv",
+]
