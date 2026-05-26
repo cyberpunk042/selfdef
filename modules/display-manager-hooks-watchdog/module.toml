@@ -1,0 +1,41 @@
+name        = "display-manager-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the display-manager ROOT-context login-hook scripts (gdm Init/PreSession/PostSession/PostLogin under /etc/gdm3 and /etc/gdm, plus sddm Xsetup/Xstop under /usr/share/sddm/scripts and /etc/sddm) vs a learned baseline + ownership + suspicious-pattern scan. The display manager runs these AS ROOT around every graphical login — gdm Init before the greeter, PreSession before the user session starts, PostLogin after auth, PostSession at logout; sddm Xsetup before the greeter and Xstop after the session. A dropped/tampered script is root-context GUI-login exec persistence (T1037/T1546). Distinct from xsession-watchdog (the USER-context X session pipeline) and xdg-autostart-watchdog (post-startup user .desktop autostart): this is the privileged DM-side surface. A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly on headless hosts / no display manager"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["display-manager-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any DM-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/display-manager-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/display-manager-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-dm-hooks.service",
+    "/etc/systemd/system/selfdef-dm-hooks.timer",
+    "/var/lib/selfdef/display-manager-hooks-baseline.tsv",
+]

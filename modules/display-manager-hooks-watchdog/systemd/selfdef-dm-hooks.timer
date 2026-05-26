@@ -1,0 +1,19 @@
+# selfdef display-manager-hooks-watchdog — boot+52min + daily 10:25.
+# Extends the staggered ladder after systemd-power-hooks (10:20). A
+# dropped DM hook fires on the next graphical login, so the boot
+# catch confirms the set after a restart and the daily catch bounds
+# dwell time on a long-running session host.
+
+[Unit]
+Description=selfdef display-manager root-context login-hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/display-manager-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=52min
+OnCalendar=*-*-* 10:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-dm-hooks.service
+
+[Install]
+WantedBy=timers.target

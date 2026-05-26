@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 71: continuation 153→154 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the privileged
+display-manager-side graphical-login exec surface (completes the
+graphical-login exec triangle: DM-root / X-session / autostart); L1
+module-contracts coherent at 154, cargo modules::tests 16/16.
+
+- `display-manager-hooks-watchdog` (154) — boot+daily delta of the
+  display-manager ROOT-context login-hook scripts (gdm
+  Init/PreSession/PostSession/PostLogin under /etc/gdm3 and /etc/gdm,
+  plus sddm Xsetup/Xstop under /usr/share/sddm/scripts and /etc/sddm) +
+  ownership + suspicious-pattern scan. The display manager runs these AS
+  ROOT around every graphical login (gdm Init before greeter, PreSession
+  before user session, PostLogin after auth, PostSession at logout; sddm
+  Xsetup before greeter, Xstop after session) — a more privileged surface
+  than the user's own X session (T1037/T1546). Distinct from
+  xsession-watchdog (user-context X session pipeline) and
+  xdg-autostart-watchdog (user .desktop autostart). gdm3→gdm symlinked
+  dirs de-duplicated by resolved real path. A script under
+  /tmp /home /dev/shm, world-writable, non-root, or an injection pattern
+  is alert; add/change/remove is warn. No-ops cleanly on headless / no-DM
+  hosts. Cadence boot+52min / 10:25.
+
 ### Added — module-ecosystem batch 70: continuation 152→153 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the systemd

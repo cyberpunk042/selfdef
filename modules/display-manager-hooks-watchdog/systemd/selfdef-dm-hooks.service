@@ -1,0 +1,15 @@
+[Unit]
+Description=selfdef display-manager root-context login-hook delta scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/display-manager-hooks-watchdog/README.md
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/display-manager-hooks-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log /var/lib/selfdef
+Nice=15
+TimeoutStartSec=1m
