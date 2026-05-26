@@ -1,0 +1,41 @@
+name        = "file-capabilities-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of file capabilities (getcap -r) vs a learned baseline. File capabilities are the modern setuid — a binary with cap_setuid+ep or cap_dac_override+ep is a root-equivalent backdoor that the setuid-bit scan misses entirely. Catches T1548 capability-based privilege persistence"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["file-capabilities-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "getcap" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED capability
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/file-capabilities-watchdog.toml",
+    "/usr/local/libexec/selfdef/file-capabilities-watchdog.sh",
+    "/etc/systemd/system/selfdef-file-caps.service",
+    "/etc/systemd/system/selfdef-file-caps.timer",
+    "/var/lib/selfdef/file-capabilities-baseline.tsv",
+]

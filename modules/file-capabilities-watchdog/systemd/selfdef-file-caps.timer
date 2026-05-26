@@ -1,0 +1,18 @@
+# selfdef file-capabilities-watchdog — daily 05:20.
+# Right after suid-sgid (05:15) since the two are the
+# matched pair (setuid-bit + file-capability are the two
+# on-disk privilege-escalation artifact classes). Boots
+# share the same find-the-tree I/O window.
+
+[Unit]
+Description=selfdef file-capabilities delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/file-capabilities-watchdog/README.md
+
+[Timer]
+OnCalendar=*-*-* 05:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-file-caps.service
+
+[Install]
+WantedBy=timers.target
