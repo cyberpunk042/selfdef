@@ -1,0 +1,38 @@
+name        = "wwan-disable"
+version     = "0.1.0"
+summary     = "Disable cellular / WWAN modems on hosts that don't use mobile broadband — rfkill block wwan + mask ModemManager + (mask profile) modprobe-blacklist the cdc_mbim/qmi_wwan/cdc_ncm/option USB-modem driver stack. Removes an out-of-band, unmonitored network path + the modem-firmware CVE surface. Completes the RF-surface family with wireless/bluetooth/wol-disable"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["wwan-disabled"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `rfkill` (default) — rfkill block wwan + stop/disable/mask
+#                     ModemManager.service. Reversible live.
+# `mask`             — rfkill + ModemManager mask + modprobe.d
+#                     blacklist the USB-WWAN driver stack
+#                     (cdc_mbim, qmi_wwan, cdc_ncm, cdc_wdm,
+#                     option, qcserial) with install /bin/true.
+default = "rfkill"
+available = ["rfkill", "mask"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/wwan-disable.toml",
+    "/etc/modprobe.d/selfdef-wwan-blacklist.conf",
+]
