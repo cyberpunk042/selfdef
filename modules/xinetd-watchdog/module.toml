@@ -1,0 +1,41 @@
+name        = "xinetd-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the (x)inetd super-server service definitions (/etc/xinetd.d/* + /etc/xinetd.conf + /etc/inetd.conf) vs a learned baseline + ownership + server-path scan. xinetd/inetd launch the configured server program AS the configured user (often root) on each inbound connection to the service's port; a rogue or tampered service definition is network-triggered root-exec persistence (T1543). A server path under /tmp /home /dev/shm, world-writable, or a world-writable/non-root config is the signature. No-ops cleanly on modern hosts without a super-server. Legacy/embedded coverage"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["xinetd-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any xinetd/inetd change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/xinetd-watchdog.toml",
+    "/usr/local/libexec/selfdef/xinetd-watchdog.sh",
+    "/etc/systemd/system/selfdef-xinetd.service",
+    "/etc/systemd/system/selfdef-xinetd.timer",
+    "/var/lib/selfdef/xinetd-baseline.tsv",
+]

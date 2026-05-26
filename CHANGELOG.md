@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 47: continuation 129→130 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the (x)inetd
+super-server surface; **130-module milestone**; L1 module-contracts
+coherent at 130, cargo modules::tests 16/16.
+
+- `xinetd-watchdog` (130) — boot+daily delta of the (x)inetd super-server
+  service definitions (/etc/xinetd.d/* + /etc/xinetd.conf +
+  /etc/inetd.conf) vs a learned baseline + ownership + server-path scan.
+  xinetd/inetd launch the configured server program AS the configured
+  user (often root) on each inbound connection to a service's port; a
+  rogue/tampered service def is network-triggered root-exec persistence
+  (T1543). A server path under /tmp /home /dev/shm or world-writable, or
+  a world-writable/non-root config, is alert; add/change/remove is warn.
+  Parses both multi-line and compact one-line xinetd blocks (server-token
+  anchored extraction) + inetd.conf lines. No-ops cleanly on modern hosts
+  without a super-server (legacy/embedded coverage). Cadence boot+28min /
+  08:25.
+
 ### Changed — ld-preload-watchdog: add pam_env injection surface (2026-05-26)
 
 - `ld-preload-watchdog` now also scans `/etc/security/pam_env.conf`

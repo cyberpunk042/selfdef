@@ -1,0 +1,18 @@
+# selfdef xinetd-watchdog — boot+28min + daily 08:25.
+# Extends the staggered ladder after sudoers-defaults (08:20). Boot
+# catch confirms the super-server definitions after a restart (a
+# service launches on the next inbound connection).
+
+[Unit]
+Description=selfdef (x)inetd super-server definition delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/xinetd-watchdog/README.md
+
+[Timer]
+OnBootSec=28min
+OnCalendar=*-*-* 08:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-xinetd.service
+
+[Install]
+WantedBy=timers.target
