@@ -6,6 +6,16 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — ld-preload-watchdog: add LD_AUDIT detection (2026-05-26)
+
+- `ld-preload-watchdog` now also scans the global env files for
+  `LD_AUDIT` (the rtld-audit sibling of `LD_PRELOAD` — it loads a `.so`
+  as an auditor into every dynamically-linked program; same
+  T1574.006 injection surface). A LD_AUDIT lib under /tmp /var/tmp
+  /dev/shm /home /run, or a non-existent path, is alert (same
+  trusted-path logic as LD_PRELOAD). Closes the LD_AUDIT half of the
+  runtime-linker env-injection vector.
+
 ### Added — module-ecosystem batch 44: continuation 126→127 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the D-Bus

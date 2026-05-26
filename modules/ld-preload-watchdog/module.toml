@@ -1,6 +1,6 @@
 name        = "ld-preload-watchdog"
 version     = "0.1.0"
-summary     = "Detect userland-rootkit LD_PRELOAD hooks — flag any /etc/ld.so.preload entry, any LD_PRELOAD/LD_LIBRARY_PATH in global env files (/etc/environment, /etc/profile.d, ~root shell rc), and any preload lib outside a trusted-path allowlist. LD_PRELOAD is the dominant userland-rootkit injection vector (T1574.006)"
+summary     = "Detect userland-rootkit LD_PRELOAD/LD_AUDIT hooks — flag any /etc/ld.so.preload entry, any LD_PRELOAD or LD_AUDIT in global env files (/etc/environment, /etc/profile.d, ~root shell rc), and any injected lib outside a trusted-path allowlist. LD_PRELOAD is the dominant userland-rootkit injection vector and LD_AUDIT is its rtld-audit sibling (T1574.006)"
 category    = "detection"
 
 depends_on  = []

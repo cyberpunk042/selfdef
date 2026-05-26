@@ -6,10 +6,11 @@
 #   1. /etc/ld.so.preload — the system-wide preload file.
 #      ANY entry is suspicious on most hosts (it's empty/absent
 #      by default; legit uses are rare — e.g. some HPC, snoopy).
-#   2. Global LD_PRELOAD / LD_LIBRARY_PATH in env files:
+#   2. Global LD_PRELOAD / LD_AUDIT in env files:
 #      /etc/environment, /etc/profile, /etc/profile.d/*.sh,
 #      /etc/bash.bashrc, root's ~/.bashrc ~/.bash_profile
-#      ~/.profile.
+#      ~/.profile. (LD_AUDIT is the rtld-audit sibling of
+#      LD_PRELOAD — same .so-into-every-program injection.)
 #   3. Preload libs residing in world-writable / tmp paths
 #      (a preload lib in /tmp or /dev/shm is malware-grade).
 #
@@ -81,6 +82,20 @@ for f in "${ENV_FILES[@]}"; do
             fi
         done
     done < <(grep -E '(^|[^A-Z_])LD_PRELOAD=' "$f" 2>/dev/null)
+    # LD_AUDIT — the rtld-audit sibling of LD_PRELOAD; loads a .so as
+    # an auditor into every dynamically-linked program (T1574.006).
+    while IFS= read -r line; do
+        val=$(echo "$line" | sed -E 's/.*LD_AUDIT=//; s/[";].*//' | tr ':' ' ')
+        read -r -a _alibs <<< "$val"
+        for lib in "${_alibs[@]}"; do
+            [[ -z "$lib" || "$lib" == export ]] && continue
+            if is_suspicious_path "$lib"; then
+                note 1 "${f}:LD_AUDIT=${lib}:SUSPICIOUS"
+            else
+                note 0 "${f}:LD_AUDIT=${lib}"
+            fi
+        done
+    done < <(grep -E '(^|[^A-Z_])LD_AUDIT=' "$f" 2>/dev/null)
 done
 
 severity="ok"; event="no_ld_preload"
