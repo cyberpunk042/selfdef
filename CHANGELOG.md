@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 27: continuation 106→108 (2026-05-22)
+
+Per operator direction ("More selfdef modules"). Two capability-grant
++ identity detectors; L1 module-contracts coherent at 108, cargo
+modules::tests 16/16.
+
+- `crontab-allow-watchdog` (107) — delta of cron.allow/deny +
+  at.allow/deny rosters; added-to-*.allow or removed-from-*.deny =
+  schedule-capability grant (precedes the job, so cron-job-watchdog
+  stays quiet until used). MITRE T1053.003/T1098. Pairs with
+  cron-baseline (sets policy) + cron-job-watchdog (the jobs).
+- `ssh-hostkey-watchdog` (108) — delta of /etc/ssh/ssh_host_*_key.pub
+  fingerprints; a changed host key = MITM-prep / unauthorized
+  reinstall / key-theft-rotate (the REMOTE HOST IDENTIFICATION HAS
+  CHANGED signal). MITRE T1557/T1563.001/T1552.004. Matched sibling
+  to ssh-authkeys-watchdog (server identity vs client access).
+
+**Capability-grant detector family**: account (new account/uid0/sudo
+group) + sudoers (NOPASSWD rule) + crontab-allow (schedule roster) —
+all catch the GRANT that precedes the action. **SSH-surface
+detection complete**: authkeys (access) + hostkey (identity) +
+hardening + moduli. Module total: 108.
+
 ### Added — module-ecosystem batch 26: continuation 103→106 (2026-05-22)
 
 Per operator direction ("More selfdef modules"). Three further
