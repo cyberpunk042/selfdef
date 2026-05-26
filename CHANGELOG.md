@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for snmpd-exec-watchdog (2026-05-26)
+
+Broadens the watchdog functional-severity coverage started with
+dhcpd-exec to a DIFFERENT trigger class: snmpd command directives
+(exec / extend / pass / pass_persist) are remotely reachable — an SNMP
+GET to a planted OID makes snmpd run the named program, so a directive
+pointing at a writable/attacker program is remotely-triggerable command
+execution (T1546/T1059). The directive grammar differs from dhcpd's
+execute() (`<directive> [name] <prog> [args...]`, scanned by token), so
+this exercises a distinct extraction path.
+
+- `packaging/test/L2-snmpd-exec-watchdog.bats` — 10 tests: ok
+  (no_snmpd / baseline_initial / snmpd_exec_intact), alert (extend under a
+  writable root, pass_persist carrying a curl|sh injection, exec with a
+  /dev/tcp reverse-shell token), warn (benign directive added →
+  snmpd_exec_changed), false-positive guard (/usr/local directive not
+  flagged), enforce-profile exit codes. Runs the actual scan script with
+  `logger` shadowed on PATH and config/baseline in a tmp sandbox via the
+  `SELFDEF_SNMPD_*` env knobs; locks the same `"severity":"alert"` token
+  SDD-062 routes on.
+
 ### Added — dashboard panel: findings by rule (incl. watchdog alert tier) (2026-05-26)
 
 Fourth slice of the "wire modules into stack" direction (the "+ dashboard
