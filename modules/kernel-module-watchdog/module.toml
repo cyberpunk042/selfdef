@@ -1,0 +1,40 @@
+name        = "kernel-module-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of the loaded-kernel-module set (/proc/modules) vs a learned baseline. A NEW kernel module that wasn't in the known-good set is a high-signal LKM-rootkit / unexpected-driver indicator (T1547.006 / T1014)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["kernel-module-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED module
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/kernel-module-watchdog.toml",
+    "/usr/local/libexec/selfdef/kernel-module-watchdog.sh",
+    "/etc/systemd/system/selfdef-kernel-modules.service",
+    "/etc/systemd/system/selfdef-kernel-modules.timer",
+    "/var/lib/selfdef/kernel-modules-baseline.tsv",
+]

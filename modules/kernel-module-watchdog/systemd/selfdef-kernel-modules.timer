@@ -1,0 +1,19 @@
+# selfdef kernel-module-watchdog — boot+5min + daily 05:55.
+# Boot catch captures the module-set right after the kernel
+# finishes loading drivers (the legitimate boot-time load
+# wave); daily 05:55 extends the staggered ladder after
+# account-watchdog (05:50).
+
+[Unit]
+Description=selfdef loaded-kernel-module delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/kernel-module-watchdog/README.md
+
+[Timer]
+OnBootSec=8min
+OnCalendar=*-*-* 05:55:00
+RandomizedDelaySec=5m
+Persistent=true
+Unit=selfdef-kernel-modules.service
+
+[Install]
+WantedBy=timers.target
