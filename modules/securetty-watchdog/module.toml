@@ -1,0 +1,41 @@
+name        = "securetty-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of /etc/securetty (the TTYs on which pam_securetty permits direct root login) vs a learned baseline + ownership scan. securetty traditionally lists only physical consoles; an attacker who ADDS a pts/* entry widens direct root login to network pseudo-terminals, and deleting the file entirely can fail-open (root permitted everywhere). Any change is warn; a NEWLY-ADDED pts/network tty, a world-writable/non-root file, or removal of the whole file is the signature (alert). Distinct from sshd-config (PermitRootLogin) — this is the console/PAM root-login gate. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["securetty-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any securetty change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/securetty-watchdog.toml",
+    "/usr/local/libexec/selfdef/securetty-watchdog.sh",
+    "/etc/systemd/system/selfdef-securetty.service",
+    "/etc/systemd/system/selfdef-securetty.timer",
+    "/var/lib/selfdef/securetty-baseline.tsv",
+]

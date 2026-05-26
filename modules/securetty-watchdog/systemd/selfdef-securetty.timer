@@ -1,0 +1,18 @@
+# selfdef securetty-watchdog — boot+33min + daily 08:50.
+# Extends the staggered ladder after rhosts (08:45). Boot catch
+# confirms the root-login TTY allowlist after a restart (a widen
+# is live for the next root login attempt).
+
+[Unit]
+Description=selfdef /etc/securetty delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/securetty-watchdog/README.md
+
+[Timer]
+OnBootSec=33min
+OnCalendar=*-*-* 08:50:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-securetty.service
+
+[Install]
+WantedBy=timers.target

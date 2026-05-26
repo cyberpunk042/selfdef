@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 52: continuation 134→135 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the root
+direct-login TTY-allowlist surface; L1 module-contracts coherent at 135,
+cargo modules::tests 16/16.
+
+- `securetty-watchdog` (135) — boot+daily delta of /etc/securetty (the
+  TTYs on which pam_securetty permits direct root login) vs a learned
+  baseline + ownership scan. securetty traditionally lists only physical
+  consoles; an attacker who ADDS a pts/* entry widens direct root login
+  to network pseudo-terminals, and deleting the file entirely fails open
+  (historic pam_securetty permits root on ALL ttys) (T1556/T1078.003). A
+  TTY add/remove is warn; a NEWLY-ADDED pts/network tty, world-writable/
+  non-root file, or removal of the whole file is alert (serial ttyS* is
+  treated as benign). No-ops cleanly if absent on first scan. Distinct
+  from sshd-config (PermitRootLogin) — this is the console/PAM root gate.
+  Cadence boot+33min / 08:50.
+
 ### Added — module-ecosystem batch 51: continuation 133→134 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the
