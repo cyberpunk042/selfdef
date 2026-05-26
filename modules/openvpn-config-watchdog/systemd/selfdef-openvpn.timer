@@ -1,0 +1,19 @@
+# selfdef openvpn-config-watchdog — boot+63min + daily 11:20.
+# Extends the staggered ladder after wireguard (11:15). A planted
+# up/client-connect script directive fires the next time the tunnel
+# connects or a client connects, so the daily catch bounds dwell
+# time; the boot catch confirms the config set after a restart.
+
+[Unit]
+Description=selfdef OpenVPN config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/openvpn-config-watchdog/README.md
+
+[Timer]
+OnBootSec=63min
+OnCalendar=*-*-* 11:20:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-openvpn.service
+
+[Install]
+WantedBy=timers.target

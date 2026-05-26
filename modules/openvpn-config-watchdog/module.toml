@@ -1,0 +1,41 @@
+name        = "openvpn-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the OpenVPN configs (/etc/openvpn/**/*.conf and *.ovpn) vs a learned baseline + ownership + script-directive + key-exposure scan. OpenVPN runs the up/down/route-up/route-pre-down/ipchange/client-connect/client-disconnect/learn-address/tls-verify/auth-user-pass-verify script directives AS ROOT (gated by script-security) on connect/route/auth events — a planted script directive is root-exec-on-VPN-event persistence (T1546). script-security 3 additionally exposes secrets to scripts via the environment. Because .conf/.ovpn files may carry inline <key>/<tls-crypt> material or a secret directive, a world-readable config is private-key exposure (T1552.001). The OpenVPN sibling of wireguard-config-watchdog (different VPN + config format). Distinct from vpn-bridge (the functional module). A script directive under /tmp /home /dev/shm or with an injection pattern, a world-writable/non-root/world-readable-with-inline-key config, or any added config is the signature. No-ops cleanly when no OpenVPN configs are present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["openvpn-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any OpenVPN config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/openvpn-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/openvpn-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-openvpn.service",
+    "/etc/systemd/system/selfdef-openvpn.timer",
+    "/var/lib/selfdef/openvpn-config-baseline.tsv",
+]

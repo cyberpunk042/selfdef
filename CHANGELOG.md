@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 82: continuation 164→165 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the OpenVPN
+config surface — the OpenVPN sibling of wireguard-config-watchdog,
+completing the VPN-config detection pair; L1 module-contracts coherent at
+165, cargo modules::tests 16/16.
+
+- `openvpn-config-watchdog` (165) — boot+daily delta of the OpenVPN
+  configs (/etc/openvpn/**/*.conf and *.ovpn) + ownership +
+  script-directive + key-exposure scan. OpenVPN runs the
+  up/down/route-up/route-pre-down/ipchange/client-connect/
+  client-disconnect/learn-address/tls-verify/auth-user-pass-verify
+  directives' command AS ROOT (gated by script-security) on
+  connect/route/auth events — a planted directive is
+  root-exec-on-VPN-event persistence (T1546); and because configs carry
+  inline <key>/<tls-crypt>/secret material, a world-readable config is
+  private-key exposure (T1552.001). Directives parsed case-insensitively;
+  comment lines (# / ;) stripped so "# up /tmp" and "uptime" don't false-
+  match. A script command under /tmp /var/tmp /dev/shm /home or with an
+  injection pattern, a world-writable/non-root config, or a
+  world-readable config with inline key material is alert;
+  add/change/remove is warn. Legit up/down resolv scripts not flagged.
+  Distinct from vpn-bridge (functional). No-ops cleanly when absent.
+  Cadence boot+63min / 11:20.
+
 ### Added — module-ecosystem batch 81: continuation 163→164 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the WireGuard
