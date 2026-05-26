@@ -1,0 +1,18 @@
+# selfdef sshd-config-watchdog — boot+14min + daily 07:15.
+# Extends the staggered ladder after modprobe-config (07:10).
+# Boot catch confirms the effective sshd config after a restart
+# (a config change takes effect on the next sshd reload/restart).
+
+[Unit]
+Description=selfdef effective sshd config delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sshd-config-watchdog/README.md
+
+[Timer]
+OnBootSec=14min
+OnCalendar=*-*-* 07:15:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-sshd-config.service
+
+[Install]
+WantedBy=timers.target

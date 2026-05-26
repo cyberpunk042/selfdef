@@ -1,0 +1,41 @@
+name        = "sshd-config-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the EFFECTIVE sshd configuration (sshd -T merged output for a curated security-directive set) + a content hash of sshd_config and sshd_config.d/* (to catch Match blocks and drop-ins) vs a learned baseline. Catches a dangerous directive added via ANY file: PermitRootLogin yes, PermitEmptyPasswords yes, a malicious AuthorizedKeysCommand/ForceCommand (sshd exec vectors), or a backdoor Match block. Distinct from ssh-hardening (writes/checks its own directives) and ssh-authkeys-watchdog (watches key files)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sshd-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any sshd-config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sshd-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/sshd-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-sshd-config.service",
+    "/etc/systemd/system/selfdef-sshd-config.timer",
+    "/var/lib/selfdef/sshd-config-baseline.tsv",
+]

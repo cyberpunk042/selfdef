@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 33: continuation 115→116 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Closes the effective-
+sshd-config drift surface; L1 module-contracts coherent at 116, cargo
+modules::tests 16/16.
+
+- `sshd-config-watchdog` (116) — boot+daily delta of the EFFECTIVE sshd
+  config (sshd -T merged output for a curated security-directive set)
+  PLUS a content hash of sshd_config + sshd_config.d/* (to catch Match
+  blocks, which sshd -T's global dump omits). Catches a dangerous
+  directive added via ANY file: PermitRootLogin yes, PermitEmptyPasswords
+  yes, a malicious AuthorizedKeysCommand/ForceCommand (sshd exec
+  vectors), or a backdoor Match block. Dangerous value or exec target
+  under tmp/home/dev-shm/world-writable/bare = alert; any other directive
+  or hash change = warn. No-ops cleanly on hosts without sshd. Distinct
+  from ssh-hardening (writes/checks its OWN directives) and
+  ssh-authkeys-watchdog (watches key FILES; this watches the
+  AuthorizedKeysCommand that supplies keys + the rest of the effective
+  config). MITRE T1098.004/T1556/T1505/T1059.004. Cadence boot+14min /
+  07:15.
+
 ### Added — module-ecosystem batch 32: continuation 114→115 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Closes the modprobe
