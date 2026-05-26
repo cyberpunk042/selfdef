@@ -1,0 +1,37 @@
+name        = "apport-disable"
+version     = "0.1.0"
+summary     = "Mask Ubuntu's apport crash-reporting daemon + clear kernel.core_pattern apport pipe. apport has a recurring local privilege-escalation CVE history (CVE-2021-3899 / CVE-2022-1242 / CVE-2023-1326 family) and the core_pattern pipe is an attacker-reachable setuid-aware code path"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["apport-disabled"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `mask` (default) — stop + disable + mask apport.service +
+#                   apport-autoreport + whoopsie; reset
+#                   core_pattern if it pipes to apport.
+# `stop`           — stop + disable only.
+default = "mask"
+available = ["mask", "stop"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/apport-disable.toml",
+]
