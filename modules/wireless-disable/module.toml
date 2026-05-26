@@ -1,0 +1,39 @@
+name        = "wireless-disable"
+version     = "0.1.0"
+summary     = "Disable Wi-Fi on wired-only servers — rfkill block wlan + modprobe-blacklist the cfg80211/mac80211 stack + common Wi-Fi drivers. Removes the WoWLAN / rogue-AP / Wi-Fi-firmware-CVE attack surface on hosts that have no business being on wireless. Companion to bluetooth-disable + wol-disable"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = []
+provides    = ["wireless-disabled"]
+consumes    = []
+
+requires    = []
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `rfkill` (default) — rfkill block all wlan + write a
+#                     NetworkManager/systemd hint; reversible
+#                     live without reboot. No module blacklist.
+# `mask`             — rfkill + modprobe.d blacklist cfg80211/
+#                     mac80211 + common drivers (iwlwifi, ath,
+#                     rtw, brcmfmac, mt76) with install /bin/true.
+#                     Survives reboot; strongest.
+default = "rfkill"
+available = ["rfkill", "mask"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/wireless-disable.toml",
+    "/etc/modprobe.d/selfdef-wireless-blacklist.conf",
+]
