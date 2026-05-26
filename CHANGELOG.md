@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 guard locking the SDD-061 D-6 dedup invariant (2026-05-26)
+
+Capstone for the D-6 migration: a guard that fails if any watchdog scan
+script re-introduces an inline copy of the shared idioms, so the
+single-source-of-truth cannot silently rot as new watchdogs are added.
+
+- `packaging/test/L2-watchdog-dedup-guard.bats` — iterates every
+  `modules/*-watchdog/systemd/*.sh` (105 scripts) and asserts: (1) none
+  carries an inline `PATTERNS=(` array; (2) none carries the raw
+  trailing-slash writable-root regex (musl-ld-path's distinct exact-match
+  `…home)$` form is intentionally not matched); (3) any script using a
+  shared helper also sources module-lib; (4) any script that sources
+  module-lib has a `module_lib_missing` fail-loud path. 5/5 green.
+
 ### Changed — SDD-061 D-6 COMPLETE: final watchdog batch (13 modules) + all 46 migrated (2026-05-26)
 
 Final D-6 batch: the 13 modules whose inline PATTERNS block was NOT
