@@ -1,0 +1,3 @@
+profile = "web"
+allow_services = "http,https"
+allow_ports = ""

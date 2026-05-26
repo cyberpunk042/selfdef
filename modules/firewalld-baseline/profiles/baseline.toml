@@ -1,0 +1,7 @@
+profile = "baseline"
+# Extra firewalld services to allow (ssh always allowed).
+# Comma-separated service names (per `firewall-cmd
+# --get-services`). Example: "cockpit,dhcpv6-client"
+allow_services = ""
+# Extra raw ports (proto/port). Example: "8443/tcp,51820/udp"
+allow_ports = ""

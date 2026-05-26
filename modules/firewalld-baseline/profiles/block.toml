@@ -1,0 +1,3 @@
+profile = "block"
+allow_services = ""
+allow_ports = ""

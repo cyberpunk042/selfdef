@@ -1,0 +1,41 @@
+name        = "firewalld-baseline"
+version     = "0.1.0"
+summary     = "firewalld default-deny zone baseline for RHEL/Fedora/Rocky/Alma — set the default zone to drop/block, allow only ssh + operator-declared services. RHEL-side parallel of nftables-baseline (which manages nftables directly). Refuse-to-brick: ssh always permitted before the zone tightens"
+category    = "hardening"
+
+depends_on  = []
+conflicts   = ["nftables-baseline"]
+provides    = ["host-firewall", "firewalld-baseline"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "firewall-cmd" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `baseline` (default) — default zone = drop; allow ssh
+#                       service + operator allow_services /
+#                       allow_ports. (drop = silent; no reply)
+# `web`                — baseline + http + https services.
+# `block`              — default zone = block (sends ICMP
+#                       reject instead of silent drop — more
+#                       polite, slightly more info-leak).
+default = "baseline"
+available = ["baseline", "web", "block"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/firewalld-baseline.toml",
+    "/var/lib/selfdef/firewalld-default-zone.bak",
+]
