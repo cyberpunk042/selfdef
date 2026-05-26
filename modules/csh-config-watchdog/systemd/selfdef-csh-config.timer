@@ -1,0 +1,19 @@
+# selfdef csh-config-watchdog — boot+69min + daily 12:00.
+# Extends the staggered ladder after hosts-allow (11:50). A planted
+# csh/tcsh init snippet runs in the next csh/tcsh session, so the
+# boot catch confirms the set after a restart and the daily catch
+# bounds dwell time on a long-running host.
+
+[Unit]
+Description=selfdef csh/tcsh global-init delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/csh-config-watchdog/README.md
+
+[Timer]
+OnBootSec=69min
+OnCalendar=*-*-* 12:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-csh-config.service
+
+[Install]
+WantedBy=timers.target

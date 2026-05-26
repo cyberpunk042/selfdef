@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 88: continuation 170→171 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Completes the global
+interactive-shell-init quartet (bash/zsh + bash-completion + fish + csh)
+with the csh/tcsh global init surface; L1 module-contracts coherent at
+171, cargo modules::tests 16/16.
+
+- `csh-config-watchdog` (171) — boot+daily delta of the csh/tcsh global
+  init files (/etc/csh.cshrc, /etc/csh.login, /etc/csh.logout) +
+  ownership + suspicious-pattern scan. csh/tcsh source /etc/csh.cshrc on
+  EVERY invocation and /etc/csh.login at login, so a planted snippet runs
+  in every csh/tcsh session (T1546). Completes the global
+  interactive-shell-init quartet with shell-init-watchdog (bash/zsh),
+  bash-completion-watchdog (bash completion), and fish-config-watchdog
+  (fish). A snippet under /tmp /home /dev/shm, world-writable, non-root,
+  or an injection pattern is alert; add/change/remove is warn. Per-user
+  ~/.cshrc is the home-dir surface (not watched here). No-ops cleanly
+  when csh/tcsh init files are absent. Cadence boot+69min / 12:00.
+
 ### Added — module-ecosystem batch 87: continuation 169→170 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the tcpwrappers
