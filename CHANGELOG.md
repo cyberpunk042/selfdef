@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 51: continuation 133→134 (2026-05-26)
+
+Per operator direction ("keep mining niche detectors"). Adds the
+rsh/rlogin trusted-relationship surface; L1 module-contracts coherent at
+134, cargo modules::tests 16/16.
+
+- `rhosts-watchdog` (134) — boot+daily delta of the rsh/rlogin trust
+  files (/etc/hosts.equiv + root's ~/.rhosts ~/.shosts +
+  /etc/ssh/shosts.equiv) vs a learned baseline + ownership scan. A `+`
+  wildcard entry grants passwordless rlogin/rsh access from any host (or
+  `+ +` from any host AND any user) — a classic trusted-relationship
+  backdoor (T1199). Any entry change is warn; a `+` wildcard, a
+  world-writable/non-root trust file, or the mere presence of root's
+  ~/.rhosts/~/.shosts is alert. No-ops cleanly if absent. Distinct from
+  rsh-telnet-disable (masks the SERVICE) — this detects the TRUST files
+  (and ~/.shosts matters even under ssh HostbasedAuthentication). Cadence
+  boot+32min / 08:45.
+
 ### Added — module-ecosystem batch 50: continuation 132→133 (2026-05-26)
 
 Per operator direction ("keep mining niche detectors"). Adds the pam_cap

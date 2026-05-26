@@ -1,0 +1,18 @@
+# selfdef rhosts-watchdog — boot+32min + daily 08:45.
+# Extends the staggered ladder after capability-conf (08:40). Boot
+# catch confirms the trust files after a restart (a wildcard trust
+# is live for the next rlogin/rsh attempt).
+
+[Unit]
+Description=selfdef rsh/rlogin trust-file delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/rhosts-watchdog/README.md
+
+[Timer]
+OnBootSec=32min
+OnCalendar=*-*-* 08:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-rhosts.service
+
+[Install]
+WantedBy=timers.target

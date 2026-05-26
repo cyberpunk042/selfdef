@@ -1,0 +1,41 @@
+name        = "rhosts-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the rsh/rlogin trust files (/etc/hosts.equiv + root's ~/.rhosts ~/.shosts + /etc/ssh/shosts.equiv) vs a learned baseline + ownership scan. A `+` wildcard entry grants passwordless rlogin/rsh access from any host (or `+ +` from any host AND any user) — a classic trusted-relationship backdoor (T1199). Any entry change is warn; a `+` wildcard, a world-writable/non-root trust file, or the mere presence of root's ~/.rhosts is the backdoor signature (alert). Distinct from rsh-telnet-disable (which masks the SERVICE) — this detects the TRUST files. No-ops cleanly if absent"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["rhosts-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any rhosts/hosts.equiv change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/rhosts-watchdog.toml",
+    "/usr/local/libexec/selfdef/rhosts-watchdog.sh",
+    "/etc/systemd/system/selfdef-rhosts.service",
+    "/etc/systemd/system/selfdef-rhosts.timer",
+    "/var/lib/selfdef/rhosts-baseline.tsv",
+]
