@@ -1,0 +1,20 @@
+# selfdef snmpd-exec-watchdog — boot+84min + daily 13:35.
+# Extends the staggered ladder after auditd-plugins (13:30). A
+# planted exec/extend/pass directive is reachable the instant the
+# snmpd agent is queried for its OID (remotely triggerable), so the
+# daily catch bounds dwell time; the boot catch confirms the config
+# after a restart.
+
+[Unit]
+Description=selfdef snmpd command-directive delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/snmpd-exec-watchdog/README.md
+
+[Timer]
+OnBootSec=84min
+OnCalendar=*-*-* 13:35:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-snmpd-exec.service
+
+[Install]
+WantedBy=timers.target

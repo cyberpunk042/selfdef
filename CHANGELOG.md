@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 103: continuation 185→186 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the
+SNMP-query-triggered exec surface — remotely-triggerable root exec; L1
+module-contracts coherent at 186, cargo modules::tests 16/16.
+
+- `snmpd-exec-watchdog` (186) — boot+daily delta of the Net-SNMP daemon
+  command directives (/etc/snmp/snmpd.conf + snmpd.conf.d/*.conf
+  exec/extend/extend-sh/pass/pass_persist/sh) + ownership + command scan.
+  snmpd runs the named program AS ITS DAEMON USER (frequently root) and
+  exposes the output as an SNMP OID, so the command is REMOTELY
+  TRIGGERABLE — anyone who can query the agent (default community
+  'public') fires it. A planted `extend evil /tmp/x` (or exec/pass to a
+  writable/attacker program) is remote-triggered command execution /
+  persistence (T1546/T1059). A command program under /tmp /var/tmp
+  /dev/shm /home or with an injection pattern, a world-writable/non-root
+  config, or any added exec directive is alert/warn. Legit /bin and
+  /usr/local monitoring checks not flagged. Distinct from cron/incron/at
+  (time/file-event) and postfix/aliases (mail). No-ops cleanly when snmpd
+  is absent. Cadence boot+84min / 13:35.
+
 ### Added — module-ecosystem batch 102: continuation 184→185 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the auditd
