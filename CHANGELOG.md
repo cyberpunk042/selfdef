@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — dashboard panel: findings by rule (incl. watchdog alert tier) (2026-05-26)
+
+Fourth slice of the "wire modules into stack" direction (the "+ dashboard
+panel" piece). Post-SDD-062 the detection-watchdog alert tier already flows
+into `selfdef_findings_by_severity_total` as High-severity findings, but
+there was no breakdown of WHICH rule produced them — so a watchdog-specific
+panel could not be accurate. This adds a generic by-rule finding counter and
+a dashboard panel over it.
+
+- `crates/selfdef-api/src/metrics.rs` — new `selfdef_findings_by_rule_total`
+  counter, labelled by the rule title the correlator carries in
+  `raw.rule_title` (escaped via the existing label-escape helper).
+  Findings with no `rule_title` are still counted in the totals but not
+  bucketed (keeps cardinality clean). New unit test
+  `findings_bucket_by_rule_title_from_raw`; selfdef-api lib 136/136.
+- `modules/observability/assets/dashboards/selfdef.json.template` — new
+  timeseries panel "selfdef findings / second by rule (incl.
+  detection-watchdog alert tier, SDD-062)" querying
+  `sum by (rule) (rate(selfdef_findings_by_rule_total[5m]))`. The
+  `selfdef_watchdog_alert` rule's findings show up by name, filterable via
+  `rule=~".*watchdog.*"`. Panel count 20 → 21 (L2-observability ≥20 gate
+  holds). No new alert rule (avoids a cross-repo runbook dependency).
+
 ### Added — L2 functional severity coverage for dhcpd-exec-watchdog (2026-05-26)
 
 Third slice of the "wire modules into stack" direction (the "+ L2 bats

@@ -32,6 +32,12 @@ pub struct Metrics {
     events_by_class: Mutex<HashMap<u32, u64>>,
     /// Total findings (category 2 events), by severity_id.
     findings_by_severity: Mutex<HashMap<u32, u64>>,
+    /// Total findings (category 2 events), by the title of the rule that
+    /// produced them (carried in `raw.rule_title` by the correlator). Lets
+    /// the dashboard break the finding stream down per rule — e.g. the
+    /// `selfdef_watchdog_alert` rule (SDD-062) that routes the
+    /// detection-watchdog alert tier.
+    findings_by_rule: Mutex<HashMap<String, u64>>,
     /// Sum of all event counters — cheaper to read than locking the map.
     events_total: AtomicU64,
     findings_total: AtomicU64,
@@ -52,6 +58,7 @@ impl Metrics {
             schema_version: selfdef_core::SCHEMA_VERSION,
             events_by_class: Mutex::new(HashMap::new()),
             findings_by_severity: Mutex::new(HashMap::new()),
+            findings_by_rule: Mutex::new(HashMap::new()),
             events_total: AtomicU64::new(0),
             findings_total: AtomicU64::new(0),
             ingest_lag_events: AtomicU64::new(0),
@@ -76,6 +83,19 @@ impl Metrics {
                 .lock()
                 .unwrap_or_else(|p| p.into_inner());
             *m.entry(event.severity_id as u32).or_insert(0) += 1;
+
+            if let Some(rule) = event
+                .raw
+                .as_ref()
+                .and_then(|r| r.get("rule_title"))
+                .and_then(serde_json::Value::as_str)
+            {
+                let mut by_rule = self
+                    .findings_by_rule
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+                *by_rule.entry(rule.to_string()).or_insert(0) += 1;
+            }
         }
     }
 
@@ -177,6 +197,26 @@ impl Metrics {
             writeln!(
                 out,
                 "selfdef_findings_by_severity_total{{severity_id=\"{sev}\"}} {count}",
+            )
+            .unwrap();
+        }
+
+        out.push_str("# HELP selfdef_findings_by_rule_total Findings, by the title of the rule that produced them.\n");
+        out.push_str("# TYPE selfdef_findings_by_rule_total counter\n");
+        let rule_snapshot: Vec<(String, u64)> = {
+            let m = self
+                .findings_by_rule
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
+            v.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            v
+        };
+        for (rule, count) in rule_snapshot {
+            writeln!(
+                out,
+                "selfdef_findings_by_rule_total{{rule=\"{}\"}} {count}",
+                escape(&rule),
             )
             .unwrap();
         }
@@ -291,6 +331,40 @@ mod tests {
         assert_eq!(by_sev.get(&(SeverityId::High as u32)).copied(), Some(2));
         assert_eq!(by_sev.get(&(SeverityId::Critical as u32)).copied(), Some(1));
         assert_eq!(by_sev.get(&(SeverityId::Informational as u32)), None);
+    }
+
+    #[test]
+    fn findings_bucket_by_rule_title_from_raw() {
+        let m = Metrics::new("test-host");
+        let finding = |title: &str| {
+            ev(ClassUid::DETECTION_FINDING, SeverityId::High)
+                .with_raw(serde_json::json!({ "rule_title": title }))
+        };
+        m.record_event(&finding("selfdef watchdog alert-tier finding"));
+        m.record_event(&finding("selfdef watchdog alert-tier finding"));
+        m.record_event(&finding("sudoers tamper"));
+        // A finding with no rule_title is counted in totals but not bucketed.
+        m.record_event(&ev(ClassUid::DETECTION_FINDING, SeverityId::High));
+        // A non-finding event never touches the by-rule bucket.
+        m.record_event(&ev(ClassUid::SSH_ACTIVITY, SeverityId::Informational));
+
+        let by_rule = m.findings_by_rule.lock().unwrap();
+        assert_eq!(
+            by_rule.get("selfdef watchdog alert-tier finding").copied(),
+            Some(2)
+        );
+        assert_eq!(by_rule.get("sudoers tamper").copied(), Some(1));
+        assert_eq!(by_rule.len(), 2);
+        drop(by_rule);
+
+        let body = m.render(0);
+        assert!(body.contains("# TYPE selfdef_findings_by_rule_total counter"));
+        assert!(
+            body.contains(
+                "selfdef_findings_by_rule_total{rule=\"selfdef watchdog alert-tier finding\"} 2"
+            ),
+            "{body}"
+        );
     }
 
     #[test]

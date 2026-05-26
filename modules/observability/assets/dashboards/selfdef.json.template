@@ -100,6 +100,19 @@
       ]
     },
     {
+      "id": 8,
+      "type": "timeseries",
+      "title": "selfdef findings / second by rule (incl. detection-watchdog alert tier, SDD-062)",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (rule) (rate(selfdef_findings_by_rule_total[5m]))",
+          "legendFormat": "{{rule}}"
+        }
+      ]
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Four-watchdog set (MS046 + MS047 + MS044 + MS048)",
