@@ -1,0 +1,20 @@
+# selfdef ca-certificates-hooks-watchdog — boot+56min + daily 10:45.
+# Extends the staggered ladder after acpi-hooks (10:40). A dropped
+# update.d hook fires on the next CA trust-store regeneration
+# (ca-certificates package update, local CA add/remove), so the
+# daily catch bounds dwell time; the boot catch confirms the hook
+# set after a restart.
+
+[Unit]
+Description=selfdef ca-certificates update-hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/ca-certificates-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=56min
+OnCalendar=*-*-* 10:45:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-cacert-hooks.service
+
+[Install]
+WantedBy=timers.target

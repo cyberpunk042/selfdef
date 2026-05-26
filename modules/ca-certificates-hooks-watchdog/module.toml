@@ -1,0 +1,41 @@
+name        = "ca-certificates-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the ca-certificates update-hook dir (/etc/ca-certificates/update.d) vs a learned baseline + ownership + suspicious-pattern scan. update-ca-certificates runs every script in this dir AS ROOT after the system CA trust store is regenerated — which happens on every ca-certificates package update and whenever a local CA is added/removed. A dropped script runs as root on those routine events (T1546), and the same trust-store-update flow is where an attacker installing a rogue root CA would already be operating, so a hook here pairs naturally with CA-implant tradecraft. Distinct from any cert-store CONTENT watcher (this is the exec surface, not the trusted-cert list). A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when ca-certificates is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["ca-certificates-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ca-certificates-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/ca-certificates-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/ca-certificates-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-cacert-hooks.service",
+    "/etc/systemd/system/selfdef-cacert-hooks.timer",
+    "/var/lib/selfdef/ca-certificates-hooks-baseline.tsv",
+]

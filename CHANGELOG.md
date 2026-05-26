@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 75: continuation 157→158 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the CA
+trust-store-update exec surface (pairs naturally with rogue-CA-implant
+tradecraft); L1 module-contracts coherent at 158, cargo modules::tests
+16/16.
+
+- `ca-certificates-hooks-watchdog` (158) — boot+daily delta of the
+  ca-certificates update-hook dir (/etc/ca-certificates/update.d) +
+  ownership + suspicious-pattern scan. update-ca-certificates runs every
+  script in this dir AS ROOT after the system CA trust store is
+  regenerated (ca-certificates package update, local CA add/remove), so
+  a dropped script runs as root on those routine events (T1546). The
+  same trust-store-update flow is where an attacker installing a rogue
+  root CA already operates, so a hook here pairs with CA-implant
+  tradecraft. Watches the exec surface, not the trusted-cert list. A
+  script under /tmp /home /dev/shm, world-writable, non-root, or an
+  injection pattern is alert; add/change/remove is warn. No-ops cleanly
+  on hosts without the Debian ca-certificates package (RHEL p11-kit
+  layout differs). Cadence boot+56min / 10:45.
+
 ### Added — module-ecosystem batch 74: continuation 156→157 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the acpid
