@@ -1,0 +1,20 @@
+# selfdef openssl-conf-watchdog — boot+80min + daily 13:00.
+# Extends the staggered ladder after systemd-env (12:50). A planted
+# engine dynamic_path / provider module takes effect for the next
+# OpenSSL-using process launch (i.e. immediately, for nearly
+# everything that does TLS/crypto), so the daily catch bounds dwell
+# time; the boot catch confirms the config after a restart.
+
+[Unit]
+Description=selfdef OpenSSL config engine/provider-load delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/openssl-conf-watchdog/README.md
+
+[Timer]
+OnBootSec=80min
+OnCalendar=*-*-* 13:00:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-openssl-conf.service
+
+[Install]
+WantedBy=timers.target

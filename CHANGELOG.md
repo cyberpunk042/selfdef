@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 99: continuation 181→182 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the OpenSSL
+engine/provider load surface — code injection into every TLS/crypto
+process; L1 module-contracts coherent at 182, cargo modules::tests 16/16.
+
+- `openssl-conf-watchdog` (182) — boot+daily delta of the OpenSSL config
+  (/etc/ssl/openssl.cnf, /etc/pki/tls/openssl.cnf, /usr/lib/ssl/openssl.cnf)
+  + ownership + engine/provider-module scan. OpenSSL loads ENGINE .so via
+  `dynamic_path =` and (3.x) PROVIDER .so via `module =`, and the config
+  is read by EVERY OpenSSL-using process (openssl CLI, curl, wget, and
+  libcrypto/libssl daemons) — so a planted dynamic_path/module pointing
+  at a writable/attacker .so loads attacker code into all of them
+  (T1574/T1556). Also flags a `.include` of a writable file. Distinct
+  from ld-preload, pkcs11-modules, gss-mech watchdogs: this is the
+  OpenSSL engine/provider load surface. A dynamic_path/module/.include
+  under /tmp /var/tmp /dev/shm /home or relative-with-slash, a
+  world-writable/non-root config, or any added directive is alert/warn.
+  Default provider config + standard /usr/lib engine paths not flagged.
+  /usr/lib/ssl/openssl.cnf de-duplicated by realpath. No-ops cleanly when
+  absent. Cadence boot+80min / 13:00.
+
 ### Added — module-ecosystem batch 98: continuation 180→181 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the systemd

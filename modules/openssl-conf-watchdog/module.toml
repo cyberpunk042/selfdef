@@ -1,0 +1,41 @@
+name        = "openssl-conf-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the OpenSSL config (/etc/ssl/openssl.cnf, /etc/pki/tls/openssl.cnf, /usr/lib/ssl/openssl.cnf) vs a learned baseline + ownership + engine/provider-module scan. OpenSSL loads ENGINE shared objects via `dynamic_path = /path/engine.so` and (OpenSSL 3.x) PROVIDER shared objects via `module = /path/provider.so` from this config — and the config is read by EVERY OpenSSL-using process on the host (openssl CLI, curl, wget, and countless daemons that link libcrypto/libssl). A planted dynamic_path/module pointing at a writable/attacker .so loads attacker code into all of them — a near-ubiquitous code-execution foothold (T1574 hijack execution flow). Distinct from ld-preload-watchdog (LD_PRELOAD/ld.so.preload), pkcs11-modules-watchdog (p11-kit), and gss-mech-watchdog: this is the OpenSSL engine/provider load surface. A dynamic_path/module under /tmp /home /dev/shm /var/tmp or relative-with-slash, a world-writable/non-root config, or any added engine/provider is the signature. No-ops cleanly when no openssl.cnf is present"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["openssl-conf-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any OpenSSL engine/provider change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/openssl-conf-watchdog.toml",
+    "/usr/local/libexec/selfdef/openssl-conf-watchdog.sh",
+    "/etc/systemd/system/selfdef-openssl-conf.service",
+    "/etc/systemd/system/selfdef-openssl-conf.timer",
+    "/var/lib/selfdef/openssl-conf-baseline.tsv",
+]
