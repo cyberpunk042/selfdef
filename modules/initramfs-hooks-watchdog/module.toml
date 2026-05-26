@@ -1,0 +1,41 @@
+name        = "initramfs-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the initramfs-tools hook + boot-script dirs (/etc/initramfs-tools/hooks, /etc/initramfs-tools/scripts/{init-top,init-bottom,init-premount,local-top,local-bottom,local-premount,nfs-top,nfs-bottom,panic}, /etc/initramfs/post-update.d) vs a learned baseline + ownership + suspicious-pattern scan. The hooks/ scripts run AS ROOT at initramfs build time (and copy arbitrary files into the image); the scripts/* boot scripts are BAKED INTO the initramfs and run AS ROOT in early userspace BEFORE pivot_root — earlier than any disk-resident defense. An added/tampered script is pre-pivot boot-time root-exec persistence / initramfs implant (T1542 pre-OS boot / T1546). Distinct from kernel-install-hooks (build-time package transaction hooks) — these execute INSIDE the initramfs at boot. A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when no initramfs-tools dirs present (dracut/no-initramfs hosts)"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["initramfs-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any initramfs-hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/initramfs-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/initramfs-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-initramfs-hooks.service",
+    "/etc/systemd/system/selfdef-initramfs-hooks.timer",
+    "/var/lib/selfdef/initramfs-hooks-baseline.tsv",
+]

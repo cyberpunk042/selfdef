@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 69: continuation 151→152 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the initramfs
+build-hook + baked-in boot-script surface (pre-pivot root exec, the
+earliest userspace defense gap); L1 module-contracts coherent at 152,
+cargo modules::tests 16/16.
+
+- `initramfs-hooks-watchdog` (152) — boot+daily delta of the
+  initramfs-tools hook + boot-script dirs (/etc/initramfs-tools/hooks,
+  /etc/initramfs-tools/scripts/{init-top,init-premount,init-bottom,
+  local-top,local-premount,local-bottom,nfs-top,nfs-premount,nfs-bottom,
+  panic}, /etc/initramfs/post-update.d) + ownership + suspicious-pattern
+  scan. Two root-exec surfaces: hooks/* run at build time and copy
+  arbitrary files INTO the image; scripts/<stage>/* are baked into the
+  initramfs and run in early userspace BEFORE pivot_root — earlier than
+  systemd or any disk-resident defense (bootkit territory). An
+  added/tampered script is pre-pivot boot-time root-exec / initramfs
+  implant (T1542 pre-OS boot / T1546). Distinct from kernel-install-hooks
+  (build-time package transaction hooks) — these execute INSIDE the
+  initramfs at boot. A script under /tmp /home /dev/shm, world-writable,
+  non-root, or an injection pattern is alert; add/change/remove is warn.
+  No-ops cleanly on dracut/no-initramfs hosts. Cadence boot+50min / 10:15.
+
 ### Added — module-ecosystem batch 68: continuation 150→151 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the
