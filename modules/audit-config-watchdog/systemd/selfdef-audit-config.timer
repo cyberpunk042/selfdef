@@ -1,0 +1,19 @@
+# selfdef audit-config-watchdog — boot+9min + every 2h.
+# Disabling auditd is a fast pre-attack blinding move; a 2h
+# cadence catches it. Boot catch confirms the audit subsystem
+# came up with its rules after restart (an attacker who
+# removed the persistent rules shows at next boot).
+
+[Unit]
+Description=selfdef audit-subsystem state delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/audit-config-watchdog/README.md
+
+[Timer]
+OnBootSec=9min
+OnUnitActiveSec=2h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-audit-config.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,42 @@
+name        = "audit-config-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of the Linux audit subsystem state — loaded rule set (auditctl -l), /etc/audit/rules.d/* + auditd.conf hashes, and the auditd enabled+active state. An attacker disabling auditd or flushing rules to blind the host is T1562.001 Impair Defenses; this surfaces it"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["audit-config-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on rule-count drop / auditd
+#                     disabled / config change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/audit-config-watchdog.toml",
+    "/usr/local/libexec/selfdef/audit-config-watchdog.sh",
+    "/etc/systemd/system/selfdef-audit-config.service",
+    "/etc/systemd/system/selfdef-audit-config.timer",
+    "/var/lib/selfdef/audit-config-baseline.tsv",
+]

@@ -1,0 +1,15 @@
+[Unit]
+Description=selfdef audit-subsystem state delta scan
+Documentation=https://github.com/cyberpunk042/selfdef modules/audit-config-watchdog/README.md
+After=local-fs.target auditd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/audit-config-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log /var/lib/selfdef
+Nice=12
+TimeoutStartSec=1m
