@@ -1,0 +1,18 @@
+# selfdef motd-scripts-watchdog — boot+24min + daily 08:05.
+# Extends the staggered ladder after polkit-rules (08:00). Boot
+# catch confirms the update-motd.d set after a restart (a motd
+# script fires on the next interactive login).
+
+[Unit]
+Description=selfdef dynamic MOTD script delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/motd-scripts-watchdog/README.md
+
+[Timer]
+OnBootSec=24min
+OnCalendar=*-*-* 08:05:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-motd-scripts.service
+
+[Install]
+WantedBy=timers.target

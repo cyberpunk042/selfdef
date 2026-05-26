@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 43: continuation 125→126 (2026-05-26)
+
+Per operator direction ("continue endlessly"). Adds the dynamic-MOTD
+root-on-login surface; L1 module-contracts coherent at 126, cargo
+modules::tests 16/16.
+
+- `motd-scripts-watchdog` (126) — boot+daily delta of the dynamic MOTD
+  script dir (/etc/update-motd.d/*) vs a learned baseline + ownership +
+  suspicious-pattern scan. pam_motd runs these scripts AS ROOT on every
+  interactive login (SSH/console); a script added or tampered here is
+  root-exec persistence that fires on each login and is easy to overlook
+  (looks like cosmetic banner config). World-writable/non-root script or
+  an injection pattern (curl|sh, /dev/tcp, bash -i, tmp/home exec, …) =
+  alert; add/change/remove = warn. No-ops cleanly if no update-motd.d.
+  Distinct from motd-doctrine (which WRITES a presence banner) — this
+  DETECTS rogue/tampered scripts in the same dir. MITRE T1546/T1037/
+  T1059.004. Cadence boot+24min / 08:05.
+
 ### Added — module-ecosystem batch 42: continuation 124→125 (2026-05-26)
 
 Per operator direction ("continue endlessly"). Adds the polkit

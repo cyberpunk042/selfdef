@@ -1,0 +1,41 @@
+name        = "motd-scripts-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the dynamic MOTD script dir (/etc/update-motd.d/*) vs a learned baseline + an ownership + suspicious-pattern scan. pam_motd runs these scripts AS ROOT on every interactive login (SSH/console); a script added or tampered here is root-exec persistence that fires on each login (T1546/T1037) and is easy to overlook. World-writable / non-root-owned script or an injection pattern is the signature. Distinct from motd-doctrine (which WRITES a presence banner) — this DETECTS rogue/tampered scripts in the same dir"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["motd-scripts-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any motd-script change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/motd-scripts-watchdog.toml",
+    "/usr/local/libexec/selfdef/motd-scripts-watchdog.sh",
+    "/etc/systemd/system/selfdef-motd-scripts.service",
+    "/etc/systemd/system/selfdef-motd-scripts.timer",
+    "/var/lib/selfdef/motd-scripts-baseline.tsv",
+]
