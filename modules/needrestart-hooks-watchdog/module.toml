@@ -1,0 +1,41 @@
+name        = "needrestart-hooks-watchdog"
+version     = "0.1.0"
+summary     = "Boot + daily delta of the needrestart hook dirs (/etc/needrestart/hook.d, /etc/needrestart/notify.d, /etc/needrestart/restart.d) vs a learned baseline + ownership + suspicious-pattern scan. needrestart runs every script in these dirs AS ROOT after each apt/dpkg transaction (it is wired in via /etc/apt/apt.conf.d/99needrestart on Ubuntu 22.04+ and many Debian hosts) to decide which services to restart. A dropped script is root-exec-after-every-package-operation persistence (T1546) that fires on the attacker's own next package install or any admin upgrade. Distinct from apt-hooks-watchdog (apt's own DPkg::Pre/Post-Invoke) and dnf-plugins-watchdog: needrestart is a separate tool with its own hook dir set that apt merely triggers. A script under /tmp /home /dev/shm, world-writable, non-root, or an injection pattern is the signature. No-ops cleanly when needrestart is not installed"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["needrestart-hooks-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "sha256sum" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any needrestart hook change
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/needrestart-hooks-watchdog.toml",
+    "/usr/local/libexec/selfdef/needrestart-hooks-watchdog.sh",
+    "/etc/systemd/system/selfdef-needrestart.service",
+    "/etc/systemd/system/selfdef-needrestart.timer",
+    "/var/lib/selfdef/needrestart-hooks-baseline.tsv",
+]

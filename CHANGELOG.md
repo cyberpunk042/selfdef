@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — module-ecosystem batch 83: continuation 165→166 (2026-05-26)
+
+Per operator direction ("keep mining (sub-niche)"). Adds the needrestart
+post-package-transaction exec surface (separate tool/dir-set from apt's
+own hooks); L1 module-contracts coherent at 166, cargo modules::tests
+16/16.
+
+- `needrestart-hooks-watchdog` (166) — boot+daily delta of the
+  needrestart hook dirs (/etc/needrestart/hook.d, notify.d, restart.d) +
+  ownership + suspicious-pattern scan. needrestart runs every script in
+  these dirs AS ROOT after each apt/dpkg transaction (wired in via
+  /etc/apt/apt.conf.d/99needrestart, default on Ubuntu 22.04+ and many
+  Debian hosts), so a dropped script is root-exec-after-every-package-
+  operation persistence (T1546) that fires on the attacker's own next
+  install or any admin upgrade. Distinct from apt-hooks-watchdog (apt's
+  DPkg::Pre/Post-Invoke) and dnf-plugins-watchdog: needrestart is a
+  separate tool with its own hook dir set that apt triggers. A script
+  under /tmp /home /dev/shm, world-writable, non-root, or an injection
+  pattern is alert; add/change/remove is warn. No-ops cleanly when
+  needrestart is not installed. Cadence boot+64min / 11:25.
+
 ### Added — module-ecosystem batch 82: continuation 164→165 (2026-05-26)
 
 Per operator direction ("keep mining (sub-niche)"). Adds the OpenVPN

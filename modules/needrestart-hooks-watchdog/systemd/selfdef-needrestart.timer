@@ -1,0 +1,19 @@
+# selfdef needrestart-hooks-watchdog — boot+64min + daily 11:25.
+# Extends the staggered ladder after openvpn (11:20). A dropped
+# needrestart hook fires on the next apt/dpkg transaction (any
+# package install or upgrade), so the daily catch bounds dwell time;
+# the boot catch confirms the hook set after a restart.
+
+[Unit]
+Description=selfdef needrestart hook delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/needrestart-hooks-watchdog/README.md
+
+[Timer]
+OnBootSec=64min
+OnCalendar=*-*-* 11:25:00
+RandomizedDelaySec=10m
+Persistent=true
+Unit=selfdef-needrestart.service
+
+[Install]
+WantedBy=timers.target
