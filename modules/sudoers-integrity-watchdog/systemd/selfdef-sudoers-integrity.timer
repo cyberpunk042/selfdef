@@ -1,0 +1,18 @@
+# selfdef sudoers-integrity-watchdog — boot+6min + every 2h.
+# A NOPASSWD grant injection is high-impact priv-esc
+# persistence; 2h bounds detection. Boot catch confirms the
+# grant set after every restart.
+
+[Unit]
+Description=selfdef sudoers grant-set delta scan timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/sudoers-integrity-watchdog/README.md
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=2h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-sudoers-integrity.service
+
+[Install]
+WantedBy=timers.target

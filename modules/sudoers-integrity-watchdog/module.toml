@@ -1,0 +1,40 @@
+name        = "sudoers-integrity-watchdog"
+version     = "0.1.0"
+summary     = "Daily + boot delta of the sudo grant set (/etc/sudoers + /etc/sudoers.d/* parsed rules) vs a learned baseline. A NEW sudo rule — especially a NOPASSWD or ALL=(ALL) grant — is privilege-escalation persistence (T1548.003) that account-watchdog's group-membership view does not catch"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["sudoers-integrity-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log delta; exit 0
+# `enforce`          — exit 1 on any ADDED rule
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/sudoers-integrity-watchdog.toml",
+    "/usr/local/libexec/selfdef/sudoers-integrity-watchdog.sh",
+    "/etc/systemd/system/selfdef-sudoers-integrity.service",
+    "/etc/systemd/system/selfdef-sudoers-integrity.timer",
+    "/var/lib/selfdef/sudoers-integrity-baseline.tsv",
+]
