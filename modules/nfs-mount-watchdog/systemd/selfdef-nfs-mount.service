@@ -1,0 +1,15 @@
+[Unit]
+Description=selfdef network-mount nosuid/nodev verification
+Documentation=https://github.com/cyberpunk042/selfdef modules/nfs-mount-watchdog/README.md
+After=remote-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/selfdef/nfs-mount-watchdog.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ReadWritePaths=/dev/log
+Nice=10
+TimeoutStartSec=1m

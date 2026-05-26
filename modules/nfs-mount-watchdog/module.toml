@@ -1,0 +1,40 @@
+name        = "nfs-mount-watchdog"
+version     = "0.1.0"
+summary     = "Verify every network filesystem mount (nfs/nfs4/cifs/smb3/fuse.sshfs) carries nosuid + nodev. A network mount WITHOUT nosuid lets an attacker who controls the export plant a setuid-root binary that the client honors → instant local root (CIS 2.x). Detection of the missing-hardening-flag on network shares"
+category    = "detection"
+
+depends_on  = []
+conflicts   = []
+provides    = ["nfs-mount-detection"]
+consumes    = []
+
+requires    = [
+    { kind = "binary", value = "findmnt" },
+    { kind = "binary", value = "logger" },
+    { kind = "binary", value = "systemctl" },
+]
+
+instanced = false
+phase = "main"
+
+[install]
+kind = "script"
+apply = "install/apply.sh"
+check = "install/check.sh"
+uninstall = "install/uninstall.sh"
+
+[profiles]
+# `report` (default) — log findings; exit 0
+# `enforce`          — exit 1 if any network mount lacks nosuid
+default = "report"
+available = ["report", "enforce"]
+
+# MS011 Z-8 / SDD-026 — install-path manifest.
+[install_paths]
+scope = "system"
+paths = [
+    "/etc/selfdef/modules/nfs-mount-watchdog.toml",
+    "/usr/local/libexec/selfdef/nfs-mount-watchdog.sh",
+    "/etc/systemd/system/selfdef-nfs-mount.service",
+    "/etc/systemd/system/selfdef-nfs-mount.timer",
+]

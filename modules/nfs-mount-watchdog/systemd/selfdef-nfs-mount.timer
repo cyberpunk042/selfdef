@@ -1,0 +1,18 @@
+# selfdef nfs-mount-watchdog — boot+6min + every 6h.
+# Network mounts come + go (autofs, operator mount); a 6h
+# cadence catches a freshly-mounted unhardened share. Boot
+# catch confirms fstab-persistent network mounts.
+
+[Unit]
+Description=selfdef network-mount verification timer
+Documentation=https://github.com/cyberpunk042/selfdef modules/nfs-mount-watchdog/README.md
+
+[Timer]
+OnBootSec=6min
+OnUnitActiveSec=6h
+RandomizedDelaySec=5min
+Persistent=true
+Unit=selfdef-nfs-mount.service
+
+[Install]
+WantedBy=timers.target
