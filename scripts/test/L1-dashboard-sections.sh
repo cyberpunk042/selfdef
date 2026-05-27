@@ -115,6 +115,12 @@ check "HTML: commit-authority aggregate"  "${HTML}" 'id="ca-aggregate"'         
 check "JS: refreshCommitAuthority()"      "${JS}"   'function refreshCommitAuthority' || failures=$((failures + 1))
 check "JS: commit-authority fetches /v1"  "${JS}"   '/v1/commit-authority'          || failures=$((failures + 1))
 check "JS: interval refreshCommitAuthority" "${JS}" 'gatedInterval\(refreshCommitAuthority' || failures=$((failures + 1))
+# MS032 / SDD-047 — IPS sandbox tier ladder panel.
+check "HTML: sandbox-tiers-section"       "${HTML}" 'id="sandbox-tiers-section"'    || failures=$((failures + 1))
+check "HTML: sandbox-tiers aggregate"     "${HTML}" 'id="st-aggregate"'             || failures=$((failures + 1))
+check "JS: refreshSandboxTiers()"         "${JS}"   'function refreshSandboxTiers'  || failures=$((failures + 1))
+check "JS: sandbox-tiers fetches /v1"     "${JS}"   '/v1/sandbox-tiers'             || failures=$((failures + 1))
+check "JS: interval refreshSandboxTiers"  "${JS}"   'gatedInterval\(refreshSandboxTiers' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

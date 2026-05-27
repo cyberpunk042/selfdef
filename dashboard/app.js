@@ -152,6 +152,9 @@
     if (kind === "commit-authority") {
       return refreshCommitAuthority();
     }
+    if (kind === "sandbox-tiers") {
+      return refreshSandboxTiers();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1715,6 +1718,67 @@
     }
   }
 
+  // MS032 / SDD-047 — IPS sandbox tier ladder doctrine. Read-only schema;
+  // renders each tier with its capability allocation (subprocess / network /
+  // persistence / host-fs) + the promotion gates.
+  async function refreshSandboxTiers() {
+    const ul = document.getElementById("sandbox-tiers-rows");
+    const aggEl = document.getElementById("st-aggregate");
+    const metaEl = document.getElementById("sandbox-tiers-meta");
+    const yn = (b) => (b ? "yes" : "no");
+    try {
+      const body = await get("/v1/sandbox-tiers");
+      const tiers = body.tiers || [];
+      const gates = body.promotion_gates || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${tiers.length} tier(s) · ${gates.length} promotion gate(s) · ` +
+        `${(body.companion_crates || []).length} companion crate(s)`;
+      ul.innerHTML = "";
+      for (const t of tiers) {
+        const li = document.createElement("li");
+        // More capability allowed = higher risk surface → warn; locked-down → green.
+        const permissive = t.subprocess_allowed || t.network_allowed;
+        li.className = permissive ? "fa-yellow" : "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `tier ${t.name}`;
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${permissive ? "yellow" : "green"}`;
+        badge.textContent = permissive ? "OPEN" : "LOCKED";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent =
+          `${t.scope} · subprocess:${yn(t.subprocess_allowed)} ` +
+          `network:${yn(t.network_allowed)} persistent:${yn(t.persistent_allowed)} ` +
+          `host-fs-read:${yn(t.host_fs_readable)}`;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const g of gates) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "promote";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `${g.name}: ${g.semantics}`;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no sandbox-tier doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/sandbox-tiers unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1738,6 +1802,7 @@
   refreshCapabilityTokens();
   refreshToolAuthority();
   refreshCommitAuthority();
+  refreshSandboxTiers();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1823,6 +1888,7 @@
   gatedInterval(refreshCapabilityTokens, 300000, "capability-tokens-section");
   gatedInterval(refreshToolAuthority, 300000, "tool-authority-section");
   gatedInterval(refreshCommitAuthority, 300000, "commit-authority-section");
+  gatedInterval(refreshSandboxTiers, 300000, "sandbox-tiers-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1840,7 +1906,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section"], // MS035/SDD-044 + MS042/SDD-050 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section"], // MS035/SDD-044 + MS042/SDD-050 + MS041/SDD-043 + MS032/SDD-047 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2076,6 +2142,7 @@
     ["capability-tokens-section",  "Capability tokens"],
     ["tool-authority-section",     "Tool authority"],
     ["commit-authority-section",   "Commit authority"],
+    ["sandbox-tiers-section",      "Sandbox tiers"],
   ];
   function readHiddenPanels() {
     try {
