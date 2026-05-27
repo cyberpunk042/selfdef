@@ -30,13 +30,26 @@ BASELINE="${SELFDEF_REQKEY_BASELINE:-/var/lib/selfdef/request-key-baseline.tsv}"
 CONF="${SELFDEF_REQKEY_FILE:-/etc/request-key.conf}"
 CONFD="${SELFDEF_REQKEY_D:-/etc/request-key.d}"
 
+# SDD-063: consume the shared writable-location policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-request-key -- '{"tag":"selfdef-request-key","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-request-key -- '{"tag":"selfdef-request-key","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 is_suspicious_prog() {
     local p="$1"
+    selfdef_is_writable_dir "$p" && return 0
     case "$p" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) [[ -e "$p" && "$(stat -L -c '%a' "$p" 2>/dev/null)" =~ [2367]$ ]] && return 0
             return 1 ;;
-        ""|/bin/false|/bin/true) return 1 ;;
+        "") return 1 ;;
         ./*|../*|*/*) return 0 ;;   # relative path with slash — abnormal
         *) return 1 ;;              # bare name (negate, pipe, …) — request-key
                                     # keywords; not a payload path

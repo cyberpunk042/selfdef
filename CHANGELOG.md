@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation batch: crypttab / request-key / dnf-plugins (2026-05-27)
+
+Three more pre-D-6 watchdogs migrated off their inline case-statement
+writable policy onto the shared `selfdef_is_writable_dir` (source module-lib,
+fail-loud, require ≥4); each gated behavior-equivalent by its L2 suite +
+a new module_lib_missing test:
+
+- `crypttab-watchdog` — `is_suspicious_path` keeps its `none|""|-` guard,
+  then delegates the writable arm to the helper.
+- `request-key-watchdog` — `is_suspicious_prog` delegates; dead
+  `/bin/true|/bin/false` tokens (shadowed by `/*)`) dropped.
+- `dnf-plugins-watchdog` — `is_suspicious_cmd` delegates; dead `/bin/*`
+  tokens dropped.
+
+L2: crypttab 11/11, request-key 10/10, dnf-plugins 10/10; L1 188.
+
 ### Changed — SDD-063 consolidation: apt-hooks-watchdog onto the shared dir policy (2026-05-27)
 
 apt-hooks-watchdog now sources module-lib (fail-loud, require ≥4) and its

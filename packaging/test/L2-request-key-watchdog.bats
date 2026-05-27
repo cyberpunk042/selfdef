@@ -14,6 +14,7 @@
 # Run with: bats packaging/test/L2-request-key-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/request-key-watchdog/systemd/request-key-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -34,6 +35,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_REQKEY_PROFILE="${PROFILE:-report}" \
     SELFDEF_REQKEY_BASELINE="${BASELINE}" \
     SELFDEF_REQKEY_FILE="${CONF_F:-$CONF}" \
@@ -128,6 +130,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious callout" {
     printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
