@@ -63,6 +63,7 @@ mod network_boundary;
 mod oracle_triage;
 mod perimeter;
 mod policy;
+mod quarantine;
 mod raid;
 mod repl;
 mod sandbox_tiers;
@@ -71,6 +72,7 @@ mod state;
 mod storage;
 mod tool_authority;
 mod transport;
+mod trust_scores;
 pub mod watchdog_metrics;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
@@ -265,6 +267,16 @@ pub fn router(state: ApiState) -> Router {
         // Static 11-crate pipeline contract for the 8 ToolId × 7
         // ExecutionMode × 6 Profile authorization matrix.
         .route("/v1/tool-authority", get(tool_authority::show))
+        // MS042 / SDD-064 D-064.1 — tool observed-discipline: quarantine
+        // archive schema discovery. 7 declaration fields × 5 observed
+        // monitors → block+quarantine+trace response + 10-field record
+        // schema + 4 archive ops. Read-only; restore/export/purge are
+        // MS003-signed CLI-only.
+        .route("/v1/quarantine", get(quarantine::show))
+        // MS042 / SDD-064 D-064.1 — per-tool trust-score model discovery.
+        // declaration-fidelity accumulation + asymmetric decay + 4 trust
+        // bands + MS040 profile integration + MS007 mirror export (D-18).
+        .route("/v1/trust-scores", get(trust_scores::show))
         // MS035 / SDD-044 D-2 — capability-tokens schema discovery.
         // Token shape + 5-verdict CheckVerdict ladder + 5-companion
         // crate ecosystem + caller contract.

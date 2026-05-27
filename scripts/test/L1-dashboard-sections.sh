@@ -109,6 +109,18 @@ check "HTML: tool-authority aggregate"    "${HTML}" 'id="ta-aggregate"'         
 check "JS: refreshToolAuthority()"        "${JS}"   'function refreshToolAuthority'  || failures=$((failures + 1))
 check "JS: tool-authority fetches /v1"    "${JS}"   '/v1/tool-authority'             || failures=$((failures + 1))
 check "JS: interval refreshToolAuthority" "${JS}"   'gatedInterval\(refreshToolAuthority' || failures=$((failures + 1))
+# MS042 / SDD-064 — IPS tool-quarantine archive panel (observed-discipline).
+check "HTML: quarantine-section"          "${HTML}" 'id="quarantine-section"'        || failures=$((failures + 1))
+check "HTML: quarantine aggregate"        "${HTML}" 'id="quar-aggregate"'            || failures=$((failures + 1))
+check "JS: refreshQuarantine()"           "${JS}"   'function refreshQuarantine'     || failures=$((failures + 1))
+check "JS: quarantine fetches /v1"        "${JS}"   '/v1/quarantine'                 || failures=$((failures + 1))
+check "JS: interval refreshQuarantine"    "${JS}"   'gatedInterval\(refreshQuarantine' || failures=$((failures + 1))
+# MS042 / SDD-064 — IPS per-tool trust-score model panel (observed-discipline).
+check "HTML: trust-scores-section"        "${HTML}" 'id="trust-scores-section"'      || failures=$((failures + 1))
+check "HTML: trust-scores aggregate"      "${HTML}" 'id="trust-aggregate"'           || failures=$((failures + 1))
+check "JS: refreshTrustScores()"          "${JS}"   'function refreshTrustScores'    || failures=$((failures + 1))
+check "JS: trust-scores fetches /v1"      "${JS}"   '/v1/trust-scores'               || failures=$((failures + 1))
+check "JS: interval refreshTrustScores"   "${JS}"   'gatedInterval\(refreshTrustScores' || failures=$((failures + 1))
 # MS041 / SDD-043 — IPS commit-authority durable-change envelope panel.
 check "HTML: commit-authority-section"    "${HTML}" 'id="commit-authority-section"' || failures=$((failures + 1))
 check "HTML: commit-authority aggregate"  "${HTML}" 'id="ca-aggregate"'             || failures=$((failures + 1))

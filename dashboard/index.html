@@ -103,6 +103,8 @@
       <a href="#inference-backends-section">Inference</a>
       <a href="#capability-tokens-section">Capability tokens</a>
       <a href="#tool-authority-section">Tool authority</a>
+      <a href="#quarantine-section">Quarantine</a>
+      <a href="#trust-scores-section">Trust scores</a>
       <a href="#commit-authority-section">Commit authority</a>
       <a href="#sandbox-tiers-section">Sandbox tiers</a>
       <a href="#filesystem-boundary-section">Filesystem boundary</a>
@@ -438,6 +440,38 @@
       </h2>
       <div id="tool-authority-meta" class="fa-meta"></div>
       <ul id="tool-authority-rows" class="fa-rows"><li class="empty">loading…</li></ul>
+    </section>
+
+    <section id="quarantine-section">
+      <h2>
+        Quarantine
+        <small>
+          IPS tool-quarantine archive (MS042 / SDD-064) — declared-vs-observed
+          mismatch → block+quarantine+trace; read-only schema
+          ·
+          <a href="#" data-refresh="quarantine">refresh</a>
+          ·
+          <span id="quar-aggregate" class="fa-aggregate fa-unknown" aria-live="polite">—</span>
+        </small>
+      </h2>
+      <div id="quarantine-meta" class="fa-meta"></div>
+      <ul id="quarantine-rows" class="fa-rows"><li class="empty">loading…</li></ul>
+    </section>
+
+    <section id="trust-scores-section">
+      <h2>
+        Trust scores
+        <small>
+          IPS per-tool trust-score model (MS042 / SDD-064) — declaration-fidelity
+          over time + asymmetric decay; read-only schema
+          ·
+          <a href="#" data-refresh="trust-scores">refresh</a>
+          ·
+          <span id="trust-aggregate" class="fa-aggregate fa-unknown" aria-live="polite">—</span>
+        </small>
+      </h2>
+      <div id="trust-scores-meta" class="fa-meta"></div>
+      <ul id="trust-scores-rows" class="fa-rows"><li class="empty">loading…</li></ul>
     </section>
 
     <section id="commit-authority-section">

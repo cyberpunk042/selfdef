@@ -149,6 +149,12 @@
     if (kind === "tool-authority") {
       return refreshToolAuthority();
     }
+    if (kind === "quarantine") {
+      return refreshQuarantine();
+    }
+    if (kind === "trust-scores") {
+      return refreshTrustScores();
+    }
     if (kind === "commit-authority") {
       return refreshCommitAuthority();
     }
@@ -1657,6 +1663,140 @@
     }
   }
 
+  // MS042 / SDD-064 — IPS tool-quarantine archive doctrine panel.
+  // Read-only schema (the observed-discipline contract): 7 declaration fields
+  // × 5 observed monitors → block+quarantine+trace response + archive ops.
+  async function refreshQuarantine() {
+    const ul = document.getElementById("quarantine-rows");
+    const aggEl = document.getElementById("quar-aggregate");
+    const metaEl = document.getElementById("quarantine-meta");
+    try {
+      const body = await get("/v1/quarantine");
+      const decl = body.declaration_fields || [];
+      const mons = body.observed_monitors || [];
+      const resp = body.response_protocol || [];
+      const ops = body.archive_operations || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${decl.length} declaration field(s) · ${mons.length} observed monitor(s) · ` +
+        `${resp.length}-step response · ${ops.length} archive op(s) · ` +
+        `archive @ ${body.persistence_path || "—"}`;
+      ul.innerHTML = "";
+      for (const s of resp) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `${s.order}. ${s.step}`;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "RESPONSE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `${s.crate_name} · ${s.effect}`;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const d of decl) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `${d.order}. ${d.name}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `declares: ${d.declares} · observed by ${d.observed_by}`;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      for (const o of ops) {
+        const li = document.createElement("li");
+        const signed = /MS003/.test(o.authority);
+        li.className = signed ? "fa-green" : "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = o.op;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge " + (signed ? "fa-green" : "fa-gray");
+        badge.textContent = signed ? "SIGNED" : "READ";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = o.authority;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no quarantine doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/quarantine unavailable</li>';
+    }
+  }
+
+  // MS042 / SDD-064 — IPS per-tool trust-score model doctrine panel.
+  // Read-only schema: declaration-fidelity accumulation + asymmetric decay +
+  // 4 trust bands + MS040 profile integration + MS007 mirror export.
+  async function refreshTrustScores() {
+    const ul = document.getElementById("trust-scores-rows");
+    const aggEl = document.getElementById("trust-aggregate");
+    const metaEl = document.getElementById("trust-scores-meta");
+    try {
+      const body = await get("/v1/trust-scores");
+      const bands = body.bands || [];
+      const dims = body.dimensions || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      const range = body.score_range || [0, 1];
+      metaEl.textContent =
+        `score ∈ [${range[0]}, ${range[1]}] · seed ${body.seed_score} · ` +
+        `${bands.length} band(s) · ${dims.length} dimension(s) · ` +
+        `scores @ ${body.persistence_path || "—"}`;
+      ul.innerHTML = "";
+      for (const b of bands) {
+        const li = document.createElement("li");
+        const cls = b.name === "trusted" ? "fa-green"
+          : b.name === "watched" ? "fa-gray"
+          : b.name === "suspect" ? "fa-yellow" : "fa-red";
+        li.className = cls;
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = b.name;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge " + cls;
+        badge.textContent = `${b.min}–${b.max}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = b.posture;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const d of dims) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "dimension";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = d;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no trust-score doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/trust-scores unavailable</li>';
+    }
+  }
+
   // MS041 / SDD-043 — IPS commit-authority durable-change envelope doctrine.
   // Read-only schema; renders the mandatory commit-envelope fields, policy
   // outcomes, high-risk classifier rules and refusal rules.
@@ -2146,6 +2286,8 @@
   refreshAuditChains();
   refreshCapabilityTokens();
   refreshToolAuthority();
+  refreshQuarantine();
+  refreshTrustScores();
   refreshCommitAuthority();
   refreshSandboxTiers();
   refreshFilesystemBoundary();
@@ -2237,6 +2379,8 @@
   // Capability-token doctrine is a static schema surface — slow refresh.
   gatedInterval(refreshCapabilityTokens, 300000, "capability-tokens-section");
   gatedInterval(refreshToolAuthority, 300000, "tool-authority-section");
+  gatedInterval(refreshQuarantine, 300000, "quarantine-section");
+  gatedInterval(refreshTrustScores, 300000, "trust-scores-section");
   gatedInterval(refreshCommitAuthority, 300000, "commit-authority-section");
   gatedInterval(refreshSandboxTiers, 300000, "sandbox-tiers-section");
   gatedInterval(refreshFilesystemBoundary, 300000, "filesystem-boundary-section");
@@ -2261,7 +2405,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section", "authority-section", "policy-section"], // 9 IPS authority/boundary surfaces complete (MS032/033/034/035/037/038/039/040/041/042) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "quarantine-section", "trust-scores-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section", "authority-section", "policy-section"], // 11 IPS authority/boundary surfaces (MS032/033/034/035/037/038/039/040/041/042) — incl. MS042 observed-discipline pair (quarantine + trust-scores, SDD-064)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2496,6 +2640,8 @@
     ["inference-backends-section", "Inference backends"],
     ["capability-tokens-section",  "Capability tokens"],
     ["tool-authority-section",     "Tool authority"],
+    ["quarantine-section",         "Quarantine"],
+    ["trust-scores-section",       "Trust scores"],
     ["commit-authority-section",   "Commit authority"],
     ["sandbox-tiers-section",      "Sandbox tiers"],
     ["filesystem-boundary-section","Filesystem boundary"],
