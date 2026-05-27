@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for fstab-watchdog (2026-05-27)
+
+Locks the fstab boot-mount surface. Three high-signal classes: a loop/file-
+backed device under a writable root (an attacker-controlled image mounted at
+boot), a bind-mount that SHADOWS a sensitive path (/etc, /bin, /root/.ssh),
+and an explicit `suid` option re-enabling setuid.
+
+- `packaging/test/L2-fstab-watchdog.bats` — 9 tests: ok (no_fstab /
+  baseline_initial / fstab_intact), alert (a loop image under a writable
+  root → fstab_suspicious_mount; a bind-mount shadowing /etc; an explicit
+  suid option), warn (a benign mount added → fstab_changed), false-positive
+  guard (a standard fstab), and enforce-profile exit. Uses the module's
+  existing `SELFDEF_FSTAB_FILE` / `_D` seams — no production change.
+
 ### Added — L2 functional coverage for anacrontab-watchdog (2026-05-27)
 
 Locks the anacron scheduler-persistence surface. /etc/anacrontab runs
