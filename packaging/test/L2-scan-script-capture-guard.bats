@@ -56,32 +56,49 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
     fi
 }
 
-@test "every comm-delta scan script redirects its inventory records into the diff temp file" {
+@test "every comm-delta scan script populates its diff temp file with the inventory" {
+    # Invariant (robust to BOTH established capture idioms):
+    #   a watchdog that builds TSV records (`printf '...\t...\n'`) and diffs
+    #   them with `comm` MUST land those records in the `$current` temp file
+    #   via at least one populate-redirect — either
+    #     (a) inline   `printf '...\t...\n' ... >> "$current"`              or
+    #     (b) a block   `done > "$current"` / `done | sort -u > "$current"`
+    #         / `} > "$current"`.
+    #   Both forms contain the literal token `> "$current"` (>> for the
+    #   inline form). If NEITHER appears, the records go to stdout, `$current`
+    #   stays empty, every `comm` diff is a no-op, and the watchdog silently
+    #   detects NOTHING.
+    #
+    # The earlier version of this guard keyed on `printf '<literal-kind>\t`
+    # and so MISSED the five watchdogs that build records with a variable
+    # first field (`printf '%s\t...`): cron-job, ssh-authkeys, sudoers,
+    # systemd-unit, group-integrity — all five had the silent-no-op bug
+    # (fixed 2026-05-27). This presence-of-populate-redirect form catches the
+    # whole class regardless of the record-printf's first field, and does NOT
+    # false-positive on the legitimate `done > "$current"` block idiom (it
+    # contains the same `> "$current"` token).
+    #
+    # `${current}.sorted` (the read-modify-write dedup target) and the
+    # `-o "$current"` in-place re-sort do NOT count as populate-redirects:
+    # the former writes a *different* path, the latter has no `>`/`>>`.
     bad=()
     for f in $(scan_scripts); do
-        # Only the scripts that build an inventory + diff it with comm.
         grep -qE 'comm -23|comm -13' "$f" || continue
-        # The temp file the inventory must land in (first `X="$(mktemp)"`).
-        tvar="$(grep -oE '^[a-z_]+="\$\(mktemp\)"' "$f" | head -1 | sed -E 's/=.*//')"
-        [ -z "${tvar}" ] && continue
-        # Record-building printfs: `printf '<kind>\t...`. These are the TSV
-        # inventory lines (the JSON-emit printf starts with `{`, and the
-        # human-readable detail lines go through `logger -t ...-detail`, so
-        # neither matches this shape). Each MUST redirect to the temp file
-        # on the same line (the established repo idiom).
-        offenders="$(grep -nE "printf '[a-z0-9_]+\\\\t" "$f" \
-            | grep -vE ">>? \"\\\$\{?(${tvar}|current|tmp)" \
-            | grep -vE 'logger|-detail' || true)"
-        if [ -n "${offenders}" ]; then
-            bad+=("$(basename "$f")")
-        fi
+        # Builds TSV records? (format has a literal \t and ends \n; the
+        # JSON-emit printf has no \t, the inline `printf '%s\t'` search-key
+        # has no trailing \n, so neither matches.)
+        grep -qE "printf '[^']*\\\\t[^']*\\\\n'" "$f" || continue
+        # Must populate $current at least once.
+        grep -qE '>>? *"\$current"' "$f" || bad+=("$(basename "$f")")
     done
     if [ "${#bad[@]}" -gt 0 ]; then
-        printf 'inventory printf not redirected to the diff temp file in: %s\n' "${bad[*]}" >&2
-        printf 'FIX: append `>> "$<tmpvar>"` to each `printf "<kind>\\t..."` that builds the\n' >&2
-        printf '     inventory. Without it the records go to stdout, the temp file is empty,\n' >&2
-        printf '     and the watchdog silently detects nothing (the 2026-05-27\n' >&2
-        printf '     self-integrity / account / pam-config bug class).\n' >&2
+        printf 'comm-delta watchdog builds records but never populates $current: %s\n' "${bad[*]}" >&2
+        printf 'FIX: populate the temp file — append `>> "$current"` to each record\n' >&2
+        printf '     `printf "...\\t...\\n"`, or redirect the collection block with\n' >&2
+        printf '     `done > "$current"`. Without it the records go to stdout, $current\n' >&2
+        printf '     is empty, and the watchdog silently detects nothing (the 2026-05-27\n' >&2
+        printf '     self-integrity / account / pam-config / cron-job / ssh-authkeys /\n' >&2
+        printf '     sudoers / systemd-unit / group-integrity bug class).\n' >&2
         return 1
     fi
 }

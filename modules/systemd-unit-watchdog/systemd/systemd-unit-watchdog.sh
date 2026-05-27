@@ -33,9 +33,9 @@ if command -v systemctl >/dev/null 2>&1; then
             frag=$(systemctl show -p FragmentPath --value "$unit" 2>/dev/null || echo "")
             if [[ -n "$frag" && -f "$frag" ]]; then
                 h=$(sha256sum "$frag" 2>/dev/null | awk '{print $1}')
-                printf '%s\tenabled\t%s\n' "$unit" "${h:0:32}"
+                printf '%s\tenabled\t%s\n' "$unit" "${h:0:32}" >> "$current"
             else
-                printf '%s\tenabled\ttransient\n' "$unit"
+                printf '%s\tenabled\ttransient\n' "$unit" >> "$current"
             fi
         done
 fi

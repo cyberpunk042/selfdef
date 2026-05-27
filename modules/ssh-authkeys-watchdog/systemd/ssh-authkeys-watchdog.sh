@@ -45,7 +45,7 @@ emit_keys() {  # user  file
         [[ -z "$body" ]] && continue
         local fp
         fp=$(printf '%s' "$body" | sha256sum | awk '{print $1}')
-        printf '%s\t%s\t%s\n' "$user" "$file" "${fp:0:32}"
+        printf '%s\t%s\t%s\n' "$user" "$file" "${fp:0:32}" >> "$current"
     done < "$file"
 }
 

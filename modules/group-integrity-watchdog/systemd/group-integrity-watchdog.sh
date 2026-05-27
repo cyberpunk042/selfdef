@@ -41,7 +41,7 @@ while IFS=: read -r gname _ gid members; do
     if [[ -n "$members" ]]; then
         IFS=',' read -ra arr <<< "$members"
         for m in "${arr[@]}"; do
-            [[ -n "$m" ]] && printf '%s\t%s\n' "$gname" "$m"
+            [[ -n "$m" ]] && printf '%s\t%s\n' "$gname" "$m" >> "$current"
         done
     fi
 done < /etc/group
@@ -50,7 +50,7 @@ done < /etc/group
 while IFS=: read -r uname _ _ pgid _; do
     [[ -z "$uname" ]] && continue
     gname=$(awk -F: -v g="$pgid" '$3==g{print $1; exit}' /etc/group 2>/dev/null)
-    [[ -n "$gname" ]] && printf '%s\t%s\n' "$gname" "$uname"
+    [[ -n "$gname" ]] && printf '%s\t%s\n' "$gname" "$uname" >> "$current"
 done < /etc/passwd
 
 { sort -u > "${current}.sorted"; } < "$current" && mv "${current}.sorted" "$current"

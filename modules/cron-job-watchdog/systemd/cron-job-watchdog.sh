@@ -32,7 +32,7 @@ emit_file() {
     [[ -f "$path" && -r "$path" ]] || return 0
     local h
     h=$(sha256sum "$path" 2>/dev/null | awk '{print $1}')
-    printf '%s\t%s\t%s\n' "$source" "$path" "$h"
+    printf '%s\t%s\t%s\n' "$source" "$path" "$h" >> "$current"
 }
 
 # User crontabs (Debian + RHEL locations).
@@ -65,7 +65,7 @@ if command -v systemctl >/dev/null 2>&1; then
             emit_file "systemd-timer" "$upath"
         else
             # timer with no fragment (transient) — record name only
-            printf '%s\t%s\t%s\n' "systemd-timer" "$unit" "transient"
+            printf '%s\t%s\t%s\n' "systemd-timer" "$unit" "transient" >> "$current"
         fi
     done < <(systemctl list-unit-files --type=timer --state=enabled --no-legend 2>/dev/null | awk '{print $1}')
 fi

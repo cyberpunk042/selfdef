@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — five more watchdogs silently captured no inventory (2026-05-27)
+
+A second sweep of the inventory-capture silent-no-op bug class (after the
+2026-05-27 self-integrity / account / pam-config fixes) found FIVE more
+comm-delta watchdogs whose record `printf`s went to stdout instead of the
+`$current` diff temp file, leaving `$current` empty, `cur_count=0`, and
+every `comm` delta a no-op — so the watchdog detected NOTHING:
+`cron-job-watchdog`, `ssh-authkeys-watchdog` (MITRE T1098.004 — the single
+most common Linux persistence vector), `sudoers-integrity-watchdog`,
+`systemd-unit-watchdog`, and `group-integrity-watchdog`. Each builds its
+TSV records with a *variable* first field (`printf '%s\t...`), via either a
+helper function (`emit_keys`/`emit_file`/`emit_rules`) called without a
+redirect, or a bare `while` loop with no `done > "$current"`. Confirmed by
+executing the collection logic in isolation (`cur_count=0` before, correct
+count after). Fixed by appending `>> "$current"` to each record printf
+(the established repo idiom).
+
+The existing `L2-scan-script-capture-guard.bats` MISSED all five because
+its offender regex keyed on `printf '<literal-kind>\t` — it never matched
+the `printf '%s\t` (variable-first-field) shape these use, so the guard
+passed vacuously. Replaced that fragile check with a robust invariant:
+*every comm-delta watchdog that builds TSV records must populate `$current`
+via at least one `> "$current"` / `>> "$current"`* — which catches the
+whole class regardless of the record-printf's first field and does NOT
+false-positive on the legitimate `done > "$current"` block idiom. Verified:
+guard passes post-fix across all watchdogs; reintroducing the bug turns it
+RED (negative-control). NB: none of these five had an L2 functional suite,
+which is why the bug survived — functional suites follow as a separate
+increment.
+
 ### Added — repo-wide JSON parse + duplicate-key coherence gate (2026-05-27)
 
 selfdef's hand-maintained JSON — the two `docs/schemas/` JSON-schemas

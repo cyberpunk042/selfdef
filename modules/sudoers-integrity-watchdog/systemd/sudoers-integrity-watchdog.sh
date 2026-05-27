@@ -33,7 +33,7 @@ emit_rules() {  # file
       | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' \
       | while IFS= read -r rule; do
             [[ -z "$rule" ]] && continue
-            printf '%s\t%s\n' "$(basename "$file")" "$rule"
+            printf '%s\t%s\n' "$(basename "$file")" "$rule" >> "$current"
         done
 }
 
