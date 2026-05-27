@@ -1,16 +1,20 @@
 #!/usr/bin/env bats
-# L2 guard against the inventory-capture bug class (2026-05-27).
+# L2 guards against watchdog silent-failure classes (2026-05-27).
 #
-# A baseline/delta scan script builds an inventory of TSV records
-# (`printf '<kind>\t...'`) into a `mktemp` temp file, then diffs that temp
-# file against the stored baseline with `comm`. If a record `printf` is
-# missing its `>> "$<tmpfile>"` redirect, the record goes to STDOUT instead,
-# the temp file stays empty, every diff is a no-op, and the watchdog silently
-# detects NOTHING — while still emitting a healthy-looking baseline_initial /
-# intact / no_delta event. This exact bug silently disabled three critical
-# watchdogs (selfdef-self-integrity, account, pam-config) before it was
-# caught. This guard fails if any comm-delta scan script has a record-building
-# printf that does not redirect into the temp file it diffs.
+# Two ways a watchdog can look healthy while detecting/routing nothing:
+#
+# 1. INVENTORY-CAPTURE bug: a baseline/delta scan builds TSV records
+#    (`printf '<kind>\t...'`) into a `mktemp` temp file, then diffs it with
+#    `comm`. If a record printf misses its `>> "$<tmpfile>"` redirect, the
+#    record goes to stdout, the temp file stays empty, every diff is a no-op,
+#    and the watchdog silently detects NOTHING. This exact bug disabled three
+#    critical watchdogs (self-integrity, account, pam-config) before it was
+#    caught.
+#
+# 2. ROUTING-BLIND tag: SDD-062 routes a finding to a Detection Finding only
+#    if its journald SyslogIdentifier starts with `selfdef-`. A watchdog that
+#    emits `"severity":"alert"` under a non-`selfdef-` `logger -t` tag would
+#    never route — a silent detection gap.
 #
 # Run with: bats packaging/test/L2-scan-script-capture-guard.bats
 
@@ -21,6 +25,28 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
 @test "scan scripts exist (sanity)" {
     n="$(scan_scripts | grep -c .)"
     [ "${n}" -ge 40 ]
+}
+
+@test "every scan script that emits a severity finding tags it selfdef-* (SDD-062 routing)" {
+    bad=()
+    for f in $(scan_scripts); do
+        # Only scripts that emit a structured severity finding route via SDD-062.
+        grep -qE '"severity":"' "$f" || continue
+        # Primary (non -detail) logger tags this script writes under.
+        tags="$(grep -oE 'logger -t [a-zA-Z0-9_-]+' "$f" | awk '{print $3}' | grep -v -- '-detail$' | sort -u)"
+        for t in ${tags}; do
+            case "$t" in
+                selfdef-*) : ;;
+                *) bad+=("$(basename "$f"):${t}") ;;
+            esac
+        done
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'finding-emitting scan script with a non-selfdef- logger tag: %s\n' "${bad[*]}" >&2
+        printf 'FIX: tag findings `logger -t selfdef-<name>` — the SDD-062 rule keys on the\n' >&2
+        printf '     selfdef- SyslogIdentifier prefix; a non-prefixed tag never routes.\n' >&2
+        return 1
+    fi
 }
 
 @test "every comm-delta scan script redirects its inventory records into the diff temp file" {

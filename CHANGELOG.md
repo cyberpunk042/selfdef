@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — routing-tag guard: every finding-emitting watchdog must tag selfdef-* (2026-05-27)
+
+Second scan-script silent-failure guard, in `L2-scan-script-capture-guard.bats`
+(now 3 assertions). SDD-062 routes a watchdog finding to a Detection Finding
+only if its journald SyslogIdentifier starts with `selfdef-`; a watchdog that
+emits `"severity":"alert|warn"` under a non-`selfdef-` `logger -t` tag would
+never route — a silent detection gap. The guard fails if any finding-emitting
+scan script uses a non-`selfdef-` primary tag. Audited clean across the whole
+watchdog set (0 violations); negative-control verified (injecting a bad tag
+makes the guard fail and name the module). Pairs with the existing
+inventory-capture assertion to close both known silent-failure classes.
+
 ### Added — warn-tier watchdog routing to a non-paging dashboard finding (SDD-062 D-5) (2026-05-27)
 
 Per operator direction (revising SDD-062 D-3's original drop-warn stance):
