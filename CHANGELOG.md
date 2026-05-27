@@ -6,6 +6,17 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — stale `cli_modules_shared_lib` test hardcoded the old module-lib version (2026-05-27)
+
+`module_requesting_newer_lib_version_is_refused` asserted the mismatch diagnostic
+said `have 2`, but `SELFDEF_MODULE_LIB_VERSION` was bumped 2→4 (the v4 dir-helper)
+and the test was never updated — so `cargo test --workspace` (the CI `test` job) was
+RED on this one stale literal (pre-existing; unrelated to the clippy/fmt work).
+Fixed by reading the actual version from `packaging/lib/module-lib.sh` and asserting
+`have {version}` dynamically, so it stays correct across future bumps. With this,
+`cargo test --workspace` passes; combined with the fmt + clippy fixes, selfdef's
+full CI is green (test run confirmed: this was the only failing test).
+
 ### Fixed — repo-wide `cargo clippy` green (CI `clippy` job no longer red) (2026-05-27)
 
 `cargo clippy --workspace --all-targets -- -D warnings` (the CI `clippy` job) was

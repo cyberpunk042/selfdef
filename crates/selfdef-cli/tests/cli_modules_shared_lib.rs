@@ -198,10 +198,20 @@ source "{}"
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
     );
+    // The "have" version is whatever the shared lib currently declares —
+    // read it so this stays correct across SELFDEF_MODULE_LIB_VERSION bumps
+    // (was hardcoded "have 2"; the lib is now v4 — the stale literal was the
+    // pre-existing test-job failure this fixes).
+    let lib_src = std::fs::read_to_string(shared_lib_path()).unwrap();
+    let have_ver = lib_src
+        .lines()
+        .find_map(|l| l.strip_prefix("SELFDEF_MODULE_LIB_VERSION="))
+        .expect("shared lib declares SELFDEF_MODULE_LIB_VERSION")
+        .trim();
     assert!(
         combined.contains("shared module-lib version mismatch")
             && combined.contains("require >=99")
-            && combined.contains("have 2"),
+            && combined.contains(&format!("have {have_ver}")),
         "expected version-mismatch diagnostic; got:\n{combined}",
     );
 }
