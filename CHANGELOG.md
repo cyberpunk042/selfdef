@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for sudoers-defaults-watchdog (2026-05-27)
+
+Locks the sudo `Defaults` privilege-escalation surface. `Defaults` lines in
+/etc/sudoers{,.d} shape every sudo invocation; three high-signal classes
+turn sudo into a privesc primitive: a `secure_path` with a
+writable/tmp/home/relative element, an `env_keep`/`env_check`/`env_delete`
+of a dangerous var (LD_PRELOAD, LD_LIBRARY_PATH, BASH_ENV, …) surviving into
+the root command, and `!env_reset`.
+
+- `packaging/test/L2-sudoers-defaults-watchdog.bats` — 11 tests: ok
+  (no_sudoers / baseline_initial / sudoers_defaults_intact), alert
+  (secure_path containing /tmp → sudoers_defaults_dangerous; env_keep of
+  LD_PRELOAD; !env_reset; secure_path with a relative element), warn (a
+  benign Defaults change → sudoers_defaults_changed), false-positive guards
+  (a standard secure_path + env_reset; env_keep of a non-dangerous var like
+  EDITOR), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_SUDODEF_*` seams — no production change.
+
 ### Added — L2 functional coverage for udev-rules-watchdog (2026-05-27)
 
 Locks the udev device-event root-exec surface. udev runs RUN+= / PROGRAM== /
