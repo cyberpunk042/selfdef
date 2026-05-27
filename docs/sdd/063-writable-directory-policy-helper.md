@@ -10,6 +10,23 @@ Depends on: SDD-061 (shared watchdog scan helpers / module-lib v3)
 - [x] D-2 — L2 bats coverage for the new helper
 - [x] D-3 — migrate the three directory-valued watchdog checks
       (musl-ld-path, xorg-config ModulePath, sudo-conf plugin_dir) onto it
+- [x] D-4 — full single-source consolidation: the writable/injection
+      policy lives ONLY in module-lib across the whole watchdog fleet.
+      18 of the 19 pre-D-6 watchdogs that carried their own inline
+      case-statement writable policy now consume the shared helpers
+      (fail-loud, lib-version-gated); the one deliberate exception is
+      `coredump-pattern-watchdog`, whose policy is intentionally narrower
+      (world-writable tmpfs roots only, excluding `/home`). Locked by
+      `L2-watchdog-dedup-guard.bats` (asserts no scan script re-inlines a
+      `PATTERNS=(` array / raw writable regex / case-statement writable
+      enumeration, coredump allowlisted).
+- [x] D-5 — observability wiring: the alert-tier findings route to a High
+      Detection Finding (SDD-062), counted by `selfdef_findings_by_rule_total`,
+      surfaced on the dashboard (findings-by-rule timeseries + a 1h stat
+      panel) and paged by the `SelfdefWatchdogAlertFinding` Prometheus alert;
+      the `module_lib_missing`/`module_lib_outdated` fail-loud emissions are
+      covered by SDD-062 rule-tests. Operator runbook:
+      info-hub `wiki/runbooks/selfdef-watchdog-alert-finding.md`.
 
 ## Why now
 
