@@ -6,6 +6,21 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — repo-wide JSON parse + duplicate-key coherence gate (2026-05-27)
+
+selfdef's hand-maintained JSON — the two `docs/schemas/` JSON-schemas
+(loaded by the selfdef-cli `module_bitnet_gpu_inference` /
+`module_tensor_parallel_inference` integration tests), the auditd replay
+fixture, and the dashboard manifest — had no coherence layer validating
+they parse, and none guarded duplicate object keys. A duplicate key is
+silent data loss: `json.load` keeps only the LAST value, so a doubled
+schema/fixture field quietly drops the earlier one with no error. New
+`scripts/test/L1-json-parse-scan.sh` gates every `.json` (stdlib-only,
+`object_pairs_hook` dup-key guard), wired into `coherence.sh` next to the
+YAML/shellcheck/ruff surface scans. All 5 files pass; both checks
+negative-control-verified. Completes the sh/py/yaml/json parse-gate
+matrix in selfdef.
+
 ### Added — repo-wide YAML parse + real-bug coherence gate (2026-05-27)
 
 selfdef ships ~62 YAML documents that drive runtime behavior (22 Sigma
