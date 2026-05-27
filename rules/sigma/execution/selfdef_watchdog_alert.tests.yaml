@@ -75,3 +75,72 @@ tests:
         raw:
           SYSLOG_IDENTIFIER: "selfdef-udev-rules"
     expected_findings: 1
+
+  # Integrity-axis watchdogs (the non-module-lib inventory/baseline scanners)
+  # emit the same `"severity":"alert"` journald shape, so the SDD-062
+  # tag-prefix rule must route THEM to a Detection Finding too. These cases
+  # lock that contract for a representative spread across the integrity
+  # classes (file-integrity / trust / access-control / kernel-hardening /
+  # name-resolution); the exact JSON bodies match what the scan scripts emit.
+  - name: suid-sgid bulk-delta alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-suid-sgid","severity":"alert","event":"bulk_delta","profile":"report","added":4,"perm_change":0}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-suid-sgid"
+    expected_findings: 1
+
+  - name: file-capabilities dangerous-capability alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-file-caps","severity":"alert","event":"dangerous_capability_added","profile":"report","added":1,"dangerous":1}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-file-caps"
+    expected_findings: 1
+
+  - name: rhosts trust-backdoor alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-rhosts","severity":"alert","event":"rhosts_trust_backdoor","profile":"report","suspicious":"hosts.equiv:wildcard(+)"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-rhosts"
+    expected_findings: 1
+
+  - name: securetty widen alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-securetty","severity":"alert","event":"securetty_widened","profile":"report","suspicious":"added-network-tty:pts/0"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-securetty"
+    expected_findings: 1
+
+  - name: nsswitch rogue-source alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-nsswitch","severity":"alert","event":"nsswitch_rogue_source","profile":"report","suspicious":"passwd:evil"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-nsswitch"
+    expected_findings: 1
+
+  - name: sysctl-hardening weaken alert pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-sysctl-hardening","severity":"alert","event":"sysctl_hardening_weakened","profile":"report","suspicious":"kernel.randomize_va_space=0"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-sysctl-hardening"
+    expected_findings: 1
+
+  - name: an integrity-axis warn-tier finding does NOT page
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-suid-sgid","severity":"warn","event":"suid_drift","profile":"report","added":1}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-suid-sgid"
+    expected_findings: 0

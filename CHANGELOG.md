@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — SDD-062 rule-tests proving the integrity axis routes to the pager (2026-05-27)
+
+The integrity/baseline watchdogs (suid-sgid, file-caps, rhosts, securetty,
+nsswitch, sysctl-hardening, …) emit the same `"severity":"alert"` journald
+shape as the module-lib watchdogs, so the SDD-062 tag-prefix Sigma rule
+(`SYSLOG_IDENTIFIER startswith "selfdef-"` + `message contains
+"severity":"alert"`) routes them to the same High Detection Finding → metric
+→ pager — but only module-lib-axis tags were tested. Added 7 rule-test cases
+to `rules/sigma/execution/selfdef_watchdog_alert.tests.yaml` locking the
+integrity-axis → Detection Finding contract (6 alert-tier tags page; an
+integrity warn-tier does not). Correlator rule-tests now 99 cases across 21
+rules, green.
+
 ### Added — L2 integrity-axis COMPLETE: service/persistence config watchdogs (2026-05-27)
 
 Final integrity-axis class, completing all 14 hermetically-testable
