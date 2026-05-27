@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for ssh-client-config-watchdog (2026-05-27)
+
+Locks the ssh-client config exec surface. A system/root ssh client config
+can run a program on every outbound ssh: `ProxyCommand` (connection setup),
+`LocalCommand` (post-connect, with PermitLocalCommand), and
+`Match … exec "…"` (match decision). A directive whose program is under a
+writable root, relative-with-slash, or carries an injection pattern is
+alert; bare PATH-resolved commands (nc, corkscrew, cloudflared) are normal.
+
+- `packaging/test/L2-ssh-client-config-watchdog.bats` — 10 tests: ok
+  (no_ssh_client_config / baseline_initial / ssh_client_config_intact),
+  alert (ProxyCommand under a writable root → ssh_client_config_exec_directive;
+  LocalCommand under /dev/shm; a Match-exec with a writable target; a
+  relative-with-slash ProxyCommand), warn (a benign directive change →
+  ssh_client_config_changed), false-positive guard (a bare PATH-resolved
+  ProxyCommand), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_SSHCLIENT_FILE` / `_D` / `_ROOT` seams — no production change.
+
 ### Added — L2 functional coverage for inittab-watchdog (2026-05-27)
 
 Locks the SysV-init / upstart boot-exec surface. /etc/inittab
