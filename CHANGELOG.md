@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for dbus-service-watchdog (2026-05-27)
+
+Locks the D-Bus activation exec surface. A `.service` activation file with
+an `Exec=` (and optional `User=`) makes dbus-daemon launch it the first time
+any client calls the service's bus name — a locally/remotely triggerable
+exec vector. High-signal two ways: `dbus_service_suspicious` (an Exec under
+a writable root, or a world-writable/non-root service file) and
+`dbus_service_new` (a NEW activation service appearing, or a new `<allow
+own=>` bus-name grant).
+
+- `packaging/test/L2-dbus-service-watchdog.bats` — 10 tests: ok
+  (no_dbus_dirs / baseline_initial / dbus_service_intact), alert (Exec under
+  a writable root → dbus_service_suspicious; Exec under /home; a
+  newly-added activation service → dbus_service_new), warn (a benign edit →
+  dbus_service_changed), false-positive guards (a trusted /usr/libexec
+  Exec; a /usr/bin Exec), and enforce-profile exit. Uses the module's
+  existing `SELFDEF_DBUS_*` seams — no production change.
+
 ### Added — L2 functional coverage for sudoers-defaults-watchdog (2026-05-27)
 
 Locks the sudo `Defaults` privilege-escalation surface. `Defaults` lines in
