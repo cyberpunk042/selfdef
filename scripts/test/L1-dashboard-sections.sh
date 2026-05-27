@@ -127,6 +127,12 @@ check "HTML: filesystem-boundary aggregate" "${HTML}" 'id="fsb-aggregate"' || fa
 check "JS: refreshFilesystemBoundary()"  "${JS}"   'function refreshFilesystemBoundary' || failures=$((failures + 1))
 check "JS: filesystem-boundary fetches /v1" "${JS}" '/v1/filesystem-boundary' || failures=$((failures + 1))
 check "JS: interval refreshFilesystemBoundary" "${JS}" 'gatedInterval\(refreshFilesystemBoundary' || failures=$((failures + 1))
+# MS038 / SDD-046 — IPS network-egress boundary panel.
+check "HTML: network-boundary-section"  "${HTML}" 'id="network-boundary-section"' || failures=$((failures + 1))
+check "HTML: network-boundary aggregate" "${HTML}" 'id="nb-aggregate"' || failures=$((failures + 1))
+check "JS: refreshNetworkBoundary()"    "${JS}"   'function refreshNetworkBoundary' || failures=$((failures + 1))
+check "JS: network-boundary fetches /v1" "${JS}" '/v1/network-boundary' || failures=$((failures + 1))
+check "JS: interval refreshNetworkBoundary" "${JS}" 'gatedInterval\(refreshNetworkBoundary' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

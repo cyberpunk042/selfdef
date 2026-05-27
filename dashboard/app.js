@@ -158,6 +158,9 @@
     if (kind === "filesystem-boundary") {
       return refreshFilesystemBoundary();
     }
+    if (kind === "network-boundary") {
+      return refreshNetworkBoundary();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1855,6 +1858,62 @@
     }
   }
 
+  // MS038 / SDD-046 — IPS network-egress boundary profile ladder doctrine.
+  // Read-only schema; renders each network profile (scope + bits) + the
+  // cross-cycle bindings.
+  async function refreshNetworkBoundary() {
+    const ul = document.getElementById("network-boundary-rows");
+    const aggEl = document.getElementById("nb-aggregate");
+    const metaEl = document.getElementById("network-boundary-meta");
+    try {
+      const body = await get("/v1/network-boundary");
+      const profiles = body.profiles || [];
+      const bindings = body.cross_cycle_bindings || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${profiles.length} egress profile(s) · ${bindings.length} cross-cycle binding(s)`;
+      ul.innerHTML = "";
+      for (const p of profiles) {
+        const li = document.createElement("li");
+        // Wider scope = more egress allowed = higher risk surface.
+        const open = /all|any|unrestricted|full/i.test(p.scope || "");
+        li.className = open ? "fa-yellow" : "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = p.name;
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${open ? "yellow" : "green"}`;
+        badge.textContent = `bits ${p.bits}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = p.scope;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const b of bindings) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "binding";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = b;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no network-boundary doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/network-boundary unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1880,6 +1939,7 @@
   refreshCommitAuthority();
   refreshSandboxTiers();
   refreshFilesystemBoundary();
+  refreshNetworkBoundary();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1967,6 +2027,7 @@
   gatedInterval(refreshCommitAuthority, 300000, "commit-authority-section");
   gatedInterval(refreshSandboxTiers, 300000, "sandbox-tiers-section");
   gatedInterval(refreshFilesystemBoundary, 300000, "filesystem-boundary-section");
+  gatedInterval(refreshNetworkBoundary, 300000, "network-boundary-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1984,7 +2045,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section"], // IPS authority/boundary surfaces (MS035/042/041/032/037) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section"], // IPS authority/boundary surfaces (MS035/042/041/032/037/038) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2222,6 +2283,7 @@
     ["commit-authority-section",   "Commit authority"],
     ["sandbox-tiers-section",      "Sandbox tiers"],
     ["filesystem-boundary-section","Filesystem boundary"],
+    ["network-boundary-section",   "Network boundary"],
   ];
   function readHiddenPanels() {
     try {
