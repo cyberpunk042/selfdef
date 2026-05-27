@@ -118,3 +118,28 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
         return 1
     fi
 }
+
+@test "module-lib-sourcing watchdogs gate the lib version, and dir-helper users require v4" {
+    # SDD-061 D-6 / SDD-063: a watchdog that sources module-lib must refuse to
+    # run against a too-old lib (the version gate `SELFDEF_MODULE_LIB_VERSION
+    # -lt N → module_lib_outdated + exit`). A watchdog that calls the v4
+    # `selfdef_is_writable_dir` helper but gates < 4 could source a v3 lib that
+    # lacks that function → an unbound-function runtime error / silent policy
+    # divergence. Lock both: (a) every sourcing watchdog has a version gate;
+    # (b) dir-helper users gate >= 4.
+    ungated=() ; dir_lowgate=()
+    for f in $(scan_scripts); do
+        grep -q 'SELFDEF_MODULE_LIB' "$f" || continue
+        grep -qE 'SELFDEF_MODULE_LIB_VERSION.*-lt' "$f" || { ungated+=("$(basename "$f")"); continue; }
+        if grep -q 'selfdef_is_writable_dir' "$f"; then
+            req="$(grep -oE 'SELFDEF_MODULE_LIB_VERSION:-0\}" -lt [0-9]+' "$f" | grep -oE '[0-9]+$' | head -1)"
+            [ "${req:-0}" -ge 4 ] || dir_lowgate+=("$(basename "$f"):gates-${req:-none}")
+        fi
+    done
+    if [ "${#ungated[@]}" -gt 0 ] || [ "${#dir_lowgate[@]}" -gt 0 ]; then
+        [ "${#ungated[@]}" -gt 0 ]    && printf 'sources module-lib but has no version gate: %s\n' "${ungated[*]}" >&2
+        [ "${#dir_lowgate[@]}" -gt 0 ] && printf 'uses selfdef_is_writable_dir (v4) but gates < 4: %s\n' "${dir_lowgate[*]}" >&2
+        printf 'FIX: gate `[[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt <N> ]] && module_lib_outdated; exit` (N=4 for dir-helper users).\n' >&2
+        return 1
+    fi
+}
