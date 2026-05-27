@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — api-endpoints coherence gate now matches rustfmt's multi-line `.route()` form (2026-05-27)
+
+The repo-wide `cargo fmt` (below) reflowed two long single-line `.route("/v1/…", handler)`
+calls in `crates/selfdef-api/src/lib.rs` (communication-boundary, dashboard-prefs) onto
+the canonical multi-line form (`.route(\n  "path",\n  handler,\n)`). `L1-api-endpoints.sh`
+detected routes with a single-line regex (`\.route\("path"`), so it began reporting those
+two SDD-promised routes as MISSING even though they ARE wired — a gate-vs-formatter
+disagreement, not a real gap. Made `check_route` newline-insensitive (collapse `\n`→space
+before matching) so it accepts both forms; negative-control confirms it still flags a
+genuinely-absent route. Keeps the api-endpoints gate green alongside the now-enforced fmt
+job.
+
 ### Fixed — repo-wide `cargo fmt` unblocks the CI fmt job + build pipeline (2026-05-27)
 
 `cargo fmt --all -- --check` (CI's `fmt` job) was RED across 490 of ~535 crates

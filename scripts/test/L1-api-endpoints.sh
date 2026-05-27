@@ -19,7 +19,13 @@ fi
 check_route() {
     local route="$1"
     local sdd="$2"
-    if grep -qE "\.route\(\"${route}\"" "${LIB}"; then
+    # Newline/whitespace-insensitive: rustfmt reflows a long
+    # `.route("path", handler)` so the path lands on its own line
+    # (`.route(\n    "path",\n    handler,\n)`). Collapse newlines to
+    # spaces first so the check matches both the single-line and the
+    # canonical multi-line form — otherwise `cargo fmt` (enforced by the
+    # CI fmt job) and this gate disagree on a route that IS wired.
+    if tr '\n' ' ' < "${LIB}" | grep -qE "\.route\(\s*\"${route}\""; then
         echo "  PASS ${route} (${sdd})"
     else
         echo "  FAIL ${route} — declared by ${sdd} but NOT present in ${LIB}"
