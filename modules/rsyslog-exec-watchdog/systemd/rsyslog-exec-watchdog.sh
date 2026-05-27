@@ -30,10 +30,23 @@ CONFD="${SELFDEF_RSYSLOG_D:-/etc/rsyslog.d}"
 
 PATTERNS='curl[^|;&]*\|[[:space:]]*(ba)?sh|wget[^|;&]*\|[[:space:]]*(ba)?sh|/dev/tcp/|bash[[:space:]]+-i|base64[[:space:]]+-d|mkfifo'
 
+# SDD-063: consume the shared writable-location policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-rsyslog-exec -- '{"tag":"selfdef-rsyslog-exec","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-rsyslog-exec -- '{"tag":"selfdef-rsyslog-exec","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 is_suspicious_prog() {
     local p="$1"
+    selfdef_is_writable_dir "$p" && return 0
     case "$p" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) [[ -e "$p" && "$(stat -L -c '%a' "$p" 2>/dev/null)" =~ [2367]$ ]] && return 0
             return 1 ;;
         ""|%*) return 1 ;;

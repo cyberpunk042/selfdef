@@ -49,10 +49,23 @@ trap 'rm -f "$current" "${current}.sorted"' EXIT
 declare -a suspicious=()
 
 # Classify an exec target token as suspicious (payload-grade).
+# SDD-063: consume the shared writable-location policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-udev-rules -- '{"tag":"selfdef-udev-rules","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-udev-rules -- '{"tag":"selfdef-udev-rules","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 is_suspicious_target() {
     local t="$1"
+    selfdef_is_writable_dir "$t" && return 0
     case "$t" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) # absolute: suspicious only if the executed target is
             # world-writable. -L follows symlinks (a symlink's own
             # 0777 is meaningless on Linux; the target's mode matters).

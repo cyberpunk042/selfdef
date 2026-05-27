@@ -17,6 +17,7 @@
 # Run with: bats packaging/test/L2-udev-rules-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/udev-rules-watchdog/systemd/udev-rules-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -37,6 +38,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_UDEV_PROFILE="${PROFILE:-report}" \
     SELFDEF_UDEV_BASELINE="${BASELINE}" \
     SELFDEF_UDEV_DIRS="${RULESD}" \
@@ -156,6 +158,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious exec" {
     printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"

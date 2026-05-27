@@ -13,6 +13,7 @@
 # Run with: bats packaging/test/L2-xdg-autostart-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/xdg-autostart-watchdog/systemd/xdg-autostart-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -35,6 +36,7 @@ desktop() { printf '[Desktop Entry]\nType=Application\nName=App\nExec=%s\n' "$1"
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_XDG_PROFILE="${PROFILE:-report}" \
     SELFDEF_XDG_BASELINE="${BASELINE}" \
     SELFDEF_XDG_DIRS="${DIRS:-$AUTOD}" \
@@ -137,6 +139,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    desktop /usr/bin/nm-applet > "${DESK}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious Exec" {
     desktop /usr/bin/nm-applet > "${DESK}"

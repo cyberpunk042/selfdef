@@ -6,6 +6,16 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation batch: rsyslog-exec / syslog-ng-exec / udev-rules / xdg-autostart (2026-05-27)
+
+Four more pre-D-6 watchdogs migrated off their inline case-statement writable
+policy onto the shared `selfdef_is_writable_dir` (source module-lib,
+fail-loud, require ≥4), each gated behavior-equivalent by its L2 suite + a
+module_lib_missing test. L2: rsyslog-exec 10/10, syslog-ng-exec 10/10,
+udev-rules 12/12, xdg-autostart 11/11; L1 188. 7 remain: the 4 special-case
+modules (ld-preload `/run`, fstab echo-style, coredump-pattern, sudoers
+secure_path) plus ssh-client-config, sshd-config, xinetd.
+
 ### Changed — SDD-063 consolidation batch: dbus-service / modprobe-config / inittab (2026-05-27)
 
 Three more pre-D-6 watchdogs migrated off their inline case-statement

@@ -12,6 +12,7 @@
 # Run with: bats packaging/test/L2-syslog-ng-exec-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/syslog-ng-exec-watchdog/systemd/syslog-ng-exec-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -32,6 +33,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_SYSLOGNG_PROFILE="${PROFILE:-report}" \
     SELFDEF_SYSLOGNG_BASELINE="${BASELINE}" \
     SELFDEF_SYSLOGNG_FILE="${CONF_F:-$CONF}" \
@@ -128,6 +130,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious program" {
     printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
