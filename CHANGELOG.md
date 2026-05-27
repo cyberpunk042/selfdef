@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for fish-config-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the fish interactive-shell
+init surface (config.fish / conf.d / functions), a per-session persistence
+vector (T1546).
+
+This is the THIRD and final module whose D-6 migration preserved a
+module-specific pattern, and it LOCKS that extra: fish's broader
+`eval[[:space:]]*[`$(]`, which matches fish's parenthesised command
+substitution `eval (cmd)` that the canonical `eval[[:space:]]*[`$]` does
+NOT. With at-jobs (at/batch self-resubmit) and acpi-hooks (`action=`), all
+three preserved extras now have functional verification proving the D-6
+migration kept them detecting.
+
+- `packaging/test/L2-fish-config-watchdog.bats` — 11 tests: ok
+  (no_fish_config / baseline_initial / fish_config_intact), alert (fish
+  parenthesised `eval (cmd)` — the preserved extra — plus curl|sh and
+  /dev/tcp from the canonical set), warn (benign line added →
+  fish_config_changed), false-positive guards (benign fish config not
+  flagged; a commented-out eval line not flagged), enforce exit, and the
+  SDD-061 D-6 `module_lib_missing` fail-loud path. Same logger-shadow +
+  `SELFDEF_FISH_*` sandbox.
+
 ### Added — L2 functional severity coverage for acpi-hooks-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the acpid event-binding /
