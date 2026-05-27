@@ -6,6 +6,21 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for crypttab-watchdog (2026-05-27)
+
+Locks the LUKS crypttab boot-exec surface. `/etc/crypttab`'s `keyscript=`
+option runs a program AS ROOT at early boot to obtain the unlock key — a
+rogue keyscript is root-exec-at-boot persistence; a keyfile under a writable
+root is an unlock-key compromise.
+
+- `packaging/test/L2-crypttab-watchdog.bats` — 10 tests: ok (no_crypttab /
+  baseline_initial / crypttab_intact), alert (keyscript under a writable
+  root → crypttab_suspicious; keyfile under /dev/shm; a bare/relative
+  keyscript), warn (a benign options change → crypttab_changed),
+  false-positive guards (keyfile=none + no keyscript; a keyfile under /etc),
+  and enforce-profile exit. Uses the module's existing `SELFDEF_CRYPTTAB_FILE`
+  seam — no production change.
+
 ### Added — L2 functional coverage for apt-hooks-watchdog (2026-05-27)
 
 Locks the APT/DPkg hook exec surface. APT/DPkg run hook commands AS ROOT
