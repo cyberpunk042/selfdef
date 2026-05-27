@@ -109,6 +109,12 @@ check "HTML: tool-authority aggregate"    "${HTML}" 'id="ta-aggregate"'         
 check "JS: refreshToolAuthority()"        "${JS}"   'function refreshToolAuthority'  || failures=$((failures + 1))
 check "JS: tool-authority fetches /v1"    "${JS}"   '/v1/tool-authority'             || failures=$((failures + 1))
 check "JS: interval refreshToolAuthority" "${JS}"   'gatedInterval\(refreshToolAuthority' || failures=$((failures + 1))
+# MS041 / SDD-043 — IPS commit-authority durable-change envelope panel.
+check "HTML: commit-authority-section"    "${HTML}" 'id="commit-authority-section"' || failures=$((failures + 1))
+check "HTML: commit-authority aggregate"  "${HTML}" 'id="ca-aggregate"'             || failures=$((failures + 1))
+check "JS: refreshCommitAuthority()"      "${JS}"   'function refreshCommitAuthority' || failures=$((failures + 1))
+check "JS: commit-authority fetches /v1"  "${JS}"   '/v1/commit-authority'          || failures=$((failures + 1))
+check "JS: interval refreshCommitAuthority" "${JS}" 'gatedInterval\(refreshCommitAuthority' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

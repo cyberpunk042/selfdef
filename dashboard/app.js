@@ -149,6 +149,9 @@
     if (kind === "tool-authority") {
       return refreshToolAuthority();
     }
+    if (kind === "commit-authority") {
+      return refreshCommitAuthority();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1636,6 +1639,82 @@
     }
   }
 
+  // MS041 / SDD-043 — IPS commit-authority durable-change envelope doctrine.
+  // Read-only schema; renders the mandatory commit-envelope fields, policy
+  // outcomes, high-risk classifier rules and refusal rules.
+  async function refreshCommitAuthority() {
+    const ul = document.getElementById("commit-authority-rows");
+    const aggEl = document.getElementById("ca-aggregate");
+    const metaEl = document.getElementById("commit-authority-meta");
+    try {
+      const body = await get("/v1/commit-authority");
+      const fields = body.mandatory_fields || [];
+      const outcomes = body.policy_outcomes || [];
+      const hiRisk = body.high_risk_classifier_rules || [];
+      const refusals = body.refusal_rules || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${fields.length} mandatory field(s) · ${outcomes.length} policy outcome(s) · ` +
+        `${hiRisk.length} high-risk rule(s) · ${refusals.length} refusal rule(s)` +
+        (body.doctrine_phrase ? ` · “${body.doctrine_phrase}”` : "");
+      ul.innerHTML = "";
+      for (const f of fields) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = f.name;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = f.r_row || "FIELD";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = f.description;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const h of hiRisk) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "high-risk";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "GATE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = h;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const r of refusals) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "refuse-rule";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "RULE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = r;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no commit-authority doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/commit-authority unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1658,6 +1737,7 @@
   refreshAuditChains();
   refreshCapabilityTokens();
   refreshToolAuthority();
+  refreshCommitAuthority();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1742,6 +1822,7 @@
   // Capability-token doctrine is a static schema surface — slow refresh.
   gatedInterval(refreshCapabilityTokens, 300000, "capability-tokens-section");
   gatedInterval(refreshToolAuthority, 300000, "tool-authority-section");
+  gatedInterval(refreshCommitAuthority, 300000, "commit-authority-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1759,7 +1840,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section"], // MS035/SDD-044 + MS042/SDD-050 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section"], // MS035/SDD-044 + MS042/SDD-050 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -1994,6 +2075,7 @@
     ["inference-backends-section", "Inference backends"],
     ["capability-tokens-section",  "Capability tokens"],
     ["tool-authority-section",     "Tool authority"],
+    ["commit-authority-section",   "Commit authority"],
   ];
   function readHiddenPanels() {
     try {
