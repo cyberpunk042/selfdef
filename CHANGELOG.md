@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for gss-mech-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the GSSAPI mechanism-load
+surface. Every GSSAPI consumer (Kerberized ssh/sshd, NFSv4 sec=krb5,
+OpenLDAP/SASL GSSAPI, sssd, curl --negotiate) loads the mechanism .so named
+in field 3 of each line in `/etc/gss/mech` + `/etc/gss/mech.d/*.conf`
+(`<oid_name> <oid> <mech.so> [options]`); a planted mech whose .so is a
+writable/attacker path loads attacker code into auth-handling processes
+(T1574 / T1556). Distinct positional grammar (the .so is the third field).
+
+- `packaging/test/L2-gss-mech-watchdog.bats` — 11 tests: ok (no_gss_mech /
+  baseline_initial / gss_mech_intact), alert (mechanism .so under a
+  writable root, relative-with-slash mechanism .so), warn (benign mechanism
+  added → gss_mech_changed), false-positive guards (absolute /usr/lib
+  mechanism not flagged; a bare-basename mechanism resolved via the lib dir
+  not flagged; a commented-out writable mechanism line not flagged), enforce
+  exit, and the SDD-061 D-6 `module_lib_missing` fail-loud path. Same
+  logger-shadow + `SELFDEF_GSS_*` sandbox.
+
 ### Added — L2 functional severity coverage for pkcs11-modules-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the PKCS#11 module-load

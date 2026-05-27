@@ -1,0 +1,149 @@
+#!/usr/bin/env bats
+# L2 bats functional tests for the gss-mech-watchdog scan script.
+#
+# Every GSSAPI consumer (Kerberized ssh/sshd, NFSv4 sec=krb5, OpenLDAP/SASL
+# GSSAPI, sssd, curl --negotiate) loads the mechanism .so named in FIELD 3
+# of each line in /etc/gss/mech + /etc/gss/mech.d/*.conf:
+#   <oid_name> <oid> <mech.so> [options]
+# A planted mech whose .so is a writable/attacker path loads attacker code
+# into auth-handling processes (often root) when GSSAPI initializes
+# (T1574 / T1556). Distinct positional grammar (the .so is the third field).
+#
+# Runs the actual scan script with `logger` shadowed on PATH and the mech
+# file + baseline in a tmp sandbox via SELFDEF_GSS_*; locks the
+# `"severity":"alert"` token SDD-062 routes on + the D-6 fail-loud path.
+#
+# Run with: bats packaging/test/L2-gss-mech-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/gss-mech-watchdog/systemd/gss-mech-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/baseline.tsv"
+    MECH="${TMP}/mech"
+    MECHD="${TMP}/mech.d"; mkdir -p "${MECHD}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_GSS_PROFILE="${PROFILE:-report}" \
+    SELFDEF_GSS_BASELINE="${BASELINE}" \
+    SELFDEF_GSS_DIRS="${MECHD}" \
+    SELFDEF_GSS_FILES="${MECH}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+# ============================================================
+# ok tier
+# ============================================================
+
+@test "no gss mech config present → ok / no_gss_mech" {
+    run_wd
+    cap | grep -q '"event":"no_gss_mech"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "benign mechanism, first run → ok / baseline_initial" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+    [ -f "${BASELINE}" ]
+}
+
+@test "unchanged config on second run → ok / gss_mech_intact" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"gss_mech_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# alert tier — the SDD-062 contract token
+# ============================================================
+
+@test "mechanism .so under a writable root → alert" {
+    printf 'gssapi_evil 1.2.3.4 /tmp/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "relative-with-slash mechanism .so → alert" {
+    printf 'gssapi_evil 1.2.3.4 sub/dir/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# warn tier
+# ============================================================
+
+@test "benign mechanism added after baseline → warn / gss_mech_changed" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\nspnego 1.3.6.1.5.5.2 mech_spnego.so\n' > "${MECH}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"gss_mech_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+# ============================================================
+# false-positive guards
+# ============================================================
+
+@test "an absolute /usr/lib mechanism .so is NOT flagged (no alert)" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 /usr/lib/x86_64-linux-gnu/gssapi/mech_krb5.so\n' > "${MECH}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "a bare-basename mechanism .so (resolved via lib dir) is NOT flagged" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "a commented-out writable mechanism line is NOT flagged" {
+    printf '# gssapi_evil 1.2.3.4 /tmp/evil.so\ngssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# enforce profile + SDD-061 D-6 fail-loud
+# ============================================================
+
+@test "enforce profile exits non-zero on an alert" {
+    printf 'gssapi_evil 1.2.3.4 /tmp/evil.so\n' > "${MECH}"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
