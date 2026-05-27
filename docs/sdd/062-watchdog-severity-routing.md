@@ -13,6 +13,18 @@ SDD-061 (shared watchdog scan helpers)
   `selfdef-correlator` `every_rule_with_tests_passes` harness. SHIPPED.
 - **D-3** — warn / ok tiers are deliberately NOT paged (local-triage
   signal, mirroring the agent-guard audit-mode precedent). DECIDED.
+- **D-4** — the rule is tag-prefix, not tag-enumerated, so it covers the
+  WHOLE `selfdef-*` watchdog set, not just the SDD-061 module-lib scanners.
+  Rule-test coverage now spans both axes: the module-lib detection-watchdogs
+  (exec/injection/writable surfaces + the SDD-063 `module_lib_missing`
+  fail-loud) AND the integrity/baseline watchdogs (suid-sgid, file-caps,
+  rhosts, securetty, nsswitch, sysctl-hardening, …), proving an alert from
+  either axis reaches the Detection Finding → `selfdef_findings_by_rule_total`
+  → `SelfdefWatchdogAlertFinding` pager path, while warn/ok from either axis
+  does not. 99 rule-test cases. SHIPPED. Functional-severity behavior of the
+  watchdogs themselves is locked by the per-module `packaging/test/L2-*-watchdog.bats`
+  suites (1154 L2 cases across 105 suites) — see `L2-watchdog-dedup-guard.bats`,
+  which fails if a module-lib watchdog ships without an L2 suite.
 
 ## Why now
 
