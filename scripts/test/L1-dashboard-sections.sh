@@ -121,6 +121,12 @@ check "HTML: sandbox-tiers aggregate"     "${HTML}" 'id="st-aggregate"'         
 check "JS: refreshSandboxTiers()"         "${JS}"   'function refreshSandboxTiers'  || failures=$((failures + 1))
 check "JS: sandbox-tiers fetches /v1"     "${JS}"   '/v1/sandbox-tiers'             || failures=$((failures + 1))
 check "JS: interval refreshSandboxTiers"  "${JS}"   'gatedInterval\(refreshSandboxTiers' || failures=$((failures + 1))
+# MS037 / SDD-045 — IPS explicit-exchange filesystem-boundary panel.
+check "HTML: filesystem-boundary-section" "${HTML}" 'id="filesystem-boundary-section"' || failures=$((failures + 1))
+check "HTML: filesystem-boundary aggregate" "${HTML}" 'id="fsb-aggregate"' || failures=$((failures + 1))
+check "JS: refreshFilesystemBoundary()"  "${JS}"   'function refreshFilesystemBoundary' || failures=$((failures + 1))
+check "JS: filesystem-boundary fetches /v1" "${JS}" '/v1/filesystem-boundary' || failures=$((failures + 1))
+check "JS: interval refreshFilesystemBoundary" "${JS}" 'gatedInterval\(refreshFilesystemBoundary' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

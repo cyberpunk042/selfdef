@@ -155,6 +155,9 @@
     if (kind === "sandbox-tiers") {
       return refreshSandboxTiers();
     }
+    if (kind === "filesystem-boundary") {
+      return refreshFilesystemBoundary();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1779,6 +1782,79 @@
     }
   }
 
+  // MS037 / SDD-045 — IPS explicit-exchange filesystem-boundary doctrine.
+  // Read-only schema; renders the exchange directories (path/direction/source),
+  // the import pipeline, and the application predicates.
+  async function refreshFilesystemBoundary() {
+    const ul = document.getElementById("filesystem-boundary-rows");
+    const aggEl = document.getElementById("fsb-aggregate");
+    const metaEl = document.getElementById("filesystem-boundary-meta");
+    try {
+      const body = await get("/v1/filesystem-boundary");
+      const dirs = body.exchange_dirs || [];
+      const pipeline = body.import_pipeline || [];
+      const predicates = body.application_predicates || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${dirs.length} exchange dir(s) · ${pipeline.length}-step import pipeline · ` +
+        `${predicates.length} application predicate(s) · ` +
+        `${(body.patch_schema_fields || []).length} patch field(s)`;
+      ul.innerHTML = "";
+      for (const d of dirs) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "dir";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = (d.direction || "").toUpperCase() || "DIR";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `${d.path} · src=${d.source_id}`;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      let i = 1;
+      for (const step of pipeline) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `step ${i++}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = step;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      for (const p of predicates) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "predicate";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "GATE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = p;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no filesystem-boundary doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/filesystem-boundary unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1803,6 +1879,7 @@
   refreshToolAuthority();
   refreshCommitAuthority();
   refreshSandboxTiers();
+  refreshFilesystemBoundary();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1889,6 +1966,7 @@
   gatedInterval(refreshToolAuthority, 300000, "tool-authority-section");
   gatedInterval(refreshCommitAuthority, 300000, "commit-authority-section");
   gatedInterval(refreshSandboxTiers, 300000, "sandbox-tiers-section");
+  gatedInterval(refreshFilesystemBoundary, 300000, "filesystem-boundary-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1906,7 +1984,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section"], // MS035/SDD-044 + MS042/SDD-050 + MS041/SDD-043 + MS032/SDD-047 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section"], // IPS authority/boundary surfaces (MS035/042/041/032/037) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2143,6 +2221,7 @@
     ["tool-authority-section",     "Tool authority"],
     ["commit-authority-section",   "Commit authority"],
     ["sandbox-tiers-section",      "Sandbox tiers"],
+    ["filesystem-boundary-section","Filesystem boundary"],
   ];
   function readHiddenPanels() {
     try {
