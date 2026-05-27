@@ -16,13 +16,16 @@ a file (the rest silently unchecked; cf. the same-session nsswitch-watchdog
 `*\]`-before-`]]` fix + onboard.sh), and an error-severity defect can make a
 hardening applier / watchdog a silent no-op (cf. the self-integrity / account
 / pam-config inventory-capture bug class). New `scripts/test/L1-shellcheck-scan.sh`
-runs `shellcheck --severity=error --exclude=SC2148` across modules/scripts/
-packaging and fails on any finding; wired as a coherence.sh L1 layer. Passes
-clean (886 scripts, 0 findings — after the nsswitch fix unblocked the one
-remaining parse-abort); negative-control verified (reintroducing the
-parse-abort fails the gate). SC2148 (sourced-lib dialect directive) excluded —
-those libs are checked in-context via their apply.sh; declaring the dialect on
-all ~186 is a separate cleanup.
+runs `shellcheck --severity=error --shell=bash` across modules/scripts/
+packaging and fails on any finding; wired as a coherence.sh L1 layer.
+`--shell=bash` (every selfdef script is bash — 0 POSIX-sh shebangs) forces the
+dialect so the ~186 sourced `install/lib.sh` helpers — which have no shebang
+and would otherwise bail with SC2148, skipping ALL dialect-aware checks — are
+error-checked too. Passes clean (886 scripts, 0 findings — after the nsswitch
+fix unblocked the one remaining parse-abort); negative-controls verified
+(reintroducing the nsswitch parse-abort, and injecting a parse error into an
+install/lib.sh, both fail the gate — the latter proving the helper libs are
+now covered, not excluded).
 
 ### Added — baseline-leak guard: every watchdog baseline must be chmod 0600 (2026-05-27)
 
