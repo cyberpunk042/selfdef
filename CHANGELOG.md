@@ -6,6 +6,36 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — selfdef-self-integrity meta-watchdog was a silent no-op (2026-05-27)
+
+TDD catch: the new L2 functional suite for `selfdef-self-integrity` (the
+"who watches the watchers" meta-watchdog that hashes every other watchdog's
+baseline + the detection wrapper scripts to detect tamper) executed the real
+scan script and found it **never detected anything**. The three inventory
+loops `printf`'d their records to stdout instead of into the `$current`
+temp file they diff against, so `$current` was always empty — the watchdog
+emitted `manifest_initial` once, then `trust_root_intact` forever, even when
+a baseline or wrapper was altered. An attacker editing a watchdog baseline to
+hide their backdoor would NOT have been caught by the very module designed to
+catch exactly that. Fixed at the root (append `>> "$current"` to each
+inventory printf, matching every other watchdog's idiom). The 6-case L2 suite
+now drives manifest_initial / intact / tampered-baseline / tampered-wrapper /
+removed-baseline / enforce and all pass; L1 188 green.
+
+### Added — L2 coverage for the scanner-bridge + posture-check modules (2026-05-27)
+
+L2 functional-severity suites for the non-watchdog detection modules that
+wrap an external scanner via a tool-binary knob (driven with a fake tool
+emitting controlled output/exit-code): `aide-bridge` (AIDE diff bitmask →
+severity), `clamav-cron` (clamscan rc → infected/error), `lynis-cron`
+(hardening_index → ok/warn/alert), `rkhunter-cron` (rc → warnings/errors)
+and `selfdef-self-integrity` (trust-root tamper, above). 26 new bats cases.
+Per the hermetic-testability classification: the 6 posture modules that read
+live kernel/firmware/socket state with no input knob (entropy-baseline,
+mta-loopback-detect, secure-boot-status, swap-encryption-detect,
+bootloader-password-detect) + the wol-disable enforcement action are not
+hermetically testable and left uncovered.
+
 ### Added — SDD-062 rule-tests proving the integrity axis routes to the pager (2026-05-27)
 
 The integrity/baseline watchdogs (suid-sgid, file-caps, rhosts, securetty,

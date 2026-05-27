@@ -42,7 +42,7 @@ trap 'rm -f "$current"' EXIT
 for f in "$STATE_DIR"/*.tsv; do
     [[ -f "$f" ]] || continue
     [[ "$f" == "$MANIFEST" ]] && continue
-    printf 'baseline\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')"
+    printf 'baseline\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')" >> "$current"
 done
 
 # wrapper scripts (exclude THIS script to avoid self-reference
@@ -50,14 +50,14 @@ done
 for f in "$LIBEXEC_DIR"/*.sh; do
     [[ -f "$f" ]] || continue
     [[ "$(basename "$f")" == "selfdef-self-integrity.sh" ]] && continue
-    printf 'wrapper\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')"
+    printf 'wrapper\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')" >> "$current"
 done
 
 # module configs.
 if [[ -d "$MODULE_CONF_DIR" ]]; then
     for f in "$MODULE_CONF_DIR"/*.toml; do
         [[ -f "$f" ]] || continue
-        printf 'config\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')"
+        printf 'config\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,16)}')" >> "$current"
     done
 fi
 
