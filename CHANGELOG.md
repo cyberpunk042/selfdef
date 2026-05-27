@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for dnf-plugins-watchdog (2026-05-27)
+
+Locks the DNF post-transaction-actions exec surface. DNF runs the command in
+each `.action` file (`package-glob:transaction-state:command`) AS ROOT after
+a matching package transaction — a package-transaction-triggered exec
+surface. An action command under a writable root, relative-with-slash, bare,
+or carrying an injection pattern is alert.
+
+- `packaging/test/L2-dnf-plugins-watchdog.bats` — 9 tests: ok
+  (no_dnf_plugins / baseline_initial / dnf_plugins_intact), alert (an action
+  command under a writable root → dnf_plugins_suspicious; a curl|sh payload;
+  a bare action command), warn (a benign action change → dnf_plugins_changed),
+  false-positive guard (a /usr/bin action command), and enforce-profile
+  exit. Uses the module's existing `SELFDEF_DNFPLUG_D` / `_ACTIONS` seams —
+  no production change.
+
 ### Added — L2 functional coverage for fstab-watchdog (2026-05-27)
 
 Locks the fstab boot-mount surface. Three high-signal classes: a loop/file-
