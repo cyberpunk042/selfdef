@@ -6,6 +6,16 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — SDD-062 rule-tests for the fail-loud module_lib findings (2026-05-27)
+
+Closes the loop between SDD-063 and SDD-062: the `module_lib_missing` /
+`module_lib_outdated` emissions introduced by the D-6 / SDD-063
+consolidation are a new alert-tier class (a watchdog running with an
+absent/divergent policy is itself a finding). Two cases added to
+`rules/sigma/execution/selfdef_watchdog_alert.tests.yaml` lock that both
+route to a Detection Finding through the SDD-062 tag-prefix rule. Correlator
+rule-tests now 92 cases across 21 rules, green.
+
 ### Changed — dedup guard extended to lock the SDD-063 consolidation (2026-05-27)
 
 Capstone for the writable-policy single-source migration. The dedup guard

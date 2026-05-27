@@ -53,3 +53,25 @@ tests:
         raw:
           SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
     expected_findings: 0
+
+  # SDD-063: the fail-loud module-lib-missing/outdated emissions (a new
+  # alert-tier class introduced by the D-6 / SDD-063 consolidation) must
+  # also reach the pager — a watchdog scanning with an absent/divergent
+  # policy is itself a finding.
+  - name: a module_lib_missing fail-loud finding pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-sshd-config","severity":"alert","event":"module_lib_missing","profile":"report"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-sshd-config"
+    expected_findings: 1
+
+  - name: a module_lib_outdated fail-loud finding pages
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-udev-rules","severity":"alert","event":"module_lib_outdated","profile":"report"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-udev-rules"
+    expected_findings: 1
