@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for request-key-watchdog (2026-05-27)
+
+Locks the kernel key-request callout surface. /etc/request-key.conf{,.d}
+map kernel key upcalls (dns_resolver, cifs.upcall, NFS idmap, …) to a
+callout PROGRAM the kernel runs AS ROOT when a key of that type is requested
+— a kernel-triggered exec surface an unprivileged action can reach. A
+callout program under a writable root is alert.
+
+- `packaging/test/L2-request-key-watchdog.bats` — 9 tests: ok
+  (no_request_key / baseline_initial / request_key_intact), alert (callout
+  under a writable root → request_key_suspicious_callout; callout under
+  /dev/shm), warn (a benign callout added → request_key_changed),
+  false-positive guards (a /usr/sbin callout; a commented-out writable
+  callout), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_REQKEY_FILE` / `_D` seams — no production change.
+
 ### Added — L2 functional coverage for xinetd-watchdog (2026-05-27)
 
 Locks the inetd/xinetd super-server exec surface. xinetd/inetd launch the
