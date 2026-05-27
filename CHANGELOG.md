@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for udev-rules-watchdog (2026-05-27)
+
+Locks the udev device-event root-exec surface. udev runs RUN+= / PROGRAM== /
+IMPORT{program}= targets AS ROOT on device events (which an unprivileged
+user can often trigger) — a persistence + privilege-escalation vector. The
+watchdog is high-signal in two distinct ways: `udev_rules_suspicious_exec`
+(target under a writable root, or bare/relative) and `udev_rules_new_exec`
+(ANY newly-added exec directive, even to a trusted path — a code-exec
+surface appearing where there was none).
+
+- `packaging/test/L2-udev-rules-watchdog.bats` — 11 tests: ok
+  (baseline_initial with no exec / a benign trusted RUN / udev_rules_intact),
+  alert (RUN+= under a writable root → udev_rules_suspicious_exec; PROGRAM==
+  under a writable root; IMPORT{program} under /home; a bare/relative RUN
+  target; and a newly-added exec to a trusted path → udev_rules_new_exec),
+  warn (a benign non-exec change → udev_rules_changed), false-positive guard
+  (a match-keys-only rule), and enforce-profile exit. Uses the module's
+  existing `SELFDEF_UDEV_*` seams — no production change.
+
 ### Added — L2 functional coverage for sshd-config-watchdog (2026-05-27)
 
 Locks the SSH daemon dangerous-directive surface — a remote-facing
