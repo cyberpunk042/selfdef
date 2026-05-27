@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for xdg-autostart-watchdog (2026-05-27)
+
+Locks the XDG autostart exec surface. A .desktop file in an autostart dir
+runs its `Exec=` at the start of every desktop session (root's session for
+/root/.config/autostart) — a login/session persistence vector. An Exec
+under a writable root, relative-with-slash, or carrying an injection pattern
+is alert; bare PATH-resolved commands are normal.
+
+- `packaging/test/L2-xdg-autostart-watchdog.bats` — 10 tests: ok
+  (no_autostart_dirs / baseline_initial / xdg_autostart_intact), alert (Exec
+  under a writable root → xdg_autostart_suspicious; a curl|sh payload; a
+  relative-with-slash Exec), warn (a benign Exec change →
+  xdg_autostart_changed), false-positive guards (a /usr/bin Exec; a bare
+  PATH-resolved Exec), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_XDG_DIRS` seam — no production change.
+
 ### Added — L2 functional coverage for syslog-ng-exec-watchdog (2026-05-27)
 
 Locks the syslog-ng log-event exec surface. syslog-ng `program("…")`
