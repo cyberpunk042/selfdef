@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for network-event hook watchdogs (2026-05-27)
+
+Continues the consolidated-watchdog L2 backfill with the network-event-
+triggered hook-dir class: `dhclient-hooks-watchdog`,
+`dhcpcd-hooks-watchdog`, and `resolvconf-hooks-watchdog` — directories whose
+scripts run AS ROOT on DHCP lease / VPN / interface events (RENEW self-fires
+on a timer, so a planted hook self-triggers; T1546). Each suite (9 cases)
+exercises ok / warn / alert tiers, the injection-content + world-writable/
+non-root alert conditions, the benign-root-owned false-positive guard, the
+`module_lib_missing` fail-loud (non-zero exit), and the enforce profile. 27
+new bats cases, green.
+
 ### Added — L2 functional-severity coverage for mail-exec watchdogs (2026-05-27)
 
 Backfilling the L2 functional-severity bats coverage for consolidated
