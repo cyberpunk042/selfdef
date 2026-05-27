@@ -6,6 +6,34 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 follow-on: consolidate ld-so-conf-watchdog onto the shared dir policy + L2 coverage (2026-05-27)
+
+Extends the SDD-063 writable-directory policy to the glibc dynamic-linker
+search-path watchdog — the last major directory-checking module still
+carrying its own per-module copy of the writable policy (a bespoke `case`
+statement). `/etc/ld.so.conf{,.d/*.conf}` list the dirs ld.so searches for
+shared libraries; a writable dir there hijacks the SO search for every
+dynamically-linked program.
+
+- `modules/ld-so-conf-watchdog/systemd/ld-so-conf-watchdog.sh` — sources
+  module-lib (fail-loud, require ≥4) and replaces the inline
+  `/tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*` case with
+  `selfdef_is_writable_dir`, keeping the on-disk `-d && -w && mode` fallback
+  for arbitrary world-writable dirs. This also tightens two loose globs
+  (old `/var/tmp*` / `/dev/shm*` matched `/var/tmpfoo` / `/dev/shmfoo`; the
+  shared helper requires the `(/|$)` boundary). Adds `SELFDEF_LDSOCONF_MAIN`
+  / `SELFDEF_LDSOCONF_DIR` test seams (the config paths were hardcoded).
+- `packaging/test/L2-ld-so-conf-watchdog.bats` — 12 tests covering this
+  module's distinct behavior for the first time: ok (baseline_initial /
+  ld_so_conf_intact), alert (dir under a writable root, a bare writable
+  root, a dir under /home), the distinct **path-removed → alert**
+  (ld_so_conf_path_removed), warn (benign dir added → ld_so_conf_changed),
+  false-positive guards (standard dirs, an `include` directive, a
+  commented-out dir), enforce exit, and the module_lib_missing fail-loud
+  path.
+
+L1 188; dedup guard 5/5; module-lib 16/16.
+
 ### Fixed — SDD-063: bare writable-root directories now flagged (module-lib v4) (2026-05-27)
 
 Closes a real detection gap. `selfdef_is_writable_path` requires a trailing

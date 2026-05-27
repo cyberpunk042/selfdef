@@ -32,15 +32,39 @@ set -u
 PROFILE="${SELFDEF_LDSOCONF_PROFILE:-report}"
 BASELINE="${SELFDEF_LDSOCONF_BASELINE:-/var/lib/selfdef/ld-so-conf-baseline.tsv}"
 
+# SDD-063: consume the shared writable-directory policy
+# (selfdef_is_writable_dir) from module-lib instead of a per-module copy.
+# ld.so.conf entries are search DIRECTORIES, so a bare writable root
+# (e.g. /tmp itself) is dangerous — exactly the directory case the v4
+# helper covers. Co-shipped by the .deb at /usr/share/selfdef/lib/
+# module-lib.sh; selfdefctl exports SELFDEF_MODULE_LIB in a workspace. A
+# missing or pre-v4 library is a real misconfiguration that would leave
+# the watchdog scanning with a divergent policy, so we fail loud.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-ld-so-conf -- '{"tag":"selfdef-ld-so-conf","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-ld-so-conf -- '{"tag":"selfdef-ld-so-conf","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
+# Main config + drop-in dir (overridable for tests).
+LDSOCONF_MAIN="${SELFDEF_LDSOCONF_MAIN:-/etc/ld.so.conf}"
+LDSOCONF_DIR="${SELFDEF_LDSOCONF_DIR:-/etc/ld.so.conf.d}"
+
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
 # Resolve the full set of conf files (ld.so.conf usually just
 # 'include /etc/ld.so.conf.d/*.conf').
 conf_files=()
-[[ -f /etc/ld.so.conf ]] && conf_files+=(/etc/ld.so.conf)
-if [[ -d /etc/ld.so.conf.d ]]; then
-    for f in /etc/ld.so.conf.d/*.conf; do [[ -f "$f" ]] && conf_files+=("$f"); done
+[[ -f "$LDSOCONF_MAIN" ]] && conf_files+=("$LDSOCONF_MAIN")
+if [[ -d "$LDSOCONF_DIR" ]]; then
+    for f in "$LDSOCONF_DIR"/*.conf; do [[ -f "$f" ]] && conf_files+=("$f"); done
 fi
 
 declare -a suspicious=()
@@ -54,11 +78,13 @@ for f in "${conf_files[@]}"; do
         [[ -z "$line" ]] && continue
         [[ "$line" == include* ]] && continue
         printf 'path\t%s\n' "$line" >> "$current"
-        # suspicious if writable/tmp/home
-        case "$line" in
-            /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) suspicious+=("$line") ;;
-            *) [[ -d "$line" && -w "$line" && "$(stat -c '%a' "$line" 2>/dev/null)" =~ [27]$ ]] && suspicious+=("$line") ;;
-        esac
+        # suspicious if at/under a writable root (shared policy), or any
+        # other directory that is actually world-writable on disk.
+        if selfdef_is_writable_dir "$line"; then
+            suspicious+=("$line")
+        elif [[ -d "$line" && -w "$line" && "$(stat -c '%a' "$line" 2>/dev/null)" =~ [27]$ ]]; then
+            suspicious+=("$line")
+        fi
     done < "$f"
 done
 
