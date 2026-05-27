@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — repo-wide YAML parse + real-bug coherence gate (2026-05-27)
+
+selfdef ships ~62 YAML documents that drive runtime behavior (22 Sigma
+rules + 22 `.tests.yaml`, Tetragon policies in `packaging/`/`rules/`/`config/`,
+agent-guard + host-sentinel policy sets, the observability scrape/alert
+templates, GitHub workflows, replay/adversary fixtures) — yet only ONE of
+them (the MS047 perimeter policy, via `L1-perimeter-yaml-lint.sh`) had any
+gate, and the policy sets/templates/workflows/fixtures had none at all. A
+malformed YAML doc does not crash its consumer loudly — a broken Sigma rule
+or Tetragon policy is silently SKIPPED, so a detection disappears; a
+DUPLICATE mapping key parses fine but silently drops the earlier value
+(two `action:` keys → only the last survives), which can quietly turn a
+Sigkill policy into a no-op. New `scripts/test/L1-yaml-parse-scan.sh` makes
+both land RED: Gate 1 (mandatory, PyYAML `safe_load_all`) requires every
+document to parse; Gate 2 (yamllint at real-bug severity — `key-duplicates`
++ syntax only, all cosmetic style rules disabled — skips if yamllint absent,
+same non-fatal contract as the perimeter gate). Wired into `coherence.sh`
+next to the shellcheck (`.sh`) and ruff (`.py`) surface scans; CI's coherence
+job already installs yamllint, so Gate 2 runs there too. All 62 files pass
+clean; both real-bug checks were negative-control-verified (injected syntax
+error → parse RED; injected duplicate key → yamllint RED).
+
 ### Added — Python lint + test layers in the local coherence harness (2026-05-27)
 
 `coherence.sh` ran 13 layers + L2 bats + cargo but **never ran selfdef's
