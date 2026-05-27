@@ -6,6 +6,14 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — dashboard stat panel for the watchdog alert-finding count (2026-05-27)
+
+Companion at-a-glance stat to the `SelfdefWatchdogAlertFinding` alert: a new
+"detection-watchdog alert findings (1h)" stat panel
+(`sum(increase(selfdef_findings_by_rule_total{rule="selfdef watchdog alert-tier
+finding"}[1h]))`, green→red at ≥1), matching the four-watchdog stat-panel
+style. Dashboard now 22 panels; L2-observability green (≥20 gate holds).
+
 ### Added — Prometheus alert for the detection-watchdog finding stream (2026-05-27)
 
 Completes the metrics-path side of the "wire watchdogs into stack" work. A

@@ -113,6 +113,31 @@
       ]
     },
     {
+      "id": 9,
+      "type": "stat",
+      "title": "detection-watchdog alert findings (1h)",
+      "description": "Count of alert-tier host detection-watchdog findings in the last hour (planted exec / writable LOLBin / injection / writable config / module_lib_missing), routed by the selfdef_watchdog_alert Sigma rule (SDD-062). >0 fires SelfdefWatchdogAlertFinding — see the selfdef-watchdog-alert-finding runbook.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 30 },
+      "targets": [
+        {
+          "expr": "sum(increase(selfdef_findings_by_rule_total{rule=\"selfdef watchdog alert-tier finding\"}[1h]))",
+          "legendFormat": "alert findings"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Four-watchdog set (MS046 + MS047 + MS044 + MS048)",
