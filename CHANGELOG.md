@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for acpi-hooks-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the acpid event-binding /
+action-script surface: acpid runs the bound action AS ROOT on each ACPI
+hardware event (power button, lid, AC adapter, thermal). A dropped handler
+or a new binding whose `action=` points at attacker code self-triggers on
+routine hardware activity (T1546).
+
+Notably this LOCKS the second module-specific pattern SDD-061 D-6 preserved
+verbatim — the acpid `action=<writable>` pattern (the path follows `=`,
+which the generic command-position rule misses) — proving the preserved
+extra still detects after migration onto module-lib.
+
+- `packaging/test/L2-acpi-hooks-watchdog.bats` — 11 tests: ok
+  (no_acpi_hooks / baseline_initial / acpi_hooks_intact), alert (`action=`
+  under a writable root, a quoted writable `action=` — both the preserved
+  extra — plus a curl|sh handler from the canonical set), warn (benign
+  binding added → acpi_hooks_changed), false-positive guards (`action=`
+  under /etc/acpi not flagged; a commented-out writable `action=` not
+  flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_ACPI_*` sandbox.
+
 ### Added — L2 functional severity coverage for at-jobs-watchdog (2026-05-26)
 
 Extends watchdog functional-severity coverage to the at/batch scheduler-
