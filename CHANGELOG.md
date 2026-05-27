@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for modprobe-config-watchdog (2026-05-27)
+
+Locks the modprobe `install`-command exec surface. An `install <mod>
+<command>` line in /etc/modprobe.d makes modprobe RUN that command instead
+of inserting the module — triggered whenever anything autoloads <mod>
+(often reachable unprivileged). The benign idiom is a disable
+(`install <mod> /bin/true`); anything else is exec-capable (T1546). The
+watchdog is high-signal two ways: `modprobe_config_exec_install` (a
+non-/bin/true install command, escalated if under a writable root / bare)
+and `modprobe_config_install_added` (a new benign install directive).
+
+- `packaging/test/L2-modprobe-config-watchdog.bats` — 10 tests: ok
+  (baseline_initial / modprobe_config_intact), alert (an exec-capable
+  install → modprobe_config_exec_install; an install command under a
+  writable root; a bare/relative install command), warn (a new benign
+  disable install → modprobe_config_install_added; a benign blacklist
+  change → modprobe_config_changed), false-positive guards (a /bin/true
+  disable install; blacklist + options lines), and enforce-profile exit.
+  Uses the module's existing `SELFDEF_MODPROBE_*` seams — no production
+  change.
+
 ### Added — L2 functional coverage for dbus-service-watchdog (2026-05-27)
 
 Locks the D-Bus activation exec surface. A `.service` activation file with
