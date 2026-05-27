@@ -164,6 +164,9 @@
     if (kind === "communication-boundary") {
       return refreshCommunicationBoundary();
     }
+    if (kind === "authority") {
+      return refreshAuthority();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1989,6 +1992,95 @@
     }
   }
 
+  // MS039 + MS040 / SDD-049 — IPS authority-model doctrine (the capstone of
+  // the authority group). Read-only schema; renders the L-levels, the trust
+  // Rings (with level caps), the per-profile authority envelopes, and the
+  // transition gates.
+  async function refreshAuthority() {
+    const ul = document.getElementById("authority-rows");
+    const aggEl = document.getElementById("auth-aggregate");
+    const metaEl = document.getElementById("authority-meta");
+    try {
+      const body = await get("/v1/authority");
+      const levels = body.authority_levels || [];
+      const rings = body.trust_rings || [];
+      const envelopes = body.profile_envelopes || [];
+      const gates = body.transition_gates || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${levels.length} authority level(s) · ${rings.length} trust ring(s) · ` +
+        `${envelopes.length} profile envelope(s) · ${gates.length} transition gate(s)`;
+      ul.innerHTML = "";
+      for (const l of levels) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = l.level;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = "LEVEL";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = l.scope;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const r of rings) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `ring ${r.ring}`;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = `≤ ${r.level_cap}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = r.scope;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const e of envelopes) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = e.profile;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = `max ${e.max_level}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent =
+          `ring≤${e.ring_cap} · sandbox=${e.sandbox_requirement} · gate=${e.gate}`;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const g of gates) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "transition";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `${g.name}: ${g.semantics}`;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no authority doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/authority unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -2016,6 +2108,7 @@
   refreshFilesystemBoundary();
   refreshNetworkBoundary();
   refreshCommunicationBoundary();
+  refreshAuthority();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -2105,6 +2198,7 @@
   gatedInterval(refreshFilesystemBoundary, 300000, "filesystem-boundary-section");
   gatedInterval(refreshNetworkBoundary, 300000, "network-boundary-section");
   gatedInterval(refreshCommunicationBoundary, 300000, "communication-boundary-section");
+  gatedInterval(refreshAuthority, 300000, "authority-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -2122,7 +2216,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section"], // IPS authority/boundary surfaces (MS034/035/037/038/041/042/032) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section", "authority-section"], // IPS authority/boundary surfaces (MS034/035/037/038/039/040/041/042/032) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2362,6 +2456,7 @@
     ["filesystem-boundary-section","Filesystem boundary"],
     ["network-boundary-section",   "Network boundary"],
     ["communication-boundary-section","Communication boundary"],
+    ["authority-section",          "Authority model"],
   ];
   function readHiddenPanels() {
     try {

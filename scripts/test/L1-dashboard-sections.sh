@@ -139,6 +139,12 @@ check "HTML: communication-boundary aggregate" "${HTML}" 'id="cb-aggregate"' || 
 check "JS: refreshCommunicationBoundary()" "${JS}" 'function refreshCommunicationBoundary' || failures=$((failures + 1))
 check "JS: communication-boundary fetches /v1" "${JS}" '/v1/communication-boundary' || failures=$((failures + 1))
 check "JS: interval refreshCommunicationBoundary" "${JS}" 'gatedInterval\(refreshCommunicationBoundary' || failures=$((failures + 1))
+# MS039 + MS040 / SDD-049 — IPS authority-model panel (capstone).
+check "HTML: authority-section"          "${HTML}" 'id="authority-section"' || failures=$((failures + 1))
+check "HTML: authority aggregate"        "${HTML}" 'id="auth-aggregate"' || failures=$((failures + 1))
+check "JS: refreshAuthority()"           "${JS}"   'function refreshAuthority' || failures=$((failures + 1))
+check "JS: authority fetches /v1"        "${JS}"   '/v1/authority' || failures=$((failures + 1))
+check "JS: interval refreshAuthority"    "${JS}"   'gatedInterval\(refreshAuthority' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))
