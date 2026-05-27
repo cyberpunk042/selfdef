@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for apt-hooks-watchdog (2026-05-27)
+
+Locks the APT/DPkg hook exec surface. APT/DPkg run hook commands AS ROOT
+around package operations (DPkg::Pre/Post-Invoke, Pre-Install-Pkgs,
+APT::Update::Pre/Post-Invoke); a planted hook fires on the next apt
+update/install — package-transaction-triggered root code execution (T1546).
+The watchdog flags a hook command under a writable root or carrying an
+injection pattern.
+
+- `packaging/test/L2-apt-hooks-watchdog.bats` — 9 tests: ok (no_apt_config
+  / baseline_initial / apt_hooks_intact), alert (hook command under a
+  writable root → apt_hooks_suspicious; a curl|bash injection;
+  APT::Update::Pre-Invoke under /dev/shm), warn (a benign hook change →
+  apt_hooks_changed), false-positive guard (/usr/bin hook commands), and
+  enforce-profile exit. Uses the module's existing `SELFDEF_APTHOOK_FILE` /
+  `_D` seams — no production change.
+
 ### Added — L2 functional coverage for request-key-watchdog (2026-05-27)
 
 Locks the kernel key-request callout surface. /etc/request-key.conf{,.d}
