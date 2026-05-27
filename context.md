@@ -161,6 +161,28 @@ new watchdogs are protected from the two known silent-failure classes.
 
 ## What's ahead (selfdef forward queue)
 
+> **STALE-QUEUE CORRECTION (2026-05-27, verified):** the entire numbered list
+> below has SHIPPED but was never struck through (update-protocol drift, same
+> as sovereign-os/context.md). Verified present + substantive this session:
+> - **MS044 Guardian Daemon: BUILT** — `scripts/guardian/guardian-core`
+>   (469 lines, 3-step SIGKILL/ZFS-audit/console-bell protocol present) +
+>   `config/systemd/guardian-core.service`.
+> - **MS045 UX coherence harness: BUILT** — `scripts/ux-harness/selfdef-ux-harness`
+>   + `tests/ux-harness/test_ux_harness_l1.py` + `config/systemd/selfdef-ux-harness.{service,timer}`
+>   + `docs/sdd/030-ux-coherence-test-harness.md`.
+> - **9 of 9 MS007 mirror crates: SHIPPED** (rules/grants/capability/sandbox/
+>   audit/quarantine/trust-score/cli/tui — 100 passing tests).
+> - **CLI completions: SHIPPED** (bash/fish/zsh).
+>
+> So items 1–4 below are DONE. Beyond them this session ALSO shipped: the
+> detection-watchdog L2 coverage (both axes) + dual-tier Sigma routing
+> (alert pages / warn non-paging, SDD-062 D-5) + 4 scan-script silent-failure
+> guards + 3 real no-op bug fixes (self-integrity/account/pam-config). The
+> genuine next frontier is NOT invented here — it comes from the next operator
+> requirement chunk or a priority call (e.g. per-tag watchdog observability,
+> the one reserved decision still open). Original list retained below per
+> "never delete — layer on top".
+
 Per "little piece by little piece" — next tractable selfdef deliverables:
 
 1. **MS044 Guardian Daemon** Python impl at `/usr/local/bin/guardian-core`
