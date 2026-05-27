@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for anacrontab-watchdog (2026-05-27)
+
+Locks the anacron scheduler-persistence surface. /etc/anacrontab runs
+`period delay job-id command…` entries AS ROOT when the machine has been off
+past the period — a vector cron-job-watchdog does not see. A job command
+under a writable root, relative-with-slash, or an injection pattern anywhere
+in the file is alert; bare commands (run-parts, nice) are normal.
+
+- `packaging/test/L2-anacrontab-watchdog.bats` — 9 tests: ok (no_anacrontab
+  / baseline_initial / anacrontab_intact), alert (a job command under a
+  writable root → anacrontab_suspicious; a curl|sh injection; a
+  relative-with-slash job command), warn (a benign job added →
+  anacrontab_changed), false-positive guard (standard run-parts jobs), and
+  enforce-profile exit. Uses the module's existing `SELFDEF_ANACRON_FILE`
+  seam — no production change.
+
 ### Added — L2 functional coverage for xdg-autostart-watchdog (2026-05-27)
 
 Locks the XDG autostart exec surface. A .desktop file in an autostart dir

