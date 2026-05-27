@@ -86,7 +86,7 @@ impl SubstrateFingerprint {
             concat.push(0);
         }
         let hash = fnv1a_64(&concat);
-        let doctrine_text_hash = format!("{:016x}", hash);
+        let doctrine_text_hash = format!("{hash:016x}");
         let mut ck = collector_kinds.to_vec();
         ck.sort();
         let collector_summary = ck.join(",");

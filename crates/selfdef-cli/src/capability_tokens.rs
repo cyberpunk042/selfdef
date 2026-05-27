@@ -30,7 +30,7 @@ fn print_verdicts() {
             "token Ok-otherwise but does not carry the requested scope",
         ),
     ] {
-        println!("  - {:<13} {}", verdict, desc);
+        println!("  - {verdict:<13} {desc}");
     }
 }
 
@@ -69,7 +69,7 @@ fn print_schema() {
             "660 LOC — gates profile transitions on holder scopes",
         ),
     ] {
-        println!("  - {:<35} {}", crate_name, role);
+        println!("  - {crate_name:<35} {role}");
     }
     println!();
     println!("Caller contract (per SDD-044):");

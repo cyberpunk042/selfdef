@@ -300,7 +300,7 @@ mod tests {
 
     #[test]
     fn assert_passed_refuses_on_tampered_registry() {
-        let mut tampered = reg();
+        let tampered = reg();
         // Wipe the registry by tampering all records' provenance — citation validate
         // will still pass since tag membership is checked. Instead let's run a single
         // bespoke fixture whose expected tags are impossible.

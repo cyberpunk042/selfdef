@@ -270,7 +270,7 @@ mod tests {
         PanelEntry {
             kind,
             quadrant: q,
-            title: format!("{:?}", kind),
+            title: format!("{kind:?}"),
             source_mirror: mirror.into(),
             columns: vec![
                 ColumnSpec {
@@ -310,7 +310,7 @@ mod tests {
             ],
             min_authority: "l0_observe".into(),
             refresh_ms: 5000,
-            signature: format!("sig-{:?}", kind),
+            signature: format!("sig-{kind:?}"),
         }
     }
 

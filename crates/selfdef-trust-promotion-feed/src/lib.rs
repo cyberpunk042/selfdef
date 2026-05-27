@@ -96,9 +96,7 @@ pub fn evaluate(metrics: &SubjectMetrics, taxonomy: &CohortTaxonomy) -> Option<S
         && metrics.anomaly_hits == 0
         && metrics.current_cohort != Cohort::Admin
     {
-        let promoted = match taxonomy.promote(metrics.current_cohort).ok()? {
-            x => x,
-        };
+        let promoted = taxonomy.promote(metrics.current_cohort).ok()?;
         return Some(Suggestion {
             subject: metrics.subject.clone(),
             kind: PromotionKind::Promotion,

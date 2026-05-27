@@ -109,7 +109,7 @@ mod tests {
         for (_, count) in histo.iter() {
             let ratio = (*count as f64) / expected;
             // Within +/-50% of expected.
-            assert!(ratio > 0.5 && ratio < 1.5, "skew: {}", ratio);
+            assert!(ratio > 0.5 && ratio < 1.5, "skew: {ratio}");
         }
     }
 

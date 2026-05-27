@@ -71,6 +71,7 @@ impl Version {
     }
 
     /// "M.N.P" display.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         format!("{}.{}.{}", self.major, self.minor, self.patch)
     }

@@ -66,7 +66,7 @@ impl RetryBackoffPolicy {
         if n == 0 {
             return Err(BackoffError::AttemptZero);
         }
-        let shift = (n - 1).min(63) as u32;
+        let shift = (n - 1).min(63);
         let raw = base_ms.checked_shl(shift).unwrap_or(u64::MAX);
         let core = raw.min(max_ms);
         let jitter = if self.jitter_ms == 0 {
@@ -124,7 +124,7 @@ mod tests {
         let a = p.delay_for_attempt(3, 100, 10_000, 42).unwrap();
         let b = p.delay_for_attempt(3, 100, 10_000, 42).unwrap();
         assert_eq!(a, b);
-        assert!(a >= 400 && a < 400 + 500);
+        assert!((400..400 + 500).contains(&a));
     }
 
     #[test]

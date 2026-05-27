@@ -183,8 +183,8 @@ impl CapabilityWord {
     /// Extract the 8 component bytes (little-endian order matching from_bytes).
     pub fn to_bytes(self) -> [u8; 8] {
         let mut b = [0u8; 8];
-        for i in 0..8 {
-            b[i] = ((self.0 >> (i * 8)) & 0xff) as u8;
+        for (i, byte) in b.iter_mut().enumerate() {
+            *byte = ((self.0 >> (i * 8)) & 0xff) as u8;
         }
         b
     }

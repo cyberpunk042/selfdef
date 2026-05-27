@@ -91,7 +91,7 @@ impl SessionLifetimePolicy {
         p.insert(
             Profile::Private,
             ProfileLifetime {
-                max_age_ms: 1 * h,
+                max_age_ms: h,
                 max_idle_ms: 5 * m,
             },
         );
@@ -105,7 +105,7 @@ impl SessionLifetimePolicy {
         p.insert(
             Profile::Careful,
             ProfileLifetime {
-                max_age_ms: 1 * h,
+                max_age_ms: h,
                 max_idle_ms: 10 * m,
             },
         );

@@ -8,7 +8,7 @@
 //!
 //! Exit codes:
 //! - 0 = composite worst is `ok` or `unknown` (don't break operator
-//!       gates on a freshly-booted daemon)
+//!   gates on a freshly-booted daemon)
 //! - 1 = composite worst is `warn` or `critical`
 //!
 //! Source: MS011 Z-6 + GET /v1/health (`crates/selfdef-api/src/health.rs`).
@@ -19,6 +19,7 @@ use anyhow::{Context, Result, anyhow};
 
 /// Try the typed `/v1/health` endpoint. Returns `(worst, rows)` on
 /// success, `None` on any failure — caller maps to an error.
+#[allow(clippy::type_complexity)]
 fn try_fetch() -> Option<(String, Vec<(String, String, String)>)> {
     let body = fetch_health().ok()?;
     let parsed: serde_json::Value = serde_json::from_str(&body).ok()?;
@@ -72,8 +73,7 @@ fn fetch_health() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/health — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/health — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -86,7 +86,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
 
     if quiet {
         // PS1-friendly single-line output: `selfdef-health: WORST`.
-        println!("selfdef-health: {}", worst);
+        println!("selfdef-health: {worst}");
     } else if json {
         let obj = serde_json::json!({
             "worst": worst,
@@ -98,7 +98,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         });
         println!("{}", serde_json::to_string(&obj)?);
     } else {
-        println!("{:<12} {:<10}   {}", "COMPONENT", "STATE", "DETAIL");
+        println!("{:<12} {:<10}   DETAIL", "COMPONENT", "STATE");
         println!("{}", "─".repeat(80));
         for (name, state, detail) in &rows {
             println!("{:<12} {:<10}   {}", name, state.to_uppercase(), detail);

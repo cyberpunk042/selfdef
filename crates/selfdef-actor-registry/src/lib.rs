@@ -220,6 +220,7 @@ impl ActorRegistry {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
 
     fn mk_entry(fp: &str, kind: ActorKind, revoked: bool) -> ActorEntry {
@@ -284,7 +285,7 @@ mod tests {
     #[test]
     fn valid_32_and_64_char_fingerprints_accepted() {
         validate_fingerprint(&fp32('B')).unwrap();
-        let fp64: String = std::iter::repeat('B').take(64).collect();
+        let fp64: String = std::iter::repeat_n('B', 64).collect();
         validate_fingerprint(&fp64).unwrap();
     }
 

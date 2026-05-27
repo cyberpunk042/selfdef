@@ -156,7 +156,7 @@ impl PromptAttachmentMimePolicy {
                 matched: mime.into(),
             });
         }
-        let subtype_glob = format!("{}/*", typ);
+        let subtype_glob = format!("{typ}/*");
         if allow.contains(&subtype_glob) {
             return Ok(MimeVerdict::Allowed {
                 matched: subtype_glob,

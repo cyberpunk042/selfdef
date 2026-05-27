@@ -1,7 +1,7 @@
 //! `selfdef-pattern-match-engine` — 4 unified pattern kinds.
 //!
 //! - `PathGlob`     — `*` wildcard matches a single path segment;
-//!                    `**` matches any number of segments.
+//!   `**` matches any number of segments.
 //! - `Fqdn`         — exact match or `.suffix` (dot-prefixed) suffix.
 //! - `Cidr`         — naive prefix match on `a.b.c.d/N` (N in 0..=32).
 //! - `SubstringRule`— case-insensitive substring of input.
@@ -51,8 +51,7 @@ impl Pattern {
         match self {
             Pattern::PathGlob(g) => match_path_glob(g, input),
             Pattern::Fqdn(s) => {
-                if s.starts_with('.') {
-                    let suffix = &s[1..];
+                if let Some(suffix) = s.strip_prefix('.') {
                     input == suffix || input.ends_with(s.as_str())
                 } else {
                     s == input

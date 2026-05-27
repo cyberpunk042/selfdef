@@ -198,6 +198,10 @@ pub mod assets {
 
 #[cfg(test)]
 mod tests {
+    // Test fixtures build via default()+field-set; asserts guard const assets
+    // are non-empty (clippy const-evaluates these, but they are regression
+    // guards against the assets ever being emptied).
+    #![allow(clippy::field_reassign_with_default, clippy::const_is_empty)]
     use super::*;
 
     #[test]

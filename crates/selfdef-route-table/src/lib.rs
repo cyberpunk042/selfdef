@@ -119,10 +119,9 @@ impl RouteTable {
         }
         let mut best: Option<(&str, &str)> = None; // (prefix, handler)
         for (p, h) in &self.prefix {
-            if key.starts_with(p.as_str()) {
-                if best.map(|(bp, _)| p.len() > bp.len()).unwrap_or(true) {
-                    best = Some((p.as_str(), h.as_str()));
-                }
+            if key.starts_with(p.as_str()) && best.map(|(bp, _)| p.len() > bp.len()).unwrap_or(true)
+            {
+                best = Some((p.as_str(), h.as_str()));
             }
         }
         best.map(|(p, h)| Resolution {

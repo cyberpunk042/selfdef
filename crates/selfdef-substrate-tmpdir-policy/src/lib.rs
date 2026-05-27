@@ -110,21 +110,21 @@ impl SubstrateTmpdirPolicy {
             Profile::Private,
             ProfileCaps {
                 max_bytes: 16 * mib,
-                max_age_ms: 1 * day,
+                max_age_ms: day,
             },
         );
         p.insert(
             Profile::Fast,
             ProfileCaps {
                 max_bytes: 256 * mib,
-                max_age_ms: 1 * day,
+                max_age_ms: day,
             },
         );
         p.insert(
             Profile::Careful,
             ProfileCaps {
                 max_bytes: 64 * mib,
-                max_age_ms: 1 * day,
+                max_age_ms: day,
             },
         );
         p.insert(
@@ -145,7 +145,7 @@ impl SubstrateTmpdirPolicy {
             Profile::Production,
             ProfileCaps {
                 max_bytes: 512 * mib,
-                max_age_ms: 1 * day,
+                max_age_ms: day,
             },
         );
         Self {

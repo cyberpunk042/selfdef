@@ -219,7 +219,7 @@ mod tests {
         r.register("n3", 64).unwrap();
         let mut seen = std::collections::BTreeSet::new();
         for k in 0..1000 {
-            seen.insert(r.assign(&format!("key-{}", k)).unwrap().to_string());
+            seen.insert(r.assign(&format!("key-{k}")).unwrap().to_string());
         }
         assert_eq!(seen.len(), 3);
     }
@@ -241,11 +241,11 @@ mod tests {
         r.register("n2", 64).unwrap();
         r.register("n3", 64).unwrap();
         let before: Vec<String> = (0..200)
-            .map(|i| r.assign(&format!("key-{}", i)).unwrap().to_string())
+            .map(|i| r.assign(&format!("key-{i}")).unwrap().to_string())
             .collect();
         r.unregister("n2").unwrap();
         let after: Vec<String> = (0..200)
-            .map(|i| r.assign(&format!("key-{}", i)).unwrap().to_string())
+            .map(|i| r.assign(&format!("key-{i}")).unwrap().to_string())
             .collect();
         for (b, a) in before.iter().zip(after.iter()) {
             if b == "n2" {

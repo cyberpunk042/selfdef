@@ -171,7 +171,7 @@ mod tests {
         let mut g = IdGenerator::new();
         let id = g.next(12345).unwrap();
         for c in id.chars() {
-            assert!(CROCKFORD.contains(&(c as u8)), "bad char: {}", c);
+            assert!(CROCKFORD.contains(&(c as u8)), "bad char: {c}");
         }
     }
 

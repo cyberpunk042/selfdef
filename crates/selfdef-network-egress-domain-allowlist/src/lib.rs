@@ -142,7 +142,7 @@ impl NetworkEgressDomainAllowlist {
                 if suffix.is_empty() {
                     return Err(DomainError::BadRule(rule.clone()));
                 }
-                let probe = format!(".{}", suffix);
+                let probe = format!(".{suffix}");
                 if h.ends_with(&probe) {
                     return Ok(DomainVerdict::Allowed {
                         matched: rule.clone(),

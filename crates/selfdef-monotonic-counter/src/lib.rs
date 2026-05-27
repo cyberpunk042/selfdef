@@ -154,15 +154,15 @@ mod tests {
     fn observe_eq_idempotent() {
         let mut c = MonotonicCounter::new();
         c.observe_eq(5).unwrap();
-        assert_eq!(c.observe_eq(5).unwrap(), false);
+        assert!(!c.observe_eq(5).unwrap());
         assert_eq!(c.advances, 1);
     }
 
     #[test]
     fn observe_eq_advance() {
         let mut c = MonotonicCounter::new();
-        assert_eq!(c.observe_eq(3).unwrap(), true);
-        assert_eq!(c.observe_eq(5).unwrap(), true);
+        assert!(c.observe_eq(3).unwrap());
+        assert!(c.observe_eq(5).unwrap());
     }
 
     #[test]

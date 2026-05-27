@@ -97,6 +97,7 @@ impl UrlParts {
     }
 
     /// Reassemble URL.
+    #[allow(clippy::inherent_to_string)]
     pub fn to_string(&self) -> String {
         let mut out = String::with_capacity(64);
         out.push_str(&self.scheme);

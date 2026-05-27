@@ -42,7 +42,7 @@ pub fn fingerprint(s: &str) -> String {
         h ^= *b as u64;
         h = h.wrapping_mul(0x100000001b3);
     }
-    format!("{:016x}", h)
+    format!("{h:016x}")
 }
 
 /// Shortened to leading `len` chars (1..=16).

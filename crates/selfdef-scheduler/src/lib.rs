@@ -1114,7 +1114,7 @@ mod tests {
     #[test]
     fn replay_against_different_profile_changes_compound() {
         let d = sample_decision(1);
-        let r = replay(&d, Profile::Fast);
+        let _r = replay(&d, Profile::Fast);
         // Careful→Fast has different weights; compound should differ for non-uniform signals.
         // sample_decision uses all_one_signals which gives compound=1.0 under any profile,
         // so we need different signals to see a change. Construct a decision with skew.

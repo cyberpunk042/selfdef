@@ -3,6 +3,7 @@
 //! enter(frame_id) pushes; leave pops. Two rejections:
 //!   - DepthExceeded if push would exceed max_depth.
 //!   - CycleDetected if frame_id is already on the stack.
+//!
 //! Both are observed without mutating state (caller can retry or
 //! abort). depth() returns current size. Suitable for nested IPS
 //! rule evaluation where cycles or runaway recursion must be a

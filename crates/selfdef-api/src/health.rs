@@ -15,7 +15,7 @@
 //! - `raid`     — `/v1/raid` worst across MD arrays (or "ok" if no MD)
 //! - `gpu`      — `/v1/gpu` worst across GPUs (or "unknown" if no policy / no nvidia-smi)
 //! - `cpu`      — `/v1/cpu` mode classification (informational; never
-//!                degrades the aggregate — `custom` is operator choice)
+//!   degrades the aggregate — `custom` is operator choice)
 //!
 //! The composite `worst` follows the standard ordering:
 //! `red/critical > yellow/warn > unknown > green/ok`.

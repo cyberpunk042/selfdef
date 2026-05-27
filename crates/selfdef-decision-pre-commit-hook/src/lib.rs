@@ -121,7 +121,7 @@ impl DecisionPreCommitHook {
         if self.schema_version != SCHEMA_VERSION {
             return Err(HookError::SchemaMismatch);
         }
-        for (k, _) in &self.hooks {
+        for k in self.hooks.keys() {
             if k.is_empty() {
                 return Err(HookError::EmptyId);
             }

@@ -68,7 +68,7 @@ impl CountMinSketch {
 
     fn col(&self, row: u32, key: &str) -> usize {
         // Per-row seed mixed in as ASCII decimal prefix.
-        let mut prefix = format!("{}:", row).into_bytes();
+        let mut prefix = format!("{row}:").into_bytes();
         prefix.extend_from_slice(key.as_bytes());
         let h = fnv1a_64(&prefix);
         (h % self.width as u64) as usize
@@ -140,7 +140,7 @@ mod tests {
     fn estimate_is_upper_bound() {
         let mut s = CountMinSketch::new(4, 128).unwrap();
         for i in 0..1000 {
-            s.add(&format!("k{}", i), 1);
+            s.add(&format!("k{i}"), 1);
         }
         // Any single key contributed exactly 1, so estimate >= 1.
         assert!(s.estimate("k0") >= 1);

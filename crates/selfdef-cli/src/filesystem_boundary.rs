@@ -2,8 +2,8 @@
 //! SDD-045 explicit-exchange directory discipline.
 //!
 //! Three subverbs (discovery + drift detection):
-//!   - `doctrine` — print the 3-dir layout + 6-step import pipeline
-//!     + 5-field patch schema + 6 application predicates + 2 verbatim
+//!   - `doctrine` — print the 3-dir layout + 6-step import pipeline,
+//!     5-field patch schema, 6 application predicates, 2 verbatim
 //!     doctrinal phrases
 //!   - `schema` — print the full SDD-045 contract
 //!

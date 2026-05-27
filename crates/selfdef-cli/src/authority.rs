@@ -24,7 +24,7 @@ pub(crate) fn run_matrix() -> Result<i32> {
             "persistent durable changes (every commit through SDD-043)",
         ),
     ] {
-        println!("  {} — {}", lvl, scope);
+        println!("  {lvl} — {scope}");
     }
     println!();
     println!("5 trust rings (per dump 17215-17532):");
@@ -37,7 +37,7 @@ pub(crate) fn run_matrix() -> Result<i32> {
         ("Ring3", "third-party tool plugin", "L3"),
         ("Ring4", "external untrusted code", "L1"),
     ] {
-        println!("  {:<6} {:<38} {}", r, scope, cap);
+        println!("  {r:<6} {scope:<38} {cap}");
     }
     println!();
     println!("6 profile envelopes (per dump 17468-17500):");
@@ -69,7 +69,7 @@ pub(crate) fn run_matrix() -> Result<i32> {
             "high cycle budget",
         ),
     ] {
-        println!("  {:<14} {:<6} {:<9} {:<16} {}", p, l, ring, sb, gate);
+        println!("  {p:<14} {l:<6} {ring:<9} {sb:<16} {gate}");
     }
     println!();
     println!("4 TransitionGate variants (per selfdef-mode-transition-authority):");
@@ -79,7 +79,7 @@ pub(crate) fn run_matrix() -> Result<i32> {
         ("SnapshotRequired", "ZFS snapshot evidence required"),
         ("Forbidden", "refused unconditionally"),
     ] {
-        println!("  - {:<18} {}", g, desc);
+        println!("  - {g:<18} {desc}");
     }
     println!();
     println!("5 authority crates shipped (per SDD-049):");
@@ -102,7 +102,7 @@ pub(crate) fn run_matrix() -> Result<i32> {
             "660 LOC — 6-profile matrix",
         ),
     ] {
-        println!("  - {:<35} {}", c, role);
+        println!("  - {c:<35} {role}");
     }
     Ok(0)
 }

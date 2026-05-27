@@ -131,8 +131,8 @@ mod tests {
     #[test]
     fn subscribe_idempotent() {
         let mut s = ListenerSet::new();
-        assert_eq!(s.subscribe("t", "a").unwrap(), true);
-        assert_eq!(s.subscribe("t", "a").unwrap(), false);
+        assert!(s.subscribe("t", "a").unwrap());
+        assert!(!s.subscribe("t", "a").unwrap());
     }
 
     #[test]

@@ -153,7 +153,7 @@ mod tests {
         let a = b.compute(0, 1);
         let c = b.compute(0, 2);
         // Different seeds → different jitter.
-        assert!(a != c || (a == c && a == 1000));
+        assert!(a != c || a == 1000);
     }
 
     #[test]

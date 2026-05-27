@@ -124,7 +124,7 @@ impl BlockAttemptCounter {
         if self.schema_version != SCHEMA_VERSION {
             return Err(CounterError::SchemaMismatch);
         }
-        for (a, _) in &self.buckets {
+        for a in self.buckets.keys() {
             if a.is_empty() {
                 return Err(CounterError::EmptyActor);
             }

@@ -9,7 +9,7 @@
 //!
 //! Exit codes:
 //! - 0 = every alert OK (or only `unknown` for series the daemon isn't
-//!       exporting yet)
+//!   exporting yet)
 //! - 1 = at least one alert in `warn` or `critical` state
 //!
 //! This lets operators gate other commands behind the alert state:
@@ -278,9 +278,7 @@ fn fetch_endpoint(path: &str) -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch {} — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        path,
-        socket
+        "could not fetch {path} — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -376,8 +374,7 @@ fn fetch_metrics() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /metrics — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN were reachable",
-        socket
+        "could not fetch /metrics — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN were reachable"
     ))
 }
 
@@ -404,7 +401,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         // PS1-friendly single-line output: `selfdef-alerts: WORST` —
         // exit non-zero iff worst != "ok" so operators can do
         // `selfdefctl alerts --quiet && deploy.sh`.
-        println!("selfdef-alerts: {}", worst);
+        println!("selfdef-alerts: {worst}");
     } else if json {
         let json_out = serde_json::json!({
             "worst": worst,
@@ -413,8 +410,8 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         println!("{}", serde_json::to_string(&json_out)?);
     } else {
         println!(
-            "{:<32} {:<5} {:<48} {:<18} {:>10}   {}",
-            "ALERT", "MS", "SERIES", "THRESHOLD", "CURRENT", "STATE"
+            "{:<32} {:<5} {:<48} {:<18} {:>10}   STATE",
+            "ALERT", "MS", "SERIES", "THRESHOLD", "CURRENT"
         );
         println!("{}", "─".repeat(132));
         for r in &rows {
@@ -451,10 +448,10 @@ mod tests {
 
     #[test]
     fn parses_basic_exposition() {
-        let text = "# HELP foo whatever\n# TYPE foo counter\nfoo 42\nbar{label=\"x\"} 3.14\n";
+        let text = "# HELP foo whatever\n# TYPE foo counter\nfoo 42\nbar{label=\"x\"} 7.5\n";
         let m = parse_prom_exposition(text);
         assert_eq!(m.get("foo"), Some(&42.0));
-        assert_eq!(m.get("bar"), Some(&3.14));
+        assert_eq!(m.get("bar"), Some(&7.5));
     }
 
     #[test]

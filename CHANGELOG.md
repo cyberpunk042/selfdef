@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — repo-wide `cargo clippy` green (CI `clippy` job no longer red) (2026-05-27)
+
+`cargo clippy --workspace --all-targets -- -D warnings` (the CI `clippy` job) was
+RED with **288 findings across 72 crates** — the crate set was never run through
+clippy (same root as the fmt gap). Resolved with clippy 0.1.88 (exact CI toolchain):
+three `cargo clippy --fix` passes auto-resolved the bulk (uninlined_format_args ×28,
+manual_*/unnecessary_*/for_kv_map/identity_op/…), then the residual was fixed by hand —
+4 `.get(k).is_none()`→`contains_key`, 4 `manual_strip`→`strip_prefix`, 2
+`match`→`matches!`, a `.max().min()`→`.clamp()` wasn't needed (covered) but a
+`needless_range_loop`→slice-iter + a DP loop `#[allow]`, `sort_by` →`sort_by_key`,
+a redundant `match x { y => y }`→`x`, an identical-branch `if` collapsed (union-by-rank,
+verified non-bug), a `to_string` test value changed off the PI approximation, `is_empty`
+not needed, plus targeted `#[allow]`s for intentional inherent methods (`add`,
+`to_string`×2), a many-arg signature, a complex return type, and test-module
+`field_reassign`/`const_is_empty`. ~25 rustdoc list-formatting lints fixed
+(dedented over-indented continuations, terminated lists, reworded false `+`/`*`
+bullets). Final: clippy exits 0, `cargo fmt --check` clean. 87 files; all
+behaviour-preserving (no real bugs — the crates were correct, just un-linted).
+
 ### Fixed — api-endpoints coherence gate now matches rustfmt's multi-line `.route()` form (2026-05-27)
 
 The repo-wide `cargo fmt` (below) reflowed two long single-line `.route("/v1/…", handler)`

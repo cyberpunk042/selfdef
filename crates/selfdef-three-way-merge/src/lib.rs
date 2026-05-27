@@ -209,7 +209,7 @@ mod tests {
         let t = m(&[("a", "1")]);
         let r = merge(&b, &o, &t);
         if let Outcome::Merged(out) = r {
-            assert!(out.get("a").is_none());
+            assert!(!out.contains_key("a"));
         } else {
             panic!("expected merged");
         }

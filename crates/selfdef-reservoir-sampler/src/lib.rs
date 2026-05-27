@@ -183,7 +183,7 @@ mod tests {
         }
         let mean = total / trials;
         // Mean across 200 seeds should land near 500 (50% slack).
-        assert!((250..=750).contains(&mean), "mean was {}", mean);
+        assert!((250..=750).contains(&mean), "mean was {mean}");
     }
 
     #[test]

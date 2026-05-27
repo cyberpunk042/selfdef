@@ -77,16 +77,16 @@ pub enum LifecycleError {
 }
 
 fn allowed(from: Phase, to: Phase) -> bool {
-    match (from, to) {
-        (Phase::Requested, Phase::Approved) => true,
-        (Phase::Requested, Phase::Cancelled) => true,
-        (Phase::Approved, Phase::Executing) => true,
-        (Phase::Approved, Phase::Cancelled) => true,
-        (Phase::Executing, Phase::Completed) => true,
-        (Phase::Executing, Phase::Failed) => true,
-        (Phase::Executing, Phase::Cancelled) => true,
-        _ => false,
-    }
+    matches!(
+        (from, to),
+        (Phase::Requested, Phase::Approved)
+            | (Phase::Requested, Phase::Cancelled)
+            | (Phase::Approved, Phase::Executing)
+            | (Phase::Approved, Phase::Cancelled)
+            | (Phase::Executing, Phase::Completed)
+            | (Phase::Executing, Phase::Failed)
+            | (Phase::Executing, Phase::Cancelled)
+    )
 }
 
 fn phase_key(p: Phase) -> &'static str {
@@ -161,7 +161,7 @@ impl ActionLifecycle {
         if self.schema_version != SCHEMA_VERSION {
             return Err(LifecycleError::SchemaMismatch);
         }
-        for (id, _) in &self.actions {
+        for id in self.actions.keys() {
             if id.is_empty() {
                 return Err(LifecycleError::EmptyId);
             }

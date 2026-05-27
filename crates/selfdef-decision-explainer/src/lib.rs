@@ -3,9 +3,9 @@
 //! Given a `PolicyDecision`, returns an `Explanation` with:
 //! - `headline`     — one-sentence summary
 //! - `factors`      — ordered list of evidence strings the daemon
-//!                    considered
+//!   considered
 //! - `outcome_class`— derived signal: `:routine`, `:elevated`,
-//!                    `:operator-attention`, `:blocked`
+//!   `:operator-attention`, `:blocked`
 //!
 //! Standing rule: We do not minimize anything.
 

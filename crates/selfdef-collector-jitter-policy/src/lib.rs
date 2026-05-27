@@ -104,7 +104,7 @@ mod tests {
         let p = CollectorJitterPolicy::new(1000);
         for id in ["a", "b", "c", "foo", "bar"] {
             let j = p.jitter(id).unwrap();
-            assert!(j >= -500 && j <= 500, "id={id} j={j}");
+            assert!((-500..=500).contains(&j), "id={id} j={j}");
         }
     }
 
@@ -127,7 +127,7 @@ mod tests {
         let p = CollectorJitterPolicy::new(1000);
         let n = p.next_at("a", 100_000).unwrap();
         // Within window.
-        assert!(n >= 99_500 && n <= 100_500);
+        assert!((99_500..=100_500).contains(&n));
     }
 
     #[test]

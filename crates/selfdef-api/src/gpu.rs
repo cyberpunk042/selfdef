@@ -19,9 +19,9 @@
 //!    - `green`  — |draw - expected_limit| ≤ tolerance_watts (default 25 W)
 //!    - `yellow` — drift exceeds tolerance but within 2x tolerance
 //!    - `red`    — drift exceeds 2x tolerance, OR draw exceeds the
-//!                  card's own power.limit (nvidia-smi reported)
+//!      card's own power.limit (nvidia-smi reported)
 //!    - `unknown` — operator hasn't set expected_power_limit_watts
-//!                  for this GPU, OR nvidia-smi reported N/A
+//!      for this GPU, OR nvidia-smi reported N/A
 //!
 //! Source: MS011 catalog row M00275 (Hardware tab) + SDD-026 Z-5.
 

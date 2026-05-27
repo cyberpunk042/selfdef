@@ -118,11 +118,10 @@ impl UnionFind {
         let size_b = self.entries.get(&rb).unwrap().size;
         let (root, child) = if rank_a < rank_b {
             (rb.clone(), ra.clone())
-        } else if rank_a > rank_b {
-            (ra.clone(), rb.clone())
         } else {
+            // a wins on higher-or-equal rank (ties: a wins, bump rank)
             (ra.clone(), rb.clone())
-        }; // ties: a wins, bump rank
+        };
         self.entries.get_mut(&child).unwrap().parent = root.clone();
         self.entries.get_mut(&root).unwrap().size = size_a.saturating_add(size_b);
         if rank_a == rank_b {

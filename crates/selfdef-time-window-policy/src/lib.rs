@@ -1,7 +1,7 @@
 //! `selfdef-time-window-policy` — wall-clock IPS gating.
 //!
 //! Restricts when high-risk operation classes are allowed by weekday
-//! + hour-of-day. Designed so the operator can say "no autonomous
+//! and hour-of-day. Designed so the operator can say "no autonomous
 //! changes between 22:00 and 07:00, and never on Sunday." Per-class
 //! windows; outside the window the gate denies regardless of profile.
 //!

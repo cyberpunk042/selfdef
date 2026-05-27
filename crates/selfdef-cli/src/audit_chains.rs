@@ -7,10 +7,10 @@
 //! Exit codes:
 //! - 0 = every chain verified (worst = "ok")
 //! - 1 = at least one chain broken (worst = "critical") OR the
-//!       daemon's /v1/audit-chains endpoint is unreachable (no
-//!       fallback — chain verification requires reading the daemon-
-//!       owned OCSF files, which the CLI process may not have access
-//!       to under the operator's daemon-as-its-own-user posture)
+//!   daemon's /v1/audit-chains endpoint is unreachable (no
+//!   fallback — chain verification requires reading the daemon-
+//!   owned OCSF files, which the CLI process may not have access
+//!   to under the operator's daemon-as-its-own-user posture)
 //!
 //! Source: GET /v1/audit-chains (crates/selfdef-api/src/audit_chains.rs).
 
@@ -55,8 +55,7 @@ fn fetch_audit_chains() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/audit-chains — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/audit-chains — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -74,13 +73,13 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         .ok_or_else(|| anyhow!("malformed /v1/audit-chains: missing `chains`"))?;
 
     if quiet {
-        println!("selfdef-audit-chains: {}", worst);
+        println!("selfdef-audit-chains: {worst}");
     } else if json {
-        println!("{}", body);
+        println!("{body}");
     } else {
         println!(
-            "{:<12} {:<8} {:>14}   {}",
-            "WATCHDOG", "STATE", "EVENTS", "DETAIL"
+            "{:<12} {:<8} {:>14}   DETAIL",
+            "WATCHDOG", "STATE", "EVENTS"
         );
         println!("{}", "─".repeat(100));
         for c in chains {
@@ -101,7 +100,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
                 let path = c.get("path").and_then(|v| v.as_str()).unwrap_or("?");
                 format!("{err}  ({path})")
             };
-            println!("{:<12} {:<8} {:>14}   {}", watchdog, state, events, detail);
+            println!("{watchdog:<12} {state:<8} {events:>14}   {detail}");
         }
         println!("{}", "─".repeat(100));
         println!("WORST: {}", worst.to_uppercase());

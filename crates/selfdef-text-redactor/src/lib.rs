@@ -61,7 +61,7 @@ impl TextRedactor {
         let mut count = 0u32;
         // Longest-first so substring needles don't shadow superstrings.
         let mut needles: Vec<&str> = self.needles.iter().map(|s| s.as_str()).collect();
-        needles.sort_by(|a, b| b.len().cmp(&a.len()));
+        needles.sort_by_key(|s| std::cmp::Reverse(s.len()));
         for n in needles {
             let token = format!("[REDACTED:{}]", n.chars().count());
             // Manual replace + count.

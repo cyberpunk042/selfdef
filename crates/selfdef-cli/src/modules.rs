@@ -180,9 +180,6 @@ pub(crate) struct Requirement {
     pub(crate) value: String,
 }
 
-/// SD-R14: hardware-aware module gating.
-///
-
 /// SD-R14 hardware-aware module gating — moved to the workspace
 /// crate `selfdef-hardware-requirements` per SDD-057 so selfdef-api
 /// can run the same gate logic without depending on this CLI bin.

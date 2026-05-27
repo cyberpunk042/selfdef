@@ -19,7 +19,7 @@ pub(crate) fn run_schema() -> Result<i32> {
             "explicit-exchange dirs per SDD-045 (slowest; large payloads)",
         ),
     ] {
-        println!("  - {:<16} {}", t, scope);
+        println!("  - {t:<16} {scope}");
     }
     println!();
     println!("8 canonical message types (per E0343-E0345 dump 3466-3473):");
@@ -43,7 +43,7 @@ pub(crate) fn run_schema() -> Result<i32> {
             "file patches (PROPOSAL — SDD-045 flow)",
         ),
     ] {
-        println!("{:<18}{:<11}{}", m, dir, content);
+        println!("{m:<18}{dir:<11}{content}");
     }
     println!();
     println!("Doctrines preserved verbatim (per E0346 + E0347):");

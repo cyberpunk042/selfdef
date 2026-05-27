@@ -36,12 +36,10 @@ pub enum Mode {
 impl Mode {
     /// Does this grant satisfy the requested mode?
     pub fn satisfies(self, requested: Mode) -> bool {
-        match (self, requested) {
-            (Mode::ReadWrite, _) => true,
-            (Mode::Read, Mode::Read) => true,
-            (Mode::WriteOnly, Mode::WriteOnly) => true,
-            _ => false,
-        }
+        matches!(
+            (self, requested),
+            (Mode::ReadWrite, _) | (Mode::Read, Mode::Read) | (Mode::WriteOnly, Mode::WriteOnly)
+        )
     }
 }
 

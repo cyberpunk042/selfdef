@@ -3,10 +3,10 @@
 //!
 //! 2 subverbs:
 //!   - `schema`  — static doctrine + Delta + DeltaOp + RevertRecord
-//!                 + refusal rules (offline; no daemon needed)
+//!     + refusal rules (offline; no daemon needed)
 //!   - `show`    — live state read via GET /v1/flex-profile (calls
-//!                 the daemon; prints baseline + delta count +
-//!                 revert count + latest delta)
+//!     the daemon; prints baseline + delta count +
+//!     revert count + latest delta)
 
 use std::process::Command;
 
@@ -105,15 +105,14 @@ fn fetch_endpoint() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/flex-profile — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/flex-profile — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
 pub(crate) fn run_show(json: bool) -> Result<i32> {
     let body = fetch_endpoint()?;
     if json {
-        println!("{}", body);
+        println!("{body}");
         return Ok(0);
     }
     let parsed: serde_json::Value = serde_json::from_str(&body)

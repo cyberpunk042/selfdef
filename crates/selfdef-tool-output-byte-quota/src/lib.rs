@@ -223,7 +223,7 @@ impl ToolOutputByteQuota {
         if self.schema_version != SCHEMA_VERSION {
             return Err(QuotaError::SchemaMismatch);
         }
-        for (_, p) in &self.profiles {
+        for p in self.profiles.values() {
             if p.warn_bytes > p.hard_bytes {
                 return Err(QuotaError::BadThresholds(p.warn_bytes, p.hard_bytes));
             }

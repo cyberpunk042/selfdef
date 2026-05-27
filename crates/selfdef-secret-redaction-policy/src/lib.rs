@@ -122,8 +122,8 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
     }
     // GitHub tokens: ghp_, gho_, ghu_, ghs_, ghr_ + 36 chars.
     for prefix in ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"] {
-        if rest.starts_with(prefix) {
-            let body_len = rest[prefix.len()..]
+        if let Some(body) = rest.strip_prefix(prefix) {
+            let body_len = body
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric())
                 .count();
@@ -133,8 +133,8 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
         }
     }
     // AWS access key: AKIA + 16 alnum.
-    if rest.starts_with("AKIA") {
-        let body_len = rest[4..]
+    if let Some(body) = rest.strip_prefix("AKIA") {
+        let body_len = body
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric())
             .count();
@@ -143,8 +143,8 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
         }
     }
     // Provider "sk-..." (sk-ant-, sk-proj-, sk-...).
-    if rest.starts_with("sk-") {
-        let body_len = rest[3..]
+    if let Some(body) = rest.strip_prefix("sk-") {
+        let body_len = body
             .chars()
             .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
             .count();
@@ -176,8 +176,8 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
         "https://discord.com/api/webhooks/",
         "https://discordapp.com/api/webhooks/",
     ] {
-        if rest.starts_with(prefix) {
-            let body_len = rest[prefix.len()..]
+        if let Some(body) = rest.strip_prefix(prefix) {
+            let body_len = body
                 .chars()
                 .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '/'))
                 .count();
@@ -212,7 +212,7 @@ fn format_placeholder(class: SecretClass, literal: &str) -> String {
         SecretClass::WebhookUrl => "WEBHOOK",
         SecretClass::GenericHighEntropy => "HIGH-ENT",
     };
-    format!("[REDACTED:{tag}:{:016x}]", h)
+    format!("[REDACTED:{tag}:{h:016x}]")
 }
 
 fn fnv1a_64(data: &[u8]) -> u64 {

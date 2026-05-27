@@ -133,7 +133,6 @@ impl Default for RendezvousHash {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
 
     fn h() -> RendezvousHash {
         let mut h = RendezvousHash::new();
@@ -189,7 +188,7 @@ mod tests {
         let mut h = h();
         let mut victims: Vec<&str> = Vec::new();
         for i in 0..1000 {
-            let k = format!("k{}", i);
+            let k = format!("k{i}");
             if h.assign(&k).unwrap() == "c" {
                 victims.push(Box::leak(k.into_boxed_str()));
             }

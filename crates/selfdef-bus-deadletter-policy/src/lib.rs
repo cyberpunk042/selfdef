@@ -172,7 +172,7 @@ mod tests {
         p.record_attempt("e1", false).unwrap();
         let v = p.record_attempt("e1", true).unwrap();
         assert_eq!(v, AttemptVerdict::Delivered);
-        assert!(p.tracks.get("e1").is_none());
+        assert!(!p.tracks.contains_key("e1"));
     }
 
     #[test]

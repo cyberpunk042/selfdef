@@ -60,14 +60,12 @@ pub fn normalize(path: &str) -> Result<String, PathError> {
         if joined.is_empty() {
             Ok("/".into())
         } else {
-            Ok(format!("/{}", joined))
+            Ok(format!("/{joined}"))
         }
+    } else if joined.is_empty() {
+        Ok(".".into())
     } else {
-        if joined.is_empty() {
-            Ok(".".into())
-        } else {
-            Ok(joined)
-        }
+        Ok(joined)
     }
 }
 

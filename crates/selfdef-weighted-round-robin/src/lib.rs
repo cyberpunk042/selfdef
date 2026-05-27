@@ -204,7 +204,7 @@ mod tests {
         // 6 picks: with smoothing, 'b' shouldn't be at the very end.
         let picks: Vec<String> = (0..6).map(|_| w.pick().unwrap()).collect();
         let last_b = picks.iter().rposition(|p| p == "b").unwrap();
-        assert!(last_b < 5, "b should be interleaved, got: {:?}", picks);
+        assert!(last_b < 5, "b should be interleaved, got: {picks:?}");
     }
 
     #[test]

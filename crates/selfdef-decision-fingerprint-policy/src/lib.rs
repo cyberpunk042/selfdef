@@ -101,7 +101,7 @@ impl DecisionFingerprintPolicy {
         h = upd(h, input.prompt_template_id.as_bytes());
         Ok(DecisionFingerprint {
             schema_version: SCHEMA_VERSION.into(),
-            fingerprint_hex: format!("{:016x}", h),
+            fingerprint_hex: format!("{h:016x}"),
         })
     }
 }

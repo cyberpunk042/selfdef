@@ -220,7 +220,7 @@ mod tests {
     }
 
     #[test]
-    fn cross_machine_CONFIRM_required() {
+    fn cross_machine_confirm_required() {
         let p = ActionConfirmationTier::canonical();
         assert_eq!(
             p.gate(

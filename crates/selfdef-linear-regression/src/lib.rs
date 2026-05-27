@@ -141,12 +141,12 @@ mod tests {
         let mut r = LinearRegression::new();
         // y = 2x + 1.
         for x in 0..5 {
-            r.observe(x as i64, 2 * x + 1);
+            r.observe(x, 2 * x + 1);
         }
         // Slope = 2 → 2_000_000 micro; intercept = 1 → 1_000_000.
         assert_eq!(r.slope_micro().unwrap(), 2_000_000);
         let intc = r.intercept_micro().unwrap();
-        assert!((intc - 1_000_000).abs() < 10, "intercept = {}", intc);
+        assert!((intc - 1_000_000).abs() < 10, "intercept = {intc}");
     }
 
     #[test]
@@ -154,7 +154,7 @@ mod tests {
         let mut r = LinearRegression::new();
         // y = -3x + 5.
         for x in 0..5 {
-            r.observe(x as i64, -3 * x + 5);
+            r.observe(x, -3 * x + 5);
         }
         assert_eq!(r.slope_micro().unwrap(), -3_000_000);
     }

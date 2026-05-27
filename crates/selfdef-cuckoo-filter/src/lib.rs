@@ -149,7 +149,7 @@ impl CuckooFilter {
         let i2 = self.alt(i1, fp);
         let in_i = |i: usize| {
             let s = i * SLOTS_PER_BUCKET;
-            self.cells[s..s + SLOTS_PER_BUCKET].iter().any(|x| *x == fp)
+            self.cells[s..s + SLOTS_PER_BUCKET].contains(&fp)
         };
         in_i(i1) || in_i(i2)
     }
@@ -214,11 +214,11 @@ mod tests {
     fn many_inserts() {
         let mut f = CuckooFilter::new(256, 500).unwrap();
         for i in 0..200 {
-            f.insert(&format!("k{}", i)).unwrap();
+            f.insert(&format!("k{i}")).unwrap();
         }
         // All inserted keys should be present.
         for i in 0..200 {
-            assert!(f.contains(&format!("k{}", i)));
+            assert!(f.contains(&format!("k{i}")));
         }
     }
 

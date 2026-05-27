@@ -153,7 +153,7 @@ impl CidrAllowlist {
         }
         for c in &self.cidrs {
             if c.prefix_len > 32 {
-                return Err(CidrError::BadCidr(format!("{:?}", c)));
+                return Err(CidrError::BadCidr(format!("{c:?}")));
             }
         }
         Ok(())

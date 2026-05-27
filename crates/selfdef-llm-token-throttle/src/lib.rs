@@ -173,7 +173,7 @@ impl LlmTokenThrottle {
         for r in &self.records {
             if r.profile == profile && r.ts_ms >= cutoff && r.ts_ms <= now_ms {
                 sum = sum.saturating_add(r.tokens);
-                if oldest_in.map_or(true, |x| r.ts_ms < x) {
+                if oldest_in.is_none_or(|x| r.ts_ms < x) {
                     oldest_in = Some(r.ts_ms);
                 }
             }

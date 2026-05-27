@@ -57,10 +57,7 @@ pub(crate) fn run_tiers() -> Result<i32> {
             true,
         ),
     ] {
-        println!(
-            "{:<6} {:<55} {:<8} {:<4} {:<8} {:<6}",
-            tier, scope, sub, net, pers, fs
-        );
+        println!("{tier:<6} {scope:<55} {sub:<8} {net:<4} {pers:<8} {fs:<6}");
     }
     println!();
     println!("4 PromotionGate variants:");
@@ -73,7 +70,7 @@ pub(crate) fn run_tiers() -> Result<i32> {
         ),
         ("Forbidden", "transition refused unconditionally"),
     ] {
-        println!("  - {:<16} {}", g, desc);
+        println!("  - {g:<16} {desc}");
     }
     println!();
     println!("Companion crates:");
@@ -99,7 +96,7 @@ pub(crate) fn run_tiers() -> Result<i32> {
             "441 LOC — cross-repo state projection (MS007)",
         ),
     ] {
-        println!("  - {:<35} {}", c, role);
+        println!("  - {c:<35} {role}");
     }
     Ok(0)
 }

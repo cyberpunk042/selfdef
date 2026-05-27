@@ -133,6 +133,7 @@ impl StateSnapshot {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::field_reassign_with_default)]
     use super::*;
     use selfdef_actor_registry::{ActorEntry, ActorKind};
     use selfdef_policy_decision::{

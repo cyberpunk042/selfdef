@@ -49,7 +49,7 @@ pub fn key(policy_version: &str, input: &[u8]) -> Result<String, KeyError> {
         return Err(KeyError::EmptyVersion);
     }
     let h = fnv1a_64(input);
-    Ok(format!("{}:{:016x}", policy_version, h))
+    Ok(format!("{policy_version}:{h:016x}"))
 }
 
 impl PolicyCacheKeyState {

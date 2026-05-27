@@ -220,7 +220,7 @@ mod tests {
             }
         }
         // Expect ~1000 ± 15%.
-        assert!((800..=1200).contains(&admitted), "got {}", admitted);
+        assert!((800..=1200).contains(&admitted), "got {admitted}");
     }
 
     #[test]

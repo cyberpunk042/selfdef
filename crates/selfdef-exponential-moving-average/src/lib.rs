@@ -1,8 +1,8 @@
 //! `selfdef-exponential-moving-average` — EMA smoother.
 //!
 //! alpha_bp in 1..=10000 (basis points). First sample seeds the
-//! EMA. Subsequent samples: ema = (alpha * sample + (10000-alpha)
-//! * ema) / 10000. Carries fractional state internally as i128
+//! EMA. Subsequent samples: ema = (alpha * sample + (10000-alpha) * ema)
+//! / 10000. Carries fractional state internally as i128
 //! scaled by 10000 to avoid drift.
 //!
 //! Standing rule: We do not minimize anything.
@@ -139,7 +139,7 @@ mod tests {
         }
         let v = e.value().unwrap();
         // After 10 steps at alpha=0.01, ema ≈ 1000*(1-0.99^10) ≈ 1000*0.0956 ≈ 96
-        assert!((50..=120).contains(&v), "got {}", v);
+        assert!((50..=120).contains(&v), "got {v}");
     }
 
     #[test]

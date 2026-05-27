@@ -202,7 +202,7 @@ mod tests {
             }
         }
         // Expect ~1000 injects ±15%.
-        assert!((800..=1200).contains(&injected), "got {}", injected);
+        assert!((800..=1200).contains(&injected), "got {injected}");
     }
 
     #[test]
@@ -231,7 +231,7 @@ mod tests {
                 diff += 1;
             }
         }
-        assert!(diff > 20, "diff={}", diff);
+        assert!(diff > 20, "diff={diff}");
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! 1. age sweep — remove items older than max_age_ms.
 //! 2. size sweep — while total_size > size_cap_bytes, evict
 //!    oldest until within cap.
+//!
 //! Returns removed ids.
 //!
 //! Standing rule: We do not minimize anything.

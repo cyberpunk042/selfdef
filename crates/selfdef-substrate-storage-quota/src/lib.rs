@@ -101,7 +101,7 @@ impl SubstrateStorageQuota {
         p.insert(
             Profile::Private,
             ProfileCaps {
-                soft_bytes: 1 * gb,
+                soft_bytes: gb,
                 hard_bytes: 2 * gb,
             },
         );

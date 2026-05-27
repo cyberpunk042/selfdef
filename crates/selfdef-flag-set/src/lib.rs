@@ -236,7 +236,7 @@ mod tests {
     fn full_set_rejected() {
         let mut s = FlagSet::new();
         for i in 0..64 {
-            s.register(&format!("f{}", i)).unwrap();
+            s.register(&format!("f{i}")).unwrap();
         }
         assert!(matches!(s.register("f64").unwrap_err(), FlagError::Full));
     }

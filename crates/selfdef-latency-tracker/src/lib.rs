@@ -89,7 +89,7 @@ impl LatencyTracker {
         sorted.sort_unstable();
         // Nearest-rank: ceil(p/100 * n) - 1, clamped to [0, n-1].
         let n = sorted.len() as u128;
-        let rank = ((p as u128) * n + 99) / 100;
+        let rank = ((p as u128) * n).div_ceil(100);
         let idx = if rank == 0 { 0 } else { (rank - 1) as usize };
         Ok(sorted[idx.min(sorted.len() - 1)])
     }

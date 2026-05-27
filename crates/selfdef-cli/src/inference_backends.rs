@@ -53,8 +53,7 @@ fn fetch_endpoint() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/inference-backends — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/inference-backends — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -99,8 +98,7 @@ pub(crate) fn run_version(backend: &str) -> Result<i32> {
         .context("invoking `command -v` to locate the backend binary")?;
     if !which.status.success() || which.stdout.is_empty() {
         eprintln!(
-            "{} not installed — `{}` not found on PATH (override via {}=<path>)",
-            backend, binary, env_var
+            "{backend} not installed — `{binary}` not found on PATH (override via {env_var}=<path>)"
         );
         return Ok(1);
     }
@@ -111,10 +109,10 @@ pub(crate) fn run_version(backend: &str) -> Result<i32> {
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     if !stdout.is_empty() {
-        print!("{}", stdout);
+        print!("{stdout}");
     }
     if !stderr.is_empty() {
-        eprint!("{}", stderr);
+        eprint!("{stderr}");
     }
     if out.status.success() { Ok(0) } else { Ok(2) }
 }
@@ -122,7 +120,7 @@ pub(crate) fn run_version(backend: &str) -> Result<i32> {
 pub(crate) fn run(json: bool) -> Result<i32> {
     let body = fetch_endpoint()?;
     if json {
-        println!("{}", body);
+        println!("{body}");
         return Ok(0);
     }
     let parsed: serde_json::Value = serde_json::from_str(&body)
@@ -137,10 +135,7 @@ pub(crate) fn run(json: bool) -> Result<i32> {
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
-    println!(
-        "{:<14} {:<10} {:<20} {}",
-        "BACKEND", "STATE", "VERSION", "BINARY"
-    );
+    println!("{:<14} {:<10} {:<20} BINARY", "BACKEND", "STATE", "VERSION");
     println!("{}", "─".repeat(70));
     for b in &backends {
         let name = b.get("name").and_then(|v| v.as_str()).unwrap_or("?");

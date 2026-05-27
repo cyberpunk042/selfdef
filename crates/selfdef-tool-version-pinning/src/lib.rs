@@ -218,7 +218,7 @@ mod tests {
     }
 
     fn digest(repeat: u8) -> String {
-        (0..64).map(|_| format!("{:x}", repeat)).collect()
+        (0..64).map(|_| format!("{repeat:x}")).collect()
     }
 
     #[test]

@@ -69,7 +69,7 @@ pub enum FsmError {
 }
 
 fn key(from: &str, event: &str) -> String {
-    format!("{}||{}", from, event)
+    format!("{from}||{event}")
 }
 
 impl StateMachine {

@@ -68,7 +68,7 @@ impl CountingBloom {
     }
 
     fn pos(&self, i: u32, key: &str) -> usize {
-        let mut buf = format!("{}:", i).into_bytes();
+        let mut buf = format!("{i}:").into_bytes();
         buf.extend_from_slice(key.as_bytes());
         (fnv1a_64(&buf) % self.m as u64) as usize
     }
@@ -77,9 +77,7 @@ impl CountingBloom {
     pub fn add(&mut self, key: &str) {
         for i in 0..self.k {
             let p = self.pos(i, key);
-            if self.counters[p] < 255 {
-                self.counters[p] += 1;
-            }
+            self.counters[p] = self.counters[p].saturating_add(1);
         }
     }
 

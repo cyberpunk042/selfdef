@@ -3,6 +3,7 @@
 //! tokenize splits an input into words by:
 //! - explicit separators (-, _, space)
 //! - capital→lower transitions (in camel/Pascal).
+//!
 //! to_snake / to_kebab / to_camel / to_pascal regenerate.
 //! Pure data; ASCII only — non-ASCII chars pass through.
 //!
@@ -50,10 +51,8 @@ pub fn tokenize(s: &str) -> Vec<String> {
             prev_lower_or_digit = false;
             continue;
         }
-        if c.is_ascii_uppercase() && prev_lower_or_digit {
-            if !cur.is_empty() {
-                out.push(std::mem::take(&mut cur));
-            }
+        if c.is_ascii_uppercase() && prev_lower_or_digit && !cur.is_empty() {
+            out.push(std::mem::take(&mut cur));
         }
         for lc in c.to_lowercase() {
             cur.push(lc);

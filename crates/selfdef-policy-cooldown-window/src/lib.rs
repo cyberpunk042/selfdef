@@ -90,7 +90,7 @@ impl PolicyCooldownWindow {
         if key.is_empty() {
             return Err(CooldownError::EmptyKey);
         }
-        let composite = format!("{:?}:{}", class, key);
+        let composite = format!("{class:?}:{key}");
         let last = self.last_fires.get(&composite).copied().unwrap_or(0);
         let cooldown = self.cooldown(class) as u64;
         let allowed = last == 0 || now_unix.saturating_sub(last) >= cooldown;
@@ -102,7 +102,7 @@ impl PolicyCooldownWindow {
 
     /// Seconds until next-allowed fire (0 = allowed now).
     pub fn seconds_to_next(&self, class: PolicyClass, key: &str, now_unix: u64) -> u64 {
-        let composite = format!("{:?}:{}", class, key);
+        let composite = format!("{class:?}:{key}");
         let last = self.last_fires.get(&composite).copied().unwrap_or(0);
         if last == 0 {
             return 0;

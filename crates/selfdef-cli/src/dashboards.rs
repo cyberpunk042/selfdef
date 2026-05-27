@@ -66,8 +66,7 @@ fn fetch_endpoint() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/dashboards — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/dashboards — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -80,7 +79,7 @@ pub(crate) fn run(json: bool) -> Result<i32> {
         }
     };
     if json {
-        println!("{}", body);
+        println!("{body}");
         return Ok(0);
     }
     let parsed: DashboardsBody =
@@ -88,8 +87,8 @@ pub(crate) fn run(json: bool) -> Result<i32> {
     println!("{} operator-named dashboard view presets:", parsed.count);
     println!();
     println!(
-        "{:<14} {:<14} {:<10} {:<8} {}",
-        "NAME", "TAB", "REFRESH", "PANELS", "DESCRIPTION"
+        "{:<14} {:<14} {:<10} {:<8} DESCRIPTION",
+        "NAME", "TAB", "REFRESH", "PANELS"
     );
     println!("{}", "─".repeat(110));
     for d in &parsed.dashboards {

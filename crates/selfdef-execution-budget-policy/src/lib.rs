@@ -49,6 +49,7 @@ impl Spend {
     };
 
     /// Saturating add.
+    #[allow(clippy::should_implement_trait)]
     pub fn add(self, other: Spend) -> Spend {
         Spend {
             wall_seconds: self.wall_seconds.saturating_add(other.wall_seconds),

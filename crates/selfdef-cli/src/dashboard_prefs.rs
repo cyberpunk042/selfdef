@@ -94,8 +94,7 @@ fn fetch_endpoint() -> Result<String> {
         }
     }
     Err(anyhow!(
-        "could not fetch /v1/dashboard-prefs — neither {} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable",
-        socket
+        "could not fetch /v1/dashboard-prefs — neither {socket} nor SELFDEF_API_URL+SELFDEF_API_TOKEN reachable"
     ))
 }
 
@@ -163,7 +162,7 @@ pub(crate) fn run_show(json: bool) -> Result<i32> {
         }
     };
     if json {
-        println!("{}", body);
+        println!("{body}");
         return Ok(0);
     }
     let prefs: DashboardPrefs = serde_json::from_str(&body)

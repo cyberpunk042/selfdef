@@ -163,7 +163,7 @@ impl KeyRotationSet {
         if signing > 1 {
             return Err(KeyError::BadTransition);
         }
-        for (k, _) in &self.keys {
+        for k in self.keys.keys() {
             if k.is_empty() {
                 return Err(KeyError::EmptyKid);
             }

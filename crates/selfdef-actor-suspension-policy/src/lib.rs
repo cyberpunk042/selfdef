@@ -225,8 +225,8 @@ mod tests {
         p.suspend("a", "x", 100).unwrap();
         p.suspend("b", "x", 10_000).unwrap();
         p.rotate(500);
-        assert!(p.records.get("a").is_none());
-        assert!(p.records.get("b").is_some());
+        assert!(!p.records.contains_key("a"));
+        assert!(p.records.contains_key("b"));
     }
 
     #[test]

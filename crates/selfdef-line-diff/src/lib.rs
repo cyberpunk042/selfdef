@@ -52,6 +52,9 @@ pub fn diff(a: &[String], b: &[String]) -> Vec<Op> {
     let m = b.len();
     // LCS DP table.
     let mut dp = vec![vec![0u32; m + 1]; n + 1];
+    // Index-based DP: i/j index a, b, and the dp grid with +1 arithmetic —
+    // an iterator rewrite would obscure the recurrence.
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n {
         for j in 0..m {
             dp[i + 1][j + 1] = if a[i] == b[j] {

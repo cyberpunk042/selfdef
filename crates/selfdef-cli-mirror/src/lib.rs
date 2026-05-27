@@ -373,7 +373,7 @@ mod tests {
                 "selfdef-capability-mirror",
             ),
         ]);
-        assert_eq!(snap.find("token.mint").unwrap().requires_signature, true);
+        assert!(snap.find("token.mint").unwrap().requires_signature);
         assert!(snap.find("nonexistent").is_none());
     }
 

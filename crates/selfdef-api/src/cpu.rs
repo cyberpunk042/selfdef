@@ -7,9 +7,9 @@
 //! - `balanced`         — governor=schedutil OR ondemand, SMT on
 //! - `sustained-burst`  — governor=performance, SMT on
 //! - `peak-inference`   — governor=performance, SMT off (consistent
-//!                         pinning, max single-thread cache footprint)
+//!   pinning, max single-thread cache footprint)
 //! - `custom`           — anything else (operator has hand-tuned
-//!                         outside the named-mode set)
+//!   outside the named-mode set)
 //!
 //! Read-only for this round. The POST surface that *sets* a mode
 //! (per Z-4 "dashboard radio-button switches between them") will

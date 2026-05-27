@@ -121,14 +121,14 @@ impl BlueGreenDeploy {
         Ok(())
     }
 
-    fn slot_mut<'a>(state: &'a mut ServiceState, slot: Slot) -> &'a mut SlotState {
+    fn slot_mut(state: &mut ServiceState, slot: Slot) -> &mut SlotState {
         match slot {
             Slot::Blue => &mut state.blue,
             Slot::Green => &mut state.green,
         }
     }
 
-    fn slot<'a>(state: &'a ServiceState, slot: Slot) -> &'a SlotState {
+    fn slot(state: &ServiceState, slot: Slot) -> &SlotState {
         match slot {
             Slot::Blue => &state.blue,
             Slot::Green => &state.green,
@@ -195,7 +195,7 @@ impl BlueGreenDeploy {
         if self.schema_version != SCHEMA_VERSION {
             return Err(DeployError::SchemaMismatch);
         }
-        for (id, _) in &self.services {
+        for id in self.services.keys() {
             if id.is_empty() {
                 return Err(DeployError::EmptyId);
             }
