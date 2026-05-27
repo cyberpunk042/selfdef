@@ -14,6 +14,7 @@
 # Run with: bats packaging/test/L2-sshd-config-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/sshd-config-watchdog/systemd/sshd-config-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -45,6 +46,7 @@ eff() { printf '%s\n' "$@" > "${SELFDEF_TEST_SSHD_EFF}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_SSHD_PROFILE="${PROFILE:-report}" \
     SELFDEF_SSHD_BASELINE="${BASELINE}" \
     SELFDEF_SSHD_BIN="${SSHD_BIN:-$FAKESSHD}" \
@@ -159,6 +161,14 @@ BENIGN=( "permitrootlogin no" "passwordauthentication no" "permitemptypasswords 
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    eff "${BENIGN[@]}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a dangerous directive" {
     eff "${BENIGN[@]}"

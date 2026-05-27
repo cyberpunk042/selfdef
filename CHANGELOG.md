@@ -6,6 +6,15 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation batch: ssh-client-config / sshd-config / xinetd (2026-05-27)
+
+Three more pre-D-6 watchdogs migrated onto the shared `selfdef_is_writable_dir`
+(source module-lib, fail-loud, require ≥4), each gated by its L2 suite + a
+module_lib_missing test; sshd-config keeps its `none|""` guard before
+delegating. L2: ssh-client-config 11/11, sshd-config 12/12, xinetd 11/11;
+L1 188. 4 special-case modules remain (ld-preload `/run`, fstab echo-style,
+coredump-pattern, sudoers secure_path-loop) — handled individually next.
+
 ### Changed — SDD-063 consolidation batch: rsyslog-exec / syslog-ng-exec / udev-rules / xdg-autostart (2026-05-27)
 
 Four more pre-D-6 watchdogs migrated off their inline case-statement writable

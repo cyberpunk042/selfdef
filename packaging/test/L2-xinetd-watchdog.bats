@@ -14,6 +14,7 @@
 # Run with: bats packaging/test/L2-xinetd-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/xinetd-watchdog/systemd/xinetd-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -36,6 +37,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_XINETD_PROFILE="${PROFILE:-report}" \
     SELFDEF_XINETD_BASELINE="${BASELINE}" \
     SELFDEF_XINETD_D="${XINETD_D:-$XD}" \
@@ -142,6 +144,14 @@ xsvc() { printf 'service telnet\n{\n    socket_type = stream\n    protocol = tcp
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    xsvc /usr/sbin/in.telnetd > "${SVC}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious server" {
     xsvc /usr/sbin/in.telnetd > "${SVC}"
