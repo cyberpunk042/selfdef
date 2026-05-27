@@ -161,6 +161,9 @@
     if (kind === "network-boundary") {
       return refreshNetworkBoundary();
     }
+    if (kind === "communication-boundary") {
+      return refreshCommunicationBoundary();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1914,6 +1917,78 @@
     }
   }
 
+  // MS034 / SDD-048 — IPS inter-agent communication-boundary doctrine.
+  // Read-only schema; renders the transports, the message types
+  // (kind/direction/content) and the proposal→commit pipeline.
+  async function refreshCommunicationBoundary() {
+    const ul = document.getElementById("communication-boundary-rows");
+    const aggEl = document.getElementById("cb-aggregate");
+    const metaEl = document.getElementById("communication-boundary-meta");
+    try {
+      const body = await get("/v1/communication-boundary");
+      const transports = body.transports || [];
+      const messages = body.message_types || [];
+      const flow = body.proposal_to_commit || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${transports.length} transport(s) · ${messages.length} message type(s) · ` +
+        `${flow.length}-step proposal→commit · ${(body.doctrines || []).length} doctrine(s)`;
+      ul.innerHTML = "";
+      for (const t of transports) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = t.name;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = "TRANSPORT";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = t.scope;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const m of messages) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = m.kind;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-gray";
+        badge.textContent = (m.direction || "").toUpperCase() || "MSG";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = m.content;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      let i = 1;
+      for (const step of flow) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `flow ${i++}`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = step;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no communication-boundary doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/communication-boundary unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1940,6 +2015,7 @@
   refreshSandboxTiers();
   refreshFilesystemBoundary();
   refreshNetworkBoundary();
+  refreshCommunicationBoundary();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -2028,6 +2104,7 @@
   gatedInterval(refreshSandboxTiers, 300000, "sandbox-tiers-section");
   gatedInterval(refreshFilesystemBoundary, 300000, "filesystem-boundary-section");
   gatedInterval(refreshNetworkBoundary, 300000, "network-boundary-section");
+  gatedInterval(refreshCommunicationBoundary, 300000, "communication-boundary-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -2045,7 +2122,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section"], // IPS authority/boundary surfaces (MS035/042/041/032/037/038) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section"], // IPS authority/boundary surfaces (MS034/035/037/038/041/042/032) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2284,6 +2361,7 @@
     ["sandbox-tiers-section",      "Sandbox tiers"],
     ["filesystem-boundary-section","Filesystem boundary"],
     ["network-boundary-section",   "Network boundary"],
+    ["communication-boundary-section","Communication boundary"],
   ];
   function readHiddenPanels() {
     try {

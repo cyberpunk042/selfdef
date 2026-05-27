@@ -133,6 +133,12 @@ check "HTML: network-boundary aggregate" "${HTML}" 'id="nb-aggregate"' || failur
 check "JS: refreshNetworkBoundary()"    "${JS}"   'function refreshNetworkBoundary' || failures=$((failures + 1))
 check "JS: network-boundary fetches /v1" "${JS}" '/v1/network-boundary' || failures=$((failures + 1))
 check "JS: interval refreshNetworkBoundary" "${JS}" 'gatedInterval\(refreshNetworkBoundary' || failures=$((failures + 1))
+# MS034 / SDD-048 — IPS communication-boundary panel.
+check "HTML: communication-boundary-section" "${HTML}" 'id="communication-boundary-section"' || failures=$((failures + 1))
+check "HTML: communication-boundary aggregate" "${HTML}" 'id="cb-aggregate"' || failures=$((failures + 1))
+check "JS: refreshCommunicationBoundary()" "${JS}" 'function refreshCommunicationBoundary' || failures=$((failures + 1))
+check "JS: communication-boundary fetches /v1" "${JS}" '/v1/communication-boundary' || failures=$((failures + 1))
+check "JS: interval refreshCommunicationBoundary" "${JS}" 'gatedInterval\(refreshCommunicationBoundary' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))
