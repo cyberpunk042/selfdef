@@ -6,6 +6,17 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation batch: dbus-service / modprobe-config / inittab (2026-05-27)
+
+Three more pre-D-6 watchdogs migrated off their inline case-statement
+writable policy onto the shared `selfdef_is_writable_dir` (source module-lib,
+fail-loud, require ≥4), each gated behavior-equivalent by its L2 suite + a
+module_lib_missing test: dbus-service (`is_suspicious_path`),
+modprobe-config (`is_suspicious_cmd`, var `$c`), inittab
+(`is_suspicious_prog`). L2: dbus-service 11/11, modprobe-config 11/11,
+inittab 10/10; L1 188. 11 analogous modules remain (incl. the special-case
+ld-preload `/run`, fstab echo-style, coredump-pattern, sudoers secure_path).
+
 ### Changed — SDD-063 consolidation batch: crypttab / request-key / dnf-plugins (2026-05-27)
 
 Three more pre-D-6 watchdogs migrated off their inline case-statement

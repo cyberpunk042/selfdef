@@ -47,6 +47,19 @@ trap 'rm -f "$current" "${current}.sorted"' EXIT
 declare -a suspicious=()
 
 # The benign disable commands (selfdef + distro idiom).
+# SDD-063: consume the shared writable-location policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-modprobe-config -- '{"tag":"selfdef-modprobe-config","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-modprobe-config -- '{"tag":"selfdef-modprobe-config","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 is_benign_cmd() {
     case "$1" in
         /bin/true|/bin/false|/sbin/nologin|true|false) return 0 ;;
@@ -55,8 +68,8 @@ is_benign_cmd() {
 }
 is_suspicious_cmd() {
     local c="$1"
+    selfdef_is_writable_dir "$c" && return 0
     case "$c" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) # -L: follow symlinks (a symlink's own 0777 is meaningless
             # on Linux; the executed target's mode is what matters).
             [[ -e "$c" && "$(stat -L -c '%a' "$c" 2>/dev/null)" =~ [2367]$ ]] && return 0

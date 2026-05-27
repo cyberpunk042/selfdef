@@ -15,6 +15,7 @@
 # Run with: bats packaging/test/L2-dbus-service-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/dbus-service-watchdog/systemd/dbus-service-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -37,6 +38,7 @@ svc() { printf '[D-BUS Service]\nName=com.example.A\nExec=%s\nUser=%s\n' "$1" "$
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_DBUS_PROFILE="${PROFILE:-report}" \
     SELFDEF_DBUS_BASELINE="${BASELINE}" \
     SELFDEF_DBUS_DIRS="${DIRS:-$DBUSD}" \
@@ -144,6 +146,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 # ============================================================
 # enforce profile
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    svc /usr/libexec/myservice > "${SVC}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious Exec" {
     svc /usr/libexec/myservice > "${SVC}"
