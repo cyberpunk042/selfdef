@@ -38,7 +38,7 @@ if [[ -d /etc/pam.d ]]; then
           | awk '{print $1" "$2" "$3}' \
           | while IFS= read -r rule; do
                 [[ -z "$rule" ]] && continue
-                printf 'pamline\t%s\t%s\n' "$(basename "$f")" "$rule"
+                printf 'pamline\t%s\t%s\n' "$(basename "$f")" "$rule" >> "$current"
             done
     done
 fi
@@ -51,7 +51,7 @@ for d in /lib/x86_64-linux-gnu/security /lib64/security \
     for so in "$d"/pam_*.so; do
         [[ -f "$so" ]] || continue
         h=$(sha256sum "$so" 2>/dev/null | awk '{print $1}')
-        printf 'pammod\t%s\t%s\n' "$so" "${h:0:12}"
+        printf 'pammod\t%s\t%s\n' "$so" "${h:0:12}" >> "$current"
     done
 done
 

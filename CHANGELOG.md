@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — account-watchdog + pam-config-watchdog were silent no-ops (same bug class) (2026-05-27)
+
+A targeted sweep after the self-integrity no-op (below) found the identical
+bug in two more — and more critical — delta watchdogs: `account-watchdog`
+(detects a new account / new uid-0 / new sudo-group member — the #1 privesc
+persistence surface) and `pam-config-watchdog` (detects PAM-stack tampering —
+an auth-bypass surface). In both, the inventory `printf`s wrote to stdout
+instead of the `$current` temp file they diff against, so the baseline was
+always empty and neither watchdog ever detected anything. Fixed at the root
+(`>> "$current"` on every inventory printf — 4 in account, 2 in pam-config).
+A robust repo-wide sweep (`comm`-based delta scripts × record printfs without
+the redirect) confirms these were the only remaining instances. Added
+capture-regression L2 suites for both: they run against the real read-only
+/etc/passwd + /etc/pam.d (no system mutation), use the `_BASELINE` knob for
+isolation, and assert the baseline is non-empty + records the expected kinds
+(+ root uid-0) + no_delta on re-run. L1 188 green; shellcheck clean.
+
 ### Fixed — selfdef-self-integrity meta-watchdog was a silent no-op (2026-05-27)
 
 TDD catch: the new L2 functional suite for `selfdef-self-integrity` (the

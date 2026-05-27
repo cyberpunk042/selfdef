@@ -27,10 +27,10 @@ trap 'rm -f "$current"' EXIT
 # home + password fields — they churn).
 while IFS=: read -r name _ uid gid _ _ shell; do
     [[ -z "$name" ]] && continue
-    printf 'user\t%s:%s:%s:%s\n' "$name" "$uid" "$gid" "$shell"
+    printf 'user\t%s:%s:%s:%s\n' "$name" "$uid" "$gid" "$shell" >> "$current"
     # uid=0 set.
     if [[ "$uid" == "0" ]]; then
-        printf 'uid0\t%s\n' "$name"
+        printf 'uid0\t%s\n' "$name" >> "$current"
     fi
 done < /etc/passwd
 
@@ -40,7 +40,7 @@ for grp in sudo wheel admin; do
     [[ -z "$members" ]] && continue
     IFS=',' read -ra arr <<< "$members"
     for m in "${arr[@]}"; do
-        [[ -n "$m" ]] && printf 'sudo\t%s\n' "$m"
+        [[ -n "$m" ]] && printf 'sudo\t%s\n' "$m" >> "$current"
     done
 done
 # Also: any passwd-primary-gid member of a sudo group.
@@ -48,7 +48,7 @@ for grp in sudo wheel admin; do
     gid=$(getent group "$grp" 2>/dev/null | awk -F: '{print $3}')
     [[ -z "$gid" ]] && continue
     while IFS=: read -r name _ _ pgid _; do
-        [[ "$pgid" == "$gid" ]] && printf 'sudo\t%s\n' "$name"
+        [[ "$pgid" == "$gid" ]] && printf 'sudo\t%s\n' "$name" >> "$current"
     done < /etc/passwd
 done
 
