@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 coverage for the trust/name-resolution integrity watchdogs (2026-05-27)
+
+Second integrity-axis class: the trust + name-resolution config scanners —
+`rhosts-watchdog` (rsh/rlogin trust files; alert on `+` wildcard / world-
+writable / per-user .rhosts present, T1199), `securetty-watchdog` (root-login
+TTY allowlist; alert on a newly-added pts/network TTY or fail-open file
+removal), `nsswitch-watchdog` (resolver source map; alert on a rogue
+libnss_<x> source or a removed db line, T1556/T1574) and `hosts-file-watchdog`
+(alert on pinning/blackholing a sensitive package/security/CA domain,
+T1565.001/T1562.001). 30 new bats cases across ok/warn/alert tiers + the
+distinctive per-watchdog alert signatures + enforce. All four read a
+sandbox config via their `_FILE`/`_FILES`/`_CONF` knob.
+
 ### Added — L2 coverage for the file-integrity inventory watchdogs (2026-05-27)
 
 Opens the second watchdog L2 axis — the integrity/baseline scanners that do
