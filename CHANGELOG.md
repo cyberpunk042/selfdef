@@ -6,6 +6,26 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 integrity-axis COMPLETE: service/persistence config watchdogs (2026-05-27)
+
+Final integrity-axis class, completing all 14 hermetically-testable
+integrity/baseline watchdogs (those with an input-source knob): `modules-load-watchdog`
+(alert on a world-writable auto-load config, T1547.006), `nfs-exports-watchdog`
+(alert on a newly-added no_root_squash / `*`-wildcard-rw / insecure export),
+`polkit-rules-watchdog` (alert on a new rule file, new YES grant, or
+world-writable rule, T1548), `sysusers-watchdog` (alert on a uid-0 declarative
+account or privileged-group membership, T1136/T1098) and `timestomp-watchdog`
+(FUTURE/EPOCH/MTIME>CTIME timestamp-manipulation ladder, T1070.006). 36 new
+bats cases.
+
+Integrity axis (non-module-lib watchdogs) testable coverage is now complete:
+18 watchdogs across file-integrity, trust/name-resolution, access-control/
+kernel-hardening, and service/persistence classes. The remaining 21 integrity
+watchdogs read live kernel/runtime state or hardcoded `/etc` paths with no
+input-source knob and are not hermetically testable without faking syscalls
+or mutating real system state — deliberately left uncovered rather than
+shipped as weak ok-path-only suites.
+
 ### Added — L2 coverage for the access-control / kernel-hardening integrity watchdogs (2026-05-27)
 
 Third integrity-axis class: the access-control + kernel-hardening config
