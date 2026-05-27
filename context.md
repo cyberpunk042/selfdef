@@ -201,6 +201,20 @@ Same rules as sovereign-os/context.md. Verbatim:
 9. **"never include model identifier in commit messages / PR bodies / pushed artifacts"** — chat replies only.
 10. **"the AI does NOT decide when it's complete"** — operator-controlled.
 
+## Build/test hygiene (environment caveat — 2026-05-27)
+
+**DO NOT run `cargo test --workspace` / `cargo build --workspace`.** selfdef
+has **535 crates** (sibling sovereign-os has 475); a full-workspace build
+makes a ~13 GB `target/` and the container has only ~16 GB free headroom, so
+a workspace build of both repos (or one atop an existing `target/`) **fills
+the disk** (`No space left on device` — the shell stops being able to write;
+observed + recovered 2026-05-27 via `rm -rf sovereign-os/target`). Build/test
+**per-crate** instead — `cargo test -p selfdef-<crate>` (e.g.
+`-p selfdef-correlator --test rule_tests`, `-p selfdef-api --lib`). The L1/L2
+bash gates (`bats packaging/test/L2-*.bats`, `scripts/test/L1-*.sh`) are cheap
+and disk-light — prefer them. `rm -rf <repo>/target` is a safe space reclaim
+(rebuildable cache).
+
 ## Hook integration — ACTUALLY WIRED 2026-05-19
 
 This file is referenced by **live, working hooks** (verified post-edit):
