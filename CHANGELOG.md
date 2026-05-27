@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for sshd-config-watchdog (2026-05-27)
+
+Locks the SSH daemon dangerous-directive surface — a remote-facing
+root-exec vector. The watchdog reads the EFFECTIVE config via `sshd -T`
+and flags AuthorizedKeysCommand / ForceCommand pointing at attacker code,
+PermitRootLogin yes, and PermitEmptyPasswords yes, plus a content hash of
+sshd_config{,.d} for Match-block / drop-in changes.
+
+- `packaging/test/L2-sshd-config-watchdog.bats` — 11 tests, stubbing
+  `sshd -T` via a fake sshd (`SELFDEF_SSHD_BIN`) emitting a controllable
+  effective-config: ok (no_sshd / baseline_initial / sshd_config_intact),
+  alert (ForceCommand under a writable root → sshd_config_dangerous_directive;
+  AuthorizedKeysCommand under a writable root; PermitRootLogin yes;
+  PermitEmptyPasswords yes), warn (a benign directive value change →
+  sshd_config_changed), false-positive guards (ForceCommand at a trusted
+  existing path; a hardened benign config), and enforce-profile exit. Uses
+  the module's existing `SELFDEF_SSHD_*` seams — no production change.
+
 ### Added — L2 functional coverage + test seams for ld-preload-watchdog (2026-05-27)
 
 Locks the canonical userland-rootkit injection surface — a stateless
