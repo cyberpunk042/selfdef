@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage + test seams for ld-preload-watchdog (2026-05-27)
+
+Locks the canonical userland-rootkit injection surface — a stateless
+scanner (no baseline) over four surfaces: /etc/ld.so.preload, global
+LD_PRELOAD / LD_AUDIT in shell env files, pam_env (`LD_PRELOAD DEFAULT=/…`),
+and preload libs under writable/tmp paths or a non-existent
+(deleted-after-load) path.
+
+- `modules/ld-preload-watchdog/systemd/ld-preload-watchdog.sh` — adds three
+  test seams (`SELFDEF_LDPRELOAD_FILE`, `SELFDEF_LDPRELOAD_ENV_FILES`,
+  `SELFDEF_LDPRELOAD_PAMENV_FILES`) defaulting to the production paths
+  (no behavior change in production; the module was previously
+  hardcoded-only). Its richer `is_suspicious_path` (which also covers
+  `/run/*` and the non-existent-lib case) is left intact — this is coverage,
+  not the SDD-063 consolidation.
+- `packaging/test/L2-ld-preload-watchdog.bats` — 11 tests: ok
+  (no_ld_preload / benign env), warn (a preload present at a trusted
+  existing path → ld_preload_present), alert (ld.so.preload lib under a
+  writable root → suspicious_ld_preload; a non-existent deleted-after-load
+  lib; a global LD_PRELOAD and a global LD_AUDIT env assignment under a
+  writable root; a pam_env `LD_PRELOAD DEFAULT=` under a writable root),
+  false-positive guard (empty preload + benign env), and enforce-profile
+  exit codes.
+
 ### Changed — SDD-063 follow-on: consolidate ld-so-conf-watchdog onto the shared dir policy + L2 coverage (2026-05-27)
 
 Extends the SDD-063 writable-directory policy to the glibc dynamic-linker

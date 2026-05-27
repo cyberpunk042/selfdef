@@ -28,6 +28,10 @@ set -u
 
 PROFILE="${SELFDEF_LDPRELOAD_PROFILE:-report}"
 
+# Test/override seams — default to the production paths (no behavior change
+# in production; the L2 suite points these at a sandbox).
+LDPRELOAD_FILE="${SELFDEF_LDPRELOAD_FILE:-/etc/ld.so.preload}"
+
 findings=0
 alerts=0
 sample=()
@@ -50,7 +54,7 @@ is_suspicious_path() {
 }
 
 # 1. /etc/ld.so.preload
-if [[ -s /etc/ld.so.preload ]]; then
+if [[ -s "$LDPRELOAD_FILE" ]]; then
     while IFS= read -r lib; do
         lib="$(echo "$lib" | sed 's/#.*//' | tr -d ' ')"
         [[ -z "$lib" ]] && continue
@@ -59,15 +63,19 @@ if [[ -s /etc/ld.so.preload ]]; then
         else
             note 0 "ld.so.preload:${lib}"
         fi
-    done < /etc/ld.so.preload
+    done < "$LDPRELOAD_FILE"
 fi
 
 # 2. Global env files referencing LD_PRELOAD / LD_LIBRARY_PATH.
-ENV_FILES=(
-    /etc/environment /etc/profile /etc/bash.bashrc
-    /root/.bashrc /root/.bash_profile /root/.profile
-)
-for f in /etc/profile.d/*.sh; do [[ -f "$f" ]] && ENV_FILES+=("$f"); done
+if [[ -n "${SELFDEF_LDPRELOAD_ENV_FILES:-}" ]]; then
+    read -r -a ENV_FILES <<< "${SELFDEF_LDPRELOAD_ENV_FILES}"
+else
+    ENV_FILES=(
+        /etc/environment /etc/profile /etc/bash.bashrc
+        /root/.bashrc /root/.bash_profile /root/.profile
+    )
+    for f in /etc/profile.d/*.sh; do [[ -f "$f" ]] && ENV_FILES+=("$f"); done
+fi
 for f in "${ENV_FILES[@]}"; do
     [[ -r "$f" ]] || continue
     while IFS= read -r line; do
@@ -106,8 +114,12 @@ done
 #    /etc/environment.d/*.conf uses `LD_PRELOAD=/path`. pam_env
 #    applies these at login — a separate vector from the shell-env
 #    files above, missed by a plain `LD_PRELOAD=` grep.
-PAMENV_FILES=(/etc/security/pam_env.conf)
-for f in /etc/environment.d/*.conf; do [[ -f "$f" ]] && PAMENV_FILES+=("$f"); done
+if [[ -n "${SELFDEF_LDPRELOAD_PAMENV_FILES:-}" ]]; then
+    read -r -a PAMENV_FILES <<< "${SELFDEF_LDPRELOAD_PAMENV_FILES}"
+else
+    PAMENV_FILES=(/etc/security/pam_env.conf)
+    for f in /etc/environment.d/*.conf; do [[ -f "$f" ]] && PAMENV_FILES+=("$f"); done
+fi
 for f in "${PAMENV_FILES[@]}"; do
     [[ -r "$f" ]] || continue
     while IFS= read -r line; do
