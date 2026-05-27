@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for kernel-usermodehelper-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the kernel usermode-helper
+surface — a genuinely distinct mechanism that reads live values from
+`/proc/sys/kernel/{modprobe,hotplug,poweroff_cmd}` AND scans
+sysctl.conf / sysctl.d for persistent settings. The kernel runs these paths
+AS ROOT on triggers an unprivileged user can cause; `kernel.modprobe=/tmp/x`
+is a classic local privilege escalation (T1574 / T1548).
+
+- `packaging/test/L2-kernel-usermodehelper-watchdog.bats` — 12 tests (faking
+  the proc tree via `SELFDEF_KUMH_PROC_DIR`): ok (no_usermodehelper /
+  baseline_initial / usermodehelper_intact), alert (modprobe under a
+  writable root, relative modprobe, non-empty deprecated hotplug, a
+  sysctl.conf line setting kernel.modprobe to a writable path), warn (benign
+  helper value changed → usermodehelper_changed), false-positive guards
+  (standard /sbin helpers + empty hotplug not flagged; a commented-out
+  sysctl line not flagged), enforce exit, and the SDD-061 D-6
+  `module_lib_missing` fail-loud path.
+
 ### Added — L2 functional severity coverage for fish-config-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the fish interactive-shell
