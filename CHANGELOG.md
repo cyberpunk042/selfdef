@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — real-substrate L2 functional suites for the five fixed watchdogs (2026-05-27)
+
+The five watchdogs fixed in the inventory-capture sweep (cron-job,
+ssh-authkeys, sudoers-integrity, systemd-unit, group-integrity) had NO L2
+functional suite — which is exactly why the silent-no-op bug survived
+undetected. Added one bats suite each, modeled on `L2-account-watchdog.bats`:
+each shadows `logger`, runs the scanner against real system state with a
+temp baseline, and asserts the capture regression lock — the baseline is
+NON-EMPTY after first run, carries well-formed TSV records, reports a
+non-zero `baseline_count` (`:0` was the bug's exact symptom), and a second
+unchanged run yields `no_delta`/`ok`. The data-dependent asserts are gated
+on the relevant substrate actually existing (cron sources / readable
+sudoers / live systemd with enabled units / readable account DB) so they
+lock the bug where it can fire and never false-fail on a host that
+legitimately has nothing to inventory. ssh-authkeys (MITRE T1098.004)
+PLANTS a fixture key in the current user's own authorized_keys — only when
+none pre-exists, never clobbering a real file — to exercise capture
+deterministically. All 13 tests pass; negative-control-verified
+(reintroducing the stdout-leak turns the capture lock RED). These suites
+exercise the real code path, complementing the static populate-redirect
+guard.
+
 ### Fixed — five more watchdogs silently captured no inventory (2026-05-27)
 
 A second sweep of the inventory-capture silent-no-op bug class (after the
