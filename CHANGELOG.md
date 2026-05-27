@@ -6,6 +6,21 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for syslog-ng-exec-watchdog (2026-05-27)
+
+Locks the syslog-ng log-event exec surface. syslog-ng `program("…")`
+destinations run a program AS ROOT, fed every matching log message on stdin
+— a log-event-triggered exec surface. A program under a writable root,
+relative-with-slash, bare, or carrying an injection pattern is alert.
+
+- `packaging/test/L2-syslog-ng-exec-watchdog.bats` — 9 tests: ok
+  (no_syslog_ng / baseline_initial / syslog_ng_exec_intact), alert
+  (program() under a writable root → syslog_ng_exec_suspicious; a curl|sh
+  payload; a bare program() target), warn (a benign program change →
+  syslog_ng_exec_changed), false-positive guard (a /usr/bin program()
+  target), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_SYSLOGNG_FILE` / `_D` seams — no production change.
+
 ### Added — L2 functional coverage for rsyslog-exec-watchdog (2026-05-27)
 
 Locks the rsyslog log-event exec surface. rsyslog can run a program per log
