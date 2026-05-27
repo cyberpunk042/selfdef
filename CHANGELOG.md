@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — `cargo deny` bans check (selfdef-hardware-requirements was publishable) (2026-05-27)
+
+The `deny` CI job (`cargo deny check all`) was RED on the **bans** check:
+`error[wildcard]` for `selfdef-hardware-requirements` — it was depended on by the
+publishable crates `selfdef-api`/`selfdef-cli` via a workspace path-wildcard, and
+cargo-deny's `allow-wildcard-paths` exemption doesn't apply when the *depended-on*
+crate is publishable. Root cause: `selfdef-hardware-requirements` (added per SDD-057)
+omitted the `publish.workspace = true` line that every other workspace crate carries,
+so it defaulted to `publish = true` while the workspace sets `publish = false`. Added
+the line → it's now private like its siblings → `advisories ok, bans ok, licenses ok,
+sources ok`. (`cargo audit` separately verified clean: 882 deps, 0 advisories.) With
+this, **every selfdef CI job is verified green** (fmt, clippy, test, coherence,
+python, ux-harness, audit, deny; build is compile-confirmed).
+
 ### Fixed — stale `cli_modules_shared_lib` test hardcoded the old module-lib version (2026-05-27)
 
 `module_requesting_newer_lib_version_is_refused` asserted the mismatch diagnostic

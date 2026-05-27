@@ -5,6 +5,11 @@ edition = "2024"
 rust-version = "1.88"
 description = "Per-module [requires_hardware] gate evaluator extracted from selfdef-cli per SDD-057."
 license = "AGPL-3.0-or-later"
+# Private workspace crate (matches every other crate's `publish.workspace =
+# true` → workspace `publish = false`). Without this it defaulted to
+# publishable, which made cargo-deny flag the wildcard path-deps on it
+# (the `allow-wildcard-paths` exemption doesn't apply to publishable crates).
+publish.workspace = true
 
 [dependencies]
 selfdef-hardware = { workspace = true }
