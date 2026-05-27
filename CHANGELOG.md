@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for pkcs11-modules-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the PKCS#11 module-load
+surface. Every p11-kit consumer (GnuPG/gpgsm, ssh-agent/ssh with PKCS#11,
+NSS browsers, libp11) loads the .so named in each
+`/etc/pkcs11/modules/*.module` file's `module:` line; a planted
+`module: /tmp/evil.so` loads attacker code into a broad set of
+credential-handling processes (T1574). Distinct p11-kit `key: value` format.
+
+- `packaging/test/L2-pkcs11-modules-watchdog.bats` — 11 tests: ok
+  (no_pkcs11_modules / baseline_initial / pkcs11_modules_intact), alert
+  (module: .so under a writable root, relative-with-slash module: path),
+  warn (benign module added → pkcs11_modules_changed), false-positive
+  guards (/usr/lib module not flagged; a bare-basename module name resolved
+  via the module dir not flagged; a commented-out writable module line not
+  flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_PKCS11_*` sandbox.
+
 ### Added — L2 functional severity coverage for kernel-usermodehelper-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the kernel usermode-helper
