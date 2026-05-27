@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 guard preventing the inventory-capture bug class from recurring (2026-05-27)
+
+Root-cause prevention (P1: infrastructure > instructions) for the
+self-integrity / account / pam-config no-op bug class. New
+`L2-scan-script-capture-guard.bats` scans every `comm`-delta scan script and
+fails if a record-building `printf '<kind>\t...'` is not redirected into the
+`mktemp` temp file it diffs — the exact mistake that silently disabled three
+critical watchdogs. Passes clean across all 96 comm-delta scan scripts;
+negative-control verified (reintroducing the missing redirect makes the guard
+fail and name the offending module). This anti-pattern can no longer ship
+silently.
+
 ### Fixed — account-watchdog + pam-config-watchdog were silent no-ops (same bug class) (2026-05-27)
 
 A targeted sweep after the self-integrity no-op (below) found the identical
