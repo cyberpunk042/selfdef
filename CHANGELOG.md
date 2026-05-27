@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L1 shellcheck gate over the whole shell-script surface (2026-05-27)
+
+selfdef's coherence harness had 13 layers but **no shellcheck layer**, so its
+886 bash scripts (hardening appliers `modules/*/install/*.sh`, watchdog
+scanners, test gates, packaging helpers) were never error-linted by the gate
+— two silent-failure classes could ship: a PARSE error makes shellcheck abort
+a file (the rest silently unchecked; cf. the same-session nsswitch-watchdog
+`*\]`-before-`]]` fix + onboard.sh), and an error-severity defect can make a
+hardening applier / watchdog a silent no-op (cf. the self-integrity / account
+/ pam-config inventory-capture bug class). New `scripts/test/L1-shellcheck-scan.sh`
+runs `shellcheck --severity=error --exclude=SC2148` across modules/scripts/
+packaging and fails on any finding; wired as a coherence.sh L1 layer. Passes
+clean (886 scripts, 0 findings — after the nsswitch fix unblocked the one
+remaining parse-abort); negative-control verified (reintroducing the
+parse-abort fails the gate). SC2148 (sourced-lib dialect directive) excluded —
+those libs are checked in-context via their apply.sh; declaring the dialect on
+all ~186 is a separate cleanup.
+
 ### Added — baseline-leak guard: every watchdog baseline must be chmod 0600 (2026-05-27)
 
 Confidentiality invariant added to `L2-scan-script-capture-guard.bats` (now 4

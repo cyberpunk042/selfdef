@@ -63,6 +63,9 @@ run_layer "L1: operator cheatsheet (daily-driver doc coverage)" \
 run_layer "L1: module-system contracts (14 modules cross-wired)" \
     bash scripts/test/L1-module-contracts.sh
 
+run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
+    bash scripts/test/L1-shellcheck-scan.sh
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then
