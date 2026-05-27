@@ -64,12 +64,36 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
   than shipped as weak ok-path-only suites. Adding input-source env knobs to
   those scan scripts is the prerequisite if their L2 coverage is later wanted.
 
-**Next forward queue (watchdog axis):** broaden Sigma/notifier coverage for
-the watchdog finding stream (warn-tier routing is a deliberate product
-decision — currently local-triage, mirroring agent-guard audit-mode); add
-more module-class observability; (optional) retrofit input-source knobs onto
-the 21 non-testable integrity watchdogs to unlock their L2 coverage; keep
-mining distinct host-hardening surfaces per the perpetual `/goal`.
+- **Scanner-bridge / posture L2 + 3 silent-no-op bug fixes (2026-05-27)** —
+  L2 suites for the external-tool wrappers (aide-bridge / clamav-cron /
+  lynis-cron / rkhunter-cron, driven by a fake tool binary via the `_BIN`
+  knob) + selfdef-self-integrity. Writing the self-integrity suite caught a
+  **bug class**: its inventory `printf`s went to stdout, not the `$current`
+  temp file it diffs, so it (and, via a sweep, **account-watchdog** +
+  **pam-config-watchdog**) silently detected nothing — three critical
+  detectors (new uid-0 / sudo-member, PAM-stack tamper, watchdog-baseline
+  tamper) were no-ops. Fixed at the root (`>> "$current"`), regression-locked,
+  and prevented from recurring by two assertions in
+  `L2-scan-script-capture-guard.bats`: (1) every comm-delta scan redirects
+  its inventory into the diff temp file; (2) every finding-emitting scan tags
+  `selfdef-*` (else SDD-062 never routes it). Both negative-control-verified.
+
+- **SDD-062 D-5 — warn-tier routing (2026-05-27, operator-directed)** — the
+  warn tier now routes to a NON-PAGING Informational finding
+  (`rules/sigma/execution/selfdef_watchdog_warn.yml`, title `selfdef watchdog
+  warn-tier finding`) for dashboard trend triage. Non-paging enforced two
+  ways: Informational < notifier panic floor (Medium; locked by a
+  dispatcher unit test) AND no Prometheus alert on its bucket. New dashboard
+  stat panel id 10 (blue/never-red). Rule-tests 106 across 22 rules. Alert
+  routing unchanged.
+
+**Next forward queue (watchdog axis):** warn-tier routing — DONE (SDD-062
+D-5). Remaining options, each a reserved decision or new scope (await
+operator steer): per-watchdog/per-tag observability (trades higher metric
+cardinality, ~105 tags); retrofit input-source knobs onto the 21 non-testable
+integrity watchdogs to unlock their L2 coverage; mine distinct new
+host-hardening surfaces. Routing + capture integrity are now guard-locked, so
+new watchdogs are protected from the two known silent-failure classes.
 
 ---
 
