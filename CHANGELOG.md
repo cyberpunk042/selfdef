@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — perimeter YAML gate fails under yamllint's cosmetic indentation rule (2026-05-27)
+
+`L1-perimeter-yaml-lint.sh`'s optional yamllint pass (which the CI coherence job
+exercises, since it `apt-get install`s yamllint) failed the valid, verbatim
+sain-01 §6 kernel-fence policy on 6 `indentation` errors — yamllint's default
+`indent-sequences: true` flags the policy's common non-indented-sequence block
+style as a *cosmetic* error, even though the YAML is valid and the gate's Python
+block already pins every required field value verbatim. Disabled the cosmetic
+`indentation` rule in the gate's yamllint config so it lints for REAL issues only
+(syntax + key-duplicates — both still caught, negative-control-verified), staying
+green across yamllint versions without reformatting the security-critical policy.
+Surfaced by the L2-perimeter.bats "L1 exits 0" guard once yamllint was present.
+
 ### Added — real-substrate L2 functional suites for the five fixed watchdogs (2026-05-27)
 
 The five watchdogs fixed in the inventory-capture sweep (cron-job,
