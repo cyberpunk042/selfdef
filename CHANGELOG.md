@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for nm-vpn-plugin-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the NetworkManager VPN
+plugin-descriptor surface. NM (root) loads the service plugin .so / helper
+named in each `/etc/NetworkManager/VPN/*.name` descriptor: `[libnm]
+plugin=<.so>` is loaded into the root NM process and `[VPN Connection]
+program=<bin>` is run as root; a planted descriptor with plugin=/tmp/evil.so
+loads attacker code into root NetworkManager (T1574). Distinct INI-style
+`key=value` format with `#`/`;` comments.
+
+- `packaging/test/L2-nm-vpn-plugin-watchdog.bats` — 11 tests: ok (no_nm_vpn
+  / baseline_initial / nm_vpn_intact), alert (plugin .so under a writable
+  root, service program under a writable root, relative-with-slash plugin
+  path), warn (benign key added → nm_vpn_changed), false-positive guards
+  (/usr/lib plugin + program not flagged; a commented-out writable plugin
+  line not flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_NMVPN_*` sandbox.
+
+This brings the watchdog mechanism-coverage set to 16 functional L2 suites
+spanning every distinct detection mechanism in the migrated set, all three
+preserved module-specific patterns, and the musl compound-clause special
+case — alongside the L2 dedup guard that keeps the SDD-061 D-6
+single-source-of-truth from regressing.
+
 ### Added — L2 functional severity coverage for musl-ld-path-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the musl dynamic-linker
