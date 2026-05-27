@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Prometheus alert for the detection-watchdog finding stream (2026-05-27)
+
+Completes the metrics-path side of the "wire watchdogs into stack" work. A
+new `selfdef-detection-watchdog` alert group in the observability module's
+alerts template fires `SelfdefWatchdogAlertFinding` when
+`increase(selfdef_findings_by_rule_total{rule="selfdef watchdog alert-tier
+finding"}[10m]) > 0` — i.e. any alert-tier watchdog finding the SDD-062
+Sigma rule routed (incl. the SDD-063 module_lib_missing fail-loud). This
+pages the Prometheus path, complementing the in-process notifier chain.
+Runbook: info-hub `wiki/runbooks/selfdef-watchdog-alert-finding.md`.
+
+Alerts template: 2 groups / 12 rules, all carrying an info-hub runbook_url;
+L2-observability green (≥9 rules + every-rule-runbook gates hold).
+
 ### Added — SDD-062 rule-tests for the fail-loud module_lib findings (2026-05-27)
 
 Closes the loop between SDD-063 and SDD-062: the `module_lib_missing` /

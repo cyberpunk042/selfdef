@@ -148,3 +148,24 @@ groups:
           summary: "storage: mount {{ $labels.mountpoint }} CRITICAL at {{ $value }}% (>=90%)"
           description: "Mount {{ $labels.mountpoint }} ({{ $labels.fstype }}) at >=90% used. Audit-chain append failures imminent for any chain on this mount. Recover per runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/storage-degraded.md"
+
+  # ----- Detection-watchdog finding stream (SDD-062 routed) -----
+  # The ~46 host detection-watchdogs emit alert-tier findings (planted
+  # exec / writable LOLBin / injection pattern / writable config / a
+  # module_lib_missing fail-loud) that the selfdef_watchdog_alert Sigma
+  # rule promotes to High Detection Findings, counted per rule by
+  # selfdef-api metrics::findings_by_rule. This pages the metrics path,
+  # complementing the in-process notifier chain.
+  - name: selfdef-detection-watchdog
+    interval: 30s
+    rules:
+      - alert: SelfdefWatchdogAlertFinding
+        expr: increase(selfdef_findings_by_rule_total{rule="selfdef watchdog alert-tier finding"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          watchdog: detection-watchdog
+        annotations:
+          summary: "detection-watchdog alert finding on {{ $labels.instance }} ({{ $value }} in 10m)"
+          description: "A selfdef host detection-watchdog emitted an alert-tier finding routed via the selfdef_watchdog_alert Sigma rule (SDD-062) — a planted execute()/RUN/Exec under a writable root, an injection pattern, a writable/non-root config, or a module_lib_missing fail-loud. Identify the watchdog from the selfdef-* journald SyslogIdentifier and compare against its baseline. See runbook."
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/selfdef-watchdog-alert-finding.md"
