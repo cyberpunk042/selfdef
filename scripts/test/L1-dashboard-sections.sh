@@ -95,6 +95,15 @@ check "JS: refreshHealth()"               "${JS}"   'function refreshHealth'    
 check "JS: refreshAuditChains()"          "${JS}"   'function refreshAuditChains'    || failures=$((failures + 1))
 check "JS: parsePromExposition()"         "${JS}"   'function parsePromExposition'   || failures=$((failures + 1))
 
+# MS035 / SDD-044 — IPS capability-token doctrine panel (first of the IPS
+# authority/boundary surfaces wired into the operator dashboard).
+check "HTML: capability-tokens-section"   "${HTML}" 'id="capability-tokens-section"' || failures=$((failures + 1))
+check "HTML: captok aggregate"            "${HTML}" 'id="captok-aggregate"'          || failures=$((failures + 1))
+check "HTML: capability-tokens nav link"  "${HTML}" '#capability-tokens-section'     || failures=$((failures + 1))
+check "JS: refreshCapabilityTokens()"     "${JS}"   'function refreshCapabilityTokens' || failures=$((failures + 1))
+check "JS: capability-tokens fetches /v1" "${JS}"   '/v1/capability-tokens'          || failures=$((failures + 1))
+check "JS: interval refreshCapabilityTokens" "${JS}" 'gatedInterval\(refreshCapabilityTokens' || failures=$((failures + 1))
+
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))
 check "JS: setInterval refreshPerimeter"       "${JS}" 'gatedInterval\(refreshPerimeter|setInterval\(refreshPerimeter'     || failures=$((failures + 1))

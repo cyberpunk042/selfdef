@@ -143,6 +143,9 @@
     if (kind === "modules") {
       return refreshModules();
     }
+    if (kind === "capability-tokens") {
+      return refreshCapabilityTokens();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1485,6 +1488,79 @@
     }
   });
 
+  // MS035 / SDD-044 — IPS capability-token doctrine panel. Read-only
+  // schema-discovery surface (issue/revoke stay MS003-signed CLI-only per
+  // SDD-044 D-3/D-4); renders the 5 CheckVerdict variants, the token shape
+  // and the refusal rules so the operator can see WHAT the IPS enforces.
+  async function refreshCapabilityTokens() {
+    const ul = document.getElementById("capability-tokens-rows");
+    const aggEl = document.getElementById("captok-aggregate");
+    const metaEl = document.getElementById("capability-tokens-meta");
+    try {
+      const body = await get("/v1/capability-tokens");
+      const verdicts = body.verdicts || [];
+      const tokenShape = body.token_shape || [];
+      const refusals = body.refusal_rules || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${verdicts.length} verdict(s) · token shape ${tokenShape.length} field(s) · ` +
+        `${refusals.length} refusal rule(s) · issue/revoke = MS003-signed CLI only`;
+      ul.innerHTML = "";
+      for (const v of verdicts) {
+        const li = document.createElement("li");
+        const ok = v.variant === "Ok";
+        li.className = ok ? "fa-green" : "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = v.variant;
+        const badge = document.createElement("span");
+        badge.className = `fa-badge fa-${ok ? "green" : "yellow"}`;
+        badge.textContent = ok ? "GRANT" : "REFUSE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = v.semantics;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const f of tokenShape) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "token";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = f;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      for (const r of refusals) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "refuse-rule";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "RULE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = r;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no capability-token doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/capability-tokens unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1505,6 +1581,7 @@
   refreshInferenceBackends();
   refreshHealth();
   refreshAuditChains();
+  refreshCapabilityTokens();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1586,6 +1663,8 @@
   gatedInterval(refreshCpu, 60000, "cpu-section");
   gatedInterval(refreshFlexProfile, 60000, "flex-profile-section");
   gatedInterval(refreshInferenceBackends, 120000, "inference-backends-section");
+  // Capability-token doctrine is a static schema surface — slow refresh.
+  gatedInterval(refreshCapabilityTokens, 300000, "capability-tokens-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1603,6 +1682,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
+    authority: ["capability-tokens-section"], // MS035/SDD-044 IPS authority surfaces (grows: tool-authority, commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -1835,6 +1915,7 @@
     ["cpu-section",                "CPU mode"],
     ["flex-profile-section",       "Flex profile"],
     ["inference-backends-section", "Inference backends"],
+    ["capability-tokens-section",  "Capability tokens"],
   ];
   function readHiddenPanels() {
     try {

@@ -6,6 +6,27 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — IPS capability-tokens dashboard panel + new "Authority" tab (MS035 / SDD-044, MS043 UX) (2026-05-27)
+
+The selfdef operator PWA dashboard surfaced ~21 read routes but OMITTED 17 real IPS
+security surfaces that already have working `/v1` handlers (tool-authority,
+commit-authority, capability-tokens, the filesystem/network/communication boundaries,
+sandbox-tiers, authority, policy) — a genuine operator-UX gap (for an IPS, the
+"what's authorized / what's enforced" views are core). First of that group wired to
+production: the **capability-tokens** panel, rendering the MS035/SDD-044 grant doctrine
+(the 5 `CheckVerdict` variants, the token shape, the refusal rules) from the real
+read-only `/v1/capability-tokens` schema endpoint — issue/revoke correctly stay
+MS003-signed CLI-only per SDD-044's sovereignty boundary. Added a new **Authority** tab
+(`TAB_PANELS.authority`) as the home for this IPS authority/boundary panel group as it
+grows. Full wiring: HTML `<section>` + nav link + `refreshCapabilityTokens()` render
+(reusing the four-watchdog render idiom + only-existing CSS classes) + dispatch +
+initial call + gated periodic refresh + `ALL_PANEL_SECTIONS` (so it joins the
+per-panel on/off menu + the 20 view presets). JS validated (`node --check`), route
+confirmed real, and the panel↔route↔render wiring is now CI-locked in
+`L1-dashboard-sections.sh` (negative-control-verified). Reaches the same prod bar as the
+existing 16 panels — it ships in the dashboard the daemon serves. Balances IPS UX work
+back into selfdef (the correct project for IPS surfaces).
+
 ### Fixed — `cargo deny` bans check (selfdef-hardware-requirements was publishable) (2026-05-27)
 
 The `deny` CI job (`cargo deny check all`) was RED on the **bans** check:

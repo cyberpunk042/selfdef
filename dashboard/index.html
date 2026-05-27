@@ -34,6 +34,7 @@
       <a href="#tab=logs" data-tab="logs">Logs</a>
       <a href="#tab=mcp" data-tab="mcp">MCP</a>
       <a href="#tab=repl" data-tab="repl">REPL</a>
+      <a href="#tab=authority" data-tab="authority">Authority</a>
       <a href="#tab=all" data-tab="all">All</a>
       <!-- Operator-facing per-panel visibility menu (MS043 UX).
            "Everything can be turned on and off" (operator verbatim).
@@ -100,6 +101,7 @@
       <a href="#cpu-section">CPU</a>
       <a href="#flex-profile-section">Flex profile</a>
       <a href="#inference-backends-section">Inference</a>
+      <a href="#capability-tokens-section">Capability tokens</a>
     </nav>
   </header>
 
@@ -396,6 +398,22 @@
       </div>
 
       <pre id="control-result" class="control-result" aria-live="polite"></pre>
+    </section>
+
+    <section id="capability-tokens-section">
+      <h2>
+        Capability tokens
+        <small>
+          IPS capability-grant doctrine (MS035 / SDD-044) — read-only schema;
+          issue/revoke stay MS003-signed CLI-only
+          ·
+          <a href="#" data-refresh="capability-tokens">refresh</a>
+          ·
+          <span id="captok-aggregate" class="fa-aggregate fa-unknown" aria-live="polite">—</span>
+        </small>
+      </h2>
+      <div id="capability-tokens-meta" class="fa-meta"></div>
+      <ul id="capability-tokens-rows" class="fa-rows"><li class="empty">loading…</li></ul>
     </section>
   </main>
 
