@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — warn-tier watchdog routing to a non-paging dashboard finding (SDD-062 D-5) (2026-05-27)
+
+Per operator direction (revising SDD-062 D-3's original drop-warn stance):
+the watchdog `warn` tier — "config changed but the target is still trusted"
+(a benign edit, a package-install artifact, a physical-TTY addition, a
+hardening_index in the moderate band) — now routes to a Detection Finding so
+it is dashboard-visible for trend triage, while staying NON-PAGING. New
+sibling Sigma rule `selfdef_watchdog_warn.yml` (`level: informational`, title
+`selfdef watchdog warn-tier finding`) matches `selfdef-*` + `"severity":"warn"`,
+mutually exclusive with the alert rule. Non-paging is enforced two ways:
+Informational sits below the notifier dispatcher's panic floor (Medium
+default), and NO Prometheus alert is wired on its metric bucket. New dashboard
+stat panel id 10 ("detection-watchdog warn findings (1h)", blue/never-red) +
+the `selfdef_findings_by_rule_total{rule="selfdef watchdog warn-tier finding"}`
+series. 7 rule-test cases (warn→finding incl. an integrity-axis case;
+alert/ok/non-selfdef/non-journald/-detail → 0); correlator rule-tests now 106
+across 22 rules. SDD-062 D-3 revised + D-5 added. Alert-tier routing unchanged.
+
 ### Added — L2 guard preventing the inventory-capture bug class from recurring (2026-05-27)
 
 Root-cause prevention (P1: infrastructure > instructions) for the

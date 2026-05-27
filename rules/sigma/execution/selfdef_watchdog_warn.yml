@@ -1,0 +1,46 @@
+title: selfdef watchdog warn-tier finding
+id: 9a3f1c2e-7b5d-4e16-a8c4-33ff66bb88cc
+status: experimental
+description: |
+  Routes any selfdef detection-watchdog emission carrying `"severity":"warn"`
+  to a LOW-severity (Informational) Detection Finding — dashboard-visible but
+  deliberately NON-PAGING.
+
+  The warn tier is the "config changed but the target is still trusted"
+  signal: a watchdog baseline-delta that is not (yet) an alert — a benign
+  config edit, a package-install artifact, a physical-TTY addition, a
+  hardening_index that slipped into the moderate band, etc. SDD-062 D-3
+  originally dropped warn entirely (local-triage only). Per operator
+  direction 2026-05-27 the warn tier now becomes a finding so it surfaces on
+  the dashboard + in `selfdef_findings_by_rule_total{rule="selfdef watchdog
+  warn-tier finding"}` for trend visibility — but at Informational level it
+  sits below the notifier panic floor (Medium) and carries NO Prometheus
+  alert, so it never pages. Alert-tier routing is unchanged (the sibling
+  selfdef_watchdog_alert rule, level: high, pages).
+
+  The `ok` tier and the `-detail` plain-text companion lines are still not
+  routed.
+
+  Design context: docs/sdd/062-watchdog-severity-routing.md (D-3 revised, D-5).
+references:
+  - docs/sdd/062-watchdog-severity-routing.md
+  - docs/sdd/061-shared-watchdog-scan-helpers.md
+author: selfdef
+date: 2026-05-27
+tags:
+  - attack.execution
+  - attack.persistence
+logsource:
+  service: journald
+detection:
+  watchdog_warn:
+    source: journald
+    raw.SYSLOG_IDENTIFIER|startswith: "selfdef-"
+    message|contains: '"severity":"warn"'
+  condition: watchdog_warn
+level: informational
+falsepositives:
+  - Expected during an operator change-window — a config edit a watchdog
+    notices but whose target is still trusted shows up here. This tier is
+    trend/triage signal, not a page; investigate only if it correlates with
+    an alert-tier finding or is unexpected.

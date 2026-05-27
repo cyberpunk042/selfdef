@@ -11,8 +11,11 @@ SDD-061 (shared watchdog scan helpers)
   Finding. SHIPPED (`rules/sigma/execution/selfdef_watchdog_alert.yml`).
 - **D-2** — companion `.tests.yaml` fixture run by the
   `selfdef-correlator` `every_rule_with_tests_passes` harness. SHIPPED.
-- **D-3** — warn / ok tiers are deliberately NOT paged (local-triage
-  signal, mirroring the agent-guard audit-mode precedent). DECIDED.
+- **D-3** — warn / ok tiers are NOT paged (local-triage signal, mirroring
+  the agent-guard audit-mode precedent). DECIDED. **Revised by D-5**: the
+  warn tier is now *routed to a non-paging finding* (it was originally
+  dropped entirely); the no-page property is unchanged. The `ok` tier and
+  the `-detail` lines remain unrouted.
 - **D-4** — the rule is tag-prefix, not tag-enumerated, so it covers the
   WHOLE `selfdef-*` watchdog set, not just the SDD-061 module-lib scanners.
   Rule-test coverage now spans both axes: the module-lib detection-watchdogs
@@ -25,6 +28,20 @@ SDD-061 (shared watchdog scan helpers)
   watchdogs themselves is locked by the per-module `packaging/test/L2-*-watchdog.bats`
   suites (1154 L2 cases across 105 suites) — see `L2-watchdog-dedup-guard.bats`,
   which fails if a module-lib watchdog ships without an L2 suite.
+- **D-5** — the `warn` tier is routed to a **non-paging** Detection Finding
+  (operator direction 2026-05-27, revising D-3's original drop-it stance). A
+  sibling tag-prefix rule `selfdef_watchdog_warn.yml` (`level: informational`,
+  title `selfdef watchdog warn-tier finding`) matches `selfdef-*` +
+  `"severity":"warn"`. At Informational it sits below the notifier panic
+  floor (Medium default) so the notifier path never pages it, and it carries
+  NO Prometheus alert, so the metrics path never pages it either — but it
+  IS dashboard-visible via `selfdef_findings_by_rule_total{rule="selfdef
+  watchdog warn-tier finding"}` (new stat panel id 10, blue/never-red) for
+  trend triage. The warn rule is mutually exclusive with the alert rule (a
+  body is either `"severity":"warn"` or `"severity":"alert"`). 7 rule-test
+  cases (warn→finding incl. an integrity-axis case; alert/ok/non-selfdef/
+  non-journald/-detail → 0). Rule-tests now 106 across 22 rules. SHIPPED
+  (`rules/sigma/execution/selfdef_watchdog_warn.yml`).
 
 ## Why now
 
@@ -111,14 +128,32 @@ sibling `.tests.yaml`. Cases:
 | alert body but non-`selfdef-` identifier | 0 | prefix scopes it |
 | alert from a `selfdef-*` tag but source != journald | 0 | source scopes it |
 
-### D-3 — warn/ok are local-triage, not paged
+### D-3 — warn/ok are local-triage, not paged (warn routing revised by D-5)
 
 Mirrors the agent-guard precedent (`hardening/agent_guard_violation.yml`):
-audit-mode / non-meaningful signal stays out of the pager. A `warn`
-(config added/changed/removed) or `ok` watchdog tick is local-triage
-signal — visible in journald and on the dashboard, but not a Detection
-Finding. Only the `alert` tier (planted exec / writable LOLBin / injection
-pattern / world-writable-or-non-root config) pages.
+audit-mode / non-meaningful signal stays out of the pager. Only the `alert`
+tier (planted exec / writable LOLBin / injection pattern /
+world-writable-or-non-root config) pages.
+
+**Revision (D-5, 2026-05-27):** the `warn` tier is no longer dropped — it is
+routed to a *non-paging* Informational Detection Finding (sibling rule
+`selfdef_watchdog_warn.yml`) so it surfaces on the dashboard + in
+`selfdef_findings_by_rule_total` for trend triage, while staying below the
+notifier panic floor and carrying no Prometheus alert. The no-page property
+of warn is preserved; only its visibility improved. The `ok` tier + the
+`-detail` plain-text lines remain unrouted.
+
+### D-5 — warn routed to a non-paging finding
+
+A second tag-prefix rule, identical in shape to D-1 but matching
+`"severity":"warn"` at `level: informational`. Mutually exclusive with the
+alert rule (a watchdog JSON body carries exactly one of `"severity":"warn"`
+/ `"severity":"alert"`). Non-paging is enforced by two independent
+mechanisms: (1) Informational is below the notifier dispatcher's panic floor
+(Medium default), so the in-process notifier path suppresses it; (2) no
+Prometheus alert is wired on the `selfdef watchdog warn-tier finding` metric
+bucket, so the metrics path never fires. Dashboard panel id 10 renders the
+1h warn count in blue (never red). See `selfdef_watchdog_warn.tests.yaml`.
 
 ## Testing
 

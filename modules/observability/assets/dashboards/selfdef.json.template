@@ -138,6 +138,31 @@
       }
     },
     {
+      "id": 10,
+      "type": "stat",
+      "title": "detection-watchdog warn findings (1h)",
+      "description": "Count of warn-tier host detection-watchdog findings in the last hour, routed by the selfdef_watchdog_warn Sigma rule (SDD-062 D-5). Warn = config changed but the target is still trusted (a benign edit, a package-install artifact, a physical-TTY addition, a hardening_index in the moderate band, …). This is an Informational, NON-PAGING trend signal — it sits below the notifier panic floor and carries no Prometheus alert. Blue, never red. Investigate only if it correlates with an alert-tier finding.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 30 },
+      "targets": [
+        {
+          "expr": "sum(increase(selfdef_findings_by_rule_total{rule=\"selfdef watchdog warn-tier finding\"}[1h]))",
+          "legendFormat": "warn findings"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "blue", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
       "id": 100,
       "type": "row",
       "title": "Four-watchdog set (MS046 + MS047 + MS044 + MS048)",

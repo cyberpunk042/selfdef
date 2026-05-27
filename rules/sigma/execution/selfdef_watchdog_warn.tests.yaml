@@ -1,0 +1,63 @@
+tests:
+  - name: warn-tier watchdog finding becomes a (non-paging) finding
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"warn","event":"dhcpd_exec_changed","profile":"report","added":1,"removed":0}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 1
+
+  - name: an integrity-axis warn finding also routes
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-suid-sgid","severity":"warn","event":"suid_drift","profile":"report","added":1}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-suid-sgid"
+    expected_findings: 1
+
+  - name: alert-tier finding does NOT match the warn rule (alert rule's job)
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"alert","event":"dhcpd_exec_suspicious","profile":"report"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0
+
+  - name: ok-tier watchdog tick does NOT route
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"ok","event":"dhcpd_exec_intact","profile":"report"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0
+
+  - name: a warn body from a non-selfdef identifier does NOT route
+    events:
+      - source: journald
+        severity_id: 1
+        message: '{"tag":"some-other-tool","severity":"warn","event":"x"}'
+        raw:
+          SYSLOG_IDENTIFIER: "some-other-tool"
+    expected_findings: 0
+
+  - name: a warn-tier selfdef body but non-journald source does NOT route
+    events:
+      - source: tetragon
+        severity_id: 1
+        message: '{"tag":"selfdef-dhcpd-exec","severity":"warn","event":"x"}'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec"
+    expected_findings: 0
+
+  - name: the -detail plain-text companion line does NOT route
+    events:
+      - source: journald
+        severity_id: 1
+        message: 'ADDED file /etc/foo'
+        raw:
+          SYSLOG_IDENTIFIER: "selfdef-dhcpd-exec-detail"
+    expected_findings: 0
