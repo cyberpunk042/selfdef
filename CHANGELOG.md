@@ -6,6 +6,17 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — baseline-leak guard: every watchdog baseline must be chmod 0600 (2026-05-27)
+
+Confidentiality invariant added to `L2-scan-script-capture-guard.bats` (now 4
+assertions). A watchdog's learned baseline records sensitive inventory (the
+setuid-binary set, the account/sudo roster, PAM module hashes, …); a
+world-readable baseline would leak it to any local user. The guard fails if a
+watchdog snapshots the current inventory into a baseline/manifest without a
+`chmod 0600`. Audited clean across all 95 baseline-creating watchdogs;
+negative-control verified (stripping a chmod makes the guard fail + name the
+module).
+
 ### Added — routing-tag guard: every finding-emitting watchdog must tag selfdef-* (2026-05-27)
 
 Second scan-script silent-failure guard, in `L2-scan-script-capture-guard.bats`

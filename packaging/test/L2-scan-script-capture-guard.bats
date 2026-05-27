@@ -16,6 +16,13 @@
 #    emits `"severity":"alert"` under a non-`selfdef-` `logger -t` tag would
 #    never route — a silent detection gap.
 #
+# Plus a confidentiality invariant:
+#
+# 3. BASELINE LEAK: a watchdog's learned baseline records sensitive inventory
+#    (the setuid-binary set, the account/sudo roster, PAM module hashes, …).
+#    A baseline written world-readable leaks that inventory to any local user.
+#    Every watchdog that creates a baseline/manifest MUST `chmod 0600` it.
+#
 # Run with: bats packaging/test/L2-scan-script-capture-guard.bats
 
 SCRIPTS_GLOB="${BATS_TEST_DIRNAME}/../../modules/*/systemd/*.sh"
@@ -75,6 +82,21 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
         printf '     inventory. Without it the records go to stdout, the temp file is empty,\n' >&2
         printf '     and the watchdog silently detects nothing (the 2026-05-27\n' >&2
         printf '     self-integrity / account / pam-config bug class).\n' >&2
+        return 1
+    fi
+}
+
+@test "every watchdog that creates a baseline/manifest chmod 0600s it (no inventory leak)" {
+    bad=()
+    for f in $(scan_scripts); do
+        # Creates a baseline by snapshotting the current inventory into it.
+        grep -qE 'cp "\$current" "\$\{?(BASELINE|MANIFEST)' "$f" || continue
+        # Must lock it to 0600 (owner-only) — the inventory is sensitive.
+        grep -qE 'chmod 0?600 "\$\{?(BASELINE|MANIFEST)' "$f" || bad+=("$(basename "$f")")
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'creates a baseline without chmod 0600 (inventory leak): %s\n' "${bad[*]}" >&2
+        printf 'FIX: `chmod 0600 "$BASELINE"` right after `cp "$current" "$BASELINE"`.\n' >&2
         return 1
     fi
 }
