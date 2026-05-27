@@ -167,5 +167,5 @@ groups:
           watchdog: detection-watchdog
         annotations:
           summary: "detection-watchdog alert finding on {{ $labels.instance }} ({{ $value }} in 10m)"
-          description: "A selfdef host detection-watchdog emitted an alert-tier finding routed via the selfdef_watchdog_alert Sigma rule (SDD-062) — a planted execute()/RUN/Exec under a writable root, an injection pattern, a writable/non-root config, or a module_lib_missing fail-loud. Identify the watchdog from the selfdef-* journald SyslogIdentifier and compare against its baseline. See runbook."
+          description: "A selfdef host detection-watchdog emitted an alert-tier finding routed via the selfdef_watchdog_alert Sigma rule (SDD-062). The tag-prefix rule covers both watchdog axes: the exec/injection axis (a planted execute()/RUN/Exec under a writable root, an injection pattern, a writable/non-root config, or a module_lib_missing fail-loud) AND the integrity/baseline axis (a new setuid binary or file-capability grant, a + rhosts trust, a root-login TTY widen, a rogue NSS source, a weakened kernel sysctl, …). Identify the watchdog + axis from the selfdef-* journald SyslogIdentifier and compare against its baseline. See runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/selfdef-watchdog-alert-finding.md"

@@ -116,7 +116,7 @@
       "id": 9,
       "type": "stat",
       "title": "detection-watchdog alert findings (1h)",
-      "description": "Count of alert-tier host detection-watchdog findings in the last hour (planted exec / writable LOLBin / injection / writable config / module_lib_missing), routed by the selfdef_watchdog_alert Sigma rule (SDD-062). >0 fires SelfdefWatchdogAlertFinding — see the selfdef-watchdog-alert-finding runbook.",
+      "description": "Count of alert-tier host detection-watchdog findings in the last hour, across BOTH watchdog axes routed by the selfdef_watchdog_alert Sigma rule (SDD-062): the exec/injection axis (planted exec / writable LOLBin / injection / writable config / module_lib_missing) and the integrity/baseline axis (new setuid binary / file-cap grant / + rhosts trust / securetty widen / rogue NSS source / weakened sysctl). >0 fires SelfdefWatchdogAlertFinding — see the selfdef-watchdog-alert-finding runbook.",
       "datasource": { "type": "prometheus" },
       "gridPos": { "h": 6, "w": 8, "x": 0, "y": 30 },
       "targets": [
