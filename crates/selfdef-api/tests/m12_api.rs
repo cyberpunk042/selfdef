@@ -1879,10 +1879,11 @@ async fn dashboard_prefs_put_rejects_unknown_active_preset() {
 }
 
 #[tokio::test]
-async fn dashboards_route_returns_5_named_presets() {
-    // MS043 UX: /v1/dashboards lists the 5 operator-named view
-    // presets shipped in batch 12 + ratified via the
-    // /v1/dashboard-prefs active_preset enum.
+async fn dashboards_route_returns_20_named_presets() {
+    // MS043 UX: /v1/dashboards lists the 20 operator-named view
+    // presets (5 original batch-12 + 15 batch-17 expansion fulfilling
+    // the operator's verbatim "over 20 dashboards" target), sorted by
+    // name. Canonical set lives in selfdef-api src/dashboards.rs.
     let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
     let req = Request::builder()
@@ -1894,16 +1895,37 @@ async fn dashboards_route_returns_5_named_presets() {
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = to_bytes(res.into_body(), 16 * 1024).await.unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(v["count"], 5);
+    assert_eq!(v["count"], 20);
     let dashboards = v["dashboards"].as_array().expect("dashboards array");
-    assert_eq!(dashboards.len(), 5);
+    assert_eq!(dashboards.len(), 20);
     let names: Vec<&str> = dashboards
         .iter()
         .map(|d| d["name"].as_str().unwrap())
         .collect();
     assert_eq!(
         names,
-        vec!["compact", "default", "inference", "performance", "security"]
+        vec![
+            "audit-trail",
+            "compact",
+            "cpu-bound",
+            "default",
+            "gpu-monitor",
+            "health-only",
+            "incident-response",
+            "inference",
+            "inference-throughput",
+            "mcp-debug",
+            "mcp-tools",
+            "models-lab",
+            "module-status",
+            "network-ops",
+            "paused-snapshot",
+            "performance",
+            "repl-session",
+            "security",
+            "storage-ops",
+            "watchdog-deep",
+        ]
     );
 }
 
