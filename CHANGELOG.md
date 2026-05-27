@@ -6,6 +6,21 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for session/login hook watchdogs (2026-05-27)
+
+Continues the consolidated-watchdog L2 backfill with the per-login / session
+exec-surface class: `bash-completion-watchdog` (sourced into every
+interactive bash login), `motd-scripts-watchdog` (pam_motd runs
+update-motd.d as root per login), `skel-watchdog` (dotfiles copied into every
+NEW user's home — recurses with find so hidden dotfiles are covered),
+`xsession-watchdog` (Xsession.d fragments sourced at graphical login) and
+`display-manager-hooks-watchdog` (GDM/LightDM/SDDM login hooks run as root).
+A planted entry is per-login code execution (T1546). Each suite (9 cases)
+exercises ok / warn / alert tiers, the injection-content + world-writable/
+non-root alert conditions, the benign-root-owned false-positive guard, the
+`module_lib_missing` fail-loud (non-zero exit), and the enforce profile. 45
+new bats cases, green.
+
 ### Added — L2 functional-severity coverage for package/boot/power hook watchdogs (2026-05-27)
 
 Continues the consolidated-watchdog L2 backfill with the package- /
