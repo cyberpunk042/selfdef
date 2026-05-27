@@ -6,6 +6,25 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for xorg-config-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the X server module-load
+surface. On non-rootless setups the X server runs AS ROOT and loads .so
+modules from `ModulePath "<dir[,dir...]>"` and `Load "<module>"` in
+/etc/X11/xorg.conf{,.d}; a planted ModulePath under a writable/attacker
+location loads attacker code into the root X server at the next start
+(T1574 / T1547). Distinct Xorg quoted-directive grammar with
+comma-separated ModulePath dir lists.
+
+- `packaging/test/L2-xorg-config-watchdog.bats` — 11 tests: ok
+  (no_xorg_config / baseline_initial / xorg_config_intact), alert
+  (ModulePath under a writable root, relative ModulePath, comma-separated
+  ModulePath with one writable dir), warn (benign Load added →
+  xorg_config_changed), false-positive guards (/usr/lib ModulePath + a
+  named Load not flagged; a commented-out writable ModulePath not flagged),
+  enforce exit, and the SDD-061 D-6 `module_lib_missing` fail-loud path.
+  Same logger-shadow + `SELFDEF_XORG_*` sandbox.
+
 ### Added — L2 functional severity coverage for gss-mech-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the GSSAPI mechanism-load
