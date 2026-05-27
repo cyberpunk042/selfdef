@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for xinetd-watchdog (2026-05-27)
+
+Locks the inetd/xinetd super-server exec surface. xinetd/inetd launch the
+configured server program AS the configured user (often root) when a client
+CONNECTS to the service port — a network-connection-triggered exec vector.
+The watchdog scans both formats: xinetd.d / xinetd.conf (`server = /path`)
+and inetd.conf (positional `service socktype proto flags user server args`);
+a server path under a writable root is alert.
+
+- `packaging/test/L2-xinetd-watchdog.bats` — 10 tests: ok (no_super_server
+  / baseline_initial / xinetd_intact), alert (xinetd `server=` under a
+  writable root → xinetd_suspicious_server; xinetd server under /dev/shm; an
+  inetd.conf server under a writable root), warn (a benign server change →
+  xinetd_changed), false-positive guards (a /usr/sbin server; a benign
+  inetd.conf line), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_XINETD_D` / `_CONF` / `SELFDEF_INETD_CONF` seams — no production
+  change.
+
 ### Added — L2 functional coverage for modprobe-config-watchdog (2026-05-27)
 
 Locks the modprobe `install`-command exec surface. An `install <mod>
