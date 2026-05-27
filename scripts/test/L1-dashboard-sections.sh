@@ -145,6 +145,13 @@ check "HTML: authority aggregate"        "${HTML}" 'id="auth-aggregate"' || fail
 check "JS: refreshAuthority()"           "${JS}"   'function refreshAuthority' || failures=$((failures + 1))
 check "JS: authority fetches /v1"        "${JS}"   '/v1/authority' || failures=$((failures + 1))
 check "JS: interval refreshAuthority"    "${JS}"   'gatedInterval\(refreshAuthority' || failures=$((failures + 1))
+# MS033 / SDD-051 — IPS policy-bus dispatch fabric panel (completes the
+# 9-surface IPS authority/boundary dashboard group).
+check "HTML: policy-section"             "${HTML}" 'id="policy-section"' || failures=$((failures + 1))
+check "HTML: policy aggregate"           "${HTML}" 'id="pol-aggregate"' || failures=$((failures + 1))
+check "JS: refreshPolicy()"              "${JS}"   'function refreshPolicy' || failures=$((failures + 1))
+check "JS: policy fetches /v1"           "${JS}"   '/v1/policy' || failures=$((failures + 1))
+check "JS: interval refreshPolicy"       "${JS}"   'gatedInterval\(refreshPolicy' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

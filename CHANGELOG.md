@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — IPS authority/boundary dashboard group COMPLETE: 9 surfaces under the Authority tab (2026-05-27)
+
+Closed the operator-UX gap where the selfdef dashboard omitted the IPS "what's
+authorized / what's enforced" surfaces. All 9 now wired to production under the new
+**Authority** tab, each rendering its real `/v1` schema endpoint via the shared panel
+pattern (HTML section + nav + render + dispatch + initial + gated refresh +
+`ALL_PANEL_SECTIONS` on/off menu + 20-preset membership) and CI-locked in
+`L1-dashboard-sections.sh` (now gates 9 IPS panels):
+- capability-tokens (MS035/SDD-044), tool-authority (MS042/SDD-050),
+  commit-authority (MS041/SDD-043), sandbox-tiers (MS032/SDD-047),
+  filesystem-boundary (MS037/SDD-045), network-boundary (MS038/SDD-046),
+  communication-boundary (MS034/SDD-048), authority-model (MS039+MS040/SDD-049),
+  policy-bus (MS033/SDD-051).
+
+The capstone **authority-model** panel renders the full ladder: L-levels + trust Rings
+(with level caps) + per-profile authority envelopes (profile→max_level/ring_cap/sandbox/
+gate) + transition gates. Every panel `node --check`-valid; every route confirmed real
+(read-only schema-discovery — mutation stays MS003-signed CLI-only per the sovereignty
+boundary). Reaches the same prod bar as the existing 16 panels (ships in the dashboard
+the daemon serves). This balances substantial IPS UX work back into selfdef (the correct
+project for IPS surfaces) and is the selfdef-side counterpart to the sovereign-os D-09
+dashboard driven to prod the same day.
+
 ### Added — IPS tool-authority dashboard panel (MS042 / SDD-050) under the Authority tab (2026-05-27)
 
 Second IPS authority surface wired to the operator dashboard (after capability-tokens):

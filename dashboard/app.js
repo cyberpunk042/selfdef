@@ -167,6 +167,9 @@
     if (kind === "authority") {
       return refreshAuthority();
     }
+    if (kind === "policy") {
+      return refreshPolicy();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -2081,6 +2084,46 @@
     }
   }
 
+  // MS033 / SDD-051 — IPS policy-bus dispatch fabric doctrine. Read-only
+  // schema; renders the subsystem clusters and the crates wired under each.
+  async function refreshPolicy() {
+    const ul = document.getElementById("policy-rows");
+    const aggEl = document.getElementById("pol-aggregate");
+    const metaEl = document.getElementById("policy-meta");
+    try {
+      const body = await get("/v1/policy");
+      const clusters = body.clusters || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      const crateTotal = clusters.reduce((n, c) => n + (c.crates || []).length, 0);
+      metaEl.textContent = `${clusters.length} subsystem cluster(s) · ${crateTotal} crate(s) wired`;
+      ul.innerHTML = "";
+      for (const c of clusters) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = c.name;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = `${(c.crates || []).length} crate(s)`;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = (c.crates || []).join(", ");
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no policy-bus doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/policy unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -2109,6 +2152,7 @@
   refreshNetworkBoundary();
   refreshCommunicationBoundary();
   refreshAuthority();
+  refreshPolicy();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -2199,6 +2243,7 @@
   gatedInterval(refreshNetworkBoundary, 300000, "network-boundary-section");
   gatedInterval(refreshCommunicationBoundary, 300000, "communication-boundary-section");
   gatedInterval(refreshAuthority, 300000, "authority-section");
+  gatedInterval(refreshPolicy, 300000, "policy-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -2216,7 +2261,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section", "authority-section"], // IPS authority/boundary surfaces (MS034/035/037/038/039/040/041/042/032) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section", "commit-authority-section", "sandbox-tiers-section", "filesystem-boundary-section", "network-boundary-section", "communication-boundary-section", "authority-section", "policy-section"], // 9 IPS authority/boundary surfaces complete (MS032/033/034/035/037/038/039/040/041/042) IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -2457,6 +2502,7 @@
     ["network-boundary-section",   "Network boundary"],
     ["communication-boundary-section","Communication boundary"],
     ["authority-section",          "Authority model"],
+    ["policy-section",             "Policy bus"],
   ];
   function readHiddenPanels() {
     try {
