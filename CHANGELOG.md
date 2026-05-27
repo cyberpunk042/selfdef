@@ -6,6 +6,15 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation: apt-hooks-watchdog onto the shared dir policy (2026-05-27)
+
+apt-hooks-watchdog now sources module-lib (fail-loud, require ≥4) and its
+`is_suspicious_cmd` delegates the writable-root arm to
+`selfdef_is_writable_dir`. Also removed two dead case tokens
+(`/bin/true|/bin/false`, already shadowed by the `/*)` arm) and braced a
+`${HOOK_RE}` expansion to quiet a pre-existing shellcheck SC1087 false
+positive. L2 apt-hooks 10/10 (incl. module_lib_missing); shellcheck clean.
+
 ### Changed — SDD-063 consolidation: anacrontab-watchdog onto the shared dir policy (pilot) (2026-05-27)
 
 Begins consolidating the pre-D-6 watchdogs that still carry their own

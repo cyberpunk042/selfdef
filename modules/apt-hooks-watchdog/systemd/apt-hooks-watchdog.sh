@@ -28,16 +28,30 @@ BASELINE="${SELFDEF_APTHOOK_BASELINE:-/var/lib/selfdef/apt-hooks-baseline.tsv}"
 APTCONF="${SELFDEF_APTHOOK_FILE:-/etc/apt/apt.conf}"
 APTCONFD="${SELFDEF_APTHOOK_D:-/etc/apt/apt.conf.d}"
 
+# SDD-063: consume the shared writable-location policy from module-lib
+# instead of a per-module case statement. Fail loud on a missing/pre-v4 lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-apt-hooks -- '{"tag":"selfdef-apt-hooks","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-apt-hooks -- '{"tag":"selfdef-apt-hooks","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 HOOK_RE='(DPkg::(Pre|Post)-Invoke|DPkg::Pre-Install-Pkgs|APT::Update::(Pre|Post)-Invoke(-Success)?)'
 PATTERNS='curl[^|;&]*\|[[:space:]]*(ba)?sh|wget[^|;&]*\|[[:space:]]*(ba)?sh|/dev/tcp/|bash[[:space:]]+-i|base64[[:space:]]+-d|mkfifo'
 
 is_suspicious_cmd() {
     local p="$1"
+    selfdef_is_writable_dir "$p" && return 0
     case "$p" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) [[ -e "$p" && "$(stat -L -c '%a' "$p" 2>/dev/null)" =~ [2367]$ ]] && return 0
             return 1 ;;
-        ""|true|false|/bin/true|/bin/false) return 1 ;;
+        ""|true|false) return 1 ;;   # bare disable verbs (/bin/* handled above)
         ./*|../*|*/*) return 0 ;;
         *) return 1 ;;   # bare command (test, dpkg, …) — normal in apt hooks
     esac
@@ -78,7 +92,7 @@ for f in "${files[@]}"; do
         printf 'hook\t%s\t%s\n' "$directive" "${prog:-(none)}" >> "$current"
         [[ -n "$prog" ]] && is_suspicious_cmd "$prog" && suspicious+=("${directive}=>${prog}")
         printf '%s\n' "$cmd" | grep -qE "$PATTERNS" && suspicious+=("${directive}-payload")
-    done < <(grep -iE "$HOOK_RE[^\"]*\"" "$f" 2>/dev/null)
+    done < <(grep -iE "${HOOK_RE}[^\"]*\"" "$f" 2>/dev/null)
 done
 
 { sort -u > "${current}.sorted"; } < "$current" && mv "${current}.sorted" "$current"

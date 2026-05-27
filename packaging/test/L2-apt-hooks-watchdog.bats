@@ -14,6 +14,7 @@
 # Run with: bats packaging/test/L2-apt-hooks-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/apt-hooks-watchdog/systemd/apt-hooks-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -35,6 +36,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_APTHOOK_PROFILE="${PROFILE:-report}" \
     SELFDEF_APTHOOK_BASELINE="${BASELINE}" \
     SELFDEF_APTHOOK_FILE="${APTCONF_F:-$APTCONF}" \
@@ -129,8 +131,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 }
 
 # ============================================================
-# enforce profile
+# enforce profile + SDD-063 fail-loud
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious hook" {
     printf 'DPkg::Post-Invoke {"/usr/bin/update-initramfs -u";};\n' > "${HOOK}"
