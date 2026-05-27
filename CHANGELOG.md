@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for network-dispatcher-watchdog (2026-05-27)
+
+Locks the NetworkManager / networkd-dispatcher script exec surface. Every
+script in the dispatcher dirs runs AS ROOT on network events (interface
+up/down, connectivity change) — an event-triggered exec surface reachable by
+toggling a network. The watchdog flags a dispatcher script that is
+world-writable / non-root, or whose body carries a high-risk injection
+pattern (shared module-lib set).
+
+- `packaging/test/L2-network-dispatcher-watchdog.bats` — 10 tests: ok
+  (no_dispatcher_dirs / baseline_initial / network_dispatcher_intact), alert
+  (a curl|sh payload → network_dispatcher_suspicious; a /dev/tcp reverse
+  shell; a /tmp payload at command position), warn (a benign script change →
+  network_dispatcher_changed), false-positive guard (a benign dispatcher
+  script), enforce-profile exit, and — since this module is SDD-061 D-6
+  migrated — the `module_lib_missing` fail-loud path. Uses the module's
+  existing `SELFDEF_NETDISP_DIRS` seam — no production change.
+
 ### Added — L2 functional coverage for dnf-plugins-watchdog (2026-05-27)
 
 Locks the DNF post-transaction-actions exec surface. DNF runs the command in
