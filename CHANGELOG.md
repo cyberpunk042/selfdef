@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for service/config exec watchdogs (2026-05-27)
+
+Continues the consolidated-watchdog L2 backfill with the service- and
+VPN-config exec-surface class: `fail2ban-action-watchdog` (action* commands
+run as root on attacker-self-inducible ban events), `systemd-generator-watchdog`
+(generators run as root very early at boot / daemon-reload), `openvpn-config-watchdog`
+(script directives on connect/route/auth + inline-key exposure) and
+`wireguard-config-watchdog` (PostUp/PreUp/PostDown/PreDown hooks + PrivateKey
+world-readable exposure, T1552.001). Each suite exercises ok / warn / alert
+tiers, the writable-root + injection + world-writable/non-root (+ key-exposure
+where applicable) alert conditions, the benign false-positive guard, the
+`module_lib_missing` fail-loud (non-zero exit), and the enforce profile. 41
+new bats cases, green.
+
 ### Added — L2 functional-severity coverage for session/login hook watchdogs (2026-05-27)
 
 Continues the consolidated-watchdog L2 backfill with the per-login / session
