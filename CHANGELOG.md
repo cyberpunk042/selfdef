@@ -6,6 +6,20 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for package/boot/power hook watchdogs (2026-05-27)
+
+Continues the consolidated-watchdog L2 backfill with the package- /
+boot- / power-event hook-dir class: `ca-certificates-hooks-watchdog`
+(trust-store rebuild), `initramfs-hooks-watchdog` (initramfs rebuild +
+early-boot exec), `kernel-install-hooks-watchdog` (kernel install/remove),
+`needrestart-hooks-watchdog` (post-apt restart scan), `pm-utils-hooks-watchdog`
+(suspend/resume) and `systemd-power-hooks-watchdog` (systemd-sleep). All run
+AS ROOT on recurring routine triggers, so a planted hook is durable root-exec
+persistence (T1546). Each suite (9 cases) exercises ok / warn / alert tiers,
+the injection-content + world-writable/non-root alert conditions, the
+benign-root-owned false-positive guard, the `module_lib_missing` fail-loud
+(non-zero exit), and the enforce profile. 54 new bats cases, green.
+
 ### Added — L2 functional-severity coverage for network-event hook watchdogs (2026-05-27)
 
 Continues the consolidated-watchdog L2 backfill with the network-event-
