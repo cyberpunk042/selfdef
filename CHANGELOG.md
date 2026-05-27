@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 coverage for the file-integrity inventory watchdogs (2026-05-27)
+
+Opens the second watchdog L2 axis — the integrity/baseline scanners that do
+NOT consume module-lib (different shape: inventory-delta / count-ladder, not
+injection/writable-policy). First class, the file-integrity inventory
+watchdogs: `suid-sgid-watchdog` (baseline delta of every setuid/setgid
+binary; warn 1-3 / alert 4+ bulk + hash-drift), `world-writable-watchdog`
+(count ladder ok / warn 1-25 / alert 26+, sticky-scratch whitelist),
+`unowned-files-watchdog` (count ladder ok / warn 1-50 / alert 51+) and
+`file-capabilities-watchdog` (baseline delta; warn 1-2 / alert 3+ OR any
+dangerous cap — setuid/setgid/dac_*/sys_admin/ptrace/module). 22 new bats
+cases exercising baseline_initial / no-delta / drift tiers / bulk + dangerous
+alerts / enforce. Tests create real setuid files, unowned files (chown to an
+unresolved uid) and file capabilities (setcap), so they run as root and
+self-skip if the fs lacks capability xattrs.
+
 ### Added — L2 backfill COMPLETE: boot/scheduler/audit watchdogs + coverage guard (2026-05-27)
 
 Completes the consolidated-watchdog L2 functional-severity backfill with the
