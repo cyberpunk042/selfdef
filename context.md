@@ -12,6 +12,38 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 
 `cyberpunk042/sovereign-os` is **Solution 1** — the runtime/cockpit. `cyberpunk042/devops-solutions-information-hub` is the **third piece** = read-only second-brain.
 
+## Current arc (2026-05-27): detection-watchdog single-source hardening — COMPLETE
+
+> The 2026-05-19 snapshot below (catalog + Rust-crate proliferation) is
+> intact and its forward queue (MS044/MS045/9 mirror crates) all shipped.
+> Since then the live work shifted to the **bash detection-watchdog
+> ecosystem** (modules/*-watchdog/, the journald baseline+delta scanners).
+> State as of 2026-05-27 (all on `main`, gated green):
+
+- **SDD-061** — shared scan helpers in `packaging/lib/module-lib.sh`
+  (`selfdef_injection_patterns`, `selfdef_is_writable_path`,
+  `selfdef_scan_injection`); **D-6**: all 46 newest watchdog scan scripts
+  migrated to consume them (fail-loud, lib-version-gated; 0 inline copies).
+- **SDD-062** — `rules/sigma/execution/selfdef_watchdog_alert.yml` routes any
+  `selfdef-*` `"severity":"alert"` emission to a High Detection Finding;
+  `selfdef_findings_by_rule_total` metric + "findings by rule" dashboard panel.
+- **SDD-063** — `selfdef_is_writable_dir` (module-lib **v4**) closes the
+  bare-writable-root directory gap; 18 of 19 pre-D-6 watchdogs consolidated
+  onto the shared helpers (coredump-pattern intentionally retains its
+  narrower world-writable-tmpfs-only policy).
+- **L2 coverage** — 39 watchdog functional-severity bats suites
+  (`packaging/test/L2-*-watchdog.bats`), every inline-policy module covered;
+  `L2-watchdog-dedup-guard.bats` (6 assertions) locks the single-source
+  invariant against regression. Full suite ~760 L2 bats green; L1 188.
+
+**Next forward queue (watchdog axis):** broaden Sigma/notifier coverage for
+the watchdog finding stream (warn-tier routing is a deliberate product
+decision — currently local-triage, mirroring agent-guard audit-mode); add
+more module-class observability; keep mining distinct host-hardening surfaces
+per the perpetual `/goal`.
+
+---
+
 ## Where we are right now (selfdef, 2026-05-19 snapshot)
 
 ### Catalog phase — COMPLETE
