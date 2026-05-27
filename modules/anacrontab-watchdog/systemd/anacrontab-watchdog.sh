@@ -32,12 +32,30 @@ PROFILE="${SELFDEF_ANACRON_PROFILE:-report}"
 BASELINE="${SELFDEF_ANACRON_BASELINE:-/var/lib/selfdef/anacrontab-baseline.tsv}"
 ANACRONTAB="${SELFDEF_ANACRON_FILE:-/etc/anacrontab}"
 
+# SDD-063: consume the shared writable-location policy from module-lib
+# instead of a per-module case statement. Co-shipped by the .deb at
+# /usr/share/selfdef/lib/module-lib.sh; selfdefctl exports SELFDEF_MODULE_LIB
+# in a workspace. A missing or pre-v4 library is a real misconfiguration that
+# would leave the watchdog scanning with a divergent policy, so we fail loud.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-anacrontab -- '{"tag":"selfdef-anacrontab","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-anacrontab -- '{"tag":"selfdef-anacrontab","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 PATTERNS='curl[^|;&]*\|[[:space:]]*(ba)?sh|wget[^|;&]*\|[[:space:]]*(ba)?sh|/dev/tcp/|bash[[:space:]]+-i|base64[[:space:]]+-d|mkfifo'
 
 is_suspicious_cmd() {
     local p="$1"
+    # at/under a writable root → shared policy (selfdef_is_writable_dir)
+    selfdef_is_writable_dir "$p" && return 0
     case "$p" in
-        /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
         /*) [[ -e "$p" && "$(stat -L -c '%a' "$p" 2>/dev/null)" =~ [2367]$ ]] && return 0
             return 1 ;;
         ""|@*) return 1 ;;

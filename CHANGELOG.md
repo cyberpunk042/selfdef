@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation: anacrontab-watchdog onto the shared dir policy (pilot) (2026-05-27)
+
+Begins consolidating the pre-D-6 watchdogs that still carry their own
+case-statement writable policy onto the shared `selfdef_is_writable_dir`
+helper — now SAFE to do because this session gave each of them functional
+L2 coverage (the original blocker was "untested older code"). Pilot:
+anacrontab-watchdog now sources module-lib (fail-loud, require ≥4) and its
+`is_suspicious_cmd` delegates the writable-root arm to
+`selfdef_is_writable_dir` (keeping the on-disk mode-check and
+bare/relative arms). This also tightens the old loose `/var/tmp*` /
+`/dev/shm*` globs (helper requires the `(/|$)` boundary).
+
+L2 anacrontab 10/10 (incl. a new module_lib_missing fail-loud test);
+shellcheck clean; L1 188. 18 analogous modules remain for the same
+treatment, each gated by its now-existing L2 suite.
+
 ### Added — L2 functional coverage for systemd-environment-watchdog (2026-05-27)
 
 Locks the systemd manager-environment injection surface. `DefaultEnvironment=`

@@ -13,6 +13,8 @@
 # Run with: bats packaging/test/L2-anacrontab-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/anacrontab-watchdog/systemd/anacrontab-watchdog.sh"
+# SDD-063: scan script now sources the shared module-lib.
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
 
 setup() {
     TMP="$(mktemp -d)"
@@ -37,6 +39,7 @@ teardown() { rm -rf "${TMP}"; }
 
 run_wd() {
     PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
     SELFDEF_ANACRON_PROFILE="${PROFILE:-report}" \
     SELFDEF_ANACRON_BASELINE="${BASELINE}" \
     SELFDEF_ANACRON_FILE="${ANAC_F:-$ANAC}" \
@@ -130,8 +133,16 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 }
 
 # ============================================================
-# enforce profile
+# enforce profile + SDD-063 fail-loud
 # ============================================================
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
 
 @test "enforce profile exits non-zero on a suspicious job" {
     printf '%s' "${BENIGN}" > "${ANAC}"
