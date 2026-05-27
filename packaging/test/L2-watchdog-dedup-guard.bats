@@ -97,3 +97,24 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
         return 1
     fi
 }
+
+@test "every consolidated watchdog has a same-named L2 functional-severity suite" {
+    # A watchdog that consumes the shared module-lib helpers emits the
+    # injection / writable-location alert tier that the SDD-062 Sigma rule
+    # routes to the pager. Each one MUST own an L2 suite locking its
+    # ok/warn/alert tiers + the module_lib_missing fail-loud, so a severity
+    # regression cannot land silently. This closes the gap that 65/65
+    # consolidated watchdogs were backfilled to satisfy (2026-05-27).
+    bad=()
+    for f in $(scan_scripts); do
+        grep -q 'SELFDEF_MODULE_LIB' "$f" || continue
+        mod="$(basename "$(dirname "$(dirname "$f")")")"   # modules/<mod>/systemd/<x>.sh
+        suite="${BATS_TEST_DIRNAME}/L2-${mod}.bats"
+        [ -f "${suite}" ] || bad+=("${mod}")
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'consolidated watchdog with no L2-<mod>.bats suite: %s\n' "${bad[*]}" >&2
+        printf 'add packaging/test/L2-<mod>.bats covering ok/warn/alert + module_lib_missing.\n' >&2
+        return 1
+    fi
+}

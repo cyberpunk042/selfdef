@@ -31,16 +31,27 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
   bare-writable-root directory gap; 18 of 19 pre-D-6 watchdogs consolidated
   onto the shared helpers (coredump-pattern intentionally retains its
   narrower world-writable-tmpfs-only policy).
-- **L2 coverage** — 39 watchdog functional-severity bats suites
-  (`packaging/test/L2-*-watchdog.bats`), every inline-policy module covered;
-  `L2-watchdog-dedup-guard.bats` (6 assertions) locks the single-source
-  invariant against regression. Full suite ~760 L2 bats green; L1 188.
+- **L2 coverage** — **62 watchdog functional-severity bats suites**
+  (`packaging/test/L2-*-watchdog.bats`): the original 39 + a 2026-05-27
+  backfill of 23 more so that **all 65 module-lib-consuming watchdogs own an
+  L2 suite** (mail / network-hook / package-hook / session-login /
+  service-config / shell-config / boot-scheduler-audit classes; each suite
+  exercises ok/warn/alert + the writable-root/injection/world-writable
+  (+ key-exposure) alert conditions + the false-positive guard +
+  `module_lib_missing` fail-loud + enforce). `L2-watchdog-dedup-guard.bats`
+  now **7 assertions** — the single-source invariant PLUS "every consolidated
+  watchdog has a same-named L2 suite" (P4: any future consolidated watchdog
+  shipped without an `L2-<mod>.bats` fails L2). Full suite ~960 L2 bats
+  green; L1 188.
 
 **Next forward queue (watchdog axis):** broaden Sigma/notifier coverage for
 the watchdog finding stream (warn-tier routing is a deliberate product
 decision — currently local-triage, mirroring agent-guard audit-mode); add
-more module-class observability; keep mining distinct host-hardening surfaces
-per the perpetual `/goal`.
+more module-class observability; the inline-policy watchdogs that are NOT
+module-lib consumers (integrity-hash scanners — ssh-hostkey, group-integrity,
+sudoers-integrity, account, time-skew, listening-ports, hidden-process, …)
+are a separate, differently-shaped L2 axis if coverage there is wanted; keep
+mining distinct host-hardening surfaces per the perpetual `/goal`.
 
 ---
 

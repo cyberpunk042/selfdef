@@ -6,6 +6,24 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 backfill COMPLETE: boot/scheduler/audit watchdogs + coverage guard (2026-05-27)
+
+Completes the consolidated-watchdog L2 functional-severity backfill with the
+final exec-surface tail: `auditd-plugins-watchdog` (audisp `path=` plugin
+exec), `incron-watchdog` (inotify-triggered table command), `boot-script-watchdog`
+(rc.local / init.d), `grub-config-watchdog` (grub.d scripts + GRUB_CMDLINE
+`init=` PID-1 hijack) and `logrotate-watchdog` (pre/postrotate action blocks).
+48 new bats cases, green.
+
+With this, **all 65 module-lib-consuming watchdogs now own an L2 suite**
+(0 remaining). A new 7th assertion in `L2-watchdog-dedup-guard.bats` —
+"every consolidated watchdog has a same-named L2 functional-severity suite" —
+locks the invariant: any future watchdog that consumes the shared helpers but
+ships without an `L2-<mod>.bats` suite now fails L2 (P4 — declarations
+aspirational until verified). Net for the backfill arc: 23 new L2 suites
+across mail / network-hook / package-hook / session-login / service-config /
+shell-config / boot-scheduler-audit classes.
+
 ### Added — L2 functional-severity coverage for shell/login config watchdogs (2026-05-27)
 
 Continues the consolidated-watchdog L2 backfill with the shell- / login-config
