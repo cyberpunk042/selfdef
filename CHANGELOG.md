@@ -6,6 +6,28 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for systemd-environment-watchdog (2026-05-27)
+
+Locks the systemd manager-environment injection surface. `DefaultEnvironment=`
+/ `ManagerEnvironment=` (system.conf{,.d} / user.conf{,.d}) are injected into
+the environment of EVERY service the manager spawns; an LD_PRELOAD / LD_AUDIT
+/ LD_LIBRARY_PATH there loads attacker code into every service (T1574.006),
+and any value under a writable root is suspicious.
+
+- `packaging/test/L2-systemd-environment-watchdog.bats` — 10 tests: ok
+  (no_systemd_env / baseline_initial / systemd_env_intact), alert
+  (DefaultEnvironment with LD_PRELOAD → systemd_env_suspicious;
+  ManagerEnvironment with LD_AUDIT even at /usr/lib; an env value under a
+  writable root), warn (a benign env change → systemd_env_changed),
+  false-positive guards (benign LANG/EDITOR env; a commented-out LD_PRELOAD),
+  and enforce-profile exit. Uses the module's existing `SELFDEF_SYSTEMDENV_DIRS`
+  / `_FILES` seams — no production change.
+
+This completes functional-severity L2 coverage for every watchdog module
+that carried an inline writable/injection policy — 39 watchdog L2 suites in
+all, alongside the SDD-061 D-6 single-source migration + dedup guard and the
+SDD-063 writable-directory helper.
+
 ### Added — L2 functional coverage for network-dispatcher-watchdog (2026-05-27)
 
 Locks the NetworkManager / networkd-dispatcher script exec surface. Every
