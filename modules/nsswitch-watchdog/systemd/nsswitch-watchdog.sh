@@ -73,8 +73,8 @@ if [[ -f "$CONF" ]]; then
         # char is not expanded against the cwd.
         read -r -a toks <<< "$sources"
         for tok in "${toks[@]}"; do
-            [[ "$tok" == \[* ]] && continue       # action bracket
-            [[ "$tok" == *\] ]] && continue       # bracket tail
+            [[ "$tok" == "["* ]] && continue      # action bracket
+            [[ "$tok" == *"]" ]] && continue      # bracket tail
             case " $KNOWN_NSS " in
                 *" $tok "*) ;;                    # known provider
                 *) suspicious+=("$db:$tok") ;;    # rogue module
