@@ -44,13 +44,31 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
   shipped without an `L2-<mod>.bats` fails L2). Full suite ~960 L2 bats
   green; L1 188.
 
+- **Integrity-axis L2 (2026-05-27)** — the non-module-lib watchdogs
+  (inventory-delta / baseline / count-ladder shape) now have L2 coverage for
+  ALL 18 hermetically-testable ones: file-integrity (suid-sgid,
+  world-writable, unowned-files, file-capabilities), trust/name-resolution
+  (rhosts, securetty, nsswitch, hosts-file), access-control/kernel-hardening
+  (access-conf, limits-conf, capability-conf, sysctl-hardening, tmpfiles) and
+  service/persistence (modules-load, nfs-exports, polkit-rules, sysusers,
+  timestomp). Tests run as root (chmod-suid / chown-invalid-uid / setcap /
+  touch-timestamp) and self-skip if the fs lacks capability xattrs. The
+  remaining 21 integrity watchdogs (account, group-integrity,
+  sudoers-integrity, ssh-authkeys, ssh-hostkey, audit-config, cron-job,
+  crontab-allow, dns-resolver, hidden-process, kernel-cmdline, kernel-module,
+  listening-ports, logfile-integrity, mount-options, nfs-mount, pam-config,
+  pci-device, systemd-unit, time-skew, coredump-pattern) read live
+  kernel/runtime state or hardcoded `/etc` with NO input-source knob — not
+  hermetically testable without faking syscalls or mutating real system
+  state; deliberately uncovered (operator-confirmed scope 2026-05-27) rather
+  than shipped as weak ok-path-only suites. Adding input-source env knobs to
+  those scan scripts is the prerequisite if their L2 coverage is later wanted.
+
 **Next forward queue (watchdog axis):** broaden Sigma/notifier coverage for
 the watchdog finding stream (warn-tier routing is a deliberate product
 decision — currently local-triage, mirroring agent-guard audit-mode); add
-more module-class observability; the inline-policy watchdogs that are NOT
-module-lib consumers (integrity-hash scanners — ssh-hostkey, group-integrity,
-sudoers-integrity, account, time-skew, listening-ports, hidden-process, …)
-are a separate, differently-shaped L2 axis if coverage there is wanted; keep
+more module-class observability; (optional) retrofit input-source knobs onto
+the 21 non-testable integrity watchdogs to unlock their L2 coverage; keep
 mining distinct host-hardening surfaces per the perpetual `/goal`.
 
 ---
