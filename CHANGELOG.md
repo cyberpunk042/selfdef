@@ -6,6 +6,29 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional severity coverage for musl-ld-path-watchdog (2026-05-27)
+
+Extends watchdog functional-severity coverage to the musl dynamic-linker
+search-path surface. On musl-libc systems (Alpine), `/etc/ld-musl-<arch>.path`
+is the ENTIRE library search path; a prepended writable directory hijacks
+libc/library loads for every dynamically-linked binary (T1574.006 dynamic
+linker hijacking). Entries are newline- or colon-separated.
+
+Notably this LOCKS a special case the SDD-061 D-6 migration preserved: the
+compound writable check keeps an extra bare-root exact-match clause
+(`^/(tmp|var/tmp|dev/shm|home)$`, no trailing slash) ALONGSIDE the shared
+`selfdef_is_writable_path` (which requires a trailing component) — so a path
+entry that is exactly `/tmp` is still flagged.
+
+- `packaging/test/L2-musl-ld-path-watchdog.bats` — 11 tests: ok
+  (no_musl_path / baseline_initial / musl_path_intact), alert (library dir
+  under a writable root, a bare writable root `/tmp` with no trailing slash
+  — the preserved compound clause — and a colon-separated path with one
+  writable dir), warn (benign dir added → musl_path_changed), false-positive
+  guards (standard library dirs not flagged; a commented-out writable dir
+  not flagged), enforce exit, and the SDD-061 D-6 `module_lib_missing`
+  fail-loud path. Same logger-shadow + `SELFDEF_MUSL_*` sandbox.
+
 ### Added — L2 functional severity coverage for xorg-config-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the X server module-load
