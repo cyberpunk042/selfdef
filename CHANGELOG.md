@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — IPS tool-authority dashboard panel (MS042 / SDD-050) under the Authority tab (2026-05-27)
+
+Second IPS authority surface wired to the operator dashboard (after capability-tokens):
+the **tool-authority** panel renders the MS042/SDD-050 declared-vs-observed tool-policy
+doctrine from the real `/v1/tool-authority` schema endpoint — the ordered gate pipeline
+(per-stage order/name/crate/vocabulary), the tool ids, the refusal rules. Same template
+as capability-tokens (HTML section + nav + Authority-tab membership + render + dispatch +
+initial + gated refresh + `ALL_PANEL_SECTIONS` + CI lock in `L1-dashboard-sections.sh`).
+JS `node --check` valid; route confirmed real. The Authority tab now homes 2 of the IPS
+authority/boundary surfaces (grows with commit-authority, the boundaries, sandbox-tiers,
+authority, policy).
+
 ### Added — IPS capability-tokens dashboard panel + new "Authority" tab (MS035 / SDD-044, MS043 UX) (2026-05-27)
 
 The selfdef operator PWA dashboard surfaced ~21 read routes but OMITTED 17 real IPS

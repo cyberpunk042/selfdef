@@ -103,6 +103,12 @@ check "HTML: capability-tokens nav link"  "${HTML}" '#capability-tokens-section'
 check "JS: refreshCapabilityTokens()"     "${JS}"   'function refreshCapabilityTokens' || failures=$((failures + 1))
 check "JS: capability-tokens fetches /v1" "${JS}"   '/v1/capability-tokens'          || failures=$((failures + 1))
 check "JS: interval refreshCapabilityTokens" "${JS}" 'gatedInterval\(refreshCapabilityTokens' || failures=$((failures + 1))
+# MS042 / SDD-050 — IPS tool-authority gate-pipeline panel.
+check "HTML: tool-authority-section"      "${HTML}" 'id="tool-authority-section"'   || failures=$((failures + 1))
+check "HTML: tool-authority aggregate"    "${HTML}" 'id="ta-aggregate"'              || failures=$((failures + 1))
+check "JS: refreshToolAuthority()"        "${JS}"   'function refreshToolAuthority'  || failures=$((failures + 1))
+check "JS: tool-authority fetches /v1"    "${JS}"   '/v1/tool-authority'             || failures=$((failures + 1))
+check "JS: interval refreshToolAuthority" "${JS}"   'gatedInterval\(refreshToolAuthority' || failures=$((failures + 1))
 
 # JS auto-refresh intervals wired (every panel of the four-watchdog set)
 check "JS: setInterval refreshFrictionAudit"  "${JS}" 'gatedInterval\(refreshFrictionAudit|setInterval\(refreshFrictionAudit' || failures=$((failures + 1))

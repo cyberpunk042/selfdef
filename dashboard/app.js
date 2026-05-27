@@ -146,6 +146,9 @@
     if (kind === "capability-tokens") {
       return refreshCapabilityTokens();
     }
+    if (kind === "tool-authority") {
+      return refreshToolAuthority();
+    }
     if (kind === "alerts") {
       return refreshAlerts();
     }
@@ -1561,6 +1564,78 @@
     }
   }
 
+  // MS042 / SDD-050 — IPS tool-authority gate-pipeline doctrine panel.
+  // Read-only schema (the declared-vs-observed tool-policy pipeline contract);
+  // renders the ordered gate pipeline + tool ids + refusal rules.
+  async function refreshToolAuthority() {
+    const ul = document.getElementById("tool-authority-rows");
+    const aggEl = document.getElementById("ta-aggregate");
+    const metaEl = document.getElementById("tool-authority-meta");
+    try {
+      const body = await get("/v1/tool-authority");
+      const gates = body.gate_pipeline || [];
+      const tools = body.tool_ids || [];
+      const refusals = body.refusal_rules || [];
+      aggEl.textContent = "DOCTRINE";
+      aggEl.className = "fa-aggregate fa-ok";
+      metaEl.textContent =
+        `${gates.length}-stage gate pipeline · ${tools.length} tool id(s) · ` +
+        `${(body.execution_modes || []).length} execution mode(s) · ` +
+        `${refusals.length} refusal rule(s)`;
+      ul.innerHTML = "";
+      for (const g of gates) {
+        const li = document.createElement("li");
+        li.className = "fa-green";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = `${g.order}. ${g.name}`;
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-green";
+        badge.textContent = "GATE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = `${g.crate_name} · ${g.vocabulary}`;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      for (const t of tools) {
+        const li = document.createElement("li");
+        li.className = "fa-gray";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = t.id;
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = t.description;
+        li.append(label, detail);
+        ul.appendChild(li);
+      }
+      for (const r of refusals) {
+        const li = document.createElement("li");
+        li.className = "fa-yellow";
+        const label = document.createElement("span");
+        label.className = "fa-gate-label";
+        label.textContent = "refuse-rule";
+        const badge = document.createElement("span");
+        badge.className = "fa-badge fa-yellow";
+        badge.textContent = "RULE";
+        const detail = document.createElement("span");
+        detail.className = "fa-detail";
+        detail.textContent = r;
+        li.append(label, badge, detail);
+        ul.appendChild(li);
+      }
+      if (!ul.children.length) {
+        ul.innerHTML = '<li class="empty">no tool-authority doctrine returned</li>';
+      }
+    } catch (e) {
+      aggEl.textContent = "OFFLINE";
+      aggEl.className = "fa-aggregate fa-unknown";
+      metaEl.textContent = "daemon offline — " + (e && e.message ? e.message : "fetch failed");
+      ul.innerHTML = '<li class="empty">/v1/tool-authority unavailable</li>';
+    }
+  }
+
   // Initial render + periodic poll for status.
   refreshStatus();
   refresh("findings");
@@ -1582,6 +1657,7 @@
   refreshHealth();
   refreshAuditChains();
   refreshCapabilityTokens();
+  refreshToolAuthority();
   refreshActionList();
 
   /// SDD-056 step 4 — gated refresh wrapper. Calls `fn` only when
@@ -1665,6 +1741,7 @@
   gatedInterval(refreshInferenceBackends, 120000, "inference-backends-section");
   // Capability-token doctrine is a static schema surface — slow refresh.
   gatedInterval(refreshCapabilityTokens, 300000, "capability-tokens-section");
+  gatedInterval(refreshToolAuthority, 300000, "tool-authority-section");
 
   // SDD-056 step 3 — tab switching JS + URL hash router.
   //
@@ -1682,7 +1759,7 @@
     logs:     ["findings"], // findings panel id is on the <ul>; we walk to its <section>
     mcp:      [], // placeholder per SDD-056 D-3
     repl:     [], // placeholder per SDD-056 D-3
-    authority: ["capability-tokens-section"], // MS035/SDD-044 IPS authority surfaces (grows: tool-authority, commit-authority, boundaries, sandbox-tiers)
+    authority: ["capability-tokens-section", "tool-authority-section"], // MS035/SDD-044 + MS042/SDD-050 IPS authority surfaces (grows: commit-authority, boundaries, sandbox-tiers)
   };
   // Sections that stay visible regardless of which tab is active
   // (always-visible strip per SDD-056 § Always-visible strip).
@@ -1916,6 +1993,7 @@
     ["flex-profile-section",       "Flex profile"],
     ["inference-backends-section", "Inference backends"],
     ["capability-tokens-section",  "Capability tokens"],
+    ["tool-authority-section",     "Tool authority"],
   ];
   function readHiddenPanels() {
     try {
