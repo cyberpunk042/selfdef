@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — Python lint + test layers in the local coherence harness (2026-05-27)
+
+`coherence.sh` ran 13 layers + L2 bats + cargo but **never ran selfdef's
+Python** — so it reported "all PASS" while CI (which does run the Python
+suites) would have been RED on the MS045 ux-harness mirror-check bug fixed
+this session. Closed that local/CI gate inconsistency: new
+`scripts/test/L1-ruff-python.sh` (ruff lint over guardian-core / ux-harness /
+tests, skips gracefully if ruff absent) + a coherence L2 layer running the 4
+unittest suites (guardian / adversary / replay / ux-harness, 52 tests). Both
+pass clean; the gate script is itself shellcheck-clean. The local pre-push
+gate now matches CI's Python coverage, so an MS045-class staleness/no-op lands
+RED locally, not in CI.
+
 ### Added — L1 shellcheck gate over the whole shell-script surface (2026-05-27)
 
 selfdef's coherence harness had 13 layers but **no shellcheck layer**, so its

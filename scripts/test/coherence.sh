@@ -66,6 +66,16 @@ run_layer "L1: module-system contracts (14 modules cross-wired)" \
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
+run_layer "L1: ruff (python lint — guardian-core / ux-harness / tests)" \
+    bash scripts/test/L1-ruff-python.sh
+
+run_layer "L2: python suites (guardian / adversary / replay / ux-harness)" \
+    python3 -m unittest \
+        tests.integration.test_guardian_core \
+        tests.adversary.test_ms042_mismatch_scenarios \
+        tests.replay.test_audit_chain_continuity \
+        tests.ux-harness.test_ux_harness_l1
+
 # --- L2 gates (bats) --------------------------------------------------
 
 if command -v bats >/dev/null 2>&1; then
