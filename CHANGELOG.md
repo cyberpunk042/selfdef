@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for shell/login config watchdogs (2026-05-27)
+
+Continues the consolidated-watchdog L2 backfill with the shell- / login-config
+class: `csh-config-watchdog` (csh/tcsh system init), `sshrc-watchdog`
+(/etc/ssh/sshrc run per SSH login), `hosts-allow-watchdog` (tcpwrappers
+spawn/twist root exec on matching connection) and `shell-init-watchdog`
+(/etc/profile + profile.d + root dotfiles, pure content-pattern scanner →
+shell_init_suspicious_pattern). Each suite exercises ok / warn / alert tiers,
+the injection-content + (where applicable) world-writable/non-root + spawn/
+twist alert conditions, the benign false-positive guard, the
+`module_lib_missing` fail-loud (non-zero exit), and the enforce profile. 36
+new bats cases, green.
+
 ### Added — L2 functional-severity coverage for service/config exec watchdogs (2026-05-27)
 
 Continues the consolidated-watchdog L2 backfill with the service- and
