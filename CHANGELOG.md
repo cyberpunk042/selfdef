@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 coverage for the access-control / kernel-hardening integrity watchdogs (2026-05-27)
+
+Third integrity-axis class: the access-control + kernel-hardening config
+scanners — `access-conf-watchdog` (pam_access; alert on a `+` permit from
+ALL/broad origin), `limits-conf-watchdog` (alert on a core-dump re-enable),
+`capability-conf-watchdog` (pam_cap; alert on a newly-added dangerous-cap
+grant, T1548), `sysctl-hardening-watchdog` (alert on a weakened security
+sysctl — ASLR off / suid_dumpable on / ptrace_scope 0 / …, T1562) and
+`tmpfiles-watchdog` (alert on a setuid-mode entry or world-writable .conf).
+37 new bats cases across ok/warn/alert + each watchdog's distinctive alert
+signature + enforce; all read sandbox config via their `_FILE`/`_FILES`/`_DIRS`
+knobs.
+
 ### Added — L2 coverage for the trust/name-resolution integrity watchdogs (2026-05-27)
 
 Second integrity-axis class: the trust + name-resolution config scanners —
