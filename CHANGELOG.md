@@ -6,6 +6,19 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — dedup guard extended to lock the SDD-063 consolidation (2026-05-27)
+
+Capstone for the writable-policy single-source migration. The dedup guard
+(`L2-watchdog-dedup-guard.bats`) now also (a) recognises `selfdef_is_writable_dir`
+in its "uses a shared helper ⇒ must source module-lib" check, and (b) FAILS
+if any watchdog scan script re-introduces an inline case-statement
+writable-root enumeration (`/tmp/* | /var/tmp/* | /dev/shm/* …`) — the policy
+now lives only in module-lib's `selfdef_is_writable_dir` / `_path`.
+`coredump-pattern-watchdog` is the single documented allowlist entry (its
+policy is intentionally narrower — world-writable tmpfs roots only). 6/6
+assertions green; locks both the D-6 and SDD-063 consolidations against
+regression as new watchdogs are added.
+
 ### Changed — SDD-063 consolidation complete: ld-preload / sudoers-defaults / fstab (special cases) (2026-05-27)
 
 The final special-case consolidations, completing the writable-policy
