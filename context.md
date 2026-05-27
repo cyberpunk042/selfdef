@@ -119,9 +119,14 @@ new watchdogs are protected from the two known silent-failure classes.
 >   systemd-unit, group-integrity) — inventory printfs went to stdout not
 >   `$current` → fixed + strengthened the static guard + added 5 L2 suites.
 > - Added repo-wide YAML + JSON parse/dup-key coherence gates.
-> All behaviour-preserving except the 5 real watchdog bug fixes. NOT yet
-> re-verified by hand: `cargo test`/`build`/`deny`/`audit` (compile confirmed
-> via clippy `--all-targets`; behaviour preserved).
+> All behaviour-preserving except the 5 real watchdog bug fixes.
+> **EVERY CI job now verified green by hand**: `cargo test --workspace` (fixed
+> one stale `have 2`→`have {ver}` test), `cargo audit` (882 deps, 0 advisories),
+> `cargo deny check all` (advisories/bans/licenses/sources ok — fixed
+> `selfdef-hardware-requirements` missing `publish.workspace=true` which made
+> its wildcard path-deps fail the bans check), full `coherence.sh` (all layers),
+> python-tests, ux-harness, fmt, clippy. `build` is compile-confirmed (clippy
+> `--all-targets` + test both compiled the workspace).
 
 ### Catalog phase — COMPLETE
 
