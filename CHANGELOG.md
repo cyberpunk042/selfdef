@@ -6,6 +6,32 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — SDD-063: bare writable-root directories now flagged (module-lib v4) (2026-05-27)
+
+Closes a real detection gap. `selfdef_is_writable_path` requires a trailing
+component (right for FILE paths), so directory-valued checks silently MISSED
+a bare writable root: `ModulePath "/tmp"` (xorg) and `Path plugin_dir /tmp`
+(sudo) both emitted `ok` — yet each loads code/plugins from world-writable
+`/tmp`. (Verified before/after: both now `alert`.) musl-ld-path had papered
+over this with a local compound clause — a per-module copy of policy.
+
+- `docs/sdd/063-writable-directory-policy-helper.md` — spec.
+- `packaging/lib/module-lib.sh` — `SELFDEF_MODULE_LIB_VERSION` 3→4
+  (additive; v3 helpers unchanged); new pure helper `selfdef_is_writable_dir`
+  matching `^/(tmp|var/tmp|dev/shm|home)(/|$)` — at OR under a writable root.
+- `packaging/test/L2-module-lib-watchdog.bats` — 5 new cases locking the dir
+  helper (bare roots + under-paths flagged; standard/empty/relative not;
+  the distinguishing bare-root-flagged-where-file-helper-is-not contract);
+  version assertion bumped to ≥4. 16/16.
+- Migrated the three directory-valued checks onto the helper, each now
+  requiring lib ≥4 (fail-loud `module_lib_outdated` otherwise):
+  `musl-ld-path` (compound clause deleted), `xorg-config` (ModulePath),
+  `sudo-conf` (plugin_dir; the `Plugin <.so>` check stays on the file
+  helper). xorg + sudo L2 suites gain a bare-root alert test (the closed
+  gap); musl's existing bare-root test now routes through the shared helper.
+
+L1 188; dedup guard 5/5; the three migrated suites green.
+
 ### Added — L2 functional severity coverage for nm-vpn-plugin-watchdog (2026-05-27)
 
 Extends watchdog functional-severity coverage to the NetworkManager VPN

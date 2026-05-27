@@ -96,6 +96,14 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
 }
 
+@test "bare writable root as ModulePath → alert (SDD-063 gap closed)" {
+    # ModulePath "/tmp" itself (no trailing component) — previously missed
+    # by the file helper; now caught by selfdef_is_writable_dir.
+    printf 'Section "Files"\n    ModulePath "/tmp"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
 # ============================================================
 # warn tier
 # ============================================================

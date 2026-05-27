@@ -95,6 +95,15 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"severity":"alert"'
 }
 
+@test "bare writable root as plugin_dir → alert (SDD-063 gap closed)" {
+    # plugin_dir = /tmp itself (no trailing component) makes relative plugin
+    # names resolve from world-writable /tmp; previously missed by the file
+    # helper, now caught by selfdef_is_writable_dir.
+    printf 'Path plugin_dir /tmp\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
 # ============================================================
 # warn tier
 # ============================================================

@@ -43,7 +43,7 @@ if [[ ! -r "$_LIB" ]]; then
 fi
 # shellcheck disable=SC1090
 source "$_LIB"
-if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
     logger -t selfdef-musl-ld-path -- '{"tag":"selfdef-musl-ld-path","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
     exit 1
 fi
@@ -84,7 +84,7 @@ for f in "${files[@]}"; do
         dir="${dir#"${dir%%[![:space:]]*}"}"; dir="${dir%"${dir##*[![:space:]]}"}"
         [[ -z "$dir" ]] && continue
         printf 'dir\t%s\t%s\n' "$f" "$dir" >> "$current"
-        if selfdef_is_writable_path "$dir" || [[ "$dir" =~ ^/(tmp|var/tmp|dev/shm|home)$ ]]; then
+        if selfdef_is_writable_dir "$dir"; then
             suspicious+=("${base}:libdir-writable($dir)")
         fi
     done < <(tr ':' '\n' < "$f" 2>/dev/null)

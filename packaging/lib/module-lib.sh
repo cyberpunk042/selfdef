@@ -26,7 +26,7 @@
 # exports SELFDEF_MODULE_LIB pointing at this file under the
 # source tree.
 
-SELFDEF_MODULE_LIB_VERSION=3
+SELFDEF_MODULE_LIB_VERSION=4
 
 if [[ "${SELFDEF_MODULE_LIB_VERSION_REQUIRED:-1}" -gt \
       "${SELFDEF_MODULE_LIB_VERSION}" ]]; then
@@ -189,6 +189,19 @@ PATSET
 # suspicion is a separate, module-specific check).
 selfdef_is_writable_path() {
     [[ "${1:-}" =~ ^/(tmp|var/tmp|dev/shm|home)/ ]]
+}
+
+# --- SDD-063 v4 writable-directory policy ---------------------
+#
+# Return 0 iff PATH is an absolute path that is AT or UNDER an
+# attacker-writable root (/tmp, /var/tmp, /dev/shm, /home). Unlike
+# selfdef_is_writable_path (which requires a trailing component, for
+# FILE-valued checks), this also matches the bare root itself — for
+# DIRECTORY-valued settings where the dangerous value can be the writable
+# root directly (an X server ModulePath, a sudo plugin_dir, a musl
+# ld-path entry of exactly "/tmp"). Empty and non-absolute paths return 1.
+selfdef_is_writable_dir() {
+    [[ "${1:-}" =~ ^/(tmp|var/tmp|dev/shm|home)(/|$) ]]
 }
 
 # Print the first injection pattern that matches TEXT (via grep -E)

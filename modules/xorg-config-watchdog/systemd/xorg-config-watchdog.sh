@@ -44,7 +44,7 @@ if [[ ! -r "$_LIB" ]]; then
 fi
 # shellcheck disable=SC1090
 source "$_LIB"
-if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
     logger -t selfdef-xorg-config -- '{"tag":"selfdef-xorg-config","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
     exit 1
 fi
@@ -98,7 +98,7 @@ for f in "${files[@]}"; do
             p="${p#"${p%%[![:space:]]*}"}"; p="${p%"${p##*[![:space:]]}"}"
             [[ -z "$p" ]] && continue
             printf 'modpath\t%s\t%s\n' "$f" "$p" >> "$current"
-            if selfdef_is_writable_path "$p"; then
+            if selfdef_is_writable_dir "$p"; then
                 suspicious+=("${base}:modulepath-writable($p)")
             elif [[ "$p" != /* ]]; then
                 suspicious+=("${base}:modulepath-relative($p)")

@@ -27,8 +27,8 @@ setup() {
 # Version gate
 # ============================================================
 
-@test "module-lib reports version >= 3" {
-    [ "${SELFDEF_MODULE_LIB_VERSION}" -ge 3 ]
+@test "module-lib reports version >= 4" {
+    [ "${SELFDEF_MODULE_LIB_VERSION}" -ge 4 ]
 }
 
 @test "requiring version 3 sources cleanly (no exit 99)" {
@@ -80,6 +80,41 @@ setup() {
 @test "writable-path: empty and relative paths are NOT flagged" {
     ! selfdef_is_writable_path ""
     ! selfdef_is_writable_path "relative/x"
+}
+
+# ============================================================
+# D-3b (SDD-063) — selfdef_is_writable_dir
+# ============================================================
+
+@test "writable-dir: paths UNDER the four writable roots are flagged" {
+    selfdef_is_writable_dir /tmp/x
+    selfdef_is_writable_dir /var/tmp/x
+    selfdef_is_writable_dir /dev/shm/x
+    selfdef_is_writable_dir /home/user/x
+}
+
+@test "writable-dir: the BARE writable roots are flagged (the gap the file helper missed)" {
+    selfdef_is_writable_dir /tmp
+    selfdef_is_writable_dir /var/tmp
+    selfdef_is_writable_dir /dev/shm
+    selfdef_is_writable_dir /home
+}
+
+@test "writable-dir: the bare root is flagged where the file helper is not" {
+    # The distinguishing contract: dir helper matches bare /tmp, file helper does not.
+    selfdef_is_writable_dir /tmp
+    ! selfdef_is_writable_path /tmp
+}
+
+@test "writable-dir: standard system dirs are NOT flagged" {
+    ! selfdef_is_writable_dir /usr/lib/xorg/modules
+    ! selfdef_is_writable_dir /usr/libexec/sudo
+    ! selfdef_is_writable_dir /lib
+}
+
+@test "writable-dir: empty and relative paths are NOT flagged" {
+    ! selfdef_is_writable_dir ""
+    ! selfdef_is_writable_dir "relative/dir"
 }
 
 # ============================================================

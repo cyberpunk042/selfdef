@@ -44,7 +44,7 @@ if [[ ! -r "$_LIB" ]]; then
 fi
 # shellcheck disable=SC1090
 source "$_LIB"
-if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
     logger -t selfdef-sudo-conf -- '{"tag":"selfdef-sudo-conf","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
     exit 1
 fi
@@ -101,7 +101,7 @@ for f in "${files[@]}"; do
                 # a=name (e.g. plugin_dir), b=value
                 [[ -z "$b" ]] && continue
                 printf 'pathdir\t%s\t%s:%s\n' "$f" "$a" "$b" >> "$current"
-                if [[ "$a" == "plugin_dir" ]] && is_writable_path "$b"; then
+                if [[ "$a" == "plugin_dir" ]] && selfdef_is_writable_dir "$b"; then
                     suspicious+=("${base}:plugin_dir-writable($b)")
                 fi
                 ;;
