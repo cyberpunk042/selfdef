@@ -6,6 +6,30 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional-severity coverage for mail-exec watchdogs (2026-05-27)
+
+Backfilling the L2 functional-severity bats coverage for consolidated
+watchdogs (those consuming the shared `module-lib.sh` injection-pattern +
+writable-location helpers) that lacked their own suite. First logical unit:
+the mail-triggered exec surfaces — `postfix-exec-watchdog` (master.cf
+pipe/spawn `argv=` + main.cf `*_command`) and `aliases-watchdog`
+(`name: |command` pipe + `:include:` targets, T1546.004). Each suite (11
+cases) exercises ok / warn / alert tiers, the writable-root + injection +
+world-writable/non-root alert conditions, the `/usr`-rooted false-positive
+guard, the `module_lib_missing` fail-loud (non-zero exit), and the enforce
+profile. 22 new bats cases, green.
+
+### Fixed — stale `/v1/dashboards` route test expecting 5 presets (2026-05-27)
+
+`dashboards_route_returns_5_named_presets` in `crates/selfdef-api/tests/
+m12_api.rs` still asserted the pre-expansion count of 5 named view presets,
+but the route ships 20 (5 original batch-12 + 15 batch-17 expansion), as its
+own `src/dashboards.rs` unit tests (`dashboards_table_has_20_entries`,
+`dashboards_table_names_match_pwa_presets`) confirm. Updated the integration
+test to expect 20 + the canonical sorted name set, and renamed it
+`dashboards_route_returns_20_named_presets`. selfdef-api green (136 lib + 75
+m12_api).
+
 ### Added — dashboard stat panel for the watchdog alert-finding count (2026-05-27)
 
 Companion at-a-glance stat to the `SelfdefWatchdogAlertFinding` alert: a new
