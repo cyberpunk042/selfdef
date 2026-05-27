@@ -6,6 +6,22 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for rsyslog-exec-watchdog (2026-05-27)
+
+Locks the rsyslog log-event exec surface. rsyslog can run a program per log
+message — modern `omprog` (`action(type="omprog" binary="/path")`) or the
+legacy caret action (`<selector> ^program;template`) — AS ROOT, fired by
+any matching log event. A binary under a writable root, relative-with-slash,
+or bare is alert.
+
+- `packaging/test/L2-rsyslog-exec-watchdog.bats` — 9 tests: ok (no_rsyslog /
+  baseline_initial / rsyslog_exec_intact), alert (omprog binary under a
+  writable root → rsyslog_exec_suspicious; a bare non-absolute binary; a
+  legacy caret action under a writable root), warn (a benign binary change →
+  rsyslog_exec_changed), false-positive guard (a /usr/libexec omprog
+  binary), and enforce-profile exit. Uses the module's existing
+  `SELFDEF_RSYSLOG_FILE` / `_D` seams — no production change.
+
 ### Added — L2 functional coverage for ssh-client-config-watchdog (2026-05-27)
 
 Locks the ssh-client config exec surface. A system/root ssh client config
