@@ -32,6 +32,19 @@ BASELINE="${SELFDEF_FSTAB_BASELINE:-/var/lib/selfdef/fstab-baseline.tsv}"
 FSTAB="${SELFDEF_FSTAB_FILE:-/etc/fstab}"
 FSTABD="${SELFDEF_FSTAB_D:-/etc/fstab.d}"
 
+# SDD-063: consume the shared writable-location policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-fstab -- '{"tag":"selfdef-fstab","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-fstab -- '{"tag":"selfdef-fstab","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 # Sensitive system paths a bind/over-mount would shadow.
 is_sensitive_mp() {
     case "$1" in
@@ -62,13 +75,9 @@ scan_entry() {  # dev mp fstype opts  -> echo a tag if suspicious
     if [[ "$fstype" == "none" || "$fstype" == "bind" ]] && [[ ",$opts," == *",bind,"* || "$opts" == bind || "$opts" == *bind* ]]; then
         is_sensitive_mp "$mp" && echo "shadow-bind:${mp}<-${dev}"
     fi
-    # loop / file device under tmp|home|dev-shm
-    case "$dev" in
-        /tmp/*|/var/tmp/*|/dev/shm/*|/home/*) echo "loop-image:${dev}->${mp}" ;;
-    esac
-    [[ ",$opts," == *",loop,"* ]] && case "$dev" in
-        /tmp/*|/var/tmp/*|/dev/shm/*|/home/*) echo "loop-image:${dev}->${mp}" ;;
-    esac
+    # loop / file device under an attacker-writable root (shared policy)
+    selfdef_is_writable_path "$dev" && echo "loop-image:${dev}->${mp}"
+    [[ ",$opts," == *",loop,"* ]] && selfdef_is_writable_path "$dev" && echo "loop-image:${dev}->${mp}"
     # explicit suid option (re-enabling setuid)
     [[ ",$opts," == *",suid,"* ]] && echo "explicit-suid:${mp}"
 }

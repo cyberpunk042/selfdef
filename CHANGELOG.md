@@ -6,6 +6,31 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — SDD-063 consolidation complete: ld-preload / sudoers-defaults / fstab (special cases) (2026-05-27)
+
+The final special-case consolidations, completing the writable-policy
+single-source migration across the watchdog ecosystem:
+- `ld-preload-watchdog` — `is_suspicious_path` → `selfdef_is_writable_path`
+  while PRESERVING its extra `/run` root and the deleted-lib
+  (non-existent-path) check.
+- `sudoers-defaults-watchdog` — `secure_path_bad` delegates each PATH
+  element to `selfdef_is_writable_dir` (bare-or-under), keeping its
+  empty/`.`/`..`, on-disk-mode, and relative-element arms.
+- `fstab-watchdog` — the two loop-image case-blocks → `selfdef_is_writable_path`
+  (behavior-identical: both were the under-only `/tmp//var/tmp//dev/shm//home/`
+  set).
+
+L2: ld-preload 12/12, sudoers-defaults 12/12, fstab 10/10; L1 188.
+
+**Single-source status:** 18 of the 19 pre-D-6 watchdogs that carried an
+inline case-statement writable policy now consume the shared module-lib
+helpers (fail-loud, lib-version-gated). The one deliberate exception is
+`coredump-pattern-watchdog`, whose policy is intentionally narrower —
+the world-writable tmpfs roots only (`/tmp /var/tmp /dev/shm`, excluding
+`/home`, which is not world-writable) — so it correctly keeps its own
+inline check. Combined with the 46 D-6 modules, the writable/injection
+policy now lives in one place for the entire detection-watchdog fleet.
+
 ### Changed — SDD-063 consolidation batch: ssh-client-config / sshd-config / xinetd (2026-05-27)
 
 Three more pre-D-6 watchdogs migrated onto the shared `selfdef_is_writable_dir`

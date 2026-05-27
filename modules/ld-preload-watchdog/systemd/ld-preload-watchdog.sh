@@ -43,10 +43,23 @@ note() {  # severity_is_alert  text
     (( ${#sample[@]} < 10 )) && sample+=("$text")
 }
 
+# SDD-063: consume the shared writable-location policy from module-lib
+# (preserving ld-preload's extra /run root + the deleted-lib check).
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-ld-preload -- '{"tag":"selfdef-ld-preload","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 3 ]]; then
+    logger -t selfdef-ld-preload -- '{"tag":"selfdef-ld-preload","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 is_suspicious_path() {
-    case "$1" in
-        /tmp/*|/var/tmp/*|/dev/shm/*|/home/*|/run/*) return 0 ;;
-    esac
+    selfdef_is_writable_path "$1" && return 0
+    [[ "$1" == /run/* ]] && return 0   # /run: ld-preload-specific extra root
     # A path that doesn't exist on disk (deleted-after-load
     # rootkit) is also suspicious.
     [[ -n "$1" && ! -e "$1" ]] && return 0

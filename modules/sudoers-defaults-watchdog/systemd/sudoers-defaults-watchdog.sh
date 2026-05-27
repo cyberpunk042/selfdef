@@ -52,14 +52,27 @@ trap 'rm -f "$current" "${current}.sorted"' EXIT
 
 # Is a secure_path value dangerous (writable / tmp / home / relative
 # element)?
+# SDD-063: consume the shared writable-directory policy from module-lib.
+_LIB="${SELFDEF_MODULE_LIB:-/usr/share/selfdef/lib/module-lib.sh}"
+if [[ ! -r "$_LIB" ]]; then
+    logger -t selfdef-sudoers-defaults -- '{"tag":"selfdef-sudoers-defaults","severity":"alert","event":"module_lib_missing","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+# shellcheck disable=SC1090
+source "$_LIB"
+if [[ "${SELFDEF_MODULE_LIB_VERSION:-0}" -lt 4 ]]; then
+    logger -t selfdef-sudoers-defaults -- '{"tag":"selfdef-sudoers-defaults","severity":"alert","event":"module_lib_outdated","profile":"'"$PROFILE"'"}'
+    exit 1
+fi
+
 secure_path_bad() {
     local v="$1" elem
     v="${v#\"}"; v="${v%\"}"
     IFS=':' read -r -a _parts <<< "$v"
     for elem in "${_parts[@]}"; do
+        selfdef_is_writable_dir "$elem" && return 0
         case "$elem" in
             ""|.|..) return 0 ;;
-            /tmp/*|/tmp|/var/tmp*|/dev/shm*|/home/*) return 0 ;;
             /*) [[ -d "$elem" && "$(stat -L -c '%a' "$elem" 2>/dev/null)" =~ [2367]$ ]] && return 0 ;;
             *) return 0 ;;  # relative element on sudo's PATH
         esac
