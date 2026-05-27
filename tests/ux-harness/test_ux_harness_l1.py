@@ -11,12 +11,10 @@ Verifies the harness itself behaves correctly:
 from __future__ import annotations
 
 import importlib.util
-import io
 import json
 import subprocess
 import sys
 import unittest
-from contextlib import redirect_stdout, redirect_stderr
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
 
@@ -115,7 +113,12 @@ class HarnessCheckTests(unittest.TestCase):
     def test_mirror_crate_list_finds_all_9(self):
         ok, summary, detail = self.mod.check_mirror_crate_list(self.repo_root)
         self.assertTrue(ok, f"failed: {summary}")
-        self.assertEqual(len(detail.get("crates", [])), 9)
+        # The 9 MS043 mirrors (R10182-R10189) must all be present; later
+        # milestones legitimately add more (e.g. the four-watchdog mirrors),
+        # so assert the MS043 set is present, not an exact total count.
+        self.assertEqual(len(detail.get("ms043", [])), 9)
+        for crate in self.mod.EXPECTED_MIRROR_CRATES:
+            self.assertIn(crate, detail.get("crates", []))
 
     def test_doctrine_preservation_passes(self):
         ok, _, _ = self.mod.check_doctrine_preservation(self.repo_root)

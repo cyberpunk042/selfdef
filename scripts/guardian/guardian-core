@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import errno
 import json
 import logging
 import logging.handlers
@@ -384,7 +383,10 @@ def main_loop(socket_path: str, audit_log_path: str, console_device: str) -> int
                 if not should_respond:
                     continue
 
-                outcome = alert_and_neutralize(
+                # alert_and_neutralize performs the 3-step response AND emits
+                # the M049 trace internally (the returned outcome dict is for
+                # optional caller use; we don't need it here).
+                alert_and_neutralize(
                     container_id=fields["container_id"],
                     process_name=fields["process_name"],
                     violated_syscall=fields["violated_syscall"],

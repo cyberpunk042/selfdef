@@ -22,7 +22,6 @@ This harness reports per-check pass/fail; operator decides commit-gate.
 
 import argparse
 import json
-import os
 import re
 import statistics
 import subprocess
@@ -118,19 +117,28 @@ class Harness:
 # (R10566-R10570 — no virtualization needed; pure filesystem inspection.)
 
 def check_mirror_crate_list(repo_root: Path) -> tuple[bool, str, dict]:
-    """R10569 — mirror crate list (9 crates) matches MS043 schema."""
+    """R10569 — the 9 MS043 mirror crates (R10182-R10189) are all PRESENT.
+
+    Subset (present), not exact-match: later milestones legitimately add more
+    `selfdef-*-mirror` crates (e.g. the four-watchdog set MS044/046/047/048 —
+    friction-audit / guardian / perimeter / scheduler mirrors), which are NOT
+    drift. A MISSING MS043 mirror is the real failure this guards.
+    """
     crates_dir = repo_root / "crates"
     found = sorted(
         p.name for p in crates_dir.iterdir()
         if p.is_dir() and p.name.endswith("-mirror") and p.name.startswith("selfdef-")
     )
     expected = sorted(EXPECTED_MIRROR_CRATES)
-    if found == expected:
-        return True, f"all 9 mirror crates present", {"crates": found}
     missing = [c for c in expected if c not in found]
     extra = [c for c in found if c not in expected]
-    return False, f"mirror crate drift: missing={missing} extra={extra}", {
-        "expected": expected, "found": found, "missing": missing, "extra": extra,
+    if not missing:
+        msg = f"all {len(expected)} MS043 mirror crates present"
+        if extra:
+            msg += f" (+{len(extra)} later-milestone mirror(s): {', '.join(extra)})"
+        return True, msg, {"crates": found, "ms043": expected, "extra": extra}
+    return False, f"MS043 mirror crate(s) missing: {missing}", {
+        "expected": expected, "found": found, "missing": missing,
     }
 
 
@@ -148,7 +156,7 @@ def check_cli_subcommand_schema(repo_root: Path) -> tuple[bool, str, dict]:
     if "DOCTRINE_FULLSTACK_AT_THE_EDGES" not in text:
         return False, "selfdef-cli-mirror doctrine constant missing", {}
     if DOCTRINE_FULLSTACK_AT_THE_EDGES not in text:
-        return False, f"selfdef-cli-mirror doctrine string not verbatim", {"expected": DOCTRINE_FULLSTACK_AT_THE_EDGES}
+        return False, "selfdef-cli-mirror doctrine string not verbatim", {"expected": DOCTRINE_FULLSTACK_AT_THE_EDGES}
     return True, "CLI surface schema present + doctrine verbatim", {}
 
 

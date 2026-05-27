@@ -102,7 +102,7 @@ class AuditChainReplayTests(unittest.TestCase):
         ]
         self._replay_sequence(events)
         lines = self._read_lines()
-        recovered = [json.loads(l) for l in lines]
+        recovered = [json.loads(line) for line in lines]
         self.assertEqual(recovered[0]["msg"], "✓ compile ok")
         self.assertEqual(recovered[2]["msg"], "Ring 4 — ✗ default-deny")
 
