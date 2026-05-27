@@ -67,9 +67,18 @@ impl PeriodicReportEmitter {
     }
 
     /// Register / update.
-    pub fn register(&mut self, id: &str, cadence_ms: u64, last_emitted_ms: u64) -> Result<(), EmitterError> {
-        if id.is_empty() { return Err(EmitterError::EmptyId); }
-        if cadence_ms == 0 { return Err(EmitterError::ZeroCadence); }
+    pub fn register(
+        &mut self,
+        id: &str,
+        cadence_ms: u64,
+        last_emitted_ms: u64,
+    ) -> Result<(), EmitterError> {
+        if id.is_empty() {
+            return Err(EmitterError::EmptyId);
+        }
+        if cadence_ms == 0 {
+            return Err(EmitterError::ZeroCadence);
+        }
         let entry = self.reports.entry(id.into()).or_insert(Report {
             cadence_ms,
             last_emitted_ms,
@@ -82,14 +91,21 @@ impl PeriodicReportEmitter {
 
     /// Should the report emit at `now_ms`?
     pub fn should_emit(&self, id: &str, now_ms: u64) -> bool {
-        let Some(r) = self.reports.get(id) else { return false; };
-        if !r.active { return false; }
+        let Some(r) = self.reports.get(id) else {
+            return false;
+        };
+        if !r.active {
+            return false;
+        }
         now_ms.saturating_sub(r.last_emitted_ms) >= r.cadence_ms
     }
 
     /// Mark emitted.
     pub fn mark_emitted(&mut self, id: &str, now_ms: u64) -> Result<(), EmitterError> {
-        let r = self.reports.get_mut(id).ok_or_else(|| EmitterError::UnknownReport(id.into()))?;
+        let r = self
+            .reports
+            .get_mut(id)
+            .ok_or_else(|| EmitterError::UnknownReport(id.into()))?;
         r.last_emitted_ms = now_ms;
         r.emissions = r.emissions.saturating_add(1);
         Ok(())
@@ -97,14 +113,18 @@ impl PeriodicReportEmitter {
 
     /// Pause / resume.
     pub fn set_active(&mut self, id: &str, active: bool) -> Result<(), EmitterError> {
-        let r = self.reports.get_mut(id).ok_or_else(|| EmitterError::UnknownReport(id.into()))?;
+        let r = self
+            .reports
+            .get_mut(id)
+            .ok_or_else(|| EmitterError::UnknownReport(id.into()))?;
         r.active = active;
         Ok(())
     }
 
     /// All ids due at now.
     pub fn due_at(&self, now_ms: u64) -> Vec<String> {
-        self.reports.iter()
+        self.reports
+            .iter()
             .filter(|(_, r)| r.active && now_ms.saturating_sub(r.last_emitted_ms) >= r.cadence_ms)
             .map(|(k, _)| k.clone())
             .collect()
@@ -112,17 +132,25 @@ impl PeriodicReportEmitter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EmitterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EmitterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EmitterError::SchemaMismatch);
+        }
         for (id, r) in &self.reports {
-            if id.is_empty() { return Err(EmitterError::EmptyId); }
-            if r.cadence_ms == 0 { return Err(EmitterError::ZeroCadence); }
+            if id.is_empty() {
+                return Err(EmitterError::EmptyId);
+            }
+            if r.cadence_ms == 0 {
+                return Err(EmitterError::ZeroCadence);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PeriodicReportEmitter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -167,26 +195,38 @@ mod tests {
     #[test]
     fn mark_unknown_rejected() {
         let mut e = PeriodicReportEmitter::new();
-        assert!(matches!(e.mark_emitted("nope", 0).unwrap_err(), EmitterError::UnknownReport(_)));
+        assert!(matches!(
+            e.mark_emitted("nope", 0).unwrap_err(),
+            EmitterError::UnknownReport(_)
+        ));
     }
 
     #[test]
     fn zero_cadence_rejected() {
         let mut e = PeriodicReportEmitter::new();
-        assert!(matches!(e.register("r", 0, 0).unwrap_err(), EmitterError::ZeroCadence));
+        assert!(matches!(
+            e.register("r", 0, 0).unwrap_err(),
+            EmitterError::ZeroCadence
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut e = PeriodicReportEmitter::new();
-        assert!(matches!(e.register("", 1, 0).unwrap_err(), EmitterError::EmptyId));
+        assert!(matches!(
+            e.register("", 1, 0).unwrap_err(),
+            EmitterError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = PeriodicReportEmitter::new();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), EmitterError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            EmitterError::SchemaMismatch
+        ));
     }
 
     #[test]

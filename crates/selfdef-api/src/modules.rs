@@ -187,7 +187,10 @@ pub(crate) async fn list() -> Result<Json<ModulesBody>, ApiError> {
     for m in &mut modules {
         m.active = active.contains(&m.name);
     }
-    Ok(Json(ModulesBody { modules_dir: dir, modules }))
+    Ok(Json(ModulesBody {
+        modules_dir: dir,
+        modules,
+    }))
 }
 
 /// `GET /v1/modules/:name` — single-module drill-down. Operator
@@ -204,7 +207,9 @@ pub(crate) async fn show(
     // [a-z0-9-]+ per docs/dev/modules.md naming convention.
     if name.is_empty()
         || name.len() > 64
-        || !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
     {
         return Err(ApiError::NotFound(format!(
             "invalid module name: {name:?} (must be kebab-case [a-z0-9-]+)"
@@ -323,10 +328,9 @@ pub(crate) async fn install_options() -> Result<Json<ModulesInstallOptionsBody>,
     // nvidia-smi, no /sys/devices/system/cpu), gate evaluation
     // falls back to "needs-review" for any module declaring a
     // hardware predicate.
-    let caps: Option<selfdef_hardware::HardwareCapabilities> =
-        crate::hardware::cached_snapshot()
-            .ok()
-            .map(selfdef_hardware::derive_capabilities);
+    let caps: Option<selfdef_hardware::HardwareCapabilities> = crate::hardware::cached_snapshot()
+        .ok()
+        .map(selfdef_hardware::derive_capabilities);
 
     let mut options: Vec<InstallOption> = Vec::new();
     let mut ready = 0usize;
@@ -626,7 +630,11 @@ pub(crate) fn compute_path_conflicts(
         let mut scopes: Vec<String> = slug_to_scope.values().cloned().collect();
         scopes.sort();
         scopes.dedup();
-        out.push(PathConflict { path, modules, scopes });
+        out.push(PathConflict {
+            path,
+            modules,
+            scopes,
+        });
     }
     out
 }
@@ -731,8 +739,7 @@ pub(crate) async fn diff() -> Result<Json<ModulesDiffBody>, ApiError> {
     let modules = list_in_dir(&dir)
         .map_err(|e| ApiError::Internal(format!("read {}: {e}", dir.display())))?;
     let active = active_modules(&toml_path);
-    let catalog: std::collections::BTreeSet<String> =
-        modules.into_iter().map(|m| m.name).collect();
+    let catalog: std::collections::BTreeSet<String> = modules.into_iter().map(|m| m.name).collect();
     let (installed, available, orphaned) = partition_modules(&catalog, &active);
     let counts = ModulesDiffCounts {
         installed: installed.len(),
@@ -986,11 +993,24 @@ paths = ["/opt/foo", "/var/lib/foo"]
             requires_hardware: Default::default(),
         };
         let modules = vec![
-            make("agent-guard", vec!["/etc/tetragon/tetragon.tp.d", "/etc/selfdef/modules/agent-guard.toml"]),
-            make("tetragon",    vec!["/etc/tetragon/tetragon.tp.d", "/etc/tetragon/tetragon.yaml"]),
-            make("unrelated",   vec!["/var/lib/selfdef/wasm-aot"]),
+            make(
+                "agent-guard",
+                vec![
+                    "/etc/tetragon/tetragon.tp.d",
+                    "/etc/selfdef/modules/agent-guard.toml",
+                ],
+            ),
+            make(
+                "tetragon",
+                vec!["/etc/tetragon/tetragon.tp.d", "/etc/tetragon/tetragon.yaml"],
+            ),
+            make("unrelated", vec!["/var/lib/selfdef/wasm-aot"]),
         ];
-        let plan = vec!["agent-guard".to_string(), "tetragon".to_string(), "unrelated".to_string()];
+        let plan = vec![
+            "agent-guard".to_string(),
+            "tetragon".to_string(),
+            "unrelated".to_string(),
+        ];
         let conflicts = compute_path_conflicts(&modules, &plan);
         assert_eq!(conflicts.len(), 1, "exactly one shared path");
         assert_eq!(conflicts[0].path, "/etc/tetragon/tetragon.tp.d");
@@ -1026,7 +1046,10 @@ paths = ["/opt/foo", "/var/lib/foo"]
         ];
         let plan = vec!["a".to_string(), "c".to_string()]; // b not in plan
         let conflicts = compute_path_conflicts(&modules, &plan);
-        assert!(conflicts.is_empty(), "b's /shared/path declaration must not conflict when b isn't planned");
+        assert!(
+            conflicts.is_empty(),
+            "b's /shared/path declaration must not conflict when b isn't planned"
+        );
     }
 
     #[test]
@@ -1051,7 +1074,7 @@ paths = ["/opt/foo", "/var/lib/foo"]
             requires_hardware: Default::default(),
         };
         let modules = vec![
-            make("host-mod",      "system",    vec!["/etc/foo"]),
+            make("host-mod", "system", vec!["/etc/foo"]),
             make("container-mod", "container", vec!["/etc/foo"]),
         ];
         let plan = vec!["container-mod".to_string(), "host-mod".to_string()];

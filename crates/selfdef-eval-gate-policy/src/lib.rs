@@ -72,7 +72,9 @@ pub enum EvalGateError {
     #[error("missing requirement for {0:?}")]
     Missing(SideEffectClass),
     /// Gate stale.
-    #[error("gate {gate:?} for {side_effect:?} stale: last_pass_seconds_ago={age} > staleness={limit}")]
+    #[error(
+        "gate {gate:?} for {side_effect:?} stale: last_pass_seconds_ago={age} > staleness={limit}"
+    )]
     Stale {
         /// side_effect.
         side_effect: SideEffectClass,
@@ -94,20 +96,48 @@ pub enum EvalGateError {
 }
 
 const REQUIRED: [SideEffectClass; 6] = [
-    SideEffectClass::None, SideEffectClass::ReadOnly, SideEffectClass::FsWrite,
-    SideEffectClass::NetworkEgress, SideEffectClass::Process, SideEffectClass::Persistent,
+    SideEffectClass::None,
+    SideEffectClass::ReadOnly,
+    SideEffectClass::FsWrite,
+    SideEffectClass::NetworkEgress,
+    SideEffectClass::Process,
+    SideEffectClass::Persistent,
 ];
 
 impl EvalGatePolicy {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let requirements = vec![
-            GateRequirement { side_effect: SideEffectClass::None,          gate: EvalGate::None,       staleness_seconds: 0 },
-            GateRequirement { side_effect: SideEffectClass::ReadOnly,      gate: EvalGate::None,       staleness_seconds: 0 },
-            GateRequirement { side_effect: SideEffectClass::FsWrite,       gate: EvalGate::Smoke,      staleness_seconds: 3_600 },
-            GateRequirement { side_effect: SideEffectClass::NetworkEgress, gate: EvalGate::Regression, staleness_seconds: 7_200 },
-            GateRequirement { side_effect: SideEffectClass::Process,       gate: EvalGate::Safety,     staleness_seconds: 7_200 },
-            GateRequirement { side_effect: SideEffectClass::Persistent,    gate: EvalGate::PreCommit,  staleness_seconds: 1_800 },
+            GateRequirement {
+                side_effect: SideEffectClass::None,
+                gate: EvalGate::None,
+                staleness_seconds: 0,
+            },
+            GateRequirement {
+                side_effect: SideEffectClass::ReadOnly,
+                gate: EvalGate::None,
+                staleness_seconds: 0,
+            },
+            GateRequirement {
+                side_effect: SideEffectClass::FsWrite,
+                gate: EvalGate::Smoke,
+                staleness_seconds: 3_600,
+            },
+            GateRequirement {
+                side_effect: SideEffectClass::NetworkEgress,
+                gate: EvalGate::Regression,
+                staleness_seconds: 7_200,
+            },
+            GateRequirement {
+                side_effect: SideEffectClass::Process,
+                gate: EvalGate::Safety,
+                staleness_seconds: 7_200,
+            },
+            GateRequirement {
+                side_effect: SideEffectClass::Persistent,
+                gate: EvalGate::PreCommit,
+                staleness_seconds: 1_800,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -144,15 +174,22 @@ impl EvalGatePolicy {
         side_effect: SideEffectClass,
         last_pass_seconds_ago: Option<u32>,
     ) -> Result<(), EvalGateError> {
-        let req = self.get(side_effect).ok_or(EvalGateError::Missing(side_effect))?;
-        if req.gate == EvalGate::None { return Ok(()); }
+        let req = self
+            .get(side_effect)
+            .ok_or(EvalGateError::Missing(side_effect))?;
+        if req.gate == EvalGate::None {
+            return Ok(());
+        }
         let age = last_pass_seconds_ago.ok_or(EvalGateError::NeverPassed {
-            side_effect, gate: req.gate,
+            side_effect,
+            gate: req.gate,
         })?;
         if age > req.staleness_seconds {
             return Err(EvalGateError::Stale {
-                side_effect, gate: req.gate,
-                age, limit: req.staleness_seconds,
+                side_effect,
+                gate: req.gate,
+                age,
+                limit: req.staleness_seconds,
             });
         }
         Ok(())
@@ -218,20 +255,32 @@ mod tests {
     fn count_invalid_caught() {
         let mut p = EvalGatePolicy::canonical();
         p.requirements.pop();
-        assert!(matches!(p.validate().unwrap_err(), EvalGateError::CountInvalid(5)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            EvalGateError::CountInvalid(5)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = EvalGatePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), EvalGateError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            EvalGateError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn gate_serde_kebab() {
-        assert_eq!(serde_json::to_string(&EvalGate::Smoke).unwrap(), "\"smoke\"");
-        assert_eq!(serde_json::to_string(&EvalGate::PreCommit).unwrap(), "\"pre-commit\"");
+        assert_eq!(
+            serde_json::to_string(&EvalGate::Smoke).unwrap(),
+            "\"smoke\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EvalGate::PreCommit).unwrap(),
+            "\"pre-commit\""
+        );
         assert_eq!(serde_json::to_string(&EvalGate::None).unwrap(), "\"none\"");
     }
 

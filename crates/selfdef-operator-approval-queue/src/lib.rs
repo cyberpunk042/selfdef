@@ -134,43 +134,82 @@ impl OperatorApprovalQueue {
     }
 
     /// Submit.
-    pub fn submit(&mut self, id: &str, summary: &str, submitted_at_ms: u64, deadline_ms: u64, priority: Priority) -> Result<(), ApprovalError> {
-        if id.is_empty() { return Err(ApprovalError::EmptyId); }
-        if summary.is_empty() { return Err(ApprovalError::EmptySummary); }
+    pub fn submit(
+        &mut self,
+        id: &str,
+        summary: &str,
+        submitted_at_ms: u64,
+        deadline_ms: u64,
+        priority: Priority,
+    ) -> Result<(), ApprovalError> {
+        if id.is_empty() {
+            return Err(ApprovalError::EmptyId);
+        }
+        if summary.is_empty() {
+            return Err(ApprovalError::EmptySummary);
+        }
         if self.items.contains_key(id) {
             return Err(ApprovalError::DuplicateId(id.into()));
         }
-        self.items.insert(id.into(), Item {
-            id: id.into(),
-            summary: summary.into(),
-            submitted_at_ms,
-            deadline_ms,
-            priority,
-            status: Status::Pending,
-        });
+        self.items.insert(
+            id.into(),
+            Item {
+                id: id.into(),
+                summary: summary.into(),
+                submitted_at_ms,
+                deadline_ms,
+                priority,
+                status: Status::Pending,
+            },
+        );
         Ok(())
     }
 
     /// Approve.
     pub fn approve(&mut self, id: &str, reviewer: &str, at_ms: u64) -> Result<(), ApprovalError> {
-        if reviewer.is_empty() { return Err(ApprovalError::EmptyReviewer); }
-        let item = self.items.get_mut(id).ok_or_else(|| ApprovalError::UnknownItem(id.into()))?;
+        if reviewer.is_empty() {
+            return Err(ApprovalError::EmptyReviewer);
+        }
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| ApprovalError::UnknownItem(id.into()))?;
         if !matches!(item.status, Status::Pending) {
             return Err(ApprovalError::NotPending(id.into()));
         }
-        item.status = Status::Approved { reviewer: reviewer.into(), at_ms };
+        item.status = Status::Approved {
+            reviewer: reviewer.into(),
+            at_ms,
+        };
         Ok(())
     }
 
     /// Reject.
-    pub fn reject(&mut self, id: &str, reviewer: &str, at_ms: u64, reason: &str) -> Result<(), ApprovalError> {
-        if reviewer.is_empty() { return Err(ApprovalError::EmptyReviewer); }
-        if reason.is_empty() { return Err(ApprovalError::EmptyReason); }
-        let item = self.items.get_mut(id).ok_or_else(|| ApprovalError::UnknownItem(id.into()))?;
+    pub fn reject(
+        &mut self,
+        id: &str,
+        reviewer: &str,
+        at_ms: u64,
+        reason: &str,
+    ) -> Result<(), ApprovalError> {
+        if reviewer.is_empty() {
+            return Err(ApprovalError::EmptyReviewer);
+        }
+        if reason.is_empty() {
+            return Err(ApprovalError::EmptyReason);
+        }
+        let item = self
+            .items
+            .get_mut(id)
+            .ok_or_else(|| ApprovalError::UnknownItem(id.into()))?;
         if !matches!(item.status, Status::Pending) {
             return Err(ApprovalError::NotPending(id.into()));
         }
-        item.status = Status::Rejected { reviewer: reviewer.into(), at_ms, reason: reason.into() };
+        item.status = Status::Rejected {
+            reviewer: reviewer.into(),
+            at_ms,
+            reason: reason.into(),
+        };
         Ok(())
     }
 
@@ -188,11 +227,17 @@ impl OperatorApprovalQueue {
 
     /// Pending list, ordered priority desc then submitted asc.
     pub fn pending(&self) -> Vec<Item> {
-        let mut v: Vec<Item> = self.items.values()
+        let mut v: Vec<Item> = self
+            .items
+            .values()
             .filter(|i| matches!(i.status, Status::Pending))
             .cloned()
             .collect();
-        v.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.submitted_at_ms.cmp(&b.submitted_at_ms)));
+        v.sort_by(|a, b| {
+            b.priority
+                .cmp(&a.priority)
+                .then(a.submitted_at_ms.cmp(&b.submitted_at_ms))
+        });
         v
     }
 
@@ -203,17 +248,25 @@ impl OperatorApprovalQueue {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ApprovalError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ApprovalError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ApprovalError::SchemaMismatch);
+        }
         for (id, item) in &self.items {
-            if id.is_empty() { return Err(ApprovalError::EmptyId); }
-            if item.summary.is_empty() { return Err(ApprovalError::EmptySummary); }
+            if id.is_empty() {
+                return Err(ApprovalError::EmptyId);
+            }
+            if item.summary.is_empty() {
+                return Err(ApprovalError::EmptySummary);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for OperatorApprovalQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -247,7 +300,10 @@ mod tests {
         let mut q = OperatorApprovalQueue::new();
         q.submit("a", "x", 0, 1000, Priority::Normal).unwrap();
         q.approve("a", "alice", 100).unwrap();
-        assert!(matches!(q.reject("a", "alice", 200, "x").unwrap_err(), ApprovalError::NotPending(_)));
+        assert!(matches!(
+            q.reject("a", "alice", 200, "x").unwrap_err(),
+            ApprovalError::NotPending(_)
+        ));
     }
 
     #[test]
@@ -275,7 +331,8 @@ mod tests {
     fn pending_ties_broken_by_submit_time() {
         let mut q = OperatorApprovalQueue::new();
         q.submit("late", "x", 200, 99999, Priority::Normal).unwrap();
-        q.submit("early", "x", 100, 99999, Priority::Normal).unwrap();
+        q.submit("early", "x", 100, 99999, Priority::Normal)
+            .unwrap();
         let p = q.pending();
         assert_eq!(p[0].id, "early");
     }
@@ -284,30 +341,51 @@ mod tests {
     fn duplicate_rejected() {
         let mut q = OperatorApprovalQueue::new();
         q.submit("a", "x", 0, 1, Priority::Normal).unwrap();
-        assert!(matches!(q.submit("a", "x", 0, 1, Priority::Normal).unwrap_err(), ApprovalError::DuplicateId(_)));
+        assert!(matches!(
+            q.submit("a", "x", 0, 1, Priority::Normal).unwrap_err(),
+            ApprovalError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut q = OperatorApprovalQueue::new();
-        assert!(matches!(q.submit("", "x", 0, 1, Priority::Normal).unwrap_err(), ApprovalError::EmptyId));
-        assert!(matches!(q.submit("a", "", 0, 1, Priority::Normal).unwrap_err(), ApprovalError::EmptySummary));
+        assert!(matches!(
+            q.submit("", "x", 0, 1, Priority::Normal).unwrap_err(),
+            ApprovalError::EmptyId
+        ));
+        assert!(matches!(
+            q.submit("a", "", 0, 1, Priority::Normal).unwrap_err(),
+            ApprovalError::EmptySummary
+        ));
         q.submit("a", "x", 0, 1, Priority::Normal).unwrap();
-        assert!(matches!(q.approve("a", "", 0).unwrap_err(), ApprovalError::EmptyReviewer));
-        assert!(matches!(q.reject("a", "r", 0, "").unwrap_err(), ApprovalError::EmptyReason));
+        assert!(matches!(
+            q.approve("a", "", 0).unwrap_err(),
+            ApprovalError::EmptyReviewer
+        ));
+        assert!(matches!(
+            q.reject("a", "r", 0, "").unwrap_err(),
+            ApprovalError::EmptyReason
+        ));
     }
 
     #[test]
     fn approve_unknown_rejected() {
         let mut q = OperatorApprovalQueue::new();
-        assert!(matches!(q.approve("nope", "r", 0).unwrap_err(), ApprovalError::UnknownItem(_)));
+        assert!(matches!(
+            q.approve("nope", "r", 0).unwrap_err(),
+            ApprovalError::UnknownItem(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = OperatorApprovalQueue::new();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), ApprovalError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            ApprovalError::SchemaMismatch
+        ));
     }
 
     #[test]

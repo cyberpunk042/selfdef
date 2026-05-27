@@ -82,7 +82,10 @@ pub fn decide(report: &MismatchReport) -> Result<Disposition, EngineError> {
         }
     }
     // Highest severity in the report drives the base disposition.
-    let max_sev = report.mismatches.iter().map(|m| m.severity)
+    let max_sev = report
+        .mismatches
+        .iter()
+        .map(|m| m.severity)
         .max_by_key(|s| rank(*s))
         .unwrap_or(MismatchSeverity::Informational);
 
@@ -114,7 +117,11 @@ pub fn decide(report: &MismatchReport) -> Result<Disposition, EngineError> {
     };
 
     // Secret-access mismatch ALWAYS escalates to at least Quarantine.
-    if report.mismatches.iter().any(|m| m.field == MismatchField::SecretAccess) {
+    if report
+        .mismatches
+        .iter()
+        .any(|m| m.field == MismatchField::SecretAccess)
+    {
         let escalated = match base {
             Disposition::Observe | Disposition::Block => Disposition::Quarantine,
             other => other,
@@ -131,7 +138,8 @@ mod tests {
 
     fn detail(field: MismatchField, severity: MismatchSeverity) -> MismatchDetail {
         MismatchDetail {
-            field, severity,
+            field,
+            severity,
             declared: "x".into(),
             observed: "y".into(),
             first_observed_at: "2026-05-19T03:00:00Z".into(),
@@ -152,34 +160,68 @@ mod tests {
 
     #[test]
     fn informational_yields_observe() {
-        assert_eq!(decide(&report(vec![detail(MismatchField::ReadPaths, MismatchSeverity::Informational)])).unwrap(), Disposition::Observe);
+        assert_eq!(
+            decide(&report(vec![detail(
+                MismatchField::ReadPaths,
+                MismatchSeverity::Informational
+            )]))
+            .unwrap(),
+            Disposition::Observe
+        );
     }
 
     #[test]
     fn minor_yields_block() {
-        assert_eq!(decide(&report(vec![detail(MismatchField::ReadPaths, MismatchSeverity::Minor)])).unwrap(), Disposition::Block);
+        assert_eq!(
+            decide(&report(vec![detail(
+                MismatchField::ReadPaths,
+                MismatchSeverity::Minor
+            )]))
+            .unwrap(),
+            Disposition::Block
+        );
     }
 
     #[test]
     fn major_yields_quarantine() {
-        assert_eq!(decide(&report(vec![detail(MismatchField::NetworkDomains, MismatchSeverity::Major)])).unwrap(), Disposition::Quarantine);
+        assert_eq!(
+            decide(&report(vec![detail(
+                MismatchField::NetworkDomains,
+                MismatchSeverity::Major
+            )]))
+            .unwrap(),
+            Disposition::Quarantine
+        );
     }
 
     #[test]
     fn critical_yields_quarantine_first_time() {
-        assert_eq!(decide(&report(vec![detail(MismatchField::WritePaths, MismatchSeverity::Critical)])).unwrap(), Disposition::Quarantine);
+        assert_eq!(
+            decide(&report(vec![detail(
+                MismatchField::WritePaths,
+                MismatchSeverity::Critical
+            )]))
+            .unwrap(),
+            Disposition::Quarantine
+        );
     }
 
     #[test]
     fn critical_with_prior_yields_forfeit() {
-        let mut r = report(vec![detail(MismatchField::WritePaths, MismatchSeverity::Critical)]);
+        let mut r = report(vec![detail(
+            MismatchField::WritePaths,
+            MismatchSeverity::Critical,
+        )]);
         r.prior_quarantine_count = 1;
         assert_eq!(decide(&r).unwrap(), Disposition::Forfeit);
     }
 
     #[test]
     fn three_prior_yields_forfeit_regardless() {
-        let mut r = report(vec![detail(MismatchField::ReadPaths, MismatchSeverity::Minor)]);
+        let mut r = report(vec![detail(
+            MismatchField::ReadPaths,
+            MismatchSeverity::Minor,
+        )]);
         r.prior_quarantine_count = 3;
         assert_eq!(decide(&r).unwrap(), Disposition::Forfeit);
     }
@@ -188,16 +230,22 @@ mod tests {
 
     #[test]
     fn whitelisted_informational_observes() {
-        let mut r = report(vec![detail(MismatchField::ReadPaths, MismatchSeverity::Informational)]);
+        let mut r = report(vec![detail(
+            MismatchField::ReadPaths,
+            MismatchSeverity::Informational,
+        )]);
         r.operator_whitelisted = true;
         assert_eq!(decide(&r).unwrap(), Disposition::Observe);
     }
 
     #[test]
     fn whitelisted_critical_still_quarantines() {
-        let mut r = report(vec![detail(MismatchField::WritePaths, MismatchSeverity::Critical)]);
+        let mut r = report(vec![detail(
+            MismatchField::WritePaths,
+            MismatchSeverity::Critical,
+        )]);
         r.operator_whitelisted = true;
-        r.prior_quarantine_count = 5;  // whitelist trumps recidivism
+        r.prior_quarantine_count = 5; // whitelist trumps recidivism
         assert_eq!(decide(&r).unwrap(), Disposition::Quarantine);
     }
 
@@ -206,19 +254,28 @@ mod tests {
     #[test]
     fn secret_access_minor_escalates_to_quarantine() {
         // Minor base → Block, then SecretAccess escalates to Quarantine.
-        let r = report(vec![detail(MismatchField::SecretAccess, MismatchSeverity::Minor)]);
+        let r = report(vec![detail(
+            MismatchField::SecretAccess,
+            MismatchSeverity::Minor,
+        )]);
         assert_eq!(decide(&r).unwrap(), Disposition::Quarantine);
     }
 
     #[test]
     fn secret_access_informational_escalates_to_quarantine() {
-        let r = report(vec![detail(MismatchField::SecretAccess, MismatchSeverity::Informational)]);
+        let r = report(vec![detail(
+            MismatchField::SecretAccess,
+            MismatchSeverity::Informational,
+        )]);
         assert_eq!(decide(&r).unwrap(), Disposition::Quarantine);
     }
 
     #[test]
     fn secret_access_critical_stays_critical_path() {
-        let r = report(vec![detail(MismatchField::SecretAccess, MismatchSeverity::Critical)]);
+        let r = report(vec![detail(
+            MismatchField::SecretAccess,
+            MismatchSeverity::Critical,
+        )]);
         // First time → Quarantine (already escalated, no change).
         assert_eq!(decide(&r).unwrap(), Disposition::Quarantine);
     }
@@ -232,14 +289,17 @@ mod tests {
             detail(MismatchField::NetworkDomains, MismatchSeverity::Major),
             detail(MismatchField::EnvVars, MismatchSeverity::Informational),
         ]);
-        assert_eq!(decide(&r).unwrap(), Disposition::Quarantine);  // Major drives it
+        assert_eq!(decide(&r).unwrap(), Disposition::Quarantine); // Major drives it
     }
 
     // --- Errors ---
 
     #[test]
     fn empty_tool_rejected() {
-        let mut r = report(vec![detail(MismatchField::ReadPaths, MismatchSeverity::Minor)]);
+        let mut r = report(vec![detail(
+            MismatchField::ReadPaths,
+            MismatchSeverity::Minor,
+        )]);
         r.tool = String::new();
         assert!(matches!(decide(&r).unwrap_err(), EngineError::EmptyTool));
     }
@@ -247,15 +307,27 @@ mod tests {
     #[test]
     fn empty_mismatches_rejected() {
         let r = report(vec![]);
-        assert!(matches!(decide(&r).unwrap_err(), EngineError::EmptyMismatches));
+        assert!(matches!(
+            decide(&r).unwrap_err(),
+            EngineError::EmptyMismatches
+        ));
     }
 
     // --- Serde ---
 
     #[test]
     fn disposition_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Disposition::Quarantine).unwrap(), "\"quarantine\"");
-        assert_eq!(serde_json::to_string(&Disposition::Forfeit).unwrap(), "\"forfeit\"");
-        assert_eq!(serde_json::to_string(&Disposition::Observe).unwrap(), "\"observe\"");
+        assert_eq!(
+            serde_json::to_string(&Disposition::Quarantine).unwrap(),
+            "\"quarantine\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Disposition::Forfeit).unwrap(),
+            "\"forfeit\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Disposition::Observe).unwrap(),
+            "\"observe\""
+        );
     }
 }

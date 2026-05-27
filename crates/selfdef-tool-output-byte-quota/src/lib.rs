@@ -112,12 +112,48 @@ impl ToolOutputByteQuota {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let mut profiles = BTreeMap::new();
-        profiles.insert(Profile::Private, ProfileBytes { warn_bytes: 64 << 10, hard_bytes: 256 << 10 });
-        profiles.insert(Profile::Fast, ProfileBytes { warn_bytes: 512 << 10, hard_bytes: 4 << 20 });
-        profiles.insert(Profile::Careful, ProfileBytes { warn_bytes: 128 << 10, hard_bytes: 1 << 20 });
-        profiles.insert(Profile::Autonomous, ProfileBytes { warn_bytes: 1 << 20, hard_bytes: 8 << 20 });
-        profiles.insert(Profile::Experimental, ProfileBytes { warn_bytes: 4 << 20, hard_bytes: 32 << 20 });
-        profiles.insert(Profile::Production, ProfileBytes { warn_bytes: 128 << 10, hard_bytes: 1 << 20 });
+        profiles.insert(
+            Profile::Private,
+            ProfileBytes {
+                warn_bytes: 64 << 10,
+                hard_bytes: 256 << 10,
+            },
+        );
+        profiles.insert(
+            Profile::Fast,
+            ProfileBytes {
+                warn_bytes: 512 << 10,
+                hard_bytes: 4 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Careful,
+            ProfileBytes {
+                warn_bytes: 128 << 10,
+                hard_bytes: 1 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Autonomous,
+            ProfileBytes {
+                warn_bytes: 1 << 20,
+                hard_bytes: 8 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Experimental,
+            ProfileBytes {
+                warn_bytes: 4 << 20,
+                hard_bytes: 32 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Production,
+            ProfileBytes {
+                warn_bytes: 128 << 10,
+                hard_bytes: 1 << 20,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles,
@@ -130,7 +166,11 @@ impl ToolOutputByteQuota {
     pub fn start_invocation(&mut self, profile: Profile) -> u64 {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.ledgers.push(InvocationLedger { id, profile, admitted: 0 });
+        self.ledgers.push(InvocationLedger {
+            id,
+            profile,
+            admitted: 0,
+        });
         id
     }
 
@@ -169,7 +209,10 @@ impl ToolOutputByteQuota {
 
     /// Finish.
     pub fn finish(&mut self, id: u64) -> Result<(), QuotaError> {
-        let pos = self.ledgers.iter().position(|l| l.id == id)
+        let pos = self
+            .ledgers
+            .iter()
+            .position(|l| l.id == id)
             .ok_or(QuotaError::UnknownInvocation(id))?;
         self.ledgers.remove(pos);
         Ok(())
@@ -208,7 +251,13 @@ mod tests {
     #[test]
     fn truncate_at_warn() {
         let mut q = ToolOutputByteQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileBytes { warn_bytes: 100, hard_bytes: 500 });
+        q.profiles.insert(
+            Profile::Fast,
+            ProfileBytes {
+                warn_bytes: 100,
+                hard_bytes: 500,
+            },
+        );
         let id = q.start_invocation(Profile::Fast);
         q.admit_chunk(id, 80);
         let v = q.admit_chunk(id, 50);
@@ -218,7 +267,13 @@ mod tests {
     #[test]
     fn reject_past_warn() {
         let mut q = ToolOutputByteQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileBytes { warn_bytes: 100, hard_bytes: 500 });
+        q.profiles.insert(
+            Profile::Fast,
+            ProfileBytes {
+                warn_bytes: 100,
+                hard_bytes: 500,
+            },
+        );
         let id = q.start_invocation(Profile::Fast);
         q.admit_chunk(id, 80);
         q.admit_chunk(id, 50); // truncate to warn
@@ -245,21 +300,36 @@ mod tests {
         let mut q = ToolOutputByteQuota::canonical();
         let id = q.start_invocation(Profile::Fast);
         q.finish(id).unwrap();
-        assert!(matches!(q.finish(id).unwrap_err(), QuotaError::UnknownInvocation(_)));
+        assert!(matches!(
+            q.finish(id).unwrap_err(),
+            QuotaError::UnknownInvocation(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = ToolOutputByteQuota::canonical();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QuotaError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QuotaError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn bad_thresholds_rejected_on_validate() {
         let mut q = ToolOutputByteQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileBytes { warn_bytes: 1000, hard_bytes: 100 });
-        assert!(matches!(q.validate().unwrap_err(), QuotaError::BadThresholds(_, _)));
+        q.profiles.insert(
+            Profile::Fast,
+            ProfileBytes {
+                warn_bytes: 1000,
+                hard_bytes: 100,
+            },
+        );
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QuotaError::BadThresholds(_, _)
+        ));
     }
 
     #[test]

@@ -58,16 +58,28 @@ impl TopicPubsubRouter {
 
     /// Subscribe.
     pub fn subscribe(&mut self, subscriber: &str, pattern: &str) -> Result<bool, RouterError> {
-        if subscriber.is_empty() { return Err(RouterError::EmptySubscriber); }
-        if pattern.is_empty() { return Err(RouterError::EmptyPattern); }
-        Ok(self.subscriptions.entry(subscriber.into()).or_default().insert(pattern.into()))
+        if subscriber.is_empty() {
+            return Err(RouterError::EmptySubscriber);
+        }
+        if pattern.is_empty() {
+            return Err(RouterError::EmptyPattern);
+        }
+        Ok(self
+            .subscriptions
+            .entry(subscriber.into())
+            .or_default()
+            .insert(pattern.into()))
     }
 
     /// Unsubscribe one pattern.
     pub fn unsubscribe(&mut self, subscriber: &str, pattern: &str) -> bool {
-        let Some(set) = self.subscriptions.get_mut(subscriber) else { return false; };
+        let Some(set) = self.subscriptions.get_mut(subscriber) else {
+            return false;
+        };
         let removed = set.remove(pattern);
-        if set.is_empty() { self.subscriptions.remove(subscriber); }
+        if set.is_empty() {
+            self.subscriptions.remove(subscriber);
+        }
         removed
     }
 
@@ -78,7 +90,8 @@ impl TopicPubsubRouter {
 
     /// Subscribers matching topic (sorted by id).
     pub fn match_topic(&self, topic: &str) -> Vec<String> {
-        self.subscriptions.iter()
+        self.subscriptions
+            .iter()
             .filter(|(_, pats)| pats.iter().any(|p| pattern_matches(p, topic)))
             .map(|(k, _)| k.clone())
             .collect()
@@ -86,16 +99,25 @@ impl TopicPubsubRouter {
 
     /// All patterns for a subscriber.
     pub fn patterns_of(&self, subscriber: &str) -> Vec<String> {
-        self.subscriptions.get(subscriber).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.subscriptions
+            .get(subscriber)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RouterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RouterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RouterError::SchemaMismatch);
+        }
         for (sub, pats) in &self.subscriptions {
-            if sub.is_empty() { return Err(RouterError::EmptySubscriber); }
+            if sub.is_empty() {
+                return Err(RouterError::EmptySubscriber);
+            }
             for p in pats {
-                if p.is_empty() { return Err(RouterError::EmptyPattern); }
+                if p.is_empty() {
+                    return Err(RouterError::EmptyPattern);
+                }
             }
         }
         Ok(())
@@ -103,7 +125,9 @@ impl TopicPubsubRouter {
 }
 
 impl Default for TopicPubsubRouter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -157,8 +181,14 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut r = TopicPubsubRouter::new();
-        assert!(matches!(r.subscribe("", "x").unwrap_err(), RouterError::EmptySubscriber));
-        assert!(matches!(r.subscribe("s", "").unwrap_err(), RouterError::EmptyPattern));
+        assert!(matches!(
+            r.subscribe("", "x").unwrap_err(),
+            RouterError::EmptySubscriber
+        ));
+        assert!(matches!(
+            r.subscribe("s", "").unwrap_err(),
+            RouterError::EmptyPattern
+        ));
     }
 
     #[test]
@@ -172,7 +202,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = TopicPubsubRouter::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RouterError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RouterError::SchemaMismatch
+        ));
     }
 
     #[test]

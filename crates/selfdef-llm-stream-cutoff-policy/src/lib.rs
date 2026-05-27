@@ -114,7 +114,8 @@ impl LlmStreamCutoffPolicy {
                 return Some(CutoffReason::StopSequence { matched: s.clone() });
             }
         }
-        if self.repeat_window_tokens > 0 && recent_tokens.len() as u32 >= self.repeat_window_tokens {
+        if self.repeat_window_tokens > 0 && recent_tokens.len() as u32 >= self.repeat_window_tokens
+        {
             let window = self.repeat_window_tokens as usize;
             let tail = &recent_tokens[recent_tokens.len() - window..];
             if let Some(first) = tail.first() {
@@ -133,8 +134,12 @@ impl LlmStreamCutoffPolicy {
         if self.schema_version != SCHEMA_VERSION {
             return Err(CutoffError::SchemaMismatch);
         }
-        if self.max_tokens == 0 { return Err(CutoffError::MaxTokensZero); }
-        if self.max_wall_seconds == 0 { return Err(CutoffError::WallZero); }
+        if self.max_tokens == 0 {
+            return Err(CutoffError::MaxTokensZero);
+        }
+        if self.max_wall_seconds == 0 {
+            return Err(CutoffError::WallZero);
+        }
         Ok(())
     }
 }
@@ -203,7 +208,10 @@ mod tests {
     fn max_tokens_zero_rejected() {
         let mut p = LlmStreamCutoffPolicy::canonical();
         p.max_tokens = 0;
-        assert!(matches!(p.validate().unwrap_err(), CutoffError::MaxTokensZero));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CutoffError::MaxTokensZero
+        ));
     }
 
     #[test]
@@ -217,12 +225,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = LlmStreamCutoffPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CutoffError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CutoffError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn reason_serde_kebab() {
-        let r = CutoffReason::MaxTokens { observed: 1, max: 0 };
+        let r = CutoffReason::MaxTokens {
+            observed: 1,
+            max: 0,
+        };
         let j = serde_json::to_string(&r).unwrap();
         assert!(j.contains("\"kind\":\"max-tokens\""));
     }

@@ -63,7 +63,11 @@ impl TieredRetentionPolicy {
     /// New.
     pub fn new(hot_ms: u64, warm_ms: u64, cold_ms: u64) -> Result<Self, RetentionError> {
         if !(hot_ms <= warm_ms && warm_ms <= cold_ms) {
-            return Err(RetentionError::BadBounds { h: hot_ms, w: warm_ms, c: cold_ms });
+            return Err(RetentionError::BadBounds {
+                h: hot_ms,
+                w: warm_ms,
+                c: cold_ms,
+            });
         }
         Ok(Self {
             schema_version_marker: 1,
@@ -75,15 +79,22 @@ impl TieredRetentionPolicy {
 
     /// Classify an item's tier given its age.
     pub fn classify(&self, age_ms: u64) -> Tier {
-        if age_ms < self.hot_ms { Tier::Hot }
-        else if age_ms < self.warm_ms { Tier::Warm }
-        else if age_ms < self.cold_ms { Tier::Cold }
-        else { Tier::Expired }
+        if age_ms < self.hot_ms {
+            Tier::Hot
+        } else if age_ms < self.warm_ms {
+            Tier::Warm
+        } else if age_ms < self.cold_ms {
+            Tier::Cold
+        } else {
+            Tier::Expired
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RetentionError> {
-        if self.schema_version_marker != 1 { return Err(RetentionError::SchemaMismatch); }
+        if self.schema_version_marker != 1 {
+            return Err(RetentionError::SchemaMismatch);
+        }
         if !(self.hot_ms <= self.warm_ms && self.warm_ms <= self.cold_ms) {
             return Err(RetentionError::BadBounds {
                 h: self.hot_ms,
@@ -118,15 +129,24 @@ mod tests {
 
     #[test]
     fn bad_bounds_rejected() {
-        assert!(matches!(TieredRetentionPolicy::new(5000, 1000, 10000).unwrap_err(), RetentionError::BadBounds { .. }));
-        assert!(matches!(TieredRetentionPolicy::new(1000, 5000, 4000).unwrap_err(), RetentionError::BadBounds { .. }));
+        assert!(matches!(
+            TieredRetentionPolicy::new(5000, 1000, 10000).unwrap_err(),
+            RetentionError::BadBounds { .. }
+        ));
+        assert!(matches!(
+            TieredRetentionPolicy::new(1000, 5000, 4000).unwrap_err(),
+            RetentionError::BadBounds { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TieredRetentionPolicy::new(1, 2, 3).unwrap();
         p.schema_version_marker = 99;
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::SchemaMismatch
+        ));
     }
 
     #[test]

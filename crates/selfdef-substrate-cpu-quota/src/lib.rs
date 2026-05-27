@@ -56,8 +56,7 @@ pub struct SubstrateCpuQuota {
 }
 
 /// Decision.
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum AdmitDecision {
     /// Allow.
@@ -108,12 +107,15 @@ impl SubstrateCpuQuota {
 
     /// Sum of records inside the window.
     pub fn window_total(&self, profile: Profile, now_unix: u64) -> f64 {
-        self.records.get(&profile).map(|v| {
-            v.iter()
-                .filter(|r| now_unix.saturating_sub(r.at_unix) < self.window_seconds as u64)
-                .map(|r| r.cpu_seconds)
-                .sum::<f64>()
-        }).unwrap_or(0.0)
+        self.records
+            .get(&profile)
+            .map(|v| {
+                v.iter()
+                    .filter(|r| now_unix.saturating_sub(r.at_unix) < self.window_seconds as u64)
+                    .map(|r| r.cpu_seconds)
+                    .sum::<f64>()
+            })
+            .unwrap_or(0.0)
     }
 
     /// Cap for a profile (defaults to f64::MAX if unconfigured).
@@ -122,9 +124,18 @@ impl SubstrateCpuQuota {
     }
 
     /// Admit a fresh charge.
-    pub fn admit(&mut self, profile: Profile, cpu_seconds: f64, now_unix: u64) -> Result<AdmitDecision, QuotaError> {
-        if cpu_seconds.is_nan() { return Err(QuotaError::NanValue); }
-        if cpu_seconds < 0.0 { return Err(QuotaError::Negative); }
+    pub fn admit(
+        &mut self,
+        profile: Profile,
+        cpu_seconds: f64,
+        now_unix: u64,
+    ) -> Result<AdmitDecision, QuotaError> {
+        if cpu_seconds.is_nan() {
+            return Err(QuotaError::NanValue);
+        }
+        if cpu_seconds < 0.0 {
+            return Err(QuotaError::Negative);
+        }
         let cap = self.cap(profile);
         // Age out records first.
         if let Some(v) = self.records.get_mut(&profile) {
@@ -133,7 +144,10 @@ impl SubstrateCpuQuota {
         let current = self.window_total(profile, now_unix);
         let projected = current + cpu_seconds;
         if projected > cap {
-            return Ok(AdmitDecision::Deny { projected_total: projected, cap });
+            return Ok(AdmitDecision::Deny {
+                projected_total: projected,
+                cap,
+            });
         }
         self.records.entry(profile).or_default().push(UsageRecord {
             at_unix: now_unix,
@@ -147,15 +161,25 @@ impl SubstrateCpuQuota {
         if self.schema_version != SCHEMA_VERSION {
             return Err(QuotaError::SchemaMismatch);
         }
-        if self.window_seconds == 0 { return Err(QuotaError::WindowZero); }
+        if self.window_seconds == 0 {
+            return Err(QuotaError::WindowZero);
+        }
         for v in self.caps.values() {
-            if v.is_nan() { return Err(QuotaError::NanValue); }
-            if *v < 0.0 { return Err(QuotaError::Negative); }
+            if v.is_nan() {
+                return Err(QuotaError::NanValue);
+            }
+            if *v < 0.0 {
+                return Err(QuotaError::Negative);
+            }
         }
         for records in self.records.values() {
             for r in records {
-                if r.cpu_seconds.is_nan() { return Err(QuotaError::NanValue); }
-                if r.cpu_seconds < 0.0 { return Err(QuotaError::Negative); }
+                if r.cpu_seconds.is_nan() {
+                    return Err(QuotaError::NanValue);
+                }
+                if r.cpu_seconds < 0.0 {
+                    return Err(QuotaError::Negative);
+                }
             }
         }
         Ok(())
@@ -174,14 +198,20 @@ mod tests {
     #[test]
     fn small_admit_allowed() {
         let mut q = SubstrateCpuQuota::canonical();
-        assert!(matches!(q.admit(Profile::Production, 5.0, 1000).unwrap(), AdmitDecision::Allow));
+        assert!(matches!(
+            q.admit(Profile::Production, 5.0, 1000).unwrap(),
+            AdmitDecision::Allow
+        ));
     }
 
     #[test]
     fn cap_exceeded_denied() {
         let mut q = SubstrateCpuQuota::canonical();
         // Production cap = 30s. Submit one big charge.
-        assert!(matches!(q.admit(Profile::Production, 50.0, 1000).unwrap(), AdmitDecision::Deny { .. }));
+        assert!(matches!(
+            q.admit(Profile::Production, 50.0, 1000).unwrap(),
+            AdmitDecision::Deny { .. }
+        ));
     }
 
     #[test]
@@ -196,25 +226,37 @@ mod tests {
     #[test]
     fn nan_rejected() {
         let mut q = SubstrateCpuQuota::canonical();
-        assert!(matches!(q.admit(Profile::Production, f64::NAN, 1000).unwrap_err(), QuotaError::NanValue));
+        assert!(matches!(
+            q.admit(Profile::Production, f64::NAN, 1000).unwrap_err(),
+            QuotaError::NanValue
+        ));
     }
 
     #[test]
     fn negative_rejected() {
         let mut q = SubstrateCpuQuota::canonical();
-        assert!(matches!(q.admit(Profile::Production, -5.0, 1000).unwrap_err(), QuotaError::Negative));
+        assert!(matches!(
+            q.admit(Profile::Production, -5.0, 1000).unwrap_err(),
+            QuotaError::Negative
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = SubstrateCpuQuota::canonical();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QuotaError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QuotaError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn profile_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Profile::Autonomous).unwrap(), "\"autonomous\"");
+        assert_eq!(
+            serde_json::to_string(&Profile::Autonomous).unwrap(),
+            "\"autonomous\""
+        );
     }
 
     #[test]

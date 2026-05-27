@@ -106,7 +106,9 @@ pub enum PreemptError {
 impl TaskPreemptionPolicy {
     /// New.
     pub fn new(min_priority_gap: u8, min_run_ms: u64) -> Result<Self, PreemptError> {
-        if min_priority_gap > 4 { return Err(PreemptError::BadGap); }
+        if min_priority_gap > 4 {
+            return Err(PreemptError::BadGap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             min_priority_gap,
@@ -115,12 +117,20 @@ impl TaskPreemptionPolicy {
     }
 
     /// Decide.
-    pub fn decide(&self, current: &RunningTask, incoming: &IncomingTask, now_ms: u64) -> PreemptVerdict {
+    pub fn decide(
+        &self,
+        current: &RunningTask,
+        incoming: &IncomingTask,
+        now_ms: u64,
+    ) -> PreemptVerdict {
         // Anti-thrash window.
         let run_age = now_ms.saturating_sub(current.started_at_ms);
         if run_age < self.min_run_ms {
             return PreemptVerdict::Keep {
-                reason: format!("anti-thrash: current ran {run_age}ms < min {min}ms", min = self.min_run_ms),
+                reason: format!(
+                    "anti-thrash: current ran {run_age}ms < min {min}ms",
+                    min = self.min_run_ms
+                ),
             };
         }
         // Priority gap.
@@ -128,13 +138,19 @@ impl TaskPreemptionPolicy {
         let inc = incoming.priority.rank();
         if inc <= cur {
             return PreemptVerdict::Keep {
-                reason: format!("incoming priority {:?} does not outrank current {:?}", incoming.priority, current.priority),
+                reason: format!(
+                    "incoming priority {:?} does not outrank current {:?}",
+                    incoming.priority, current.priority
+                ),
             };
         }
         let gap = inc - cur;
         if gap < self.min_priority_gap {
             return PreemptVerdict::Keep {
-                reason: format!("gap {gap} < min_gap {gap_min}", gap_min = self.min_priority_gap),
+                reason: format!(
+                    "gap {gap} < min_gap {gap_min}",
+                    gap_min = self.min_priority_gap
+                ),
             };
         }
         PreemptVerdict::Preempt
@@ -142,14 +158,20 @@ impl TaskPreemptionPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PreemptError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PreemptError::SchemaMismatch); }
-        if self.min_priority_gap > 4 { return Err(PreemptError::BadGap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PreemptError::SchemaMismatch);
+        }
+        if self.min_priority_gap > 4 {
+            return Err(PreemptError::BadGap);
+        }
         Ok(())
     }
 }
 
 impl Default for TaskPreemptionPolicy {
-    fn default() -> Self { Self::new(1, 1000).unwrap() }
+    fn default() -> Self {
+        Self::new(1, 1000).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -157,11 +179,18 @@ mod tests {
     use super::*;
 
     fn task(id: &str, p: Priority, started: u64) -> RunningTask {
-        RunningTask { id: id.into(), priority: p, started_at_ms: started }
+        RunningTask {
+            id: id.into(),
+            priority: p,
+            started_at_ms: started,
+        }
     }
 
     fn inc(id: &str, p: Priority) -> IncomingTask {
-        IncomingTask { id: id.into(), priority: p }
+        IncomingTask {
+            id: id.into(),
+            priority: p,
+        }
     }
 
     #[test]
@@ -232,14 +261,20 @@ mod tests {
 
     #[test]
     fn bad_gap_rejected() {
-        assert!(matches!(TaskPreemptionPolicy::new(5, 0).unwrap_err(), PreemptError::BadGap));
+        assert!(matches!(
+            TaskPreemptionPolicy::new(5, 0).unwrap_err(),
+            PreemptError::BadGap
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TaskPreemptionPolicy::new(1, 0).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PreemptError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PreemptError::SchemaMismatch
+        ));
     }
 
     #[test]

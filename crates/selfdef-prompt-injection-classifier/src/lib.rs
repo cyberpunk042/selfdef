@@ -122,7 +122,10 @@ impl Classifier {
             signals.push(Signal::JailbreakChain);
         }
         // Obfuscation: zero-width chars present.
-        if text.chars().any(|c| matches!(c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{FEFF}')) {
+        if text
+            .chars()
+            .any(|c| matches!(c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{FEFF}'))
+        {
             signals.push(Signal::Obfuscation);
         }
 
@@ -240,20 +243,38 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = Classifier::classify("clean");
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), InjectionError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            InjectionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn signal_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Signal::InstructionOverride).unwrap(), "\"instruction-override\"");
-        assert_eq!(serde_json::to_string(&Signal::SystemPromptExtraction).unwrap(), "\"system-prompt-extraction\"");
-        assert_eq!(serde_json::to_string(&Signal::JailbreakChain).unwrap(), "\"jailbreak-chain\"");
+        assert_eq!(
+            serde_json::to_string(&Signal::InstructionOverride).unwrap(),
+            "\"instruction-override\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Signal::SystemPromptExtraction).unwrap(),
+            "\"system-prompt-extraction\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Signal::JailbreakChain).unwrap(),
+            "\"jailbreak-chain\""
+        );
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&InjectionClass::Clean).unwrap(), "\"clean\"");
-        assert_eq!(serde_json::to_string(&InjectionClass::Confirmed).unwrap(), "\"confirmed\"");
+        assert_eq!(
+            serde_json::to_string(&InjectionClass::Clean).unwrap(),
+            "\"clean\""
+        );
+        assert_eq!(
+            serde_json::to_string(&InjectionClass::Confirmed).unwrap(),
+            "\"confirmed\""
+        );
     }
 
     #[test]

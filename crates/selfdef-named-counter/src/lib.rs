@@ -47,7 +47,9 @@ impl NamedCounter {
 
     /// Increment (saturating).
     pub fn inc(&mut self, name: &str, by: u64) -> Result<u64, CounterError> {
-        if name.is_empty() { return Err(CounterError::EmptyName); }
+        if name.is_empty() {
+            return Err(CounterError::EmptyName);
+        }
         let c = self.counters.entry(name.into()).or_insert(0);
         *c = c.saturating_add(by);
         Ok(*c)
@@ -55,7 +57,9 @@ impl NamedCounter {
 
     /// Decrement (saturating at 0).
     pub fn dec(&mut self, name: &str, by: u64) -> Result<u64, CounterError> {
-        if name.is_empty() { return Err(CounterError::EmptyName); }
+        if name.is_empty() {
+            return Err(CounterError::EmptyName);
+        }
         let c = self.counters.entry(name.into()).or_insert(0);
         *c = c.saturating_sub(by);
         Ok(*c)
@@ -68,7 +72,9 @@ impl NamedCounter {
 
     /// Reset all counters to 0 (keys preserved).
     pub fn reset_all(&mut self) {
-        for v in self.counters.values_mut() { *v = 0; }
+        for v in self.counters.values_mut() {
+            *v = 0;
+        }
     }
 
     /// Snapshot.
@@ -83,16 +89,22 @@ impl NamedCounter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CounterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CounterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CounterError::SchemaMismatch);
+        }
         for k in self.counters.keys() {
-            if k.is_empty() { return Err(CounterError::EmptyName); }
+            if k.is_empty() {
+                return Err(CounterError::EmptyName);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for NamedCounter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -158,7 +170,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = NamedCounter::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

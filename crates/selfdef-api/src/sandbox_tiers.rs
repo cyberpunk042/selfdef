@@ -33,31 +33,88 @@ pub(crate) struct CrateDescriptor {
 }
 
 const TIERS: &[TierDescriptor] = &[
-    TierDescriptor { name: "Tier0", scope: "pure read-only observe; no side effects",
-        subprocess_allowed: false, network_allowed: false, persistent_allowed: false, host_fs_readable: false },
-    TierDescriptor { name: "Tier1", scope: "minimal — limited capabilities",
-        subprocess_allowed: false, network_allowed: false, persistent_allowed: false, host_fs_readable: false },
-    TierDescriptor { name: "Tier2", scope: "chroot + read-only host FS mount; no network",
-        subprocess_allowed: true, network_allowed: false, persistent_allowed: false, host_fs_readable: true },
-    TierDescriptor { name: "Tier3", scope: "controlled network egress (per SDD-046 NetworkProfile)",
-        subprocess_allowed: true, network_allowed: true, persistent_allowed: false, host_fs_readable: true },
-    TierDescriptor { name: "Tier4", scope: "full sandbox with persistent state",
-        subprocess_allowed: true, network_allowed: true, persistent_allowed: true, host_fs_readable: true },
+    TierDescriptor {
+        name: "Tier0",
+        scope: "pure read-only observe; no side effects",
+        subprocess_allowed: false,
+        network_allowed: false,
+        persistent_allowed: false,
+        host_fs_readable: false,
+    },
+    TierDescriptor {
+        name: "Tier1",
+        scope: "minimal — limited capabilities",
+        subprocess_allowed: false,
+        network_allowed: false,
+        persistent_allowed: false,
+        host_fs_readable: false,
+    },
+    TierDescriptor {
+        name: "Tier2",
+        scope: "chroot + read-only host FS mount; no network",
+        subprocess_allowed: true,
+        network_allowed: false,
+        persistent_allowed: false,
+        host_fs_readable: true,
+    },
+    TierDescriptor {
+        name: "Tier3",
+        scope: "controlled network egress (per SDD-046 NetworkProfile)",
+        subprocess_allowed: true,
+        network_allowed: true,
+        persistent_allowed: false,
+        host_fs_readable: true,
+    },
+    TierDescriptor {
+        name: "Tier4",
+        scope: "full sandbox with persistent state",
+        subprocess_allowed: true,
+        network_allowed: true,
+        persistent_allowed: true,
+        host_fs_readable: true,
+    },
 ];
 
 const PROMOTION_GATES: &[GateDescriptor] = &[
-    GateDescriptor { name: "Routine",        semantics: "no extra check (typically demotion)" },
-    GateDescriptor { name: "SingleOperator", semantics: "single MS003-signed approval" },
-    GateDescriptor { name: "DoubleOperator", semantics: "two distinct MS003 signatures (high-tier)" },
-    GateDescriptor { name: "Forbidden",      semantics: "transition refused unconditionally" },
+    GateDescriptor {
+        name: "Routine",
+        semantics: "no extra check (typically demotion)",
+    },
+    GateDescriptor {
+        name: "SingleOperator",
+        semantics: "single MS003-signed approval",
+    },
+    GateDescriptor {
+        name: "DoubleOperator",
+        semantics: "two distinct MS003 signatures (high-tier)",
+    },
+    GateDescriptor {
+        name: "Forbidden",
+        semantics: "transition refused unconditionally",
+    },
 ];
 
 const COMPANION_CRATES: &[CrateDescriptor] = &[
-    CrateDescriptor { name: "selfdef-sandbox-tier-policy",       role: "272 LOC, 15 tests — enum + capability tuples + gates" },
-    CrateDescriptor { name: "selfdef-sandbox-dispatcher",        role: "269 LOC, 14 tests — route-by-tier semantics" },
-    CrateDescriptor { name: "selfdef-sandbox-fs-isolation",      role: "227 LOC — per-tier filesystem mount strategy" },
-    CrateDescriptor { name: "selfdef-sandbox-network-isolation", role: "188 LOC — per-tier network namespace strategy" },
-    CrateDescriptor { name: "selfdef-sandbox-mirror",            role: "441 LOC — cross-repo state projection (MS007)" },
+    CrateDescriptor {
+        name: "selfdef-sandbox-tier-policy",
+        role: "272 LOC, 15 tests — enum + capability tuples + gates",
+    },
+    CrateDescriptor {
+        name: "selfdef-sandbox-dispatcher",
+        role: "269 LOC, 14 tests — route-by-tier semantics",
+    },
+    CrateDescriptor {
+        name: "selfdef-sandbox-fs-isolation",
+        role: "227 LOC — per-tier filesystem mount strategy",
+    },
+    CrateDescriptor {
+        name: "selfdef-sandbox-network-isolation",
+        role: "188 LOC — per-tier network namespace strategy",
+    },
+    CrateDescriptor {
+        name: "selfdef-sandbox-mirror",
+        role: "441 LOC — cross-repo state projection (MS007)",
+    },
 ];
 
 pub(crate) async fn show() -> Json<SandboxTiersSchema> {

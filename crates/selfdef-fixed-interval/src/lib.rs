@@ -42,7 +42,9 @@ pub enum IntervalError {
 impl FixedInterval {
     /// New starting at start_ms.
     pub fn new(period_ms: u64, start_ms: u64) -> Result<Self, IntervalError> {
-        if period_ms == 0 { return Err(IntervalError::ZeroPeriod); }
+        if period_ms == 0 {
+            return Err(IntervalError::ZeroPeriod);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             period_ms,
@@ -69,8 +71,12 @@ impl FixedInterval {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IntervalError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IntervalError::SchemaMismatch); }
-        if self.period_ms == 0 { return Err(IntervalError::ZeroPeriod); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IntervalError::SchemaMismatch);
+        }
+        if self.period_ms == 0 {
+            return Err(IntervalError::ZeroPeriod);
+        }
         Ok(())
     }
 }
@@ -119,14 +125,20 @@ mod tests {
 
     #[test]
     fn zero_period_rejected() {
-        assert!(matches!(FixedInterval::new(0, 0).unwrap_err(), IntervalError::ZeroPeriod));
+        assert!(matches!(
+            FixedInterval::new(0, 0).unwrap_err(),
+            IntervalError::ZeroPeriod
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut i = FixedInterval::new(1000, 0).unwrap();
         i.schema_version = "9.9.9".into();
-        assert!(matches!(i.validate().unwrap_err(), IntervalError::SchemaMismatch));
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            IntervalError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -121,7 +121,9 @@ impl SubstrateColdBootPolicy {
 
     /// First step not yet completed (Passed/Skipped). None when all done.
     pub fn next_step(&self) -> Option<&StepRecord> {
-        self.records.iter().find(|r| !matches!(r.status, StepStatus::Passed | StepStatus::Skipped))
+        self.records
+            .iter()
+            .find(|r| !matches!(r.status, StepStatus::Passed | StepStatus::Skipped))
     }
 
     /// All required steps passed (or non-required skipped allowed)?
@@ -141,7 +143,9 @@ impl SubstrateColdBootPolicy {
         use std::collections::HashSet;
         let mut seen: HashSet<BootStep> = HashSet::new();
         for r in &self.records {
-            if !seen.insert(r.step) { return Err(BootError::DuplicateStep(r.step)); }
+            if !seen.insert(r.step) {
+                return Err(BootError::DuplicateStep(r.step));
+            }
             if r.required && r.status == StepStatus::Skipped {
                 return Err(BootError::RequiredSkipped(r.step));
             }
@@ -168,7 +172,11 @@ mod tests {
     #[test]
     fn first_failure_after_failure() {
         let mut p = SubstrateColdBootPolicy::canonical();
-        p.set_status(BootStep::CanaryProbe, StepStatus::Failed, Some("baseline drift".into()));
+        p.set_status(
+            BootStep::CanaryProbe,
+            StepStatus::Failed,
+            Some("baseline drift".into()),
+        );
         let f = p.first_failure().unwrap();
         assert_eq!(f.step, BootStep::CanaryProbe);
         assert_eq!(f.failure_reason.as_deref(), Some("baseline drift"));
@@ -220,20 +228,32 @@ mod tests {
     fn required_skipped_rejected_on_validate() {
         let mut p = SubstrateColdBootPolicy::canonical();
         p.set_status(BootStep::FingerprintVerify, StepStatus::Skipped, None);
-        assert!(matches!(p.validate().unwrap_err(), BootError::RequiredSkipped(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BootError::RequiredSkipped(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstrateColdBootPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), BootError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BootError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn step_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BootStep::FingerprintVerify).unwrap(), "\"fingerprint-verify\"");
-        assert_eq!(serde_json::to_string(&BootStep::AcceptOperatorConnection).unwrap(), "\"accept-operator-connection\"");
+        assert_eq!(
+            serde_json::to_string(&BootStep::FingerprintVerify).unwrap(),
+            "\"fingerprint-verify\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BootStep::AcceptOperatorConnection).unwrap(),
+            "\"accept-operator-connection\""
+        );
     }
 
     #[test]

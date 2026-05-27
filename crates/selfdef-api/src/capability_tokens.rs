@@ -34,11 +34,26 @@ pub(crate) struct CrateDescriptor {
 }
 
 const VERDICTS: &[VerdictDescriptor] = &[
-    VerdictDescriptor { variant: "Ok",           semantics: "token present + active + not revoked + carries the requested scope" },
-    VerdictDescriptor { variant: "Expired",      semantics: "token present but now_ms > expires_at_ms" },
-    VerdictDescriptor { variant: "Revoked",      semantics: "token present but revoked == true" },
-    VerdictDescriptor { variant: "Unknown",      semantics: "no token registered under this id" },
-    VerdictDescriptor { variant: "MissingScope", semantics: "token Ok-otherwise but does not carry the requested scope" },
+    VerdictDescriptor {
+        variant: "Ok",
+        semantics: "token present + active + not revoked + carries the requested scope",
+    },
+    VerdictDescriptor {
+        variant: "Expired",
+        semantics: "token present but now_ms > expires_at_ms",
+    },
+    VerdictDescriptor {
+        variant: "Revoked",
+        semantics: "token present but revoked == true",
+    },
+    VerdictDescriptor {
+        variant: "Unknown",
+        semantics: "no token registered under this id",
+    },
+    VerdictDescriptor {
+        variant: "MissingScope",
+        semantics: "token Ok-otherwise but does not carry the requested scope",
+    },
 ];
 
 const TOKEN_SHAPE: &[&str] = &[
@@ -50,11 +65,26 @@ const TOKEN_SHAPE: &[&str] = &[
 ];
 
 const COMPANION_CRATES: &[CrateDescriptor] = &[
-    CrateDescriptor { name: "selfdef-capability-token-store",  role: "215 LOC, 9 tests — issue + revoke + check primitives" },
-    CrateDescriptor { name: "selfdef-capability-word",         role: "496 LOC — canonical scope vocabulary (drift-prevention)" },
-    CrateDescriptor { name: "selfdef-capability-mirror",       role: "416 LOC — cross-repo state projection (MS007 typed-mirror)" },
-    CrateDescriptor { name: "selfdef-tool-capability-policy",  role: "12 tests — per-tool scope requirements (consumes scopes)" },
-    CrateDescriptor { name: "selfdef-profile-authority-gate",  role: "660 LOC — gates profile transitions on holder scopes" },
+    CrateDescriptor {
+        name: "selfdef-capability-token-store",
+        role: "215 LOC, 9 tests — issue + revoke + check primitives",
+    },
+    CrateDescriptor {
+        name: "selfdef-capability-word",
+        role: "496 LOC — canonical scope vocabulary (drift-prevention)",
+    },
+    CrateDescriptor {
+        name: "selfdef-capability-mirror",
+        role: "416 LOC — cross-repo state projection (MS007 typed-mirror)",
+    },
+    CrateDescriptor {
+        name: "selfdef-tool-capability-policy",
+        role: "12 tests — per-tool scope requirements (consumes scopes)",
+    },
+    CrateDescriptor {
+        name: "selfdef-profile-authority-gate",
+        role: "660 LOC — gates profile transitions on holder scopes",
+    },
 ];
 
 const CALLER_CONTRACT: &[&str] = &[

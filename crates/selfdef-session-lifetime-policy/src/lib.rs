@@ -88,12 +88,48 @@ impl SessionLifetimePolicy {
         let mut p = BTreeMap::new();
         let h: u64 = 60 * 60 * 1000;
         let m: u64 = 60 * 1000;
-        p.insert(Profile::Private,      ProfileLifetime { max_age_ms: 1 * h, max_idle_ms: 5 * m });
-        p.insert(Profile::Fast,         ProfileLifetime { max_age_ms: 4 * h, max_idle_ms: 15 * m });
-        p.insert(Profile::Careful,      ProfileLifetime { max_age_ms: 1 * h, max_idle_ms: 10 * m });
-        p.insert(Profile::Autonomous,   ProfileLifetime { max_age_ms: 8 * h, max_idle_ms: 30 * m });
-        p.insert(Profile::Experimental, ProfileLifetime { max_age_ms: 16 * h, max_idle_ms: 60 * m });
-        p.insert(Profile::Production,   ProfileLifetime { max_age_ms: 2 * h, max_idle_ms: 10 * m });
+        p.insert(
+            Profile::Private,
+            ProfileLifetime {
+                max_age_ms: 1 * h,
+                max_idle_ms: 5 * m,
+            },
+        );
+        p.insert(
+            Profile::Fast,
+            ProfileLifetime {
+                max_age_ms: 4 * h,
+                max_idle_ms: 15 * m,
+            },
+        );
+        p.insert(
+            Profile::Careful,
+            ProfileLifetime {
+                max_age_ms: 1 * h,
+                max_idle_ms: 10 * m,
+            },
+        );
+        p.insert(
+            Profile::Autonomous,
+            ProfileLifetime {
+                max_age_ms: 8 * h,
+                max_idle_ms: 30 * m,
+            },
+        );
+        p.insert(
+            Profile::Experimental,
+            ProfileLifetime {
+                max_age_ms: 16 * h,
+                max_idle_ms: 60 * m,
+            },
+        );
+        p.insert(
+            Profile::Production,
+            ProfileLifetime {
+                max_age_ms: 2 * h,
+                max_idle_ms: 10 * m,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -107,17 +143,23 @@ impl SessionLifetimePolicy {
             None => return LifetimeVerdict::Unconfigured,
         };
         if age_ms >= cfg.max_age_ms {
-            return LifetimeVerdict::AgeExpired { age_cap_ms: cfg.max_age_ms };
+            return LifetimeVerdict::AgeExpired {
+                age_cap_ms: cfg.max_age_ms,
+            };
         }
         if idle_ms >= cfg.max_idle_ms {
-            return LifetimeVerdict::IdleExpired { idle_cap_ms: cfg.max_idle_ms };
+            return LifetimeVerdict::IdleExpired {
+                idle_cap_ms: cfg.max_idle_ms,
+            };
         }
         LifetimeVerdict::Active
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LifetimeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LifetimeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LifetimeError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -134,7 +176,10 @@ mod tests {
     #[test]
     fn active_under_caps() {
         let p = SessionLifetimePolicy::canonical();
-        assert_eq!(p.classify(Profile::Fast, 1000, 1000), LifetimeVerdict::Active);
+        assert_eq!(
+            p.classify(Profile::Fast, 1000, 1000),
+            LifetimeVerdict::Active
+        );
     }
 
     #[test]
@@ -142,7 +187,12 @@ mod tests {
         let p = SessionLifetimePolicy::canonical();
         // Fast idle cap 15m = 900_000 ms.
         let v = p.classify(Profile::Fast, 1_000_000, 900_001);
-        assert_eq!(v, LifetimeVerdict::IdleExpired { idle_cap_ms: 900_000 });
+        assert_eq!(
+            v,
+            LifetimeVerdict::IdleExpired {
+                idle_cap_ms: 900_000
+            }
+        );
     }
 
     #[test]
@@ -150,7 +200,12 @@ mod tests {
         let p = SessionLifetimePolicy::canonical();
         // Fast age cap 4h = 14_400_000.
         let v = p.classify(Profile::Fast, 14_400_001, 0);
-        assert_eq!(v, LifetimeVerdict::AgeExpired { age_cap_ms: 14_400_000 });
+        assert_eq!(
+            v,
+            LifetimeVerdict::AgeExpired {
+                age_cap_ms: 14_400_000
+            }
+        );
     }
 
     #[test]
@@ -165,7 +220,10 @@ mod tests {
     fn unconfigured_profile() {
         let mut p = SessionLifetimePolicy::canonical();
         p.profiles.clear();
-        assert_eq!(p.classify(Profile::Fast, 0, 0), LifetimeVerdict::Unconfigured);
+        assert_eq!(
+            p.classify(Profile::Fast, 0, 0),
+            LifetimeVerdict::Unconfigured
+        );
     }
 
     #[test]
@@ -173,14 +231,20 @@ mod tests {
         let p = SessionLifetimePolicy::canonical();
         let h = 60 * 60 * 1000;
         // 12 hours; Experimental cap is 16h.
-        assert_eq!(p.classify(Profile::Experimental, 12 * h, 0), LifetimeVerdict::Active);
+        assert_eq!(
+            p.classify(Profile::Experimental, 12 * h, 0),
+            LifetimeVerdict::Active
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SessionLifetimePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), LifetimeError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            LifetimeError::SchemaMismatch
+        ));
     }
 
     #[test]

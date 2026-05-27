@@ -60,7 +60,9 @@ pub enum BusError {
 
 /// Compute the dispatch plan for a policy decision.
 pub fn plan(decision: &PolicyDecision) -> Result<DispatchPlan, BusError> {
-    decision.validate().map_err(|e| BusError::InvalidDecision(e.to_string()))?;
+    decision
+        .validate()
+        .map_err(|e| BusError::InvalidDecision(e.to_string()))?;
 
     // Every decision fans out to Observability + EventBus + Correlator + AuditLog.
     let mut subsystems = vec![
@@ -157,7 +159,7 @@ mod tests {
     fn critical_risk_adds_operator_queue_even_on_allow() {
         let mut d = ok_decision();
         d.risk = RiskClass::Critical;
-        d.user_approval = UserApprovalState::Approved;  // satisfy PolicyDecision validate()
+        d.user_approval = UserApprovalState::Approved; // satisfy PolicyDecision validate()
         let p = plan(&d).unwrap();
         assert!(p.subsystems.contains(&BusSubsystem::OperatorQueue));
     }
@@ -166,7 +168,7 @@ mod tests {
     fn persistent_side_effect_adds_operator_queue() {
         let mut d = ok_decision();
         d.side_effect_class = SideEffectClass::Persistent;
-        d.user_approval = UserApprovalState::Approved;  // satisfy PolicyDecision validate()
+        d.user_approval = UserApprovalState::Approved; // satisfy PolicyDecision validate()
         let p = plan(&d).unwrap();
         assert!(p.subsystems.contains(&BusSubsystem::OperatorQueue));
     }
@@ -175,26 +177,44 @@ mod tests {
     fn invalid_decision_rejected() {
         let mut d = ok_decision();
         d.subject = String::new();
-        assert!(matches!(plan(&d).unwrap_err(), BusError::InvalidDecision(_)));
+        assert!(matches!(
+            plan(&d).unwrap_err(),
+            BusError::InvalidDecision(_)
+        ));
     }
 
     #[test]
     fn six_subsystems_enumerated() {
         // Sanity check the enum.
         let all = [
-            BusSubsystem::Observability, BusSubsystem::EventBus,
-            BusSubsystem::Correlator, BusSubsystem::AuditLog,
-            BusSubsystem::NotifyChain, BusSubsystem::OperatorQueue,
+            BusSubsystem::Observability,
+            BusSubsystem::EventBus,
+            BusSubsystem::Correlator,
+            BusSubsystem::AuditLog,
+            BusSubsystem::NotifyChain,
+            BusSubsystem::OperatorQueue,
         ];
         assert_eq!(all.len(), 6);
     }
 
     #[test]
     fn bus_subsystem_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BusSubsystem::EventBus).unwrap(), "\"event-bus\"");
-        assert_eq!(serde_json::to_string(&BusSubsystem::NotifyChain).unwrap(), "\"notify-chain\"");
-        assert_eq!(serde_json::to_string(&BusSubsystem::OperatorQueue).unwrap(), "\"operator-queue\"");
-        assert_eq!(serde_json::to_string(&BusSubsystem::AuditLog).unwrap(), "\"audit-log\"");
+        assert_eq!(
+            serde_json::to_string(&BusSubsystem::EventBus).unwrap(),
+            "\"event-bus\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BusSubsystem::NotifyChain).unwrap(),
+            "\"notify-chain\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BusSubsystem::OperatorQueue).unwrap(),
+            "\"operator-queue\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BusSubsystem::AuditLog).unwrap(),
+            "\"audit-log\""
+        );
     }
 
     #[test]

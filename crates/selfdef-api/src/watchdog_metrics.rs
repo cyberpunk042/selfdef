@@ -42,23 +42,21 @@
 use std::fmt::Write;
 use std::path::Path;
 
-use selfdef_friction_audit::{
-    read_ring_buffer as fa_read, DEFAULT_RING_DIR as FA_RING,
-};
+use selfdef_friction_audit::{DEFAULT_RING_DIR as FA_RING, read_ring_buffer as fa_read};
 use selfdef_friction_audit_mirror::Status;
 use selfdef_guardian::{
-    audit_chain_check as guard_chain, read_ring_buffer as guard_read,
     DEFAULT_OCSF_PATH as GUARD_OCSF, DEFAULT_RING_DIR as GUARD_RING,
-    DEFAULT_SOCKET_PATH as GUARD_SOCK,
+    DEFAULT_SOCKET_PATH as GUARD_SOCK, audit_chain_check as guard_chain,
+    read_ring_buffer as guard_read,
 };
 use selfdef_perimeter::{
+    DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH as PERIM_OCSF, DEFAULT_POLICY_PATH,
+    DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR, ExtensionStore, Outcome,
     audit_chain_check as perim_chain, now_ms, read_ring_buffer as perim_read,
-    ExtensionStore, Outcome, DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH as PERIM_OCSF,
-    DEFAULT_POLICY_PATH, DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR,
 };
 use selfdef_scheduler::{
-    audit_chain_check as sched_chain, read_ring_buffer as sched_read,
     DEFAULT_AUDIT_LOG_PATH as SCHED_AUDIT, DEFAULT_RING_DIR as SCHED_RING,
+    audit_chain_check as sched_chain, read_ring_buffer as sched_read,
 };
 
 /// Render four-watchdog Prometheus metrics. Reads ring buffers + audit
@@ -108,9 +106,7 @@ fn render_storage(out: &mut String) {
         )
         .unwrap();
     }
-    out.push_str(
-        "# HELP selfdef_storage_mount_size_bytes Per-mount total bytes — MS011 Z-10.\n",
-    );
+    out.push_str("# HELP selfdef_storage_mount_size_bytes Per-mount total bytes — MS011 Z-10.\n");
     out.push_str("# TYPE selfdef_storage_mount_size_bytes gauge\n");
     for m in &resp.mounts {
         writeln!(
@@ -122,9 +118,7 @@ fn render_storage(out: &mut String) {
         )
         .unwrap();
     }
-    out.push_str(
-        "# HELP selfdef_storage_mount_used_bytes Per-mount used bytes — MS011 Z-10.\n",
-    );
+    out.push_str("# HELP selfdef_storage_mount_used_bytes Per-mount used bytes — MS011 Z-10.\n");
     out.push_str("# TYPE selfdef_storage_mount_used_bytes gauge\n");
     for m in &resp.mounts {
         writeln!(
@@ -187,7 +181,12 @@ fn render_friction_audit(out: &mut String) {
 
     out.push_str("# HELP selfdef_friction_audit_verdicts_total Verdicts currently in the friction-audit ring buffer.\n");
     out.push_str("# TYPE selfdef_friction_audit_verdicts_total gauge\n");
-    writeln!(out, "selfdef_friction_audit_verdicts_total {}", verdicts.len()).unwrap();
+    writeln!(
+        out,
+        "selfdef_friction_audit_verdicts_total {}",
+        verdicts.len()
+    )
+    .unwrap();
 
     out.push_str("# HELP selfdef_friction_audit_failing_total Verdicts in Fail status (no override honoring).\n");
     out.push_str("# TYPE selfdef_friction_audit_failing_total gauge\n");
@@ -212,7 +211,11 @@ fn render_perimeter(out: &mut String) {
     )
     .map(|(s, _)| s.active(now).len())
     .unwrap_or(0);
-    let policy_present = if Path::new(DEFAULT_POLICY_PATH).exists() { 1 } else { 0 };
+    let policy_present = if Path::new(DEFAULT_POLICY_PATH).exists() {
+        1
+    } else {
+        0
+    };
     let chain_events: i64 = perim_chain(Path::new(PERIM_OCSF))
         .map(|n| n as i64)
         .unwrap_or(-1);
@@ -225,11 +228,15 @@ fn render_perimeter(out: &mut String) {
     out.push_str("# TYPE selfdef_perimeter_sigkills_total gauge\n");
     writeln!(out, "selfdef_perimeter_sigkills_total {sigkills}").unwrap();
 
-    out.push_str("# HELP selfdef_perimeter_extensions_total Active operator-signed allowlist extensions.\n");
+    out.push_str(
+        "# HELP selfdef_perimeter_extensions_total Active operator-signed allowlist extensions.\n",
+    );
     out.push_str("# TYPE selfdef_perimeter_extensions_total gauge\n");
     writeln!(out, "selfdef_perimeter_extensions_total {extensions}").unwrap();
 
-    out.push_str("# HELP selfdef_perimeter_policy_present 1 if sovereign-perimeter.yaml is installed.\n");
+    out.push_str(
+        "# HELP selfdef_perimeter_policy_present 1 if sovereign-perimeter.yaml is installed.\n",
+    );
     out.push_str("# TYPE selfdef_perimeter_policy_present gauge\n");
     writeln!(out, "selfdef_perimeter_policy_present {policy_present}").unwrap();
 
@@ -246,17 +253,25 @@ fn render_guardian(out: &mut String) {
         .map(|n| n as i64)
         .unwrap_or(-1);
 
-    out.push_str("# HELP selfdef_guardian_verdicts_total Verdicts currently in the guardian ring buffer.\n");
+    out.push_str(
+        "# HELP selfdef_guardian_verdicts_total Verdicts currently in the guardian ring buffer.\n",
+    );
     out.push_str("# TYPE selfdef_guardian_verdicts_total gauge\n");
     writeln!(out, "selfdef_guardian_verdicts_total {}", verdicts.len()).unwrap();
 
-    out.push_str("# HELP selfdef_guardian_failed_responses_total Verdicts with at least one Failed step.\n");
+    out.push_str(
+        "# HELP selfdef_guardian_failed_responses_total Verdicts with at least one Failed step.\n",
+    );
     out.push_str("# TYPE selfdef_guardian_failed_responses_total gauge\n");
     writeln!(out, "selfdef_guardian_failed_responses_total {failed}").unwrap();
 
     out.push_str("# HELP selfdef_guardian_tetragon_socket_present 1 if the Tetragon UNIX socket is reachable.\n");
     out.push_str("# TYPE selfdef_guardian_tetragon_socket_present gauge\n");
-    writeln!(out, "selfdef_guardian_tetragon_socket_present {socket_present}").unwrap();
+    writeln!(
+        out,
+        "selfdef_guardian_tetragon_socket_present {socket_present}"
+    )
+    .unwrap();
 
     out.push_str("# HELP selfdef_guardian_audit_chain_events Guardian OCSF audit chain length; -1 on chain break.\n");
     out.push_str("# TYPE selfdef_guardian_audit_chain_events gauge\n");
@@ -279,7 +294,11 @@ fn render_scheduler(out: &mut String) {
 
     out.push_str("# HELP selfdef_scheduler_backpressured_decisions_total Decisions with any backpressure surface open.\n");
     out.push_str("# TYPE selfdef_scheduler_backpressured_decisions_total gauge\n");
-    writeln!(out, "selfdef_scheduler_backpressured_decisions_total {backpressured}").unwrap();
+    writeln!(
+        out,
+        "selfdef_scheduler_backpressured_decisions_total {backpressured}"
+    )
+    .unwrap();
 
     out.push_str("# HELP selfdef_scheduler_audit_chain_events Scheduler audit chain length; -1 on chain break.\n");
     out.push_str("# TYPE selfdef_scheduler_audit_chain_events gauge\n");

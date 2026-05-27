@@ -85,26 +85,36 @@ impl SyscallAllowlist {
 
     /// Register an empty allowlist for a substrate.
     pub fn register(&mut self, substrate_id: &str) -> Result<(), SyscallError> {
-        if substrate_id.is_empty() { return Err(SyscallError::EmptySubstrate); }
-        self.substrates.entry(substrate_id.into()).or_insert_with(|| SubstrateAllowlist {
-            allowed: BTreeSet::new(),
-            allow_count: 0,
-            deny_count: 0,
-        });
+        if substrate_id.is_empty() {
+            return Err(SyscallError::EmptySubstrate);
+        }
+        self.substrates
+            .entry(substrate_id.into())
+            .or_insert_with(|| SubstrateAllowlist {
+                allowed: BTreeSet::new(),
+                allow_count: 0,
+                deny_count: 0,
+            });
         Ok(())
     }
 
     /// Allow a syscall.
     pub fn allow(&mut self, substrate_id: &str, syscall: &str) -> Result<bool, SyscallError> {
-        if syscall.is_empty() { return Err(SyscallError::EmptyCall); }
-        let s = self.substrates.get_mut(substrate_id)
+        if syscall.is_empty() {
+            return Err(SyscallError::EmptyCall);
+        }
+        let s = self
+            .substrates
+            .get_mut(substrate_id)
             .ok_or_else(|| SyscallError::UnknownSubstrate(substrate_id.into()))?;
         Ok(s.allowed.insert(syscall.into()))
     }
 
     /// Disallow a syscall.
     pub fn disallow(&mut self, substrate_id: &str, syscall: &str) -> Result<bool, SyscallError> {
-        let s = self.substrates.get_mut(substrate_id)
+        let s = self
+            .substrates
+            .get_mut(substrate_id)
             .ok_or_else(|| SyscallError::UnknownSubstrate(substrate_id.into()))?;
         Ok(s.allowed.remove(syscall))
     }
@@ -117,7 +127,9 @@ impl SyscallAllowlist {
                 if s.allowed.contains(syscall) {
                     SyscallVerdict::Allowed
                 } else {
-                    SyscallVerdict::Denied { reason: format!("syscall not on allowlist: {syscall}") }
+                    SyscallVerdict::Denied {
+                        reason: format!("syscall not on allowlist: {syscall}"),
+                    }
                 }
             }
         }
@@ -138,16 +150,24 @@ impl SyscallAllowlist {
 
     /// Counts (allow, deny).
     pub fn counts(&self, substrate_id: &str) -> Option<(u64, u64)> {
-        self.substrates.get(substrate_id).map(|s| (s.allow_count, s.deny_count))
+        self.substrates
+            .get(substrate_id)
+            .map(|s| (s.allow_count, s.deny_count))
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SyscallError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SyscallError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SyscallError::SchemaMismatch);
+        }
         for (id, s) in &self.substrates {
-            if id.is_empty() { return Err(SyscallError::EmptySubstrate); }
+            if id.is_empty() {
+                return Err(SyscallError::EmptySubstrate);
+            }
             for c in &s.allowed {
-                if c.is_empty() { return Err(SyscallError::EmptyCall); }
+                if c.is_empty() {
+                    return Err(SyscallError::EmptyCall);
+                }
             }
         }
         Ok(())
@@ -155,7 +175,9 @@ impl SyscallAllowlist {
 }
 
 impl Default for SyscallAllowlist {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -174,7 +196,10 @@ mod tests {
     fn denied_when_not_listed() {
         let mut s = SyscallAllowlist::new();
         s.register("sandbox-a").unwrap();
-        assert!(matches!(s.decide("sandbox-a", "exec"), SyscallVerdict::Denied { .. }));
+        assert!(matches!(
+            s.decide("sandbox-a", "exec"),
+            SyscallVerdict::Denied { .. }
+        ));
     }
 
     #[test]
@@ -189,7 +214,10 @@ mod tests {
         s.register("sandbox-a").unwrap();
         s.allow("sandbox-a", "read").unwrap();
         assert!(s.disallow("sandbox-a", "read").unwrap());
-        assert!(matches!(s.decide("sandbox-a", "read"), SyscallVerdict::Denied { .. }));
+        assert!(matches!(
+            s.decide("sandbox-a", "read"),
+            SyscallVerdict::Denied { .. }
+        ));
     }
 
     #[test]
@@ -217,27 +245,39 @@ mod tests {
     #[test]
     fn empty_substrate_rejected() {
         let mut s = SyscallAllowlist::new();
-        assert!(matches!(s.register("").unwrap_err(), SyscallError::EmptySubstrate));
+        assert!(matches!(
+            s.register("").unwrap_err(),
+            SyscallError::EmptySubstrate
+        ));
     }
 
     #[test]
     fn empty_syscall_rejected() {
         let mut s = SyscallAllowlist::new();
         s.register("a").unwrap();
-        assert!(matches!(s.allow("a", "").unwrap_err(), SyscallError::EmptyCall));
+        assert!(matches!(
+            s.allow("a", "").unwrap_err(),
+            SyscallError::EmptyCall
+        ));
     }
 
     #[test]
     fn allow_unknown_substrate_rejected() {
         let mut s = SyscallAllowlist::new();
-        assert!(matches!(s.allow("nope", "read").unwrap_err(), SyscallError::UnknownSubstrate(_)));
+        assert!(matches!(
+            s.allow("nope", "read").unwrap_err(),
+            SyscallError::UnknownSubstrate(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = SyscallAllowlist::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SyscallError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SyscallError::SchemaMismatch
+        ));
     }
 
     #[test]

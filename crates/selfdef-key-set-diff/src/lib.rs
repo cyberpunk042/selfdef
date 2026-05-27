@@ -48,11 +48,17 @@ pub enum DiffError {
 
 impl Diff {
     /// Sizes.
-    pub fn added_len(&self) -> usize { self.added.len() }
+    pub fn added_len(&self) -> usize {
+        self.added.len()
+    }
     /// Sizes.
-    pub fn removed_len(&self) -> usize { self.removed.len() }
+    pub fn removed_len(&self) -> usize {
+        self.removed.len()
+    }
     /// Sizes.
-    pub fn common_len(&self) -> usize { self.common.len() }
+    pub fn common_len(&self) -> usize {
+        self.common.len()
+    }
     /// True iff added/removed both empty.
     pub fn is_change_free(&self) -> bool {
         self.added.is_empty() && self.removed.is_empty()
@@ -64,7 +70,11 @@ pub fn compute(prev: &BTreeSet<String>, next: &BTreeSet<String>) -> Diff {
     let added: BTreeSet<String> = next.difference(prev).cloned().collect();
     let removed: BTreeSet<String> = prev.difference(next).cloned().collect();
     let common: BTreeSet<String> = prev.intersection(next).cloned().collect();
-    Diff { added, removed, common }
+    Diff {
+        added,
+        removed,
+        common,
+    }
 }
 
 impl KeySetDiff {
@@ -86,13 +96,17 @@ impl KeySetDiff {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DiffError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DiffError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DiffError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for KeySetDiff {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -154,7 +168,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut k = KeySetDiff::new();
         k.schema_version = "9.9.9".into();
-        assert!(matches!(k.validate().unwrap_err(), DiffError::SchemaMismatch));
+        assert!(matches!(
+            k.validate().unwrap_err(),
+            DiffError::SchemaMismatch
+        ));
     }
 
     #[test]

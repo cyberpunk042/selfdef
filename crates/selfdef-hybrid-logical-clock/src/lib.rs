@@ -33,12 +33,16 @@ pub struct Timestamp {
 }
 
 impl PartialOrd for Timestamp {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { Some(self.cmp(other)) }
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for Timestamp {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.wall_ms.cmp(&other.wall_ms).then(self.counter.cmp(&other.counter))
+        self.wall_ms
+            .cmp(&other.wall_ms)
+            .then(self.counter.cmp(&other.counter))
     }
 }
 
@@ -67,7 +71,10 @@ impl HybridLogicalClock {
     pub fn new() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            current: Timestamp { wall_ms: 0, counter: 0 },
+            current: Timestamp {
+                wall_ms: 0,
+                counter: 0,
+            },
         }
     }
 
@@ -80,7 +87,10 @@ impl HybridLogicalClock {
         } else {
             0
         };
-        self.current = Timestamp { wall_ms: new_wall, counter: new_counter };
+        self.current = Timestamp {
+            wall_ms: new_wall,
+            counter: new_counter,
+        };
         Ok(self.current)
     }
 
@@ -89,7 +99,10 @@ impl HybridLogicalClock {
         let prev = self.current;
         let new_wall = prev.wall_ms.max(remote.wall_ms).max(wall_now);
         let new_counter = if new_wall == prev.wall_ms && new_wall == remote.wall_ms {
-            prev.counter.max(remote.counter).checked_add(1).ok_or(HlcError::Overflow)?
+            prev.counter
+                .max(remote.counter)
+                .checked_add(1)
+                .ok_or(HlcError::Overflow)?
         } else if new_wall == prev.wall_ms {
             prev.counter.checked_add(1).ok_or(HlcError::Overflow)?
         } else if new_wall == remote.wall_ms {
@@ -97,19 +110,26 @@ impl HybridLogicalClock {
         } else {
             0
         };
-        self.current = Timestamp { wall_ms: new_wall, counter: new_counter };
+        self.current = Timestamp {
+            wall_ms: new_wall,
+            counter: new_counter,
+        };
         Ok(self.current)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HlcError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HlcError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HlcError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for HybridLogicalClock {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -149,7 +169,10 @@ mod tests {
     fn update_with_remote_ahead() {
         let mut h = HybridLogicalClock::new();
         h.now(100).unwrap();
-        let remote = Timestamp { wall_ms: 1000, counter: 5 };
+        let remote = Timestamp {
+            wall_ms: 1000,
+            counter: 5,
+        };
         let t = h.update(remote, 100).unwrap();
         assert_eq!(t.wall_ms, 1000);
         assert_eq!(t.counter, 6);
@@ -161,7 +184,10 @@ mod tests {
         h.now(100).unwrap();
         h.now(100).unwrap();
         // Local counter is 1. Remote at same wall, counter 3 → max+1 = 4.
-        let remote = Timestamp { wall_ms: 100, counter: 3 };
+        let remote = Timestamp {
+            wall_ms: 100,
+            counter: 3,
+        };
         let t = h.update(remote, 100).unwrap();
         assert_eq!(t.wall_ms, 100);
         assert_eq!(t.counter, 4);
@@ -169,9 +195,18 @@ mod tests {
 
     #[test]
     fn cmp_orders_by_wall_then_counter() {
-        let a = Timestamp { wall_ms: 100, counter: 5 };
-        let b = Timestamp { wall_ms: 100, counter: 6 };
-        let c = Timestamp { wall_ms: 200, counter: 0 };
+        let a = Timestamp {
+            wall_ms: 100,
+            counter: 5,
+        };
+        let b = Timestamp {
+            wall_ms: 100,
+            counter: 6,
+        };
+        let c = Timestamp {
+            wall_ms: 200,
+            counter: 0,
+        };
         assert!(a < b);
         assert!(b < c);
     }
@@ -180,7 +215,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut h = HybridLogicalClock::new();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HlcError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HlcError::SchemaMismatch
+        ));
     }
 
     #[test]

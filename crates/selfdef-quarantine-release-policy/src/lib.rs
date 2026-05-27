@@ -74,7 +74,12 @@ impl QuarantineReleasePolicy {
     }
 
     /// Classify.
-    pub fn classify(&self, reviewed_by_count: u32, age_ms: u64, has_operator_signoff: bool) -> ReleaseVerdict {
+    pub fn classify(
+        &self,
+        reviewed_by_count: u32,
+        age_ms: u64,
+        has_operator_signoff: bool,
+    ) -> ReleaseVerdict {
         if reviewed_by_count < self.min_reviewers {
             return ReleaseVerdict::NeedsMoreReviewers {
                 have: reviewed_by_count,
@@ -95,7 +100,9 @@ impl QuarantineReleasePolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ReleaseError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ReleaseError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ReleaseError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -113,13 +120,22 @@ mod tests {
     #[test]
     fn needs_more_reviewers() {
         let p = QuarantineReleasePolicy::new(3, 0, false);
-        assert_eq!(p.classify(1, 0, false), ReleaseVerdict::NeedsMoreReviewers { have: 1, need: 3 });
+        assert_eq!(
+            p.classify(1, 0, false),
+            ReleaseVerdict::NeedsMoreReviewers { have: 1, need: 3 }
+        );
     }
 
     #[test]
     fn too_fresh() {
         let p = QuarantineReleasePolicy::new(0, 60_000, false);
-        assert_eq!(p.classify(0, 30_000, false), ReleaseVerdict::TooFresh { age_ms: 30_000, need_min_age_ms: 60_000 });
+        assert_eq!(
+            p.classify(0, 30_000, false),
+            ReleaseVerdict::TooFresh {
+                age_ms: 30_000,
+                need_min_age_ms: 60_000
+            }
+        );
     }
 
     #[test]
@@ -133,21 +149,30 @@ mod tests {
     fn order_reviewers_first() {
         // Under both reviewer count and min_age — reviewers come first.
         let p = QuarantineReleasePolicy::new(3, 60_000, false);
-        assert!(matches!(p.classify(0, 0, false), ReleaseVerdict::NeedsMoreReviewers { .. }));
+        assert!(matches!(
+            p.classify(0, 0, false),
+            ReleaseVerdict::NeedsMoreReviewers { .. }
+        ));
     }
 
     #[test]
     fn order_age_second() {
         // Reviewers met, age not.
         let p = QuarantineReleasePolicy::new(1, 60_000, true);
-        assert!(matches!(p.classify(2, 0, true), ReleaseVerdict::TooFresh { .. }));
+        assert!(matches!(
+            p.classify(2, 0, true),
+            ReleaseVerdict::TooFresh { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = QuarantineReleasePolicy::new(0, 0, false);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ReleaseError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ReleaseError::SchemaMismatch
+        ));
     }
 
     #[test]

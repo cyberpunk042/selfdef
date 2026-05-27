@@ -89,7 +89,9 @@ pub enum FsIsolationError {
 impl SandboxFsIsolation {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Tier's max allowed PathClass.
@@ -137,84 +139,142 @@ impl SandboxFsIsolation {
 }
 
 impl Default for SandboxFsIsolation {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn p() -> SandboxFsIsolation { SandboxFsIsolation::new() }
+    fn p() -> SandboxFsIsolation {
+        SandboxFsIsolation::new()
+    }
 
     #[test]
     fn tier0_only_none() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier0, PathClass::None, FsOp::Read), FsDecision::Allow);
-        assert_eq!(x.decide(SandboxTier::Tier0, PathClass::JailDir, FsOp::Read), FsDecision::DeniedClass);
+        assert_eq!(
+            x.decide(SandboxTier::Tier0, PathClass::None, FsOp::Read),
+            FsDecision::Allow
+        );
+        assert_eq!(
+            x.decide(SandboxTier::Tier0, PathClass::JailDir, FsOp::Read),
+            FsDecision::DeniedClass
+        );
     }
 
     #[test]
     fn tier1_jail_read_only() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Read), FsDecision::Allow);
-        assert_eq!(x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Write), FsDecision::DeniedReadOnly);
+        assert_eq!(
+            x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Read),
+            FsDecision::Allow
+        );
+        assert_eq!(
+            x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Write),
+            FsDecision::DeniedReadOnly
+        );
     }
 
     #[test]
     fn tier2_workspace_rw() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier2, PathClass::Workspace, FsOp::Write), FsDecision::Allow);
-        assert_eq!(x.decide(SandboxTier::Tier2, PathClass::UserHome, FsOp::Read), FsDecision::DeniedClass);
+        assert_eq!(
+            x.decide(SandboxTier::Tier2, PathClass::Workspace, FsOp::Write),
+            FsDecision::Allow
+        );
+        assert_eq!(
+            x.decide(SandboxTier::Tier2, PathClass::UserHome, FsOp::Read),
+            FsDecision::DeniedClass
+        );
     }
 
     #[test]
     fn tier3_home_rw_no_host_write() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier3, PathClass::UserHome, FsOp::Write), FsDecision::Allow);
-        assert_eq!(x.decide(SandboxTier::Tier3, PathClass::Host, FsOp::Read), FsDecision::DeniedClass);
+        assert_eq!(
+            x.decide(SandboxTier::Tier3, PathClass::UserHome, FsOp::Write),
+            FsDecision::Allow
+        );
+        assert_eq!(
+            x.decide(SandboxTier::Tier3, PathClass::Host, FsOp::Read),
+            FsDecision::DeniedClass
+        );
     }
 
     #[test]
     fn tier4_host_writes_allowed() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier4, PathClass::Host, FsOp::Delete), FsDecision::Allow);
+        assert_eq!(
+            x.decide(SandboxTier::Tier4, PathClass::Host, FsOp::Delete),
+            FsDecision::Allow
+        );
     }
 
     #[test]
     fn delete_treated_as_write() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Delete), FsDecision::DeniedReadOnly);
+        assert_eq!(
+            x.decide(SandboxTier::Tier1, PathClass::JailDir, FsOp::Delete),
+            FsDecision::DeniedReadOnly
+        );
     }
 
     #[test]
     fn higher_tiers_subsume_lower_classes() {
         let x = p();
-        assert_eq!(x.decide(SandboxTier::Tier4, PathClass::JailDir, FsOp::Read), FsDecision::Allow);
-        assert_eq!(x.decide(SandboxTier::Tier3, PathClass::Workspace, FsOp::Write), FsDecision::Allow);
+        assert_eq!(
+            x.decide(SandboxTier::Tier4, PathClass::JailDir, FsOp::Read),
+            FsDecision::Allow
+        );
+        assert_eq!(
+            x.decide(SandboxTier::Tier3, PathClass::Workspace, FsOp::Write),
+            FsDecision::Allow
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = p();
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), FsIsolationError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            FsIsolationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SandboxTier::Tier0).unwrap(), "\"tier0\"");
+        assert_eq!(
+            serde_json::to_string(&SandboxTier::Tier0).unwrap(),
+            "\"tier0\""
+        );
     }
 
     #[test]
     fn path_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PathClass::JailDir).unwrap(), "\"jail-dir\"");
-        assert_eq!(serde_json::to_string(&PathClass::UserHome).unwrap(), "\"user-home\"");
+        assert_eq!(
+            serde_json::to_string(&PathClass::JailDir).unwrap(),
+            "\"jail-dir\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PathClass::UserHome).unwrap(),
+            "\"user-home\""
+        );
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&FsDecision::DeniedClass).unwrap(), "\"denied-class\"");
-        assert_eq!(serde_json::to_string(&FsDecision::DeniedReadOnly).unwrap(), "\"denied-read-only\"");
+        assert_eq!(
+            serde_json::to_string(&FsDecision::DeniedClass).unwrap(),
+            "\"denied-class\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FsDecision::DeniedReadOnly).unwrap(),
+            "\"denied-read-only\""
+        );
     }
 
     #[test]

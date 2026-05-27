@@ -53,7 +53,9 @@ pub enum UndoError {
 impl UndoLog {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, UndoError> {
-        if capacity == 0 { return Err(UndoError::ZeroCap); }
+        if capacity == 0 {
+            return Err(UndoError::ZeroCap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -64,7 +66,9 @@ impl UndoLog {
 
     /// Record a new action; clears redo.
     pub fn record(&mut self, id: &str) -> Result<(), UndoError> {
-        if id.is_empty() { return Err(UndoError::EmptyId); }
+        if id.is_empty() {
+            return Err(UndoError::EmptyId);
+        }
         self.redo_stack.clear();
         self.undo_stack.push_back(id.into());
         while self.undo_stack.len() > self.capacity as usize {
@@ -91,17 +95,27 @@ impl UndoLog {
     }
 
     /// Can undo?
-    pub fn can_undo(&self) -> bool { !self.undo_stack.is_empty() }
+    pub fn can_undo(&self) -> bool {
+        !self.undo_stack.is_empty()
+    }
 
     /// Can redo?
-    pub fn can_redo(&self) -> bool { !self.redo_stack.is_empty() }
+    pub fn can_redo(&self) -> bool {
+        !self.redo_stack.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), UndoError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(UndoError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(UndoError::ZeroCap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(UndoError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(UndoError::ZeroCap);
+        }
         for id in self.undo_stack.iter().chain(self.redo_stack.iter()) {
-            if id.is_empty() { return Err(UndoError::EmptyId); }
+            if id.is_empty() {
+                return Err(UndoError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -169,7 +183,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = UndoLog::new(2).unwrap();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), UndoError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            UndoError::SchemaMismatch
+        ));
     }
 
     #[test]

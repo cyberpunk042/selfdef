@@ -130,19 +130,28 @@ mod tests {
     fn bad_thresholds_rejected() {
         let mut p = SubstrateNetworkClockPolicy::canonical();
         p.warn_seconds = 100;
-        assert!(matches!(p.validate().unwrap_err(), ClockError::BadThresholds { .. }));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ClockError::BadThresholds { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstrateNetworkClockPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ClockError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ClockError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ClockDecision::NoAuthority).unwrap(), "\"no-authority\"");
+        assert_eq!(
+            serde_json::to_string(&ClockDecision::NoAuthority).unwrap(),
+            "\"no-authority\""
+        );
     }
 
     #[test]

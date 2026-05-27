@@ -78,20 +78,33 @@ impl ActorHandoffPolicy {
     }
 
     /// Grant.
-    pub fn grant(&mut self, from: &str, to: &str, scope: &str, granted_at_ms: u64, expires_at_ms: u64) -> Result<(), HandoffError> {
+    pub fn grant(
+        &mut self,
+        from: &str,
+        to: &str,
+        scope: &str,
+        granted_at_ms: u64,
+        expires_at_ms: u64,
+    ) -> Result<(), HandoffError> {
         if from.is_empty() || to.is_empty() || scope.is_empty() {
             return Err(HandoffError::EmptyId);
         }
         if granted_at_ms >= expires_at_ms {
             return Err(HandoffError::BadWindow(granted_at_ms, expires_at_ms));
         }
-        self.by_from.entry(from.into()).or_default()
-            .entry(to.into()).or_default()
-            .insert(scope.into(), Handoff {
-                granted_at_ms,
-                expires_at_ms,
-                revoked: false,
-            });
+        self.by_from
+            .entry(from.into())
+            .or_default()
+            .entry(to.into())
+            .or_default()
+            .insert(
+                scope.into(),
+                Handoff {
+                    granted_at_ms,
+                    expires_at_ms,
+                    revoked: false,
+                },
+            );
         Ok(())
     }
 
@@ -110,27 +123,43 @@ impl ActorHandoffPolicy {
 
     /// Classify.
     pub fn classify(&self, from: &str, to: &str, scope: &str, now_ms: u64) -> HandoffVerdict {
-        let h = match self.by_from.get(from)
+        let h = match self
+            .by_from
+            .get(from)
             .and_then(|m| m.get(to))
             .and_then(|s| s.get(scope))
         {
             Some(h) => h,
             None => return HandoffVerdict::Unknown,
         };
-        if h.revoked { return HandoffVerdict::Revoked; }
-        if now_ms >= h.expires_at_ms { return HandoffVerdict::Expired; }
-        HandoffVerdict::Active { expires_at_ms: h.expires_at_ms }
+        if h.revoked {
+            return HandoffVerdict::Revoked;
+        }
+        if now_ms >= h.expires_at_ms {
+            return HandoffVerdict::Expired;
+        }
+        HandoffVerdict::Active {
+            expires_at_ms: h.expires_at_ms,
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HandoffError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HandoffError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HandoffError::SchemaMismatch);
+        }
         for (from, byto) in &self.by_from {
-            if from.is_empty() { return Err(HandoffError::EmptyId); }
+            if from.is_empty() {
+                return Err(HandoffError::EmptyId);
+            }
             for (to, scopes) in byto {
-                if to.is_empty() { return Err(HandoffError::EmptyId); }
+                if to.is_empty() {
+                    return Err(HandoffError::EmptyId);
+                }
                 for (s, h) in scopes {
-                    if s.is_empty() { return Err(HandoffError::EmptyId); }
+                    if s.is_empty() {
+                        return Err(HandoffError::EmptyId);
+                    }
                     if h.granted_at_ms >= h.expires_at_ms {
                         return Err(HandoffError::BadWindow(h.granted_at_ms, h.expires_at_ms));
                     }
@@ -142,7 +171,9 @@ impl ActorHandoffPolicy {
 }
 
 impl Default for ActorHandoffPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -169,7 +200,10 @@ mod tests {
     fn expired_past_window() {
         let mut p = ActorHandoffPolicy::new();
         p.grant("a", "b", "deploy", 0, 1000).unwrap();
-        assert_eq!(p.classify("a", "b", "deploy", 2000), HandoffVerdict::Expired);
+        assert_eq!(
+            p.classify("a", "b", "deploy", 2000),
+            HandoffVerdict::Expired
+        );
     }
 
     #[test]
@@ -189,22 +223,37 @@ mod tests {
     #[test]
     fn bad_window_rejected() {
         let mut p = ActorHandoffPolicy::new();
-        assert!(matches!(p.grant("a", "b", "deploy", 1000, 1000).unwrap_err(), HandoffError::BadWindow(_, _)));
+        assert!(matches!(
+            p.grant("a", "b", "deploy", 1000, 1000).unwrap_err(),
+            HandoffError::BadWindow(_, _)
+        ));
     }
 
     #[test]
     fn empty_ids_rejected() {
         let mut p = ActorHandoffPolicy::new();
-        assert!(matches!(p.grant("", "b", "s", 0, 1).unwrap_err(), HandoffError::EmptyId));
-        assert!(matches!(p.grant("a", "", "s", 0, 1).unwrap_err(), HandoffError::EmptyId));
-        assert!(matches!(p.grant("a", "b", "", 0, 1).unwrap_err(), HandoffError::EmptyId));
+        assert!(matches!(
+            p.grant("", "b", "s", 0, 1).unwrap_err(),
+            HandoffError::EmptyId
+        ));
+        assert!(matches!(
+            p.grant("a", "", "s", 0, 1).unwrap_err(),
+            HandoffError::EmptyId
+        ));
+        assert!(matches!(
+            p.grant("a", "b", "", 0, 1).unwrap_err(),
+            HandoffError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ActorHandoffPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), HandoffError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            HandoffError::SchemaMismatch
+        ));
     }
 
     #[test]

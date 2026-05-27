@@ -71,31 +71,44 @@ pub enum RouterError {
 }
 
 /// Run the router.
-pub fn route(
-    input: &RouterInput,
-    floor: &TrustFloorManifest,
-) -> Result<RouterOutput, RouterError> {
+pub fn route(input: &RouterInput, floor: &TrustFloorManifest) -> Result<RouterOutput, RouterError> {
     if input.trust_score > 100 {
         return Err(RouterError::TrustOutOfRange(input.trust_score));
     }
     // 1. Trust floor → Allow / Ask / Deny.
-    let trust_outcome = floor.decide_outcome(input.side_effect, input.trust_score)
+    let trust_outcome = floor
+        .decide_outcome(input.side_effect, input.trust_score)
         .unwrap_or(Outcome::Deny);
     if trust_outcome == Outcome::Deny {
-        return Ok(RouterOutput { outcome: Outcome::Deny, decided_by: DecidedBy::TrustFloor });
+        return Ok(RouterOutput {
+            outcome: Outcome::Deny,
+            decided_by: DecidedBy::TrustFloor,
+        });
     }
     if trust_outcome == Outcome::Ask && !input.operator_approved {
-        return Ok(RouterOutput { outcome: Outcome::Ask, decided_by: DecidedBy::TrustFloor });
+        return Ok(RouterOutput {
+            outcome: Outcome::Ask,
+            decided_by: DecidedBy::TrustFloor,
+        });
     }
     // 2. Eval gate.
     if let Some(false) = input.eval_gate_passes {
-        return Ok(RouterOutput { outcome: Outcome::Deny, decided_by: DecidedBy::EvalGate });
+        return Ok(RouterOutput {
+            outcome: Outcome::Deny,
+            decided_by: DecidedBy::EvalGate,
+        });
     }
     // 3. Sandbox escalation.
     if input.sandbox_requested {
-        return Ok(RouterOutput { outcome: Outcome::Sandbox, decided_by: DecidedBy::Sandbox });
+        return Ok(RouterOutput {
+            outcome: Outcome::Sandbox,
+            decided_by: DecidedBy::Sandbox,
+        });
     }
-    Ok(RouterOutput { outcome: Outcome::Allow, decided_by: DecidedBy::AllGatesCleared })
+    Ok(RouterOutput {
+        outcome: Outcome::Allow,
+        decided_by: DecidedBy::AllGatesCleared,
+    })
 }
 
 #[cfg(test)]
@@ -114,21 +127,33 @@ mod tests {
 
     #[test]
     fn high_trust_allows() {
-        let r = route(&input(SideEffectClass::FsWrite, 90), &TrustFloorManifest::canonical()).unwrap();
+        let r = route(
+            &input(SideEffectClass::FsWrite, 90),
+            &TrustFloorManifest::canonical(),
+        )
+        .unwrap();
         assert_eq!(r.outcome, Outcome::Allow);
         assert_eq!(r.decided_by, DecidedBy::AllGatesCleared);
     }
 
     #[test]
     fn low_trust_below_floor_denies() {
-        let r = route(&input(SideEffectClass::FsWrite, 5), &TrustFloorManifest::canonical()).unwrap();
+        let r = route(
+            &input(SideEffectClass::FsWrite, 5),
+            &TrustFloorManifest::canonical(),
+        )
+        .unwrap();
         assert_eq!(r.outcome, Outcome::Deny);
         assert_eq!(r.decided_by, DecidedBy::TrustFloor);
     }
 
     #[test]
     fn trust_in_ask_band_returns_ask() {
-        let r = route(&input(SideEffectClass::FsWrite, 35), &TrustFloorManifest::canonical()).unwrap();
+        let r = route(
+            &input(SideEffectClass::FsWrite, 35),
+            &TrustFloorManifest::canonical(),
+        )
+        .unwrap();
         assert_eq!(r.outcome, Outcome::Ask);
         assert_eq!(r.decided_by, DecidedBy::TrustFloor);
     }
@@ -162,21 +187,38 @@ mod tests {
     #[test]
     fn trust_out_of_range_caught() {
         assert!(matches!(
-            route(&input(SideEffectClass::FsWrite, 150), &TrustFloorManifest::canonical()).unwrap_err(),
+            route(
+                &input(SideEffectClass::FsWrite, 150),
+                &TrustFloorManifest::canonical()
+            )
+            .unwrap_err(),
             RouterError::TrustOutOfRange(150)
         ));
     }
 
     #[test]
     fn decided_by_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DecidedBy::TrustFloor).unwrap(), "\"trust-floor\"");
-        assert_eq!(serde_json::to_string(&DecidedBy::EvalGate).unwrap(), "\"eval-gate\"");
-        assert_eq!(serde_json::to_string(&DecidedBy::AllGatesCleared).unwrap(), "\"all-gates-cleared\"");
+        assert_eq!(
+            serde_json::to_string(&DecidedBy::TrustFloor).unwrap(),
+            "\"trust-floor\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DecidedBy::EvalGate).unwrap(),
+            "\"eval-gate\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DecidedBy::AllGatesCleared).unwrap(),
+            "\"all-gates-cleared\""
+        );
     }
 
     #[test]
     fn output_serde_roundtrip() {
-        let r = route(&input(SideEffectClass::FsWrite, 90), &TrustFloorManifest::canonical()).unwrap();
+        let r = route(
+            &input(SideEffectClass::FsWrite, 90),
+            &TrustFloorManifest::canonical(),
+        )
+        .unwrap();
         let j = serde_json::to_string(&r).unwrap();
         let back: RouterOutput = serde_json::from_str(&j).unwrap();
         assert_eq!(r, back);

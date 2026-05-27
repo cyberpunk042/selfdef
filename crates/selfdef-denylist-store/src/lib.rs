@@ -57,25 +57,48 @@ pub enum DenyError {
 impl DenylistStore {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), entries: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            entries: BTreeMap::new(),
+        }
     }
 
     /// Add (ttl=0 means permanent).
-    pub fn add(&mut self, key: &str, reason: &str, now_ms: u64, ttl_ms: u64) -> Result<(), DenyError> {
-        if key.is_empty() { return Err(DenyError::EmptyKey); }
-        if reason.is_empty() { return Err(DenyError::EmptyReason); }
-        let expires_at_ms = if ttl_ms == 0 { 0 } else { now_ms.saturating_add(ttl_ms) };
-        self.entries.insert(key.into(), Entry {
-            reason: reason.into(),
-            added_at_ms: now_ms,
-            expires_at_ms,
-        });
+    pub fn add(
+        &mut self,
+        key: &str,
+        reason: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), DenyError> {
+        if key.is_empty() {
+            return Err(DenyError::EmptyKey);
+        }
+        if reason.is_empty() {
+            return Err(DenyError::EmptyReason);
+        }
+        let expires_at_ms = if ttl_ms == 0 {
+            0
+        } else {
+            now_ms.saturating_add(ttl_ms)
+        };
+        self.entries.insert(
+            key.into(),
+            Entry {
+                reason: reason.into(),
+                added_at_ms: now_ms,
+                expires_at_ms,
+            },
+        );
         Ok(())
     }
 
     /// Remove.
     pub fn remove(&mut self, key: &str) -> Result<(), DenyError> {
-        self.entries.remove(key).map(|_| ()).ok_or_else(|| DenyError::Unknown(key.into()))
+        self.entries
+            .remove(key)
+            .map(|_| ())
+            .ok_or_else(|| DenyError::Unknown(key.into()))
     }
 
     /// Is key denied at now_ms?
@@ -93,29 +116,39 @@ impl DenylistStore {
 
     /// Drop expired entries.
     pub fn compact(&mut self, now_ms: u64) {
-        self.entries.retain(|_, e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms);
+        self.entries
+            .retain(|_, e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms);
     }
 
     /// Count live entries.
     pub fn live(&self, now_ms: u64) -> usize {
-        self.entries.values()
+        self.entries
+            .values()
             .filter(|e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms)
             .count()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DenyError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DenyError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DenyError::SchemaMismatch);
+        }
         for (k, e) in &self.entries {
-            if k.is_empty() { return Err(DenyError::EmptyKey); }
-            if e.reason.is_empty() { return Err(DenyError::EmptyReason); }
+            if k.is_empty() {
+                return Err(DenyError::EmptyKey);
+            }
+            if e.reason.is_empty() {
+                return Err(DenyError::EmptyReason);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DenylistStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -158,21 +191,33 @@ mod tests {
     #[test]
     fn remove_unknown_rejected() {
         let mut s = DenylistStore::new();
-        assert!(matches!(s.remove("missing").unwrap_err(), DenyError::Unknown(_)));
+        assert!(matches!(
+            s.remove("missing").unwrap_err(),
+            DenyError::Unknown(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = DenylistStore::new();
-        assert!(matches!(s.add("", "x", 0, 0).unwrap_err(), DenyError::EmptyKey));
-        assert!(matches!(s.add("k", "", 0, 0).unwrap_err(), DenyError::EmptyReason));
+        assert!(matches!(
+            s.add("", "x", 0, 0).unwrap_err(),
+            DenyError::EmptyKey
+        ));
+        assert!(matches!(
+            s.add("k", "", 0, 0).unwrap_err(),
+            DenyError::EmptyReason
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = DenylistStore::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), DenyError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            DenyError::SchemaMismatch
+        ));
     }
 
     #[test]

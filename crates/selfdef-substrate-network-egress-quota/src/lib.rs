@@ -113,12 +113,54 @@ impl SubstrateEgressQuota {
     pub fn canonical() -> Self {
         let mut profiles = BTreeMap::new();
         let m: u64 = 5 * 60 * 1000;
-        profiles.insert(Profile::Private, ProfileEgress { window_ms: m, window_budget_bytes: 8 << 20, max_request_bytes: 1 << 20 });
-        profiles.insert(Profile::Fast, ProfileEgress { window_ms: m, window_budget_bytes: 64 << 20, max_request_bytes: 8 << 20 });
-        profiles.insert(Profile::Careful, ProfileEgress { window_ms: m, window_budget_bytes: 32 << 20, max_request_bytes: 4 << 20 });
-        profiles.insert(Profile::Autonomous, ProfileEgress { window_ms: m, window_budget_bytes: 128 << 20, max_request_bytes: 16 << 20 });
-        profiles.insert(Profile::Experimental, ProfileEgress { window_ms: m, window_budget_bytes: 256 << 20, max_request_bytes: 32 << 20 });
-        profiles.insert(Profile::Production, ProfileEgress { window_ms: m, window_budget_bytes: 32 << 20, max_request_bytes: 4 << 20 });
+        profiles.insert(
+            Profile::Private,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 8 << 20,
+                max_request_bytes: 1 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Fast,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 64 << 20,
+                max_request_bytes: 8 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Careful,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 32 << 20,
+                max_request_bytes: 4 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Autonomous,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 128 << 20,
+                max_request_bytes: 16 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Experimental,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 256 << 20,
+                max_request_bytes: 32 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Production,
+            ProfileEgress {
+                window_ms: m,
+                window_budget_bytes: 32 << 20,
+                max_request_bytes: 4 << 20,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles,
@@ -128,24 +170,38 @@ impl SubstrateEgressQuota {
 
     /// Trim records older than widest window prior to now_ms.
     pub fn rotate(&mut self, now_ms: u64) {
-        let max_window = self.profiles.values().map(|p| p.window_ms).max().unwrap_or(0);
+        let max_window = self
+            .profiles
+            .values()
+            .map(|p| p.window_ms)
+            .max()
+            .unwrap_or(0);
         let cutoff = now_ms.saturating_sub(max_window);
         self.records.retain(|r| r.ts_ms >= cutoff);
     }
 
     fn in_window_bytes(&self, profile: Profile, cfg: &ProfileEgress, now_ms: u64) -> u64 {
         let cutoff = now_ms.saturating_sub(cfg.window_ms);
-        self.records.iter()
+        self.records
+            .iter()
             .filter(|r| r.profile == profile && r.ts_ms >= cutoff && r.ts_ms <= now_ms)
             .map(|r| r.bytes)
             .sum()
     }
 
     /// Account for a candidate send of `bytes` at `now_ms`.
-    pub fn account(&mut self, profile: Profile, bytes: u64, now_ms: u64) -> Result<EgressVerdict, EgressError> {
+    pub fn account(
+        &mut self,
+        profile: Profile,
+        bytes: u64,
+        now_ms: u64,
+    ) -> Result<EgressVerdict, EgressError> {
         if let Some(last) = self.records.last() {
             if now_ms < last.ts_ms {
-                return Err(EgressError::NonMonotonic { prev: last.ts_ms, new: now_ms });
+                return Err(EgressError::NonMonotonic {
+                    prev: last.ts_ms,
+                    new: now_ms,
+                });
             }
         }
         let cfg = match self.profiles.get(&profile) {
@@ -153,14 +209,24 @@ impl SubstrateEgressQuota {
             None => return Ok(EgressVerdict::Unconfigured),
         };
         if bytes > cfg.max_request_bytes {
-            return Ok(EgressVerdict::RequestTooLarge { requested: bytes, cap: cfg.max_request_bytes });
+            return Ok(EgressVerdict::RequestTooLarge {
+                requested: bytes,
+                cap: cfg.max_request_bytes,
+            });
         }
         let used = self.in_window_bytes(profile, &cfg, now_ms);
         let would = used.saturating_add(bytes);
         if would > cfg.window_budget_bytes {
-            return Ok(EgressVerdict::BudgetExhausted { would_total: would, budget: cfg.window_budget_bytes });
+            return Ok(EgressVerdict::BudgetExhausted {
+                would_total: would,
+                budget: cfg.window_budget_bytes,
+            });
         }
-        self.records.push(EgressRecord { ts_ms: now_ms, bytes, profile });
+        self.records.push(EgressRecord {
+            ts_ms: now_ms,
+            bytes,
+            profile,
+        });
         Ok(EgressVerdict::Accepted)
     }
 
@@ -172,7 +238,10 @@ impl SubstrateEgressQuota {
         let mut last = 0u64;
         for r in &self.records {
             if r.ts_ms < last {
-                return Err(EgressError::NonMonotonic { prev: last, new: r.ts_ms });
+                return Err(EgressError::NonMonotonic {
+                    prev: last,
+                    new: r.ts_ms,
+                });
             }
             last = r.ts_ms;
         }
@@ -192,14 +261,20 @@ mod tests {
     #[test]
     fn accept_under_caps() {
         let mut q = SubstrateEgressQuota::canonical();
-        assert!(matches!(q.account(Profile::Fast, 1 << 20, 0).unwrap(), EgressVerdict::Accepted));
+        assert!(matches!(
+            q.account(Profile::Fast, 1 << 20, 0).unwrap(),
+            EgressVerdict::Accepted
+        ));
     }
 
     #[test]
     fn request_too_large() {
         let mut q = SubstrateEgressQuota::canonical();
         // Private max_request 1 MB.
-        assert!(matches!(q.account(Profile::Private, 4 << 20, 0).unwrap(), EgressVerdict::RequestTooLarge { .. }));
+        assert!(matches!(
+            q.account(Profile::Private, 4 << 20, 0).unwrap(),
+            EgressVerdict::RequestTooLarge { .. }
+        ));
     }
 
     #[test]
@@ -207,31 +282,48 @@ mod tests {
         let mut q = SubstrateEgressQuota::canonical();
         // Production 32 MB budget, 4 MB request cap. 8 × 4MB = 32MB; 9th exceeds.
         for _ in 0..8 {
-            assert!(matches!(q.account(Profile::Production, 4 << 20, 0).unwrap(), EgressVerdict::Accepted));
+            assert!(matches!(
+                q.account(Profile::Production, 4 << 20, 0).unwrap(),
+                EgressVerdict::Accepted
+            ));
         }
-        assert!(matches!(q.account(Profile::Production, 1, 0).unwrap(), EgressVerdict::BudgetExhausted { .. }));
+        assert!(matches!(
+            q.account(Profile::Production, 1, 0).unwrap(),
+            EgressVerdict::BudgetExhausted { .. }
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut q = SubstrateEgressQuota::canonical();
         q.profiles.clear();
-        assert!(matches!(q.account(Profile::Fast, 100, 0).unwrap(), EgressVerdict::Unconfigured));
+        assert!(matches!(
+            q.account(Profile::Fast, 100, 0).unwrap(),
+            EgressVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn window_slides() {
         let mut q = SubstrateEgressQuota::canonical();
-        for _ in 0..8 { q.account(Profile::Production, 4 << 20, 0).unwrap(); }
+        for _ in 0..8 {
+            q.account(Profile::Production, 4 << 20, 0).unwrap();
+        }
         // 6 minutes later, window has slid past.
-        assert!(matches!(q.account(Profile::Production, 1, 6 * 60_000).unwrap(), EgressVerdict::Accepted));
+        assert!(matches!(
+            q.account(Profile::Production, 1, 6 * 60_000).unwrap(),
+            EgressVerdict::Accepted
+        ));
     }
 
     #[test]
     fn nonmonotonic_rejected() {
         let mut q = SubstrateEgressQuota::canonical();
         q.account(Profile::Fast, 100, 200).unwrap();
-        assert!(matches!(q.account(Profile::Fast, 100, 100).unwrap_err(), EgressError::NonMonotonic { .. }));
+        assert!(matches!(
+            q.account(Profile::Fast, 100, 100).unwrap_err(),
+            EgressError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -246,7 +338,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut q = SubstrateEgressQuota::canonical();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), EgressError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            EgressError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -86,14 +86,27 @@ impl ActionResultCache {
     }
 
     /// Put.
-    pub fn put(&mut self, action_hash: u64, result: &str, ts_ms: u64, ttl_ms: u64) -> Result<(), CacheError> {
-        if result.is_empty() { return Err(CacheError::EmptyResult); }
-        if ttl_ms == 0 { return Err(CacheError::ZeroTtl); }
-        self.entries.insert(action_hash, Entry {
-            result: result.into(),
-            stored_at_ms: ts_ms,
-            ttl_ms,
-        });
+    pub fn put(
+        &mut self,
+        action_hash: u64,
+        result: &str,
+        ts_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), CacheError> {
+        if result.is_empty() {
+            return Err(CacheError::EmptyResult);
+        }
+        if ttl_ms == 0 {
+            return Err(CacheError::ZeroTtl);
+        }
+        self.entries.insert(
+            action_hash,
+            Entry {
+                result: result.into(),
+                stored_at_ms: ts_ms,
+                ttl_ms,
+            },
+        );
         Ok(())
     }
 
@@ -105,30 +118,45 @@ impl ActionResultCache {
         };
         let age = now_ms.saturating_sub(e.stored_at_ms);
         if age <= e.ttl_ms {
-            GetVerdict::Hit { result: e.result.clone(), age_ms: age }
+            GetVerdict::Hit {
+                result: e.result.clone(),
+                age_ms: age,
+            }
         } else {
-            GetVerdict::Stale { age_ms: age, ttl_ms: e.ttl_ms }
+            GetVerdict::Stale {
+                age_ms: age,
+                ttl_ms: e.ttl_ms,
+            }
         }
     }
 
     /// Drop stale entries.
     pub fn rotate(&mut self, now_ms: u64) {
-        self.entries.retain(|_, e| now_ms.saturating_sub(e.stored_at_ms) <= e.ttl_ms);
+        self.entries
+            .retain(|_, e| now_ms.saturating_sub(e.stored_at_ms) <= e.ttl_ms);
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CacheError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CacheError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CacheError::SchemaMismatch);
+        }
         for e in self.entries.values() {
-            if e.result.is_empty() { return Err(CacheError::EmptyResult); }
-            if e.ttl_ms == 0 { return Err(CacheError::ZeroTtl); }
+            if e.result.is_empty() {
+                return Err(CacheError::EmptyResult);
+            }
+            if e.ttl_ms == 0 {
+                return Err(CacheError::ZeroTtl);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionResultCache {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -178,20 +206,29 @@ mod tests {
     #[test]
     fn empty_result_rejected() {
         let mut c = ActionResultCache::new();
-        assert!(matches!(c.put(0xabc, "", 0, 1000).unwrap_err(), CacheError::EmptyResult));
+        assert!(matches!(
+            c.put(0xabc, "", 0, 1000).unwrap_err(),
+            CacheError::EmptyResult
+        ));
     }
 
     #[test]
     fn zero_ttl_rejected() {
         let mut c = ActionResultCache::new();
-        assert!(matches!(c.put(0xabc, "ok", 0, 0).unwrap_err(), CacheError::ZeroTtl));
+        assert!(matches!(
+            c.put(0xabc, "ok", 0, 0).unwrap_err(),
+            CacheError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ActionResultCache::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CacheError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CacheError::SchemaMismatch
+        ));
     }
 
     #[test]

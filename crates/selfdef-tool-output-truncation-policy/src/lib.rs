@@ -109,12 +109,30 @@ impl ToolOutputTruncationPolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            fs_read: ToolBudget { budget_bytes: 64 * 1024, strategy: Strategy::HeadTail },
-            fs_write: ToolBudget { budget_bytes: 8 * 1024, strategy: Strategy::HeadOnly },
-            net: ToolBudget { budget_bytes: 32 * 1024, strategy: Strategy::HeadTail },
-            shell: ToolBudget { budget_bytes: 16 * 1024, strategy: Strategy::HeadTail },
-            llm: ToolBudget { budget_bytes: 128 * 1024, strategy: Strategy::MiddleEllipsis },
-            other: ToolBudget { budget_bytes: 8 * 1024, strategy: Strategy::HeadOnly },
+            fs_read: ToolBudget {
+                budget_bytes: 64 * 1024,
+                strategy: Strategy::HeadTail,
+            },
+            fs_write: ToolBudget {
+                budget_bytes: 8 * 1024,
+                strategy: Strategy::HeadOnly,
+            },
+            net: ToolBudget {
+                budget_bytes: 32 * 1024,
+                strategy: Strategy::HeadTail,
+            },
+            shell: ToolBudget {
+                budget_bytes: 16 * 1024,
+                strategy: Strategy::HeadTail,
+            },
+            llm: ToolBudget {
+                budget_bytes: 128 * 1024,
+                strategy: Strategy::MiddleEllipsis,
+            },
+            other: ToolBudget {
+                budget_bytes: 8 * 1024,
+                strategy: Strategy::HeadOnly,
+            },
         }
     }
 
@@ -217,7 +235,9 @@ fn take_utf8(bytes: &[u8], range: std::ops::Range<usize>) -> String {
         }
         hi -= 1;
     }
-    std::str::from_utf8(&bytes[lo..hi]).unwrap_or("").to_string()
+    std::str::from_utf8(&bytes[lo..hi])
+        .unwrap_or("")
+        .to_string()
 }
 
 #[cfg(test)]
@@ -241,7 +261,10 @@ mod tests {
     #[test]
     fn head_only_truncates() {
         let mut p = ToolOutputTruncationPolicy::canonical();
-        p.other = ToolBudget { budget_bytes: 64, strategy: Strategy::HeadOnly };
+        p.other = ToolBudget {
+            budget_bytes: 64,
+            strategy: Strategy::HeadOnly,
+        };
         let input = "x".repeat(200);
         let (out, r) = p.truncate(ToolClass::Other, &input);
         assert_eq!(out.len(), 64);
@@ -252,7 +275,10 @@ mod tests {
     #[test]
     fn head_tail_truncates_split() {
         let mut p = ToolOutputTruncationPolicy::canonical();
-        p.shell = ToolBudget { budget_bytes: 64, strategy: Strategy::HeadTail };
+        p.shell = ToolBudget {
+            budget_bytes: 64,
+            strategy: Strategy::HeadTail,
+        };
         let input = format!("{}{}", "a".repeat(100), "z".repeat(100));
         let (out, _) = p.truncate(ToolClass::Shell, &input);
         assert_eq!(out.len(), 64);
@@ -263,7 +289,10 @@ mod tests {
     #[test]
     fn middle_ellipsis_truncates() {
         let mut p = ToolOutputTruncationPolicy::canonical();
-        p.llm = ToolBudget { budget_bytes: 100, strategy: Strategy::MiddleEllipsis };
+        p.llm = ToolBudget {
+            budget_bytes: 100,
+            strategy: Strategy::MiddleEllipsis,
+        };
         let input = format!("{}{}", "a".repeat(200), "z".repeat(200));
         let (out, _) = p.truncate(ToolClass::Llm, &input);
         assert!(out.starts_with("a"));
@@ -276,7 +305,10 @@ mod tests {
         let mut p = ToolOutputTruncationPolicy::canonical();
         // Budget that would fall mid-codepoint if not for boundary logic.
         // "abc" = 3 bytes, then 🎉 = 4 bytes. Budget 5 -> rollback to 3.
-        p.other = ToolBudget { budget_bytes: 5, strategy: Strategy::HeadOnly };
+        p.other = ToolBudget {
+            budget_bytes: 5,
+            strategy: Strategy::HeadOnly,
+        };
         let input = "abc🎉xyz";
         let (out, _) = p.truncate(ToolClass::Other, input);
         // Must end at a valid utf-8 boundary (rolled back to "abc").
@@ -286,27 +318,48 @@ mod tests {
     #[test]
     fn budget_too_small_rejected() {
         let mut p = ToolOutputTruncationPolicy::canonical();
-        p.other = ToolBudget { budget_bytes: 5, strategy: Strategy::HeadOnly };
-        assert!(matches!(p.validate().unwrap_err(), TruncationError::BudgetTooSmall(_, 5)));
+        p.other = ToolBudget {
+            budget_bytes: 5,
+            strategy: Strategy::HeadOnly,
+        };
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TruncationError::BudgetTooSmall(_, 5)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ToolOutputTruncationPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TruncationError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TruncationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn strategy_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Strategy::HeadOnly).unwrap(), "\"head-only\"");
-        assert_eq!(serde_json::to_string(&Strategy::MiddleEllipsis).unwrap(), "\"middle-ellipsis\"");
+        assert_eq!(
+            serde_json::to_string(&Strategy::HeadOnly).unwrap(),
+            "\"head-only\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Strategy::MiddleEllipsis).unwrap(),
+            "\"middle-ellipsis\""
+        );
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ToolClass::FsRead).unwrap(), "\"fs-read\"");
-        assert_eq!(serde_json::to_string(&ToolClass::FsWrite).unwrap(), "\"fs-write\"");
+        assert_eq!(
+            serde_json::to_string(&ToolClass::FsRead).unwrap(),
+            "\"fs-read\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolClass::FsWrite).unwrap(),
+            "\"fs-write\""
+        );
     }
 
     #[test]

@@ -87,19 +87,26 @@ impl PromptSystemPinning {
 
     /// Pin; replace-by-id semantics.
     pub fn pin(&mut self, id: &str, body: &str, priority: u32) -> Result<(), PinError> {
-        if id.is_empty() { return Err(PinError::EmptyId); }
-        if body.is_empty() { return Err(PinError::EmptyBody); }
+        if id.is_empty() {
+            return Err(PinError::EmptyId);
+        }
+        if body.is_empty() {
+            return Err(PinError::EmptyBody);
+        }
         if !self.pins.contains_key(id) && self.pins.len() as u32 >= self.max_pinned {
             return Err(PinError::CapReached(self.max_pinned));
         }
         let pin_seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
-        self.pins.insert(id.into(), Pinned {
-            id: id.into(),
-            body: body.into(),
-            priority,
-            pin_seq,
-        });
+        self.pins.insert(
+            id.into(),
+            Pinned {
+                id: id.into(),
+                body: body.into(),
+                priority,
+                pin_seq,
+            },
+        );
         Ok(())
     }
 
@@ -111,7 +118,9 @@ impl PromptSystemPinning {
     /// Classify.
     pub fn classify(&self, id: &str) -> PinVerdict {
         match self.pins.get(id) {
-            Some(p) => PinVerdict::Pinned { priority: p.priority },
+            Some(p) => PinVerdict::Pinned {
+                priority: p.priority,
+            },
             None => PinVerdict::Unpinned,
         }
     }
@@ -125,13 +134,19 @@ impl PromptSystemPinning {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PinError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PinError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PinError::SchemaMismatch);
+        }
         if self.pins.len() as u32 > self.max_pinned {
             return Err(PinError::CapReached(self.max_pinned));
         }
         for (id, p) in &self.pins {
-            if id.is_empty() { return Err(PinError::EmptyId); }
-            if p.body.is_empty() { return Err(PinError::EmptyBody); }
+            if id.is_empty() {
+                return Err(PinError::EmptyId);
+            }
+            if p.body.is_empty() {
+                return Err(PinError::EmptyBody);
+            }
         }
         Ok(())
     }
@@ -171,7 +186,10 @@ mod tests {
     fn cap_reached() {
         let mut p = PromptSystemPinning::new(1);
         p.pin("a", "x", 1).unwrap();
-        assert!(matches!(p.pin("b", "x", 1).unwrap_err(), PinError::CapReached(_)));
+        assert!(matches!(
+            p.pin("b", "x", 1).unwrap_err(),
+            PinError::CapReached(_)
+        ));
     }
 
     #[test]
@@ -202,14 +220,20 @@ mod tests {
     #[test]
     fn empty_body_rejected() {
         let mut p = PromptSystemPinning::new(2);
-        assert!(matches!(p.pin("a", "", 0).unwrap_err(), PinError::EmptyBody));
+        assert!(matches!(
+            p.pin("a", "", 0).unwrap_err(),
+            PinError::EmptyBody
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PromptSystemPinning::new(2);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PinError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PinError::SchemaMismatch
+        ));
     }
 
     #[test]

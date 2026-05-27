@@ -44,7 +44,9 @@ pub enum FwcError {
 impl FixedWindowCounter {
     /// New.
     pub fn new(window_ms: u64, start_ms: u64) -> Result<Self, FwcError> {
-        if window_ms == 0 { return Err(FwcError::ZeroWindow); }
+        if window_ms == 0 {
+            return Err(FwcError::ZeroWindow);
+        }
         let bucket_start_ms = (start_ms / window_ms) * window_ms;
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -82,8 +84,12 @@ impl FixedWindowCounter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FwcError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FwcError::SchemaMismatch); }
-        if self.window_ms == 0 { return Err(FwcError::ZeroWindow); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FwcError::SchemaMismatch);
+        }
+        if self.window_ms == 0 {
+            return Err(FwcError::ZeroWindow);
+        }
         Ok(())
     }
 }
@@ -138,14 +144,20 @@ mod tests {
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(FixedWindowCounter::new(0, 0).unwrap_err(), FwcError::ZeroWindow));
+        assert!(matches!(
+            FixedWindowCounter::new(0, 0).unwrap_err(),
+            FwcError::ZeroWindow
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = FixedWindowCounter::new(1000, 0).unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), FwcError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            FwcError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -214,7 +214,9 @@ impl CapabilityWord {
     /// Filesystem scope (byte 1).
     pub fn fs_scope(self) -> Result<Option<FilesystemScope>, CapError> {
         let b = self.byte(1);
-        if b == 0 { return Ok(None); }
+        if b == 0 {
+            return Ok(None);
+        }
         FilesystemScope::decode(b)
             .map(Some)
             .ok_or(CapError::InvalidFilesystemScope(b))
@@ -239,7 +241,9 @@ impl CapabilityWord {
     /// Max memory in MiB-units of 64. 255 = uncapped → 16 GiB.
     pub fn max_memory_mib(self) -> u32 {
         let b = self.byte(4);
-        if b == 0xff { return u32::MAX; }
+        if b == 0xff {
+            return u32::MAX;
+        }
         (b as u32) * 64
     }
 
@@ -290,8 +294,13 @@ impl CapabilityWord {
 
     /// Parse hex string back.
     pub fn from_hex(s: &str) -> Option<Self> {
-        let stripped = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
-        if stripped.len() != 16 { return None; }
+        let stripped = s
+            .strip_prefix("0x")
+            .or_else(|| s.strip_prefix("0X"))
+            .unwrap_or(s);
+        if stripped.len() != 16 {
+            return None;
+        }
         u64::from_str_radix(stripped, 16).ok().map(CapabilityWord)
     }
 }
@@ -341,16 +350,24 @@ mod tests {
         assert!(w.has_tool(ToolClass::ReadOnlyHost));
         w.allow_tool(ToolClass::Browser);
         assert!(w.has_tool(ToolClass::Browser));
-        assert!(!w.has_tool(ToolClass::WriteHost));  // unrelated bit stays 0
+        assert!(!w.has_tool(ToolClass::WriteHost)); // unrelated bit stays 0
     }
 
     #[test]
     fn tool_bits_distinct_0_to_7() {
         for (i, t) in [
-            ToolClass::ReadOnlyHost, ToolClass::WriteHost, ToolClass::Tests,
-            ToolClass::Builds, ToolClass::NetworkEgress, ToolClass::GpuCompute,
-            ToolClass::VmSpawn, ToolClass::Browser,
-        ].iter().enumerate() {
+            ToolClass::ReadOnlyHost,
+            ToolClass::WriteHost,
+            ToolClass::Tests,
+            ToolClass::Builds,
+            ToolClass::NetworkEgress,
+            ToolClass::GpuCompute,
+            ToolClass::VmSpawn,
+            ToolClass::Browser,
+        ]
+        .iter()
+        .enumerate()
+        {
             assert_eq!(t.bit(), i as u8);
         }
     }
@@ -360,9 +377,12 @@ mod tests {
     #[test]
     fn fs_scope_encode_decode_roundtrip() {
         for s in [
-            FilesystemScope::SourceReadOnly, FilesystemScope::WorkspaceWrite,
-            FilesystemScope::WorkspaceScratch, FilesystemScope::EtcRead,
-            FilesystemScope::HostRead, FilesystemScope::HostReadWrite,
+            FilesystemScope::SourceReadOnly,
+            FilesystemScope::WorkspaceWrite,
+            FilesystemScope::WorkspaceScratch,
+            FilesystemScope::EtcRead,
+            FilesystemScope::HostRead,
+            FilesystemScope::HostReadWrite,
         ] {
             assert_eq!(FilesystemScope::decode(s.encode()), Some(s));
         }
@@ -371,7 +391,10 @@ mod tests {
     #[test]
     fn fs_scope_invalid_byte_caught() {
         let w = CapabilityWord::from_bytes([0, 0xff, 0, 0, 0, 0, 0, 0]);
-        assert!(matches!(w.fs_scope().unwrap_err(), CapError::InvalidFilesystemScope(0xff)));
+        assert!(matches!(
+            w.fs_scope().unwrap_err(),
+            CapError::InvalidFilesystemScope(0xff)
+        ));
     }
 
     #[test]
@@ -398,9 +421,9 @@ mod tests {
     #[test]
     fn max_memory_mib_units_of_64() {
         let mut w = CapabilityWord::empty();
-        w.set_byte(4, 16);  // 16 * 64 = 1024 MiB
+        w.set_byte(4, 16); // 16 * 64 = 1024 MiB
         assert_eq!(w.max_memory_mib(), 1024);
-        w.set_byte(4, 255);  // uncapped
+        w.set_byte(4, 255); // uncapped
         assert_eq!(w.max_memory_mib(), u32::MAX);
     }
 
@@ -409,7 +432,10 @@ mod tests {
         let mut w = CapabilityWord::empty();
         w.set_trust_level(2).unwrap();
         assert_eq!(w.trust_level().unwrap(), 2);
-        assert!(matches!(w.set_trust_level(7).unwrap_err(), CapError::InvalidTrustLevel(7)));
+        assert!(matches!(
+            w.set_trust_level(7).unwrap_err(),
+            CapError::InvalidTrustLevel(7)
+        ));
         // Byte unchanged after rejected set.
         assert_eq!(w.byte(6), 2);
     }
@@ -429,10 +455,18 @@ mod tests {
     #[test]
     fn flag_bits_distinct() {
         for (i, f) in [
-            CapFlag::CloudOk, CapFlag::PiiOk, CapFlag::HighRisk,
-            CapFlag::OperatorSigned, CapFlag::AdapterPromote, CapFlag::ReplayMode,
-            CapFlag::Reserved6, CapFlag::Reserved7,
-        ].iter().enumerate() {
+            CapFlag::CloudOk,
+            CapFlag::PiiOk,
+            CapFlag::HighRisk,
+            CapFlag::OperatorSigned,
+            CapFlag::AdapterPromote,
+            CapFlag::ReplayMode,
+            CapFlag::Reserved6,
+            CapFlag::Reserved7,
+        ]
+        .iter()
+        .enumerate()
+        {
             assert_eq!(f.bit(), i as u8);
         }
     }
@@ -455,8 +489,8 @@ mod tests {
 
     #[test]
     fn from_hex_invalid_returns_none() {
-        assert!(CapabilityWord::from_hex("0xff").is_none());          // too short
-        assert!(CapabilityWord::from_hex("not-hex").is_none());        // garbage
+        assert!(CapabilityWord::from_hex("0xff").is_none()); // too short
+        assert!(CapabilityWord::from_hex("not-hex").is_none()); // garbage
         assert!(CapabilityWord::from_hex("0xzzzzzzzzzzzzzzzz").is_none()); // bad chars
     }
 
@@ -468,9 +502,9 @@ mod tests {
         w.allow_tool(ToolClass::ReadOnlyHost);
         w.allow_tool(ToolClass::Tests);
         w.set_fs_scope(FilesystemScope::WorkspaceWrite);
-        w.set_byte(2, 0b00000111);  // arbitrary-web network profile
-        w.set_byte(3, 60);  // 60-min runtime
-        w.set_byte(4, 16);  // 1024 MiB
+        w.set_byte(2, 0b00000111); // arbitrary-web network profile
+        w.set_byte(3, 60); // 60-min runtime
+        w.set_byte(4, 16); // 1024 MiB
         w.set_trust_level(2).unwrap();
         w.set_flag(CapFlag::OperatorSigned);
         // Verify every byte slot independently.

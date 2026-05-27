@@ -68,7 +68,9 @@ pub enum SeatError {
 impl SeatPool {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, SeatError> {
-        if capacity == 0 { return Err(SeatError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(SeatError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -81,14 +83,17 @@ impl SeatPool {
 
     /// Acquire a seat.
     pub fn acquire(&mut self, holder: &str, ts_ms: u64) -> Result<(), SeatError> {
-        if holder.is_empty() { return Err(SeatError::EmptyHolder); }
+        if holder.is_empty() {
+            return Err(SeatError::EmptyHolder);
+        }
         if self.holders.contains_key(holder) {
             return Err(SeatError::DuplicateHolder(holder.into()));
         }
         if (self.holders.len() as u32) >= self.capacity {
             return Err(SeatError::AtCapacity(self.capacity));
         }
-        self.holders.insert(holder.into(), Holder { acquired_ms: ts_ms });
+        self.holders
+            .insert(holder.into(), Holder { acquired_ms: ts_ms });
         self.acquires = self.acquires.saturating_add(1);
         Ok(())
     }
@@ -105,32 +110,45 @@ impl SeatPool {
     /// Expire stale holders (acquired_ms older than now - ttl_ms).
     pub fn expire(&mut self, now_ms: u64, ttl_ms: u64) -> u32 {
         let cutoff = now_ms.saturating_sub(ttl_ms);
-        let stale: Vec<String> = self.holders
+        let stale: Vec<String> = self
+            .holders
             .iter()
             .filter(|(_, h)| h.acquired_ms < cutoff)
             .map(|(k, _)| k.clone())
             .collect();
         let n = stale.len() as u32;
-        for k in stale { self.holders.remove(&k); }
+        for k in stale {
+            self.holders.remove(&k);
+        }
         self.expires = self.expires.saturating_add(n as u64);
         n
     }
 
     /// Used count.
-    pub fn used(&self) -> u32 { self.holders.len() as u32 }
+    pub fn used(&self) -> u32 {
+        self.holders.len() as u32
+    }
 
     /// Available count.
-    pub fn available(&self) -> u32 { self.capacity.saturating_sub(self.used()) }
+    pub fn available(&self) -> u32 {
+        self.capacity.saturating_sub(self.used())
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SeatError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SeatError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(SeatError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SeatError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(SeatError::ZeroCapacity);
+        }
         if (self.holders.len() as u32) > self.capacity {
             return Err(SeatError::AtCapacity(self.capacity));
         }
         for k in self.holders.keys() {
-            if k.is_empty() { return Err(SeatError::EmptyHolder); }
+            if k.is_empty() {
+                return Err(SeatError::EmptyHolder);
+            }
         }
         Ok(())
     }
@@ -145,7 +163,10 @@ mod tests {
         let mut p = SeatPool::new(2).unwrap();
         p.acquire("a", 0).unwrap();
         p.acquire("b", 0).unwrap();
-        assert!(matches!(p.acquire("c", 0).unwrap_err(), SeatError::AtCapacity(2)));
+        assert!(matches!(
+            p.acquire("c", 0).unwrap_err(),
+            SeatError::AtCapacity(2)
+        ));
     }
 
     #[test]
@@ -162,13 +183,19 @@ mod tests {
     fn duplicate_holder_rejected() {
         let mut p = SeatPool::new(2).unwrap();
         p.acquire("a", 0).unwrap();
-        assert!(matches!(p.acquire("a", 0).unwrap_err(), SeatError::DuplicateHolder(_)));
+        assert!(matches!(
+            p.acquire("a", 0).unwrap_err(),
+            SeatError::DuplicateHolder(_)
+        ));
     }
 
     #[test]
     fn unknown_release_rejected() {
         let mut p = SeatPool::new(2).unwrap();
-        assert!(matches!(p.release("nope").unwrap_err(), SeatError::UnknownHolder(_)));
+        assert!(matches!(
+            p.release("nope").unwrap_err(),
+            SeatError::UnknownHolder(_)
+        ));
     }
 
     #[test]
@@ -195,15 +222,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut p = SeatPool::new(2).unwrap();
-        assert!(matches!(p.acquire("", 0).unwrap_err(), SeatError::EmptyHolder));
-        assert!(matches!(SeatPool::new(0).unwrap_err(), SeatError::ZeroCapacity));
+        assert!(matches!(
+            p.acquire("", 0).unwrap_err(),
+            SeatError::EmptyHolder
+        ));
+        assert!(matches!(
+            SeatPool::new(0).unwrap_err(),
+            SeatError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SeatPool::new(2).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SeatError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SeatError::SchemaMismatch
+        ));
     }
 
     #[test]

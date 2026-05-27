@@ -68,18 +68,29 @@ pub enum BusStatsError {
 }
 
 const REQUIRED: [Subscriber; 9] = [
-    Subscriber::AuditLog, Subscriber::Quarantine, Subscriber::Notifier,
-    Subscriber::EvidenceLedger, Subscriber::HistorySink, Subscriber::PolicyBus,
-    Subscriber::TrustScore, Subscriber::ProfileAuthority, Subscriber::DashboardManifest,
+    Subscriber::AuditLog,
+    Subscriber::Quarantine,
+    Subscriber::Notifier,
+    Subscriber::EvidenceLedger,
+    Subscriber::HistorySink,
+    Subscriber::PolicyBus,
+    Subscriber::TrustScore,
+    Subscriber::ProfileAuthority,
+    Subscriber::DashboardManifest,
 ];
 
 impl EventBusStats {
     /// Canonical empty snapshot.
     pub fn empty_canonical(window_start: &str, window_end: &str) -> Self {
-        let per_subscriber = REQUIRED.iter().map(|s| SubscriberStats {
-            subscriber: *s,
-            delivered: 0, dropped: 0, throttled: 0,
-        }).collect();
+        let per_subscriber = REQUIRED
+            .iter()
+            .map(|s| SubscriberStats {
+                subscriber: *s,
+                delivered: 0,
+                dropped: 0,
+                throttled: 0,
+            })
+            .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             window_start: window_start.into(),
@@ -93,8 +104,12 @@ impl EventBusStats {
         if self.schema_version != SCHEMA_VERSION {
             return Err(BusStatsError::SchemaMismatch);
         }
-        if self.window_start.is_empty() { return Err(BusStatsError::MissingTimestamp("window_start")); }
-        if self.window_end.is_empty() { return Err(BusStatsError::MissingTimestamp("window_end")); }
+        if self.window_start.is_empty() {
+            return Err(BusStatsError::MissingTimestamp("window_start"));
+        }
+        if self.window_end.is_empty() {
+            return Err(BusStatsError::MissingTimestamp("window_end"));
+        }
         if self.window_end < self.window_start {
             return Err(BusStatsError::WindowInverted {
                 start: self.window_start.clone(),
@@ -137,7 +152,9 @@ impl EventBusStats {
         let delivered = self.total_delivered();
         let dropped = self.total_dropped();
         let denom = delivered + dropped;
-        if denom == 0 { return 0; }
+        if denom == 0 {
+            return 0;
+        }
         ((dropped * 10_000) / denom) as u32
     }
 }
@@ -148,13 +165,17 @@ mod tests {
 
     #[test]
     fn empty_canonical_validates() {
-        EventBusStats::empty_canonical("2026-05-19T03:00:00Z", "2026-05-19T03:01:00Z").validate().unwrap();
+        EventBusStats::empty_canonical("2026-05-19T03:00:00Z", "2026-05-19T03:01:00Z")
+            .validate()
+            .unwrap();
     }
 
     #[test]
     fn nine_subscribers_present() {
         let s = EventBusStats::empty_canonical("t", "t");
-        for sub in REQUIRED { assert!(s.get(sub).is_some(), "missing {sub:?}"); }
+        for sub in REQUIRED {
+            assert!(s.get(sub).is_some(), "missing {sub:?}");
+        }
     }
 
     #[test]
@@ -186,20 +207,29 @@ mod tests {
     fn count_invalid_caught() {
         let mut s = EventBusStats::empty_canonical("t", "t");
         s.per_subscriber.pop();
-        assert!(matches!(s.validate().unwrap_err(), BusStatsError::CountInvalid(8)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            BusStatsError::CountInvalid(8)
+        ));
     }
 
     #[test]
     fn window_inverted_caught() {
         let s = EventBusStats::empty_canonical("2026-05-19T03:00:05Z", "2026-05-19T03:00:00Z");
-        assert!(matches!(s.validate().unwrap_err(), BusStatsError::WindowInverted { .. }));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            BusStatsError::WindowInverted { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = EventBusStats::empty_canonical("t", "t");
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), BusStatsError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            BusStatsError::SchemaMismatch
+        ));
     }
 
     #[test]

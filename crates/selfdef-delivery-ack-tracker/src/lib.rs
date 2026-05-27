@@ -104,22 +104,30 @@ impl DeliveryAckTracker {
 
     /// Enqueue.
     pub fn enqueue(&mut self, message_id: &str, max_retries: u32) -> Result<(), AckError> {
-        if message_id.is_empty() { return Err(AckError::EmptyId); }
+        if message_id.is_empty() {
+            return Err(AckError::EmptyId);
+        }
         if self.messages.contains_key(message_id) {
             return Err(AckError::DuplicateId(message_id.into()));
         }
-        self.messages.insert(message_id.into(), MessageEntry {
-            status: Status::Pending,
-            retries_left: max_retries,
-            retry_count: 0,
-            last_nack_reason: None,
-        });
+        self.messages.insert(
+            message_id.into(),
+            MessageEntry {
+                status: Status::Pending,
+                retries_left: max_retries,
+                retry_count: 0,
+                last_nack_reason: None,
+            },
+        );
         Ok(())
     }
 
     /// Ack.
     pub fn ack(&mut self, message_id: &str) -> Result<(), AckError> {
-        let m = self.messages.get_mut(message_id).ok_or_else(|| AckError::UnknownMessage(message_id.into()))?;
+        let m = self
+            .messages
+            .get_mut(message_id)
+            .ok_or_else(|| AckError::UnknownMessage(message_id.into()))?;
         if m.status != Status::Pending {
             return Err(AckError::NotPending(message_id.into()));
         }
@@ -130,8 +138,13 @@ impl DeliveryAckTracker {
 
     /// Nack.
     pub fn nack(&mut self, message_id: &str, reason: &str) -> Result<NackVerdict, AckError> {
-        if reason.is_empty() { return Err(AckError::EmptyReason); }
-        let m = self.messages.get_mut(message_id).ok_or_else(|| AckError::UnknownMessage(message_id.into()))?;
+        if reason.is_empty() {
+            return Err(AckError::EmptyReason);
+        }
+        let m = self
+            .messages
+            .get_mut(message_id)
+            .ok_or_else(|| AckError::UnknownMessage(message_id.into()))?;
         if m.status != Status::Pending {
             return Err(AckError::NotPending(message_id.into()));
         }
@@ -143,7 +156,9 @@ impl DeliveryAckTracker {
             Ok(NackVerdict::DeadLettered)
         } else {
             m.retries_left -= 1;
-            Ok(NackVerdict::Retried { retries_left: m.retries_left })
+            Ok(NackVerdict::Retried {
+                retries_left: m.retries_left,
+            })
         }
     }
 
@@ -154,21 +169,30 @@ impl DeliveryAckTracker {
 
     /// Pending count.
     pub fn pending_count(&self) -> usize {
-        self.messages.values().filter(|m| m.status == Status::Pending).count()
+        self.messages
+            .values()
+            .filter(|m| m.status == Status::Pending)
+            .count()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AckError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AckError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AckError::SchemaMismatch);
+        }
         for k in self.messages.keys() {
-            if k.is_empty() { return Err(AckError::EmptyId); }
+            if k.is_empty() {
+                return Err(AckError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DeliveryAckTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -221,14 +245,23 @@ mod tests {
     fn duplicate_enqueue_rejected() {
         let mut t = DeliveryAckTracker::new();
         t.enqueue("m1", 1).unwrap();
-        assert!(matches!(t.enqueue("m1", 1).unwrap_err(), AckError::DuplicateId(_)));
+        assert!(matches!(
+            t.enqueue("m1", 1).unwrap_err(),
+            AckError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn unknown_message_rejected() {
         let mut t = DeliveryAckTracker::new();
-        assert!(matches!(t.ack("nope").unwrap_err(), AckError::UnknownMessage(_)));
-        assert!(matches!(t.nack("nope", "x").unwrap_err(), AckError::UnknownMessage(_)));
+        assert!(matches!(
+            t.ack("nope").unwrap_err(),
+            AckError::UnknownMessage(_)
+        ));
+        assert!(matches!(
+            t.nack("nope", "x").unwrap_err(),
+            AckError::UnknownMessage(_)
+        ));
     }
 
     #[test]
@@ -245,14 +278,20 @@ mod tests {
         let mut t = DeliveryAckTracker::new();
         assert!(matches!(t.enqueue("", 1).unwrap_err(), AckError::EmptyId));
         t.enqueue("a", 1).unwrap();
-        assert!(matches!(t.nack("a", "").unwrap_err(), AckError::EmptyReason));
+        assert!(matches!(
+            t.nack("a", "").unwrap_err(),
+            AckError::EmptyReason
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = DeliveryAckTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), AckError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            AckError::SchemaMismatch
+        ));
     }
 
     #[test]

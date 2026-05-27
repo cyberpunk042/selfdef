@@ -76,7 +76,10 @@ impl SequenceGapDetector {
         if seq == self.expected_next {
             self.expected_next = seq.saturating_add(1);
         } else if seq > self.expected_next {
-            self.gaps.push(Gap { start: self.expected_next, end: seq });
+            self.gaps.push(Gap {
+                start: self.expected_next,
+                end: seq,
+            });
             self.expected_next = seq.saturating_add(1);
         } else {
             // seq < expected_next.
@@ -87,17 +90,32 @@ impl SequenceGapDetector {
     /// Explicitly close a gap (e.g. a retransmit covered it).
     /// Splits the matching gap if `seq` is interior.
     pub fn close_gap(&mut self, seq: u64) -> Result<(), SeqError> {
-        let idx = self.gaps.iter().position(|g| seq >= g.start && seq < g.end)
+        let idx = self
+            .gaps
+            .iter()
+            .position(|g| seq >= g.start && seq < g.end)
             .ok_or(SeqError::GapNotFound)?;
         let g = self.gaps[idx].clone();
         self.gaps.remove(idx);
         // Re-insert remaining halves in the same position.
         let mut insert_at = idx;
         if seq + 1 < g.end {
-            self.gaps.insert(insert_at, Gap { start: seq + 1, end: g.end });
+            self.gaps.insert(
+                insert_at,
+                Gap {
+                    start: seq + 1,
+                    end: g.end,
+                },
+            );
         }
         if seq > g.start {
-            self.gaps.insert(insert_at, Gap { start: g.start, end: seq });
+            self.gaps.insert(
+                insert_at,
+                Gap {
+                    start: g.start,
+                    end: seq,
+                },
+            );
             insert_at += 1;
         }
         let _ = insert_at;
@@ -106,18 +124,25 @@ impl SequenceGapDetector {
 
     /// Outstanding (uncovered) count across all gaps.
     pub fn missing(&self) -> u64 {
-        self.gaps.iter().map(|g| g.end.saturating_sub(g.start)).sum()
+        self.gaps
+            .iter()
+            .map(|g| g.end.saturating_sub(g.start))
+            .sum()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SeqError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SeqError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SeqError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for SequenceGapDetector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,10 +197,10 @@ mod tests {
         d.observe(10);
         d.observe(20);
         d.close_gap(15).unwrap();
-        assert_eq!(d.gaps, vec![
-            Gap { start: 11, end: 15 },
-            Gap { start: 16, end: 20 },
-        ]);
+        assert_eq!(
+            d.gaps,
+            vec![Gap { start: 11, end: 15 }, Gap { start: 16, end: 20 },]
+        );
     }
 
     #[test]
@@ -183,14 +208,20 @@ mod tests {
         let mut d = SequenceGapDetector::new();
         d.observe(10);
         d.observe(13);
-        assert!(matches!(d.close_gap(50).unwrap_err(), SeqError::GapNotFound));
+        assert!(matches!(
+            d.close_gap(50).unwrap_err(),
+            SeqError::GapNotFound
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = SequenceGapDetector::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), SeqError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SeqError::SchemaMismatch
+        ));
     }
 
     #[test]

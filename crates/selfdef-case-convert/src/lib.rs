@@ -44,38 +44,51 @@ pub fn tokenize(s: &str) -> Vec<String> {
     let mut prev_lower_or_digit = false;
     for c in s.chars() {
         if c == '-' || c == '_' || c == ' ' {
-            if !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
             prev_lower_or_digit = false;
             continue;
         }
         if c.is_ascii_uppercase() && prev_lower_or_digit {
-            if !cur.is_empty() { out.push(std::mem::take(&mut cur)); }
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
         }
         for lc in c.to_lowercase() {
             cur.push(lc);
         }
         prev_lower_or_digit = c.is_ascii_lowercase() || c.is_ascii_digit();
     }
-    if !cur.is_empty() { out.push(cur); }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
     out
 }
 
 /// snake_case.
-pub fn to_snake(s: &str) -> String { tokenize(s).join("_") }
+pub fn to_snake(s: &str) -> String {
+    tokenize(s).join("_")
+}
 
 /// kebab-case.
-pub fn to_kebab(s: &str) -> String { tokenize(s).join("-") }
+pub fn to_kebab(s: &str) -> String {
+    tokenize(s).join("-")
+}
 
 /// camelCase.
 pub fn to_camel(s: &str) -> String {
     let tokens = tokenize(s);
     let mut out = String::new();
     for (i, t) in tokens.iter().enumerate() {
-        if i == 0 { out.push_str(t); }
-        else {
+        if i == 0 {
+            out.push_str(t);
+        } else {
             let mut chars = t.chars();
             if let Some(first) = chars.next() {
-                for u in first.to_uppercase() { out.push(u); }
+                for u in first.to_uppercase() {
+                    out.push(u);
+                }
             }
             out.push_str(chars.as_str());
         }
@@ -90,7 +103,9 @@ pub fn to_pascal(s: &str) -> String {
     for t in tokens {
         let mut chars = t.chars();
         if let Some(first) = chars.next() {
-            for u in first.to_uppercase() { out.push(u); }
+            for u in first.to_uppercase() {
+                out.push(u);
+            }
         }
         out.push_str(chars.as_str());
     }
@@ -108,13 +123,17 @@ impl CaseConvertState {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CaseError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CaseError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CaseError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for CaseConvertState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -165,7 +184,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = CaseConvertState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), CaseError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            CaseError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -10,7 +10,7 @@
 //!
 //! Source: SDD-046 § Open questions D-1.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use selfdef_network_boundary::NetworkProfile;
 
 fn print_profiles() {
@@ -19,11 +19,17 @@ fn print_profiles() {
     println!("Profile             bits      scope");
     println!("--------------------------------------------------------");
     for (profile, scope) in &[
-        (NetworkProfile::Offline,              "no egress"),
-        (NetworkProfile::PackageRegistries,    "npm / PyPI / crates.io / …"),
-        (NetworkProfile::DocsOnly,             "+ read-only documentation hosts"),
-        (NetworkProfile::ArbitraryWeb,         "+ general egress"),
-        (NetworkProfile::AuthenticatedBrowser, "+ logged-in session websites"),
+        (NetworkProfile::Offline, "no egress"),
+        (
+            NetworkProfile::PackageRegistries,
+            "npm / PyPI / crates.io / …",
+        ),
+        (NetworkProfile::DocsOnly, "+ read-only documentation hosts"),
+        (NetworkProfile::ArbitraryWeb, "+ general egress"),
+        (
+            NetworkProfile::AuthenticatedBrowser,
+            "+ logged-in session websites",
+        ),
     ] {
         println!(
             "{:<20}{:08b}  {}",
@@ -34,7 +40,9 @@ fn print_profiles() {
     }
     println!();
     println!("Cross-cycle bindings:");
-    println!("  - F04527 — Tier A=offline / Tier B=package-registries / Tier C=docs+arbitrary / Tier D=authenticated-browser");
+    println!(
+        "  - F04527 — Tier A=offline / Tier B=package-registries / Tier C=docs+arbitrary / Tier D=authenticated-browser"
+    );
     println!("  - F04526 — capability_word bits 16..23 encode the 5 profile values");
     println!("  - F04528 — composes with MS039 authority-graded egress (Ring 0-4)");
 }

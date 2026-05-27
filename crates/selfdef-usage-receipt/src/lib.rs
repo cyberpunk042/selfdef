@@ -107,15 +107,24 @@ impl UsageReceipt {
 
     /// Record.
     pub fn record(&mut self, receipt: Receipt) -> Result<(), UsageError> {
-        if receipt.id.is_empty() { return Err(UsageError::EmptyId); }
-        if receipt.actor.is_empty() { return Err(UsageError::EmptyActor); }
-        if receipt.resource.is_empty() { return Err(UsageError::EmptyResource); }
+        if receipt.id.is_empty() {
+            return Err(UsageError::EmptyId);
+        }
+        if receipt.actor.is_empty() {
+            return Err(UsageError::EmptyActor);
+        }
+        if receipt.resource.is_empty() {
+            return Err(UsageError::EmptyResource);
+        }
         if self.receipts.contains_key(&receipt.id) {
             return Err(UsageError::DuplicateId(receipt.id));
         }
         let a_total = self.by_actor.entry(receipt.actor.clone()).or_default();
         accumulate(a_total, &receipt);
-        let r_total = self.by_resource.entry(receipt.resource.clone()).or_default();
+        let r_total = self
+            .by_resource
+            .entry(receipt.resource.clone())
+            .or_default();
         accumulate(r_total, &receipt);
         self.receipts.insert(receipt.id.clone(), receipt);
         Ok(())
@@ -133,18 +142,28 @@ impl UsageReceipt {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), UsageError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(UsageError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(UsageError::SchemaMismatch);
+        }
         for (id, r) in &self.receipts {
-            if id.is_empty() { return Err(UsageError::EmptyId); }
-            if r.actor.is_empty() { return Err(UsageError::EmptyActor); }
-            if r.resource.is_empty() { return Err(UsageError::EmptyResource); }
+            if id.is_empty() {
+                return Err(UsageError::EmptyId);
+            }
+            if r.actor.is_empty() {
+                return Err(UsageError::EmptyActor);
+            }
+            if r.resource.is_empty() {
+                return Err(UsageError::EmptyResource);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for UsageReceipt {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -184,15 +203,27 @@ mod tests {
     fn duplicate_rejected() {
         let mut u = UsageReceipt::new();
         u.record(r("r1", "a", "x", 1)).unwrap();
-        assert!(matches!(u.record(r("r1", "a", "x", 1)).unwrap_err(), UsageError::DuplicateId(_)));
+        assert!(matches!(
+            u.record(r("r1", "a", "x", 1)).unwrap_err(),
+            UsageError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut u = UsageReceipt::new();
-        assert!(matches!(u.record(r("", "a", "x", 1)).unwrap_err(), UsageError::EmptyId));
-        assert!(matches!(u.record(r("r", "", "x", 1)).unwrap_err(), UsageError::EmptyActor));
-        assert!(matches!(u.record(r("r", "a", "", 1)).unwrap_err(), UsageError::EmptyResource));
+        assert!(matches!(
+            u.record(r("", "a", "x", 1)).unwrap_err(),
+            UsageError::EmptyId
+        ));
+        assert!(matches!(
+            u.record(r("r", "", "x", 1)).unwrap_err(),
+            UsageError::EmptyActor
+        ));
+        assert!(matches!(
+            u.record(r("r", "a", "", 1)).unwrap_err(),
+            UsageError::EmptyResource
+        ));
     }
 
     #[test]
@@ -205,7 +236,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut u = UsageReceipt::new();
         u.schema_version = "9.9.9".into();
-        assert!(matches!(u.validate().unwrap_err(), UsageError::SchemaMismatch));
+        assert!(matches!(
+            u.validate().unwrap_err(),
+            UsageError::SchemaMismatch
+        ));
     }
 
     #[test]

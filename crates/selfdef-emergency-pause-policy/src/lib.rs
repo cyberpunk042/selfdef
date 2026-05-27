@@ -89,9 +89,13 @@ impl EmergencyPausePolicy {
 
     /// Engage pause with reason.
     pub fn pause(&mut self, reason: &str) -> Result<(), PauseError> {
-        if reason.is_empty() { return Err(PauseError::EmptyReason); }
+        if reason.is_empty() {
+            return Err(PauseError::EmptyReason);
+        }
         let n = reason.chars().count();
-        if n > 200 { return Err(PauseError::ReasonTooLong(n)); }
+        if n > 200 {
+            return Err(PauseError::ReasonTooLong(n));
+        }
         self.state = PauseState::Paused;
         self.reason = reason.into();
         Ok(())
@@ -122,16 +126,22 @@ impl EmergencyPausePolicy {
             return Err(PauseError::SchemaMismatch);
         }
         if self.state == PauseState::Paused {
-            if self.reason.is_empty() { return Err(PauseError::EmptyReason); }
+            if self.reason.is_empty() {
+                return Err(PauseError::EmptyReason);
+            }
             let n = self.reason.chars().count();
-            if n > 200 { return Err(PauseError::ReasonTooLong(n)); }
+            if n > 200 {
+                return Err(PauseError::ReasonTooLong(n));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for EmergencyPausePolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -141,7 +151,12 @@ mod tests {
     #[test]
     fn running_allows_everything() {
         let p = EmergencyPausePolicy::new();
-        for op in [OperationClass::NewTask, OperationClass::Checkpoint, OperationClass::Resume, OperationClass::ReadOnly] {
+        for op in [
+            OperationClass::NewTask,
+            OperationClass::Checkpoint,
+            OperationClass::Resume,
+            OperationClass::ReadOnly,
+        ] {
             assert_eq!(p.admit(op), PauseDecision::Allow);
         }
     }
@@ -193,25 +208,40 @@ mod tests {
     fn long_reason_rejected() {
         let mut p = EmergencyPausePolicy::new();
         let r = "x".repeat(201);
-        assert!(matches!(p.pause(&r).unwrap_err(), PauseError::ReasonTooLong(201)));
+        assert!(matches!(
+            p.pause(&r).unwrap_err(),
+            PauseError::ReasonTooLong(201)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = EmergencyPausePolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PauseError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PauseError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn state_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PauseState::Paused).unwrap(), "\"paused\"");
+        assert_eq!(
+            serde_json::to_string(&PauseState::Paused).unwrap(),
+            "\"paused\""
+        );
     }
 
     #[test]
     fn op_serde_kebab() {
-        assert_eq!(serde_json::to_string(&OperationClass::NewTask).unwrap(), "\"new-task\"");
-        assert_eq!(serde_json::to_string(&OperationClass::ReadOnly).unwrap(), "\"read-only\"");
+        assert_eq!(
+            serde_json::to_string(&OperationClass::NewTask).unwrap(),
+            "\"new-task\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OperationClass::ReadOnly).unwrap(),
+            "\"read-only\""
+        );
     }
 
     #[test]

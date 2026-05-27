@@ -225,12 +225,16 @@ impl CapabilityMirrorSnapshot {
 
     /// Count of tokens currently active across all rings.
     pub fn active_count(&self) -> usize {
-        self.tokens.iter().filter(|t| t.state == TokenState::Active).count()
+        self.tokens
+            .iter()
+            .filter(|t| t.state == TokenState::Active)
+            .count()
     }
 
     /// Count of tokens needing operator attention (pending or quarantined).
     pub fn attention_count(&self) -> usize {
-        self.tokens.iter()
+        self.tokens
+            .iter()
             .filter(|t| matches!(t.state, TokenState::Pending | TokenState::Quarantined))
             .count()
     }
@@ -296,7 +300,10 @@ mod tests {
             tokens: vec![],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            snap.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -327,11 +334,20 @@ mod tests {
         };
         let summaries = snap.recompute_summaries();
         assert_eq!(summaries.len(), 3);
-        let ring0 = summaries.iter().find(|s| s.ring == TrustRing::Ring0).unwrap();
+        let ring0 = summaries
+            .iter()
+            .find(|s| s.ring == TrustRing::Ring0)
+            .unwrap();
         assert_eq!(ring0.active, 2);
-        let ring2 = summaries.iter().find(|s| s.ring == TrustRing::Ring2).unwrap();
+        let ring2 = summaries
+            .iter()
+            .find(|s| s.ring == TrustRing::Ring2)
+            .unwrap();
         assert_eq!(ring2.pending, 1);
-        let ring3 = summaries.iter().find(|s| s.ring == TrustRing::Ring3).unwrap();
+        let ring3 = summaries
+            .iter()
+            .find(|s| s.ring == TrustRing::Ring3)
+            .unwrap();
         assert_eq!(ring3.quarantined, 1);
     }
 

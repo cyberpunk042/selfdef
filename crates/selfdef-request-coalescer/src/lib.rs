@@ -67,7 +67,9 @@ impl RequestCoalescer {
 
     /// Enter; returns Role.
     pub fn enter(&mut self, key: &str) -> Result<Role, CoalesceError> {
-        if key.is_empty() { return Err(CoalesceError::EmptyKey); }
+        if key.is_empty() {
+            return Err(CoalesceError::EmptyKey);
+        }
         if let Some(c) = self.inflight.get_mut(key) {
             *c = c.saturating_add(1);
             self.followers = self.followers.saturating_add(1);
@@ -93,16 +95,22 @@ impl RequestCoalescer {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CoalesceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CoalesceError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CoalesceError::SchemaMismatch);
+        }
         for k in self.inflight.keys() {
-            if k.is_empty() { return Err(CoalesceError::EmptyKey); }
+            if k.is_empty() {
+                return Err(CoalesceError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for RequestCoalescer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -146,7 +154,10 @@ mod tests {
     #[test]
     fn complete_unknown_rejected() {
         let mut c = RequestCoalescer::new();
-        assert!(matches!(c.complete("nope").unwrap_err(), CoalesceError::UnknownKey(_)));
+        assert!(matches!(
+            c.complete("nope").unwrap_err(),
+            CoalesceError::UnknownKey(_)
+        ));
     }
 
     #[test]
@@ -159,7 +170,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = RequestCoalescer::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CoalesceError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CoalesceError::SchemaMismatch
+        ));
     }
 
     #[test]

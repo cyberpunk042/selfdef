@@ -92,7 +92,9 @@ impl TwoPhaseCommit {
 
     /// Register a participant.
     pub fn register(&mut self, id: &str) -> Result<(), CommitError> {
-        if id.is_empty() { return Err(CommitError::EmptyParticipant); }
+        if id.is_empty() {
+            return Err(CommitError::EmptyParticipant);
+        }
         if self.phase != Phase::Init {
             return Err(CommitError::InvalidPhase);
         }
@@ -108,7 +110,10 @@ impl TwoPhaseCommit {
         if self.phase == Phase::Committed || self.phase == Phase::Aborted {
             return Err(CommitError::InvalidPhase);
         }
-        let slot = self.participants.get_mut(id).ok_or_else(|| CommitError::UnknownParticipant(id.into()))?;
+        let slot = self
+            .participants
+            .get_mut(id)
+            .ok_or_else(|| CommitError::UnknownParticipant(id.into()))?;
         *slot = Some(v);
         // Recompute phase.
         let any_no = self.participants.values().any(|x| *x == Some(Vote::No));
@@ -141,16 +146,22 @@ impl TwoPhaseCommit {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CommitError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CommitError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CommitError::SchemaMismatch);
+        }
         for k in self.participants.keys() {
-            if k.is_empty() { return Err(CommitError::EmptyParticipant); }
+            if k.is_empty() {
+                return Err(CommitError::EmptyParticipant);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TwoPhaseCommit {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -185,7 +196,10 @@ mod tests {
         let mut t = TwoPhaseCommit::new();
         t.register("a").unwrap();
         t.vote("a", Vote::Yes).unwrap();
-        assert!(matches!(t.register("b").unwrap_err(), CommitError::InvalidPhase));
+        assert!(matches!(
+            t.register("b").unwrap_err(),
+            CommitError::InvalidPhase
+        ));
     }
 
     #[test]
@@ -194,7 +208,10 @@ mod tests {
         t.register("a").unwrap();
         t.vote("a", Vote::Yes).unwrap();
         t.decide().unwrap();
-        assert!(matches!(t.vote("a", Vote::No).unwrap_err(), CommitError::InvalidPhase));
+        assert!(matches!(
+            t.vote("a", Vote::No).unwrap_err(),
+            CommitError::InvalidPhase
+        ));
     }
 
     #[test]
@@ -208,14 +225,20 @@ mod tests {
     fn duplicate_participant_rejected() {
         let mut t = TwoPhaseCommit::new();
         t.register("a").unwrap();
-        assert!(matches!(t.register("a").unwrap_err(), CommitError::DuplicateParticipant(_)));
+        assert!(matches!(
+            t.register("a").unwrap_err(),
+            CommitError::DuplicateParticipant(_)
+        ));
     }
 
     #[test]
     fn unknown_vote_rejected() {
         let mut t = TwoPhaseCommit::new();
         t.register("a").unwrap();
-        assert!(matches!(t.vote("nope", Vote::Yes).unwrap_err(), CommitError::UnknownParticipant(_)));
+        assert!(matches!(
+            t.vote("nope", Vote::Yes).unwrap_err(),
+            CommitError::UnknownParticipant(_)
+        ));
     }
 
     #[test]
@@ -234,7 +257,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = TwoPhaseCommit::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), CommitError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CommitError::SchemaMismatch
+        ));
     }
 
     #[test]

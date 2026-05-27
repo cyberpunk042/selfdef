@@ -70,10 +70,18 @@ pub enum AttestationError {
 impl HostFingerprint {
     /// Validate non-empty.
     pub fn validate(&self) -> Result<(), AttestationError> {
-        if self.kernel_id.is_empty() { return Err(AttestationError::MissingField("kernel_id")); }
-        if self.cpu_id.is_empty() { return Err(AttestationError::MissingField("cpu_id")); }
-        if self.boot_id.is_empty() { return Err(AttestationError::MissingField("boot_id")); }
-        if self.fs_id.is_empty() { return Err(AttestationError::MissingField("fs_id")); }
+        if self.kernel_id.is_empty() {
+            return Err(AttestationError::MissingField("kernel_id"));
+        }
+        if self.cpu_id.is_empty() {
+            return Err(AttestationError::MissingField("cpu_id"));
+        }
+        if self.boot_id.is_empty() {
+            return Err(AttestationError::MissingField("boot_id"));
+        }
+        if self.fs_id.is_empty() {
+            return Err(AttestationError::MissingField("fs_id"));
+        }
         Ok(())
     }
 }
@@ -85,9 +93,15 @@ impl HostAttestation {
             return Err(AttestationError::SchemaMismatch);
         }
         self.pinned.validate()?;
-        if self.signed_at.is_empty() { return Err(AttestationError::MissingField("signed_at")); }
-        if self.actor.is_empty() { return Err(AttestationError::MissingField("actor")); }
-        if self.signature.is_empty() { return Err(AttestationError::Unsigned); }
+        if self.signed_at.is_empty() {
+            return Err(AttestationError::MissingField("signed_at"));
+        }
+        if self.actor.is_empty() {
+            return Err(AttestationError::MissingField("actor"));
+        }
+        if self.signature.is_empty() {
+            return Err(AttestationError::Unsigned);
+        }
         Ok(())
     }
 
@@ -194,21 +208,30 @@ mod tests {
     fn unsigned_rejected() {
         let mut a = att();
         a.signature = String::new();
-        assert!(matches!(a.validate().unwrap_err(), AttestationError::Unsigned));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AttestationError::Unsigned
+        ));
     }
 
     #[test]
     fn missing_kernel_id_rejected() {
         let mut a = att();
         a.pinned.kernel_id = String::new();
-        assert!(matches!(a.validate().unwrap_err(), AttestationError::MissingField("kernel_id")));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AttestationError::MissingField("kernel_id")
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = att();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), AttestationError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AttestationError::SchemaMismatch
+        ));
     }
 
     #[test]

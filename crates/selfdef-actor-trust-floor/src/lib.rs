@@ -94,7 +94,9 @@ impl ActorTrustFloor {
 
     /// Classify.
     pub fn classify(&self, profile: Profile, score: u16) -> Result<TrustVerdict, FloorError> {
-        if score > 1000 { return Err(FloorError::ScoreOver1000(score)); }
+        if score > 1000 {
+            return Err(FloorError::ScoreOver1000(score));
+        }
         let floor = match self.floors.get(&profile) {
             Some(&f) => f,
             None => return Ok(TrustVerdict::Unconfigured),
@@ -112,7 +114,9 @@ impl ActorTrustFloor {
             return Err(FloorError::SchemaMismatch);
         }
         for &f in self.floors.values() {
-            if f > 1000 { return Err(FloorError::FloorOver1000(f)); }
+            if f > 1000 {
+                return Err(FloorError::FloorOver1000(f));
+            }
         }
         Ok(())
     }
@@ -130,7 +134,10 @@ mod tests {
     #[test]
     fn allowed_at_floor() {
         let f = ActorTrustFloor::canonical();
-        assert_eq!(f.classify(Profile::Production, 900).unwrap(), TrustVerdict::Allowed);
+        assert_eq!(
+            f.classify(Profile::Production, 900).unwrap(),
+            TrustVerdict::Allowed
+        );
     }
 
     #[test]
@@ -143,34 +150,49 @@ mod tests {
     #[test]
     fn experimental_admits_low_trust() {
         let f = ActorTrustFloor::canonical();
-        assert_eq!(f.classify(Profile::Experimental, 150).unwrap(), TrustVerdict::Allowed);
+        assert_eq!(
+            f.classify(Profile::Experimental, 150).unwrap(),
+            TrustVerdict::Allowed
+        );
     }
 
     #[test]
     fn score_over_1000_rejected() {
         let f = ActorTrustFloor::canonical();
-        assert!(matches!(f.classify(Profile::Production, 1500).unwrap_err(), FloorError::ScoreOver1000(_)));
+        assert!(matches!(
+            f.classify(Profile::Production, 1500).unwrap_err(),
+            FloorError::ScoreOver1000(_)
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut f = ActorTrustFloor::canonical();
         f.floors.clear();
-        assert_eq!(f.classify(Profile::Fast, 500).unwrap(), TrustVerdict::Unconfigured);
+        assert_eq!(
+            f.classify(Profile::Fast, 500).unwrap(),
+            TrustVerdict::Unconfigured
+        );
     }
 
     #[test]
     fn floor_over_1000_invalid() {
         let mut f = ActorTrustFloor::canonical();
         f.floors.insert(Profile::Fast, 9999);
-        assert!(matches!(f.validate().unwrap_err(), FloorError::FloorOver1000(_)));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FloorError::FloorOver1000(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = ActorTrustFloor::canonical();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FloorError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FloorError::SchemaMismatch
+        ));
     }
 
     #[test]

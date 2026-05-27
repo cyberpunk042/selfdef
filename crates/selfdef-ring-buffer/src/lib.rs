@@ -44,7 +44,9 @@ pub enum BufferError {
 impl RingBuffer {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, BufferError> {
-        if capacity == 0 { return Err(BufferError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(BufferError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -82,27 +84,39 @@ impl RingBuffer {
     }
 
     /// Count.
-    pub fn len(&self) -> usize { self.buf.len() }
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.buf.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.buf.is_empty()
+    }
 
     /// Mean (None when empty).
     pub fn mean(&self) -> Option<u64> {
-        if self.buf.is_empty() { return None; }
+        if self.buf.is_empty() {
+            return None;
+        }
         let sum: u128 = self.buf.iter().map(|x| *x as u128).sum();
         Some((sum / self.buf.len() as u128) as u64)
     }
 
     /// Min.
-    pub fn min(&self) -> Option<u64> { self.buf.iter().min().copied() }
+    pub fn min(&self) -> Option<u64> {
+        self.buf.iter().min().copied()
+    }
 
     /// Max.
-    pub fn max(&self) -> Option<u64> { self.buf.iter().max().copied() }
+    pub fn max(&self) -> Option<u64> {
+        self.buf.iter().max().copied()
+    }
 
     /// Last pushed (newest).
     pub fn last(&self) -> Option<u64> {
-        if self.buf.is_empty() { return None; }
+        if self.buf.is_empty() {
+            return None;
+        }
         if (self.buf.len() as u32) < self.capacity {
             self.buf.last().copied()
         } else {
@@ -114,8 +128,12 @@ impl RingBuffer {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BufferError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BufferError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(BufferError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BufferError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(BufferError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -137,7 +155,11 @@ mod tests {
     #[test]
     fn over_capacity_overwrites_oldest() {
         let mut r = RingBuffer::new(3).unwrap();
-        r.push(1); r.push(2); r.push(3); r.push(4); r.push(5);
+        r.push(1);
+        r.push(2);
+        r.push(3);
+        r.push(4);
+        r.push(5);
         assert_eq!(r.samples(), vec![3, 4, 5]);
         assert_eq!(r.last(), Some(5));
         assert_eq!(r.pushes, 5);
@@ -146,7 +168,9 @@ mod tests {
     #[test]
     fn mean_min_max() {
         let mut r = RingBuffer::new(5).unwrap();
-        for x in &[10, 20, 30, 40, 50] { r.push(*x); }
+        for x in &[10, 20, 30, 40, 50] {
+            r.push(*x);
+        }
         assert_eq!(r.mean(), Some(30));
         assert_eq!(r.min(), Some(10));
         assert_eq!(r.max(), Some(50));
@@ -163,20 +187,29 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(RingBuffer::new(0).unwrap_err(), BufferError::ZeroCapacity));
+        assert!(matches!(
+            RingBuffer::new(0).unwrap_err(),
+            BufferError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = RingBuffer::new(3).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), BufferError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BufferError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn ring_serde_roundtrip() {
         let mut r = RingBuffer::new(3).unwrap();
-        r.push(1); r.push(2); r.push(3); r.push(4);
+        r.push(1);
+        r.push(2);
+        r.push(3);
+        r.push(4);
         let j = serde_json::to_string(&r).unwrap();
         let back: RingBuffer = serde_json::from_str(&j).unwrap();
         assert_eq!(r, back);

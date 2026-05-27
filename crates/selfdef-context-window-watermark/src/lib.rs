@@ -129,7 +129,11 @@ impl ContextWindowWatermark {
             Zone::Hot => Action::Compact,
             Zone::Critical => Action::EmergencyCompact,
         };
-        Ok(WatermarkDecision { zone, action, used_pct })
+        Ok(WatermarkDecision {
+            zone,
+            action,
+            used_pct,
+        })
     }
 
     /// Validate.
@@ -137,7 +141,10 @@ impl ContextWindowWatermark {
         if self.schema_version != SCHEMA_VERSION {
             return Err(WatermarkError::SchemaMismatch);
         }
-        if !(self.cool_max_pct < self.warm_max_pct && self.warm_max_pct < self.hot_max_pct && self.hot_max_pct <= 100) {
+        if !(self.cool_max_pct < self.warm_max_pct
+            && self.warm_max_pct < self.hot_max_pct
+            && self.hot_max_pct <= 100)
+        {
             return Err(WatermarkError::BadOrder {
                 cool: self.cool_max_pct,
                 warm: self.warm_max_pct,
@@ -153,7 +160,10 @@ mod tests {
     use super::*;
 
     fn snap(used: u64, total: u64) -> ContextSnapshot {
-        ContextSnapshot { used_tokens: used, total_tokens: total }
+        ContextSnapshot {
+            used_tokens: used,
+            total_tokens: total,
+        }
     }
 
     #[test]
@@ -208,31 +218,46 @@ mod tests {
     #[test]
     fn total_zero_rejected() {
         let p = ContextWindowWatermark::canonical();
-        assert!(matches!(p.decide(snap(0, 0)).unwrap_err(), WatermarkError::TotalZero));
+        assert!(matches!(
+            p.decide(snap(0, 0)).unwrap_err(),
+            WatermarkError::TotalZero
+        ));
     }
 
     #[test]
     fn out_of_order_thresholds_rejected() {
         let mut p = ContextWindowWatermark::canonical();
         p.warm_max_pct = 30;
-        assert!(matches!(p.validate().unwrap_err(), WatermarkError::BadOrder { .. }));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            WatermarkError::BadOrder { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ContextWindowWatermark::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), WatermarkError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            WatermarkError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn action_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Action::EmergencyCompact).unwrap(), "\"emergency-compact\"");
+        assert_eq!(
+            serde_json::to_string(&Action::EmergencyCompact).unwrap(),
+            "\"emergency-compact\""
+        );
     }
 
     #[test]
     fn zone_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Zone::Critical).unwrap(), "\"critical\"");
+        assert_eq!(
+            serde_json::to_string(&Zone::Critical).unwrap(),
+            "\"critical\""
+        );
     }
 
     #[test]

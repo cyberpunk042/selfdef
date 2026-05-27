@@ -79,14 +79,22 @@ fn parse(s: &str) -> Option<Triple> {
     let major = it.next()?.parse::<u32>().ok()?;
     let minor = it.next()?.parse::<u32>().ok()?;
     let patch = it.next()?.parse::<u32>().ok()?;
-    if it.next().is_some() { return None; }
-    Some(Triple { major, minor, patch })
+    if it.next().is_some() {
+        return None;
+    }
+    Some(Triple {
+        major,
+        minor,
+        patch,
+    })
 }
 
 impl McpHandshakeVersion {
     /// New.
     pub fn new(min: Triple, max: Triple) -> Result<Self, HandshakeError> {
-        if min > max { return Err(HandshakeError::BadRange); }
+        if min > max {
+            return Err(HandshakeError::BadRange);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             supported_min: min,
@@ -109,15 +117,27 @@ impl McpHandshakeVersion {
             Some(t) => t,
             None => return HandshakeVerdict::Unparseable,
         };
-        if t < self.supported_min { return HandshakeVerdict::TooOld { min: self.supported_min }; }
-        if t > self.supported_max { return HandshakeVerdict::TooNew { max: self.supported_max }; }
+        if t < self.supported_min {
+            return HandshakeVerdict::TooOld {
+                min: self.supported_min,
+            };
+        }
+        if t > self.supported_max {
+            return HandshakeVerdict::TooNew {
+                max: self.supported_max,
+            };
+        }
         HandshakeVerdict::Compatible
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HandshakeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HandshakeError::SchemaMismatch); }
-        if self.supported_min > self.supported_max { return Err(HandshakeError::BadRange); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HandshakeError::SchemaMismatch);
+        }
+        if self.supported_min > self.supported_max {
+            return Err(HandshakeError::BadRange);
+        }
         Ok(())
     }
 }
@@ -126,36 +146,45 @@ impl McpHandshakeVersion {
 mod tests {
     use super::*;
 
-    fn t(maj: u32, min: u32, pat: u32) -> Triple { Triple { major: maj, minor: min, patch: pat } }
+    fn t(maj: u32, min: u32, pat: u32) -> Triple {
+        Triple {
+            major: maj,
+            minor: min,
+            patch: pat,
+        }
+    }
 
     #[test]
     fn bad_range_rejected() {
-        assert!(matches!(McpHandshakeVersion::new(t(2,0,0), t(1,0,0)).unwrap_err(), HandshakeError::BadRange));
+        assert!(matches!(
+            McpHandshakeVersion::new(t(2, 0, 0), t(1, 0, 0)).unwrap_err(),
+            HandshakeError::BadRange
+        ));
     }
 
     #[test]
     fn in_range_compatible() {
-        let h = McpHandshakeVersion::new(t(1,0,0), t(2,9,9)).unwrap();
+        let h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 9, 9)).unwrap();
         assert_eq!(h.classify("1.5.0"), HandshakeVerdict::Compatible);
     }
 
     #[test]
     fn too_old() {
-        let h = McpHandshakeVersion::new(t(1,5,0), t(2,9,9)).unwrap();
+        let h = McpHandshakeVersion::new(t(1, 5, 0), t(2, 9, 9)).unwrap();
         let v = h.classify("1.0.0");
-        assert_eq!(v, HandshakeVerdict::TooOld { min: t(1,5,0) });
+        assert_eq!(v, HandshakeVerdict::TooOld { min: t(1, 5, 0) });
     }
 
     #[test]
     fn too_new() {
-        let h = McpHandshakeVersion::new(t(1,0,0), t(2,0,0)).unwrap();
+        let h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 0, 0)).unwrap();
         let v = h.classify("3.0.0");
-        assert_eq!(v, HandshakeVerdict::TooNew { max: t(2,0,0) });
+        assert_eq!(v, HandshakeVerdict::TooNew { max: t(2, 0, 0) });
     }
 
     #[test]
     fn unparseable() {
-        let h = McpHandshakeVersion::new(t(1,0,0), t(2,0,0)).unwrap();
+        let h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 0, 0)).unwrap();
         assert_eq!(h.classify("not-semver"), HandshakeVerdict::Unparseable);
         assert_eq!(h.classify("1.0"), HandshakeVerdict::Unparseable);
         assert_eq!(h.classify("1.0.0.0"), HandshakeVerdict::Unparseable);
@@ -163,23 +192,29 @@ mod tests {
 
     #[test]
     fn allowlist_overrides_range() {
-        let mut h = McpHandshakeVersion::new(t(1,0,0), t(2,0,0)).unwrap();
+        let mut h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 0, 0)).unwrap();
         h.allow("3.5.0");
         assert_eq!(h.classify("3.5.0"), HandshakeVerdict::Compatible);
         // Another out-of-range version still rejected.
-        assert!(matches!(h.classify("3.5.1"), HandshakeVerdict::TooNew { .. }));
+        assert!(matches!(
+            h.classify("3.5.1"),
+            HandshakeVerdict::TooNew { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
-        let mut h = McpHandshakeVersion::new(t(1,0,0), t(2,0,0)).unwrap();
+        let mut h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 0, 0)).unwrap();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HandshakeError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HandshakeError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn handshake_serde_roundtrip() {
-        let mut h = McpHandshakeVersion::new(t(1,0,0), t(2,0,0)).unwrap();
+        let mut h = McpHandshakeVersion::new(t(1, 0, 0), t(2, 0, 0)).unwrap();
         h.allow("3.5.0");
         let j = serde_json::to_string(&h).unwrap();
         let back: McpHandshakeVersion = serde_json::from_str(&j).unwrap();

@@ -78,25 +78,42 @@ impl TraceBaggage {
     }
 
     fn current_bytes(b: &Baggage) -> u64 {
-        b.entries.iter()
+        b.entries
+            .iter()
             .map(|(k, v)| (k.len() + v.len()) as u64)
             .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Set k=v (replaces existing).
     pub fn set(&mut self, trace_id: &str, key: &str, value: &str) -> Result<(), BaggageError> {
-        if trace_id.is_empty() { return Err(BaggageError::EmptyTrace); }
-        if key.is_empty() { return Err(BaggageError::EmptyKey); }
+        if trace_id.is_empty() {
+            return Err(BaggageError::EmptyTrace);
+        }
+        if key.is_empty() {
+            return Err(BaggageError::EmptyKey);
+        }
         let b = self.traces.entry(trace_id.into()).or_default();
         // Compute size impact of replacing.
-        let old_size_of_key = b.entries.get(key).map(|v| (key.len() + v.len()) as u64).unwrap_or(0);
-        let proposed = Self::current_bytes(b).saturating_sub(old_size_of_key).saturating_add((key.len() + value.len()) as u64);
+        let old_size_of_key = b
+            .entries
+            .get(key)
+            .map(|v| (key.len() + v.len()) as u64)
+            .unwrap_or(0);
+        let proposed = Self::current_bytes(b)
+            .saturating_sub(old_size_of_key)
+            .saturating_add((key.len() + value.len()) as u64);
         if proposed > self.max_total_bytes {
-            return Err(BaggageError::OverSize { proposed, max: self.max_total_bytes });
+            return Err(BaggageError::OverSize {
+                proposed,
+                max: self.max_total_bytes,
+            });
         }
         // Count check (only matters if inserting new key).
         if !b.entries.contains_key(key) && (b.entries.len() as u32) >= self.max_entries {
-            return Err(BaggageError::OverCount { count: b.entries.len() as u32, max: self.max_entries });
+            return Err(BaggageError::OverCount {
+                count: b.entries.len() as u32,
+                max: self.max_entries,
+            });
         }
         b.entries.insert(key.into(), value.into());
         Ok(())
@@ -104,14 +121,21 @@ impl TraceBaggage {
 
     /// Get.
     pub fn get(&self, trace_id: &str, key: &str) -> Option<String> {
-        self.traces.get(trace_id).and_then(|b| b.entries.get(key)).cloned()
+        self.traces
+            .get(trace_id)
+            .and_then(|b| b.entries.get(key))
+            .cloned()
     }
 
     /// Remove key.
     pub fn remove(&mut self, trace_id: &str, key: &str) -> bool {
-        let Some(b) = self.traces.get_mut(trace_id) else { return false; };
+        let Some(b) = self.traces.get_mut(trace_id) else {
+            return false;
+        };
         let removed = b.entries.remove(key).is_some();
-        if b.entries.is_empty() { self.traces.remove(trace_id); }
+        if b.entries.is_empty() {
+            self.traces.remove(trace_id);
+        }
         removed
     }
 
@@ -122,21 +146,33 @@ impl TraceBaggage {
 
     /// All keys (sorted).
     pub fn keys_of(&self, trace_id: &str) -> Vec<String> {
-        self.traces.get(trace_id).map(|b| b.entries.keys().cloned().collect()).unwrap_or_default()
+        self.traces
+            .get(trace_id)
+            .map(|b| b.entries.keys().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Total bytes used.
     pub fn bytes_of(&self, trace_id: &str) -> u64 {
-        self.traces.get(trace_id).map(Self::current_bytes).unwrap_or(0)
+        self.traces
+            .get(trace_id)
+            .map(Self::current_bytes)
+            .unwrap_or(0)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BaggageError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BaggageError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BaggageError::SchemaMismatch);
+        }
         for (id, b) in &self.traces {
-            if id.is_empty() { return Err(BaggageError::EmptyTrace); }
+            if id.is_empty() {
+                return Err(BaggageError::EmptyTrace);
+            }
             for k in b.entries.keys() {
-                if k.is_empty() { return Err(BaggageError::EmptyKey); }
+                if k.is_empty() {
+                    return Err(BaggageError::EmptyKey);
+                }
             }
         }
         Ok(())
@@ -144,7 +180,9 @@ impl TraceBaggage {
 }
 
 impl Default for TraceBaggage {
-    fn default() -> Self { Self::new(32, 8192) }
+    fn default() -> Self {
+        Self::new(32, 8192)
+    }
 }
 
 #[cfg(test)]
@@ -170,14 +208,20 @@ mod tests {
     fn over_count_rejected() {
         let mut b = TraceBaggage::new(1, 1000);
         b.set("t", "k1", "v").unwrap();
-        assert!(matches!(b.set("t", "k2", "v").unwrap_err(), BaggageError::OverCount { .. }));
+        assert!(matches!(
+            b.set("t", "k2", "v").unwrap_err(),
+            BaggageError::OverCount { .. }
+        ));
     }
 
     #[test]
     fn over_size_rejected() {
         let mut b = TraceBaggage::new(10, 5);
         // k+v = 6 bytes, max = 5.
-        assert!(matches!(b.set("t", "key1", "vv").unwrap_err(), BaggageError::OverSize { .. }));
+        assert!(matches!(
+            b.set("t", "key1", "vv").unwrap_err(),
+            BaggageError::OverSize { .. }
+        ));
     }
 
     #[test]
@@ -208,15 +252,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut b = TraceBaggage::new(10, 1000);
-        assert!(matches!(b.set("", "k", "v").unwrap_err(), BaggageError::EmptyTrace));
-        assert!(matches!(b.set("t", "", "v").unwrap_err(), BaggageError::EmptyKey));
+        assert!(matches!(
+            b.set("", "k", "v").unwrap_err(),
+            BaggageError::EmptyTrace
+        ));
+        assert!(matches!(
+            b.set("t", "", "v").unwrap_err(),
+            BaggageError::EmptyKey
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = TraceBaggage::new(10, 1000);
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BaggageError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BaggageError::SchemaMismatch
+        ));
     }
 
     #[test]

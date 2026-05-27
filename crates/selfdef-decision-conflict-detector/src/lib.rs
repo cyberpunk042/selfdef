@@ -79,11 +79,25 @@ impl DecisionConflictDetector {
     }
 
     /// Record an observation.
-    pub fn record(&mut self, payload_hash: &str, outcome: &str, ts_ms: u64) -> Result<(), DetectorError> {
-        if payload_hash.is_empty() { return Err(DetectorError::EmptyHash); }
-        if outcome.is_empty() { return Err(DetectorError::EmptyOutcome); }
-        self.ledger.entry(payload_hash.into()).or_default()
-            .push(Obs { outcome: outcome.into(), ts_ms });
+    pub fn record(
+        &mut self,
+        payload_hash: &str,
+        outcome: &str,
+        ts_ms: u64,
+    ) -> Result<(), DetectorError> {
+        if payload_hash.is_empty() {
+            return Err(DetectorError::EmptyHash);
+        }
+        if outcome.is_empty() {
+            return Err(DetectorError::EmptyOutcome);
+        }
+        self.ledger
+            .entry(payload_hash.into())
+            .or_default()
+            .push(Obs {
+                outcome: outcome.into(),
+                ts_ms,
+            });
         Ok(())
     }
 
@@ -94,7 +108,8 @@ impl DecisionConflictDetector {
             None => return ConflictVerdict::Consistent,
         };
         let cutoff = now_ms.saturating_sub(self.window_ms);
-        let in_window: BTreeSet<&str> = entries.iter()
+        let in_window: BTreeSet<&str> = entries
+            .iter()
             .filter(|o| o.ts_ms >= cutoff && o.ts_ms <= now_ms)
             .map(|o| o.outcome.as_str())
             .collect();
@@ -118,11 +133,17 @@ impl DecisionConflictDetector {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DetectorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DetectorError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DetectorError::SchemaMismatch);
+        }
         for (k, v) in &self.ledger {
-            if k.is_empty() { return Err(DetectorError::EmptyHash); }
+            if k.is_empty() {
+                return Err(DetectorError::EmptyHash);
+            }
             for o in v {
-                if o.outcome.is_empty() { return Err(DetectorError::EmptyOutcome); }
+                if o.outcome.is_empty() {
+                    return Err(DetectorError::EmptyOutcome);
+                }
             }
         }
         Ok(())
@@ -174,13 +195,19 @@ mod tests {
     #[test]
     fn empty_hash_rejected() {
         let mut d = DecisionConflictDetector::new(60_000);
-        assert!(matches!(d.record("", "a", 0).unwrap_err(), DetectorError::EmptyHash));
+        assert!(matches!(
+            d.record("", "a", 0).unwrap_err(),
+            DetectorError::EmptyHash
+        ));
     }
 
     #[test]
     fn empty_outcome_rejected() {
         let mut d = DecisionConflictDetector::new(60_000);
-        assert!(matches!(d.record("h", "", 0).unwrap_err(), DetectorError::EmptyOutcome));
+        assert!(matches!(
+            d.record("h", "", 0).unwrap_err(),
+            DetectorError::EmptyOutcome
+        ));
     }
 
     #[test]
@@ -204,7 +231,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = DecisionConflictDetector::new(1);
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DetectorError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DetectorError::SchemaMismatch
+        ));
     }
 
     #[test]

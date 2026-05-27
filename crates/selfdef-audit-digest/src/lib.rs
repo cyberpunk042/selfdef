@@ -120,10 +120,19 @@ impl Digest {
 
     /// Record a decision into the digest.
     pub fn record(&mut self, decision: &PolicyDecision) {
-        *self.outcomes.entry(outcome_key(decision.outcome).into()).or_insert(0) += 1;
-        *self.side_effects.entry(side_effect_key(decision.side_effect_class).into()).or_insert(0) += 1;
+        *self
+            .outcomes
+            .entry(outcome_key(decision.outcome).into())
+            .or_insert(0) += 1;
+        *self
+            .side_effects
+            .entry(side_effect_key(decision.side_effect_class).into())
+            .or_insert(0) += 1;
         *self.profiles.entry(decision.profile.clone()).or_insert(0) += 1;
-        *self.risks.entry(risk_key(decision.risk).into()).or_insert(0) += 1;
+        *self
+            .risks
+            .entry(risk_key(decision.risk).into())
+            .or_insert(0) += 1;
         self.total += 1;
     }
 
@@ -149,7 +158,9 @@ impl Digest {
 
     /// Deny rate as basis points (out of 10_000) of the window; 0 if no decisions.
     pub fn deny_rate_bps(&self) -> u32 {
-        if self.total == 0 { return 0; }
+        if self.total == 0 {
+            return 0;
+        }
         let deny = self.outcome_count(Outcome::Deny);
         ((deny * 10_000) / self.total) as u32
     }
@@ -159,8 +170,12 @@ impl Digest {
         if self.schema_version != SCHEMA_VERSION {
             return Err(DigestError::SchemaMismatch);
         }
-        if self.window_start.is_empty() { return Err(DigestError::MissingWindowStart); }
-        if self.window_end.is_empty() { return Err(DigestError::MissingWindowEnd); }
+        if self.window_start.is_empty() {
+            return Err(DigestError::MissingWindowStart);
+        }
+        if self.window_end.is_empty() {
+            return Err(DigestError::MissingWindowEnd);
+        }
         if self.window_end < self.window_start {
             return Err(DigestError::WindowEndBeforeStart {
                 start: self.window_start.clone(),
@@ -169,7 +184,10 @@ impl Digest {
         }
         let sum: u64 = self.outcomes.values().sum();
         if sum != self.total {
-            return Err(DigestError::OutcomeSumMismatch { sum, total: self.total });
+            return Err(DigestError::OutcomeSumMismatch {
+                sum,
+                total: self.total,
+            });
         }
         Ok(())
     }
@@ -209,13 +227,20 @@ mod tests {
 
     #[test]
     fn empty_digest_validates() {
-        Digest::new("2026-05-19T03:00:00Z", "2026-05-19T03:01:00Z").validate().unwrap();
+        Digest::new("2026-05-19T03:00:00Z", "2026-05-19T03:01:00Z")
+            .validate()
+            .unwrap();
     }
 
     #[test]
     fn record_increments_all_axes() {
         let mut g = Digest::new("a", "b");
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
         assert_eq!(g.total, 1);
         assert_eq!(g.outcome_count(Outcome::Allow), 1);
         assert_eq!(g.side_effect_count(SideEffectClass::ReadOnly), 1);
@@ -226,9 +251,28 @@ mod tests {
     #[test]
     fn outcome_counts_partition() {
         let mut g = Digest::new("a", "b");
-        for _ in 0..3 { g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful")); }
-        for _ in 0..2 { g.record(&d(Outcome::Deny, SideEffectClass::ReadOnly, RiskClass::Medium, "careful")); }
-        g.record(&d(Outcome::Ask, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
+        for _ in 0..3 {
+            g.record(&d(
+                Outcome::Allow,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "careful",
+            ));
+        }
+        for _ in 0..2 {
+            g.record(&d(
+                Outcome::Deny,
+                SideEffectClass::ReadOnly,
+                RiskClass::Medium,
+                "careful",
+            ));
+        }
+        g.record(&d(
+            Outcome::Ask,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
         assert_eq!(g.total, 6);
         assert_eq!(g.outcome_count(Outcome::Allow), 3);
         assert_eq!(g.outcome_count(Outcome::Deny), 2);
@@ -239,8 +283,22 @@ mod tests {
     #[test]
     fn deny_rate_bps() {
         let mut g = Digest::new("a", "b");
-        for _ in 0..3 { g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "x")); }
-        for _ in 0..1 { g.record(&d(Outcome::Deny, SideEffectClass::ReadOnly, RiskClass::Low, "x")); }
+        for _ in 0..3 {
+            g.record(&d(
+                Outcome::Allow,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "x",
+            ));
+        }
+        for _ in 0..1 {
+            g.record(&d(
+                Outcome::Deny,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "x",
+            ));
+        }
         // 1/4 = 0.25 = 2500 bps
         assert_eq!(g.deny_rate_bps(), 2500);
         let empty = Digest::new("a", "b");
@@ -250,9 +308,24 @@ mod tests {
     #[test]
     fn profile_counts_distinct() {
         let mut g = Digest::new("a", "b");
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "fast"));
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "fast",
+        ));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
         assert_eq!(g.profile_count("careful"), 2);
         assert_eq!(g.profile_count("fast"), 1);
         assert_eq!(g.profile_count("private"), 0);
@@ -261,38 +334,68 @@ mod tests {
     #[test]
     fn window_end_before_start_caught() {
         let g = Digest::new("2026-05-19T03:05:00Z", "2026-05-19T03:00:00Z");
-        assert!(matches!(g.validate().unwrap_err(), DigestError::WindowEndBeforeStart { .. }));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::WindowEndBeforeStart { .. }
+        ));
     }
 
     #[test]
     fn missing_window_caught() {
         let g = Digest::new("", "b");
-        assert!(matches!(g.validate().unwrap_err(), DigestError::MissingWindowStart));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::MissingWindowStart
+        ));
         let g2 = Digest::new("a", "");
-        assert!(matches!(g2.validate().unwrap_err(), DigestError::MissingWindowEnd));
+        assert!(matches!(
+            g2.validate().unwrap_err(),
+            DigestError::MissingWindowEnd
+        ));
     }
 
     #[test]
     fn outcome_sum_mismatch_caught() {
         let mut g = Digest::new("a", "b");
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
         // Tamper total
         g.total = 5;
-        assert!(matches!(g.validate().unwrap_err(), DigestError::OutcomeSumMismatch { sum: 1, total: 5 }));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::OutcomeSumMismatch { sum: 1, total: 5 }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = Digest::new("a", "b");
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), DigestError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn digest_serde_roundtrip() {
         let mut g = Digest::new("2026-05-19T03:00:00Z", "2026-05-19T03:01:00Z");
-        g.record(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "careful"));
-        g.record(&d(Outcome::Deny, SideEffectClass::Process, RiskClass::High, "fast"));
+        g.record(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+            "careful",
+        ));
+        g.record(&d(
+            Outcome::Deny,
+            SideEffectClass::Process,
+            RiskClass::High,
+            "fast",
+        ));
         let j = serde_json::to_string(&g).unwrap();
         let back: Digest = serde_json::from_str(&j).unwrap();
         assert_eq!(g, back);

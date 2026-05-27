@@ -49,19 +49,33 @@ pub enum WarmupError {
 
 impl WarmupRamp {
     /// New.
-    pub fn new(start_ms: u64, warmup_ms: u64, floor: u64, target: u64) -> Result<Self, WarmupError> {
-        if warmup_ms == 0 { return Err(WarmupError::ZeroWarmup); }
-        if target < floor { return Err(WarmupError::BadBounds); }
+    pub fn new(
+        start_ms: u64,
+        warmup_ms: u64,
+        floor: u64,
+        target: u64,
+    ) -> Result<Self, WarmupError> {
+        if warmup_ms == 0 {
+            return Err(WarmupError::ZeroWarmup);
+        }
+        if target < floor {
+            return Err(WarmupError::BadBounds);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            start_ms, warmup_ms, floor, target,
+            start_ms,
+            warmup_ms,
+            floor,
+            target,
         })
     }
 
     /// Capacity at now_ms.
     pub fn cap(&self, now_ms: u64) -> u64 {
         let elapsed = now_ms.saturating_sub(self.start_ms);
-        if elapsed >= self.warmup_ms { return self.target; }
+        if elapsed >= self.warmup_ms {
+            return self.target;
+        }
         let span = self.target - self.floor;
         // floor + span * elapsed / warmup_ms, integer math.
         let bump = (span as u128 * elapsed as u128 / self.warmup_ms as u128) as u64;
@@ -75,9 +89,15 @@ impl WarmupRamp {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), WarmupError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(WarmupError::SchemaMismatch); }
-        if self.warmup_ms == 0 { return Err(WarmupError::ZeroWarmup); }
-        if self.target < self.floor { return Err(WarmupError::BadBounds); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(WarmupError::SchemaMismatch);
+        }
+        if self.warmup_ms == 0 {
+            return Err(WarmupError::ZeroWarmup);
+        }
+        if self.target < self.floor {
+            return Err(WarmupError::BadBounds);
+        }
         Ok(())
     }
 }
@@ -113,19 +133,28 @@ mod tests {
 
     #[test]
     fn zero_warmup_rejected() {
-        assert!(matches!(WarmupRamp::new(0, 0, 0, 1).unwrap_err(), WarmupError::ZeroWarmup));
+        assert!(matches!(
+            WarmupRamp::new(0, 0, 0, 1).unwrap_err(),
+            WarmupError::ZeroWarmup
+        ));
     }
 
     #[test]
     fn bad_bounds_rejected() {
-        assert!(matches!(WarmupRamp::new(0, 100, 50, 10).unwrap_err(), WarmupError::BadBounds));
+        assert!(matches!(
+            WarmupRamp::new(0, 100, 50, 10).unwrap_err(),
+            WarmupError::BadBounds
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = WarmupRamp::new(0, 100, 0, 10).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), WarmupError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            WarmupError::SchemaMismatch
+        ));
     }
 
     #[test]

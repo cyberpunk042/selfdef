@@ -84,13 +84,25 @@ pub enum LadderError {
 
 impl TierLadder {
     /// New.
-    pub fn new(tiers: Vec<String>, initial_index: usize, history_capacity: u32) -> Result<Self, LadderError> {
-        if tiers.is_empty() { return Err(LadderError::NoTiers); }
-        for t in &tiers {
-            if t.is_empty() { return Err(LadderError::EmptyTier); }
+    pub fn new(
+        tiers: Vec<String>,
+        initial_index: usize,
+        history_capacity: u32,
+    ) -> Result<Self, LadderError> {
+        if tiers.is_empty() {
+            return Err(LadderError::NoTiers);
         }
-        if initial_index >= tiers.len() { return Err(LadderError::BadInitial); }
-        if history_capacity == 0 { return Err(LadderError::ZeroCapacity); }
+        for t in &tiers {
+            if t.is_empty() {
+                return Err(LadderError::EmptyTier);
+            }
+        }
+        if initial_index >= tiers.len() {
+            return Err(LadderError::BadInitial);
+        }
+        if history_capacity == 0 {
+            return Err(LadderError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             tiers,
@@ -101,7 +113,9 @@ impl TierLadder {
     }
 
     /// Current tier name.
-    pub fn current_tier(&self) -> &str { &self.tiers[self.current] }
+    pub fn current_tier(&self) -> &str {
+        &self.tiers[self.current]
+    }
 
     /// Promote.
     pub fn promote(&mut self, reason: &str, ts_ms: u64) -> Result<&str, LadderError> {
@@ -114,21 +128,33 @@ impl TierLadder {
     }
 
     fn step(&mut self, dir: Direction, reason: &str, ts_ms: u64) -> Result<&str, LadderError> {
-        if reason.is_empty() { return Err(LadderError::EmptyReason); }
+        if reason.is_empty() {
+            return Err(LadderError::EmptyReason);
+        }
         let new = match dir {
             Direction::Promote => {
-                if self.current + 1 >= self.tiers.len() { return Err(LadderError::AtBoundary); }
+                if self.current + 1 >= self.tiers.len() {
+                    return Err(LadderError::AtBoundary);
+                }
                 self.current + 1
             }
             Direction::Demote => {
-                if self.current == 0 { return Err(LadderError::AtBoundary); }
+                if self.current == 0 {
+                    return Err(LadderError::AtBoundary);
+                }
                 self.current - 1
             }
         };
         let from = self.tiers[self.current].clone();
         let to = self.tiers[new].clone();
         self.current = new;
-        let rec = Transition { from, to, direction: dir, ts_ms, reason: reason.into() };
+        let rec = Transition {
+            from,
+            to,
+            direction: dir,
+            ts_ms,
+            reason: reason.into(),
+        };
         if (self.history.len() as u32) >= self.history_capacity {
             self.history.remove(0);
         }
@@ -138,13 +164,23 @@ impl TierLadder {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LadderError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LadderError::SchemaMismatch); }
-        if self.tiers.is_empty() { return Err(LadderError::NoTiers); }
-        if self.current >= self.tiers.len() { return Err(LadderError::BadInitial); }
-        for t in &self.tiers {
-            if t.is_empty() { return Err(LadderError::EmptyTier); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LadderError::SchemaMismatch);
         }
-        if self.history_capacity == 0 { return Err(LadderError::ZeroCapacity); }
+        if self.tiers.is_empty() {
+            return Err(LadderError::NoTiers);
+        }
+        if self.current >= self.tiers.len() {
+            return Err(LadderError::BadInitial);
+        }
+        for t in &self.tiers {
+            if t.is_empty() {
+                return Err(LadderError::EmptyTier);
+            }
+        }
+        if self.history_capacity == 0 {
+            return Err(LadderError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -154,11 +190,7 @@ mod tests {
     use super::*;
 
     fn ladder() -> TierLadder {
-        TierLadder::new(
-            vec!["bronze".into(), "silver".into(), "gold".into()],
-            0,
-            5,
-        ).unwrap()
+        TierLadder::new(vec!["bronze".into(), "silver".into(), "gold".into()], 0, 5).unwrap()
     }
 
     #[test]
@@ -181,22 +213,24 @@ mod tests {
         let mut l = ladder();
         l.promote("p", 0).unwrap();
         l.promote("p", 0).unwrap();
-        assert!(matches!(l.promote("p", 0).unwrap_err(), LadderError::AtBoundary));
+        assert!(matches!(
+            l.promote("p", 0).unwrap_err(),
+            LadderError::AtBoundary
+        ));
     }
 
     #[test]
     fn demote_at_bottom_rejected() {
         let mut l = ladder();
-        assert!(matches!(l.demote("d", 0).unwrap_err(), LadderError::AtBoundary));
+        assert!(matches!(
+            l.demote("d", 0).unwrap_err(),
+            LadderError::AtBoundary
+        ));
     }
 
     #[test]
     fn history_capped() {
-        let mut l = TierLadder::new(
-            vec!["a".into(), "b".into(), "c".into()],
-            0,
-            2,
-        ).unwrap();
+        let mut l = TierLadder::new(vec!["a".into(), "b".into(), "c".into()], 0, 2).unwrap();
         l.promote("p1", 1).unwrap();
         l.promote("p2", 2).unwrap();
         l.demote("d1", 3).unwrap();
@@ -208,7 +242,10 @@ mod tests {
     #[test]
     fn empty_reason_rejected() {
         let mut l = ladder();
-        assert!(matches!(l.promote("", 0).unwrap_err(), LadderError::EmptyReason));
+        assert!(matches!(
+            l.promote("", 0).unwrap_err(),
+            LadderError::EmptyReason
+        ));
     }
 
     #[test]
@@ -221,7 +258,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = ladder();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LadderError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LadderError::SchemaMismatch
+        ));
     }
 
     #[test]

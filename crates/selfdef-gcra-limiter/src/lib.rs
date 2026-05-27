@@ -56,10 +56,14 @@ pub enum GcraError {
 impl GcraLimiter {
     /// New.
     pub fn new(period_ms: u64, capacity: u64, burst_ms: u64) -> Result<Self, GcraError> {
-        if period_ms == 0 || capacity == 0 { return Err(GcraError::BadConfig); }
+        if period_ms == 0 || capacity == 0 {
+            return Err(GcraError::BadConfig);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            period_ms, capacity, burst_ms,
+            period_ms,
+            capacity,
+            burst_ms,
             tat_ms: 0,
         })
     }
@@ -86,14 +90,21 @@ impl GcraLimiter {
 
     /// Peek (does not mutate).
     pub fn peek(&self, now_ms: u64) -> Outcome {
-        if now_ms.saturating_add(self.burst_ms) >= self.tat_ms { Outcome::Allow }
-        else { Outcome::Reject(self.tat_ms - self.burst_ms - now_ms) }
+        if now_ms.saturating_add(self.burst_ms) >= self.tat_ms {
+            Outcome::Allow
+        } else {
+            Outcome::Reject(self.tat_ms - self.burst_ms - now_ms)
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GcraError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GcraError::SchemaMismatch); }
-        if self.period_ms == 0 || self.capacity == 0 { return Err(GcraError::BadConfig); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GcraError::SchemaMismatch);
+        }
+        if self.period_ms == 0 || self.capacity == 0 {
+            return Err(GcraError::BadConfig);
+        }
         Ok(())
     }
 }
@@ -152,15 +163,24 @@ mod tests {
 
     #[test]
     fn bad_config_rejected() {
-        assert!(matches!(GcraLimiter::new(0, 10, 0).unwrap_err(), GcraError::BadConfig));
-        assert!(matches!(GcraLimiter::new(1000, 0, 0).unwrap_err(), GcraError::BadConfig));
+        assert!(matches!(
+            GcraLimiter::new(0, 10, 0).unwrap_err(),
+            GcraError::BadConfig
+        ));
+        assert!(matches!(
+            GcraLimiter::new(1000, 0, 0).unwrap_err(),
+            GcraError::BadConfig
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = GcraLimiter::new(1000, 10, 0).unwrap();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GcraError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GcraError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -50,7 +50,11 @@ pub fn bucket_for(value: u64) -> usize {
 
 /// Bucket lower bound (inverse of bucket_for).
 pub fn bucket_lower_bound(i: usize) -> u64 {
-    if i == 0 { 0 } else { (1u64 << i).saturating_sub(1) }
+    if i == 0 {
+        0
+    } else {
+        (1u64 << i).saturating_sub(1)
+    }
 }
 
 impl LogHistogram {
@@ -72,8 +76,12 @@ impl LogHistogram {
 
     /// Quantile in basis points (0..=10000); returns bucket lower bound.
     pub fn quantile(&self, p_bp: u32) -> Result<u64, HistError> {
-        if p_bp > 10_000 { return Err(HistError::BadPercentile); }
-        if self.count == 0 { return Ok(0); }
+        if p_bp > 10_000 {
+            return Err(HistError::BadPercentile);
+        }
+        if self.count == 0 {
+            return Ok(0);
+        }
         let target = (self.count as u128 * p_bp as u128).div_ceil(10_000) as u64;
         let mut cum: u64 = 0;
         for (i, &c) in self.buckets.iter().enumerate() {
@@ -86,17 +94,23 @@ impl LogHistogram {
     }
 
     /// Total count.
-    pub fn count(&self) -> u64 { self.count }
+    pub fn count(&self) -> u64 {
+        self.count
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HistError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HistError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HistError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for LogHistogram {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -134,7 +148,9 @@ mod tests {
     #[test]
     fn quantile_zero_and_full() {
         let mut h = LogHistogram::new();
-        for v in 0..10u64 { h.observe(v); }
+        for v in 0..10u64 {
+            h.observe(v);
+        }
         assert_eq!(h.quantile(0).unwrap(), 0);
         // 100th percentile = highest bucket lower bound observed.
         let max_b = h.quantile(10_000).unwrap();
@@ -152,14 +168,20 @@ mod tests {
     #[test]
     fn bad_percentile_rejected() {
         let h = LogHistogram::new();
-        assert!(matches!(h.quantile(10_001).unwrap_err(), HistError::BadPercentile));
+        assert!(matches!(
+            h.quantile(10_001).unwrap_err(),
+            HistError::BadPercentile
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut h = LogHistogram::new();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HistError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HistError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -107,13 +107,18 @@ impl EvidenceRetentionPolicy {
 
     /// Should this item be swept?
     pub fn is_expired(&self, c: EvidenceClass, age_days: u32) -> bool {
-        if self.never_delete.contains(&c) { return false; }
+        if self.never_delete.contains(&c) {
+            return false;
+        }
         age_days > self.days_for(c)
     }
 
     /// Filter sweep candidates.
     pub fn sweep_candidates<'a>(&self, items: &'a [EvidenceItem]) -> Vec<&'a EvidenceItem> {
-        items.iter().filter(|i| self.is_expired(i.class, i.age_days)).collect()
+        items
+            .iter()
+            .filter(|i| self.is_expired(i.class, i.age_days))
+            .collect()
     }
 
     /// Validate.
@@ -142,7 +147,11 @@ mod tests {
     use super::*;
 
     fn item(id: &str, c: EvidenceClass, age: u32) -> EvidenceItem {
-        EvidenceItem { id: id.into(), class: c, age_days: age }
+        EvidenceItem {
+            id: id.into(),
+            class: c,
+            age_days: age,
+        }
     }
 
     #[test]
@@ -175,10 +184,10 @@ mod tests {
     fn sweep_candidates_filtered() {
         let p = EvidenceRetentionPolicy::canonical();
         let items = vec![
-            item("a", EvidenceClass::Audit, 400),    // expired
-            item("b", EvidenceClass::Trace, 5),      // kept
+            item("a", EvidenceClass::Audit, 400),       // expired
+            item("b", EvidenceClass::Trace, 5),         // kept
             item("c", EvidenceClass::CanaryTrip, 9999), // never_delete
-            item("d", EvidenceClass::Decision, 200), // expired
+            item("d", EvidenceClass::Decision, 200),    // expired
         ];
         let cands = p.sweep_candidates(&items);
         let ids: Vec<&str> = cands.iter().map(|c| c.id.as_str()).collect();
@@ -192,19 +201,28 @@ mod tests {
     fn days_zero_rejected() {
         let mut p = EvidenceRetentionPolicy::canonical();
         p.audit_days = 0;
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::DaysZero(EvidenceClass::Audit)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::DaysZero(EvidenceClass::Audit)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = EvidenceRetentionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&EvidenceClass::CanaryTrip).unwrap(), "\"canary-trip\"");
+        assert_eq!(
+            serde_json::to_string(&EvidenceClass::CanaryTrip).unwrap(),
+            "\"canary-trip\""
+        );
     }
 
     #[test]

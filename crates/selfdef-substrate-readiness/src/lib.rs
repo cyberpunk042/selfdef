@@ -102,11 +102,14 @@ const REQUIRED: [CheckKind; 8] = [
 impl ReadinessReport {
     /// Build a report with all checks marked passed.
     pub fn all_pass(captured_at: &str) -> Self {
-        let results = REQUIRED.iter().map(|k| CheckResult {
-            kind: *k,
-            passed: true,
-            detail: String::new(),
-        }).collect();
+        let results = REQUIRED
+            .iter()
+            .map(|k| CheckResult {
+                kind: *k,
+                passed: true,
+                detail: String::new(),
+            })
+            .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: captured_at.into(),
@@ -121,14 +124,20 @@ impl ReadinessReport {
 
     /// Failed check kinds.
     pub fn failures(&self) -> Vec<CheckKind> {
-        self.results.iter().filter(|r| !r.passed).map(|r| r.kind).collect()
+        self.results
+            .iter()
+            .filter(|r| !r.passed)
+            .map(|r| r.kind)
+            .collect()
     }
 
     /// Refuse bring-up if any check failed.
     pub fn assert_ready(&self) -> Result<(), ReadinessError> {
         self.validate()?;
         if !self.all_passed() {
-            return Err(ReadinessError::NotReady { failures: self.failures() });
+            return Err(ReadinessError::NotReady {
+                failures: self.failures(),
+            });
         }
         Ok(())
     }
@@ -138,7 +147,9 @@ impl ReadinessReport {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ReadinessError::SchemaMismatch);
         }
-        if self.captured_at.is_empty() { return Err(ReadinessError::EmptyTimestamp); }
+        if self.captured_at.is_empty() {
+            return Err(ReadinessError::EmptyTimestamp);
+        }
         if self.results.len() != 8 {
             return Err(ReadinessError::CountInvalid(self.results.len()));
         }
@@ -200,13 +211,19 @@ mod tests {
                 c.kind = CheckKind::ModePolicyLoaded;
             }
         }
-        assert!(matches!(r.validate().unwrap_err(), ReadinessError::Missing(CheckKind::AuditChainHealthy)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReadinessError::Missing(CheckKind::AuditChainHealthy)
+        ));
     }
 
     #[test]
     fn empty_timestamp_caught() {
         let mut r = ReadinessReport::all_pass("");
-        assert!(matches!(r.validate().unwrap_err(), ReadinessError::EmptyTimestamp));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReadinessError::EmptyTimestamp
+        ));
         // Set a timestamp + try assert_ready.
         r.captured_at = "t".into();
         r.assert_ready().unwrap();
@@ -216,20 +233,32 @@ mod tests {
     fn count_invalid_caught() {
         let mut r = ReadinessReport::all_pass("t");
         r.results.pop();
-        assert!(matches!(r.validate().unwrap_err(), ReadinessError::CountInvalid(7)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReadinessError::CountInvalid(7)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = ReadinessReport::all_pass("t");
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ReadinessError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReadinessError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CheckKind::ModePolicyLoaded).unwrap(), "\"mode-policy-loaded\"");
-        assert_eq!(serde_json::to_string(&CheckKind::HostFingerprintPinned).unwrap(), "\"host-fingerprint-pinned\"");
+        assert_eq!(
+            serde_json::to_string(&CheckKind::ModePolicyLoaded).unwrap(),
+            "\"mode-policy-loaded\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckKind::HostFingerprintPinned).unwrap(),
+            "\"host-fingerprint-pinned\""
+        );
     }
 
     #[test]

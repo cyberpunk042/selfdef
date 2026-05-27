@@ -94,8 +94,8 @@ pub enum ArmingError {
 impl ArmingState {
     /// Apply an event; returns the new state if legal.
     pub fn step(self, event: ArmingEvent) -> Option<ArmingState> {
-        use ArmingState::*;
         use ArmingEvent::*;
+        use ArmingState::*;
         let next = match (self, event) {
             (Disabled, Arm) => Arming,
             (Arming, Ack) => Armed,
@@ -141,14 +141,21 @@ impl ArmingVector {
     /// All-disabled canonical vector.
     pub fn empty_canonical(at: &str) -> Self {
         let collectors = [
-            CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-            CollectorKind::EventStream, CollectorKind::Journald,
-            CollectorKind::Suricata, CollectorKind::Tetragon,
-        ].into_iter().map(|k| CollectorArming {
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
+        ]
+        .into_iter()
+        .map(|k| CollectorArming {
             kind: k,
             state: ArmingState::Disabled,
             transitioned_at: at.into(),
-        }).collect();
+        })
+        .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             collectors,
@@ -164,9 +171,13 @@ impl ArmingVector {
             return Err(ArmingError::CountInvalid(self.collectors.len()));
         }
         for k in [
-            CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-            CollectorKind::EventStream, CollectorKind::Journald,
-            CollectorKind::Suricata, CollectorKind::Tetragon,
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
         ] {
             if !self.collectors.iter().any(|c| c.kind == k) {
                 return Err(ArmingError::Missing(k));
@@ -176,8 +187,16 @@ impl ArmingVector {
     }
 
     /// Apply a transition for one collector. Returns the new state.
-    pub fn apply(&mut self, kind: CollectorKind, event: ArmingEvent, at: &str) -> Result<ArmingState, ArmingError> {
-        let entry = self.collectors.iter_mut().find(|c| c.kind == kind)
+    pub fn apply(
+        &mut self,
+        kind: CollectorKind,
+        event: ArmingEvent,
+        at: &str,
+    ) -> Result<ArmingState, ArmingError> {
+        let entry = self
+            .collectors
+            .iter_mut()
+            .find(|c| c.kind == kind)
             .ok_or(ArmingError::Missing(kind))?;
         match entry.state.step(event) {
             Some(next) => {
@@ -185,7 +204,11 @@ impl ArmingVector {
                 entry.transitioned_at = at.into();
                 Ok(next)
             }
-            None => Err(ArmingError::TransitionInvalid { kind, state: entry.state, event }),
+            None => Err(ArmingError::TransitionInvalid {
+                kind,
+                state: entry.state,
+                event,
+            }),
         }
     }
 
@@ -196,12 +219,18 @@ impl ArmingVector {
 
     /// Count collectors currently in Active state.
     pub fn active_count(&self) -> usize {
-        self.collectors.iter().filter(|c| c.state == ArmingState::Active).count()
+        self.collectors
+            .iter()
+            .filter(|c| c.state == ArmingState::Active)
+            .count()
     }
 
     /// Count quarantined collectors.
     pub fn quarantined_count(&self) -> usize {
-        self.collectors.iter().filter(|c| c.state == ArmingState::Quarantined).count()
+        self.collectors
+            .iter()
+            .filter(|c| c.state == ArmingState::Quarantined)
+            .count()
     }
 }
 
@@ -217,41 +246,74 @@ mod tests {
     #[test]
     fn happy_path_disabled_to_active() {
         let mut v = ArmingVector::empty_canonical("t0");
-        assert_eq!(v.apply(CollectorKind::Auditd, ArmingEvent::Arm, "t1").unwrap(), ArmingState::Arming);
-        assert_eq!(v.apply(CollectorKind::Auditd, ArmingEvent::Ack, "t2").unwrap(), ArmingState::Armed);
-        assert_eq!(v.apply(CollectorKind::Auditd, ArmingEvent::Subscribe, "t3").unwrap(), ArmingState::Active);
+        assert_eq!(
+            v.apply(CollectorKind::Auditd, ArmingEvent::Arm, "t1")
+                .unwrap(),
+            ArmingState::Arming
+        );
+        assert_eq!(
+            v.apply(CollectorKind::Auditd, ArmingEvent::Ack, "t2")
+                .unwrap(),
+            ArmingState::Armed
+        );
+        assert_eq!(
+            v.apply(CollectorKind::Auditd, ArmingEvent::Subscribe, "t3")
+                .unwrap(),
+            ArmingState::Active
+        );
         assert_eq!(v.active_count(), 1);
     }
 
     #[test]
     fn drain_then_disable() {
         let mut v = ArmingVector::empty_canonical("t0");
-        v.apply(CollectorKind::Ebpf, ArmingEvent::Arm, "t1").unwrap();
-        v.apply(CollectorKind::Ebpf, ArmingEvent::Ack, "t2").unwrap();
-        v.apply(CollectorKind::Ebpf, ArmingEvent::Subscribe, "t3").unwrap();
-        v.apply(CollectorKind::Ebpf, ArmingEvent::Drain, "t4").unwrap();
-        assert_eq!(v.get(CollectorKind::Ebpf).unwrap().state, ArmingState::Draining);
-        v.apply(CollectorKind::Ebpf, ArmingEvent::Disable, "t5").unwrap();
-        assert_eq!(v.get(CollectorKind::Ebpf).unwrap().state, ArmingState::Disabled);
+        v.apply(CollectorKind::Ebpf, ArmingEvent::Arm, "t1")
+            .unwrap();
+        v.apply(CollectorKind::Ebpf, ArmingEvent::Ack, "t2")
+            .unwrap();
+        v.apply(CollectorKind::Ebpf, ArmingEvent::Subscribe, "t3")
+            .unwrap();
+        v.apply(CollectorKind::Ebpf, ArmingEvent::Drain, "t4")
+            .unwrap();
+        assert_eq!(
+            v.get(CollectorKind::Ebpf).unwrap().state,
+            ArmingState::Draining
+        );
+        v.apply(CollectorKind::Ebpf, ArmingEvent::Disable, "t5")
+            .unwrap();
+        assert_eq!(
+            v.get(CollectorKind::Ebpf).unwrap().state,
+            ArmingState::Disabled
+        );
     }
 
     #[test]
     fn quarantine_then_rearm() {
         let mut v = ArmingVector::empty_canonical("t0");
-        v.apply(CollectorKind::Suricata, ArmingEvent::Arm, "t1").unwrap();
-        v.apply(CollectorKind::Suricata, ArmingEvent::Ack, "t2").unwrap();
-        v.apply(CollectorKind::Suricata, ArmingEvent::Subscribe, "t3").unwrap();
-        v.apply(CollectorKind::Suricata, ArmingEvent::Quarantine, "t4").unwrap();
+        v.apply(CollectorKind::Suricata, ArmingEvent::Arm, "t1")
+            .unwrap();
+        v.apply(CollectorKind::Suricata, ArmingEvent::Ack, "t2")
+            .unwrap();
+        v.apply(CollectorKind::Suricata, ArmingEvent::Subscribe, "t3")
+            .unwrap();
+        v.apply(CollectorKind::Suricata, ArmingEvent::Quarantine, "t4")
+            .unwrap();
         assert_eq!(v.quarantined_count(), 1);
-        v.apply(CollectorKind::Suricata, ArmingEvent::Rearm, "t5").unwrap();
-        assert_eq!(v.get(CollectorKind::Suricata).unwrap().state, ArmingState::Arming);
+        v.apply(CollectorKind::Suricata, ArmingEvent::Rearm, "t5")
+            .unwrap();
+        assert_eq!(
+            v.get(CollectorKind::Suricata).unwrap().state,
+            ArmingState::Arming
+        );
     }
 
     #[test]
     fn invalid_transition_caught() {
         let mut v = ArmingVector::empty_canonical("t0");
         // Disabled + Subscribe is not allowed (must Arm first).
-        let err = v.apply(CollectorKind::Auditd, ArmingEvent::Subscribe, "t1").unwrap_err();
+        let err = v
+            .apply(CollectorKind::Auditd, ArmingEvent::Subscribe, "t1")
+            .unwrap_err();
         match err {
             ArmingError::TransitionInvalid { kind, state, event } => {
                 assert_eq!(kind, CollectorKind::Auditd);
@@ -276,42 +338,67 @@ mod tests {
     fn schema_drift_rejected() {
         let mut v = ArmingVector::empty_canonical("t");
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), ArmingError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            ArmingError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut v = ArmingVector::empty_canonical("t");
         v.collectors.pop();
-        assert!(matches!(v.validate().unwrap_err(), ArmingError::CountInvalid(6)));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            ArmingError::CountInvalid(6)
+        ));
     }
 
     #[test]
     fn quarantine_from_armed_legal() {
         let mut v = ArmingVector::empty_canonical("t0");
-        v.apply(CollectorKind::Canary, ArmingEvent::Arm, "t1").unwrap();
-        v.apply(CollectorKind::Canary, ArmingEvent::Ack, "t2").unwrap();
+        v.apply(CollectorKind::Canary, ArmingEvent::Arm, "t1")
+            .unwrap();
+        v.apply(CollectorKind::Canary, ArmingEvent::Ack, "t2")
+            .unwrap();
         // Quarantine from Armed (e.g. schema invalid on first event)
-        v.apply(CollectorKind::Canary, ArmingEvent::Quarantine, "t3").unwrap();
-        assert_eq!(v.get(CollectorKind::Canary).unwrap().state, ArmingState::Quarantined);
+        v.apply(CollectorKind::Canary, ArmingEvent::Quarantine, "t3")
+            .unwrap();
+        assert_eq!(
+            v.get(CollectorKind::Canary).unwrap().state,
+            ArmingState::Quarantined
+        );
     }
 
     #[test]
     fn state_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ArmingState::Quarantined).unwrap(), "\"quarantined\"");
-        assert_eq!(serde_json::to_string(&ArmingState::Draining).unwrap(), "\"draining\"");
+        assert_eq!(
+            serde_json::to_string(&ArmingState::Quarantined).unwrap(),
+            "\"quarantined\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ArmingState::Draining).unwrap(),
+            "\"draining\""
+        );
     }
 
     #[test]
     fn event_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ArmingEvent::Subscribe).unwrap(), "\"subscribe\"");
-        assert_eq!(serde_json::to_string(&ArmingEvent::Rearm).unwrap(), "\"rearm\"");
+        assert_eq!(
+            serde_json::to_string(&ArmingEvent::Subscribe).unwrap(),
+            "\"subscribe\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ArmingEvent::Rearm).unwrap(),
+            "\"rearm\""
+        );
     }
 
     #[test]
     fn vector_serde_roundtrip() {
         let mut v = ArmingVector::empty_canonical("t0");
-        v.apply(CollectorKind::Auditd, ArmingEvent::Arm, "t1").unwrap();
+        v.apply(CollectorKind::Auditd, ArmingEvent::Arm, "t1")
+            .unwrap();
         let j = serde_json::to_string(&v).unwrap();
         let back: ArmingVector = serde_json::from_str(&j).unwrap();
         assert_eq!(v, back);

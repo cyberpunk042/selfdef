@@ -119,7 +119,9 @@ impl LlmCostTracker {
 
     /// Set rates (creates entry if missing).
     pub fn set_rates(&mut self, model: &str, rates: Rates) -> Result<(), CostError> {
-        if model.is_empty() { return Err(CostError::EmptyModel); }
+        if model.is_empty() {
+            return Err(CostError::EmptyModel);
+        }
         let entry = self.models.entry(model.into()).or_insert(ModelState {
             rates,
             totals: TierTotals::default(),
@@ -131,18 +133,35 @@ impl LlmCostTracker {
 
     /// Record usage for an existing model.
     pub fn record(&mut self, model: &str, usage: Usage) -> Result<TierTotals, CostError> {
-        if model.is_empty() { return Err(CostError::EmptyModel); }
-        let m = self.models.get_mut(model).ok_or_else(|| CostError::UnknownModel(model.into()))?;
+        if model.is_empty() {
+            return Err(CostError::EmptyModel);
+        }
+        let m = self
+            .models
+            .get_mut(model)
+            .ok_or_else(|| CostError::UnknownModel(model.into()))?;
         let delta = TierTotals {
             input_micros: tokens_to_micros(usage.input_tokens, m.rates.input_micros_per_1k),
             output_micros: tokens_to_micros(usage.output_tokens, m.rates.output_micros_per_1k),
-            cache_read_micros: tokens_to_micros(usage.cache_read_tokens, m.rates.cache_read_micros_per_1k),
-            cache_write_micros: tokens_to_micros(usage.cache_write_tokens, m.rates.cache_write_micros_per_1k),
+            cache_read_micros: tokens_to_micros(
+                usage.cache_read_tokens,
+                m.rates.cache_read_micros_per_1k,
+            ),
+            cache_write_micros: tokens_to_micros(
+                usage.cache_write_tokens,
+                m.rates.cache_write_micros_per_1k,
+            ),
         };
         m.totals.input_micros = m.totals.input_micros.saturating_add(delta.input_micros);
         m.totals.output_micros = m.totals.output_micros.saturating_add(delta.output_micros);
-        m.totals.cache_read_micros = m.totals.cache_read_micros.saturating_add(delta.cache_read_micros);
-        m.totals.cache_write_micros = m.totals.cache_write_micros.saturating_add(delta.cache_write_micros);
+        m.totals.cache_read_micros = m
+            .totals
+            .cache_read_micros
+            .saturating_add(delta.cache_read_micros);
+        m.totals.cache_write_micros = m
+            .totals
+            .cache_write_micros
+            .saturating_add(delta.cache_write_micros);
         m.calls = m.calls.saturating_add(1);
         Ok(delta)
     }
@@ -154,7 +173,10 @@ impl LlmCostTracker {
 
     /// Sum across all models.
     pub fn grand_total_micros(&self) -> u64 {
-        self.models.values().map(|m| m.totals.total_micros()).fold(0u64, |a, b| a.saturating_add(b))
+        self.models
+            .values()
+            .map(|m| m.totals.total_micros())
+            .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Reset all counters but keep rates.
@@ -167,16 +189,22 @@ impl LlmCostTracker {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CostError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CostError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CostError::SchemaMismatch);
+        }
         for k in self.models.keys() {
-            if k.is_empty() { return Err(CostError::EmptyModel); }
+            if k.is_empty() {
+                return Err(CostError::EmptyModel);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for LlmCostTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -196,7 +224,16 @@ mod tests {
     fn record_basic() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        let d = t.record("opus", Usage { input_tokens: 1000, output_tokens: 500, ..Usage::default() }).unwrap();
+        let d = t
+            .record(
+                "opus",
+                Usage {
+                    input_tokens: 1000,
+                    output_tokens: 500,
+                    ..Usage::default()
+                },
+            )
+            .unwrap();
         // 1000 input × 15_000/1000 = 15_000 micros.
         assert_eq!(d.input_micros, 15_000);
         // 500 output × 75_000/1000 = 37_500.
@@ -207,8 +244,22 @@ mod tests {
     fn totals_accumulate() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        t.record("opus", Usage { input_tokens: 1000, ..Usage::default() }).unwrap();
-        t.record("opus", Usage { input_tokens: 1000, ..Usage::default() }).unwrap();
+        t.record(
+            "opus",
+            Usage {
+                input_tokens: 1000,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
+        t.record(
+            "opus",
+            Usage {
+                input_tokens: 1000,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
         assert_eq!(t.totals("opus").unwrap().input_micros, 30_000);
     }
 
@@ -225,11 +276,16 @@ mod tests {
     fn cache_tiers() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        let d = t.record("opus", Usage {
-            cache_read_tokens: 1000,
-            cache_write_tokens: 1000,
-            ..Usage::default()
-        }).unwrap();
+        let d = t
+            .record(
+                "opus",
+                Usage {
+                    cache_read_tokens: 1000,
+                    cache_write_tokens: 1000,
+                    ..Usage::default()
+                },
+            )
+            .unwrap();
         assert_eq!(d.cache_read_micros, 1_500);
         assert_eq!(d.cache_write_micros, 18_750);
     }
@@ -238,13 +294,32 @@ mod tests {
     fn grand_total_sums() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        t.set_rates("haiku", Rates {
-            input_micros_per_1k: 800,
-            output_micros_per_1k: 4_000,
-            ..Rates::default()
-        }).unwrap();
-        t.record("opus", Usage { input_tokens: 1000, output_tokens: 500, ..Usage::default() }).unwrap();
-        t.record("haiku", Usage { input_tokens: 1000, ..Usage::default() }).unwrap();
+        t.set_rates(
+            "haiku",
+            Rates {
+                input_micros_per_1k: 800,
+                output_micros_per_1k: 4_000,
+                ..Rates::default()
+            },
+        )
+        .unwrap();
+        t.record(
+            "opus",
+            Usage {
+                input_tokens: 1000,
+                output_tokens: 500,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
+        t.record(
+            "haiku",
+            Usage {
+                input_tokens: 1000,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
         // opus: 15_000 + 37_500 = 52_500
         // haiku: 800
         assert_eq!(t.grand_total_micros(), 53_300);
@@ -254,7 +329,14 @@ mod tests {
     fn reset_clears_totals_keeps_rates() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        t.record("opus", Usage { input_tokens: 1000, ..Usage::default() }).unwrap();
+        t.record(
+            "opus",
+            Usage {
+                input_tokens: 1000,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
         t.reset_totals();
         assert_eq!(t.totals("opus").unwrap().input_micros, 0);
         assert_eq!(t.models["opus"].calls, 0);
@@ -265,27 +347,44 @@ mod tests {
     #[test]
     fn unknown_model_rejected() {
         let mut t = LlmCostTracker::new();
-        assert!(matches!(t.record("nope", Usage::default()).unwrap_err(), CostError::UnknownModel(_)));
+        assert!(matches!(
+            t.record("nope", Usage::default()).unwrap_err(),
+            CostError::UnknownModel(_)
+        ));
     }
 
     #[test]
     fn empty_model_rejected() {
         let mut t = LlmCostTracker::new();
-        assert!(matches!(t.set_rates("", Rates::default()).unwrap_err(), CostError::EmptyModel));
+        assert!(matches!(
+            t.set_rates("", Rates::default()).unwrap_err(),
+            CostError::EmptyModel
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = LlmCostTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), CostError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CostError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn cost_serde_roundtrip() {
         let mut t = LlmCostTracker::new();
         t.set_rates("opus", opus_rates()).unwrap();
-        t.record("opus", Usage { input_tokens: 1000, output_tokens: 500, ..Usage::default() }).unwrap();
+        t.record(
+            "opus",
+            Usage {
+                input_tokens: 1000,
+                output_tokens: 500,
+                ..Usage::default()
+            },
+        )
+        .unwrap();
         let j = serde_json::to_string(&t).unwrap();
         let back: LlmCostTracker = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);

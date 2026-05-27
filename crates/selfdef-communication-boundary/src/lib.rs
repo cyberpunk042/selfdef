@@ -180,8 +180,10 @@ impl MessageEnvelope {
             return Err(CommError::Unsigned);
         }
         // F04037 — DraftRequest + EmbeddingRequest MUST carry budget.
-        if matches!(self.message_type, MessageType::DraftRequest | MessageType::EmbeddingRequest)
-            && self.budget_micro_usd == 0
+        if matches!(
+            self.message_type,
+            MessageType::DraftRequest | MessageType::EmbeddingRequest
+        ) && self.budget_micro_usd == 0
         {
             return Err(CommError::BudgetMissing(self.message_type));
         }
@@ -192,10 +194,14 @@ impl MessageEnvelope {
 /// Assert both communication-boundary doctrines are intact.
 pub fn assert_doctrines_intact(vm_never: &str, vm_proposes: &str) -> Result<(), CommError> {
     if vm_never != DOCTRINE_VM_NEVER_MUTATES {
-        return Err(CommError::DoctrineTampered { expected: DOCTRINE_VM_NEVER_MUTATES.into() });
+        return Err(CommError::DoctrineTampered {
+            expected: DOCTRINE_VM_NEVER_MUTATES.into(),
+        });
     }
     if vm_proposes != DOCTRINE_VM_PROPOSES_HOST_COMMITS {
-        return Err(CommError::DoctrineTampered { expected: DOCTRINE_VM_PROPOSES_HOST_COMMITS.into() });
+        return Err(CommError::DoctrineTampered {
+            expected: DOCTRINE_VM_PROPOSES_HOST_COMMITS.into(),
+        });
     }
     Ok(())
 }
@@ -211,7 +217,7 @@ mod tests {
             transport: Transport::GrpcOverVsock,
             trace_id: "trace-001".into(),
             profile: "careful".into(),
-            budget_micro_usd: 1_000_000,  // 1 USD
+            budget_micro_usd: 1_000_000, // 1 USD
             capability_word: "0xff00ff00ff00ff00".into(),
             payload: "{}".into(),
             signature: "ms003-sig".into(),
@@ -223,10 +229,14 @@ mod tests {
     #[test]
     fn eight_message_types_enumerated() {
         let kinds = [
-            MessageType::DraftRequest, MessageType::DraftResult,
-            MessageType::EmbeddingRequest, MessageType::RerankResult,
-            MessageType::VisionResult, MessageType::ToolPlan,
-            MessageType::RiskAssessment, MessageType::PatchProposal,
+            MessageType::DraftRequest,
+            MessageType::DraftResult,
+            MessageType::EmbeddingRequest,
+            MessageType::RerankResult,
+            MessageType::VisionResult,
+            MessageType::ToolPlan,
+            MessageType::RiskAssessment,
+            MessageType::PatchProposal,
         ];
         assert_eq!(kinds.len(), 8);
     }
@@ -234,11 +244,17 @@ mod tests {
     #[test]
     fn direction_per_type() {
         assert_eq!(MessageType::DraftRequest.direction(), Direction::HostToVm);
-        assert_eq!(MessageType::EmbeddingRequest.direction(), Direction::HostToVm);
+        assert_eq!(
+            MessageType::EmbeddingRequest.direction(),
+            Direction::HostToVm
+        );
         for vm_to_host in [
-            MessageType::DraftResult, MessageType::RerankResult,
-            MessageType::VisionResult, MessageType::ToolPlan,
-            MessageType::RiskAssessment, MessageType::PatchProposal,
+            MessageType::DraftResult,
+            MessageType::RerankResult,
+            MessageType::VisionResult,
+            MessageType::ToolPlan,
+            MessageType::RiskAssessment,
+            MessageType::PatchProposal,
         ] {
             assert_eq!(vm_to_host.direction(), Direction::VmToHost);
         }
@@ -257,10 +273,22 @@ mod tests {
 
     #[test]
     fn four_transports_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Transport::VirtioVsock).unwrap(), "\"virtio-vsock\"");
-        assert_eq!(serde_json::to_string(&Transport::GrpcOverVsock).unwrap(), "\"grpc-over-vsock\"");
-        assert_eq!(serde_json::to_string(&Transport::UnixSocketProxy).unwrap(), "\"unix-socket-proxy\"");
-        assert_eq!(serde_json::to_string(&Transport::SharedFolder).unwrap(), "\"shared-folder\"");
+        assert_eq!(
+            serde_json::to_string(&Transport::VirtioVsock).unwrap(),
+            "\"virtio-vsock\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Transport::GrpcOverVsock).unwrap(),
+            "\"grpc-over-vsock\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Transport::UnixSocketProxy).unwrap(),
+            "\"unix-socket-proxy\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Transport::SharedFolder).unwrap(),
+            "\"shared-folder\""
+        );
     }
 
     // --- Envelope validation ---
@@ -274,28 +302,40 @@ mod tests {
     fn schema_drift_rejected() {
         let mut e = ok_envelope(MessageType::DraftRequest);
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), CommError::SchemaMismatch { .. }));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
     fn missing_trace_id_rejected() {
         let mut e = ok_envelope(MessageType::ToolPlan);
         e.trace_id = String::new();
-        assert!(matches!(e.validate().unwrap_err(), CommError::TraceIdMissing));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::TraceIdMissing
+        ));
     }
 
     #[test]
     fn missing_profile_rejected() {
         let mut e = ok_envelope(MessageType::ToolPlan);
         e.profile = String::new();
-        assert!(matches!(e.validate().unwrap_err(), CommError::ProfileMissing));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::ProfileMissing
+        ));
     }
 
     #[test]
     fn missing_capability_word_rejected() {
         let mut e = ok_envelope(MessageType::ToolPlan);
         e.capability_word = String::new();
-        assert!(matches!(e.validate().unwrap_err(), CommError::CapabilityWordMissing));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::CapabilityWordMissing
+        ));
     }
 
     #[test]
@@ -309,14 +349,20 @@ mod tests {
     fn draft_request_zero_budget_rejected() {
         let mut e = ok_envelope(MessageType::DraftRequest);
         e.budget_micro_usd = 0;
-        assert!(matches!(e.validate().unwrap_err(), CommError::BudgetMissing(MessageType::DraftRequest)));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::BudgetMissing(MessageType::DraftRequest)
+        ));
     }
 
     #[test]
     fn embedding_request_zero_budget_rejected() {
         let mut e = ok_envelope(MessageType::EmbeddingRequest);
         e.budget_micro_usd = 0;
-        assert!(matches!(e.validate().unwrap_err(), CommError::BudgetMissing(MessageType::EmbeddingRequest)));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            CommError::BudgetMissing(MessageType::EmbeddingRequest)
+        ));
     }
 
     #[test]
@@ -331,19 +377,27 @@ mod tests {
 
     #[test]
     fn doctrines_verbatim() {
-        assert_eq!(DOCTRINE_VM_NEVER_MUTATES, "Never let the VM directly mutate host truth");
-        assert_eq!(DOCTRINE_VM_PROPOSES_HOST_COMMITS, "The VM proposes. Host commits.");
+        assert_eq!(
+            DOCTRINE_VM_NEVER_MUTATES,
+            "Never let the VM directly mutate host truth"
+        );
+        assert_eq!(
+            DOCTRINE_VM_PROPOSES_HOST_COMMITS,
+            "The VM proposes. Host commits."
+        );
         assert_doctrines_intact(
             "Never let the VM directly mutate host truth",
             "The VM proposes. Host commits.",
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
     fn doctrine_tamper_caught() {
         let err = assert_doctrines_intact("WRONG", "The VM proposes. Host commits.").unwrap_err();
         assert!(matches!(err, CommError::DoctrineTampered { .. }));
-        let err2 = assert_doctrines_intact("Never let the VM directly mutate host truth", "WRONG").unwrap_err();
+        let err2 = assert_doctrines_intact("Never let the VM directly mutate host truth", "WRONG")
+            .unwrap_err();
         assert!(matches!(err2, CommError::DoctrineTampered { .. }));
     }
 
@@ -351,15 +405,30 @@ mod tests {
 
     #[test]
     fn message_type_serde_kebab() {
-        assert_eq!(serde_json::to_string(&MessageType::PatchProposal).unwrap(), "\"patch-proposal\"");
-        assert_eq!(serde_json::to_string(&MessageType::RiskAssessment).unwrap(), "\"risk-assessment\"");
-        assert_eq!(serde_json::to_string(&MessageType::EmbeddingRequest).unwrap(), "\"embedding-request\"");
+        assert_eq!(
+            serde_json::to_string(&MessageType::PatchProposal).unwrap(),
+            "\"patch-proposal\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MessageType::RiskAssessment).unwrap(),
+            "\"risk-assessment\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MessageType::EmbeddingRequest).unwrap(),
+            "\"embedding-request\""
+        );
     }
 
     #[test]
     fn direction_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Direction::HostToVm).unwrap(), "\"host-to-vm\"");
-        assert_eq!(serde_json::to_string(&Direction::VmToHost).unwrap(), "\"vm-to-host\"");
+        assert_eq!(
+            serde_json::to_string(&Direction::HostToVm).unwrap(),
+            "\"host-to-vm\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Direction::VmToHost).unwrap(),
+            "\"vm-to-host\""
+        );
     }
 
     #[test]

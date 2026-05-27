@@ -65,12 +65,17 @@ pub fn scan(decisions: &[PolicyDecision]) -> Vec<Conflict> {
                     summary: format!("trace_id {} has {prev:?} then {:?}", d.trace_id, d.outcome),
                 });
             }
-            None => { by_trace.insert(d.trace_id.as_str(), d.outcome); }
+            None => {
+                by_trace.insert(d.trace_id.as_str(), d.outcome);
+            }
             _ => {}
         }
         // RiskSideEffectMismatch
         if d.risk == RiskClass::Negligible
-            && matches!(d.side_effect_class, SideEffectClass::Persistent | SideEffectClass::Process)
+            && matches!(
+                d.side_effect_class,
+                SideEffectClass::Persistent | SideEffectClass::Process
+            )
         {
             conflicts.push(Conflict {
                 class: ConflictClass::RiskSideEffectMismatch,
@@ -114,7 +119,14 @@ mod tests {
     use super::*;
     use selfdef_policy_decision::{ContextSensitivity, UserApprovalState};
 
-    fn d(subject: &str, action: &str, outcome: Outcome, sec: SideEffectClass, risk: RiskClass, trace: &str) -> PolicyDecision {
+    fn d(
+        subject: &str,
+        action: &str,
+        outcome: Outcome,
+        sec: SideEffectClass,
+        risk: RiskClass,
+        trace: &str,
+    ) -> PolicyDecision {
         let approval = if outcome == Outcome::Allow
             && (sec == SideEffectClass::Persistent || risk == RiskClass::Critical)
         {
@@ -144,8 +156,22 @@ mod tests {
     #[test]
     fn no_conflicts_in_clean_run() {
         let v = vec![
-            d("alice", "fs.read", Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "tr-1"),
-            d("alice", "fs.read", Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "tr-2"),
+            d(
+                "alice",
+                "fs.read",
+                Outcome::Allow,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "alice",
+                "fs.read",
+                Outcome::Allow,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "tr-2",
+            ),
         ];
         assert!(scan(&v).is_empty());
     }
@@ -153,8 +179,22 @@ mod tests {
     #[test]
     fn trace_id_split_detected() {
         let v = vec![
-            d("alice", "fs.read", Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low, "tr-1"),
-            d("alice", "fs.read", Outcome::Deny, SideEffectClass::ReadOnly, RiskClass::Low, "tr-1"),
+            d(
+                "alice",
+                "fs.read",
+                Outcome::Allow,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "alice",
+                "fs.read",
+                Outcome::Deny,
+                SideEffectClass::ReadOnly,
+                RiskClass::Low,
+                "tr-1",
+            ),
         ];
         let c = scan(&v);
         assert!(c.iter().any(|x| x.class == ConflictClass::TraceIdSplit));
@@ -163,8 +203,22 @@ mod tests {
     #[test]
     fn outcome_flip_detected() {
         let v = vec![
-            d("alice", "fs.write", Outcome::Allow, SideEffectClass::FsWrite, RiskClass::Low, "tr-1"),
-            d("alice", "fs.write", Outcome::Deny, SideEffectClass::FsWrite, RiskClass::Low, "tr-2"),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Allow,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Deny,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-2",
+            ),
         ];
         let c = scan(&v);
         assert!(c.iter().any(|x| x.class == ConflictClass::OutcomeFlip));
@@ -172,18 +226,40 @@ mod tests {
 
     #[test]
     fn risk_underclassification_detected() {
-        let v = vec![
-            d("alice", "proc.spawn", Outcome::Allow, SideEffectClass::Process, RiskClass::Negligible, "tr-1"),
-        ];
+        let v = vec![d(
+            "alice",
+            "proc.spawn",
+            Outcome::Allow,
+            SideEffectClass::Process,
+            RiskClass::Negligible,
+            "tr-1",
+        )];
         let c = scan(&v);
-        assert!(c.iter().any(|x| x.class == ConflictClass::RiskSideEffectMismatch));
+        assert!(
+            c.iter()
+                .any(|x| x.class == ConflictClass::RiskSideEffectMismatch)
+        );
     }
 
     #[test]
     fn allow_to_ask_not_a_flip() {
         let v = vec![
-            d("alice", "fs.write", Outcome::Allow, SideEffectClass::FsWrite, RiskClass::Low, "tr-1"),
-            d("alice", "fs.write", Outcome::Ask, SideEffectClass::FsWrite, RiskClass::Low, "tr-2"),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Allow,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Ask,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-2",
+            ),
         ];
         let c = scan(&v);
         assert!(c.iter().all(|x| x.class != ConflictClass::OutcomeFlip));
@@ -192,8 +268,22 @@ mod tests {
     #[test]
     fn distinct_subjects_no_flip() {
         let v = vec![
-            d("alice", "fs.write", Outcome::Allow, SideEffectClass::FsWrite, RiskClass::Low, "tr-1"),
-            d("bob", "fs.write", Outcome::Deny, SideEffectClass::FsWrite, RiskClass::Low, "tr-2"),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Allow,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "bob",
+                "fs.write",
+                Outcome::Deny,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-2",
+            ),
         ];
         let c = scan(&v);
         assert!(c.iter().all(|x| x.class != ConflictClass::OutcomeFlip));
@@ -202,9 +292,30 @@ mod tests {
     #[test]
     fn three_conflicts_in_one_scan() {
         let v = vec![
-            d("alice", "fs.write", Outcome::Allow, SideEffectClass::FsWrite, RiskClass::Low, "tr-1"),
-            d("alice", "fs.write", Outcome::Deny, SideEffectClass::FsWrite, RiskClass::Low, "tr-1"), // split + flip
-            d("alice", "proc.spawn", Outcome::Allow, SideEffectClass::Process, RiskClass::Negligible, "tr-2"), // mismatch
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Allow,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-1",
+            ),
+            d(
+                "alice",
+                "fs.write",
+                Outcome::Deny,
+                SideEffectClass::FsWrite,
+                RiskClass::Low,
+                "tr-1",
+            ), // split + flip
+            d(
+                "alice",
+                "proc.spawn",
+                Outcome::Allow,
+                SideEffectClass::Process,
+                RiskClass::Negligible,
+                "tr-2",
+            ), // mismatch
         ];
         let c = scan(&v);
         let classes: Vec<_> = c.iter().map(|x| x.class).collect();
@@ -215,9 +326,18 @@ mod tests {
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ConflictClass::TraceIdSplit).unwrap(), "\"trace-id-split\"");
-        assert_eq!(serde_json::to_string(&ConflictClass::OutcomeFlip).unwrap(), "\"outcome-flip\"");
-        assert_eq!(serde_json::to_string(&ConflictClass::RiskSideEffectMismatch).unwrap(), "\"risk-side-effect-mismatch\"");
+        assert_eq!(
+            serde_json::to_string(&ConflictClass::TraceIdSplit).unwrap(),
+            "\"trace-id-split\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ConflictClass::OutcomeFlip).unwrap(),
+            "\"outcome-flip\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ConflictClass::RiskSideEffectMismatch).unwrap(),
+            "\"risk-side-effect-mismatch\""
+        );
     }
 
     #[test]

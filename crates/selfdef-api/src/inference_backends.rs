@@ -49,10 +49,18 @@ pub(crate) struct InferenceBackendsResponse {
 }
 
 const BACKENDS: &[(&str, &str, &str)] = &[
-    ("llama.cpp",   "llama-server",   "SELFDEF_INFERENCE_LLAMA_CPP_BIN"),
-    ("vllm",        "vllm",           "SELFDEF_INFERENCE_VLLM_BIN"),
-    ("bitnet.cpp",  "bitnet-cli",     "SELFDEF_INFERENCE_BITNET_CPP_BIN"),
-    ("unsloth",     "unsloth-cli",    "SELFDEF_INFERENCE_UNSLOTH_BIN"),
+    (
+        "llama.cpp",
+        "llama-server",
+        "SELFDEF_INFERENCE_LLAMA_CPP_BIN",
+    ),
+    ("vllm", "vllm", "SELFDEF_INFERENCE_VLLM_BIN"),
+    (
+        "bitnet.cpp",
+        "bitnet-cli",
+        "SELFDEF_INFERENCE_BITNET_CPP_BIN",
+    ),
+    ("unsloth", "unsloth-cli", "SELFDEF_INFERENCE_UNSLOTH_BIN"),
 ];
 
 fn probe_one(name: &'static str, default_bin: &str, env_var: &str) -> InferenceBackend {
@@ -87,7 +95,11 @@ fn probe_one(name: &'static str, default_bin: &str, env_var: &str) -> InferenceB
                 name,
                 binary,
                 installed: true,
-                version: if version_line.is_empty() { None } else { Some(version_line) },
+                version: if version_line.is_empty() {
+                    None
+                } else {
+                    Some(version_line)
+                },
                 state: "green",
             }
         }

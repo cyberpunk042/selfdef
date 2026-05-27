@@ -73,11 +73,17 @@ pub enum LimitError {
 }
 
 fn refill(b: &mut Bucket, now_ms: u64) {
-    if now_ms <= b.last_refill_ms { return; }
+    if now_ms <= b.last_refill_ms {
+        return;
+    }
     let elapsed = now_ms - b.last_refill_ms;
     let total_ms = elapsed.saturating_add(b.remainder_ms);
     let added = total_ms.saturating_mul(b.refill_per_sec) / 1000;
-    let consumed_ms = if b.refill_per_sec == 0 { total_ms } else { added.saturating_mul(1000) / b.refill_per_sec };
+    let consumed_ms = if b.refill_per_sec == 0 {
+        total_ms
+    } else {
+        added.saturating_mul(1000) / b.refill_per_sec
+    };
     b.remainder_ms = total_ms.saturating_sub(consumed_ms);
     b.tokens = b.tokens.saturating_add(added).min(b.capacity);
     b.last_refill_ms = now_ms;
@@ -86,7 +92,9 @@ fn refill(b: &mut Bucket, now_ms: u64) {
 impl KeyedRateLimit {
     /// New.
     pub fn new(default_capacity: u64, default_refill_per_sec: u64) -> Result<Self, LimitError> {
-        if default_capacity == 0 { return Err(LimitError::ZeroCapacity); }
+        if default_capacity == 0 {
+            return Err(LimitError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             default_capacity,
@@ -96,8 +104,15 @@ impl KeyedRateLimit {
     }
 
     /// Try acquire.
-    pub fn try_acquire(&mut self, key: &str, cost: u64, now_ms: u64) -> Result<AcquireVerdict, LimitError> {
-        if key.is_empty() { return Err(LimitError::EmptyKey); }
+    pub fn try_acquire(
+        &mut self,
+        key: &str,
+        cost: u64,
+        now_ms: u64,
+    ) -> Result<AcquireVerdict, LimitError> {
+        if key.is_empty() {
+            return Err(LimitError::EmptyKey);
+        }
         let dcap = self.default_capacity;
         let drefill = self.default_refill_per_sec;
         let b = self.buckets.entry(key.into()).or_insert(Bucket {
@@ -109,23 +124,39 @@ impl KeyedRateLimit {
         });
         refill(b, now_ms);
         if cost > b.tokens {
-            return Ok(AcquireVerdict::Throttled { available: b.tokens, requested: cost });
+            return Ok(AcquireVerdict::Throttled {
+                available: b.tokens,
+                requested: cost,
+            });
         }
         b.tokens -= cost;
         Ok(AcquireVerdict::Granted)
     }
 
     /// Set per-key override.
-    pub fn set_override(&mut self, key: &str, capacity: u64, refill_per_sec: u64, now_ms: u64) -> Result<(), LimitError> {
-        if key.is_empty() { return Err(LimitError::EmptyKey); }
-        if capacity == 0 { return Err(LimitError::ZeroCapacity); }
-        self.buckets.insert(key.into(), Bucket {
-            tokens: capacity,
-            capacity,
-            refill_per_sec,
-            last_refill_ms: now_ms,
-            remainder_ms: 0,
-        });
+    pub fn set_override(
+        &mut self,
+        key: &str,
+        capacity: u64,
+        refill_per_sec: u64,
+        now_ms: u64,
+    ) -> Result<(), LimitError> {
+        if key.is_empty() {
+            return Err(LimitError::EmptyKey);
+        }
+        if capacity == 0 {
+            return Err(LimitError::ZeroCapacity);
+        }
+        self.buckets.insert(
+            key.into(),
+            Bucket {
+                tokens: capacity,
+                capacity,
+                refill_per_sec,
+                last_refill_ms: now_ms,
+                remainder_ms: 0,
+            },
+        );
         Ok(())
     }
 
@@ -136,10 +167,16 @@ impl KeyedRateLimit {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LimitError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LimitError::SchemaMismatch); }
-        if self.default_capacity == 0 { return Err(LimitError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LimitError::SchemaMismatch);
+        }
+        if self.default_capacity == 0 {
+            return Err(LimitError::ZeroCapacity);
+        }
         for k in self.buckets.keys() {
-            if k.is_empty() { return Err(LimitError::EmptyKey); }
+            if k.is_empty() {
+                return Err(LimitError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -160,7 +197,10 @@ mod tests {
         let mut l = KeyedRateLimit::new(10, 0).unwrap();
         l.try_acquire("a", 10, 0).unwrap();
         match l.try_acquire("a", 5, 0).unwrap() {
-            AcquireVerdict::Throttled { available, requested } => {
+            AcquireVerdict::Throttled {
+                available,
+                requested,
+            } => {
                 assert_eq!(available, 0);
                 assert_eq!(requested, 5);
             }
@@ -195,25 +235,37 @@ mod tests {
     fn refill_over_time() {
         let mut l = KeyedRateLimit::new(10, 5).unwrap();
         l.try_acquire("a", 10, 0).unwrap();
-        assert_eq!(l.try_acquire("a", 5, 1000).unwrap(), AcquireVerdict::Granted);
+        assert_eq!(
+            l.try_acquire("a", 5, 1000).unwrap(),
+            AcquireVerdict::Granted
+        );
     }
 
     #[test]
     fn empty_key_rejected() {
         let mut l = KeyedRateLimit::new(10, 1).unwrap();
-        assert!(matches!(l.try_acquire("", 1, 0).unwrap_err(), LimitError::EmptyKey));
+        assert!(matches!(
+            l.try_acquire("", 1, 0).unwrap_err(),
+            LimitError::EmptyKey
+        ));
     }
 
     #[test]
     fn zero_default_rejected() {
-        assert!(matches!(KeyedRateLimit::new(0, 1).unwrap_err(), LimitError::ZeroCapacity));
+        assert!(matches!(
+            KeyedRateLimit::new(0, 1).unwrap_err(),
+            LimitError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = KeyedRateLimit::new(10, 1).unwrap();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LimitError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LimitError::SchemaMismatch
+        ));
     }
 
     #[test]

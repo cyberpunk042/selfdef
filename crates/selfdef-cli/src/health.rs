@@ -15,7 +15,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 /// Try the typed `/v1/health` endpoint. Returns `(worst, rows)` on
 /// success, `None` on any failure — caller maps to an error.
@@ -98,18 +98,10 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         });
         println!("{}", serde_json::to_string(&obj)?);
     } else {
-        println!(
-            "{:<12} {:<10}   {}",
-            "COMPONENT", "STATE", "DETAIL"
-        );
+        println!("{:<12} {:<10}   {}", "COMPONENT", "STATE", "DETAIL");
         println!("{}", "─".repeat(80));
         for (name, state, detail) in &rows {
-            println!(
-                "{:<12} {:<10}   {}",
-                name,
-                state.to_uppercase(),
-                detail
-            );
+            println!("{:<12} {:<10}   {}", name, state.to_uppercase(), detail);
         }
         println!("{}", "─".repeat(80));
         println!("WORST: {}", worst.to_uppercase());

@@ -80,12 +80,22 @@ impl PolicyMutationRecord {
 
     /// Record a mutation.
     pub fn record(&mut self, r: Record) -> Result<(), RecordError> {
-        if r.mutation_id.is_empty() { return Err(RecordError::EmptyMutationId); }
-        if r.policy_id.is_empty() { return Err(RecordError::EmptyPolicyId); }
-        if r.proposed_by.is_empty() { return Err(RecordError::EmptyProposer); }
-        if r.applied_by.is_empty() { return Err(RecordError::EmptyApplier); }
+        if r.mutation_id.is_empty() {
+            return Err(RecordError::EmptyMutationId);
+        }
+        if r.policy_id.is_empty() {
+            return Err(RecordError::EmptyPolicyId);
+        }
+        if r.proposed_by.is_empty() {
+            return Err(RecordError::EmptyProposer);
+        }
+        if r.applied_by.is_empty() {
+            return Err(RecordError::EmptyApplier);
+        }
         for w in &r.witnessed_by {
-            if w.is_empty() { return Err(RecordError::EmptyWitness); }
+            if w.is_empty() {
+                return Err(RecordError::EmptyWitness);
+            }
         }
         if self.records.contains_key(&r.mutation_id) {
             return Err(RecordError::Duplicate(r.mutation_id));
@@ -101,7 +111,8 @@ impl PolicyMutationRecord {
 
     /// Records for a policy.
     pub fn for_policy(&self, policy_id: &str) -> Vec<Record> {
-        self.records.values()
+        self.records
+            .values()
             .filter(|r| r.policy_id == policy_id)
             .cloned()
             .collect()
@@ -109,14 +120,26 @@ impl PolicyMutationRecord {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RecordError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RecordError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RecordError::SchemaMismatch);
+        }
         for r in self.records.values() {
-            if r.mutation_id.is_empty() { return Err(RecordError::EmptyMutationId); }
-            if r.policy_id.is_empty() { return Err(RecordError::EmptyPolicyId); }
-            if r.proposed_by.is_empty() { return Err(RecordError::EmptyProposer); }
-            if r.applied_by.is_empty() { return Err(RecordError::EmptyApplier); }
+            if r.mutation_id.is_empty() {
+                return Err(RecordError::EmptyMutationId);
+            }
+            if r.policy_id.is_empty() {
+                return Err(RecordError::EmptyPolicyId);
+            }
+            if r.proposed_by.is_empty() {
+                return Err(RecordError::EmptyProposer);
+            }
+            if r.applied_by.is_empty() {
+                return Err(RecordError::EmptyApplier);
+            }
             for w in &r.witnessed_by {
-                if w.is_empty() { return Err(RecordError::EmptyWitness); }
+                if w.is_empty() {
+                    return Err(RecordError::EmptyWitness);
+                }
             }
         }
         Ok(())
@@ -124,7 +147,9 @@ impl PolicyMutationRecord {
 }
 
 impl Default for PolicyMutationRecord {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -153,7 +178,10 @@ mod tests {
     fn duplicate_rejected() {
         let mut r = PolicyMutationRecord::new();
         r.record(rec("m1", "p1")).unwrap();
-        assert!(matches!(r.record(rec("m1", "p1")).unwrap_err(), RecordError::Duplicate(_)));
+        assert!(matches!(
+            r.record(rec("m1", "p1")).unwrap_err(),
+            RecordError::Duplicate(_)
+        ));
     }
 
     #[test]
@@ -170,17 +198,26 @@ mod tests {
         let mut r = PolicyMutationRecord::new();
         let mut bad = rec("m1", "p1");
         bad.mutation_id = "".into();
-        assert!(matches!(r.record(bad).unwrap_err(), RecordError::EmptyMutationId));
+        assert!(matches!(
+            r.record(bad).unwrap_err(),
+            RecordError::EmptyMutationId
+        ));
         let mut bad2 = rec("m1", "p1");
         bad2.witnessed_by = vec!["".into()];
-        assert!(matches!(r.record(bad2).unwrap_err(), RecordError::EmptyWitness));
+        assert!(matches!(
+            r.record(bad2).unwrap_err(),
+            RecordError::EmptyWitness
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = PolicyMutationRecord::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RecordError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RecordError::SchemaMismatch
+        ));
     }
 
     #[test]

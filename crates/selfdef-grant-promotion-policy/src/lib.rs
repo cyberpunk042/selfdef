@@ -115,7 +115,9 @@ pub fn authorize_widen(operator_signatures: u8) -> Result<(), PromotionError> {
 }
 
 /// Generic authorize for ShortenTtl / NarrowScope (always Ok).
-pub fn authorize_demote() -> Result<(), PromotionError> { Ok(()) }
+pub fn authorize_demote() -> Result<(), PromotionError> {
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {
@@ -149,8 +151,14 @@ mod tests {
 
     #[test]
     fn widen_requires_two() {
-        assert!(matches!(authorize_widen(0).unwrap_err(), PromotionError::MissingApproval { .. }));
-        assert!(matches!(authorize_widen(1).unwrap_err(), PromotionError::MissingApproval { .. }));
+        assert!(matches!(
+            authorize_widen(0).unwrap_err(),
+            PromotionError::MissingApproval { .. }
+        ));
+        assert!(matches!(
+            authorize_widen(1).unwrap_err(),
+            PromotionError::MissingApproval { .. }
+        ));
         authorize_widen(2).unwrap();
     }
 
@@ -161,16 +169,31 @@ mod tests {
 
     #[test]
     fn gate_classification() {
-        assert_eq!(gate_for(ChangeKind::ExtendTtl), PromotionGate::SingleOperator);
+        assert_eq!(
+            gate_for(ChangeKind::ExtendTtl),
+            PromotionGate::SingleOperator
+        );
         assert_eq!(gate_for(ChangeKind::ShortenTtl), PromotionGate::Routine);
-        assert_eq!(gate_for(ChangeKind::WidenScope), PromotionGate::DoubleOperator);
+        assert_eq!(
+            gate_for(ChangeKind::WidenScope),
+            PromotionGate::DoubleOperator
+        );
         assert_eq!(gate_for(ChangeKind::NarrowScope), PromotionGate::Routine);
     }
 
     #[test]
     fn change_kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ChangeKind::ExtendTtl).unwrap(), "\"extend-ttl\"");
-        assert_eq!(serde_json::to_string(&ChangeKind::WidenScope).unwrap(), "\"widen-scope\"");
-        assert_eq!(serde_json::to_string(&ChangeKind::NarrowScope).unwrap(), "\"narrow-scope\"");
+        assert_eq!(
+            serde_json::to_string(&ChangeKind::ExtendTtl).unwrap(),
+            "\"extend-ttl\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChangeKind::WidenScope).unwrap(),
+            "\"widen-scope\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ChangeKind::NarrowScope).unwrap(),
+            "\"narrow-scope\""
+        );
     }
 }

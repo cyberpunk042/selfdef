@@ -47,7 +47,9 @@ pub enum TombError {
 impl TombstoneSet {
     /// New.
     pub fn new(grace_ttl_ms: u64) -> Result<Self, TombError> {
-        if grace_ttl_ms == 0 { return Err(TombError::ZeroTtl); }
+        if grace_ttl_ms == 0 {
+            return Err(TombError::ZeroTtl);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             grace_ttl_ms,
@@ -57,7 +59,9 @@ impl TombstoneSet {
 
     /// Mark id as tombstoned.
     pub fn mark(&mut self, id: &str, now_ms: u64) -> Result<(), TombError> {
-        if id.is_empty() { return Err(TombError::EmptyId); }
+        if id.is_empty() {
+            return Err(TombError::EmptyId);
+        }
         let exp = now_ms.saturating_add(self.grace_ttl_ms);
         self.tombs.insert(id.into(), exp);
         Ok(())
@@ -83,10 +87,16 @@ impl TombstoneSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TombError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TombError::SchemaMismatch); }
-        if self.grace_ttl_ms == 0 { return Err(TombError::ZeroTtl); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TombError::SchemaMismatch);
+        }
+        if self.grace_ttl_ms == 0 {
+            return Err(TombError::ZeroTtl);
+        }
         for k in self.tombs.keys() {
-            if k.is_empty() { return Err(TombError::EmptyId); }
+            if k.is_empty() {
+                return Err(TombError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -142,14 +152,20 @@ mod tests {
 
     #[test]
     fn zero_ttl_rejected() {
-        assert!(matches!(TombstoneSet::new(0).unwrap_err(), TombError::ZeroTtl));
+        assert!(matches!(
+            TombstoneSet::new(0).unwrap_err(),
+            TombError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = TombstoneSet::new(100).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), TombError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            TombError::SchemaMismatch
+        ));
     }
 
     #[test]

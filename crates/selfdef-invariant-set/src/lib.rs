@@ -65,21 +65,29 @@ impl InvariantSet {
 
     /// Register an invariant (initial holds=true).
     pub fn register(&mut self, name: &str) -> Result<(), InvariantError> {
-        if name.is_empty() { return Err(InvariantError::EmptyName); }
+        if name.is_empty() {
+            return Err(InvariantError::EmptyName);
+        }
         if self.invariants.contains_key(name) {
             return Err(InvariantError::DuplicateInvariant(name.into()));
         }
-        self.invariants.insert(name.into(), Invariant {
-            holds: true,
-            violations: 0,
-            last_ts_ms: 0,
-        });
+        self.invariants.insert(
+            name.into(),
+            Invariant {
+                holds: true,
+                violations: 0,
+                last_ts_ms: 0,
+            },
+        );
         Ok(())
     }
 
     /// Report latest state.
     pub fn report(&mut self, name: &str, holds: bool, ts_ms: u64) -> Result<(), InvariantError> {
-        let inv = self.invariants.get_mut(name).ok_or_else(|| InvariantError::UnknownInvariant(name.into()))?;
+        let inv = self
+            .invariants
+            .get_mut(name)
+            .ok_or_else(|| InvariantError::UnknownInvariant(name.into()))?;
         inv.holds = holds;
         inv.last_ts_ms = ts_ms;
         if !holds {
@@ -90,7 +98,8 @@ impl InvariantSet {
 
     /// Currently-failing invariants (latest holds=false).
     pub fn failing(&self) -> Vec<&str> {
-        self.invariants.iter()
+        self.invariants
+            .iter()
             .filter(|(_, v)| !v.holds)
             .map(|(k, _)| k.as_str())
             .collect()
@@ -103,16 +112,22 @@ impl InvariantSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), InvariantError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(InvariantError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(InvariantError::SchemaMismatch);
+        }
         for k in self.invariants.keys() {
-            if k.is_empty() { return Err(InvariantError::EmptyName); }
+            if k.is_empty() {
+                return Err(InvariantError::EmptyName);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for InvariantSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -151,26 +166,38 @@ mod tests {
     fn duplicate_register_rejected() {
         let mut s = InvariantSet::new();
         s.register("a").unwrap();
-        assert!(matches!(s.register("a").unwrap_err(), InvariantError::DuplicateInvariant(_)));
+        assert!(matches!(
+            s.register("a").unwrap_err(),
+            InvariantError::DuplicateInvariant(_)
+        ));
     }
 
     #[test]
     fn unknown_report_rejected() {
         let mut s = InvariantSet::new();
-        assert!(matches!(s.report("nope", true, 0).unwrap_err(), InvariantError::UnknownInvariant(_)));
+        assert!(matches!(
+            s.report("nope", true, 0).unwrap_err(),
+            InvariantError::UnknownInvariant(_)
+        ));
     }
 
     #[test]
     fn empty_name_rejected() {
         let mut s = InvariantSet::new();
-        assert!(matches!(s.register("").unwrap_err(), InvariantError::EmptyName));
+        assert!(matches!(
+            s.register("").unwrap_err(),
+            InvariantError::EmptyName
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = InvariantSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), InvariantError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            InvariantError::SchemaMismatch
+        ));
     }
 
     #[test]

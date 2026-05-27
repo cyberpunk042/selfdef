@@ -46,7 +46,9 @@ pub enum PrefetchError {
 impl PrefetchQueue {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, PrefetchError> {
-        if capacity == 0 { return Err(PrefetchError::ZeroCap); }
+        if capacity == 0 {
+            return Err(PrefetchError::ZeroCap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -56,7 +58,9 @@ impl PrefetchQueue {
 
     /// Add a hint; dedup pushes existing entry to the back.
     pub fn hint(&mut self, key: &str) -> Result<(), PrefetchError> {
-        if key.is_empty() { return Err(PrefetchError::EmptyKey); }
+        if key.is_empty() {
+            return Err(PrefetchError::EmptyKey);
+        }
         // Remove existing same-key entry.
         if let Some(idx) = self.queue.iter().position(|x| x == key) {
             self.queue.remove(idx);
@@ -70,20 +74,32 @@ impl PrefetchQueue {
     }
 
     /// Pop the oldest hint.
-    pub fn pop(&mut self) -> Option<String> { self.queue.pop_front() }
+    pub fn pop(&mut self) -> Option<String> {
+        self.queue.pop_front()
+    }
 
     /// Length.
-    pub fn len(&self) -> usize { self.queue.len() }
+    pub fn len(&self) -> usize {
+        self.queue.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.queue.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PrefetchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PrefetchError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(PrefetchError::ZeroCap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PrefetchError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(PrefetchError::ZeroCap);
+        }
         for k in &self.queue {
-            if k.is_empty() { return Err(PrefetchError::EmptyKey); }
+            if k.is_empty() {
+                return Err(PrefetchError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -143,14 +159,20 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(PrefetchQueue::new(0).unwrap_err(), PrefetchError::ZeroCap));
+        assert!(matches!(
+            PrefetchQueue::new(0).unwrap_err(),
+            PrefetchError::ZeroCap
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = PrefetchQueue::new(2).unwrap();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), PrefetchError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            PrefetchError::SchemaMismatch
+        ));
     }
 
     #[test]

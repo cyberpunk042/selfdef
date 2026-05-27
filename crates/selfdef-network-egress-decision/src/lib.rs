@@ -98,8 +98,12 @@ fn matches(entry: &AllowlistEntry, dest: &str) -> bool {
             }
         }
         PatternKind::Cidr => {
-            let Some((prefix, bits_s)) = entry.pattern.split_once('/') else { return false; };
-            let Ok(bits) = bits_s.parse::<u32>() else { return false; };
+            let Some((prefix, bits_s)) = entry.pattern.split_once('/') else {
+                return false;
+            };
+            let Ok(bits) = bits_s.parse::<u32>() else {
+                return false;
+            };
             // Octets matched: bits / 8 (truncate).
             let octets_needed = (bits / 8) as usize;
             let prefix_parts: Vec<&str> = prefix.split('.').collect();
@@ -107,7 +111,9 @@ fn matches(entry: &AllowlistEntry, dest: &str) -> bool {
             if prefix_parts.len() != 4 || dest_parts.len() != 4 {
                 return false;
             }
-            if octets_needed > 4 { return false; }
+            if octets_needed > 4 {
+                return false;
+            }
             prefix_parts[..octets_needed] == dest_parts[..octets_needed]
         }
     }
@@ -124,7 +130,9 @@ impl EgressAllowlist {
 
     /// Add an entry.
     pub fn add(&mut self, e: AllowlistEntry) -> Result<(), EgressError> {
-        if e.pattern.is_empty() { return Err(EgressError::EmptyPattern); }
+        if e.pattern.is_empty() {
+            return Err(EgressError::EmptyPattern);
+        }
         match e.kind {
             PatternKind::DomainSuffix if !e.pattern.starts_with('.') => {
                 return Err(EgressError::BadDomainSuffix(e.pattern));
@@ -140,8 +148,12 @@ impl EgressAllowlist {
 
     /// Decide for an egress request.
     pub fn decide(&self, req: &EgressRequest) -> Result<Outcome, EgressError> {
-        if req.subject.is_empty() { return Err(EgressError::EmptySubject); }
-        if req.destination.is_empty() { return Err(EgressError::EmptyDestination); }
+        if req.subject.is_empty() {
+            return Err(EgressError::EmptySubject);
+        }
+        if req.destination.is_empty() {
+            return Err(EgressError::EmptyDestination);
+        }
         for e in &self.entries {
             if matches(e, &req.destination) {
                 return Ok(Outcome::Allow);
@@ -157,7 +169,9 @@ impl EgressAllowlist {
             return Err(EgressError::SchemaMismatch);
         }
         for e in &self.entries {
-            if e.pattern.is_empty() { return Err(EgressError::EmptyPattern); }
+            if e.pattern.is_empty() {
+                return Err(EgressError::EmptyPattern);
+            }
             match e.kind {
                 PatternKind::DomainSuffix if !e.pattern.starts_with('.') => {
                     return Err(EgressError::BadDomainSuffix(e.pattern.clone()));
@@ -173,7 +187,9 @@ impl EgressAllowlist {
 }
 
 impl Default for EgressAllowlist {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -181,11 +197,19 @@ mod tests {
     use super::*;
 
     fn e(kind: PatternKind, pat: &str) -> AllowlistEntry {
-        AllowlistEntry { kind, pattern: pat.into(), note: String::new() }
+        AllowlistEntry {
+            kind,
+            pattern: pat.into(),
+            note: String::new(),
+        }
     }
 
     fn req(dest: &str) -> EgressRequest {
-        EgressRequest { subject: "op".into(), destination: dest.into(), port: 443 }
+        EgressRequest {
+            subject: "op".into(),
+            destination: dest.into(),
+            port: 443,
+        }
     }
 
     #[test]
@@ -197,7 +221,8 @@ mod tests {
     #[test]
     fn exact_host_match() {
         let mut a = EgressAllowlist::new();
-        a.add(e(PatternKind::ExactHost, "api.anthropic.com")).unwrap();
+        a.add(e(PatternKind::ExactHost, "api.anthropic.com"))
+            .unwrap();
         assert_eq!(a.decide(&req("api.anthropic.com")).unwrap(), Outcome::Allow);
         assert_eq!(a.decide(&req("api.openai.com")).unwrap(), Outcome::Deny);
     }
@@ -215,7 +240,9 @@ mod tests {
     #[test]
     fn domain_suffix_must_start_with_dot() {
         let mut a = EgressAllowlist::new();
-        let err = a.add(e(PatternKind::DomainSuffix, "no-dot.com")).unwrap_err();
+        let err = a
+            .add(e(PatternKind::DomainSuffix, "no-dot.com"))
+            .unwrap_err();
         assert!(matches!(err, EgressError::BadDomainSuffix(_)));
     }
 
@@ -255,7 +282,10 @@ mod tests {
         let a = EgressAllowlist::new();
         let mut r = req("a");
         r.subject = String::new();
-        assert!(matches!(a.decide(&r).unwrap_err(), EgressError::EmptySubject));
+        assert!(matches!(
+            a.decide(&r).unwrap_err(),
+            EgressError::EmptySubject
+        ));
     }
 
     #[test]
@@ -263,21 +293,36 @@ mod tests {
         let a = EgressAllowlist::new();
         let mut r = req("a");
         r.destination = String::new();
-        assert!(matches!(a.decide(&r).unwrap_err(), EgressError::EmptyDestination));
+        assert!(matches!(
+            a.decide(&r).unwrap_err(),
+            EgressError::EmptyDestination
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = EgressAllowlist::new();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), EgressError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            EgressError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PatternKind::ExactHost).unwrap(), "\"exact-host\"");
-        assert_eq!(serde_json::to_string(&PatternKind::DomainSuffix).unwrap(), "\"domain-suffix\"");
-        assert_eq!(serde_json::to_string(&PatternKind::Cidr).unwrap(), "\"cidr\"");
+        assert_eq!(
+            serde_json::to_string(&PatternKind::ExactHost).unwrap(),
+            "\"exact-host\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PatternKind::DomainSuffix).unwrap(),
+            "\"domain-suffix\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PatternKind::Cidr).unwrap(),
+            "\"cidr\""
+        );
     }
 
     #[test]

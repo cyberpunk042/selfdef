@@ -100,7 +100,11 @@ pub enum CohortError {
 }
 
 const REQUIRED: [Cohort; 5] = [
-    Cohort::Newcomer, Cohort::Probationary, Cohort::Trusted, Cohort::Staff, Cohort::Admin,
+    Cohort::Newcomer,
+    Cohort::Probationary,
+    Cohort::Trusted,
+    Cohort::Staff,
+    Cohort::Admin,
 ];
 
 impl CohortTaxonomy {
@@ -160,10 +164,18 @@ impl CohortTaxonomy {
         for p in &self.policies {
             let (min, max) = p.default_trust_band;
             if min > 100 || max > 100 {
-                return Err(CohortError::BandOutOfRange { cohort: p.cohort, min, max });
+                return Err(CohortError::BandOutOfRange {
+                    cohort: p.cohort,
+                    min,
+                    max,
+                });
             }
             if min > max {
-                return Err(CohortError::BandInverted { cohort: p.cohort, min, max });
+                return Err(CohortError::BandInverted {
+                    cohort: p.cohort,
+                    min,
+                    max,
+                });
             }
         }
         Ok(())
@@ -181,7 +193,12 @@ impl CohortTaxonomy {
             Cohort::Probationary => Cohort::Trusted,
             Cohort::Trusted => Cohort::Staff,
             Cohort::Staff => Cohort::Admin,
-            Cohort::Admin => return Err(CohortError::IllegalPromotion { from: current, to: current }),
+            Cohort::Admin => {
+                return Err(CohortError::IllegalPromotion {
+                    from: current,
+                    to: current,
+                });
+            }
         };
         Ok(next)
     }
@@ -224,7 +241,10 @@ mod tests {
     #[test]
     fn admin_cannot_promote() {
         let t = CohortTaxonomy::canonical();
-        assert!(matches!(t.promote(Cohort::Admin).unwrap_err(), CohortError::IllegalPromotion { .. }));
+        assert!(matches!(
+            t.promote(Cohort::Admin).unwrap_err(),
+            CohortError::IllegalPromotion { .. }
+        ));
     }
 
     #[test]
@@ -255,14 +275,20 @@ mod tests {
     fn band_inverted_caught() {
         let mut t = CohortTaxonomy::canonical();
         t.policies[0].default_trust_band = (60, 20); // inverted
-        assert!(matches!(t.validate().unwrap_err(), CohortError::BandInverted { .. }));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CohortError::BandInverted { .. }
+        ));
     }
 
     #[test]
     fn band_out_of_range_caught() {
         let mut t = CohortTaxonomy::canonical();
         t.policies[0].default_trust_band = (0, 200);
-        assert!(matches!(t.validate().unwrap_err(), CohortError::BandOutOfRange { .. }));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CohortError::BandOutOfRange { .. }
+        ));
     }
 
     #[test]
@@ -278,20 +304,32 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = CohortTaxonomy::canonical();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), CohortError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CohortError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut t = CohortTaxonomy::canonical();
         t.policies.pop();
-        assert!(matches!(t.validate().unwrap_err(), CohortError::CountInvalid(4)));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CohortError::CountInvalid(4)
+        ));
     }
 
     #[test]
     fn cohort_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Cohort::Newcomer).unwrap(), "\"newcomer\"");
-        assert_eq!(serde_json::to_string(&Cohort::Probationary).unwrap(), "\"probationary\"");
+        assert_eq!(
+            serde_json::to_string(&Cohort::Newcomer).unwrap(),
+            "\"newcomer\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Cohort::Probationary).unwrap(),
+            "\"probationary\""
+        );
         assert_eq!(serde_json::to_string(&Cohort::Admin).unwrap(), "\"admin\"");
     }
 

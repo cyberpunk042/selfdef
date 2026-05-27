@@ -87,10 +87,18 @@ impl ProcessSpawnRegistry {
 
     /// Register a freshly-spawned process.
     pub fn record_spawn(&mut self, p: SpawnedProcess) -> Result<(), ProcessError> {
-        if p.pid <= 0 { return Err(ProcessError::InvalidPid(p.pid)); }
-        if p.command.is_empty() { return Err(ProcessError::EmptyCommand); }
-        if p.owner_subject.is_empty() { return Err(ProcessError::EmptyOwner); }
-        if p.started_at.is_empty() { return Err(ProcessError::MissingStartedAt); }
+        if p.pid <= 0 {
+            return Err(ProcessError::InvalidPid(p.pid));
+        }
+        if p.command.is_empty() {
+            return Err(ProcessError::EmptyCommand);
+        }
+        if p.owner_subject.is_empty() {
+            return Err(ProcessError::EmptyOwner);
+        }
+        if p.started_at.is_empty() {
+            return Err(ProcessError::MissingStartedAt);
+        }
         if self.live.contains_key(&p.pid) {
             return Err(ProcessError::DuplicatePid(p.pid));
         }
@@ -111,11 +119,16 @@ impl ProcessSpawnRegistry {
     }
 
     /// Live count.
-    pub fn live_count(&self) -> usize { self.live.len() }
+    pub fn live_count(&self) -> usize {
+        self.live.len()
+    }
 
     /// Live processes owned by subject.
     pub fn live_for_subject(&self, subject: &str) -> Vec<&SpawnedProcess> {
-        self.live.values().filter(|p| p.owner_subject == subject).collect()
+        self.live
+            .values()
+            .filter(|p| p.owner_subject == subject)
+            .collect()
     }
 
     /// Validate.
@@ -124,18 +137,30 @@ impl ProcessSpawnRegistry {
             return Err(ProcessError::SchemaMismatch);
         }
         for (pid, p) in &self.live {
-            if *pid <= 0 { return Err(ProcessError::InvalidPid(*pid)); }
-            if p.pid != *pid { return Err(ProcessError::InvalidPid(p.pid)); }
-            if p.command.is_empty() { return Err(ProcessError::EmptyCommand); }
-            if p.owner_subject.is_empty() { return Err(ProcessError::EmptyOwner); }
-            if p.started_at.is_empty() { return Err(ProcessError::MissingStartedAt); }
+            if *pid <= 0 {
+                return Err(ProcessError::InvalidPid(*pid));
+            }
+            if p.pid != *pid {
+                return Err(ProcessError::InvalidPid(p.pid));
+            }
+            if p.command.is_empty() {
+                return Err(ProcessError::EmptyCommand);
+            }
+            if p.owner_subject.is_empty() {
+                return Err(ProcessError::EmptyOwner);
+            }
+            if p.started_at.is_empty() {
+                return Err(ProcessError::MissingStartedAt);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ProcessSpawnRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -235,7 +260,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = ProcessSpawnRegistry::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ProcessError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ProcessError::SchemaMismatch
+        ));
     }
 
     #[test]

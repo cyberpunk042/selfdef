@@ -63,9 +63,13 @@ pub enum InterpError {
 impl LinearInterp {
     /// New.
     pub fn new(points: Vec<Point>, extrap: Extrapolation) -> Result<Self, InterpError> {
-        if points.len() < 2 { return Err(InterpError::InsufficientPoints); }
+        if points.len() < 2 {
+            return Err(InterpError::InsufficientPoints);
+        }
         for w in points.windows(2) {
-            if w[0].x >= w[1].x { return Err(InterpError::NotStrictlyIncreasing); }
+            if w[0].x >= w[1].x {
+                return Err(InterpError::NotStrictlyIncreasing);
+            }
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -106,10 +110,16 @@ impl LinearInterp {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), InterpError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(InterpError::SchemaMismatch); }
-        if self.points.len() < 2 { return Err(InterpError::InsufficientPoints); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(InterpError::SchemaMismatch);
+        }
+        if self.points.len() < 2 {
+            return Err(InterpError::InsufficientPoints);
+        }
         for w in self.points.windows(2) {
-            if w[0].x >= w[1].x { return Err(InterpError::NotStrictlyIncreasing); }
+            if w[0].x >= w[1].x {
+                return Err(InterpError::NotStrictlyIncreasing);
+            }
         }
         Ok(())
     }
@@ -129,7 +139,8 @@ mod tests {
         LinearInterp::new(
             vec![Point { x: 0, y: 0 }, Point { x: 100, y: 100 }],
             Extrapolation::Clamp,
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
@@ -157,7 +168,8 @@ mod tests {
         let l = LinearInterp::new(
             vec![Point { x: 0, y: 0 }, Point { x: 100, y: 100 }],
             Extrapolation::Extend,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(l.lookup(150), 150);
         assert_eq!(l.lookup(-50), -50);
     }
@@ -171,7 +183,8 @@ mod tests {
                 Point { x: 200, y: 50 },
             ],
             Extrapolation::Clamp,
-        ).unwrap();
+        )
+        .unwrap();
         // Mid of second segment (100..200, y 100 → 50): at x=150 → y=75.
         assert_eq!(l.lookup(150), 75);
     }
@@ -195,7 +208,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = line();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), InterpError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            InterpError::SchemaMismatch
+        ));
     }
 
     #[test]

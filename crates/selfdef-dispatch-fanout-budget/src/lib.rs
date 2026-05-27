@@ -73,17 +73,27 @@ pub enum FanoutError {
 }
 
 const REQUIRED: [Subscriber; 9] = [
-    Subscriber::AuditLog, Subscriber::Quarantine, Subscriber::Notifier,
-    Subscriber::EvidenceLedger, Subscriber::HistorySink, Subscriber::PolicyBus,
-    Subscriber::TrustScore, Subscriber::ProfileAuthority, Subscriber::DashboardManifest,
+    Subscriber::AuditLog,
+    Subscriber::Quarantine,
+    Subscriber::Notifier,
+    Subscriber::EvidenceLedger,
+    Subscriber::HistorySink,
+    Subscriber::PolicyBus,
+    Subscriber::TrustScore,
+    Subscriber::ProfileAuthority,
+    Subscriber::DashboardManifest,
 ];
 
 impl FanoutBudget {
     /// Evaluate an EPS reading.
     pub fn evaluate(&self, eps: u32) -> FanoutVerdict {
-        if eps >= self.hard_eps { FanoutVerdict::Drop }
-        else if eps >= self.warn_eps { FanoutVerdict::Throttle }
-        else { FanoutVerdict::Within }
+        if eps >= self.hard_eps {
+            FanoutVerdict::Drop
+        } else if eps >= self.warn_eps {
+            FanoutVerdict::Throttle
+        } else {
+            FanoutVerdict::Within
+        }
     }
 }
 
@@ -91,15 +101,51 @@ impl FanoutRegistry {
     /// Canonical operator-tuned defaults.
     pub fn canonical() -> Self {
         let budgets = vec![
-            FanoutBudget { subscriber: Subscriber::AuditLog,          warn_eps: 50_000, hard_eps: 100_000 },
-            FanoutBudget { subscriber: Subscriber::Quarantine,        warn_eps:  1_000, hard_eps:   5_000 },
-            FanoutBudget { subscriber: Subscriber::Notifier,          warn_eps:    500, hard_eps:   2_000 },
-            FanoutBudget { subscriber: Subscriber::EvidenceLedger,    warn_eps: 30_000, hard_eps:  80_000 },
-            FanoutBudget { subscriber: Subscriber::HistorySink,       warn_eps: 50_000, hard_eps: 100_000 },
-            FanoutBudget { subscriber: Subscriber::PolicyBus,         warn_eps: 20_000, hard_eps:  50_000 },
-            FanoutBudget { subscriber: Subscriber::TrustScore,        warn_eps:  5_000, hard_eps:  15_000 },
-            FanoutBudget { subscriber: Subscriber::ProfileAuthority,  warn_eps:    100, hard_eps:   1_000 },
-            FanoutBudget { subscriber: Subscriber::DashboardManifest, warn_eps: 10_000, hard_eps:  30_000 },
+            FanoutBudget {
+                subscriber: Subscriber::AuditLog,
+                warn_eps: 50_000,
+                hard_eps: 100_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::Quarantine,
+                warn_eps: 1_000,
+                hard_eps: 5_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::Notifier,
+                warn_eps: 500,
+                hard_eps: 2_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::EvidenceLedger,
+                warn_eps: 30_000,
+                hard_eps: 80_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::HistorySink,
+                warn_eps: 50_000,
+                hard_eps: 100_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::PolicyBus,
+                warn_eps: 20_000,
+                hard_eps: 50_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::TrustScore,
+                warn_eps: 5_000,
+                hard_eps: 15_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::ProfileAuthority,
+                warn_eps: 100,
+                hard_eps: 1_000,
+            },
+            FanoutBudget {
+                subscriber: Subscriber::DashboardManifest,
+                warn_eps: 10_000,
+                hard_eps: 30_000,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -123,7 +169,9 @@ impl FanoutRegistry {
         for b in &self.budgets {
             if b.warn_eps >= b.hard_eps {
                 return Err(FanoutError::Inverted {
-                    sub: b.subscriber, warn: b.warn_eps, hard: b.hard_eps,
+                    sub: b.subscriber,
+                    warn: b.warn_eps,
+                    hard: b.hard_eps,
                 });
             }
         }
@@ -164,27 +212,39 @@ mod tests {
     #[test]
     fn within_below_warn() {
         let r = FanoutRegistry::canonical();
-        assert_eq!(r.evaluate(Subscriber::AuditLog, 1_000), FanoutVerdict::Within);
+        assert_eq!(
+            r.evaluate(Subscriber::AuditLog, 1_000),
+            FanoutVerdict::Within
+        );
     }
 
     #[test]
     fn throttle_between() {
         let r = FanoutRegistry::canonical();
         // AuditLog warn 50k, hard 100k → 70k = throttle
-        assert_eq!(r.evaluate(Subscriber::AuditLog, 70_000), FanoutVerdict::Throttle);
+        assert_eq!(
+            r.evaluate(Subscriber::AuditLog, 70_000),
+            FanoutVerdict::Throttle
+        );
     }
 
     #[test]
     fn drop_above_hard() {
         let r = FanoutRegistry::canonical();
-        assert_eq!(r.evaluate(Subscriber::AuditLog, 200_000), FanoutVerdict::Drop);
+        assert_eq!(
+            r.evaluate(Subscriber::AuditLog, 200_000),
+            FanoutVerdict::Drop
+        );
     }
 
     #[test]
     fn notifier_has_low_caps() {
         let r = FanoutRegistry::canonical();
         // Notifier warn 500, hard 2_000
-        assert_eq!(r.evaluate(Subscriber::Notifier, 1_500), FanoutVerdict::Throttle);
+        assert_eq!(
+            r.evaluate(Subscriber::Notifier, 1_500),
+            FanoutVerdict::Throttle
+        );
         assert_eq!(r.evaluate(Subscriber::Notifier, 3_000), FanoutVerdict::Drop);
     }
 
@@ -202,21 +262,36 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = FanoutRegistry::canonical();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), FanoutError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            FanoutError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut r = FanoutRegistry::canonical();
         r.budgets.pop();
-        assert!(matches!(r.validate().unwrap_err(), FanoutError::CountInvalid(8)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            FanoutError::CountInvalid(8)
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
-        assert_eq!(serde_json::to_string(&FanoutVerdict::Within).unwrap(), "\"within\"");
-        assert_eq!(serde_json::to_string(&FanoutVerdict::Throttle).unwrap(), "\"throttle\"");
-        assert_eq!(serde_json::to_string(&FanoutVerdict::Drop).unwrap(), "\"drop\"");
+        assert_eq!(
+            serde_json::to_string(&FanoutVerdict::Within).unwrap(),
+            "\"within\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FanoutVerdict::Throttle).unwrap(),
+            "\"throttle\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FanoutVerdict::Drop).unwrap(),
+            "\"drop\""
+        );
     }
 
     #[test]

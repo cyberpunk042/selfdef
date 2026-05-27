@@ -142,7 +142,8 @@ impl CredentialVaultPolicy {
             return UnsealDecision::DeniedOpClass;
         }
         // Drop unseals older than 3600s.
-        cred.recent_unseals.retain(|t| now_unix.saturating_sub(*t) < 3600);
+        cred.recent_unseals
+            .retain(|t| now_unix.saturating_sub(*t) < 3600);
         if (cred.recent_unseals.len() as u32) >= cred.max_unseal_per_hour {
             return UnsealDecision::DeniedQuota;
         }
@@ -171,21 +172,35 @@ impl CredentialVaultPolicy {
 }
 
 fn check_credential(c: &Credential) -> Result<(), VaultError> {
-    if c.id.is_empty() { return Err(VaultError::EmptyId); }
-    if c.allowed_ops.is_empty() { return Err(VaultError::EmptyAllowedOps(c.id.clone())); }
-    if c.max_unseal_per_hour == 0 { return Err(VaultError::QuotaZero(c.id.clone())); }
+    if c.id.is_empty() {
+        return Err(VaultError::EmptyId);
+    }
+    if c.allowed_ops.is_empty() {
+        return Err(VaultError::EmptyAllowedOps(c.id.clone()));
+    }
+    if c.max_unseal_per_hour == 0 {
+        return Err(VaultError::QuotaZero(c.id.clone()));
+    }
     Ok(())
 }
 
 impl Default for CredentialVaultPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn cred(id: &str, class: CredentialClass, ops: Vec<OperationClass>, quota: u32, approval: bool) -> Credential {
+    fn cred(
+        id: &str,
+        class: CredentialClass,
+        ops: Vec<OperationClass>,
+        quota: u32,
+        approval: bool,
+    ) -> Credential {
         Credential {
             id: id.into(),
             class,
@@ -199,55 +214,137 @@ mod tests {
     #[test]
     fn unknown_credential_denied() {
         let mut v = CredentialVaultPolicy::new();
-        assert_eq!(v.unseal("none", OperationClass::Read, true, 0), UnsealDecision::DeniedUnknown);
+        assert_eq!(
+            v.unseal("none", OperationClass::Read, true, 0),
+            UnsealDecision::DeniedUnknown
+        );
     }
 
     #[test]
     fn allowed_op_unseals() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 10, false)).unwrap();
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 0), UnsealDecision::Allow);
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            10,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 0),
+            UnsealDecision::Allow
+        );
     }
 
     #[test]
     fn disallowed_op_denied() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 10, false)).unwrap();
-        assert_eq!(v.unseal("a", OperationClass::Write, false, 0), UnsealDecision::DeniedOpClass);
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            10,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(
+            v.unseal("a", OperationClass::Write, false, 0),
+            UnsealDecision::DeniedOpClass
+        );
     }
 
     #[test]
     fn quota_exhausted_denies() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 2, false)).unwrap();
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 0), UnsealDecision::Allow);
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 0), UnsealDecision::Allow);
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 0), UnsealDecision::DeniedQuota);
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            2,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 0),
+            UnsealDecision::Allow
+        );
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 0),
+            UnsealDecision::Allow
+        );
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 0),
+            UnsealDecision::DeniedQuota
+        );
     }
 
     #[test]
     fn quota_window_slides() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 1, false)).unwrap();
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 0), UnsealDecision::Allow);
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 100), UnsealDecision::DeniedQuota);
-        assert_eq!(v.unseal("a", OperationClass::Read, false, 4000), UnsealDecision::Allow);
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            1,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 0),
+            UnsealDecision::Allow
+        );
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 100),
+            UnsealDecision::DeniedQuota
+        );
+        assert_eq!(
+            v.unseal("a", OperationClass::Read, false, 4000),
+            UnsealDecision::Allow
+        );
     }
 
     #[test]
     fn approval_required_blocks_without_approval() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Master, vec![OperationClass::Admin], 5, true)).unwrap();
-        assert_eq!(v.unseal("a", OperationClass::Admin, false, 0), UnsealDecision::DeniedApprovalMissing);
-        assert_eq!(v.unseal("a", OperationClass::Admin, true, 0), UnsealDecision::Allow);
+        v.add(cred(
+            "a",
+            CredentialClass::Master,
+            vec![OperationClass::Admin],
+            5,
+            true,
+        ))
+        .unwrap();
+        assert_eq!(
+            v.unseal("a", OperationClass::Admin, false, 0),
+            UnsealDecision::DeniedApprovalMissing
+        );
+        assert_eq!(
+            v.unseal("a", OperationClass::Admin, true, 0),
+            UnsealDecision::Allow
+        );
     }
 
     #[test]
     fn add_duplicate_rejected() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 1, false)).unwrap();
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            1,
+            false,
+        ))
+        .unwrap();
         assert!(matches!(
-            v.add(cred("a", CredentialClass::Cloud, vec![OperationClass::Read], 1, false)).unwrap_err(),
+            v.add(cred(
+                "a",
+                CredentialClass::Cloud,
+                vec![OperationClass::Read],
+                1,
+                false
+            ))
+            .unwrap_err(),
             VaultError::DuplicateId(_)
         ));
     }
@@ -256,7 +353,14 @@ mod tests {
     fn empty_id_rejected() {
         let mut v = CredentialVaultPolicy::new();
         assert!(matches!(
-            v.add(cred("", CredentialClass::Local, vec![OperationClass::Read], 1, false)).unwrap_err(),
+            v.add(cred(
+                "",
+                CredentialClass::Local,
+                vec![OperationClass::Read],
+                1,
+                false
+            ))
+            .unwrap_err(),
             VaultError::EmptyId
         ));
     }
@@ -265,7 +369,8 @@ mod tests {
     fn empty_allowed_ops_rejected() {
         let mut v = CredentialVaultPolicy::new();
         assert!(matches!(
-            v.add(cred("a", CredentialClass::Local, vec![], 1, false)).unwrap_err(),
+            v.add(cred("a", CredentialClass::Local, vec![], 1, false))
+                .unwrap_err(),
             VaultError::EmptyAllowedOps(_)
         ));
     }
@@ -274,7 +379,14 @@ mod tests {
     fn zero_quota_rejected() {
         let mut v = CredentialVaultPolicy::new();
         assert!(matches!(
-            v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 0, false)).unwrap_err(),
+            v.add(cred(
+                "a",
+                CredentialClass::Local,
+                vec![OperationClass::Read],
+                0,
+                false
+            ))
+            .unwrap_err(),
             VaultError::QuotaZero(_)
         ));
     }
@@ -283,23 +395,39 @@ mod tests {
     fn schema_drift_rejected() {
         let mut v = CredentialVaultPolicy::new();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), VaultError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            VaultError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CredentialClass::Recovery).unwrap(), "\"recovery\"");
+        assert_eq!(
+            serde_json::to_string(&CredentialClass::Recovery).unwrap(),
+            "\"recovery\""
+        );
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&UnsealDecision::DeniedQuota).unwrap(), "\"denied-quota\"");
+        assert_eq!(
+            serde_json::to_string(&UnsealDecision::DeniedQuota).unwrap(),
+            "\"denied-quota\""
+        );
     }
 
     #[test]
     fn vault_serde_roundtrip() {
         let mut v = CredentialVaultPolicy::new();
-        v.add(cred("a", CredentialClass::Local, vec![OperationClass::Read], 5, false)).unwrap();
+        v.add(cred(
+            "a",
+            CredentialClass::Local,
+            vec![OperationClass::Read],
+            5,
+            false,
+        ))
+        .unwrap();
         let j = serde_json::to_string(&v).unwrap();
         let back: CredentialVaultPolicy = serde_json::from_str(&j).unwrap();
         assert_eq!(v, back);

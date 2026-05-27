@@ -195,7 +195,9 @@ impl ClipboardEgressPolicy {
 }
 
 impl Default for ClipboardEgressPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -205,7 +207,9 @@ mod tests {
     use ClipboardTarget::*;
     use ContextSensitivity::*;
 
-    fn p() -> ClipboardEgressPolicy { ClipboardEgressPolicy::new() }
+    fn p() -> ClipboardEgressPolicy {
+        ClipboardEgressPolicy::new()
+    }
 
     #[test]
     fn top_secret_always_denied() {
@@ -218,18 +222,30 @@ mod tests {
 
     #[test]
     fn confidential_external_denied() {
-        assert_eq!(p().decide(Confidential, ExternalPasteBuffer, Profile::Private), Deny);
+        assert_eq!(
+            p().decide(Confidential, ExternalPasteBuffer, Profile::Private),
+            Deny
+        );
     }
 
     #[test]
     fn confidential_cross_profile_asks() {
-        assert_eq!(p().decide(Confidential, CrossProfile, Profile::Private), Ask);
+        assert_eq!(
+            p().decide(Confidential, CrossProfile, Profile::Private),
+            Ask
+        );
     }
 
     #[test]
     fn confidential_local_production_asks() {
-        assert_eq!(p().decide(Confidential, LocalOnly, Profile::Production), Ask);
-        assert_eq!(p().decide(Confidential, LocalOnly, Profile::Autonomous), Ask);
+        assert_eq!(
+            p().decide(Confidential, LocalOnly, Profile::Production),
+            Ask
+        );
+        assert_eq!(
+            p().decide(Confidential, LocalOnly, Profile::Autonomous),
+            Ask
+        );
     }
 
     #[test]
@@ -241,7 +257,10 @@ mod tests {
     #[test]
     fn internal_production_asks_off_local() {
         assert_eq!(p().decide(Internal, CrossProfile, Profile::Production), Ask);
-        assert_eq!(p().decide(Internal, ExternalPasteBuffer, Profile::Production), Ask);
+        assert_eq!(
+            p().decide(Internal, ExternalPasteBuffer, Profile::Production),
+            Ask
+        );
         assert_eq!(p().decide(Internal, LocalOnly, Profile::Production), Allow);
     }
 
@@ -257,7 +276,13 @@ mod tests {
     #[test]
     fn gate_top_secret_returns_error() {
         assert!(matches!(
-            p().gate(TopSecret, LocalOnly, Profile::Private, ApprovalState::Approved).unwrap_err(),
+            p().gate(
+                TopSecret,
+                LocalOnly,
+                Profile::Private,
+                ApprovalState::Approved
+            )
+            .unwrap_err(),
             ClipboardEgressError::TopSecretForbidden
         ));
     }
@@ -265,7 +290,13 @@ mod tests {
     #[test]
     fn gate_confidential_external_returns_error() {
         assert!(matches!(
-            p().gate(Confidential, ExternalPasteBuffer, Profile::Private, ApprovalState::Approved).unwrap_err(),
+            p().gate(
+                Confidential,
+                ExternalPasteBuffer,
+                Profile::Private,
+                ApprovalState::Approved
+            )
+            .unwrap_err(),
             ClipboardEgressError::ConfidentialExternalForbidden
         ));
     }
@@ -273,41 +304,74 @@ mod tests {
     #[test]
     fn gate_ask_unasked_returns_approval_required() {
         assert!(matches!(
-            p().gate(Confidential, CrossProfile, Profile::Private, ApprovalState::Unasked).unwrap_err(),
+            p().gate(
+                Confidential,
+                CrossProfile,
+                Profile::Private,
+                ApprovalState::Unasked
+            )
+            .unwrap_err(),
             ClipboardEgressError::ApprovalRequired
         ));
     }
 
     #[test]
     fn gate_ask_approved_passes() {
-        p().gate(Confidential, CrossProfile, Profile::Private, ApprovalState::Approved).unwrap();
+        p().gate(
+            Confidential,
+            CrossProfile,
+            Profile::Private,
+            ApprovalState::Approved,
+        )
+        .unwrap();
     }
 
     #[test]
     fn gate_ask_declined_blocks() {
         assert!(matches!(
-            p().gate(Confidential, CrossProfile, Profile::Private, ApprovalState::Declined).unwrap_err(),
+            p().gate(
+                Confidential,
+                CrossProfile,
+                Profile::Private,
+                ApprovalState::Declined
+            )
+            .unwrap_err(),
             ClipboardEgressError::OperatorDeclined
         ));
     }
 
     #[test]
     fn gate_public_allow_passes() {
-        p().gate(Public, ExternalPasteBuffer, Profile::Production, ApprovalState::Unasked).unwrap();
+        p().gate(
+            Public,
+            ExternalPasteBuffer,
+            Profile::Production,
+            ApprovalState::Unasked,
+        )
+        .unwrap();
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = p();
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), ClipboardEgressError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            ClipboardEgressError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn target_serde_kebab() {
         assert_eq!(serde_json::to_string(&LocalOnly).unwrap(), "\"local-only\"");
-        assert_eq!(serde_json::to_string(&CrossProfile).unwrap(), "\"cross-profile\"");
-        assert_eq!(serde_json::to_string(&ExternalPasteBuffer).unwrap(), "\"external-paste-buffer\"");
+        assert_eq!(
+            serde_json::to_string(&CrossProfile).unwrap(),
+            "\"cross-profile\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExternalPasteBuffer).unwrap(),
+            "\"external-paste-buffer\""
+        );
     }
 
     #[test]

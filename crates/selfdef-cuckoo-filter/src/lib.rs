@@ -71,10 +71,13 @@ fn fp_byte(key: &str) -> u8 {
 impl CuckooFilter {
     /// New.
     pub fn new(n_buckets: u32, max_relocations: u32) -> Result<Self, CuckooError> {
-        if n_buckets == 0 || max_relocations == 0 { return Err(CuckooError::BadConfig); }
+        if n_buckets == 0 || max_relocations == 0 {
+            return Err(CuckooError::BadConfig);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            n_buckets, max_relocations,
+            n_buckets,
+            max_relocations,
             cells: vec![0u8; (n_buckets as usize) * SLOTS_PER_BUCKET],
         })
     }
@@ -98,7 +101,10 @@ impl CuckooFilter {
 
     fn try_insert_into(&mut self, i: usize, fp: u8) -> bool {
         for s in self.bucket(i).iter_mut() {
-            if *s == 0 { *s = fp; return true; }
+            if *s == 0 {
+                *s = fp;
+                return true;
+            }
         }
         false
     }
@@ -107,9 +113,13 @@ impl CuckooFilter {
     pub fn insert(&mut self, key: &str) -> Result<(), CuckooError> {
         let fp = fp_byte(key);
         let i1 = self.i1(key);
-        if self.try_insert_into(i1, fp) { return Ok(()); }
+        if self.try_insert_into(i1, fp) {
+            return Ok(());
+        }
         let i2 = self.alt(i1, fp);
-        if self.try_insert_into(i2, fp) { return Ok(()); }
+        if self.try_insert_into(i2, fp) {
+            return Ok(());
+        }
         // Relocate victims; choose i2 as starting bucket.
         let mut i = i2;
         let mut victim_fp = fp;
@@ -124,7 +134,9 @@ impl CuckooFilter {
             };
             victim_fp = evicted;
             let alt_i = self.alt(i, victim_fp);
-            if self.try_insert_into(alt_i, victim_fp) { return Ok(()); }
+            if self.try_insert_into(alt_i, victim_fp) {
+                return Ok(());
+            }
             i = alt_i;
         }
         Err(CuckooError::Full)
@@ -160,8 +172,12 @@ impl CuckooFilter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CuckooError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CuckooError::SchemaMismatch); }
-        if self.n_buckets == 0 || self.max_relocations == 0 { return Err(CuckooError::BadConfig); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CuckooError::SchemaMismatch);
+        }
+        if self.n_buckets == 0 || self.max_relocations == 0 {
+            return Err(CuckooError::BadConfig);
+        }
         if self.cells.len() != (self.n_buckets as usize) * SLOTS_PER_BUCKET {
             return Err(CuckooError::BadGeometry);
         }
@@ -208,22 +224,34 @@ mod tests {
 
     #[test]
     fn bad_config_rejected() {
-        assert!(matches!(CuckooFilter::new(0, 1).unwrap_err(), CuckooError::BadConfig));
-        assert!(matches!(CuckooFilter::new(1, 0).unwrap_err(), CuckooError::BadConfig));
+        assert!(matches!(
+            CuckooFilter::new(0, 1).unwrap_err(),
+            CuckooError::BadConfig
+        ));
+        assert!(matches!(
+            CuckooFilter::new(1, 0).unwrap_err(),
+            CuckooError::BadConfig
+        ));
     }
 
     #[test]
     fn bad_geometry_rejected() {
         let mut f = CuckooFilter::new(4, 10).unwrap();
         f.cells.pop();
-        assert!(matches!(f.validate().unwrap_err(), CuckooError::BadGeometry));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            CuckooError::BadGeometry
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = CuckooFilter::new(4, 10).unwrap();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), CuckooError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            CuckooError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -105,20 +105,28 @@ impl PrefixTrie {
     }
 
     /// Number of tagged prefixes.
-    pub fn len(&self) -> u32 { self.size }
+    pub fn len(&self) -> u32 {
+        self.size
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.size == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TrieError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TrieError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TrieError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for PrefixTrie {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -168,7 +176,10 @@ mod tests {
     fn duplicate_prefix_rejected() {
         let mut t = PrefixTrie::new();
         t.insert("/a", 1).unwrap();
-        assert!(matches!(t.insert("/a", 2).unwrap_err(), TrieError::DuplicatePrefix(_)));
+        assert!(matches!(
+            t.insert("/a", 2).unwrap_err(),
+            TrieError::DuplicatePrefix(_)
+        ));
     }
 
     #[test]
@@ -184,7 +195,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = PrefixTrie::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), TrieError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            TrieError::SchemaMismatch
+        ));
     }
 
     #[test]

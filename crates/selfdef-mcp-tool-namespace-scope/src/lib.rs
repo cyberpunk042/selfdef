@@ -66,9 +66,16 @@ impl McpToolNamespaceScope {
 
     /// Allow a namespace for a tool.
     pub fn allow(&mut self, tool_id: &str, namespace: &str) -> Result<(), ScopeError> {
-        if tool_id.is_empty() { return Err(ScopeError::EmptyTool); }
-        if namespace.is_empty() { return Err(ScopeError::EmptyNamespace); }
-        self.scopes.entry(tool_id.into()).or_default().insert(namespace.into());
+        if tool_id.is_empty() {
+            return Err(ScopeError::EmptyTool);
+        }
+        if namespace.is_empty() {
+            return Err(ScopeError::EmptyNamespace);
+        }
+        self.scopes
+            .entry(tool_id.into())
+            .or_default()
+            .insert(namespace.into());
         Ok(())
     }
 
@@ -76,7 +83,9 @@ impl McpToolNamespaceScope {
     pub fn revoke(&mut self, tool_id: &str, namespace: &str) -> bool {
         if let Some(s) = self.scopes.get_mut(tool_id) {
             if s.remove(namespace) {
-                if s.is_empty() { self.scopes.remove(tool_id); }
+                if s.is_empty() {
+                    self.scopes.remove(tool_id);
+                }
                 return true;
             }
         }
@@ -92,17 +101,25 @@ impl McpToolNamespaceScope {
         if set.contains("*") || set.contains(namespace) {
             ScopeVerdict::Allowed
         } else {
-            ScopeVerdict::Denied { allowed: set.iter().cloned().collect() }
+            ScopeVerdict::Denied {
+                allowed: set.iter().cloned().collect(),
+            }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ScopeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ScopeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ScopeError::SchemaMismatch);
+        }
         for (t, s) in &self.scopes {
-            if t.is_empty() { return Err(ScopeError::EmptyTool); }
+            if t.is_empty() {
+                return Err(ScopeError::EmptyTool);
+            }
             for n in s {
-                if n.is_empty() { return Err(ScopeError::EmptyNamespace); }
+                if n.is_empty() {
+                    return Err(ScopeError::EmptyNamespace);
+                }
             }
         }
         Ok(())
@@ -110,7 +127,9 @@ impl McpToolNamespaceScope {
 }
 
 impl Default for McpToolNamespaceScope {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -128,14 +147,20 @@ mod tests {
         let mut s = McpToolNamespaceScope::new();
         s.allow("read-file", "ns/a").unwrap();
         assert_eq!(s.classify("read-file", "ns/a"), ScopeVerdict::Allowed);
-        assert!(matches!(s.classify("read-file", "ns/b"), ScopeVerdict::Denied { .. }));
+        assert!(matches!(
+            s.classify("read-file", "ns/b"),
+            ScopeVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn wildcard_allows_all() {
         let mut s = McpToolNamespaceScope::new();
         s.allow("read-file", "*").unwrap();
-        assert_eq!(s.classify("read-file", "any-namespace"), ScopeVerdict::Allowed);
+        assert_eq!(
+            s.classify("read-file", "any-namespace"),
+            ScopeVerdict::Allowed
+        );
     }
 
     #[test]
@@ -156,15 +181,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = McpToolNamespaceScope::new();
-        assert!(matches!(s.allow("", "ns").unwrap_err(), ScopeError::EmptyTool));
-        assert!(matches!(s.allow("t", "").unwrap_err(), ScopeError::EmptyNamespace));
+        assert!(matches!(
+            s.allow("", "ns").unwrap_err(),
+            ScopeError::EmptyTool
+        ));
+        assert!(matches!(
+            s.allow("t", "").unwrap_err(),
+            ScopeError::EmptyNamespace
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = McpToolNamespaceScope::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), ScopeError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ScopeError::SchemaMismatch
+        ));
     }
 
     #[test]

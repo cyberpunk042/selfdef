@@ -58,22 +58,33 @@ pub enum SigError {
 impl ThresholdSigStore {
     /// New.
     pub fn new(m: u32, n: u32) -> Result<Self, SigError> {
-        if n == 0 || m == 0 || m > n { return Err(SigError::BadThreshold); }
+        if n == 0 || m == 0 || m > n {
+            return Err(SigError::BadThreshold);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            m, n,
+            m,
+            n,
             by_digest: BTreeMap::new(),
         })
     }
 
     /// Submit a shard. Idempotent if same shard; ShardConflict otherwise.
     pub fn submit(&mut self, digest: &str, signer: &str, shard: &[u8]) -> Result<(), SigError> {
-        if digest.is_empty() { return Err(SigError::EmptyDigest); }
-        if signer.is_empty() { return Err(SigError::EmptySigner); }
-        if shard.is_empty() { return Err(SigError::EmptyShard); }
+        if digest.is_empty() {
+            return Err(SigError::EmptyDigest);
+        }
+        if signer.is_empty() {
+            return Err(SigError::EmptySigner);
+        }
+        if shard.is_empty() {
+            return Err(SigError::EmptyShard);
+        }
         let by_signer = self.by_digest.entry(digest.into()).or_default();
         if let Some(existing) = by_signer.get(signer) {
-            if existing != shard { return Err(SigError::ShardConflict); }
+            if existing != shard {
+                return Err(SigError::ShardConflict);
+            }
             return Ok(());
         }
         by_signer.insert(signer.into(), shard.to_vec());
@@ -87,15 +98,20 @@ impl ThresholdSigStore {
 
     /// Collected shards in signer-id order.
     pub fn shards(&self, digest: &str) -> Vec<(String, Vec<u8>)> {
-        self.by_digest.get(digest)
+        self.by_digest
+            .get(digest)
             .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
             .unwrap_or_default()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SigError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SigError::SchemaMismatch); }
-        if self.n == 0 || self.m == 0 || self.m > self.n { return Err(SigError::BadThreshold); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SigError::SchemaMismatch);
+        }
+        if self.n == 0 || self.m == 0 || self.m > self.n {
+            return Err(SigError::BadThreshold);
+        }
         Ok(())
     }
 }
@@ -127,7 +143,10 @@ mod tests {
     fn shard_conflict_rejected() {
         let mut s = ThresholdSigStore::new(2, 3).unwrap();
         s.submit("d", "s1", b"x").unwrap();
-        assert!(matches!(s.submit("d", "s1", b"y").unwrap_err(), SigError::ShardConflict));
+        assert!(matches!(
+            s.submit("d", "s1", b"y").unwrap_err(),
+            SigError::ShardConflict
+        ));
     }
 
     #[test]
@@ -149,24 +168,45 @@ mod tests {
 
     #[test]
     fn bad_threshold_rejected() {
-        assert!(matches!(ThresholdSigStore::new(0, 5).unwrap_err(), SigError::BadThreshold));
-        assert!(matches!(ThresholdSigStore::new(6, 5).unwrap_err(), SigError::BadThreshold));
-        assert!(matches!(ThresholdSigStore::new(1, 0).unwrap_err(), SigError::BadThreshold));
+        assert!(matches!(
+            ThresholdSigStore::new(0, 5).unwrap_err(),
+            SigError::BadThreshold
+        ));
+        assert!(matches!(
+            ThresholdSigStore::new(6, 5).unwrap_err(),
+            SigError::BadThreshold
+        ));
+        assert!(matches!(
+            ThresholdSigStore::new(1, 0).unwrap_err(),
+            SigError::BadThreshold
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = ThresholdSigStore::new(1, 1).unwrap();
-        assert!(matches!(s.submit("", "s", b"x").unwrap_err(), SigError::EmptyDigest));
-        assert!(matches!(s.submit("d", "", b"x").unwrap_err(), SigError::EmptySigner));
-        assert!(matches!(s.submit("d", "s", b"").unwrap_err(), SigError::EmptyShard));
+        assert!(matches!(
+            s.submit("", "s", b"x").unwrap_err(),
+            SigError::EmptyDigest
+        ));
+        assert!(matches!(
+            s.submit("d", "", b"x").unwrap_err(),
+            SigError::EmptySigner
+        ));
+        assert!(matches!(
+            s.submit("d", "s", b"").unwrap_err(),
+            SigError::EmptyShard
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = ThresholdSigStore::new(1, 1).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SigError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SigError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -83,22 +83,39 @@ impl PolicyTestHarness {
     }
 
     /// Add case.
-    pub fn add_case(&mut self, id: &str, input: &str, expected_outcome: &str) -> Result<(), HarnessError> {
-        if id.is_empty() { return Err(HarnessError::EmptyId); }
-        if expected_outcome.is_empty() { return Err(HarnessError::EmptyExpected); }
-        if self.cases.contains_key(id) { return Err(HarnessError::DuplicateId(id.into())); }
-        self.cases.insert(id.into(), Case {
-            id: id.into(),
-            input: input.into(),
-            expected_outcome: expected_outcome.into(),
-            observed_outcome: None,
-        });
+    pub fn add_case(
+        &mut self,
+        id: &str,
+        input: &str,
+        expected_outcome: &str,
+    ) -> Result<(), HarnessError> {
+        if id.is_empty() {
+            return Err(HarnessError::EmptyId);
+        }
+        if expected_outcome.is_empty() {
+            return Err(HarnessError::EmptyExpected);
+        }
+        if self.cases.contains_key(id) {
+            return Err(HarnessError::DuplicateId(id.into()));
+        }
+        self.cases.insert(
+            id.into(),
+            Case {
+                id: id.into(),
+                input: input.into(),
+                expected_outcome: expected_outcome.into(),
+                observed_outcome: None,
+            },
+        );
         Ok(())
     }
 
     /// Record observed outcome.
     pub fn record_observed(&mut self, id: &str, observed: &str) -> Result<(), HarnessError> {
-        let c = self.cases.get_mut(id).ok_or_else(|| HarnessError::UnknownCase(id.into()))?;
+        let c = self
+            .cases
+            .get_mut(id)
+            .ok_or_else(|| HarnessError::UnknownCase(id.into()))?;
         c.observed_outcome = Some(observed.into());
         Ok(())
     }
@@ -134,17 +151,25 @@ impl PolicyTestHarness {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HarnessError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HarnessError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HarnessError::SchemaMismatch);
+        }
         for (id, c) in &self.cases {
-            if id.is_empty() { return Err(HarnessError::EmptyId); }
-            if c.expected_outcome.is_empty() { return Err(HarnessError::EmptyExpected); }
+            if id.is_empty() {
+                return Err(HarnessError::EmptyId);
+            }
+            if c.expected_outcome.is_empty() {
+                return Err(HarnessError::EmptyExpected);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyTestHarness {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -194,27 +219,42 @@ mod tests {
     fn duplicate_case_rejected() {
         let mut h = PolicyTestHarness::new();
         h.add_case("a", "in", "x").unwrap();
-        assert!(matches!(h.add_case("a", "in", "x").unwrap_err(), HarnessError::DuplicateId(_)));
+        assert!(matches!(
+            h.add_case("a", "in", "x").unwrap_err(),
+            HarnessError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn unknown_record_rejected() {
         let mut h = PolicyTestHarness::new();
-        assert!(matches!(h.record_observed("nope", "x").unwrap_err(), HarnessError::UnknownCase(_)));
+        assert!(matches!(
+            h.record_observed("nope", "x").unwrap_err(),
+            HarnessError::UnknownCase(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut h = PolicyTestHarness::new();
-        assert!(matches!(h.add_case("", "in", "x").unwrap_err(), HarnessError::EmptyId));
-        assert!(matches!(h.add_case("a", "in", "").unwrap_err(), HarnessError::EmptyExpected));
+        assert!(matches!(
+            h.add_case("", "in", "x").unwrap_err(),
+            HarnessError::EmptyId
+        ));
+        assert!(matches!(
+            h.add_case("a", "in", "").unwrap_err(),
+            HarnessError::EmptyExpected
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut h = PolicyTestHarness::new();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HarnessError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HarnessError::SchemaMismatch
+        ));
     }
 
     #[test]

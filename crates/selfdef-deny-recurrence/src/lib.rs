@@ -80,7 +80,9 @@ impl DenyRecurrenceTracker {
 
     /// With a custom threshold.
     pub fn with_threshold(threshold: u32) -> Result<Self, TrackerError> {
-        if threshold == 0 { return Err(TrackerError::ZeroThreshold); }
+        if threshold == 0 {
+            return Err(TrackerError::ZeroThreshold);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             breach_threshold: threshold,
@@ -89,10 +91,21 @@ impl DenyRecurrenceTracker {
     }
 
     /// Record a deny event. Returns the bucket's new count.
-    pub fn record_deny(&mut self, subject: &str, action: &str, at: &str) -> Result<u32, TrackerError> {
-        if subject.is_empty() { return Err(TrackerError::EmptySubject); }
-        if action.is_empty() { return Err(TrackerError::EmptyAction); }
-        if at.is_empty() { return Err(TrackerError::EmptyTimestamp); }
+    pub fn record_deny(
+        &mut self,
+        subject: &str,
+        action: &str,
+        at: &str,
+    ) -> Result<u32, TrackerError> {
+        if subject.is_empty() {
+            return Err(TrackerError::EmptySubject);
+        }
+        if action.is_empty() {
+            return Err(TrackerError::EmptyAction);
+        }
+        if at.is_empty() {
+            return Err(TrackerError::EmptyTimestamp);
+        }
         let k = key(subject, action);
         let bucket = self.buckets.entry(k).or_insert_with(|| BucketState {
             subject: subject.into(),
@@ -107,7 +120,10 @@ impl DenyRecurrenceTracker {
 
     /// Lookup count for (subject, action).
     pub fn recent_count(&self, subject: &str, action: &str) -> u32 {
-        self.buckets.get(&key(subject, action)).map(|b| b.deny_count).unwrap_or(0)
+        self.buckets
+            .get(&key(subject, action))
+            .map(|b| b.deny_count)
+            .unwrap_or(0)
     }
 
     /// True if (subject, action) breached the threshold.
@@ -129,23 +145,32 @@ impl DenyRecurrenceTracker {
             return Err(TrackerError::ZeroThreshold);
         }
         for b in self.buckets.values() {
-            if b.subject.is_empty() { return Err(TrackerError::EmptySubject); }
-            if b.action.is_empty() { return Err(TrackerError::EmptyAction); }
-            if b.last_at.is_empty() { return Err(TrackerError::EmptyTimestamp); }
+            if b.subject.is_empty() {
+                return Err(TrackerError::EmptySubject);
+            }
+            if b.action.is_empty() {
+                return Err(TrackerError::EmptyAction);
+            }
+            if b.last_at.is_empty() {
+                return Err(TrackerError::EmptyTimestamp);
+            }
         }
         Ok(())
     }
 
     /// Buckets currently breached.
     pub fn breached_buckets(&self) -> Vec<&BucketState> {
-        self.buckets.values()
+        self.buckets
+            .values()
             .filter(|b| b.deny_count >= self.breach_threshold)
             .collect()
     }
 }
 
 impl Default for DenyRecurrenceTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -177,7 +202,9 @@ mod tests {
     #[test]
     fn breach_at_threshold() {
         let mut t = DenyRecurrenceTracker::with_threshold(3).unwrap();
-        for _ in 0..2 { t.record_deny("op", "x", "t").unwrap(); }
+        for _ in 0..2 {
+            t.record_deny("op", "x", "t").unwrap();
+        }
         assert!(!t.breached("op", "x"));
         t.record_deny("op", "x", "t").unwrap();
         assert!(t.breached("op", "x"));
@@ -195,8 +222,12 @@ mod tests {
     #[test]
     fn breached_buckets_enumerates() {
         let mut t = DenyRecurrenceTracker::with_threshold(2).unwrap();
-        for _ in 0..3 { t.record_deny("alice", "x", "t").unwrap(); }
-        for _ in 0..1 { t.record_deny("bob", "y", "t").unwrap(); }
+        for _ in 0..3 {
+            t.record_deny("alice", "x", "t").unwrap();
+        }
+        for _ in 0..1 {
+            t.record_deny("bob", "y", "t").unwrap();
+        }
         let breached = t.breached_buckets();
         assert_eq!(breached.len(), 1);
         assert_eq!(breached[0].subject, "alice");
@@ -205,31 +236,46 @@ mod tests {
     #[test]
     fn empty_subject_rejected() {
         let mut t = DenyRecurrenceTracker::new();
-        assert!(matches!(t.record_deny("", "x", "t").unwrap_err(), TrackerError::EmptySubject));
+        assert!(matches!(
+            t.record_deny("", "x", "t").unwrap_err(),
+            TrackerError::EmptySubject
+        ));
     }
 
     #[test]
     fn empty_action_rejected() {
         let mut t = DenyRecurrenceTracker::new();
-        assert!(matches!(t.record_deny("op", "", "t").unwrap_err(), TrackerError::EmptyAction));
+        assert!(matches!(
+            t.record_deny("op", "", "t").unwrap_err(),
+            TrackerError::EmptyAction
+        ));
     }
 
     #[test]
     fn empty_timestamp_rejected() {
         let mut t = DenyRecurrenceTracker::new();
-        assert!(matches!(t.record_deny("op", "x", "").unwrap_err(), TrackerError::EmptyTimestamp));
+        assert!(matches!(
+            t.record_deny("op", "x", "").unwrap_err(),
+            TrackerError::EmptyTimestamp
+        ));
     }
 
     #[test]
     fn zero_threshold_rejected() {
-        assert!(matches!(DenyRecurrenceTracker::with_threshold(0).unwrap_err(), TrackerError::ZeroThreshold));
+        assert!(matches!(
+            DenyRecurrenceTracker::with_threshold(0).unwrap_err(),
+            TrackerError::ZeroThreshold
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = DenyRecurrenceTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), TrackerError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            TrackerError::SchemaMismatch
+        ));
     }
 
     #[test]

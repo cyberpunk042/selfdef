@@ -107,7 +107,9 @@ impl RulePackPrecedence {
     pub fn resolve_order(&self) -> Vec<&RulePack> {
         let mut sorted: Vec<&RulePack> = self.packs.iter().collect();
         sorted.sort_by(|a, b| {
-            b.source.precedence().cmp(&a.source.precedence())
+            b.source
+                .precedence()
+                .cmp(&a.source.precedence())
                 .then(a.id.cmp(&b.id))
         });
         sorted
@@ -136,14 +138,22 @@ impl RulePackPrecedence {
 }
 
 fn check_pack(p: &RulePack) -> Result<(), PrecedenceError> {
-    if p.id.is_empty() { return Err(PrecedenceError::EmptyId); }
-    if p.name.is_empty() { return Err(PrecedenceError::EmptyName(p.id.clone())); }
-    if p.version.is_empty() { return Err(PrecedenceError::EmptyVersion(p.id.clone())); }
+    if p.id.is_empty() {
+        return Err(PrecedenceError::EmptyId);
+    }
+    if p.name.is_empty() {
+        return Err(PrecedenceError::EmptyName(p.id.clone()));
+    }
+    if p.version.is_empty() {
+        return Err(PrecedenceError::EmptyVersion(p.id.clone()));
+    }
     Ok(())
 }
 
 impl Default for RulePackPrecedence {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -151,7 +161,12 @@ mod tests {
     use super::*;
 
     fn pack(id: &str, source: PackSource) -> RulePack {
-        RulePack { id: id.into(), name: format!("N-{id}"), source, version: "1.0.0".into() }
+        RulePack {
+            id: id.into(),
+            name: format!("N-{id}"),
+            source,
+            version: "1.0.0".into(),
+        }
     }
 
     #[test]
@@ -199,13 +214,19 @@ mod tests {
     fn duplicate_rejected() {
         let mut p = RulePackPrecedence::new();
         p.load(pack("a", PackSource::Vendor)).unwrap();
-        assert!(matches!(p.load(pack("a", PackSource::Operator)).unwrap_err(), PrecedenceError::DuplicateId(_)));
+        assert!(matches!(
+            p.load(pack("a", PackSource::Operator)).unwrap_err(),
+            PrecedenceError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = RulePackPrecedence::new();
-        assert!(matches!(p.load(pack("", PackSource::Vendor)).unwrap_err(), PrecedenceError::EmptyId));
+        assert!(matches!(
+            p.load(pack("", PackSource::Vendor)).unwrap_err(),
+            PrecedenceError::EmptyId
+        ));
     }
 
     #[test]
@@ -213,7 +234,10 @@ mod tests {
         let mut p = RulePackPrecedence::new();
         let mut x = pack("a", PackSource::Vendor);
         x.name = String::new();
-        assert!(matches!(p.load(x).unwrap_err(), PrecedenceError::EmptyName(_)));
+        assert!(matches!(
+            p.load(x).unwrap_err(),
+            PrecedenceError::EmptyName(_)
+        ));
     }
 
     #[test]
@@ -221,19 +245,28 @@ mod tests {
         let mut p = RulePackPrecedence::new();
         let mut x = pack("a", PackSource::Vendor);
         x.version = String::new();
-        assert!(matches!(p.load(x).unwrap_err(), PrecedenceError::EmptyVersion(_)));
+        assert!(matches!(
+            p.load(x).unwrap_err(),
+            PrecedenceError::EmptyVersion(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = RulePackPrecedence::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PrecedenceError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PrecedenceError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn source_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PackSource::Emergency).unwrap(), "\"emergency\"");
+        assert_eq!(
+            serde_json::to_string(&PackSource::Emergency).unwrap(),
+            "\"emergency\""
+        );
     }
 
     #[test]

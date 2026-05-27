@@ -100,9 +100,18 @@ impl ActorLivenessChallenge {
     }
 
     /// Issue.
-    pub fn issue(&mut self, actor: &str, ts_ms: u64, ttl_ms: u64) -> Result<Challenge, ChallengeError> {
-        if actor.is_empty() { return Err(ChallengeError::EmptyActor); }
-        if ttl_ms == 0 { return Err(ChallengeError::ZeroTtl); }
+    pub fn issue(
+        &mut self,
+        actor: &str,
+        ts_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<Challenge, ChallengeError> {
+        if actor.is_empty() {
+            return Err(ChallengeError::EmptyActor);
+        }
+        if ttl_ms == 0 {
+            return Err(ChallengeError::ZeroTtl);
+        }
         let nonce = self.next_nonce;
         self.next_nonce = self.next_nonce.wrapping_add(1);
         let c = Challenge {
@@ -118,9 +127,13 @@ impl ActorLivenessChallenge {
 
     /// Verify.
     pub fn verify(&mut self, actor: &str, nonce: u64, ts_ms: u64) -> VerifyVerdict {
-        let Some(c) = self.challenges.get_mut(&nonce) else { return VerifyVerdict::Unknown; };
+        let Some(c) = self.challenges.get_mut(&nonce) else {
+            return VerifyVerdict::Unknown;
+        };
         if c.actor != actor {
-            return VerifyVerdict::WrongActor { expected_actor: c.actor.clone() };
+            return VerifyVerdict::WrongActor {
+                expected_actor: c.actor.clone(),
+            };
         }
         if c.consumed {
             return VerifyVerdict::AlreadyUsed;
@@ -135,27 +148,37 @@ impl ActorLivenessChallenge {
     /// Prune consumed entries older than retention.
     pub fn prune(&mut self, now_ms: u64) -> usize {
         let cutoff = now_ms.saturating_sub(self.history_retention_ms);
-        let to_drop: Vec<u64> = self.challenges.iter()
+        let to_drop: Vec<u64> = self
+            .challenges
+            .iter()
             .filter(|(_, c)| c.consumed && c.issued_at_ms < cutoff)
             .map(|(k, _)| *k)
             .collect();
         let n = to_drop.len();
-        for k in to_drop { self.challenges.remove(&k); }
+        for k in to_drop {
+            self.challenges.remove(&k);
+        }
         n
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ChallengeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ChallengeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ChallengeError::SchemaMismatch);
+        }
         for c in self.challenges.values() {
-            if c.actor.is_empty() { return Err(ChallengeError::EmptyActor); }
+            if c.actor.is_empty() {
+                return Err(ChallengeError::EmptyActor);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActorLivenessChallenge {
-    fn default() -> Self { Self::new(3_600_000) }
+    fn default() -> Self {
+        Self::new(3_600_000)
+    }
 }
 
 #[cfg(test)]
@@ -227,20 +250,29 @@ mod tests {
     #[test]
     fn empty_actor_rejected() {
         let mut c = ActorLivenessChallenge::new(1000);
-        assert!(matches!(c.issue("", 0, 1).unwrap_err(), ChallengeError::EmptyActor));
+        assert!(matches!(
+            c.issue("", 0, 1).unwrap_err(),
+            ChallengeError::EmptyActor
+        ));
     }
 
     #[test]
     fn zero_ttl_rejected() {
         let mut c = ActorLivenessChallenge::new(1000);
-        assert!(matches!(c.issue("a", 0, 0).unwrap_err(), ChallengeError::ZeroTtl));
+        assert!(matches!(
+            c.issue("a", 0, 0).unwrap_err(),
+            ChallengeError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ActorLivenessChallenge::new(1000);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ChallengeError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ChallengeError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -104,21 +104,40 @@ fn risk_rank(k: EffectKind) -> u8 {
 impl PolicyDiffClassifier {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Classify.
     pub fn classify(&self, s: &DiffSummary) -> Classification {
         let mut effects = Vec::new();
-        if s.new_deny_count > 0 { effects.push(EffectKind::NewDeny); }
-        if s.removed_deny_count > 0 { effects.push(EffectKind::RemovesDeny); }
-        if s.new_allow_count > 0 { effects.push(EffectKind::NewAllow); }
-        if s.removed_allow_count > 0 { effects.push(EffectKind::RemovesAllow); }
-        if s.tightens_cap_count > 0 { effects.push(EffectKind::TightensCap); }
-        if s.loosens_cap_count > 0 { effects.push(EffectKind::LoosensCap); }
-        if s.schema_bump { effects.push(EffectKind::SchemaBump); }
-        if effects.is_empty() { effects.push(EffectKind::Neutral); }
-        let worst = effects.iter()
+        if s.new_deny_count > 0 {
+            effects.push(EffectKind::NewDeny);
+        }
+        if s.removed_deny_count > 0 {
+            effects.push(EffectKind::RemovesDeny);
+        }
+        if s.new_allow_count > 0 {
+            effects.push(EffectKind::NewAllow);
+        }
+        if s.removed_allow_count > 0 {
+            effects.push(EffectKind::RemovesAllow);
+        }
+        if s.tightens_cap_count > 0 {
+            effects.push(EffectKind::TightensCap);
+        }
+        if s.loosens_cap_count > 0 {
+            effects.push(EffectKind::LoosensCap);
+        }
+        if s.schema_bump {
+            effects.push(EffectKind::SchemaBump);
+        }
+        if effects.is_empty() {
+            effects.push(EffectKind::Neutral);
+        }
+        let worst = effects
+            .iter()
             .copied()
             .max_by_key(|k| risk_rank(*k))
             .unwrap_or(EffectKind::Neutral);
@@ -127,13 +146,17 @@ impl PolicyDiffClassifier {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DiffError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DiffError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DiffError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for PolicyDiffClassifier {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -152,7 +175,8 @@ mod tests {
     fn add_allow_is_riskiest() {
         let c = PolicyDiffClassifier::new();
         let s = DiffSummary {
-            new_allow_count: 1, tightens_cap_count: 1,
+            new_allow_count: 1,
+            tightens_cap_count: 1,
             ..Default::default()
         };
         let v = c.classify(&s);
@@ -163,7 +187,8 @@ mod tests {
     fn loosens_cap_outranks_removes_allow() {
         let c = PolicyDiffClassifier::new();
         let s = DiffSummary {
-            removed_allow_count: 1, loosens_cap_count: 1,
+            removed_allow_count: 1,
+            loosens_cap_count: 1,
             ..Default::default()
         };
         let v = c.classify(&s);
@@ -174,7 +199,8 @@ mod tests {
     fn removes_deny_outranks_schema_bump() {
         let c = PolicyDiffClassifier::new();
         let s = DiffSummary {
-            removed_deny_count: 1, schema_bump: true,
+            removed_deny_count: 1,
+            schema_bump: true,
             ..Default::default()
         };
         let v = c.classify(&s);
@@ -184,7 +210,10 @@ mod tests {
     #[test]
     fn new_deny_safer_than_neutral_floor() {
         let c = PolicyDiffClassifier::new();
-        let s = DiffSummary { new_deny_count: 1, ..Default::default() };
+        let s = DiffSummary {
+            new_deny_count: 1,
+            ..Default::default()
+        };
         let v = c.classify(&s);
         assert_eq!(v.worst, EffectKind::NewDeny);
     }
@@ -210,7 +239,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = PolicyDiffClassifier::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), DiffError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            DiffError::SchemaMismatch
+        ));
     }
 
     #[test]

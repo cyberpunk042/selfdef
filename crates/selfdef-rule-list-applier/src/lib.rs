@@ -92,16 +92,25 @@ impl RuleListApplier {
 
     /// Append rule (insertion order = priority).
     pub fn append(&mut self, id: &str, effect: Effect, match_: Match) -> Result<(), RuleError> {
-        if id.is_empty() { return Err(RuleError::EmptyId); }
+        if id.is_empty() {
+            return Err(RuleError::EmptyId);
+        }
         match &match_ {
             Match::Exact(v) | Match::Prefix(v) => {
-                if v.is_empty() { return Err(RuleError::EmptyMatch); }
+                if v.is_empty() {
+                    return Err(RuleError::EmptyMatch);
+                }
             }
         }
         if self.rules.iter().any(|r| r.id == id) {
             return Err(RuleError::DuplicateId(id.into()));
         }
-        self.rules.push(Rule { id: id.into(), effect, match_, matches: 0 });
+        self.rules.push(Rule {
+            id: id.into(),
+            effect,
+            match_,
+            matches: 0,
+        });
         Ok(())
     }
 
@@ -123,12 +132,18 @@ impl RuleListApplier {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RuleError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RuleError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RuleError::SchemaMismatch);
+        }
         for r in &self.rules {
-            if r.id.is_empty() { return Err(RuleError::EmptyId); }
+            if r.id.is_empty() {
+                return Err(RuleError::EmptyId);
+            }
             match &r.match_ {
                 Match::Exact(v) | Match::Prefix(v) => {
-                    if v.is_empty() { return Err(RuleError::EmptyMatch); }
+                    if v.is_empty() {
+                        return Err(RuleError::EmptyMatch);
+                    }
                 }
             }
         }
@@ -150,7 +165,8 @@ mod tests {
     #[test]
     fn exact_match_wins() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        a.append("r1", Effect::Allow, Match::Exact("/etc/passwd".into())).unwrap();
+        a.append("r1", Effect::Allow, Match::Exact("/etc/passwd".into()))
+            .unwrap();
         assert_eq!(a.evaluate("/etc/passwd"), Effect::Allow);
         assert_eq!(a.evaluate("/etc/shadow"), Effect::Deny);
     }
@@ -158,7 +174,8 @@ mod tests {
     #[test]
     fn prefix_match() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        a.append("r1", Effect::Allow, Match::Prefix("/var/log/".into())).unwrap();
+        a.append("r1", Effect::Allow, Match::Prefix("/var/log/".into()))
+            .unwrap();
         assert_eq!(a.evaluate("/var/log/messages"), Effect::Allow);
         assert_eq!(a.evaluate("/var/log/auth.log"), Effect::Allow);
         assert_eq!(a.evaluate("/etc/passwd"), Effect::Deny);
@@ -167,8 +184,14 @@ mod tests {
     #[test]
     fn first_match_wins() {
         let mut a = RuleListApplier::new(Effect::Allow);
-        a.append("deny-secret", Effect::Deny, Match::Prefix("/etc/secret".into())).unwrap();
-        a.append("allow-etc", Effect::Allow, Match::Prefix("/etc/".into())).unwrap();
+        a.append(
+            "deny-secret",
+            Effect::Deny,
+            Match::Prefix("/etc/secret".into()),
+        )
+        .unwrap();
+        a.append("allow-etc", Effect::Allow, Match::Prefix("/etc/".into()))
+            .unwrap();
         assert_eq!(a.evaluate("/etc/secret/db.key"), Effect::Deny);
         assert_eq!(a.evaluate("/etc/passwd"), Effect::Allow);
     }
@@ -176,7 +199,8 @@ mod tests {
     #[test]
     fn match_counter_increments() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        a.append("r1", Effect::Allow, Match::Exact("k".into())).unwrap();
+        a.append("r1", Effect::Allow, Match::Exact("k".into()))
+            .unwrap();
         a.evaluate("k");
         a.evaluate("k");
         assert_eq!(a.rules[0].matches, 2);
@@ -185,9 +209,11 @@ mod tests {
     #[test]
     fn duplicate_id_rejected() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        a.append("r1", Effect::Allow, Match::Exact("a".into())).unwrap();
+        a.append("r1", Effect::Allow, Match::Exact("a".into()))
+            .unwrap();
         assert!(matches!(
-            a.append("r1", Effect::Deny, Match::Exact("b".into())).unwrap_err(),
+            a.append("r1", Effect::Deny, Match::Exact("b".into()))
+                .unwrap_err(),
             RuleError::DuplicateId(_)
         ));
     }
@@ -195,21 +221,33 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        assert!(matches!(a.append("", Effect::Allow, Match::Exact("a".into())).unwrap_err(), RuleError::EmptyId));
-        assert!(matches!(a.append("r", Effect::Allow, Match::Exact("".into())).unwrap_err(), RuleError::EmptyMatch));
+        assert!(matches!(
+            a.append("", Effect::Allow, Match::Exact("a".into()))
+                .unwrap_err(),
+            RuleError::EmptyId
+        ));
+        assert!(matches!(
+            a.append("r", Effect::Allow, Match::Exact("".into()))
+                .unwrap_err(),
+            RuleError::EmptyMatch
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = RuleListApplier::new(Effect::Deny);
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), RuleError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            RuleError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn applier_serde_roundtrip() {
         let mut a = RuleListApplier::new(Effect::Deny);
-        a.append("r1", Effect::Allow, Match::Prefix("/var/".into())).unwrap();
+        a.append("r1", Effect::Allow, Match::Prefix("/var/".into()))
+            .unwrap();
         a.evaluate("/var/log");
         let j = serde_json::to_string(&a).unwrap();
         let back: RuleListApplier = serde_json::from_str(&j).unwrap();

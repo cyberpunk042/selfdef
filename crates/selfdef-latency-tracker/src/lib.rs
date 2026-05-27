@@ -49,7 +49,9 @@ pub enum LatError {
 impl LatencyTracker {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, LatError> {
-        if capacity == 0 { return Err(LatError::ZeroCap); }
+        if capacity == 0 {
+            return Err(LatError::ZeroCap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -66,15 +68,23 @@ impl LatencyTracker {
     }
 
     /// Reset.
-    pub fn reset(&mut self) { self.samples.clear(); }
+    pub fn reset(&mut self) {
+        self.samples.clear();
+    }
 
     /// Count.
-    pub fn count(&self) -> usize { self.samples.len() }
+    pub fn count(&self) -> usize {
+        self.samples.len()
+    }
 
     /// Percentile (0..=100). Uses nearest-rank.
     pub fn percentile(&self, p: u8) -> Result<u64, LatError> {
-        if p > 100 { return Err(LatError::BadP); }
-        if self.samples.is_empty() { return Err(LatError::Empty); }
+        if p > 100 {
+            return Err(LatError::BadP);
+        }
+        if self.samples.is_empty() {
+            return Err(LatError::Empty);
+        }
         let mut sorted: Vec<u64> = self.samples.iter().copied().collect();
         sorted.sort_unstable();
         // Nearest-rank: ceil(p/100 * n) - 1, clamped to [0, n-1].
@@ -85,21 +95,31 @@ impl LatencyTracker {
     }
 
     /// p50.
-    pub fn p50(&self) -> Result<u64, LatError> { self.percentile(50) }
+    pub fn p50(&self) -> Result<u64, LatError> {
+        self.percentile(50)
+    }
     /// p99.
-    pub fn p99(&self) -> Result<u64, LatError> { self.percentile(99) }
+    pub fn p99(&self) -> Result<u64, LatError> {
+        self.percentile(99)
+    }
 
     /// Mean.
     pub fn mean(&self) -> Result<u64, LatError> {
-        if self.samples.is_empty() { return Err(LatError::Empty); }
+        if self.samples.is_empty() {
+            return Err(LatError::Empty);
+        }
         let sum: u128 = self.samples.iter().map(|x| *x as u128).sum();
         Ok((sum / self.samples.len() as u128) as u64)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LatError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LatError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(LatError::ZeroCap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LatError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(LatError::ZeroCap);
+        }
         Ok(())
     }
 }
@@ -111,21 +131,27 @@ mod tests {
     #[test]
     fn p50_basic() {
         let mut t = LatencyTracker::new(100).unwrap();
-        for i in 1..=100u64 { t.observe(i); }
+        for i in 1..=100u64 {
+            t.observe(i);
+        }
         assert_eq!(t.p50().unwrap(), 50);
     }
 
     #[test]
     fn p99_basic() {
         let mut t = LatencyTracker::new(100).unwrap();
-        for i in 1..=100u64 { t.observe(i); }
+        for i in 1..=100u64 {
+            t.observe(i);
+        }
         assert_eq!(t.p99().unwrap(), 99);
     }
 
     #[test]
     fn mean_basic() {
         let mut t = LatencyTracker::new(100).unwrap();
-        for i in 1..=100u64 { t.observe(i); }
+        for i in 1..=100u64 {
+            t.observe(i);
+        }
         assert_eq!(t.mean().unwrap(), 50);
     }
 
@@ -155,20 +181,28 @@ mod tests {
 
     #[test]
     fn zero_cap_rejected() {
-        assert!(matches!(LatencyTracker::new(0).unwrap_err(), LatError::ZeroCap));
+        assert!(matches!(
+            LatencyTracker::new(0).unwrap_err(),
+            LatError::ZeroCap
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = LatencyTracker::new(10).unwrap();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), LatError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            LatError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn tracker_serde_roundtrip() {
         let mut t = LatencyTracker::new(10).unwrap();
-        for i in 1..=5u64 { t.observe(i); }
+        for i in 1..=5u64 {
+            t.observe(i);
+        }
         let j = serde_json::to_string(&t).unwrap();
         let back: LatencyTracker = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);

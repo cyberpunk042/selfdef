@@ -62,7 +62,9 @@ pub enum LruError {
 impl LruCache {
     /// New.
     pub fn new(capacity: usize) -> Result<Self, LruError> {
-        if capacity == 0 { return Err(LruError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(LruError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -99,17 +101,27 @@ impl LruCache {
 
     /// Put.
     pub fn put(&mut self, key: &str, value: &str) -> Result<(), LruError> {
-        if key.is_empty() { return Err(LruError::EmptyKey); }
+        if key.is_empty() {
+            return Err(LruError::EmptyKey);
+        }
         let tick = self.next_tick;
         self.next_tick = self.next_tick.wrapping_add(1);
         if self.entries.contains_key(key) {
             // Update + touch.
-            self.entries.insert(key.into(), Entry { value: value.into(), tick });
+            self.entries.insert(
+                key.into(),
+                Entry {
+                    value: value.into(),
+                    tick,
+                },
+            );
             return Ok(());
         }
         if self.entries.len() == self.capacity {
             // Evict lowest tick.
-            let victim_key = self.entries.iter()
+            let victim_key = self
+                .entries
+                .iter()
                 .min_by_key(|(_, e)| e.tick)
                 .map(|(k, _)| k.clone());
             if let Some(k) = victim_key {
@@ -117,7 +129,13 @@ impl LruCache {
                 self.evictions = self.evictions.saturating_add(1);
             }
         }
-        self.entries.insert(key.into(), Entry { value: value.into(), tick });
+        self.entries.insert(
+            key.into(),
+            Entry {
+                value: value.into(),
+                tick,
+            },
+        );
         Ok(())
     }
 
@@ -138,10 +156,16 @@ impl LruCache {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LruError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LruError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(LruError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LruError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(LruError::ZeroCapacity);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(LruError::EmptyKey); }
+            if k.is_empty() {
+                return Err(LruError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -209,7 +233,10 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(LruCache::new(0).unwrap_err(), LruError::ZeroCapacity));
+        assert!(matches!(
+            LruCache::new(0).unwrap_err(),
+            LruError::ZeroCapacity
+        ));
     }
 
     #[test]
@@ -222,7 +249,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = LruCache::new(2).unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), LruError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            LruError::SchemaMismatch
+        ));
     }
 
     #[test]

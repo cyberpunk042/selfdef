@@ -150,7 +150,9 @@ mod tests {
     #[test]
     fn monotonic_delay_by_radius() {
         let p = DecisionDelayPolicy::canonical();
-        assert!(p.delay_ms(BlastRadius::LocalEphemeral) <= p.delay_ms(BlastRadius::LocalPersistent));
+        assert!(
+            p.delay_ms(BlastRadius::LocalEphemeral) <= p.delay_ms(BlastRadius::LocalPersistent)
+        );
         assert!(p.delay_ms(BlastRadius::LocalPersistent) <= p.delay_ms(BlastRadius::CrossSession));
         assert!(p.delay_ms(BlastRadius::CrossSession) <= p.delay_ms(BlastRadius::CrossMachine));
         assert!(p.delay_ms(BlastRadius::CrossMachine) <= p.delay_ms(BlastRadius::Public));
@@ -160,7 +162,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = DecisionDelayPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), DelayError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            DelayError::SchemaMismatch
+        ));
     }
 
     #[test]

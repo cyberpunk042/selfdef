@@ -114,26 +114,38 @@ mod tests {
     #[test]
     fn below_min_remaining_rejected() {
         let p = GrantRenewalPolicy::canonical();
-        assert!(matches!(p.authorize(30, 60).unwrap_err(), RenewalError::BelowMinRemaining { .. }));
+        assert!(matches!(
+            p.authorize(30, 60).unwrap_err(),
+            RenewalError::BelowMinRemaining { .. }
+        ));
     }
 
     #[test]
     fn delta_too_large_rejected() {
         let p = GrantRenewalPolicy::canonical();
-        assert!(matches!(p.authorize(120, 100_000).unwrap_err(), RenewalError::DeltaTooLarge { .. }));
+        assert!(matches!(
+            p.authorize(120, 100_000).unwrap_err(),
+            RenewalError::DeltaTooLarge { .. }
+        ));
     }
 
     #[test]
     fn delta_zero_rejected() {
         let p = GrantRenewalPolicy::canonical();
-        assert!(matches!(p.authorize(120, 0).unwrap_err(), RenewalError::DeltaZero));
+        assert!(matches!(
+            p.authorize(120, 0).unwrap_err(),
+            RenewalError::DeltaZero
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = GrantRenewalPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RenewalError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RenewalError::SchemaMismatch
+        ));
     }
 
     #[test]

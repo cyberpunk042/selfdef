@@ -59,7 +59,9 @@ pub enum AgingError {
 impl PriorityAging {
     /// New.
     pub fn new(age_step_ms: u64) -> Result<Self, AgingError> {
-        if age_step_ms == 0 { return Err(AgingError::ZeroStep); }
+        if age_step_ms == 0 {
+            return Err(AgingError::ZeroStep);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             age_step_ms,
@@ -69,11 +71,17 @@ impl PriorityAging {
 
     /// Enqueue.
     pub fn enqueue(&mut self, id: &str, base_priority: u32, now_ms: u64) -> Result<(), AgingError> {
-        if id.is_empty() { return Err(AgingError::EmptyId); }
+        if id.is_empty() {
+            return Err(AgingError::EmptyId);
+        }
         if self.jobs.iter().any(|j| j.id == id) {
             return Err(AgingError::Duplicate(id.into()));
         }
-        self.jobs.push(Job { id: id.into(), base_priority, enqueued_at_ms: now_ms });
+        self.jobs.push(Job {
+            id: id.into(),
+            base_priority,
+            enqueued_at_ms: now_ms,
+        });
         Ok(())
     }
 
@@ -86,26 +94,41 @@ impl PriorityAging {
 
     /// Pop highest effective priority (ties → lower id).
     pub fn next(&mut self, now_ms: u64) -> Option<Job> {
-        let idx = self.jobs.iter().enumerate().max_by(|(_, a), (_, b)| {
-            let ea = self.effective(a, now_ms);
-            let eb = self.effective(b, now_ms);
-            ea.cmp(&eb).then(b.id.cmp(&a.id))
-        }).map(|(i, _)| i)?;
+        let idx = self
+            .jobs
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| {
+                let ea = self.effective(a, now_ms);
+                let eb = self.effective(b, now_ms);
+                ea.cmp(&eb).then(b.id.cmp(&a.id))
+            })
+            .map(|(i, _)| i)?;
         Some(self.jobs.remove(idx))
     }
 
     /// Length.
-    pub fn len(&self) -> usize { self.jobs.len() }
+    pub fn len(&self) -> usize {
+        self.jobs.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.jobs.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.jobs.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AgingError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AgingError::SchemaMismatch); }
-        if self.age_step_ms == 0 { return Err(AgingError::ZeroStep); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AgingError::SchemaMismatch);
+        }
+        if self.age_step_ms == 0 {
+            return Err(AgingError::ZeroStep);
+        }
         for j in &self.jobs {
-            if j.id.is_empty() { return Err(AgingError::EmptyId); }
+            if j.id.is_empty() {
+                return Err(AgingError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -126,7 +149,7 @@ mod tests {
     #[test]
     fn aging_overtakes_after_enough_wait() {
         let mut p = PriorityAging::new(1000).unwrap();
-        p.enqueue("low", 1, 0).unwrap();      // eff at 20s = 1+20 = 21
+        p.enqueue("low", 1, 0).unwrap(); // eff at 20s = 1+20 = 21
         p.enqueue("high", 10, 10000).unwrap(); // eff at 20s = 10+10 = 20
         assert_eq!(p.next(20000).unwrap().id, "low");
     }
@@ -143,25 +166,37 @@ mod tests {
     fn duplicate_rejected() {
         let mut p = PriorityAging::new(1000).unwrap();
         p.enqueue("a", 1, 0).unwrap();
-        assert!(matches!(p.enqueue("a", 2, 0).unwrap_err(), AgingError::Duplicate(_)));
+        assert!(matches!(
+            p.enqueue("a", 2, 0).unwrap_err(),
+            AgingError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = PriorityAging::new(1000).unwrap();
-        assert!(matches!(p.enqueue("", 1, 0).unwrap_err(), AgingError::EmptyId));
+        assert!(matches!(
+            p.enqueue("", 1, 0).unwrap_err(),
+            AgingError::EmptyId
+        ));
     }
 
     #[test]
     fn zero_step_rejected() {
-        assert!(matches!(PriorityAging::new(0).unwrap_err(), AgingError::ZeroStep));
+        assert!(matches!(
+            PriorityAging::new(0).unwrap_err(),
+            AgingError::ZeroStep
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PriorityAging::new(1000).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AgingError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AgingError::SchemaMismatch
+        ));
     }
 
     #[test]

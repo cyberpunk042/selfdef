@@ -73,8 +73,12 @@ impl TraceIdIssuer {
 
     /// Mint a fresh trace_id.
     pub fn mint(&mut self, nano_epoch: u64, actor: &str) -> Result<String, TraceIdError> {
-        if actor.is_empty() { return Err(TraceIdError::EmptyActor); }
-        if nano_epoch == 0 { return Err(TraceIdError::ZeroEpoch); }
+        if actor.is_empty() {
+            return Err(TraceIdError::EmptyActor);
+        }
+        if nano_epoch == 0 {
+            return Err(TraceIdError::ZeroEpoch);
+        }
         let actor_hash = fnv1a_64(actor.as_bytes());
         let actor_hash16 = format!("{actor_hash:016x}");
         let id = format!("tr-{nano_epoch}-{}-{actor_hash16}", self.sequence);
@@ -90,7 +94,9 @@ impl TraceIdIssuer {
     }
 
     /// Number of ids retained in window.
-    pub fn window_len(&self) -> usize { self.seen.len() }
+    pub fn window_len(&self) -> usize {
+        self.seen.len()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TraceIdError> {
@@ -102,7 +108,9 @@ impl TraceIdIssuer {
 }
 
 impl Default for TraceIdIssuer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -138,13 +146,19 @@ mod tests {
     #[test]
     fn empty_actor_rejected() {
         let mut i = TraceIdIssuer::new();
-        assert!(matches!(i.mint(1, "").unwrap_err(), TraceIdError::EmptyActor));
+        assert!(matches!(
+            i.mint(1, "").unwrap_err(),
+            TraceIdError::EmptyActor
+        ));
     }
 
     #[test]
     fn zero_epoch_rejected() {
         let mut i = TraceIdIssuer::new();
-        assert!(matches!(i.mint(0, "a").unwrap_err(), TraceIdError::ZeroEpoch));
+        assert!(matches!(
+            i.mint(0, "a").unwrap_err(),
+            TraceIdError::ZeroEpoch
+        ));
     }
 
     #[test]
@@ -185,7 +199,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut i = TraceIdIssuer::new();
         i.schema_version = "9.9.9".into();
-        assert!(matches!(i.validate().unwrap_err(), TraceIdError::SchemaMismatch));
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            TraceIdError::SchemaMismatch
+        ));
     }
 
     #[test]

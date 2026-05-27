@@ -96,10 +96,22 @@ impl TaskDeadlineExtensionPolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            maintenance: ClassExtension { max_extensions: 0, max_total_extension_seconds: 0 },
-            background: ClassExtension { max_extensions: 3, max_total_extension_seconds: 3600 },
-            operator: ClassExtension { max_extensions: 8, max_total_extension_seconds: 24 * 3600 },
-            emergency: ClassExtension { max_extensions: 16, max_total_extension_seconds: 72 * 3600 },
+            maintenance: ClassExtension {
+                max_extensions: 0,
+                max_total_extension_seconds: 0,
+            },
+            background: ClassExtension {
+                max_extensions: 3,
+                max_total_extension_seconds: 3600,
+            },
+            operator: ClassExtension {
+                max_extensions: 8,
+                max_total_extension_seconds: 24 * 3600,
+            },
+            emergency: ClassExtension {
+                max_extensions: 16,
+                max_total_extension_seconds: 72 * 3600,
+            },
         }
     }
 
@@ -208,18 +220,28 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = TaskDeadlineExtensionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ExtensionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ExtensionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TaskClass::Emergency).unwrap(), "\"emergency\"");
+        assert_eq!(
+            serde_json::to_string(&TaskClass::Emergency).unwrap(),
+            "\"emergency\""
+        );
     }
 
     #[test]
     fn decision_serde_kebab() {
         let d = ExtendDecision::Allow { new_total: 0 };
-        assert!(serde_json::to_string(&d).unwrap().contains("\"kind\":\"allow\""));
+        assert!(
+            serde_json::to_string(&d)
+                .unwrap()
+                .contains("\"kind\":\"allow\"")
+        );
     }
 
     #[test]

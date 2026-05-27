@@ -39,7 +39,9 @@ pub enum RoutingAuthorityError {
     #[error("schema version mismatch")]
     SchemaMismatch,
     /// Route not authorized.
-    #[error("route not authorized: class={class:?} profile={profile:?} mode={mode:?} reason={reason}")]
+    #[error(
+        "route not authorized: class={class:?} profile={profile:?} mode={mode:?} reason={reason}"
+    )]
     NotAuthorized {
         /// class.
         class: ProviderClass,
@@ -63,25 +65,37 @@ pub fn authorize_route(
     // Replay mode: only Synthetic admissible.
     if mode == Replay && class != ProviderClass::Synthetic {
         return Err(RoutingAuthorityError::NotAuthorized {
-            class, profile, mode, reason: "replay-mode-allows-synthetic-only",
+            class,
+            profile,
+            mode,
+            reason: "replay-mode-allows-synthetic-only",
         });
     }
     // Private profile: never Cloud.
     if profile == Private && class == ProviderClass::Cloud {
         return Err(RoutingAuthorityError::NotAuthorized {
-            class, profile, mode, reason: "private-profile-forbids-cloud",
+            class,
+            profile,
+            mode,
+            reason: "private-profile-forbids-cloud",
         });
     }
     // Plan mode forbids Cloud (no live network in pure planning).
     if mode == Plan && class == ProviderClass::Cloud {
         return Err(RoutingAuthorityError::NotAuthorized {
-            class, profile, mode, reason: "plan-mode-forbids-cloud",
+            class,
+            profile,
+            mode,
+            reason: "plan-mode-forbids-cloud",
         });
     }
     // Sandbox forbids Cloud (network is off per mode policy).
     if mode == Sandbox && class == ProviderClass::Cloud {
         return Err(RoutingAuthorityError::NotAuthorized {
-            class, profile, mode, reason: "sandbox-mode-forbids-cloud",
+            class,
+            profile,
+            mode,
+            reason: "sandbox-mode-forbids-cloud",
         });
     }
     Ok(())
@@ -122,7 +136,11 @@ mod tests {
 
     #[test]
     fn execute_careful_allows_all_classes() {
-        for class in [ProviderClass::Local, ProviderClass::Cloud, ProviderClass::Synthetic] {
+        for class in [
+            ProviderClass::Local,
+            ProviderClass::Cloud,
+            ProviderClass::Synthetic,
+        ] {
             authorize_route(class, Careful, Execute).unwrap();
         }
     }
@@ -139,8 +157,17 @@ mod tests {
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ProviderClass::Local).unwrap(), "\"local\"");
-        assert_eq!(serde_json::to_string(&ProviderClass::Cloud).unwrap(), "\"cloud\"");
-        assert_eq!(serde_json::to_string(&ProviderClass::Synthetic).unwrap(), "\"synthetic\"");
+        assert_eq!(
+            serde_json::to_string(&ProviderClass::Local).unwrap(),
+            "\"local\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ProviderClass::Cloud).unwrap(),
+            "\"cloud\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ProviderClass::Synthetic).unwrap(),
+            "\"synthetic\""
+        );
     }
 }

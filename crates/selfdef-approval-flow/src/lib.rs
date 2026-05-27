@@ -86,12 +86,18 @@ pub enum FlowError {
 impl ApprovalFlow {
     /// New (Pending at stage 0).
     pub fn new(stages: Vec<(String, Vec<String>)>) -> Result<Self, FlowError> {
-        if stages.is_empty() { return Err(FlowError::NoStages); }
+        if stages.is_empty() {
+            return Err(FlowError::NoStages);
+        }
         let mut s_vec: Vec<Stage> = Vec::with_capacity(stages.len());
         for (name, required) in stages {
-            if name.is_empty() { return Err(FlowError::EmptyName); }
+            if name.is_empty() {
+                return Err(FlowError::EmptyName);
+            }
             for r in &required {
-                if r.is_empty() { return Err(FlowError::EmptyApprover); }
+                if r.is_empty() {
+                    return Err(FlowError::EmptyApprover);
+                }
             }
             s_vec.push(Stage {
                 name,
@@ -109,9 +115,16 @@ impl ApprovalFlow {
 
     /// Approve at active stage.
     pub fn approve(&mut self, approver: &str) -> Result<Phase, FlowError> {
-        if approver.is_empty() { return Err(FlowError::EmptyApprover); }
-        if self.phase != Phase::Pending { return Err(FlowError::NotPending); }
-        let stage = self.stages.get_mut(self.current).ok_or(FlowError::NotPending)?;
+        if approver.is_empty() {
+            return Err(FlowError::EmptyApprover);
+        }
+        if self.phase != Phase::Pending {
+            return Err(FlowError::NotPending);
+        }
+        let stage = self
+            .stages
+            .get_mut(self.current)
+            .ok_or(FlowError::NotPending)?;
         if !stage.required.contains(approver) {
             return Err(FlowError::NotRequiredApprover(approver.into()));
         }
@@ -130,20 +143,32 @@ impl ApprovalFlow {
 
     /// Reject (one-way).
     pub fn reject(&mut self, reason: &str) -> Result<(), FlowError> {
-        if reason.is_empty() { return Err(FlowError::EmptyReason); }
-        if self.phase != Phase::Pending { return Err(FlowError::NotPending); }
+        if reason.is_empty() {
+            return Err(FlowError::EmptyReason);
+        }
+        if self.phase != Phase::Pending {
+            return Err(FlowError::NotPending);
+        }
         self.phase = Phase::Rejected(reason.into());
         Ok(())
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FlowError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FlowError::SchemaMismatch); }
-        if self.stages.is_empty() { return Err(FlowError::NoStages); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FlowError::SchemaMismatch);
+        }
+        if self.stages.is_empty() {
+            return Err(FlowError::NoStages);
+        }
         for s in &self.stages {
-            if s.name.is_empty() { return Err(FlowError::EmptyName); }
+            if s.name.is_empty() {
+                return Err(FlowError::EmptyName);
+            }
             for r in &s.required {
-                if r.is_empty() { return Err(FlowError::EmptyApprover); }
+                if r.is_empty() {
+                    return Err(FlowError::EmptyApprover);
+                }
             }
         }
         Ok(())
@@ -158,7 +183,8 @@ mod tests {
         ApprovalFlow::new(vec![
             ("manager".into(), vec!["alice".into()]),
             ("security".into(), vec!["bob".into(), "carol".into()]),
-        ]).unwrap()
+        ])
+        .unwrap()
     }
 
     #[test]
@@ -185,7 +211,10 @@ mod tests {
     #[test]
     fn non_required_rejected() {
         let mut f = flow();
-        assert!(matches!(f.approve("bob").unwrap_err(), FlowError::NotRequiredApprover(_)));
+        assert!(matches!(
+            f.approve("bob").unwrap_err(),
+            FlowError::NotRequiredApprover(_)
+        ));
     }
 
     #[test]
@@ -194,7 +223,10 @@ mod tests {
         f.approve("alice").unwrap();
         // Now at security stage.
         f.approve("bob").unwrap();
-        assert!(matches!(f.approve("bob").unwrap_err(), FlowError::AlreadyApproved(_)));
+        assert!(matches!(
+            f.approve("bob").unwrap_err(),
+            FlowError::AlreadyApproved(_)
+        ));
     }
 
     #[test]
@@ -203,7 +235,10 @@ mod tests {
         f.approve("alice").unwrap();
         f.approve("bob").unwrap();
         f.approve("carol").unwrap();
-        assert!(matches!(f.approve("alice").unwrap_err(), FlowError::NotPending));
+        assert!(matches!(
+            f.approve("alice").unwrap_err(),
+            FlowError::NotPending
+        ));
     }
 
     #[test]
@@ -218,7 +253,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut f = flow();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FlowError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FlowError::SchemaMismatch
+        ));
     }
 
     #[test]

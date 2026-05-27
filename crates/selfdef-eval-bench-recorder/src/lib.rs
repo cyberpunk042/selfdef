@@ -86,17 +86,24 @@ impl EvalBenchRecorder {
         actual_outcome: &str,
         ts_ms: u64,
     ) -> Result<(), BenchError> {
-        if suite_id.is_empty() { return Err(BenchError::EmptySuite); }
-        if scenario_id.is_empty() { return Err(BenchError::EmptyScenario); }
+        if suite_id.is_empty() {
+            return Err(BenchError::EmptySuite);
+        }
+        if scenario_id.is_empty() {
+            return Err(BenchError::EmptyScenario);
+        }
         if would_outcome.is_empty() || actual_outcome.is_empty() {
             return Err(BenchError::EmptyOutcome);
         }
-        self.by_suite.entry(suite_id.into()).or_default().push(EvalSample {
-            scenario_id: scenario_id.into(),
-            would_outcome: would_outcome.into(),
-            actual_outcome: actual_outcome.into(),
-            ts_ms,
-        });
+        self.by_suite
+            .entry(suite_id.into())
+            .or_default()
+            .push(EvalSample {
+                scenario_id: scenario_id.into(),
+                would_outcome: would_outcome.into(),
+                actual_outcome: actual_outcome.into(),
+                ts_ms,
+            });
         Ok(())
     }
 
@@ -104,31 +111,53 @@ impl EvalBenchRecorder {
     pub fn report(&self, suite_id: &str) -> AgreementReport {
         let samples = match self.by_suite.get(suite_id) {
             Some(s) => s,
-            None => return AgreementReport { total: 0, agreed: 0, disagreed_pct_x100: 0, disagreement_samples: vec![] },
+            None => {
+                return AgreementReport {
+                    total: 0,
+                    agreed: 0,
+                    disagreed_pct_x100: 0,
+                    disagreement_samples: vec![],
+                };
+            }
         };
         let total = samples.len() as u32;
-        let agreed = samples.iter().filter(|s| s.would_outcome == s.actual_outcome).count() as u32;
+        let agreed = samples
+            .iter()
+            .filter(|s| s.would_outcome == s.actual_outcome)
+            .count() as u32;
         let disagreed = total - agreed;
-        let disagreed_pct_x100 = if total == 0 { 0 } else {
+        let disagreed_pct_x100 = if total == 0 {
+            0
+        } else {
             ((disagreed as u64) * 10_000 / total as u64) as u32
         };
-        let disagreement_samples: Vec<EvalSample> = samples.iter()
+        let disagreement_samples: Vec<EvalSample> = samples
+            .iter()
             .filter(|s| s.would_outcome != s.actual_outcome)
             .take(16)
             .cloned()
             .collect();
-        AgreementReport { total, agreed, disagreed_pct_x100, disagreement_samples }
+        AgreementReport {
+            total,
+            agreed,
+            disagreed_pct_x100,
+            disagreement_samples,
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BenchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BenchError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BenchError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for EvalBenchRecorder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,7 +201,8 @@ mod tests {
     fn disagreement_capped_at_16() {
         let mut b = EvalBenchRecorder::new();
         for i in 0..20 {
-            b.record_eval("s", &format!("s{i}"), "Allow", "Deny", 0).unwrap();
+            b.record_eval("s", &format!("s{i}"), "Allow", "Deny", 0)
+                .unwrap();
         }
         let r = b.report("s");
         assert_eq!(r.disagreement_samples.len(), 16);
@@ -181,16 +211,28 @@ mod tests {
     #[test]
     fn empty_fields_rejected() {
         let mut b = EvalBenchRecorder::new();
-        assert!(matches!(b.record_eval("", "a", "x", "x", 0).unwrap_err(), BenchError::EmptySuite));
-        assert!(matches!(b.record_eval("s", "", "x", "x", 0).unwrap_err(), BenchError::EmptyScenario));
-        assert!(matches!(b.record_eval("s", "a", "", "x", 0).unwrap_err(), BenchError::EmptyOutcome));
+        assert!(matches!(
+            b.record_eval("", "a", "x", "x", 0).unwrap_err(),
+            BenchError::EmptySuite
+        ));
+        assert!(matches!(
+            b.record_eval("s", "", "x", "x", 0).unwrap_err(),
+            BenchError::EmptyScenario
+        ));
+        assert!(matches!(
+            b.record_eval("s", "a", "", "x", 0).unwrap_err(),
+            BenchError::EmptyOutcome
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = EvalBenchRecorder::new();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BenchError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BenchError::SchemaMismatch
+        ));
     }
 
     #[test]

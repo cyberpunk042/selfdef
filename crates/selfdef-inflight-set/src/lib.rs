@@ -72,13 +72,23 @@ impl InflightSet {
 
     /// Issue an inflight id.
     pub fn issue(&mut self, id: &str, now_ms: u64, ttl_ms: u64) -> Result<(), InflightError> {
-        if id.is_empty() { return Err(InflightError::EmptyId); }
-        if ttl_ms == 0 { return Err(InflightError::ZeroTtl); }
+        if id.is_empty() {
+            return Err(InflightError::EmptyId);
+        }
+        if ttl_ms == 0 {
+            return Err(InflightError::ZeroTtl);
+        }
         if self.entries.contains_key(id) {
             return Err(InflightError::DuplicateId(id.into()));
         }
         let deadline_ms = now_ms.saturating_add(ttl_ms);
-        self.entries.insert(id.into(), InflightEntry { issued_ms: now_ms, deadline_ms });
+        self.entries.insert(
+            id.into(),
+            InflightEntry {
+                issued_ms: now_ms,
+                deadline_ms,
+            },
+        );
         self.issued = self.issued.saturating_add(1);
         Ok(())
     }
@@ -95,7 +105,8 @@ impl InflightSet {
 
     /// Sweep entries past deadline; return their ids.
     pub fn sweep_timeouts(&mut self, now_ms: u64) -> Vec<String> {
-        let stale: Vec<String> = self.entries
+        let stale: Vec<String> = self
+            .entries
             .iter()
             .filter(|(_, e)| e.deadline_ms <= now_ms)
             .map(|(k, _)| k.clone())
@@ -113,23 +124,33 @@ impl InflightSet {
     }
 
     /// Count.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), InflightError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(InflightError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(InflightError::SchemaMismatch);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(InflightError::EmptyId); }
+            if k.is_empty() {
+                return Err(InflightError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for InflightSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -168,14 +189,23 @@ mod tests {
     fn duplicate_issue_rejected() {
         let mut s = InflightSet::new();
         s.issue("a", 0, 1000).unwrap();
-        assert!(matches!(s.issue("a", 0, 1000).unwrap_err(), InflightError::DuplicateId(_)));
+        assert!(matches!(
+            s.issue("a", 0, 1000).unwrap_err(),
+            InflightError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = InflightSet::new();
-        assert!(matches!(s.issue("", 0, 1000).unwrap_err(), InflightError::EmptyId));
-        assert!(matches!(s.issue("a", 0, 0).unwrap_err(), InflightError::ZeroTtl));
+        assert!(matches!(
+            s.issue("", 0, 1000).unwrap_err(),
+            InflightError::EmptyId
+        ));
+        assert!(matches!(
+            s.issue("a", 0, 0).unwrap_err(),
+            InflightError::ZeroTtl
+        ));
     }
 
     #[test]
@@ -194,7 +224,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = InflightSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), InflightError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            InflightError::SchemaMismatch
+        ));
     }
 
     #[test]

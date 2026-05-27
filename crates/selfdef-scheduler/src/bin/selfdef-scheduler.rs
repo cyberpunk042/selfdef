@@ -23,14 +23,14 @@
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use selfdef_scheduler::{
-    emit_audit_entry, evaluate_objective, now_ms, AxisSignals, BackpressureMonitor,
-    BackpressureThresholds, Decision, Profile, ResourceMeasurements, Route,
-    DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR,
+    AxisSignals, BackpressureMonitor, BackpressureThresholds, DEFAULT_AUDIT_LOG_PATH,
+    DEFAULT_RING_DIR, Decision, Profile, ResourceMeasurements, Route, emit_audit_entry,
+    evaluate_objective, now_ms,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -57,8 +57,8 @@ fn main() -> ExitCode {
             .unwrap_or_else(|_| "unknown".to_string())
     });
 
-    let signer_kid =
-        std::env::var("SELFDEF_SCHEDULER_SIGNER_KID").unwrap_or_else(|_| "kid-bootstrap".to_string());
+    let signer_kid = std::env::var("SELFDEF_SCHEDULER_SIGNER_KID")
+        .unwrap_or_else(|_| "kid-bootstrap".to_string());
 
     if let Err(e) = std::fs::create_dir_all(&ring_dir) {
         eprintln!(
@@ -68,8 +68,11 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    eprintln!("[selfdef-scheduler] tick={tick_secs}s ring={} audit={} host={hostname}",
-        ring_dir.display(), audit_log.display());
+    eprintln!(
+        "[selfdef-scheduler] tick={tick_secs}s ring={} audit={} host={hostname}",
+        ring_dir.display(),
+        audit_log.display()
+    );
 
     // Clean-shutdown flag — set on SIGTERM/SIGINT via signal-hook-style
     // probe. We use a polling approach (no signal-hook dep added) by
@@ -84,9 +87,8 @@ fn main() -> ExitCode {
     // grows real request handling, signal handling becomes mandatory.
     let _ = shutdown_clone;
 
-    let mut monitor = BackpressureMonitor::with_thresholds(
-        BackpressureThresholds::default_for_sain01(),
-    );
+    let mut monitor =
+        BackpressureMonitor::with_thresholds(BackpressureThresholds::default_for_sain01());
 
     let mut tick_count: u64 = 0;
     loop {
@@ -140,9 +142,7 @@ fn main() -> ExitCode {
         match emit_audit_entry(&audit_log, &decision) {
             Ok(()) => {}
             Err(e) => {
-                eprintln!(
-                    "[selfdef-scheduler] WARN: audit log write failed (continuing): {e}"
-                );
+                eprintln!("[selfdef-scheduler] WARN: audit log write failed (continuing): {e}");
             }
         }
 
@@ -201,8 +201,7 @@ fn clamp_unit(v: f32) -> f32 {
 }
 
 fn write_ring_entry(path: &Path, decision: &Decision) -> std::io::Result<()> {
-    let bytes = serde_json::to_vec(decision)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let bytes = serde_json::to_vec(decision).map_err(|e| std::io::Error::other(e.to_string()))?;
     std::fs::write(path, bytes)
 }
 

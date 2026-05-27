@@ -99,7 +99,9 @@ fn classify(decision: &PolicyDecision) -> OutcomeClass {
             if decision.risk >= RiskClass::High
                 || matches!(
                     decision.side_effect_class,
-                    SideEffectClass::Persistent | SideEffectClass::NetworkEgress | SideEffectClass::Process
+                    SideEffectClass::Persistent
+                        | SideEffectClass::NetworkEgress
+                        | SideEffectClass::Process
                 )
                 || decision.user_approval == UserApprovalState::Approved
             {
@@ -120,12 +122,18 @@ fn headline_for(decision: &PolicyDecision, class: OutcomeClass) -> String {
     };
     let mut h = format!(
         "{outcome}: {} {} on {} (risk {:?}, side-effect {:?}) [{class:?}]",
-        decision.subject, decision.action, decision.resource, decision.risk, decision.side_effect_class,
+        decision.subject,
+        decision.action,
+        decision.resource,
+        decision.risk,
+        decision.side_effect_class,
     );
     if h.chars().count() > 120 {
         // Truncate to 120 chars (boundary-safe).
         let mut s = String::new();
-        for c in h.chars().take(120) { s.push(c); }
+        for c in h.chars().take(120) {
+            s.push(c);
+        }
         h = s;
     }
     h
@@ -138,9 +146,13 @@ impl Explanation {
             return Err(ExplainError::SchemaMismatch);
         }
         let n = self.headline.chars().count();
-        if n > 120 { return Err(ExplainError::HeadlineTooLong(n)); }
+        if n > 120 {
+            return Err(ExplainError::HeadlineTooLong(n));
+        }
         for (i, f) in self.factors.iter().enumerate() {
-            if f.is_empty() { return Err(ExplainError::EmptyFactor(i)); }
+            if f.is_empty() {
+                return Err(ExplainError::EmptyFactor(i));
+            }
         }
         Ok(())
     }
@@ -180,26 +192,42 @@ mod tests {
 
     #[test]
     fn allow_low_routine() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+        ));
         assert_eq!(e.outcome_class, OutcomeClass::Routine);
         e.validate().unwrap();
     }
 
     #[test]
     fn allow_high_risk_elevated() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::High));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::High,
+        ));
         assert_eq!(e.outcome_class, OutcomeClass::Elevated);
     }
 
     #[test]
     fn allow_persistent_elevated() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::Persistent, RiskClass::Low));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::Persistent,
+            RiskClass::Low,
+        ));
         assert_eq!(e.outcome_class, OutcomeClass::Elevated);
     }
 
     #[test]
     fn allow_network_egress_elevated() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::NetworkEgress, RiskClass::Low));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::NetworkEgress,
+            RiskClass::Low,
+        ));
         assert_eq!(e.outcome_class, OutcomeClass::Elevated);
     }
 
@@ -223,13 +251,21 @@ mod tests {
 
     #[test]
     fn sandbox_blocked() {
-        let e = explain(&d(Outcome::Sandbox, SideEffectClass::FsWrite, RiskClass::Medium));
+        let e = explain(&d(
+            Outcome::Sandbox,
+            SideEffectClass::FsWrite,
+            RiskClass::Medium,
+        ));
         assert_eq!(e.outcome_class, OutcomeClass::Blocked);
     }
 
     #[test]
     fn factors_include_essential_fields() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+        ));
         assert!(e.factors.iter().any(|f| f.starts_with("subject=alice")));
         assert!(e.factors.iter().any(|f| f.starts_with("action=fs.write")));
         assert!(e.factors.iter().any(|f| f.starts_with("risk=Low")));
@@ -237,19 +273,33 @@ mod tests {
 
     #[test]
     fn headline_under_120_chars() {
-        let e = explain(&d(Outcome::Allow, SideEffectClass::ReadOnly, RiskClass::Low));
+        let e = explain(&d(
+            Outcome::Allow,
+            SideEffectClass::ReadOnly,
+            RiskClass::Low,
+        ));
         assert!(e.headline.chars().count() <= 120);
     }
 
     #[test]
     fn outcome_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&OutcomeClass::Routine).unwrap(), "\"routine\"");
-        assert_eq!(serde_json::to_string(&OutcomeClass::OperatorAttention).unwrap(), "\"operator-attention\"");
+        assert_eq!(
+            serde_json::to_string(&OutcomeClass::Routine).unwrap(),
+            "\"routine\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutcomeClass::OperatorAttention).unwrap(),
+            "\"operator-attention\""
+        );
     }
 
     #[test]
     fn explanation_serde_roundtrip() {
-        let e = explain(&d(Outcome::Ask, SideEffectClass::FsWrite, RiskClass::Medium));
+        let e = explain(&d(
+            Outcome::Ask,
+            SideEffectClass::FsWrite,
+            RiskClass::Medium,
+        ));
         let j = serde_json::to_string(&e).unwrap();
         let back: Explanation = serde_json::from_str(&j).unwrap();
         assert_eq!(e, back);

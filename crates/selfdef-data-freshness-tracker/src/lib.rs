@@ -65,7 +65,12 @@ pub enum FreshnessError {
 impl DataFreshnessTracker {
     /// New.
     pub fn new(fresh_ms: u64, stale_ms: u64) -> Result<Self, FreshnessError> {
-        if fresh_ms >= stale_ms { return Err(FreshnessError::BadBounds { f: fresh_ms, s: stale_ms }); }
+        if fresh_ms >= stale_ms {
+            return Err(FreshnessError::BadBounds {
+                f: fresh_ms,
+                s: stale_ms,
+            });
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             fresh_ms,
@@ -76,18 +81,26 @@ impl DataFreshnessTracker {
 
     /// Record update.
     pub fn update(&mut self, key: &str, ts_ms: u64) -> Result<(), FreshnessError> {
-        if key.is_empty() { return Err(FreshnessError::EmptyKey); }
+        if key.is_empty() {
+            return Err(FreshnessError::EmptyKey);
+        }
         self.updated.insert(key.into(), ts_ms);
         Ok(())
     }
 
     /// Check freshness.
     pub fn check(&self, key: &str, now_ms: u64) -> Freshness {
-        let Some(last) = self.updated.get(key) else { return Freshness::Unknown; };
+        let Some(last) = self.updated.get(key) else {
+            return Freshness::Unknown;
+        };
         let age = now_ms.saturating_sub(*last);
-        if age < self.fresh_ms { Freshness::Fresh }
-        else if age < self.stale_ms { Freshness::Stale }
-        else { Freshness::Expired }
+        if age < self.fresh_ms {
+            Freshness::Fresh
+        } else if age < self.stale_ms {
+            Freshness::Stale
+        } else {
+            Freshness::Expired
+        }
     }
 
     /// Remove.
@@ -97,10 +110,19 @@ impl DataFreshnessTracker {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FreshnessError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FreshnessError::SchemaMismatch); }
-        if self.fresh_ms >= self.stale_ms { return Err(FreshnessError::BadBounds { f: self.fresh_ms, s: self.stale_ms }); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FreshnessError::SchemaMismatch);
+        }
+        if self.fresh_ms >= self.stale_ms {
+            return Err(FreshnessError::BadBounds {
+                f: self.fresh_ms,
+                s: self.stale_ms,
+            });
+        }
         for k in self.updated.keys() {
-            if k.is_empty() { return Err(FreshnessError::EmptyKey); }
+            if k.is_empty() {
+                return Err(FreshnessError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -155,20 +177,29 @@ mod tests {
 
     #[test]
     fn bad_bounds_rejected() {
-        assert!(matches!(DataFreshnessTracker::new(5000, 1000).unwrap_err(), FreshnessError::BadBounds { .. }));
+        assert!(matches!(
+            DataFreshnessTracker::new(5000, 1000).unwrap_err(),
+            FreshnessError::BadBounds { .. }
+        ));
     }
 
     #[test]
     fn empty_key_rejected() {
         let mut t = DataFreshnessTracker::new(1, 2).unwrap();
-        assert!(matches!(t.update("", 0).unwrap_err(), FreshnessError::EmptyKey));
+        assert!(matches!(
+            t.update("", 0).unwrap_err(),
+            FreshnessError::EmptyKey
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = DataFreshnessTracker::new(1, 2).unwrap();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), FreshnessError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            FreshnessError::SchemaMismatch
+        ));
     }
 
     #[test]

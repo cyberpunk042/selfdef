@@ -117,28 +117,40 @@ impl ProcessLaunchPolicy {
             return Err(ProcessLaunchError::SchemaMismatch);
         }
         for r in &self.allow {
-            if r.bin.is_empty() { return Err(ProcessLaunchError::EmptyBin("allow".into())); }
+            if r.bin.is_empty() {
+                return Err(ProcessLaunchError::EmptyBin("allow".into()));
+            }
         }
         for r in &self.deny {
-            if r.bin.is_empty() { return Err(ProcessLaunchError::EmptyBin("deny".into())); }
+            if r.bin.is_empty() {
+                return Err(ProcessLaunchError::EmptyBin("deny".into()));
+            }
         }
         for n in &self.never_launch {
-            if n.is_empty() { return Err(ProcessLaunchError::EmptyBin("never_launch".into())); }
+            if n.is_empty() {
+                return Err(ProcessLaunchError::EmptyBin("never_launch".into()));
+            }
         }
         Ok(())
     }
 }
 
 fn argv_starts_with(argv: &[&str], prefix: &[String]) -> bool {
-    if prefix.len() > argv.len() { return false; }
+    if prefix.len() > argv.len() {
+        return false;
+    }
     for (i, p) in prefix.iter().enumerate() {
-        if argv[i] != p.as_str() { return false; }
+        if argv[i] != p.as_str() {
+            return false;
+        }
     }
     true
 }
 
 impl Default for ProcessLaunchPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -146,11 +158,17 @@ mod tests {
     use super::*;
 
     fn allow(bin: &str, args: &[&str]) -> AllowRule {
-        AllowRule { bin: bin.into(), argv_prefix: args.iter().map(|s| (*s).into()).collect() }
+        AllowRule {
+            bin: bin.into(),
+            argv_prefix: args.iter().map(|s| (*s).into()).collect(),
+        }
     }
 
     fn deny(bin: &str, args: &[&str]) -> DenyRule {
-        DenyRule { bin: bin.into(), argv_prefix: args.iter().map(|s| (*s).into()).collect() }
+        DenyRule {
+            bin: bin.into(),
+            argv_prefix: args.iter().map(|s| (*s).into()).collect(),
+        }
     }
 
     #[test]
@@ -163,15 +181,24 @@ mod tests {
     fn allow_bin_no_prefix_grants_any_args() {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("ls", &[]));
-        assert!(matches!(p.decide("ls", &["-la"]), LaunchDecision::Allow { .. }));
+        assert!(matches!(
+            p.decide("ls", &["-la"]),
+            LaunchDecision::Allow { .. }
+        ));
     }
 
     #[test]
     fn allow_with_prefix_matches_only_prefix() {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("git", &["status"]));
-        assert!(matches!(p.decide("git", &["status", "-s"]), LaunchDecision::Allow { .. }));
-        assert!(matches!(p.decide("git", &["push"]), LaunchDecision::DenyImplicit));
+        assert!(matches!(
+            p.decide("git", &["status", "-s"]),
+            LaunchDecision::Allow { .. }
+        ));
+        assert!(matches!(
+            p.decide("git", &["push"]),
+            LaunchDecision::DenyImplicit
+        ));
     }
 
     #[test]
@@ -179,8 +206,14 @@ mod tests {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("git", &[]));
         p.deny.push(deny("git", &["push", "--force"]));
-        assert!(matches!(p.decide("git", &["push", "--force"]), LaunchDecision::DenyByDeny { .. }));
-        assert!(matches!(p.decide("git", &["status"]), LaunchDecision::Allow { .. }));
+        assert!(matches!(
+            p.decide("git", &["push", "--force"]),
+            LaunchDecision::DenyByDeny { .. }
+        ));
+        assert!(matches!(
+            p.decide("git", &["status"]),
+            LaunchDecision::Allow { .. }
+        ));
     }
 
     #[test]
@@ -199,28 +232,40 @@ mod tests {
     fn empty_argv_matches_empty_prefix() {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("uname", &[]));
-        assert!(matches!(p.decide("uname", &[]), LaunchDecision::Allow { .. }));
+        assert!(matches!(
+            p.decide("uname", &[]),
+            LaunchDecision::Allow { .. }
+        ));
     }
 
     #[test]
     fn prefix_longer_than_argv_no_match() {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("git", &["status", "-s"]));
-        assert!(matches!(p.decide("git", &["status"]), LaunchDecision::DenyImplicit));
+        assert!(matches!(
+            p.decide("git", &["status"]),
+            LaunchDecision::DenyImplicit
+        ));
     }
 
     #[test]
     fn empty_bin_rejected_on_validate() {
         let mut p = ProcessLaunchPolicy::new();
         p.allow.push(allow("", &[]));
-        assert!(matches!(p.validate().unwrap_err(), ProcessLaunchError::EmptyBin(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ProcessLaunchError::EmptyBin(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ProcessLaunchPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ProcessLaunchError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ProcessLaunchError::SchemaMismatch
+        ));
     }
 
     #[test]

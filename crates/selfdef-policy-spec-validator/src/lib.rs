@@ -82,30 +82,49 @@ impl PolicySpecValidator {
     }
 
     /// Register.
-    pub fn register(&mut self, name: &str, required: &[&str], forbidden: &[&str]) -> Result<(), SpecError> {
-        if name.is_empty() { return Err(SpecError::EmptyName); }
-        if self.specs.contains_key(name) { return Err(SpecError::DuplicateSpec(name.into())); }
+    pub fn register(
+        &mut self,
+        name: &str,
+        required: &[&str],
+        forbidden: &[&str],
+    ) -> Result<(), SpecError> {
+        if name.is_empty() {
+            return Err(SpecError::EmptyName);
+        }
+        if self.specs.contains_key(name) {
+            return Err(SpecError::DuplicateSpec(name.into()));
+        }
         let mut req = BTreeSet::new();
         for f in required {
-            if f.is_empty() { return Err(SpecError::EmptyField); }
+            if f.is_empty() {
+                return Err(SpecError::EmptyField);
+            }
             req.insert((*f).into());
         }
         let mut fb = BTreeSet::new();
         for f in forbidden {
-            if f.is_empty() { return Err(SpecError::EmptyField); }
+            if f.is_empty() {
+                return Err(SpecError::EmptyField);
+            }
             fb.insert((*f).into());
         }
-        self.specs.insert(name.into(), Spec {
-            name: name.into(),
-            required: req,
-            forbidden: fb,
-        });
+        self.specs.insert(
+            name.into(),
+            Spec {
+                name: name.into(),
+                required: req,
+                forbidden: fb,
+            },
+        );
         Ok(())
     }
 
     /// Validate.
     pub fn check(&self, name: &str, present: &[&str]) -> Result<Vec<Issue>, SpecError> {
-        let s = self.specs.get(name).ok_or_else(|| SpecError::UnknownSpec(name.into()))?;
+        let s = self
+            .specs
+            .get(name)
+            .ok_or_else(|| SpecError::UnknownSpec(name.into()))?;
         let present_set: BTreeSet<String> = present.iter().map(|f| (*f).into()).collect();
         let mut issues = Vec::new();
         for r in &s.required {
@@ -123,11 +142,17 @@ impl PolicySpecValidator {
 
     /// Validate state.
     pub fn validate(&self) -> Result<(), SpecError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SpecError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SpecError::SchemaMismatch);
+        }
         for (n, s) in &self.specs {
-            if n.is_empty() { return Err(SpecError::EmptyName); }
+            if n.is_empty() {
+                return Err(SpecError::EmptyName);
+            }
             for f in s.required.iter().chain(s.forbidden.iter()) {
-                if f.is_empty() { return Err(SpecError::EmptyField); }
+                if f.is_empty() {
+                    return Err(SpecError::EmptyField);
+                }
             }
         }
         Ok(())
@@ -135,7 +160,9 @@ impl PolicySpecValidator {
 }
 
 impl Default for PolicySpecValidator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,28 +199,43 @@ mod tests {
     #[test]
     fn unknown_spec_rejected() {
         let v = PolicySpecValidator::new();
-        assert!(matches!(v.check("nope", &[]).unwrap_err(), SpecError::UnknownSpec(_)));
+        assert!(matches!(
+            v.check("nope", &[]).unwrap_err(),
+            SpecError::UnknownSpec(_)
+        ));
     }
 
     #[test]
     fn duplicate_spec_rejected() {
         let mut v = PolicySpecValidator::new();
         v.register("p", &[], &[]).unwrap();
-        assert!(matches!(v.register("p", &[], &[]).unwrap_err(), SpecError::DuplicateSpec(_)));
+        assert!(matches!(
+            v.register("p", &[], &[]).unwrap_err(),
+            SpecError::DuplicateSpec(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut v = PolicySpecValidator::new();
-        assert!(matches!(v.register("", &[], &[]).unwrap_err(), SpecError::EmptyName));
-        assert!(matches!(v.register("p", &[""], &[]).unwrap_err(), SpecError::EmptyField));
+        assert!(matches!(
+            v.register("", &[], &[]).unwrap_err(),
+            SpecError::EmptyName
+        ));
+        assert!(matches!(
+            v.register("p", &[""], &[]).unwrap_err(),
+            SpecError::EmptyField
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut v = PolicySpecValidator::new();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), SpecError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            SpecError::SchemaMismatch
+        ));
     }
 
     #[test]

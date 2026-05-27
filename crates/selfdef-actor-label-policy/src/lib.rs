@@ -59,27 +59,54 @@ impl ActorLabelPolicy {
     }
 
     /// Set a user label (refuses reserved prefix).
-    pub fn set_user_label(&mut self, actor: &str, key: &str, value: &str) -> Result<(), LabelError> {
-        if actor.is_empty() { return Err(LabelError::EmptyActor); }
-        if key.is_empty() { return Err(LabelError::EmptyKey); }
+    pub fn set_user_label(
+        &mut self,
+        actor: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), LabelError> {
+        if actor.is_empty() {
+            return Err(LabelError::EmptyActor);
+        }
+        if key.is_empty() {
+            return Err(LabelError::EmptyKey);
+        }
         if key.starts_with(RESERVED_PREFIX) {
             return Err(LabelError::ReservedKey(RESERVED_PREFIX.into()));
         }
-        self.labels.entry(actor.into()).or_default().insert(key.into(), value.into());
+        self.labels
+            .entry(actor.into())
+            .or_default()
+            .insert(key.into(), value.into());
         Ok(())
     }
 
     /// Set a system label (any key).
-    pub fn set_system_label(&mut self, actor: &str, key: &str, value: &str) -> Result<(), LabelError> {
-        if actor.is_empty() { return Err(LabelError::EmptyActor); }
-        if key.is_empty() { return Err(LabelError::EmptyKey); }
-        self.labels.entry(actor.into()).or_default().insert(key.into(), value.into());
+    pub fn set_system_label(
+        &mut self,
+        actor: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), LabelError> {
+        if actor.is_empty() {
+            return Err(LabelError::EmptyActor);
+        }
+        if key.is_empty() {
+            return Err(LabelError::EmptyKey);
+        }
+        self.labels
+            .entry(actor.into())
+            .or_default()
+            .insert(key.into(), value.into());
         Ok(())
     }
 
     /// Get.
     pub fn get(&self, actor: &str, key: &str) -> Option<&str> {
-        self.labels.get(actor).and_then(|m| m.get(key)).map(|s| s.as_str())
+        self.labels
+            .get(actor)
+            .and_then(|m| m.get(key))
+            .map(|s| s.as_str())
     }
 
     /// Remove (user-only — refuses reserved).
@@ -87,23 +114,34 @@ impl ActorLabelPolicy {
         if key.starts_with(RESERVED_PREFIX) {
             return Err(LabelError::ReservedKey(RESERVED_PREFIX.into()));
         }
-        let Some(m) = self.labels.get_mut(actor) else { return Ok(false); };
+        let Some(m) = self.labels.get_mut(actor) else {
+            return Ok(false);
+        };
         let removed = m.remove(key).is_some();
-        if m.is_empty() { self.labels.remove(actor); }
+        if m.is_empty() {
+            self.labels.remove(actor);
+        }
         Ok(removed)
     }
 
     /// Remove (system — any key).
     pub fn remove_system_label(&mut self, actor: &str, key: &str) -> bool {
-        let Some(m) = self.labels.get_mut(actor) else { return false; };
+        let Some(m) = self.labels.get_mut(actor) else {
+            return false;
+        };
         let removed = m.remove(key).is_some();
-        if m.is_empty() { self.labels.remove(actor); }
+        if m.is_empty() {
+            self.labels.remove(actor);
+        }
         removed
     }
 
     /// All labels of an actor (sorted by key).
     pub fn labels_of(&self, actor: &str) -> Vec<(String, String)> {
-        self.labels.get(actor).map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default()
+        self.labels
+            .get(actor)
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default()
     }
 
     /// Drop an actor entirely.
@@ -113,11 +151,17 @@ impl ActorLabelPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LabelError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LabelError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LabelError::SchemaMismatch);
+        }
         for (a, m) in &self.labels {
-            if a.is_empty() { return Err(LabelError::EmptyActor); }
+            if a.is_empty() {
+                return Err(LabelError::EmptyActor);
+            }
             for k in m.keys() {
-                if k.is_empty() { return Err(LabelError::EmptyKey); }
+                if k.is_empty() {
+                    return Err(LabelError::EmptyKey);
+                }
             }
         }
         Ok(())
@@ -125,7 +169,9 @@ impl ActorLabelPolicy {
 }
 
 impl Default for ActorLabelPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -142,13 +188,18 @@ mod tests {
     #[test]
     fn user_cannot_set_reserved() {
         let mut p = ActorLabelPolicy::new();
-        assert!(matches!(p.set_user_label("alice", "selfdef.trust", "high").unwrap_err(), LabelError::ReservedKey(_)));
+        assert!(matches!(
+            p.set_user_label("alice", "selfdef.trust", "high")
+                .unwrap_err(),
+            LabelError::ReservedKey(_)
+        ));
     }
 
     #[test]
     fn system_can_set_reserved() {
         let mut p = ActorLabelPolicy::new();
-        p.set_system_label("alice", "selfdef.trust", "high").unwrap();
+        p.set_system_label("alice", "selfdef.trust", "high")
+            .unwrap();
         assert_eq!(p.get("alice", "selfdef.trust"), Some("high"));
     }
 
@@ -156,7 +207,10 @@ mod tests {
     fn user_remove_refuses_reserved() {
         let mut p = ActorLabelPolicy::new();
         p.set_system_label("alice", "selfdef.x", "v").unwrap();
-        assert!(matches!(p.remove_user_label("alice", "selfdef.x").unwrap_err(), LabelError::ReservedKey(_)));
+        assert!(matches!(
+            p.remove_user_label("alice", "selfdef.x").unwrap_err(),
+            LabelError::ReservedKey(_)
+        ));
     }
 
     #[test]
@@ -187,8 +241,14 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut p = ActorLabelPolicy::new();
-        assert!(matches!(p.set_user_label("", "k", "v").unwrap_err(), LabelError::EmptyActor));
-        assert!(matches!(p.set_user_label("a", "", "v").unwrap_err(), LabelError::EmptyKey));
+        assert!(matches!(
+            p.set_user_label("", "k", "v").unwrap_err(),
+            LabelError::EmptyActor
+        ));
+        assert!(matches!(
+            p.set_user_label("a", "", "v").unwrap_err(),
+            LabelError::EmptyKey
+        ));
     }
 
     #[test]
@@ -203,7 +263,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = ActorLabelPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), LabelError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            LabelError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -72,11 +72,27 @@ impl TtlTable {
     }
 
     /// Insert (or replace).
-    pub fn insert(&mut self, key: &str, value: &str, now_ms: u64, ttl_ms: u64) -> Result<(), TtlError> {
-        if key.is_empty() { return Err(TtlError::EmptyKey); }
-        if ttl_ms == 0 { return Err(TtlError::ZeroTtl); }
+    pub fn insert(
+        &mut self,
+        key: &str,
+        value: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), TtlError> {
+        if key.is_empty() {
+            return Err(TtlError::EmptyKey);
+        }
+        if ttl_ms == 0 {
+            return Err(TtlError::ZeroTtl);
+        }
         let expires_at_ms = now_ms.saturating_add(ttl_ms);
-        self.entries.insert(key.into(), Entry { value: value.into(), expires_at_ms });
+        self.entries.insert(
+            key.into(),
+            Entry {
+                value: value.into(),
+                expires_at_ms,
+            },
+        );
         self.inserts = self.inserts.saturating_add(1);
         Ok(())
     }
@@ -104,7 +120,9 @@ impl TtlTable {
 
     /// Touch (refresh) expiry.
     pub fn touch(&mut self, key: &str, now_ms: u64, ttl_ms: u64) -> Result<bool, TtlError> {
-        if ttl_ms == 0 { return Err(TtlError::ZeroTtl); }
+        if ttl_ms == 0 {
+            return Err(TtlError::ZeroTtl);
+        }
         if let Some(e) = self.entries.get_mut(key) {
             e.expires_at_ms = now_ms.saturating_add(ttl_ms);
             Ok(true)
@@ -115,35 +133,48 @@ impl TtlTable {
 
     /// Eagerly remove expired entries; returns count removed.
     pub fn sweep(&mut self, now_ms: u64) -> u32 {
-        let stale: Vec<String> = self.entries
+        let stale: Vec<String> = self
+            .entries
             .iter()
             .filter(|(_, e)| e.expires_at_ms <= now_ms)
             .map(|(k, _)| k.clone())
             .collect();
         let n = stale.len() as u32;
-        for k in stale { self.entries.remove(&k); }
+        for k in stale {
+            self.entries.remove(&k);
+        }
         self.expired = self.expired.saturating_add(n as u64);
         n
     }
 
     /// Count.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TtlError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TtlError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TtlError::SchemaMismatch);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(TtlError::EmptyKey); }
+            if k.is_empty() {
+                return Err(TtlError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TtlTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -205,15 +236,24 @@ mod tests {
     #[test]
     fn bad_inputs_rejected() {
         let mut t = TtlTable::new();
-        assert!(matches!(t.insert("", "v", 0, 100).unwrap_err(), TtlError::EmptyKey));
-        assert!(matches!(t.insert("k", "v", 0, 0).unwrap_err(), TtlError::ZeroTtl));
+        assert!(matches!(
+            t.insert("", "v", 0, 100).unwrap_err(),
+            TtlError::EmptyKey
+        ));
+        assert!(matches!(
+            t.insert("k", "v", 0, 0).unwrap_err(),
+            TtlError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = TtlTable::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), TtlError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            TtlError::SchemaMismatch
+        ));
     }
 
     #[test]

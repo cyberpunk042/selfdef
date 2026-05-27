@@ -69,11 +69,17 @@ impl Pattern {
     pub fn validate(&self) -> Result<(), PatternError> {
         match self {
             Pattern::PathGlob(s) | Pattern::Fqdn(s) | Pattern::SubstringRule(s) => {
-                if s.is_empty() { return Err(PatternError::Empty); }
+                if s.is_empty() {
+                    return Err(PatternError::Empty);
+                }
             }
             Pattern::Cidr(c) => {
-                if c.is_empty() { return Err(PatternError::Empty); }
-                if !c.contains('/') { return Err(PatternError::BadCidr(c.clone())); }
+                if c.is_empty() {
+                    return Err(PatternError::Empty);
+                }
+                if !c.contains('/') {
+                    return Err(PatternError::BadCidr(c.clone()));
+                }
             }
         }
         Ok(())
@@ -87,8 +93,12 @@ fn match_path_glob(pattern: &str, input: &str) -> bool {
 }
 
 fn glob_segs(pattern: &[&str], input: &[&str]) -> bool {
-    if pattern.is_empty() && input.is_empty() { return true; }
-    if pattern.is_empty() { return false; }
+    if pattern.is_empty() && input.is_empty() {
+        return true;
+    }
+    if pattern.is_empty() {
+        return false;
+    }
     let p0 = pattern[0];
     if p0 == "**" {
         // `**` matches zero or more segments — recurse on consuming patterns or input.
@@ -99,21 +109,33 @@ fn glob_segs(pattern: &[&str], input: &[&str]) -> bool {
         }
         false
     } else {
-        if input.is_empty() { return false; }
+        if input.is_empty() {
+            return false;
+        }
         let i0 = input[0];
         let seg_match = p0 == "*" || p0 == i0;
-        if !seg_match { return false; }
+        if !seg_match {
+            return false;
+        }
         glob_segs(&pattern[1..], &input[1..])
     }
 }
 
 fn match_cidr(cidr: &str, input: &str) -> bool {
-    let Some((prefix, bits_s)) = cidr.split_once('/') else { return false; };
-    let Ok(bits) = bits_s.parse::<u32>() else { return false; };
-    if bits > 32 { return false; }
+    let Some((prefix, bits_s)) = cidr.split_once('/') else {
+        return false;
+    };
+    let Ok(bits) = bits_s.parse::<u32>() else {
+        return false;
+    };
+    if bits > 32 {
+        return false;
+    }
     let prefix_parts: Vec<&str> = prefix.split('.').collect();
     let input_parts: Vec<&str> = input.split('.').collect();
-    if prefix_parts.len() != 4 || input_parts.len() != 4 { return false; }
+    if prefix_parts.len() != 4 || input_parts.len() != 4 {
+        return false;
+    }
     let octets = (bits / 8) as usize;
     let remainder_bits = bits % 8;
     if octets <= 4 && prefix_parts[..octets] != input_parts[..octets] {
@@ -223,7 +245,10 @@ mod tests {
     #[test]
     fn bad_cidr_rejected() {
         let p = Pattern::Cidr("10.0.0.0".into());
-        assert!(matches!(p.validate().unwrap_err(), PatternError::BadCidr(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PatternError::BadCidr(_)
+        ));
     }
 
     #[test]

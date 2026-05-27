@@ -57,7 +57,8 @@ pub fn authorize_flow(
                 Ok(())
             } else {
                 Err(SensitivityError::NotAuthorized {
-                    sensitivity, class,
+                    sensitivity,
+                    class,
                     reason: "confidential-to-cloud-requires-operator-approval",
                 })
             }

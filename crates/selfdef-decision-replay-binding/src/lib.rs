@@ -64,9 +64,18 @@ impl DecisionReplayBinding {
     }
 
     /// Bind a decision to a replay slot.
-    pub fn bind(&mut self, decision_id: &str, replay_slot_id: &str, at: &str) -> Result<(), BindingError> {
-        if decision_id.is_empty() { return Err(BindingError::EmptyDecisionId); }
-        if replay_slot_id.is_empty() { return Err(BindingError::EmptyReplaySlotId); }
+    pub fn bind(
+        &mut self,
+        decision_id: &str,
+        replay_slot_id: &str,
+        at: &str,
+    ) -> Result<(), BindingError> {
+        if decision_id.is_empty() {
+            return Err(BindingError::EmptyDecisionId);
+        }
+        if replay_slot_id.is_empty() {
+            return Err(BindingError::EmptyReplaySlotId);
+        }
         if self.bindings.iter().any(|b| b.decision_id == decision_id) {
             return Err(BindingError::AlreadyBound(decision_id.into()));
         }
@@ -80,7 +89,10 @@ impl DecisionReplayBinding {
 
     /// Unbind a decision.
     pub fn unbind(&mut self, decision_id: &str) -> Result<(), BindingError> {
-        let pos = self.bindings.iter().position(|b| b.decision_id == decision_id)
+        let pos = self
+            .bindings
+            .iter()
+            .position(|b| b.decision_id == decision_id)
             .ok_or_else(|| BindingError::NotBound(decision_id.into()))?;
         self.bindings.remove(pos);
         Ok(())
@@ -88,12 +100,16 @@ impl DecisionReplayBinding {
 
     /// Lookup decision → replay slot.
     pub fn lookup(&self, decision_id: &str) -> Option<&str> {
-        self.bindings.iter().find(|b| b.decision_id == decision_id).map(|b| b.replay_slot_id.as_str())
+        self.bindings
+            .iter()
+            .find(|b| b.decision_id == decision_id)
+            .map(|b| b.replay_slot_id.as_str())
     }
 
     /// Reverse lookup: replay slot → decision ids.
     pub fn decisions_for_slot(&self, replay_slot_id: &str) -> Vec<&str> {
-        self.bindings.iter()
+        self.bindings
+            .iter()
             .filter(|b| b.replay_slot_id == replay_slot_id)
             .map(|b| b.decision_id.as_str())
             .collect()
@@ -107,8 +123,12 @@ impl DecisionReplayBinding {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for b in &self.bindings {
-            if b.decision_id.is_empty() { return Err(BindingError::EmptyDecisionId); }
-            if b.replay_slot_id.is_empty() { return Err(BindingError::EmptyReplaySlotId); }
+            if b.decision_id.is_empty() {
+                return Err(BindingError::EmptyDecisionId);
+            }
+            if b.replay_slot_id.is_empty() {
+                return Err(BindingError::EmptyReplaySlotId);
+            }
             if !seen.insert(b.decision_id.as_str()) {
                 return Err(BindingError::AlreadyBound(b.decision_id.clone()));
             }
@@ -118,7 +138,9 @@ impl DecisionReplayBinding {
 }
 
 impl Default for DecisionReplayBinding {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -142,7 +164,10 @@ mod tests {
     fn bind_duplicate_rejected() {
         let mut r = DecisionReplayBinding::new();
         r.bind("d1", "slot-a", "t").unwrap();
-        assert!(matches!(r.bind("d1", "slot-b", "t").unwrap_err(), BindingError::AlreadyBound(_)));
+        assert!(matches!(
+            r.bind("d1", "slot-b", "t").unwrap_err(),
+            BindingError::AlreadyBound(_)
+        ));
     }
 
     #[test]
@@ -156,7 +181,10 @@ mod tests {
     #[test]
     fn unbind_missing_rejected() {
         let mut r = DecisionReplayBinding::new();
-        assert!(matches!(r.unbind("d1").unwrap_err(), BindingError::NotBound(_)));
+        assert!(matches!(
+            r.unbind("d1").unwrap_err(),
+            BindingError::NotBound(_)
+        ));
     }
 
     #[test]
@@ -174,20 +202,29 @@ mod tests {
     #[test]
     fn empty_decision_id_rejected() {
         let mut r = DecisionReplayBinding::new();
-        assert!(matches!(r.bind("", "slot", "t").unwrap_err(), BindingError::EmptyDecisionId));
+        assert!(matches!(
+            r.bind("", "slot", "t").unwrap_err(),
+            BindingError::EmptyDecisionId
+        ));
     }
 
     #[test]
     fn empty_slot_id_rejected() {
         let mut r = DecisionReplayBinding::new();
-        assert!(matches!(r.bind("d1", "", "t").unwrap_err(), BindingError::EmptyReplaySlotId));
+        assert!(matches!(
+            r.bind("d1", "", "t").unwrap_err(),
+            BindingError::EmptyReplaySlotId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = DecisionReplayBinding::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), BindingError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BindingError::SchemaMismatch
+        ));
     }
 
     #[test]

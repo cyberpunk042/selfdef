@@ -246,13 +246,22 @@ impl SandboxMirrorSnapshot {
 
     /// Count of allocations currently Running across all tiers.
     pub fn running_count(&self) -> usize {
-        self.allocations.iter().filter(|a| a.state == AllocationState::Running).count()
+        self.allocations
+            .iter()
+            .filter(|a| a.state == AllocationState::Running)
+            .count()
     }
 
     /// Total resident memory across active (Running + Checkpointed) allocations, in MiB.
     pub fn total_resident_mb(&self) -> u64 {
-        self.allocations.iter()
-            .filter(|a| matches!(a.state, AllocationState::Running | AllocationState::Checkpointed))
+        self.allocations
+            .iter()
+            .filter(|a| {
+                matches!(
+                    a.state,
+                    AllocationState::Running | AllocationState::Checkpointed
+                )
+            })
             .map(|a| a.resident_mb as u64)
             .sum()
     }
@@ -314,7 +323,10 @@ mod tests {
             allocations: vec![],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            snap.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -334,18 +346,36 @@ mod tests {
         };
         let summaries = snap.recompute_summaries();
         assert_eq!(summaries.len(), 4);
-        let a = summaries.iter().find(|s| s.tier == SandboxTier::TierA).unwrap();
+        let a = summaries
+            .iter()
+            .find(|s| s.tier == SandboxTier::TierA)
+            .unwrap();
         assert_eq!(a.running, 2);
-        let d = summaries.iter().find(|s| s.tier == SandboxTier::TierD).unwrap();
+        let d = summaries
+            .iter()
+            .find(|s| s.tier == SandboxTier::TierD)
+            .unwrap();
         assert_eq!(d.quarantined, 1);
     }
 
     #[test]
     fn ms032_range_for_each_tier() {
-        assert_eq!(SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierA), (1, 1));
-        assert_eq!(SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierB), (2, 5));
-        assert_eq!(SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierC), (6, 6));
-        assert_eq!(SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierD), (7, 9));
+        assert_eq!(
+            SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierA),
+            (1, 1)
+        );
+        assert_eq!(
+            SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierB),
+            (2, 5)
+        );
+        assert_eq!(
+            SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierC),
+            (6, 6)
+        );
+        assert_eq!(
+            SandboxMirrorSnapshot::ms032_range_for(SandboxTier::TierD),
+            (7, 9)
+        );
     }
 
     #[test]
@@ -354,19 +384,35 @@ mod tests {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: "2026-05-19T00:00:00Z".into(),
             summaries: vec![],
-            allocations: vec![mk_alloc("z", SandboxTier::TierA, 0, AllocationState::Running)],
+            allocations: vec![mk_alloc(
+                "z",
+                SandboxTier::TierA,
+                0,
+                AllocationState::Running,
+            )],
             signature: String::new(),
         };
-        assert!(matches!(bad_zero.validate_ms032_indices().unwrap_err(), MirrorError::InvalidMs032Tier(0)));
+        assert!(matches!(
+            bad_zero.validate_ms032_indices().unwrap_err(),
+            MirrorError::InvalidMs032Tier(0)
+        ));
 
         let bad_high = SandboxMirrorSnapshot {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: "2026-05-19T00:00:00Z".into(),
             summaries: vec![],
-            allocations: vec![mk_alloc("h", SandboxTier::TierD, 10, AllocationState::Running)],
+            allocations: vec![mk_alloc(
+                "h",
+                SandboxTier::TierD,
+                10,
+                AllocationState::Running,
+            )],
             signature: String::new(),
         };
-        assert!(matches!(bad_high.validate_ms032_indices().unwrap_err(), MirrorError::InvalidMs032Tier(10)));
+        assert!(matches!(
+            bad_high.validate_ms032_indices().unwrap_err(),
+            MirrorError::InvalidMs032Tier(10)
+        ));
     }
 
     #[test]

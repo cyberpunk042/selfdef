@@ -100,12 +100,12 @@ impl ActionStepBudget {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let mut m = BTreeMap::new();
-        m.insert(Profile::Private,      8);
-        m.insert(Profile::Fast,         32);
-        m.insert(Profile::Careful,      16);
-        m.insert(Profile::Autonomous,   64);
+        m.insert(Profile::Private, 8);
+        m.insert(Profile::Fast, 32);
+        m.insert(Profile::Careful, 16);
+        m.insert(Profile::Autonomous, 64);
         m.insert(Profile::Experimental, 256);
-        m.insert(Profile::Production,   32);
+        m.insert(Profile::Production, 32);
         Self {
             schema_version: SCHEMA_VERSION.into(),
             max_steps: m,
@@ -115,11 +115,17 @@ impl ActionStepBudget {
 
     /// Start.
     pub fn start(&mut self, id: &str, profile: Profile) -> Result<(), BudgetError> {
-        if id.is_empty() { return Err(BudgetError::EmptyId); }
+        if id.is_empty() {
+            return Err(BudgetError::EmptyId);
+        }
         if self.counters.iter().any(|c| c.id == id) {
             return Err(BudgetError::DuplicateAction(id.into()));
         }
-        self.counters.push(Counter { id: id.into(), profile, used: 0 });
+        self.counters.push(Counter {
+            id: id.into(),
+            profile,
+            used: 0,
+        });
         Ok(())
     }
 
@@ -138,12 +144,17 @@ impl ActionStepBudget {
             return StepVerdict::Exhausted { cap };
         }
         self.counters[pos].used += 1;
-        StepVerdict::Accepted { remaining: cap - self.counters[pos].used }
+        StepVerdict::Accepted {
+            remaining: cap - self.counters[pos].used,
+        }
     }
 
     /// Finish.
     pub fn finish(&mut self, id: &str) -> Result<(), BudgetError> {
-        let pos = self.counters.iter().position(|c| c.id == id)
+        let pos = self
+            .counters
+            .iter()
+            .position(|c| c.id == id)
             .ok_or_else(|| BudgetError::UnknownAction(id.into()))?;
         self.counters.remove(pos);
         Ok(())
@@ -151,9 +162,13 @@ impl ActionStepBudget {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
         for c in &self.counters {
-            if c.id.is_empty() { return Err(BudgetError::EmptyId); }
+            if c.id.is_empty() {
+                return Err(BudgetError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -197,13 +212,19 @@ mod tests {
     fn duplicate_start_rejected() {
         let mut b = ActionStepBudget::canonical();
         b.start("a", Profile::Fast).unwrap();
-        assert!(matches!(b.start("a", Profile::Fast).unwrap_err(), BudgetError::DuplicateAction(_)));
+        assert!(matches!(
+            b.start("a", Profile::Fast).unwrap_err(),
+            BudgetError::DuplicateAction(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut b = ActionStepBudget::canonical();
-        assert!(matches!(b.start("", Profile::Fast).unwrap_err(), BudgetError::EmptyId));
+        assert!(matches!(
+            b.start("", Profile::Fast).unwrap_err(),
+            BudgetError::EmptyId
+        ));
     }
 
     #[test]
@@ -211,14 +232,20 @@ mod tests {
         let mut b = ActionStepBudget::canonical();
         b.start("a", Profile::Fast).unwrap();
         b.finish("a").unwrap();
-        assert!(matches!(b.finish("a").unwrap_err(), BudgetError::UnknownAction(_)));
+        assert!(matches!(
+            b.finish("a").unwrap_err(),
+            BudgetError::UnknownAction(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ActionStepBudget::canonical();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

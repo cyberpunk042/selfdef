@@ -18,11 +18,17 @@ fn print_verdicts() {
     println!();
     println!("5 verdicts returned by `CapabilityTokenStore::check(id, scope, now_ms)`:");
     for (verdict, desc) in &[
-        ("Ok",            "token present + active + not revoked + carries the requested scope"),
-        ("Expired",       "token present but `now_ms > expires_at_ms`"),
-        ("Revoked",       "token present but `revoked == true`"),
-        ("Unknown",       "no token registered under this id"),
-        ("MissingScope",  "token Ok-otherwise but does not carry the requested scope"),
+        (
+            "Ok",
+            "token present + active + not revoked + carries the requested scope",
+        ),
+        ("Expired", "token present but `now_ms > expires_at_ms`"),
+        ("Revoked", "token present but `revoked == true`"),
+        ("Unknown", "no token registered under this id"),
+        (
+            "MissingScope",
+            "token Ok-otherwise but does not carry the requested scope",
+        ),
     ] {
         println!("  - {:<13} {}", verdict, desc);
     }
@@ -34,17 +40,34 @@ fn print_schema() {
     println!("Token shape (per `selfdef-capability-token-store::Token`):");
     println!("  - id              (operator-chosen identifier)");
     println!("  - holder          (MS003 fingerprint of holder actor)");
-    println!("  - scopes          (BTreeSet<String>; canonical names from selfdef-capability-word)");
+    println!(
+        "  - scopes          (BTreeSet<String>; canonical names from selfdef-capability-word)"
+    );
     println!("  - expires_at_ms   (mandatory; bounded TTL per SDD-044 goal 3)");
     println!("  - revoked         (bool; surgical revocation per SDD-044 goal 4)");
     println!();
     println!("Companion crates (per SDD-044 § Recommended design):");
     for (crate_name, role) in &[
-        ("selfdef-capability-token-store",   "215 LOC, 9 tests — issue + revoke + check primitives"),
-        ("selfdef-capability-word",          "496 LOC — canonical scope vocabulary (drift-prevention)"),
-        ("selfdef-capability-mirror",        "416 LOC — cross-repo state projection (MS007 typed-mirror)"),
-        ("selfdef-tool-capability-policy",   "12 tests — per-tool scope requirements (consumes scopes)"),
-        ("selfdef-profile-authority-gate",   "660 LOC — gates profile transitions on holder scopes"),
+        (
+            "selfdef-capability-token-store",
+            "215 LOC, 9 tests — issue + revoke + check primitives",
+        ),
+        (
+            "selfdef-capability-word",
+            "496 LOC — canonical scope vocabulary (drift-prevention)",
+        ),
+        (
+            "selfdef-capability-mirror",
+            "416 LOC — cross-repo state projection (MS007 typed-mirror)",
+        ),
+        (
+            "selfdef-tool-capability-policy",
+            "12 tests — per-tool scope requirements (consumes scopes)",
+        ),
+        (
+            "selfdef-profile-authority-gate",
+            "660 LOC — gates profile transitions on holder scopes",
+        ),
     ] {
         println!("  - {:<35} {}", crate_name, role);
     }

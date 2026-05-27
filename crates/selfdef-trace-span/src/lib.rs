@@ -39,8 +39,7 @@ pub const DOCTRINE_TRACE_AT_DECISION: &str =
     "Trace is emitted when the action is decided, not after";
 
 /// Doctrine surface verbatim per F03944 dump 16221.
-pub const DOCTRINE_EVERY_ACTION_EMITS_TRACE: &str =
-    "Every action MUST emit a trace event object";
+pub const DOCTRINE_EVERY_ACTION_EMITS_TRACE: &str = "Every action MUST emit a trace event object";
 
 /// Policy outcome (mirrors MS033 4-state).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -170,11 +169,21 @@ pub fn validate(s: &TraceSpan) -> Result<(), SpanError> {
         return Err(SpanError::ClosedAtMissing);
     }
     // String fields non-empty.
-    if s.trace_id.is_empty() { return Err(SpanError::FieldEmpty("trace_id")); }
-    if s.profile.is_empty() { return Err(SpanError::FieldEmpty("profile")); }
-    if s.model.is_empty() { return Err(SpanError::FieldEmpty("model")); }
-    if s.provider.is_empty() { return Err(SpanError::FieldEmpty("provider")); }
-    if s.branch_id.is_empty() { return Err(SpanError::FieldEmpty("branch_id")); }
+    if s.trace_id.is_empty() {
+        return Err(SpanError::FieldEmpty("trace_id"));
+    }
+    if s.profile.is_empty() {
+        return Err(SpanError::FieldEmpty("profile"));
+    }
+    if s.model.is_empty() {
+        return Err(SpanError::FieldEmpty("model"));
+    }
+    if s.provider.is_empty() {
+        return Err(SpanError::FieldEmpty("provider"));
+    }
+    if s.branch_id.is_empty() {
+        return Err(SpanError::FieldEmpty("branch_id"));
+    }
     if s.risk_score > 100 {
         return Err(SpanError::RiskOutOfRange(s.risk_score));
     }
@@ -184,10 +193,14 @@ pub fn validate(s: &TraceSpan) -> Result<(), SpanError> {
 /// Validate the two doctrine constants.
 pub fn assert_doctrines_intact(at_decision: &str, every_action: &str) -> Result<(), SpanError> {
     if at_decision != DOCTRINE_TRACE_AT_DECISION {
-        return Err(SpanError::DoctrineTampered { expected: DOCTRINE_TRACE_AT_DECISION.into() });
+        return Err(SpanError::DoctrineTampered {
+            expected: DOCTRINE_TRACE_AT_DECISION.into(),
+        });
     }
     if every_action != DOCTRINE_EVERY_ACTION_EMITS_TRACE {
-        return Err(SpanError::DoctrineTampered { expected: DOCTRINE_EVERY_ACTION_EMITS_TRACE.into() });
+        return Err(SpanError::DoctrineTampered {
+            expected: DOCTRINE_EVERY_ACTION_EMITS_TRACE.into(),
+        });
     }
     Ok(())
 }
@@ -229,49 +242,70 @@ mod tests {
     fn missing_trace_id_rejected() {
         let mut s = ok_span();
         s.trace_id = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::FieldEmpty("trace_id")));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::FieldEmpty("trace_id")
+        ));
     }
 
     #[test]
     fn missing_profile_rejected() {
         let mut s = ok_span();
         s.profile = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::FieldEmpty("profile")));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::FieldEmpty("profile")
+        ));
     }
 
     #[test]
     fn missing_model_rejected() {
         let mut s = ok_span();
         s.model = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::FieldEmpty("model")));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::FieldEmpty("model")
+        ));
     }
 
     #[test]
     fn missing_provider_rejected() {
         let mut s = ok_span();
         s.provider = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::FieldEmpty("provider")));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::FieldEmpty("provider")
+        ));
     }
 
     #[test]
     fn missing_branch_id_rejected() {
         let mut s = ok_span();
         s.branch_id = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::FieldEmpty("branch_id")));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::FieldEmpty("branch_id")
+        ));
     }
 
     #[test]
     fn risk_score_over_100_rejected() {
         let mut s = ok_span();
         s.risk_score = 150;
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::RiskOutOfRange(150)));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::RiskOutOfRange(150)
+        ));
     }
 
     #[test]
     fn closed_at_empty_rejected() {
         let mut s = ok_span();
         s.closed_at = String::new();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::ClosedAtMissing));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::ClosedAtMissing
+        ));
     }
 
     #[test]
@@ -285,7 +319,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = ok_span();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(validate(&s).unwrap_err(), SpanError::SchemaMismatch { .. }));
+        assert!(matches!(
+            validate(&s).unwrap_err(),
+            SpanError::SchemaMismatch { .. }
+        ));
     }
 
     // --- Helper methods ---
@@ -299,7 +336,7 @@ mod tests {
     #[test]
     fn cost_usd_conversion() {
         let mut s = ok_span();
-        s.cost_millicents = 250_000;  // 250000 millicents = 2.50 USD
+        s.cost_millicents = 250_000; // 250000 millicents = 2.50 USD
         assert!((s.cost_usd() - 2.50).abs() < 1e-9);
     }
 
@@ -307,12 +344,19 @@ mod tests {
 
     #[test]
     fn doctrines_verbatim() {
-        assert_eq!(DOCTRINE_TRACE_AT_DECISION, "Trace is emitted when the action is decided, not after");
-        assert_eq!(DOCTRINE_EVERY_ACTION_EMITS_TRACE, "Every action MUST emit a trace event object");
+        assert_eq!(
+            DOCTRINE_TRACE_AT_DECISION,
+            "Trace is emitted when the action is decided, not after"
+        );
+        assert_eq!(
+            DOCTRINE_EVERY_ACTION_EMITS_TRACE,
+            "Every action MUST emit a trace event object"
+        );
         assert_doctrines_intact(
             DOCTRINE_TRACE_AT_DECISION,
             DOCTRINE_EVERY_ACTION_EMITS_TRACE,
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
@@ -327,9 +371,18 @@ mod tests {
 
     #[test]
     fn hardware_target_serde_kebab() {
-        assert_eq!(serde_json::to_string(&HardwareTarget::BlackwellOracle).unwrap(), "\"blackwell-oracle\"");
-        assert_eq!(serde_json::to_string(&HardwareTarget::CpuPulse).unwrap(), "\"cpu-pulse\"");
-        assert_eq!(serde_json::to_string(&HardwareTarget::Rocm3090).unwrap(), "\"rocm-3090\"");
+        assert_eq!(
+            serde_json::to_string(&HardwareTarget::BlackwellOracle).unwrap(),
+            "\"blackwell-oracle\""
+        );
+        assert_eq!(
+            serde_json::to_string(&HardwareTarget::CpuPulse).unwrap(),
+            "\"cpu-pulse\""
+        );
+        assert_eq!(
+            serde_json::to_string(&HardwareTarget::Rocm3090).unwrap(),
+            "\"rocm-3090\""
+        );
     }
 
     #[test]

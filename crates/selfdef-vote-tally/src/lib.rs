@@ -115,16 +115,26 @@ impl VoteTally {
 
     /// Register voter.
     pub fn register(&mut self, voter: &str, weight: u32) -> Result<(), VoteError> {
-        if voter.is_empty() { return Err(VoteError::EmptyVoter); }
-        if weight == 0 { return Err(VoteError::ZeroWeight); }
-        if self.voters.contains_key(voter) { return Err(VoteError::DuplicateVoter(voter.into())); }
-        self.voters.insert(voter.into(), Voter { weight, cast: None });
+        if voter.is_empty() {
+            return Err(VoteError::EmptyVoter);
+        }
+        if weight == 0 {
+            return Err(VoteError::ZeroWeight);
+        }
+        if self.voters.contains_key(voter) {
+            return Err(VoteError::DuplicateVoter(voter.into()));
+        }
+        self.voters
+            .insert(voter.into(), Voter { weight, cast: None });
         Ok(())
     }
 
     /// Cast vote (replaces prior).
     pub fn cast(&mut self, voter: &str, vote: Vote) -> Result<(), VoteError> {
-        let v = self.voters.get_mut(voter).ok_or_else(|| VoteError::UnknownVoter(voter.into()))?;
+        let v = self
+            .voters
+            .get_mut(voter)
+            .ok_or_else(|| VoteError::UnknownVoter(voter.into()))?;
         v.cast = Some(vote);
         Ok(())
     }
@@ -138,9 +148,18 @@ impl VoteTally {
         for v in self.voters.values() {
             match v.cast {
                 None => {}
-                Some(Vote::Approve) => { approve = approve.saturating_add(v.weight as u64); cast += 1; }
-                Some(Vote::Reject) => { reject = reject.saturating_add(v.weight as u64); cast += 1; }
-                Some(Vote::Abstain) => { abstain = abstain.saturating_add(v.weight as u64); cast += 1; }
+                Some(Vote::Approve) => {
+                    approve = approve.saturating_add(v.weight as u64);
+                    cast += 1;
+                }
+                Some(Vote::Reject) => {
+                    reject = reject.saturating_add(v.weight as u64);
+                    cast += 1;
+                }
+                Some(Vote::Abstain) => {
+                    abstain = abstain.saturating_add(v.weight as u64);
+                    cast += 1;
+                }
             }
         }
         let total = self.voters.len() as u32;
@@ -151,18 +170,28 @@ impl VoteTally {
             // approve / (approve + reject) × 10000 >= threshold → Approved.
             let approve_bp = (approve.saturating_mul(10_000)) / participating;
             if cast == total {
-                if approve_bp >= self.approve_threshold_bp as u64 { Decision::Approved } else { Decision::Rejected }
+                if approve_bp >= self.approve_threshold_bp as u64 {
+                    Decision::Approved
+                } else {
+                    Decision::Rejected
+                }
             } else {
                 // Not everyone has cast yet; decisive if approve already at threshold
                 // OR reject share guarantees rejection no matter how remaining votes fall.
-                let remaining_weight: u64 = self.voters.values()
+                let remaining_weight: u64 = self
+                    .voters
+                    .values()
                     .filter(|v| v.cast.is_none())
                     .map(|v| v.weight as u64)
                     .sum();
                 // Best-case approve if all remaining vote approve:
                 let best_approve = approve + remaining_weight;
                 let best_part = best_approve + reject;
-                let best_approve_bp = if best_part == 0 { 10000 } else { (best_approve * 10000) / best_part };
+                let best_approve_bp = if best_part == 0 {
+                    10000
+                } else {
+                    (best_approve * 10000) / best_part
+                };
                 // Worst-case approve_bp (no remaining ever approves):
                 let worst_approve_bp = if participating == 0 { 0 } else { approve_bp };
                 if worst_approve_bp >= self.approve_threshold_bp as u64 {
@@ -174,18 +203,31 @@ impl VoteTally {
                 }
             }
         };
-        Tally { approve, reject, abstain, cast, total, decision }
+        Tally {
+            approve,
+            reject,
+            abstain,
+            cast,
+            total,
+            decision,
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), VoteError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(VoteError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(VoteError::SchemaMismatch);
+        }
         if self.approve_threshold_bp == 0 || self.approve_threshold_bp > 10000 {
             return Err(VoteError::BadThreshold);
         }
         for (k, v) in &self.voters {
-            if k.is_empty() { return Err(VoteError::EmptyVoter); }
-            if v.weight == 0 { return Err(VoteError::ZeroWeight); }
+            if k.is_empty() {
+                return Err(VoteError::EmptyVoter);
+            }
+            if v.weight == 0 {
+                return Err(VoteError::ZeroWeight);
+            }
         }
         Ok(())
     }
@@ -259,27 +301,45 @@ mod tests {
     fn duplicate_voter_rejected() {
         let mut t = VoteTally::new(5001).unwrap();
         t.register("a", 1).unwrap();
-        assert!(matches!(t.register("a", 1).unwrap_err(), VoteError::DuplicateVoter(_)));
+        assert!(matches!(
+            t.register("a", 1).unwrap_err(),
+            VoteError::DuplicateVoter(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut t = VoteTally::new(5001).unwrap();
-        assert!(matches!(t.register("", 1).unwrap_err(), VoteError::EmptyVoter));
-        assert!(matches!(t.register("a", 0).unwrap_err(), VoteError::ZeroWeight));
+        assert!(matches!(
+            t.register("", 1).unwrap_err(),
+            VoteError::EmptyVoter
+        ));
+        assert!(matches!(
+            t.register("a", 0).unwrap_err(),
+            VoteError::ZeroWeight
+        ));
     }
 
     #[test]
     fn bad_threshold_rejected() {
-        assert!(matches!(VoteTally::new(0).unwrap_err(), VoteError::BadThreshold));
-        assert!(matches!(VoteTally::new(10001).unwrap_err(), VoteError::BadThreshold));
+        assert!(matches!(
+            VoteTally::new(0).unwrap_err(),
+            VoteError::BadThreshold
+        ));
+        assert!(matches!(
+            VoteTally::new(10001).unwrap_err(),
+            VoteError::BadThreshold
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = VoteTally::new(5001).unwrap();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), VoteError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            VoteError::SchemaMismatch
+        ));
     }
 
     #[test]

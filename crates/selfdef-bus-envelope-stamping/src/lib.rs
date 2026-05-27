@@ -93,9 +93,19 @@ impl BusEnvelopeStamping {
     }
 
     /// Stamp an envelope.
-    pub fn stamp(&mut self, emitter: &str, topic: &str, payload: &[u8], ts_ms: u64) -> Result<Envelope, StampError> {
-        if emitter.is_empty() { return Err(StampError::EmptyEmitter); }
-        if topic.is_empty() { return Err(StampError::EmptyTopic); }
+    pub fn stamp(
+        &mut self,
+        emitter: &str,
+        topic: &str,
+        payload: &[u8],
+        ts_ms: u64,
+    ) -> Result<Envelope, StampError> {
+        if emitter.is_empty() {
+            return Err(StampError::EmptyEmitter);
+        }
+        if topic.is_empty() {
+            return Err(StampError::EmptyTopic);
+        }
         let seq = *self.next_seq.entry(emitter.into()).or_insert(1);
         *self.next_seq.get_mut(emitter).unwrap() = seq.wrapping_add(1);
         Ok(Envelope {
@@ -111,14 +121,23 @@ impl BusEnvelopeStamping {
     pub fn verify(env: &Envelope, payload: &[u8]) -> Result<(), StampError> {
         let h = fnv1a_64(payload);
         if h != env.payload_hash {
-            return Err(StampError::HashMismatch { stamped: env.payload_hash, recomputed: h });
+            return Err(StampError::HashMismatch {
+                stamped: env.payload_hash,
+                recomputed: h,
+            });
         }
         Ok(())
     }
 
     /// Advance the next seq counter past `last_observed_seq`.
-    pub fn recover_emitter_state(&mut self, emitter: &str, last_observed_seq: u64) -> Result<(), StampError> {
-        if emitter.is_empty() { return Err(StampError::EmptyEmitter); }
+    pub fn recover_emitter_state(
+        &mut self,
+        emitter: &str,
+        last_observed_seq: u64,
+    ) -> Result<(), StampError> {
+        if emitter.is_empty() {
+            return Err(StampError::EmptyEmitter);
+        }
         let proposed = last_observed_seq.wrapping_add(1);
         let existing = *self.next_seq.get(emitter).unwrap_or(&1);
         if existing >= proposed {
@@ -135,16 +154,22 @@ impl BusEnvelopeStamping {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StampError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StampError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StampError::SchemaMismatch);
+        }
         for k in self.next_seq.keys() {
-            if k.is_empty() { return Err(StampError::EmptyEmitter); }
+            if k.is_empty() {
+                return Err(StampError::EmptyEmitter);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for BusEnvelopeStamping {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -198,7 +223,10 @@ mod tests {
         s.stamp("e1", "t", b"x", 0).unwrap(); // seq 1
         s.stamp("e1", "t", b"y", 0).unwrap(); // seq 2
         // next is 3; recovering "saw last_seq=1" implies proposed=2, < existing 3 → reject.
-        assert!(matches!(s.recover_emitter_state("e1", 1).unwrap_err(), StampError::BackwardRecover { .. }));
+        assert!(matches!(
+            s.recover_emitter_state("e1", 1).unwrap_err(),
+            StampError::BackwardRecover { .. }
+        ));
     }
 
     #[test]
@@ -212,15 +240,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = BusEnvelopeStamping::new();
-        assert!(matches!(s.stamp("", "t", b"", 0).unwrap_err(), StampError::EmptyEmitter));
-        assert!(matches!(s.stamp("e", "", b"", 0).unwrap_err(), StampError::EmptyTopic));
+        assert!(matches!(
+            s.stamp("", "t", b"", 0).unwrap_err(),
+            StampError::EmptyEmitter
+        ));
+        assert!(matches!(
+            s.stamp("e", "", b"", 0).unwrap_err(),
+            StampError::EmptyTopic
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = BusEnvelopeStamping::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), StampError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            StampError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -144,10 +144,7 @@ fn run_df() -> Vec<MountUsage> {
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     let out = Command::new("df")
-        .args([
-            "-P",
-            "--output=source,fstype,size,used,avail,pcent,target",
-        ])
+        .args(["-P", "--output=source,fstype,size,used,avail,pcent,target"])
         .output();
     let body = match out {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
@@ -186,11 +183,7 @@ fn dir_usage(path: &Path) -> (u64, u64) {
 }
 
 fn probe_log_dirs() -> Vec<LogDirUsage> {
-    let paths = [
-        "/var/log/selfdef",
-        "/var/cache/selfdef",
-        "/var/lib/selfdef",
-    ];
+    let paths = ["/var/log/selfdef", "/var/cache/selfdef", "/var/lib/selfdef"];
     paths
         .iter()
         .map(|p| {
@@ -314,10 +307,7 @@ mod tests {
     #[test]
     fn dir_usage_counts_known_path() {
         // Use a tempdir we create ourselves so the test is portable.
-        let tmp = std::env::temp_dir().join(format!(
-            "selfdef-storage-test-{}",
-            std::process::id()
-        ));
+        let tmp = std::env::temp_dir().join(format!("selfdef-storage-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         std::fs::write(tmp.join("a.txt"), b"hello").unwrap();

@@ -117,15 +117,23 @@ impl LlmTemperaturePolicy {
 
     /// Admit.
     pub fn admit(&self, mode: ExecutionMode, t: f32) -> AdmitDecision {
-        if t.is_nan() { return AdmitDecision::Denied; }
+        if t.is_nan() {
+            return AdmitDecision::Denied;
+        }
         let r = self.range(mode);
-        if t >= r.min && t <= r.max { AdmitDecision::Allow } else { AdmitDecision::Denied }
+        if t >= r.min && t <= r.max {
+            AdmitDecision::Allow
+        } else {
+            AdmitDecision::Denied
+        }
     }
 
     /// Clamp into range.
     pub fn clamp(&self, mode: ExecutionMode, t: f32) -> f32 {
         let r = self.range(mode);
-        if t.is_nan() { return r.min; }
+        if t.is_nan() {
+            return r.min;
+        }
         t.clamp(r.min, r.max)
     }
 
@@ -195,7 +203,10 @@ mod tests {
     #[test]
     fn nan_denied() {
         let p = LlmTemperaturePolicy::canonical();
-        assert_eq!(p.admit(ExecutionMode::Plan, f32::NAN), AdmitDecision::Denied);
+        assert_eq!(
+            p.admit(ExecutionMode::Plan, f32::NAN),
+            AdmitDecision::Denied
+        );
     }
 
     #[test]
@@ -208,20 +219,32 @@ mod tests {
     fn bad_range_rejected() {
         let mut p = LlmTemperaturePolicy::canonical();
         p.execute = TempRange { min: 0.5, max: 0.1 };
-        assert!(matches!(p.validate().unwrap_err(), TempError::BadRange(ExecutionMode::Execute, _, _)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TempError::BadRange(ExecutionMode::Execute, _, _)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = LlmTemperaturePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TempError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TempError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn mode_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExecutionMode::DryRun).unwrap(), "\"dry-run\"");
-        assert_eq!(serde_json::to_string(&ExecutionMode::Replay).unwrap(), "\"replay\"");
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::DryRun).unwrap(),
+            "\"dry-run\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::Replay).unwrap(),
+            "\"replay\""
+        );
     }
 
     #[test]

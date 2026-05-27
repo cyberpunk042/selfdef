@@ -53,11 +53,17 @@ impl SemVer {
     /// Parse "x.y.z".
     pub fn parse(s: &str) -> Option<Self> {
         let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() != 3 { return None; }
+        if parts.len() != 3 {
+            return None;
+        }
         let major = parts[0].parse().ok()?;
         let minor = parts[1].parse().ok()?;
         let patch = parts[2].parse().ok()?;
-        Some(Self { major, minor, patch })
+        Some(Self {
+            major,
+            minor,
+            patch,
+        })
     }
     /// "x.y.z".
     pub fn to_string_dotted(self) -> String {
@@ -167,10 +173,17 @@ impl RulePackManifest {
         }
         for p in &self.packs {
             if SemVer::parse(&p.semver).is_none() {
-                return Err(PackError::BadSemver { kind: p.kind, semver: p.semver.clone() });
+                return Err(PackError::BadSemver {
+                    kind: p.kind,
+                    semver: p.semver.clone(),
+                });
             }
-            if p.signature.is_empty() { return Err(PackError::Unsigned(p.kind)); }
-            if p.loaded_at.is_empty() { return Err(PackError::MissingLoadedAt(p.kind)); }
+            if p.signature.is_empty() {
+                return Err(PackError::Unsigned(p.kind));
+            }
+            if p.loaded_at.is_empty() {
+                return Err(PackError::MissingLoadedAt(p.kind));
+            }
         }
         Ok(())
     }
@@ -179,7 +192,11 @@ impl RulePackManifest {
     pub fn validate_floors(&self, floors: &PinnedFloors) -> Result<(), PackError> {
         self.validate()?;
         for p in &self.packs {
-            let floor = floors.floors.iter().find(|(k, _)| *k == p.kind).map(|(_, v)| *v)
+            let floor = floors
+                .floors
+                .iter()
+                .find(|(k, _)| *k == p.kind)
+                .map(|(_, v)| *v)
                 .ok_or(PackError::NoFloor(p.kind))?;
             let got = SemVer::parse(&p.semver).expect("validated above");
             if got < floor {
@@ -198,7 +215,19 @@ impl PinnedFloors {
     /// Canonical floors — 1.0.0 for everything by default.
     pub fn canonical() -> Self {
         Self {
-            floors: REQUIRED_KINDS.iter().map(|k| (*k, SemVer { major: 1, minor: 0, patch: 0 })).collect(),
+            floors: REQUIRED_KINDS
+                .iter()
+                .map(|k| {
+                    (
+                        *k,
+                        SemVer {
+                            major: 1,
+                            minor: 0,
+                            patch: 0,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -230,7 +259,9 @@ mod tests {
 
     #[test]
     fn floors_pass() {
-        canonical_manifest().validate_floors(&PinnedFloors::canonical()).unwrap();
+        canonical_manifest()
+            .validate_floors(&PinnedFloors::canonical())
+            .unwrap();
     }
 
     #[test]
@@ -248,7 +279,10 @@ mod tests {
     fn count_invalid_caught() {
         let mut m = canonical_manifest();
         m.packs.pop();
-        assert!(matches!(m.validate().unwrap_err(), PackError::CountInvalid(7)));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            PackError::CountInvalid(7)
+        ));
     }
 
     #[test]
@@ -265,7 +299,10 @@ mod tests {
     fn bad_semver_caught() {
         let mut m = canonical_manifest();
         m.packs[0].semver = "1.2".into();
-        assert!(matches!(m.validate().unwrap_err(), PackError::BadSemver { .. }));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            PackError::BadSemver { .. }
+        ));
     }
 
     #[test]
@@ -285,7 +322,14 @@ mod tests {
     #[test]
     fn semver_parse_and_string() {
         let v = SemVer::parse("3.4.5").unwrap();
-        assert_eq!(v, SemVer { major: 3, minor: 4, patch: 5 });
+        assert_eq!(
+            v,
+            SemVer {
+                major: 3,
+                minor: 4,
+                patch: 5
+            }
+        );
         assert_eq!(v.to_string_dotted(), "3.4.5");
         assert!(SemVer::parse("1.2").is_none());
         assert!(SemVer::parse("abc").is_none());
@@ -293,9 +337,21 @@ mod tests {
 
     #[test]
     fn semver_ordering() {
-        let a = SemVer { major: 1, minor: 0, patch: 0 };
-        let b = SemVer { major: 1, minor: 0, patch: 1 };
-        let c = SemVer { major: 2, minor: 0, patch: 0 };
+        let a = SemVer {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
+        let b = SemVer {
+            major: 1,
+            minor: 0,
+            patch: 1,
+        };
+        let c = SemVer {
+            major: 2,
+            minor: 0,
+            patch: 0,
+        };
         assert!(a < b && b < c);
     }
 
@@ -303,14 +359,26 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = canonical_manifest();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), PackError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            PackError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PackKind::CollectorBudget).unwrap(), "\"collector-budget\"");
-        assert_eq!(serde_json::to_string(&PackKind::CommitAuthority).unwrap(), "\"commit-authority\"");
-        assert_eq!(serde_json::to_string(&PackKind::Sandbox).unwrap(), "\"sandbox\"");
+        assert_eq!(
+            serde_json::to_string(&PackKind::CollectorBudget).unwrap(),
+            "\"collector-budget\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PackKind::CommitAuthority).unwrap(),
+            "\"commit-authority\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PackKind::Sandbox).unwrap(),
+            "\"sandbox\""
+        );
     }
 
     #[test]

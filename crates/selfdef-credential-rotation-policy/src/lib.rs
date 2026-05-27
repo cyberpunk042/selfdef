@@ -97,21 +97,37 @@ impl CredentialRotationPolicy {
     }
 
     /// Register a credential.
-    pub fn register(&mut self, cred_id: &str, created_ms: u64, max_age_ms: u64, grace_ms: u64) -> Result<(), RotationError> {
-        if cred_id.is_empty() { return Err(RotationError::EmptyId); }
-        if max_age_ms == 0 { return Err(RotationError::ZeroMaxAge); }
-        self.credentials.insert(cred_id.into(), Credential {
-            created_ms,
-            max_age_ms,
-            grace_ms,
-            rotations: 0,
-        });
+    pub fn register(
+        &mut self,
+        cred_id: &str,
+        created_ms: u64,
+        max_age_ms: u64,
+        grace_ms: u64,
+    ) -> Result<(), RotationError> {
+        if cred_id.is_empty() {
+            return Err(RotationError::EmptyId);
+        }
+        if max_age_ms == 0 {
+            return Err(RotationError::ZeroMaxAge);
+        }
+        self.credentials.insert(
+            cred_id.into(),
+            Credential {
+                created_ms,
+                max_age_ms,
+                grace_ms,
+                rotations: 0,
+            },
+        );
         Ok(())
     }
 
     /// Record a rotation.
     pub fn rotate(&mut self, cred_id: &str, now_ms: u64) -> Result<(), RotationError> {
-        let c = self.credentials.get_mut(cred_id).ok_or_else(|| RotationError::UnknownCredential(cred_id.into()))?;
+        let c = self
+            .credentials
+            .get_mut(cred_id)
+            .ok_or_else(|| RotationError::UnknownCredential(cred_id.into()))?;
         c.created_ms = now_ms;
         c.rotations = c.rotations.saturating_add(1);
         Ok(())
@@ -119,10 +135,14 @@ impl CredentialRotationPolicy {
 
     /// Check status.
     pub fn check(&self, cred_id: &str, now_ms: u64) -> RotationVerdict {
-        let Some(c) = self.credentials.get(cred_id) else { return RotationVerdict::Unknown; };
+        let Some(c) = self.credentials.get(cred_id) else {
+            return RotationVerdict::Unknown;
+        };
         let age = now_ms.saturating_sub(c.created_ms);
         if age < c.max_age_ms {
-            return RotationVerdict::Fresh { remaining_ms: c.max_age_ms - age };
+            return RotationVerdict::Fresh {
+                remaining_ms: c.max_age_ms - age,
+            };
         }
         let overdue = age - c.max_age_ms;
         if overdue < c.grace_ms {
@@ -131,13 +151,16 @@ impl CredentialRotationPolicy {
                 grace_remaining_ms: c.grace_ms - overdue,
             }
         } else {
-            RotationVerdict::Expired { overdue_ms: overdue }
+            RotationVerdict::Expired {
+                overdue_ms: overdue,
+            }
         }
     }
 
     /// All credentials currently due or expired.
     pub fn needs_attention(&self, now_ms: u64) -> Vec<String> {
-        self.credentials.iter()
+        self.credentials
+            .iter()
             .filter(|(_, c)| {
                 let age = now_ms.saturating_sub(c.created_ms);
                 age >= c.max_age_ms
@@ -148,17 +171,25 @@ impl CredentialRotationPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RotationError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RotationError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RotationError::SchemaMismatch);
+        }
         for (id, c) in &self.credentials {
-            if id.is_empty() { return Err(RotationError::EmptyId); }
-            if c.max_age_ms == 0 { return Err(RotationError::ZeroMaxAge); }
+            if id.is_empty() {
+                return Err(RotationError::EmptyId);
+            }
+            if c.max_age_ms == 0 {
+                return Err(RotationError::ZeroMaxAge);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for CredentialRotationPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -169,7 +200,10 @@ mod tests {
     fn fresh_when_young() {
         let mut p = CredentialRotationPolicy::new();
         p.register("k", 0, 1000, 100).unwrap();
-        assert!(matches!(p.check("k", 500), RotationVerdict::Fresh { remaining_ms: 500 }));
+        assert!(matches!(
+            p.check("k", 500),
+            RotationVerdict::Fresh { remaining_ms: 500 }
+        ));
     }
 
     #[test]
@@ -177,7 +211,10 @@ mod tests {
         let mut p = CredentialRotationPolicy::new();
         p.register("k", 0, 1000, 100).unwrap();
         match p.check("k", 1050) {
-            RotationVerdict::DueForRotation { overdue_ms, grace_remaining_ms } => {
+            RotationVerdict::DueForRotation {
+                overdue_ms,
+                grace_remaining_ms,
+            } => {
                 assert_eq!(overdue_ms, 50);
                 assert_eq!(grace_remaining_ms, 50);
             }
@@ -207,7 +244,10 @@ mod tests {
         p.register("k", 0, 1000, 100).unwrap();
         p.rotate("k", 2000).unwrap();
         // Right after rotation: fresh.
-        assert!(matches!(p.check("k", 2500), RotationVerdict::Fresh { remaining_ms: 500 }));
+        assert!(matches!(
+            p.check("k", 2500),
+            RotationVerdict::Fresh { remaining_ms: 500 }
+        ));
         assert_eq!(p.credentials["k"].rotations, 1);
     }
 
@@ -225,26 +265,38 @@ mod tests {
     #[test]
     fn rotate_unknown_rejected() {
         let mut p = CredentialRotationPolicy::new();
-        assert!(matches!(p.rotate("nope", 0).unwrap_err(), RotationError::UnknownCredential(_)));
+        assert!(matches!(
+            p.rotate("nope", 0).unwrap_err(),
+            RotationError::UnknownCredential(_)
+        ));
     }
 
     #[test]
     fn zero_max_age_rejected() {
         let mut p = CredentialRotationPolicy::new();
-        assert!(matches!(p.register("k", 0, 0, 0).unwrap_err(), RotationError::ZeroMaxAge));
+        assert!(matches!(
+            p.register("k", 0, 0, 0).unwrap_err(),
+            RotationError::ZeroMaxAge
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = CredentialRotationPolicy::new();
-        assert!(matches!(p.register("", 0, 1, 0).unwrap_err(), RotationError::EmptyId));
+        assert!(matches!(
+            p.register("", 0, 1, 0).unwrap_err(),
+            RotationError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = CredentialRotationPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RotationError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RotationError::SchemaMismatch
+        ));
     }
 
     #[test]

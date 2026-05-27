@@ -68,10 +68,18 @@ pub struct DecisionFingerprintPolicy;
 impl DecisionFingerprintPolicy {
     /// Compute.
     pub fn compute(input: &DecisionInput) -> Result<DecisionFingerprint, FpError> {
-        if input.subject.is_empty() { return Err(FpError::EmptySubject); }
-        if input.action.is_empty() { return Err(FpError::EmptyAction); }
-        if input.profile.is_empty() { return Err(FpError::EmptyProfile); }
-        if input.mode.is_empty() { return Err(FpError::EmptyMode); }
+        if input.subject.is_empty() {
+            return Err(FpError::EmptySubject);
+        }
+        if input.action.is_empty() {
+            return Err(FpError::EmptyAction);
+        }
+        if input.profile.is_empty() {
+            return Err(FpError::EmptyProfile);
+        }
+        if input.mode.is_empty() {
+            return Err(FpError::EmptyMode);
+        }
         let mut h: u64 = 0xcbf29ce484222325;
         fn upd(mut h: u64, bytes: &[u8]) -> u64 {
             for &b in bytes {

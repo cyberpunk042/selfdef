@@ -95,10 +95,14 @@ pub enum TemplateError {
 }
 
 const REQUIRED: [TemplateId; 8] = [
-    TemplateId::ReadWorkspace, TemplateId::WriteWorkspace,
-    TemplateId::FetchPublic, TemplateId::SpawnTestProcess,
-    TemplateId::ReadSecrets, TemplateId::NetworkInternal,
-    TemplateId::SandboxTier1, TemplateId::SandboxTier2,
+    TemplateId::ReadWorkspace,
+    TemplateId::WriteWorkspace,
+    TemplateId::FetchPublic,
+    TemplateId::SpawnTestProcess,
+    TemplateId::ReadSecrets,
+    TemplateId::NetworkInternal,
+    TemplateId::SandboxTier1,
+    TemplateId::SandboxTier2,
 ];
 
 impl GrantTemplatePack {
@@ -190,10 +194,17 @@ impl GrantTemplatePack {
             }
         }
         for t in &self.templates {
-            if t.scope.is_empty() { return Err(TemplateError::EmptyScope(t.id)); }
-            if t.profile.is_empty() { return Err(TemplateError::EmptyProfile(t.id)); }
+            if t.scope.is_empty() {
+                return Err(TemplateError::EmptyScope(t.id));
+            }
+            if t.profile.is_empty() {
+                return Err(TemplateError::EmptyProfile(t.id));
+            }
             if t.ttl_seconds > 86_400 {
-                return Err(TemplateError::TtlExceeds24h { id: t.id, ttl: t.ttl_seconds });
+                return Err(TemplateError::TtlExceeds24h {
+                    id: t.id,
+                    ttl: t.ttl_seconds,
+                });
             }
         }
         Ok(())
@@ -231,7 +242,11 @@ mod tests {
     #[test]
     fn filesystem_grants_have_path_scope() {
         let p = GrantTemplatePack::canonical();
-        for id in [TemplateId::ReadWorkspace, TemplateId::WriteWorkspace, TemplateId::ReadSecrets] {
+        for id in [
+            TemplateId::ReadWorkspace,
+            TemplateId::WriteWorkspace,
+            TemplateId::ReadSecrets,
+        ] {
             assert!(p.get(id).unwrap().scope.starts_with('/'));
         }
     }
@@ -239,58 +254,105 @@ mod tests {
     #[test]
     fn network_grants_have_url_or_cidr_scope() {
         let p = GrantTemplatePack::canonical();
-        assert!(p.get(TemplateId::FetchPublic).unwrap().scope.starts_with("https://"));
-        assert!(p.get(TemplateId::NetworkInternal).unwrap().scope.starts_with("cidr:"));
+        assert!(
+            p.get(TemplateId::FetchPublic)
+                .unwrap()
+                .scope
+                .starts_with("https://")
+        );
+        assert!(
+            p.get(TemplateId::NetworkInternal)
+                .unwrap()
+                .scope
+                .starts_with("cidr:")
+        );
     }
 
     #[test]
     fn sandbox_grants_use_tier_scope() {
         let p = GrantTemplatePack::canonical();
-        assert!(p.get(TemplateId::SandboxTier1).unwrap().scope.starts_with("tier:"));
-        assert!(p.get(TemplateId::SandboxTier2).unwrap().scope.starts_with("tier:"));
+        assert!(
+            p.get(TemplateId::SandboxTier1)
+                .unwrap()
+                .scope
+                .starts_with("tier:")
+        );
+        assert!(
+            p.get(TemplateId::SandboxTier2)
+                .unwrap()
+                .scope
+                .starts_with("tier:")
+        );
     }
 
     #[test]
     fn ttl_exceeds_24h_caught() {
         let mut p = GrantTemplatePack::canonical();
         p.templates[0].ttl_seconds = 100_000;
-        assert!(matches!(p.validate().unwrap_err(), TemplateError::TtlExceeds24h { .. }));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TemplateError::TtlExceeds24h { .. }
+        ));
     }
 
     #[test]
     fn empty_scope_caught() {
         let mut p = GrantTemplatePack::canonical();
         p.templates[0].scope = String::new();
-        assert!(matches!(p.validate().unwrap_err(), TemplateError::EmptyScope(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TemplateError::EmptyScope(_)
+        ));
     }
 
     #[test]
     fn empty_profile_caught() {
         let mut p = GrantTemplatePack::canonical();
         p.templates[0].profile = String::new();
-        assert!(matches!(p.validate().unwrap_err(), TemplateError::EmptyProfile(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TemplateError::EmptyProfile(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = GrantTemplatePack::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TemplateError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TemplateError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut p = GrantTemplatePack::canonical();
         p.templates.pop();
-        assert!(matches!(p.validate().unwrap_err(), TemplateError::CountInvalid(7)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TemplateError::CountInvalid(7)
+        ));
     }
 
     #[test]
     fn template_id_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TemplateId::ReadWorkspace).unwrap(), "\"read-workspace\"");
-        assert_eq!(serde_json::to_string(&TemplateId::FetchPublic).unwrap(), "\"fetch-public\"");
-        assert_eq!(serde_json::to_string(&TemplateId::SpawnTestProcess).unwrap(), "\"spawn-test-process\"");
-        assert_eq!(serde_json::to_string(&TemplateId::SandboxTier1).unwrap(), "\"sandbox-tier-1\"");
+        assert_eq!(
+            serde_json::to_string(&TemplateId::ReadWorkspace).unwrap(),
+            "\"read-workspace\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TemplateId::FetchPublic).unwrap(),
+            "\"fetch-public\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TemplateId::SpawnTestProcess).unwrap(),
+            "\"spawn-test-process\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TemplateId::SandboxTier1).unwrap(),
+            "\"sandbox-tier-1\""
+        );
     }
 
     #[test]

@@ -78,9 +78,22 @@ impl PolicySunsetPolicy {
     }
 
     /// Register.
-    pub fn register(&mut self, policy_id: &str, sunset_at_ms: u64, warn_window_ms: u64) -> Result<(), SunsetError> {
-        if policy_id.is_empty() { return Err(SunsetError::EmptyId); }
-        self.entries.insert(policy_id.into(), SunsetEntry { sunset_at_ms, warn_window_ms });
+    pub fn register(
+        &mut self,
+        policy_id: &str,
+        sunset_at_ms: u64,
+        warn_window_ms: u64,
+    ) -> Result<(), SunsetError> {
+        if policy_id.is_empty() {
+            return Err(SunsetError::EmptyId);
+        }
+        self.entries.insert(
+            policy_id.into(),
+            SunsetEntry {
+                sunset_at_ms,
+                warn_window_ms,
+            },
+        );
         Ok(())
     }
 
@@ -90,10 +103,14 @@ impl PolicySunsetPolicy {
             Some(e) => e,
             None => return SunsetVerdict::Unknown,
         };
-        if now_ms >= e.sunset_at_ms { return SunsetVerdict::Expired; }
+        if now_ms >= e.sunset_at_ms {
+            return SunsetVerdict::Expired;
+        }
         let warn_start = e.sunset_at_ms.saturating_sub(e.warn_window_ms);
         if now_ms >= warn_start {
-            SunsetVerdict::Warning { remaining_ms: e.sunset_at_ms - now_ms }
+            SunsetVerdict::Warning {
+                remaining_ms: e.sunset_at_ms - now_ms,
+            }
         } else {
             SunsetVerdict::Active
         }
@@ -101,26 +118,36 @@ impl PolicySunsetPolicy {
 
     /// Rotate. Returns the expired entries (removed from the map).
     pub fn rotate(&mut self, now_ms: u64) -> Vec<(String, SunsetEntry)> {
-        let expired: Vec<(String, SunsetEntry)> = self.entries.iter()
+        let expired: Vec<(String, SunsetEntry)> = self
+            .entries
+            .iter()
             .filter(|(_, e)| now_ms >= e.sunset_at_ms)
             .map(|(k, e)| (k.clone(), *e))
             .collect();
-        for (k, _) in &expired { self.entries.remove(k); }
+        for (k, _) in &expired {
+            self.entries.remove(k);
+        }
         expired
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SunsetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SunsetError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SunsetError::SchemaMismatch);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(SunsetError::EmptyId); }
+            if k.is_empty() {
+                return Err(SunsetError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicySunsetPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -139,7 +166,12 @@ mod tests {
         let mut p = PolicySunsetPolicy::new();
         p.register("rule-1", 10_000, 2_000).unwrap();
         let v = p.classify("rule-1", 9_000);
-        assert_eq!(v, SunsetVerdict::Warning { remaining_ms: 1_000 });
+        assert_eq!(
+            v,
+            SunsetVerdict::Warning {
+                remaining_ms: 1_000
+            }
+        );
     }
 
     #[test]
@@ -170,14 +202,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut p = PolicySunsetPolicy::new();
-        assert!(matches!(p.register("", 0, 0).unwrap_err(), SunsetError::EmptyId));
+        assert!(matches!(
+            p.register("", 0, 0).unwrap_err(),
+            SunsetError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PolicySunsetPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SunsetError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SunsetError::SchemaMismatch
+        ));
     }
 
     #[test]

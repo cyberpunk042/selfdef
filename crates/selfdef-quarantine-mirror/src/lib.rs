@@ -194,7 +194,8 @@ impl QuarantineMirrorSnapshot {
 
     /// Count entries currently in Quarantined state.
     pub fn quarantined_count(&self) -> usize {
-        self.entries.iter()
+        self.entries
+            .iter()
             .filter(|e| e.state == QuarantineState::Quarantined)
             .count()
     }
@@ -222,7 +223,9 @@ impl QuarantineMirrorSnapshot {
             });
             match e.state {
                 QuarantineState::Quarantined | QuarantineState::Blocking => entry.quarantined += 1,
-                QuarantineState::Released | QuarantineState::AutoReleased => entry.released_24h += 1,
+                QuarantineState::Released | QuarantineState::AutoReleased => {
+                    entry.released_24h += 1
+                }
                 QuarantineState::Forfeited => entry.forfeited_24h += 1,
             }
         }
@@ -262,14 +265,22 @@ impl QuarantineMirrorSnapshot {
 mod tests {
     use super::*;
 
-    fn mk_entry(id: &str, state: QuarantineState, sev: MismatchSeverity, fields: &[MismatchField]) -> QuarantineEntry {
-        let mismatches: Vec<MismatchDetail> = fields.iter().map(|&f| MismatchDetail {
-            field: f,
-            declared: "ro_path:/etc".into(),
-            observed: "rw_path:/etc:write".into(),
-            first_observed_at: "2026-05-19T03:00:00Z".into(),
-            severity: sev,
-        }).collect();
+    fn mk_entry(
+        id: &str,
+        state: QuarantineState,
+        sev: MismatchSeverity,
+        fields: &[MismatchField],
+    ) -> QuarantineEntry {
+        let mismatches: Vec<MismatchDetail> = fields
+            .iter()
+            .map(|&f| MismatchDetail {
+                field: f,
+                declared: "ro_path:/etc".into(),
+                observed: "rw_path:/etc:write".into(),
+                first_observed_at: "2026-05-19T03:00:00Z".into(),
+                severity: sev,
+            })
+            .collect();
         QuarantineEntry {
             quarantine_id: id.into(),
             tool: "untrusted-binary".into(),
@@ -306,7 +317,10 @@ mod tests {
             entries: vec![],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            snap.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -316,10 +330,30 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             entries: vec![
-                mk_entry("a", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains]),
-                mk_entry("b", QuarantineState::Released,    MismatchSeverity::Minor, &[MismatchField::ReadPaths]),
-                mk_entry("c", QuarantineState::Quarantined, MismatchSeverity::Critical, &[MismatchField::SecretAccess]),
-                mk_entry("d", QuarantineState::Forfeited,   MismatchSeverity::Critical, &[MismatchField::WritePaths]),
+                mk_entry(
+                    "a",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains],
+                ),
+                mk_entry(
+                    "b",
+                    QuarantineState::Released,
+                    MismatchSeverity::Minor,
+                    &[MismatchField::ReadPaths],
+                ),
+                mk_entry(
+                    "c",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Critical,
+                    &[MismatchField::SecretAccess],
+                ),
+                mk_entry(
+                    "d",
+                    QuarantineState::Forfeited,
+                    MismatchSeverity::Critical,
+                    &[MismatchField::WritePaths],
+                ),
             ],
             signature: String::new(),
         };
@@ -333,10 +367,30 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             entries: vec![
-                mk_entry("a", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains]),
-                mk_entry("b", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains]),
-                mk_entry("c", QuarantineState::Released,    MismatchSeverity::Minor, &[MismatchField::ReadPaths]),
-                mk_entry("d", QuarantineState::Forfeited,   MismatchSeverity::Critical, &[MismatchField::WritePaths]),
+                mk_entry(
+                    "a",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains],
+                ),
+                mk_entry(
+                    "b",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains],
+                ),
+                mk_entry(
+                    "c",
+                    QuarantineState::Released,
+                    MismatchSeverity::Minor,
+                    &[MismatchField::ReadPaths],
+                ),
+                mk_entry(
+                    "d",
+                    QuarantineState::Forfeited,
+                    MismatchSeverity::Critical,
+                    &[MismatchField::WritePaths],
+                ),
             ],
             signature: String::new(),
         };
@@ -353,9 +407,24 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             entries: vec![
-                mk_entry("a", QuarantineState::Quarantined, MismatchSeverity::Critical, &[MismatchField::SecretAccess]),
-                mk_entry("b", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains]),
-                mk_entry("c", QuarantineState::Released,    MismatchSeverity::Minor, &[MismatchField::ReadPaths]),
+                mk_entry(
+                    "a",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Critical,
+                    &[MismatchField::SecretAccess],
+                ),
+                mk_entry(
+                    "b",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains],
+                ),
+                mk_entry(
+                    "c",
+                    QuarantineState::Released,
+                    MismatchSeverity::Minor,
+                    &[MismatchField::ReadPaths],
+                ),
             ],
             signature: String::new(),
         };
@@ -375,8 +444,22 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             entries: vec![
-                mk_entry("a", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains, MismatchField::NetworkDomains, MismatchField::WritePaths]),
-                mk_entry("b", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains, MismatchField::SecretAccess]),
+                mk_entry(
+                    "a",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[
+                        MismatchField::NetworkDomains,
+                        MismatchField::NetworkDomains,
+                        MismatchField::WritePaths,
+                    ],
+                ),
+                mk_entry(
+                    "b",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains, MismatchField::SecretAccess],
+                ),
             ],
             signature: String::new(),
         };
@@ -394,8 +477,18 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             entries: vec![
-                mk_entry("a", QuarantineState::Quarantined, MismatchSeverity::Major, &[MismatchField::NetworkDomains, MismatchField::WritePaths]),
-                mk_entry("b", QuarantineState::Released,    MismatchSeverity::Minor, &[MismatchField::ReadPaths]),
+                mk_entry(
+                    "a",
+                    QuarantineState::Quarantined,
+                    MismatchSeverity::Major,
+                    &[MismatchField::NetworkDomains, MismatchField::WritePaths],
+                ),
+                mk_entry(
+                    "b",
+                    QuarantineState::Released,
+                    MismatchSeverity::Minor,
+                    &[MismatchField::ReadPaths],
+                ),
             ],
             signature: String::new(),
         };
@@ -404,8 +497,12 @@ mod tests {
 
     #[test]
     fn entry_serde_roundtrip_preserves_mismatches() {
-        let original = mk_entry("alpha", QuarantineState::Quarantined, MismatchSeverity::Critical,
-            &[MismatchField::SecretAccess, MismatchField::WritePaths]);
+        let original = mk_entry(
+            "alpha",
+            QuarantineState::Quarantined,
+            MismatchSeverity::Critical,
+            &[MismatchField::SecretAccess, MismatchField::WritePaths],
+        );
         let j = serde_json::to_string(&original).unwrap();
         let back: QuarantineEntry = serde_json::from_str(&j).unwrap();
         assert_eq!(original, back);

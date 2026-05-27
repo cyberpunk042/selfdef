@@ -124,10 +124,14 @@ impl EvidenceChain {
     }
 
     /// Length.
-    pub fn len(&self) -> usize { self.links.len() }
+    pub fn len(&self) -> usize {
+        self.links.len()
+    }
 
     /// Is empty.
-    pub fn is_empty(&self) -> bool { self.links.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.links.is_empty()
+    }
 
     /// Most recent hash (for chain advance).
     pub fn tip(&self) -> &str {
@@ -147,7 +151,9 @@ impl EvidenceChain {
             let expected_seq = idx as u64;
             if l.sequence != expected_seq {
                 return Err(ChainLinkError::SequenceNonMonotonic {
-                    idx, got: l.sequence, expected: expected_seq,
+                    idx,
+                    got: l.sequence,
+                    expected: expected_seq,
                 });
             }
             if l.prev_link_hash != expected_prev {
@@ -172,7 +178,9 @@ impl EvidenceChain {
 }
 
 impl Default for EvidenceChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -232,8 +240,11 @@ mod tests {
         c.links[1].prev_link_hash = "0xdeadbeefdeadbeef".into();
         let err = c.validate().unwrap_err();
         // Either prev mismatch first or this-hash mismatch (since prev fed into hash). Accept either.
-        assert!(matches!(err, ChainLinkError::PrevHashMismatch { idx: 1, .. }
-                              | ChainLinkError::ThisHashMismatch { idx: 1, .. }));
+        assert!(matches!(
+            err,
+            ChainLinkError::PrevHashMismatch { idx: 1, .. }
+                | ChainLinkError::ThisHashMismatch { idx: 1, .. }
+        ));
     }
 
     #[test]
@@ -256,7 +267,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = EvidenceChain::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ChainLinkError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ChainLinkError::SchemaMismatch
+        ));
     }
 
     #[test]
@@ -268,7 +282,8 @@ mod tests {
     #[test]
     fn chain_serde_roundtrip() {
         let mut c = EvidenceChain::new();
-        c.append("a"); c.append("b");
+        c.append("a");
+        c.append("b");
         let j = serde_json::to_string(&c).unwrap();
         let back: EvidenceChain = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

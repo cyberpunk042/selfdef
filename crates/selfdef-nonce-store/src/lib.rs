@@ -56,7 +56,9 @@ pub enum NonceError {
 impl NonceStore {
     /// New.
     pub fn new(ttl_ms: u64) -> Result<Self, NonceError> {
-        if ttl_ms == 0 { return Err(NonceError::ZeroTtl); }
+        if ttl_ms == 0 {
+            return Err(NonceError::ZeroTtl);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             ttl_ms,
@@ -66,7 +68,9 @@ impl NonceStore {
 
     /// Observe a nonce.
     pub fn observe(&mut self, nonce: &str, now_ms: u64) -> Result<Outcome, NonceError> {
-        if nonce.is_empty() { return Err(NonceError::EmptyNonce); }
+        if nonce.is_empty() {
+            return Err(NonceError::EmptyNonce);
+        }
         // Drop expired *for this nonce* lazily.
         if let Some(&exp) = self.seen.get(nonce) {
             if exp > now_ms {
@@ -75,7 +79,8 @@ impl NonceStore {
                 self.seen.remove(nonce);
             }
         }
-        self.seen.insert(nonce.into(), now_ms.saturating_add(self.ttl_ms));
+        self.seen
+            .insert(nonce.into(), now_ms.saturating_add(self.ttl_ms));
         Ok(Outcome::Accept)
     }
 
@@ -91,10 +96,16 @@ impl NonceStore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), NonceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(NonceError::SchemaMismatch); }
-        if self.ttl_ms == 0 { return Err(NonceError::ZeroTtl); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(NonceError::SchemaMismatch);
+        }
+        if self.ttl_ms == 0 {
+            return Err(NonceError::ZeroTtl);
+        }
         for k in self.seen.keys() {
-            if k.is_empty() { return Err(NonceError::EmptyNonce); }
+            if k.is_empty() {
+                return Err(NonceError::EmptyNonce);
+            }
         }
         Ok(())
     }
@@ -138,19 +149,28 @@ mod tests {
     #[test]
     fn empty_nonce_rejected() {
         let mut s = NonceStore::new(1000).unwrap();
-        assert!(matches!(s.observe("", 0).unwrap_err(), NonceError::EmptyNonce));
+        assert!(matches!(
+            s.observe("", 0).unwrap_err(),
+            NonceError::EmptyNonce
+        ));
     }
 
     #[test]
     fn zero_ttl_rejected() {
-        assert!(matches!(NonceStore::new(0).unwrap_err(), NonceError::ZeroTtl));
+        assert!(matches!(
+            NonceStore::new(0).unwrap_err(),
+            NonceError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = NonceStore::new(1000).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), NonceError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            NonceError::SchemaMismatch
+        ));
     }
 
     #[test]

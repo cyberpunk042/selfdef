@@ -51,7 +51,9 @@ fn fnv1a_64(bytes: &[u8], seed: u64) -> u64 {
 impl BloomFilter {
     /// New with byte size.
     pub fn new(byte_size: usize) -> Result<Self, BloomError> {
-        if byte_size == 0 { return Err(BloomError::ZeroSize); }
+        if byte_size == 0 {
+            return Err(BloomError::ZeroSize);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             bits: vec![0u8; byte_size],
@@ -96,23 +98,29 @@ impl BloomFilter {
 
     /// Clear.
     pub fn clear(&mut self) {
-        for b in self.bits.iter_mut() { *b = 0; }
+        for b in self.bits.iter_mut() {
+            *b = 0;
+        }
         self.count = 0;
     }
 
     /// Approximate load factor in basis points.
     pub fn load_bp(&self) -> u32 {
-        if self.bit_count == 0 { return 0; }
-        let set_bits: u64 = self.bits.iter()
-            .map(|b| b.count_ones() as u64)
-            .sum();
+        if self.bit_count == 0 {
+            return 0;
+        }
+        let set_bits: u64 = self.bits.iter().map(|b| b.count_ones() as u64).sum();
         ((set_bits * 10_000) / self.bit_count) as u32
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BloomError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BloomError::SchemaMismatch); }
-        if self.bits.is_empty() { return Err(BloomError::ZeroSize); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BloomError::SchemaMismatch);
+        }
+        if self.bits.is_empty() {
+            return Err(BloomError::ZeroSize);
+        }
         Ok(())
     }
 }
@@ -168,7 +176,10 @@ mod tests {
 
     #[test]
     fn zero_size_rejected() {
-        assert!(matches!(BloomFilter::new(0).unwrap_err(), BloomError::ZeroSize));
+        assert!(matches!(
+            BloomFilter::new(0).unwrap_err(),
+            BloomError::ZeroSize
+        ));
     }
 
     #[test]
@@ -186,7 +197,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = BloomFilter::new(128).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BloomError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BloomError::SchemaMismatch
+        ));
     }
 
     #[test]

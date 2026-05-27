@@ -83,8 +83,12 @@ pub enum LedgerError {
 impl EvidenceLedger {
     /// Insert a new record. Duplicates rejected.
     pub fn insert(&mut self, rec: LedgerRecord) -> Result<(), LedgerError> {
-        if rec.trace_id.is_empty() { return Err(LedgerError::FieldEmpty("trace_id")); }
-        if rec.actor.is_empty() { return Err(LedgerError::FieldEmpty("actor")); }
+        if rec.trace_id.is_empty() {
+            return Err(LedgerError::FieldEmpty("trace_id"));
+        }
+        if rec.actor.is_empty() {
+            return Err(LedgerError::FieldEmpty("actor"));
+        }
         if self.records.contains_key(&rec.trace_id) {
             return Err(LedgerError::DuplicateTraceId(rec.trace_id));
         }
@@ -94,7 +98,9 @@ impl EvidenceLedger {
 
     /// Lookup by trace_id (R09409).
     pub fn find_by_trace_id(&self, trace_id: &str) -> Result<&LedgerRecord, LedgerError> {
-        self.records.get(trace_id).ok_or_else(|| LedgerError::NotFoundByTraceId(trace_id.into()))
+        self.records
+            .get(trace_id)
+            .ok_or_else(|| LedgerError::NotFoundByTraceId(trace_id.into()))
     }
 
     /// Lookup by actor (R09410). Returns all matching records.
@@ -106,7 +112,9 @@ impl EvidenceLedger {
     /// Returns count purged.
     pub fn purge_expired(&mut self, now_epoch_seconds: u64) -> usize {
         let cutoff = now_epoch_seconds.saturating_sub(RETENTION_SECONDS);
-        let to_remove: Vec<String> = self.records.iter()
+        let to_remove: Vec<String> = self
+            .records
+            .iter()
             .filter(|(_, r)| r.recorded_epoch_seconds < cutoff)
             .map(|(k, _)| k.clone())
             .collect();
@@ -163,26 +171,38 @@ mod tests {
     #[test]
     fn missing_trace_id_lookup_errors() {
         let l = EvidenceLedger::default();
-        assert!(matches!(l.find_by_trace_id("ghost").unwrap_err(), LedgerError::NotFoundByTraceId(_)));
+        assert!(matches!(
+            l.find_by_trace_id("ghost").unwrap_err(),
+            LedgerError::NotFoundByTraceId(_)
+        ));
     }
 
     #[test]
     fn empty_trace_id_rejected() {
         let mut l = EvidenceLedger::default();
-        assert!(matches!(l.insert(rec("", "op", 1000)).unwrap_err(), LedgerError::FieldEmpty("trace_id")));
+        assert!(matches!(
+            l.insert(rec("", "op", 1000)).unwrap_err(),
+            LedgerError::FieldEmpty("trace_id")
+        ));
     }
 
     #[test]
     fn empty_actor_rejected() {
         let mut l = EvidenceLedger::default();
-        assert!(matches!(l.insert(rec("t1", "", 1000)).unwrap_err(), LedgerError::FieldEmpty("actor")));
+        assert!(matches!(
+            l.insert(rec("t1", "", 1000)).unwrap_err(),
+            LedgerError::FieldEmpty("actor")
+        ));
     }
 
     #[test]
     fn duplicate_trace_id_rejected() {
         let mut l = EvidenceLedger::default();
         l.insert(rec("t1", "op", 1000)).unwrap();
-        assert!(matches!(l.insert(rec("t1", "op2", 1100)).unwrap_err(), LedgerError::DuplicateTraceId(_)));
+        assert!(matches!(
+            l.insert(rec("t1", "op2", 1100)).unwrap_err(),
+            LedgerError::DuplicateTraceId(_)
+        ));
     }
 
     #[test]
@@ -225,7 +245,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = EvidenceLedger::default();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch { .. }));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]

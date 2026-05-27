@@ -64,8 +64,12 @@ fn overlaps(kind: GrantKind, a: &str, b: &str) -> Option<String> {
         }
         GrantKind::Network => {
             // Suffix overlap (".example.org" covers "a.example.org").
-            if a.starts_with('.') && b.ends_with(a) { return Some(format!("{a} suffix-covers {b}")); }
-            if b.starts_with('.') && a.ends_with(b) { return Some(format!("{b} suffix-covers {a}")); }
+            if a.starts_with('.') && b.ends_with(a) {
+                return Some(format!("{a} suffix-covers {b}"));
+            }
+            if b.starts_with('.') && a.ends_with(b) {
+                return Some(format!("{b} suffix-covers {a}"));
+            }
             None
         }
         // Other kinds: only exact-match (handled above).
@@ -74,18 +78,27 @@ fn overlaps(kind: GrantKind, a: &str, b: &str) -> Option<String> {
 }
 
 fn trim_trailing_slash(s: &str) -> &str {
-    if s.len() > 1 && s.ends_with('/') { &s[..s.len() - 1] } else { s }
+    if s.len() > 1 && s.ends_with('/') {
+        &s[..s.len() - 1]
+    } else {
+        s
+    }
 }
 
 /// Scan active grants and return overlap pairs.
 pub fn scan(grants: &[GrantEntry]) -> Vec<OverlapPair> {
-    let active: Vec<&GrantEntry> = grants.iter().filter(|g| g.state == GrantState::Active).collect();
+    let active: Vec<&GrantEntry> = grants
+        .iter()
+        .filter(|g| g.state == GrantState::Active)
+        .collect();
     let mut out = Vec::new();
     for i in 0..active.len() {
         for j in (i + 1)..active.len() {
             let a = active[i];
             let b = active[j];
-            if a.kind != b.kind { continue; }
+            if a.kind != b.kind {
+                continue;
+            }
             if let Some(reason) = overlaps(a.kind, &a.scope, &b.scope) {
                 out.push(OverlapPair {
                     grant_a: a.grant_id.clone(),
@@ -132,8 +145,18 @@ mod tests {
     #[test]
     fn identical_scope_overlaps() {
         let g = vec![
-            entry("g1", GrantKind::Filesystem, "/workspace", GrantState::Active),
-            entry("g2", GrantKind::Filesystem, "/workspace", GrantState::Active),
+            entry(
+                "g1",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+            ),
+            entry(
+                "g2",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+            ),
         ];
         assert_eq!(scan(&g).len(), 1);
     }
@@ -141,8 +164,18 @@ mod tests {
     #[test]
     fn filesystem_prefix_overlap() {
         let g = vec![
-            entry("g1", GrantKind::Filesystem, "/workspace", GrantState::Active),
-            entry("g2", GrantKind::Filesystem, "/workspace/foo", GrantState::Active),
+            entry(
+                "g1",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+            ),
+            entry(
+                "g2",
+                GrantKind::Filesystem,
+                "/workspace/foo",
+                GrantState::Active,
+            ),
         ];
         let pairs = scan(&g);
         assert_eq!(pairs.len(), 1);
@@ -152,7 +185,12 @@ mod tests {
     fn network_suffix_overlap() {
         let g = vec![
             entry("g1", GrantKind::Network, ".example.org", GrantState::Active),
-            entry("g2", GrantKind::Network, "a.example.org", GrantState::Active),
+            entry(
+                "g2",
+                GrantKind::Network,
+                "a.example.org",
+                GrantState::Active,
+            ),
         ];
         let pairs = scan(&g);
         assert_eq!(pairs.len(), 1);
@@ -179,13 +217,33 @@ mod tests {
     #[test]
     fn capability_only_exact_overlap() {
         let g = vec![
-            entry("g1", GrantKind::Capability, "cap:proc.spawn", GrantState::Active),
-            entry("g2", GrantKind::Capability, "cap:fs.write", GrantState::Active),
+            entry(
+                "g1",
+                GrantKind::Capability,
+                "cap:proc.spawn",
+                GrantState::Active,
+            ),
+            entry(
+                "g2",
+                GrantKind::Capability,
+                "cap:fs.write",
+                GrantState::Active,
+            ),
         ];
         assert!(scan(&g).is_empty());
         let g2 = vec![
-            entry("g1", GrantKind::Capability, "cap:proc.spawn", GrantState::Active),
-            entry("g2", GrantKind::Capability, "cap:proc.spawn", GrantState::Active),
+            entry(
+                "g1",
+                GrantKind::Capability,
+                "cap:proc.spawn",
+                GrantState::Active,
+            ),
+            entry(
+                "g2",
+                GrantKind::Capability,
+                "cap:proc.spawn",
+                GrantState::Active,
+            ),
         ];
         assert_eq!(scan(&g2).len(), 1);
     }
@@ -193,7 +251,8 @@ mod tests {
     #[test]
     fn pair_serde_roundtrip() {
         let p = OverlapPair {
-            grant_a: "g1".into(), grant_b: "g2".into(),
+            grant_a: "g1".into(),
+            grant_b: "g2".into(),
             kind: GrantKind::Filesystem,
             reason: "x".into(),
         };

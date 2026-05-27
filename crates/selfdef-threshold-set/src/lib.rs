@@ -58,7 +58,9 @@ pub enum ThresholdError {
 impl ThresholdSet {
     /// New.
     pub fn new(default_band: &str) -> Result<Self, ThresholdError> {
-        if default_band.is_empty() { return Err(ThresholdError::EmptyDefault); }
+        if default_band.is_empty() {
+            return Err(ThresholdError::EmptyDefault);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             thresholds: Vec::new(),
@@ -68,7 +70,9 @@ impl ThresholdSet {
 
     /// Add threshold (inserts sorted; rejects duplicate value).
     pub fn add(&mut self, name: &str, value: i64) -> Result<(), ThresholdError> {
-        if name.is_empty() { return Err(ThresholdError::EmptyName); }
+        if name.is_empty() {
+            return Err(ThresholdError::EmptyName);
+        }
         if self.thresholds.iter().any(|t| t.name == name) {
             return Err(ThresholdError::DuplicateName(name.into()));
         }
@@ -77,7 +81,13 @@ impl ThresholdSet {
             return Err(ThresholdError::NotStrictlyIncreasing);
         }
         let pos = pos.unwrap_err();
-        self.thresholds.insert(pos, Threshold { name: name.into(), value });
+        self.thresholds.insert(
+            pos,
+            Threshold {
+                name: name.into(),
+                value,
+            },
+        );
         Ok(())
     }
 
@@ -85,20 +95,32 @@ impl ThresholdSet {
     pub fn classify(&self, value: i64) -> &str {
         let mut band: &str = &self.default_band;
         for t in &self.thresholds {
-            if t.value <= value { band = t.name.as_str(); } else { break; }
+            if t.value <= value {
+                band = t.name.as_str();
+            } else {
+                break;
+            }
         }
         band
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ThresholdError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ThresholdError::SchemaMismatch); }
-        if self.default_band.is_empty() { return Err(ThresholdError::EmptyDefault); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ThresholdError::SchemaMismatch);
+        }
+        if self.default_band.is_empty() {
+            return Err(ThresholdError::EmptyDefault);
+        }
         for t in &self.thresholds {
-            if t.name.is_empty() { return Err(ThresholdError::EmptyName); }
+            if t.name.is_empty() {
+                return Err(ThresholdError::EmptyName);
+            }
         }
         for w in self.thresholds.windows(2) {
-            if w[0].value >= w[1].value { return Err(ThresholdError::NotStrictlyIncreasing); }
+            if w[0].value >= w[1].value {
+                return Err(ThresholdError::NotStrictlyIncreasing);
+            }
         }
         Ok(())
     }
@@ -147,28 +169,43 @@ mod tests {
     fn duplicate_value_rejected() {
         let mut s = ThresholdSet::new("low").unwrap();
         s.add("a", 50).unwrap();
-        assert!(matches!(s.add("b", 50).unwrap_err(), ThresholdError::NotStrictlyIncreasing));
+        assert!(matches!(
+            s.add("b", 50).unwrap_err(),
+            ThresholdError::NotStrictlyIncreasing
+        ));
     }
 
     #[test]
     fn duplicate_name_rejected() {
         let mut s = ThresholdSet::new("low").unwrap();
         s.add("a", 50).unwrap();
-        assert!(matches!(s.add("a", 60).unwrap_err(), ThresholdError::DuplicateName(_)));
+        assert!(matches!(
+            s.add("a", 60).unwrap_err(),
+            ThresholdError::DuplicateName(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = ThresholdSet::new("low").unwrap();
-        assert!(matches!(s.add("", 1).unwrap_err(), ThresholdError::EmptyName));
-        assert!(matches!(ThresholdSet::new("").unwrap_err(), ThresholdError::EmptyDefault));
+        assert!(matches!(
+            s.add("", 1).unwrap_err(),
+            ThresholdError::EmptyName
+        ));
+        assert!(matches!(
+            ThresholdSet::new("").unwrap_err(),
+            ThresholdError::EmptyDefault
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = set();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), ThresholdError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ThresholdError::SchemaMismatch
+        ));
     }
 
     #[test]

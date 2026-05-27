@@ -73,8 +73,12 @@ impl DecisionRedoBudget {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            same_cap: 5, adjacent_cap: 3, cross_cap: 1,
-            same_used: 0, adjacent_used: 0, cross_used: 0,
+            same_cap: 5,
+            adjacent_cap: 3,
+            cross_cap: 1,
+            same_used: 0,
+            adjacent_used: 0,
+            cross_used: 0,
         }
     }
 
@@ -108,7 +112,9 @@ impl DecisionRedoBudget {
             ReDoClass::Adjacent => self.adjacent_used += 1,
             ReDoClass::Cross => self.cross_used += 1,
         }
-        ReDoVerdict::Allow { remaining: cap - self.used(class) }
+        ReDoVerdict::Allow {
+            remaining: cap - self.used(class),
+        }
     }
 
     /// Reset counters (new session).
@@ -149,15 +155,23 @@ mod tests {
     #[test]
     fn cap_exhausts() {
         let mut b = DecisionRedoBudget::canonical();
-        for _ in 0..5 { b.request(ReDoClass::Same); }
-        assert!(matches!(b.request(ReDoClass::Same), ReDoVerdict::Denied { .. }));
+        for _ in 0..5 {
+            b.request(ReDoClass::Same);
+        }
+        assert!(matches!(
+            b.request(ReDoClass::Same),
+            ReDoVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn cross_smallest_cap() {
         let mut b = DecisionRedoBudget::canonical();
         b.request(ReDoClass::Cross);
-        assert!(matches!(b.request(ReDoClass::Cross), ReDoVerdict::Denied { .. }));
+        assert!(matches!(
+            b.request(ReDoClass::Cross),
+            ReDoVerdict::Denied { .. }
+        ));
     }
 
     #[test]
@@ -165,7 +179,10 @@ mod tests {
         let mut b = DecisionRedoBudget::canonical();
         b.request(ReDoClass::Cross);
         // Same still has budget.
-        assert!(matches!(b.request(ReDoClass::Same), ReDoVerdict::Allow { .. }));
+        assert!(matches!(
+            b.request(ReDoClass::Same),
+            ReDoVerdict::Allow { .. }
+        ));
     }
 
     #[test]
@@ -180,12 +197,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = DecisionRedoBudget::canonical();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ReDoClass::Adjacent).unwrap(), "\"adjacent\"");
+        assert_eq!(
+            serde_json::to_string(&ReDoClass::Adjacent).unwrap(),
+            "\"adjacent\""
+        );
     }
 
     #[test]

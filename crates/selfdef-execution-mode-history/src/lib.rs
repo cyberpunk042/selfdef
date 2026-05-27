@@ -81,7 +81,9 @@ pub enum HistoryError {
 impl ExecutionModeHistory {
     /// New.
     pub fn new(max_entries: u32) -> Result<Self, HistoryError> {
-        if max_entries == 0 { return Err(HistoryError::MaxZero); }
+        if max_entries == 0 {
+            return Err(HistoryError::MaxZero);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             transitions: Vec::new(),
@@ -90,12 +92,24 @@ impl ExecutionModeHistory {
     }
 
     /// Append.
-    pub fn record(&mut self, from: ExecutionMode, to: ExecutionMode, at: &str, by: &str, reason: &str) -> Result<(), HistoryError> {
-        if by.is_empty() { return Err(HistoryError::EmptyBy); }
+    pub fn record(
+        &mut self,
+        from: ExecutionMode,
+        to: ExecutionMode,
+        at: &str,
+        by: &str,
+        reason: &str,
+    ) -> Result<(), HistoryError> {
+        if by.is_empty() {
+            return Err(HistoryError::EmptyBy);
+        }
         let n = reason.chars().count();
-        if n > 200 { return Err(HistoryError::ReasonTooLong(n)); }
+        if n > 200 {
+            return Err(HistoryError::ReasonTooLong(n));
+        }
         self.transitions.push(Transition {
-            from, to,
+            from,
+            to,
             at: at.into(),
             by: by.into(),
             reason: reason.into(),
@@ -126,11 +140,17 @@ impl ExecutionModeHistory {
         if self.schema_version != SCHEMA_VERSION {
             return Err(HistoryError::SchemaMismatch);
         }
-        if self.max_entries == 0 { return Err(HistoryError::MaxZero); }
+        if self.max_entries == 0 {
+            return Err(HistoryError::MaxZero);
+        }
         for t in &self.transitions {
-            if t.by.is_empty() { return Err(HistoryError::EmptyBy); }
+            if t.by.is_empty() {
+                return Err(HistoryError::EmptyBy);
+            }
             let n = t.reason.chars().count();
-            if n > 200 { return Err(HistoryError::ReasonTooLong(n)); }
+            if n > 200 {
+                return Err(HistoryError::ReasonTooLong(n));
+            }
         }
         Ok(())
     }
@@ -143,7 +163,10 @@ mod tests {
 
     #[test]
     fn max_zero_rejected() {
-        assert!(matches!(ExecutionModeHistory::new(0).unwrap_err(), HistoryError::MaxZero));
+        assert!(matches!(
+            ExecutionModeHistory::new(0).unwrap_err(),
+            HistoryError::MaxZero
+        ));
     }
 
     #[test]
@@ -198,26 +221,38 @@ mod tests {
     #[test]
     fn empty_by_rejected() {
         let mut h = ExecutionModeHistory::new(5).unwrap();
-        assert!(matches!(h.record(Plan, DryRun, "t", "", "").unwrap_err(), HistoryError::EmptyBy));
+        assert!(matches!(
+            h.record(Plan, DryRun, "t", "", "").unwrap_err(),
+            HistoryError::EmptyBy
+        ));
     }
 
     #[test]
     fn reason_too_long_rejected() {
         let mut h = ExecutionModeHistory::new(5).unwrap();
         let r = "x".repeat(201);
-        assert!(matches!(h.record(Plan, DryRun, "t", "ops", &r).unwrap_err(), HistoryError::ReasonTooLong(201)));
+        assert!(matches!(
+            h.record(Plan, DryRun, "t", "ops", &r).unwrap_err(),
+            HistoryError::ReasonTooLong(201)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut h = ExecutionModeHistory::new(5).unwrap();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HistoryError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HistoryError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn mode_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExecutionMode::DryRun).unwrap(), "\"dry-run\"");
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::DryRun).unwrap(),
+            "\"dry-run\""
+        );
     }
 
     #[test]

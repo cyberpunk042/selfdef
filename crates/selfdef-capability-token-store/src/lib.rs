@@ -86,24 +86,39 @@ impl CapabilityTokenStore {
     }
 
     /// Issue.
-    pub fn issue(&mut self, id: &str, holder: &str, scopes: &[&str], expires_at_ms: u64) -> Result<(), TokenError> {
-        if id.is_empty() { return Err(TokenError::EmptyId); }
-        if holder.is_empty() { return Err(TokenError::EmptyHolder); }
+    pub fn issue(
+        &mut self,
+        id: &str,
+        holder: &str,
+        scopes: &[&str],
+        expires_at_ms: u64,
+    ) -> Result<(), TokenError> {
+        if id.is_empty() {
+            return Err(TokenError::EmptyId);
+        }
+        if holder.is_empty() {
+            return Err(TokenError::EmptyHolder);
+        }
         if self.tokens.contains_key(id) {
             return Err(TokenError::DuplicateId(id.into()));
         }
         let mut set = BTreeSet::new();
         for s in scopes {
-            if s.is_empty() { return Err(TokenError::EmptyScope); }
+            if s.is_empty() {
+                return Err(TokenError::EmptyScope);
+            }
             set.insert((*s).into());
         }
-        self.tokens.insert(id.into(), Token {
-            id: id.into(),
-            holder: holder.into(),
-            scopes: set,
-            expires_at_ms,
-            revoked: false,
-        });
+        self.tokens.insert(
+            id.into(),
+            Token {
+                id: id.into(),
+                holder: holder.into(),
+                scopes: set,
+                expires_at_ms,
+                revoked: false,
+            },
+        );
         Ok(())
     }
 
@@ -112,26 +127,44 @@ impl CapabilityTokenStore {
         if let Some(t) = self.tokens.get_mut(id) {
             t.revoked = true;
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     /// Check.
     pub fn check(&self, id: &str, scope: &str, now_ms: u64) -> CheckVerdict {
-        let Some(t) = self.tokens.get(id) else { return CheckVerdict::Unknown; };
-        if t.revoked { return CheckVerdict::Revoked; }
-        if now_ms >= t.expires_at_ms { return CheckVerdict::Expired; }
-        if !t.scopes.contains(scope) { return CheckVerdict::MissingScope; }
+        let Some(t) = self.tokens.get(id) else {
+            return CheckVerdict::Unknown;
+        };
+        if t.revoked {
+            return CheckVerdict::Revoked;
+        }
+        if now_ms >= t.expires_at_ms {
+            return CheckVerdict::Expired;
+        }
+        if !t.scopes.contains(scope) {
+            return CheckVerdict::MissingScope;
+        }
         CheckVerdict::Ok
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TokenError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TokenError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TokenError::SchemaMismatch);
+        }
         for (id, t) in &self.tokens {
-            if id.is_empty() { return Err(TokenError::EmptyId); }
-            if t.holder.is_empty() { return Err(TokenError::EmptyHolder); }
+            if id.is_empty() {
+                return Err(TokenError::EmptyId);
+            }
+            if t.holder.is_empty() {
+                return Err(TokenError::EmptyHolder);
+            }
             for s in &t.scopes {
-                if s.is_empty() { return Err(TokenError::EmptyScope); }
+                if s.is_empty() {
+                    return Err(TokenError::EmptyScope);
+                }
             }
         }
         Ok(())
@@ -139,7 +172,9 @@ impl CapabilityTokenStore {
 }
 
 impl Default for CapabilityTokenStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -185,22 +220,37 @@ mod tests {
     fn duplicate_rejected() {
         let mut s = CapabilityTokenStore::new();
         s.issue("t1", "alice", &["r"], 1000).unwrap();
-        assert!(matches!(s.issue("t1", "bob", &["r"], 1000).unwrap_err(), TokenError::DuplicateId(_)));
+        assert!(matches!(
+            s.issue("t1", "bob", &["r"], 1000).unwrap_err(),
+            TokenError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = CapabilityTokenStore::new();
-        assert!(matches!(s.issue("", "h", &[], 1).unwrap_err(), TokenError::EmptyId));
-        assert!(matches!(s.issue("t", "", &[], 1).unwrap_err(), TokenError::EmptyHolder));
-        assert!(matches!(s.issue("t", "h", &[""], 1).unwrap_err(), TokenError::EmptyScope));
+        assert!(matches!(
+            s.issue("", "h", &[], 1).unwrap_err(),
+            TokenError::EmptyId
+        ));
+        assert!(matches!(
+            s.issue("t", "", &[], 1).unwrap_err(),
+            TokenError::EmptyHolder
+        ));
+        assert!(matches!(
+            s.issue("t", "h", &[""], 1).unwrap_err(),
+            TokenError::EmptyScope
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = CapabilityTokenStore::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), TokenError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            TokenError::SchemaMismatch
+        ));
     }
 
     #[test]

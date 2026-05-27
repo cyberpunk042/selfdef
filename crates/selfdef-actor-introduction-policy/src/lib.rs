@@ -69,13 +69,25 @@ impl ActorIntroductionPolicy {
     }
 
     /// Record introduction.
-    pub fn record_introduction(&mut self, actor: &str, ts_ms: u64, attested_fingerprint: &str) -> Result<(), IntroError> {
-        if actor.is_empty() { return Err(IntroError::EmptyActor); }
-        if attested_fingerprint.is_empty() { return Err(IntroError::EmptyFingerprint); }
-        self.introductions.insert(actor.into(), Introduction {
-            ts_ms,
-            attested_fingerprint: attested_fingerprint.into(),
-        });
+    pub fn record_introduction(
+        &mut self,
+        actor: &str,
+        ts_ms: u64,
+        attested_fingerprint: &str,
+    ) -> Result<(), IntroError> {
+        if actor.is_empty() {
+            return Err(IntroError::EmptyActor);
+        }
+        if attested_fingerprint.is_empty() {
+            return Err(IntroError::EmptyFingerprint);
+        }
+        self.introductions.insert(
+            actor.into(),
+            Introduction {
+                ts_ms,
+                attested_fingerprint: attested_fingerprint.into(),
+            },
+        );
         Ok(())
     }
 
@@ -95,17 +107,25 @@ impl ActorIntroductionPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IntroError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IntroError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IntroError::SchemaMismatch);
+        }
         for (a, i) in &self.introductions {
-            if a.is_empty() { return Err(IntroError::EmptyActor); }
-            if i.attested_fingerprint.is_empty() { return Err(IntroError::EmptyFingerprint); }
+            if a.is_empty() {
+                return Err(IntroError::EmptyActor);
+            }
+            if i.attested_fingerprint.is_empty() {
+                return Err(IntroError::EmptyFingerprint);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActorIntroductionPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -142,8 +162,14 @@ mod tests {
     #[test]
     fn empty_actor_or_fingerprint_rejected() {
         let mut p = ActorIntroductionPolicy::new();
-        assert!(matches!(p.record_introduction("", 0, "fp").unwrap_err(), IntroError::EmptyActor));
-        assert!(matches!(p.record_introduction("a", 0, "").unwrap_err(), IntroError::EmptyFingerprint));
+        assert!(matches!(
+            p.record_introduction("", 0, "fp").unwrap_err(),
+            IntroError::EmptyActor
+        ));
+        assert!(matches!(
+            p.record_introduction("a", 0, "").unwrap_err(),
+            IntroError::EmptyFingerprint
+        ));
     }
 
     #[test]
@@ -158,7 +184,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = ActorIntroductionPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), IntroError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            IntroError::SchemaMismatch
+        ));
     }
 
     #[test]

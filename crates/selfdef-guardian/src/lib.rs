@@ -206,7 +206,8 @@ impl Effector for RealEffector {
     fn append_audit_log(&self, audit_log: &Path, line: &str) -> Result<(), String> {
         if let Some(parent) = audit_log.parent() {
             if !parent.exists() {
-                fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
             }
         }
         let mut f = std::fs::OpenOptions::new()
@@ -298,10 +299,7 @@ impl<E: Effector> Responder<E> {
             "signer_kid_policy": self.signer_kid_policy,
         }))
         .map_err(|e| GuardianError::Serde(e.to_string()))?;
-        let aa_outcome = match self
-            .effector
-            .append_audit_log(&self.audit_log, &audit_line)
-        {
+        let aa_outcome = match self.effector.append_audit_log(&self.audit_log, &audit_line) {
             Ok(()) => StepOutcome::Ok,
             Err(e) => StepOutcome::Failed(e),
         };
@@ -341,7 +339,11 @@ impl<E: Effector> Responder<E> {
             event.container_id.clone(),
             event.binary_path.clone(),
             steps,
-            if event.ts_ms == 0 { now_ms() } else { event.ts_ms },
+            if event.ts_ms == 0 {
+                now_ms()
+            } else {
+                event.ts_ms
+            },
             self.hostname.clone(),
             self.signer_kid_policy.clone(),
         ))
@@ -356,10 +358,7 @@ impl<E: Effector> Responder<E> {
 /// # Errors
 /// Returns `GuardianError::Io` on file I/O failure,
 /// `GuardianError::Serde` on serialization failure.
-pub fn emit_ocsf_detection_2004(
-    ocsf_jsonl: &Path,
-    verdict: &Verdict,
-) -> Result<(), GuardianError> {
+pub fn emit_ocsf_detection_2004(ocsf_jsonl: &Path, verdict: &Verdict) -> Result<(), GuardianError> {
     if let Some(parent) = ocsf_jsonl.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).map_err(|e| GuardianError::Io(e.to_string()))?;
@@ -443,12 +442,11 @@ pub fn audit_chain_check(ocsf_jsonl: &Path) -> Result<usize, GuardianError> {
         if line.trim().is_empty() {
             continue;
         }
-        let parsed: serde_json::Value = serde_json::from_str(line).map_err(|e| {
-            GuardianError::AuditChainBreak {
+        let parsed: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| GuardianError::AuditChainBreak {
                 line: idx + 1,
                 detail: format!("malformed JSON: {e}"),
-            }
-        })?;
+            })?;
         let claimed_prev = parsed
             .get("prev_event_sha256")
             .and_then(|v| v.as_str())
@@ -686,7 +684,10 @@ mod tests {
         assert_eq!(v.response_steps.len(), 3);
         assert!(!v.sigkill_ok());
         assert!(v.audit_append_ok()); // step 2 still ran
-        assert!(matches!(v.response_steps[0].outcome, StepOutcome::Failed(_)));
+        assert!(matches!(
+            v.response_steps[0].outcome,
+            StepOutcome::Failed(_)
+        ));
     }
 
     #[test]
@@ -698,7 +699,10 @@ mod tests {
         };
         let r = make_responder(eff, &dir);
         let v = r.respond(&sample_event()).unwrap();
-        assert!(matches!(v.response_steps[2].outcome, StepOutcome::Skipped(_)));
+        assert!(matches!(
+            v.response_steps[2].outcome,
+            StepOutcome::Skipped(_)
+        ));
         // all_steps_ok treats Skipped as still OK (operator-extended).
         assert!(v.all_steps_ok());
     }
@@ -804,7 +808,10 @@ mod tests {
         let l2 = r#"{"class_uid":2004,"prev_event_sha256":"bogus"}"#;
         fs::write(&path, format!("{l1}\n{l2}\n")).unwrap();
         let err = audit_chain_check(&path).unwrap_err();
-        assert!(matches!(err, GuardianError::AuditChainBreak { line: 2, .. }));
+        assert!(matches!(
+            err,
+            GuardianError::AuditChainBreak { line: 2, .. }
+        ));
     }
 
     #[test]

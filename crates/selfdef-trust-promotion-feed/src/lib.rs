@@ -105,7 +105,10 @@ pub fn evaluate(metrics: &SubjectMetrics, taxonomy: &CohortTaxonomy) -> Option<S
             from: metrics.current_cohort,
             to: promoted,
             reason: PromotionReason::Earned,
-            rationale: format!("{} consecutive allows, 0 denies, 0 anomalies", metrics.consecutive_allows),
+            rationale: format!(
+                "{} consecutive allows, 0 denies, 0 anomalies",
+                metrics.consecutive_allows
+            ),
         });
     }
     None
@@ -115,7 +118,9 @@ pub fn evaluate(metrics: &SubjectMetrics, taxonomy: &CohortTaxonomy) -> Option<S
 mod tests {
     use super::*;
 
-    fn tax() -> CohortTaxonomy { CohortTaxonomy::canonical() }
+    fn tax() -> CohortTaxonomy {
+        CohortTaxonomy::canonical()
+    }
 
     fn m(c: Cohort, allows: u32, denies: u32, anomalies: u32) -> SubjectMetrics {
         SubjectMetrics {

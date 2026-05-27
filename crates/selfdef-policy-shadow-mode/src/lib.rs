@@ -78,7 +78,9 @@ impl PolicyShadowMode {
 
     /// Set the mode for a policy.
     pub fn set(&mut self, policy_id: &str, mode: Mode) -> Result<(), ShadowError> {
-        if policy_id.is_empty() { return Err(ShadowError::EmptyId); }
+        if policy_id.is_empty() {
+            return Err(ShadowError::EmptyId);
+        }
         self.modes.insert(policy_id.into(), mode);
         Ok(())
     }
@@ -100,16 +102,22 @@ impl PolicyShadowMode {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ShadowError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ShadowError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ShadowError::SchemaMismatch);
+        }
         for k in self.modes.keys() {
-            if k.is_empty() { return Err(ShadowError::EmptyId); }
+            if k.is_empty() {
+                return Err(ShadowError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyShadowMode {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -148,14 +156,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut p = PolicyShadowMode::new();
-        assert!(matches!(p.set("", Mode::Enforce).unwrap_err(), ShadowError::EmptyId));
+        assert!(matches!(
+            p.set("", Mode::Enforce).unwrap_err(),
+            ShadowError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PolicyShadowMode::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ShadowError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ShadowError::SchemaMismatch
+        ));
     }
 
     #[test]

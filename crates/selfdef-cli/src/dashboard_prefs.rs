@@ -16,7 +16,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 const VALID_RATES: &[&str] = &["fast", "normal", "slow", "paused"];

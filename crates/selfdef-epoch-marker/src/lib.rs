@@ -80,25 +80,35 @@ impl EpochMarker {
 
     /// Tag the next event.
     pub fn tag(&mut self) -> Result<Tag, EpochError> {
-        let t = Tag { epoch: self.epoch, seq: self.next_seq };
+        let t = Tag {
+            epoch: self.epoch,
+            seq: self.next_seq,
+        };
         self.next_seq = self.next_seq.checked_add(1).ok_or(EpochError::Exhausted)?;
         Ok(t)
     }
 
     /// Peek next tag without consuming.
     pub fn peek(&self) -> Tag {
-        Tag { epoch: self.epoch, seq: self.next_seq }
+        Tag {
+            epoch: self.epoch,
+            seq: self.next_seq,
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EpochError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EpochError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EpochError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for EpochMarker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -162,7 +172,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = EpochMarker::new();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), EpochError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            EpochError::SchemaMismatch
+        ));
     }
 
     #[test]

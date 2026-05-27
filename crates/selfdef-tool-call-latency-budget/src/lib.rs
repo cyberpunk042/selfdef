@@ -115,12 +115,48 @@ impl ToolCallLatencyBudget {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Private,      ProfileLatency { soft_ms: 5_000,  hard_ms: 15_000 });
-        p.insert(Profile::Fast,         ProfileLatency { soft_ms: 10_000, hard_ms: 30_000 });
-        p.insert(Profile::Careful,      ProfileLatency { soft_ms: 30_000, hard_ms: 90_000 });
-        p.insert(Profile::Autonomous,   ProfileLatency { soft_ms: 30_000, hard_ms: 120_000 });
-        p.insert(Profile::Experimental, ProfileLatency { soft_ms: 60_000, hard_ms: 300_000 });
-        p.insert(Profile::Production,   ProfileLatency { soft_ms: 15_000, hard_ms: 60_000 });
+        p.insert(
+            Profile::Private,
+            ProfileLatency {
+                soft_ms: 5_000,
+                hard_ms: 15_000,
+            },
+        );
+        p.insert(
+            Profile::Fast,
+            ProfileLatency {
+                soft_ms: 10_000,
+                hard_ms: 30_000,
+            },
+        );
+        p.insert(
+            Profile::Careful,
+            ProfileLatency {
+                soft_ms: 30_000,
+                hard_ms: 90_000,
+            },
+        );
+        p.insert(
+            Profile::Autonomous,
+            ProfileLatency {
+                soft_ms: 30_000,
+                hard_ms: 120_000,
+            },
+        );
+        p.insert(
+            Profile::Experimental,
+            ProfileLatency {
+                soft_ms: 60_000,
+                hard_ms: 300_000,
+            },
+        );
+        p.insert(
+            Profile::Production,
+            ProfileLatency {
+                soft_ms: 15_000,
+                hard_ms: 60_000,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -130,7 +166,12 @@ impl ToolCallLatencyBudget {
 
     /// Start a call.
     pub fn start(&mut self, id: u64, profile: Profile, tool: &str, start_ts_ms: u64) {
-        self.calls.push(CallEntry { id, profile, tool: tool.into(), start_ts_ms });
+        self.calls.push(CallEntry {
+            id,
+            profile,
+            tool: tool.into(),
+            start_ts_ms,
+        });
     }
 
     /// Poll.
@@ -145,9 +186,15 @@ impl ToolCallLatencyBudget {
         };
         let elapsed_ms = now_ms.saturating_sub(c.start_ts_ms);
         if elapsed_ms >= cfg.hard_ms {
-            PollVerdict::HardExpired { elapsed_ms, hard_ms: cfg.hard_ms }
+            PollVerdict::HardExpired {
+                elapsed_ms,
+                hard_ms: cfg.hard_ms,
+            }
         } else if elapsed_ms >= cfg.soft_ms {
-            PollVerdict::SoftExpired { elapsed_ms, soft_ms: cfg.soft_ms }
+            PollVerdict::SoftExpired {
+                elapsed_ms,
+                soft_ms: cfg.soft_ms,
+            }
         } else {
             PollVerdict::OnTime { elapsed_ms }
         }
@@ -155,7 +202,10 @@ impl ToolCallLatencyBudget {
 
     /// Finish.
     pub fn finish(&mut self, id: u64) -> Result<(), LatencyError> {
-        let pos = self.calls.iter().position(|c| c.id == id)
+        let pos = self
+            .calls
+            .iter()
+            .position(|c| c.id == id)
             .ok_or(LatencyError::UnknownCall(id))?;
         self.calls.remove(pos);
         Ok(())
@@ -226,21 +276,36 @@ mod tests {
         let mut b = ToolCallLatencyBudget::canonical();
         b.start(1, Profile::Fast, "fetch", 0);
         b.finish(1).unwrap();
-        assert!(matches!(b.finish(1).unwrap_err(), LatencyError::UnknownCall(_)));
+        assert!(matches!(
+            b.finish(1).unwrap_err(),
+            LatencyError::UnknownCall(_)
+        ));
     }
 
     #[test]
     fn bad_thresholds_rejected() {
         let mut b = ToolCallLatencyBudget::canonical();
-        b.profiles.insert(Profile::Fast, ProfileLatency { soft_ms: 1000, hard_ms: 100 });
-        assert!(matches!(b.validate().unwrap_err(), LatencyError::BadThresholds(_, _)));
+        b.profiles.insert(
+            Profile::Fast,
+            ProfileLatency {
+                soft_ms: 1000,
+                hard_ms: 100,
+            },
+        );
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            LatencyError::BadThresholds(_, _)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ToolCallLatencyBudget::canonical();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), LatencyError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            LatencyError::SchemaMismatch
+        ));
     }
 
     #[test]

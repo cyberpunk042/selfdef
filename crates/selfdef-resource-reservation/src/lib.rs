@@ -87,16 +87,30 @@ impl ResourceReservation {
     }
 
     /// Register a pool.
-    pub fn set_capacity(&mut self, resource_id: &str, capacity: u64) -> Result<(), ReservationError> {
-        if resource_id.is_empty() { return Err(ReservationError::EmptyResource); }
+    pub fn set_capacity(
+        &mut self,
+        resource_id: &str,
+        capacity: u64,
+    ) -> Result<(), ReservationError> {
+        if resource_id.is_empty() {
+            return Err(ReservationError::EmptyResource);
+        }
         let held = self.pools.get(resource_id).map(|p| p.held).unwrap_or(0);
-        self.pools.insert(resource_id.into(), Pool { capacity, held });
+        self.pools
+            .insert(resource_id.into(), Pool { capacity, held });
         Ok(())
     }
 
     /// Reserve.
-    pub fn reserve(&mut self, resource_id: &str, units: u64, ts_ms: u64) -> Result<u64, ReservationError> {
-        let pool = self.pools.get_mut(resource_id)
+    pub fn reserve(
+        &mut self,
+        resource_id: &str,
+        units: u64,
+        ts_ms: u64,
+    ) -> Result<u64, ReservationError> {
+        let pool = self
+            .pools
+            .get_mut(resource_id)
             .ok_or_else(|| ReservationError::UnknownResource(resource_id.into()))?;
         let free = pool.capacity.saturating_sub(pool.held);
         if units > free {
@@ -105,19 +119,24 @@ impl ResourceReservation {
         pool.held = pool.held.saturating_add(units);
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.reservations.insert(id, Reservation {
+        self.reservations.insert(
             id,
-            resource_id: resource_id.into(),
-            units,
-            reserved_at_ms: ts_ms,
-            committed: false,
-        });
+            Reservation {
+                id,
+                resource_id: resource_id.into(),
+                units,
+                reserved_at_ms: ts_ms,
+                committed: false,
+            },
+        );
         Ok(id)
     }
 
     /// Commit.
     pub fn commit(&mut self, reservation_id: u64) -> Result<(), ReservationError> {
-        let r = self.reservations.get_mut(&reservation_id)
+        let r = self
+            .reservations
+            .get_mut(&reservation_id)
             .ok_or(ReservationError::UnknownReservation(reservation_id))?;
         r.committed = true;
         Ok(())
@@ -125,7 +144,9 @@ impl ResourceReservation {
 
     /// Abandon.
     pub fn abandon(&mut self, reservation_id: u64) -> Result<(), ReservationError> {
-        let r = self.reservations.remove(&reservation_id)
+        let r = self
+            .reservations
+            .remove(&reservation_id)
             .ok_or(ReservationError::UnknownReservation(reservation_id))?;
         if let Some(p) = self.pools.get_mut(&r.resource_id) {
             p.held = p.held.saturating_sub(r.units);
@@ -135,29 +156,39 @@ impl ResourceReservation {
 
     /// Expire stale reservations (not yet committed).
     pub fn expire(&mut self, now_ms: u64, max_age_ms: u64) -> usize {
-        let stale_ids: Vec<u64> = self.reservations.iter()
+        let stale_ids: Vec<u64> = self
+            .reservations
+            .iter()
             .filter(|(_, r)| !r.committed && now_ms.saturating_sub(r.reserved_at_ms) > max_age_ms)
             .map(|(id, _)| *id)
             .collect();
         let mut count = 0;
         for id in stale_ids {
-            if self.abandon(id).is_ok() { count += 1; }
+            if self.abandon(id).is_ok() {
+                count += 1;
+            }
         }
         count
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ReservationError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ReservationError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ReservationError::SchemaMismatch);
+        }
         for k in self.pools.keys() {
-            if k.is_empty() { return Err(ReservationError::EmptyResource); }
+            if k.is_empty() {
+                return Err(ReservationError::EmptyResource);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ResourceReservation {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -186,19 +217,28 @@ mod tests {
     fn insufficient_rejected() {
         let mut r = ResourceReservation::new();
         r.set_capacity("disk", 100).unwrap();
-        assert!(matches!(r.reserve("disk", 200, 0).unwrap_err(), ReservationError::Insufficient(_, _)));
+        assert!(matches!(
+            r.reserve("disk", 200, 0).unwrap_err(),
+            ReservationError::Insufficient(_, _)
+        ));
     }
 
     #[test]
     fn unknown_resource() {
         let mut r = ResourceReservation::new();
-        assert!(matches!(r.reserve("nope", 1, 0).unwrap_err(), ReservationError::UnknownResource(_)));
+        assert!(matches!(
+            r.reserve("nope", 1, 0).unwrap_err(),
+            ReservationError::UnknownResource(_)
+        ));
     }
 
     #[test]
     fn unknown_reservation() {
         let mut r = ResourceReservation::new();
-        assert!(matches!(r.commit(999).unwrap_err(), ReservationError::UnknownReservation(_)));
+        assert!(matches!(
+            r.commit(999).unwrap_err(),
+            ReservationError::UnknownReservation(_)
+        ));
     }
 
     #[test]
@@ -226,14 +266,20 @@ mod tests {
     #[test]
     fn empty_resource_rejected() {
         let mut r = ResourceReservation::new();
-        assert!(matches!(r.set_capacity("", 1).unwrap_err(), ReservationError::EmptyResource));
+        assert!(matches!(
+            r.set_capacity("", 1).unwrap_err(),
+            ReservationError::EmptyResource
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = ResourceReservation::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ReservationError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReservationError::SchemaMismatch
+        ));
     }
 
     #[test]

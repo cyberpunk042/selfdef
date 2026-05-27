@@ -111,25 +111,40 @@ impl ActionLifecycle {
 
     /// Request an action (entry point).
     pub fn request(&mut self, action_id: &str, ts_ms: u64) -> Result<(), LifecycleError> {
-        if action_id.is_empty() { return Err(LifecycleError::EmptyId); }
+        if action_id.is_empty() {
+            return Err(LifecycleError::EmptyId);
+        }
         if self.actions.contains_key(action_id) {
             return Err(LifecycleError::Duplicate(action_id.into()));
         }
         let mut history = BTreeMap::new();
         history.insert(phase_key(Phase::Requested).into(), ts_ms);
-        self.actions.insert(action_id.into(), ActionRecord {
-            phase: Phase::Requested,
-            history,
-        });
+        self.actions.insert(
+            action_id.into(),
+            ActionRecord {
+                phase: Phase::Requested,
+                history,
+            },
+        );
         Ok(())
     }
 
     /// Advance.
-    pub fn advance(&mut self, action_id: &str, to: Phase, ts_ms: u64) -> Result<(), LifecycleError> {
-        let rec = self.actions.get_mut(action_id)
+    pub fn advance(
+        &mut self,
+        action_id: &str,
+        to: Phase,
+        ts_ms: u64,
+    ) -> Result<(), LifecycleError> {
+        let rec = self
+            .actions
+            .get_mut(action_id)
             .ok_or_else(|| LifecycleError::Unknown(action_id.into()))?;
         if !allowed(rec.phase, to) {
-            return Err(LifecycleError::BadTransition { from: rec.phase, to });
+            return Err(LifecycleError::BadTransition {
+                from: rec.phase,
+                to,
+            });
         }
         rec.phase = to;
         rec.history.insert(phase_key(to).into(), ts_ms);
@@ -143,16 +158,22 @@ impl ActionLifecycle {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LifecycleError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LifecycleError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LifecycleError::SchemaMismatch);
+        }
         for (id, _) in &self.actions {
-            if id.is_empty() { return Err(LifecycleError::EmptyId); }
+            if id.is_empty() {
+                return Err(LifecycleError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionLifecycle {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -192,34 +213,48 @@ mod tests {
         let mut l = ActionLifecycle::new();
         l.request("a", 0).unwrap();
         // Requested → Executing not allowed.
-        assert!(matches!(l.advance("a", Phase::Executing, 100).unwrap_err(),
-            LifecycleError::BadTransition { .. }));
+        assert!(matches!(
+            l.advance("a", Phase::Executing, 100).unwrap_err(),
+            LifecycleError::BadTransition { .. }
+        ));
     }
 
     #[test]
     fn duplicate_request_rejected() {
         let mut l = ActionLifecycle::new();
         l.request("a", 0).unwrap();
-        assert!(matches!(l.request("a", 100).unwrap_err(), LifecycleError::Duplicate(_)));
+        assert!(matches!(
+            l.request("a", 100).unwrap_err(),
+            LifecycleError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut l = ActionLifecycle::new();
-        assert!(matches!(l.request("", 0).unwrap_err(), LifecycleError::EmptyId));
+        assert!(matches!(
+            l.request("", 0).unwrap_err(),
+            LifecycleError::EmptyId
+        ));
     }
 
     #[test]
     fn unknown_advance_rejected() {
         let mut l = ActionLifecycle::new();
-        assert!(matches!(l.advance("a", Phase::Approved, 0).unwrap_err(), LifecycleError::Unknown(_)));
+        assert!(matches!(
+            l.advance("a", Phase::Approved, 0).unwrap_err(),
+            LifecycleError::Unknown(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = ActionLifecycle::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LifecycleError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LifecycleError::SchemaMismatch
+        ));
     }
 
     #[test]

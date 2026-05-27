@@ -89,12 +89,9 @@ fn check_one(
 
 /// `GET /v1/audit-chains` handler.
 pub(crate) async fn show() -> Json<AuditChainsResponse> {
-    let perimeter_path =
-        PathBuf::from(selfdef_perimeter::DEFAULT_OCSF_PATH);
-    let guardian_path =
-        PathBuf::from(selfdef_guardian::DEFAULT_AUDIT_LOG_PATH);
-    let scheduler_path =
-        PathBuf::from(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH);
+    let perimeter_path = PathBuf::from(selfdef_perimeter::DEFAULT_OCSF_PATH);
+    let guardian_path = PathBuf::from(selfdef_guardian::DEFAULT_AUDIT_LOG_PATH);
+    let scheduler_path = PathBuf::from(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH);
     let chains = vec![
         check_one("perimeter", perimeter_path.clone(), |p| {
             selfdef_perimeter::audit_chain_check(p).map_err(|e| e.to_string())

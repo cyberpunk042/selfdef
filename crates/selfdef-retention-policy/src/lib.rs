@@ -100,14 +100,38 @@ impl RetentionPolicy {
     /// Canonical policy.
     pub fn canonical() -> Self {
         let records = vec![
-            RetentionRecord { kind: RecordKind::Audit,         rule: RetentionRule::Forever },
-            RetentionRecord { kind: RecordKind::Decision,      rule: RetentionRule::Days(365) },
-            RetentionRecord { kind: RecordKind::Span,          rule: RetentionRule::Days(90) },
-            RetentionRecord { kind: RecordKind::Quarantine,    rule: RetentionRule::Days(180) },
-            RetentionRecord { kind: RecordKind::Evidence,      rule: RetentionRule::Forever },
-            RetentionRecord { kind: RecordKind::TrustScore,    rule: RetentionRule::Days(365) },
-            RetentionRecord { kind: RecordKind::CollectorEps,  rule: RetentionRule::Days(30) },
-            RetentionRecord { kind: RecordKind::ReplayBuffer,  rule: RetentionRule::EventCount(1_000_000) },
+            RetentionRecord {
+                kind: RecordKind::Audit,
+                rule: RetentionRule::Forever,
+            },
+            RetentionRecord {
+                kind: RecordKind::Decision,
+                rule: RetentionRule::Days(365),
+            },
+            RetentionRecord {
+                kind: RecordKind::Span,
+                rule: RetentionRule::Days(90),
+            },
+            RetentionRecord {
+                kind: RecordKind::Quarantine,
+                rule: RetentionRule::Days(180),
+            },
+            RetentionRecord {
+                kind: RecordKind::Evidence,
+                rule: RetentionRule::Forever,
+            },
+            RetentionRecord {
+                kind: RecordKind::TrustScore,
+                rule: RetentionRule::Days(365),
+            },
+            RetentionRecord {
+                kind: RecordKind::CollectorEps,
+                rule: RetentionRule::Days(30),
+            },
+            RetentionRecord {
+                kind: RecordKind::ReplayBuffer,
+                rule: RetentionRule::EventCount(1_000_000),
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -124,9 +148,14 @@ impl RetentionPolicy {
             return Err(RetentionError::CountInvalid(self.records.len()));
         }
         for k in [
-            RecordKind::Audit, RecordKind::Decision, RecordKind::Span,
-            RecordKind::Quarantine, RecordKind::Evidence, RecordKind::TrustScore,
-            RecordKind::CollectorEps, RecordKind::ReplayBuffer,
+            RecordKind::Audit,
+            RecordKind::Decision,
+            RecordKind::Span,
+            RecordKind::Quarantine,
+            RecordKind::Evidence,
+            RecordKind::TrustScore,
+            RecordKind::CollectorEps,
+            RecordKind::ReplayBuffer,
         ] {
             if !self.records.iter().any(|r| r.kind == k) {
                 return Err(RetentionError::Missing(k));
@@ -134,7 +163,9 @@ impl RetentionPolicy {
         }
         for r in &self.records {
             match r.rule {
-                RetentionRule::Days(0) | RetentionRule::EventCount(0) | RetentionRule::SizeBytes(0) => {
+                RetentionRule::Days(0)
+                | RetentionRule::EventCount(0)
+                | RetentionRule::SizeBytes(0) => {
                     return Err(RetentionError::ZeroValued(r.kind));
                 }
                 _ => {}
@@ -176,9 +207,16 @@ mod tests {
     #[test]
     fn eight_kinds_present() {
         let p = RetentionPolicy::canonical();
-        for k in [RecordKind::Audit, RecordKind::Decision, RecordKind::Span,
-                  RecordKind::Quarantine, RecordKind::Evidence, RecordKind::TrustScore,
-                  RecordKind::CollectorEps, RecordKind::ReplayBuffer] {
+        for k in [
+            RecordKind::Audit,
+            RecordKind::Decision,
+            RecordKind::Span,
+            RecordKind::Quarantine,
+            RecordKind::Evidence,
+            RecordKind::TrustScore,
+            RecordKind::CollectorEps,
+            RecordKind::ReplayBuffer,
+        ] {
             assert!(p.get(k).is_some(), "missing {k:?}");
         }
     }
@@ -228,23 +266,34 @@ mod tests {
     fn zero_valued_caught() {
         let mut p = RetentionPolicy::canonical();
         for r in p.records.iter_mut() {
-            if r.kind == RecordKind::Span { r.rule = RetentionRule::Days(0); }
+            if r.kind == RecordKind::Span {
+                r.rule = RetentionRule::Days(0);
+            }
         }
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::ZeroValued(RecordKind::Span)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::ZeroValued(RecordKind::Span)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = RetentionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut p = RetentionPolicy::canonical();
         p.records.pop();
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::CountInvalid(7)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::CountInvalid(7)
+        ));
     }
 
     #[test]
@@ -257,7 +306,10 @@ mod tests {
                 r.rule = RetentionRule::Forever;
             }
         }
-        assert!(matches!(p.validate().unwrap_err(), RetentionError::Missing(RecordKind::Span)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetentionError::Missing(RecordKind::Span)
+        ));
     }
 
     #[test]
@@ -275,9 +327,18 @@ mod tests {
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&RecordKind::CollectorEps).unwrap(), "\"collector-eps\"");
-        assert_eq!(serde_json::to_string(&RecordKind::ReplayBuffer).unwrap(), "\"replay-buffer\"");
-        assert_eq!(serde_json::to_string(&RecordKind::TrustScore).unwrap(), "\"trust-score\"");
+        assert_eq!(
+            serde_json::to_string(&RecordKind::CollectorEps).unwrap(),
+            "\"collector-eps\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RecordKind::ReplayBuffer).unwrap(),
+            "\"replay-buffer\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RecordKind::TrustScore).unwrap(),
+            "\"trust-score\""
+        );
     }
 
     #[test]

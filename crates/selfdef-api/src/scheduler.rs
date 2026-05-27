@@ -25,8 +25,8 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use selfdef_scheduler::{
-    audit_chain_check, now_ms, read_ring_buffer, AxisWeights, Decision, Profile,
-    SchedulerError, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR,
+    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, SchedulerError,
+    audit_chain_check, now_ms, read_ring_buffer,
 };
 
 /// Response body for `GET /v1/scheduler`.
@@ -115,9 +115,7 @@ pub(crate) async fn show() -> Result<Json<SchedulerBody>, ApiError> {
 }
 
 /// `GET /v1/scheduler/history?limit=N` — decisions newest-first.
-pub(crate) async fn history(
-    Query(q): Query<HistoryQuery>,
-) -> Result<Json<HistoryBody>, ApiError> {
+pub(crate) async fn history(Query(q): Query<HistoryQuery>) -> Result<Json<HistoryBody>, ApiError> {
     let limit = q.limit.unwrap_or(32).min(256) as usize;
     let all = read_ring_buffer(Path::new(DEFAULT_RING_DIR))
         .map_err(|e| ApiError::Internal(format!("ring read: {e}")))?;
@@ -179,7 +177,11 @@ pub(crate) async fn weights(
         .map(|p| {
             let w = AxisWeights::for_profile(p);
             let sum = w.sum();
-            WeightsEntry { profile: p, weights: w, sum }
+            WeightsEntry {
+                profile: p,
+                weights: w,
+                sum,
+            }
         })
         .collect();
     Ok(Json(entries))
@@ -193,7 +195,9 @@ pub(crate) async fn explain(
         .map_err(|e| ApiError::Internal(format!("ring read: {e}")))?;
     let found = all.into_iter().find(|d| d.request_id == request_id);
     match found {
-        None => Err(ApiError::NotFound(format!("request_id={request_id:?} not found"))),
+        None => Err(ApiError::NotFound(format!(
+            "request_id={request_id:?} not found"
+        ))),
         Some(d) => Ok(Json(d)),
     }
 }
@@ -242,9 +246,7 @@ impl From<SchedulerError> for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_scheduler::{
-        evaluate_objective, AxisSignals, BackpressureState, Route,
-    };
+    use selfdef_scheduler::{AxisSignals, BackpressureState, Route, evaluate_objective};
 
     fn sample_decision(ts_ms: u64, with_pressure: bool) -> Decision {
         let signals = AxisSignals {

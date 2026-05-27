@@ -64,22 +64,43 @@ impl DecisionCache {
     /// Insert.
     pub fn insert(
         &mut self,
-        subject: &str, action: &str, resource: &str, profile: &str,
-        outcome: Outcome, now_ms: u64,
+        subject: &str,
+        action: &str,
+        resource: &str,
+        profile: &str,
+        outcome: Outcome,
+        now_ms: u64,
     ) -> Result<(), CacheError> {
-        if subject.is_empty() { return Err(CacheError::MissingField("subject")); }
-        if action.is_empty() { return Err(CacheError::MissingField("action")); }
-        if resource.is_empty() { return Err(CacheError::MissingField("resource")); }
-        if profile.is_empty() { return Err(CacheError::MissingField("profile")); }
+        if subject.is_empty() {
+            return Err(CacheError::MissingField("subject"));
+        }
+        if action.is_empty() {
+            return Err(CacheError::MissingField("action"));
+        }
+        if resource.is_empty() {
+            return Err(CacheError::MissingField("resource"));
+        }
+        if profile.is_empty() {
+            return Err(CacheError::MissingField("profile"));
+        }
         let k = key(subject, action, resource, profile);
-        self.entries.insert(k, CacheEntry { outcome, inserted_at_ms: now_ms });
+        self.entries.insert(
+            k,
+            CacheEntry {
+                outcome,
+                inserted_at_ms: now_ms,
+            },
+        );
         Ok(())
     }
 
     /// Look up; honors TTL.
     pub fn get(
         &self,
-        subject: &str, action: &str, resource: &str, profile: &str,
+        subject: &str,
+        action: &str,
+        resource: &str,
+        profile: &str,
         now_ms: u64,
     ) -> Option<Outcome> {
         let k = key(subject, action, resource, profile);
@@ -93,15 +114,22 @@ impl DecisionCache {
 
     /// Prune expired entries.
     pub fn prune(&mut self, now_ms: u64) {
-        if self.ttl_ms == 0 { return; }
-        self.entries.retain(|_, e| now_ms.saturating_sub(e.inserted_at_ms) < self.ttl_ms as u64);
+        if self.ttl_ms == 0 {
+            return;
+        }
+        self.entries
+            .retain(|_, e| now_ms.saturating_sub(e.inserted_at_ms) < self.ttl_ms as u64);
     }
 
     /// Number of cached entries.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Is empty.
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CacheError> {
@@ -124,38 +152,54 @@ mod tests {
     #[test]
     fn insert_and_lookup() {
         let mut c = DecisionCache::new(10_000);
-        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 1_000).unwrap();
-        assert_eq!(c.get("alice", "fs.read", "/x", "careful", 2_000), Some(Outcome::Allow));
+        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 1_000)
+            .unwrap();
+        assert_eq!(
+            c.get("alice", "fs.read", "/x", "careful", 2_000),
+            Some(Outcome::Allow)
+        );
     }
 
     #[test]
     fn ttl_expires_lookup() {
         let mut c = DecisionCache::new(500);
-        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 1_000).unwrap();
+        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 1_000)
+            .unwrap();
         assert_eq!(c.get("alice", "fs.read", "/x", "careful", 2_000), None);
     }
 
     #[test]
     fn ttl_zero_never_expires() {
         let mut c = DecisionCache::new(0);
-        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 0).unwrap();
-        assert_eq!(c.get("alice", "fs.read", "/x", "careful", u64::MAX), Some(Outcome::Allow));
+        c.insert("alice", "fs.read", "/x", "careful", Outcome::Allow, 0)
+            .unwrap();
+        assert_eq!(
+            c.get("alice", "fs.read", "/x", "careful", u64::MAX),
+            Some(Outcome::Allow)
+        );
     }
 
     #[test]
     fn missing_field_rejected() {
         let mut c = DecisionCache::new(1000);
-        assert!(matches!(c.insert("", "a", "r", "p", Outcome::Allow, 0).unwrap_err(),
-            CacheError::MissingField("subject")));
+        assert!(matches!(
+            c.insert("", "a", "r", "p", Outcome::Allow, 0).unwrap_err(),
+            CacheError::MissingField("subject")
+        ));
     }
 
     #[test]
     fn distinct_keys_separate() {
         let mut c = DecisionCache::new(10_000);
-        c.insert("a", "x", "/r", "careful", Outcome::Allow, 1_000).unwrap();
-        c.insert("a", "x", "/r", "fast",    Outcome::Deny, 1_000).unwrap();
-        assert_eq!(c.get("a", "x", "/r", "careful", 1_000), Some(Outcome::Allow));
-        assert_eq!(c.get("a", "x", "/r", "fast",    1_000), Some(Outcome::Deny));
+        c.insert("a", "x", "/r", "careful", Outcome::Allow, 1_000)
+            .unwrap();
+        c.insert("a", "x", "/r", "fast", Outcome::Deny, 1_000)
+            .unwrap();
+        assert_eq!(
+            c.get("a", "x", "/r", "careful", 1_000),
+            Some(Outcome::Allow)
+        );
+        assert_eq!(c.get("a", "x", "/r", "fast", 1_000), Some(Outcome::Deny));
     }
 
     #[test]
@@ -171,7 +215,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = DecisionCache::new(1000);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CacheError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CacheError::SchemaMismatch
+        ));
     }
 
     #[test]

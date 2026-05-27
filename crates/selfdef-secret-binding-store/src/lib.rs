@@ -53,18 +53,32 @@ impl SecretBindingStore {
 
     /// Bind.
     pub fn bind(&mut self, actor: &str, name: &str, ref_path: &str) -> Result<bool, BindError> {
-        if actor.is_empty() { return Err(BindError::EmptyActor); }
-        if name.is_empty() { return Err(BindError::EmptyName); }
-        if ref_path.is_empty() { return Err(BindError::EmptyRefPath); }
-        let prev = self.bindings.entry(actor.into()).or_default().insert(name.into(), ref_path.into());
+        if actor.is_empty() {
+            return Err(BindError::EmptyActor);
+        }
+        if name.is_empty() {
+            return Err(BindError::EmptyName);
+        }
+        if ref_path.is_empty() {
+            return Err(BindError::EmptyRefPath);
+        }
+        let prev = self
+            .bindings
+            .entry(actor.into())
+            .or_default()
+            .insert(name.into(), ref_path.into());
         Ok(prev.is_none())
     }
 
     /// Unbind.
     pub fn unbind(&mut self, actor: &str, name: &str) -> bool {
-        let Some(m) = self.bindings.get_mut(actor) else { return false; };
+        let Some(m) = self.bindings.get_mut(actor) else {
+            return false;
+        };
         let removed = m.remove(name).is_some();
-        if m.is_empty() { self.bindings.remove(actor); }
+        if m.is_empty() {
+            self.bindings.remove(actor);
+        }
         removed
     }
 
@@ -75,17 +89,28 @@ impl SecretBindingStore {
 
     /// Names bound for actor.
     pub fn names_of(&self, actor: &str) -> Vec<String> {
-        self.bindings.get(actor).map(|m| m.keys().cloned().collect()).unwrap_or_default()
+        self.bindings
+            .get(actor)
+            .map(|m| m.keys().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BindError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BindError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BindError::SchemaMismatch);
+        }
         for (a, m) in &self.bindings {
-            if a.is_empty() { return Err(BindError::EmptyActor); }
+            if a.is_empty() {
+                return Err(BindError::EmptyActor);
+            }
             for (n, p) in m {
-                if n.is_empty() { return Err(BindError::EmptyName); }
-                if p.is_empty() { return Err(BindError::EmptyRefPath); }
+                if n.is_empty() {
+                    return Err(BindError::EmptyName);
+                }
+                if p.is_empty() {
+                    return Err(BindError::EmptyRefPath);
+                }
             }
         }
         Ok(())
@@ -93,7 +118,9 @@ impl SecretBindingStore {
 }
 
 impl Default for SecretBindingStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -104,7 +131,10 @@ mod tests {
     fn bind_and_resolve() {
         let mut s = SecretBindingStore::new();
         s.bind("alice", "api-key", "vault://alice/api-key").unwrap();
-        assert_eq!(s.resolve("alice", "api-key").as_deref(), Some("vault://alice/api-key"));
+        assert_eq!(
+            s.resolve("alice", "api-key").as_deref(),
+            Some("vault://alice/api-key")
+        );
     }
 
     #[test]
@@ -137,16 +167,28 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = SecretBindingStore::new();
-        assert!(matches!(s.bind("", "k", "v").unwrap_err(), BindError::EmptyActor));
-        assert!(matches!(s.bind("a", "", "v").unwrap_err(), BindError::EmptyName));
-        assert!(matches!(s.bind("a", "k", "").unwrap_err(), BindError::EmptyRefPath));
+        assert!(matches!(
+            s.bind("", "k", "v").unwrap_err(),
+            BindError::EmptyActor
+        ));
+        assert!(matches!(
+            s.bind("a", "", "v").unwrap_err(),
+            BindError::EmptyName
+        ));
+        assert!(matches!(
+            s.bind("a", "k", "").unwrap_err(),
+            BindError::EmptyRefPath
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = SecretBindingStore::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), BindError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            BindError::SchemaMismatch
+        ));
     }
 
     #[test]

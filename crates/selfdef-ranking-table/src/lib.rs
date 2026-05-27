@@ -47,7 +47,9 @@ impl RankingTable {
 
     /// Set score (insert or overwrite).
     pub fn set(&mut self, id: &str, score: i64) -> Result<(), RankError> {
-        if id.is_empty() { return Err(RankError::EmptyId); }
+        if id.is_empty() {
+            return Err(RankError::EmptyId);
+        }
         self.scores.insert(id.into(), score);
         Ok(())
     }
@@ -59,9 +61,8 @@ impl RankingTable {
 
     /// Sorted (id, score) by score desc + id asc.
     fn sorted(&self) -> Vec<(String, i64)> {
-        let mut all: Vec<(String, i64)> = self.scores.iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
+        let mut all: Vec<(String, i64)> =
+            self.scores.iter().map(|(k, v)| (k.clone(), *v)).collect();
         all.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         all
     }
@@ -73,23 +74,34 @@ impl RankingTable {
 
     /// 1-based rank (None if absent).
     pub fn rank_of(&self, id: &str) -> Option<u32> {
-        if !self.scores.contains_key(id) { return None; }
+        if !self.scores.contains_key(id) {
+            return None;
+        }
         let sorted = self.sorted();
-        sorted.iter().position(|(k, _)| k == id).map(|i| (i + 1) as u32)
+        sorted
+            .iter()
+            .position(|(k, _)| k == id)
+            .map(|i| (i + 1) as u32)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RankError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RankError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RankError::SchemaMismatch);
+        }
         for k in self.scores.keys() {
-            if k.is_empty() { return Err(RankError::EmptyId); }
+            if k.is_empty() {
+                return Err(RankError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for RankingTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -154,7 +166,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = RankingTable::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), RankError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            RankError::SchemaMismatch
+        ));
     }
 
     #[test]

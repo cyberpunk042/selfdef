@@ -64,27 +64,53 @@ pub enum AllowError {
 impl AllowlistStore {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), entries: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            entries: BTreeMap::new(),
+        }
     }
 
     /// Grant.
-    pub fn grant(&mut self, key: &str, reason: &str, granted_by: &str, now_ms: u64, ttl_ms: u64) -> Result<(), AllowError> {
-        if key.is_empty() { return Err(AllowError::EmptyKey); }
-        if reason.is_empty() { return Err(AllowError::EmptyReason); }
-        if granted_by.is_empty() { return Err(AllowError::EmptyGrantedBy); }
-        let expires_at_ms = if ttl_ms == 0 { 0 } else { now_ms.saturating_add(ttl_ms) };
-        self.entries.insert(key.into(), Entry {
-            reason: reason.into(),
-            granted_by: granted_by.into(),
-            granted_at_ms: now_ms,
-            expires_at_ms,
-        });
+    pub fn grant(
+        &mut self,
+        key: &str,
+        reason: &str,
+        granted_by: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), AllowError> {
+        if key.is_empty() {
+            return Err(AllowError::EmptyKey);
+        }
+        if reason.is_empty() {
+            return Err(AllowError::EmptyReason);
+        }
+        if granted_by.is_empty() {
+            return Err(AllowError::EmptyGrantedBy);
+        }
+        let expires_at_ms = if ttl_ms == 0 {
+            0
+        } else {
+            now_ms.saturating_add(ttl_ms)
+        };
+        self.entries.insert(
+            key.into(),
+            Entry {
+                reason: reason.into(),
+                granted_by: granted_by.into(),
+                granted_at_ms: now_ms,
+                expires_at_ms,
+            },
+        );
         Ok(())
     }
 
     /// Revoke.
     pub fn revoke(&mut self, key: &str) -> Result<(), AllowError> {
-        self.entries.remove(key).map(|_| ()).ok_or_else(|| AllowError::Unknown(key.into()))
+        self.entries
+            .remove(key)
+            .map(|_| ())
+            .ok_or_else(|| AllowError::Unknown(key.into()))
     }
 
     /// Allowed?
@@ -102,30 +128,42 @@ impl AllowlistStore {
 
     /// Drop expired entries.
     pub fn compact(&mut self, now_ms: u64) {
-        self.entries.retain(|_, e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms);
+        self.entries
+            .retain(|_, e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms);
     }
 
     /// Live entry count.
     pub fn live(&self, now_ms: u64) -> usize {
-        self.entries.values()
+        self.entries
+            .values()
             .filter(|e| e.expires_at_ms == 0 || e.expires_at_ms > now_ms)
             .count()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AllowError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AllowError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AllowError::SchemaMismatch);
+        }
         for (k, e) in &self.entries {
-            if k.is_empty() { return Err(AllowError::EmptyKey); }
-            if e.reason.is_empty() { return Err(AllowError::EmptyReason); }
-            if e.granted_by.is_empty() { return Err(AllowError::EmptyGrantedBy); }
+            if k.is_empty() {
+                return Err(AllowError::EmptyKey);
+            }
+            if e.reason.is_empty() {
+                return Err(AllowError::EmptyReason);
+            }
+            if e.granted_by.is_empty() {
+                return Err(AllowError::EmptyGrantedBy);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for AllowlistStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -172,16 +210,28 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = AllowlistStore::new();
-        assert!(matches!(s.grant("", "x", "y", 0, 0).unwrap_err(), AllowError::EmptyKey));
-        assert!(matches!(s.grant("k", "", "y", 0, 0).unwrap_err(), AllowError::EmptyReason));
-        assert!(matches!(s.grant("k", "x", "", 0, 0).unwrap_err(), AllowError::EmptyGrantedBy));
+        assert!(matches!(
+            s.grant("", "x", "y", 0, 0).unwrap_err(),
+            AllowError::EmptyKey
+        ));
+        assert!(matches!(
+            s.grant("k", "", "y", 0, 0).unwrap_err(),
+            AllowError::EmptyReason
+        ));
+        assert!(matches!(
+            s.grant("k", "x", "", 0, 0).unwrap_err(),
+            AllowError::EmptyGrantedBy
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = AllowlistStore::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), AllowError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AllowError::SchemaMismatch
+        ));
     }
 
     #[test]

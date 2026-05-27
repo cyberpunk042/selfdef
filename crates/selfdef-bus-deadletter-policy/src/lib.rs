@@ -78,7 +78,9 @@ pub enum DlqError {
 impl BusDeadletterPolicy {
     /// New.
     pub fn new(max_attempts: u32) -> Result<Self, DlqError> {
-        if max_attempts == 0 { return Err(DlqError::ZeroAttempts); }
+        if max_attempts == 0 {
+            return Err(DlqError::ZeroAttempts);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             max_attempts,
@@ -88,11 +90,16 @@ impl BusDeadletterPolicy {
 
     /// Record an attempt.
     pub fn record_attempt(&mut self, event_id: &str, ok: bool) -> Result<AttemptVerdict, DlqError> {
-        if event_id.is_empty() { return Err(DlqError::EmptyId); }
+        if event_id.is_empty() {
+            return Err(DlqError::EmptyId);
+        }
         let track = self.tracks.entry(event_id.into()).or_insert(EventTrack {
-            attempts: 0, dead_lettered: false,
+            attempts: 0,
+            dead_lettered: false,
         });
-        if track.dead_lettered { return Ok(AttemptVerdict::AlreadyDead); }
+        if track.dead_lettered {
+            return Ok(AttemptVerdict::AlreadyDead);
+        }
         if ok {
             self.tracks.remove(event_id);
             return Ok(AttemptVerdict::Delivered);
@@ -100,9 +107,13 @@ impl BusDeadletterPolicy {
         track.attempts = track.attempts.saturating_add(1);
         if track.attempts >= self.max_attempts {
             track.dead_lettered = true;
-            Ok(AttemptVerdict::DeadLetter { attempts: track.attempts })
+            Ok(AttemptVerdict::DeadLetter {
+                attempts: track.attempts,
+            })
         } else {
-            Ok(AttemptVerdict::Retry { attempts: track.attempts })
+            Ok(AttemptVerdict::Retry {
+                attempts: track.attempts,
+            })
         }
     }
 
@@ -119,7 +130,8 @@ impl BusDeadletterPolicy {
 
     /// All dead-lettered ids.
     pub fn dead_letter_ids(&self) -> Vec<String> {
-        self.tracks.iter()
+        self.tracks
+            .iter()
             .filter(|(_, t)| t.dead_lettered)
             .map(|(k, _)| k.clone())
             .collect()
@@ -127,10 +139,16 @@ impl BusDeadletterPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DlqError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DlqError::SchemaMismatch); }
-        if self.max_attempts == 0 { return Err(DlqError::ZeroAttempts); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DlqError::SchemaMismatch);
+        }
+        if self.max_attempts == 0 {
+            return Err(DlqError::ZeroAttempts);
+        }
         for k in self.tracks.keys() {
-            if k.is_empty() { return Err(DlqError::EmptyId); }
+            if k.is_empty() {
+                return Err(DlqError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -142,7 +160,10 @@ mod tests {
 
     #[test]
     fn zero_attempts_rejected() {
-        assert!(matches!(BusDeadletterPolicy::new(0).unwrap_err(), DlqError::ZeroAttempts));
+        assert!(matches!(
+            BusDeadletterPolicy::new(0).unwrap_err(),
+            DlqError::ZeroAttempts
+        ));
     }
 
     #[test]
@@ -157,8 +178,14 @@ mod tests {
     #[test]
     fn retries_then_dlq() {
         let mut p = BusDeadletterPolicy::new(3).unwrap();
-        assert_eq!(p.record_attempt("e1", false).unwrap(), AttemptVerdict::Retry { attempts: 1 });
-        assert_eq!(p.record_attempt("e1", false).unwrap(), AttemptVerdict::Retry { attempts: 2 });
+        assert_eq!(
+            p.record_attempt("e1", false).unwrap(),
+            AttemptVerdict::Retry { attempts: 1 }
+        );
+        assert_eq!(
+            p.record_attempt("e1", false).unwrap(),
+            AttemptVerdict::Retry { attempts: 2 }
+        );
         let v = p.record_attempt("e1", false).unwrap();
         assert_eq!(v, AttemptVerdict::DeadLetter { attempts: 3 });
     }
@@ -177,7 +204,10 @@ mod tests {
         p.record_attempt("e1", false).unwrap();
         assert!(p.revive("e1"));
         // After revive, attempts start fresh.
-        assert_eq!(p.record_attempt("e1", false).unwrap(), AttemptVerdict::DeadLetter { attempts: 1 });
+        assert_eq!(
+            p.record_attempt("e1", false).unwrap(),
+            AttemptVerdict::DeadLetter { attempts: 1 }
+        );
     }
 
     #[test]
@@ -201,14 +231,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut p = BusDeadletterPolicy::new(1).unwrap();
-        assert!(matches!(p.record_attempt("", false).unwrap_err(), DlqError::EmptyId));
+        assert!(matches!(
+            p.record_attempt("", false).unwrap_err(),
+            DlqError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = BusDeadletterPolicy::new(1).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), DlqError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            DlqError::SchemaMismatch
+        ));
     }
 
     #[test]

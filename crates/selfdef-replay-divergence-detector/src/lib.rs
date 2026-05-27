@@ -178,7 +178,10 @@ mod tests {
 
     #[test]
     fn identical_no_divergence() {
-        let r = vec![step("git", "allow", "abc", 100), step("ls", "allow", "def", 50)];
+        let r = vec![
+            step("git", "allow", "abc", 100),
+            step("ls", "allow", "def", 50),
+        ];
         let o = r.clone();
         assert!(ReplayDivergenceDetector::compare(&r, &o).is_none());
     }
@@ -265,7 +268,10 @@ mod tests {
         let o = vec![step("git", "deny", "abc", 100)];
         let mut d = ReplayDivergenceDetector::compare(&r, &o).unwrap();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DivergenceError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DivergenceError::SchemaMismatch
+        ));
     }
 
     #[test]

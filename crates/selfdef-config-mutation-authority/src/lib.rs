@@ -69,7 +69,9 @@ pub enum ConfigMutationError {
     #[error("missing namespace: {0:?}")]
     Missing(ConfigNamespace),
     /// Profile below requirement.
-    #[error("mutation forbidden in namespace {namespace:?}: actor profile {actor_profile:?} below required {required:?}")]
+    #[error(
+        "mutation forbidden in namespace {namespace:?}: actor profile {actor_profile:?} below required {required:?}"
+    )]
     BelowMinimum {
         /// namespace.
         namespace: ConfigNamespace,
@@ -81,9 +83,14 @@ pub enum ConfigMutationError {
 }
 
 const REQUIRED: [ConfigNamespace; 8] = [
-    ConfigNamespace::Boundary, ConfigNamespace::Notifier,
-    ConfigNamespace::Theme, ConfigNamespace::Density, ConfigNamespace::Locale,
-    ConfigNamespace::Provider, ConfigNamespace::Eval, ConfigNamespace::Replay,
+    ConfigNamespace::Boundary,
+    ConfigNamespace::Notifier,
+    ConfigNamespace::Theme,
+    ConfigNamespace::Density,
+    ConfigNamespace::Locale,
+    ConfigNamespace::Provider,
+    ConfigNamespace::Eval,
+    ConfigNamespace::Replay,
 ];
 
 /// Numeric rank for Profile authority ordering (higher = more authority).
@@ -102,14 +109,38 @@ impl ConfigMutationAuthority {
     /// Canonical policy.
     pub fn canonical() -> Self {
         let policies = vec![
-            MutationPolicy { namespace: ConfigNamespace::Boundary, min_profile: Profile::Production },
-            MutationPolicy { namespace: ConfigNamespace::Notifier, min_profile: Profile::Careful },
-            MutationPolicy { namespace: ConfigNamespace::Theme,    min_profile: Profile::Private },
-            MutationPolicy { namespace: ConfigNamespace::Density,  min_profile: Profile::Private },
-            MutationPolicy { namespace: ConfigNamespace::Locale,   min_profile: Profile::Private },
-            MutationPolicy { namespace: ConfigNamespace::Provider, min_profile: Profile::Careful },
-            MutationPolicy { namespace: ConfigNamespace::Eval,     min_profile: Profile::Careful },
-            MutationPolicy { namespace: ConfigNamespace::Replay,   min_profile: Profile::Careful },
+            MutationPolicy {
+                namespace: ConfigNamespace::Boundary,
+                min_profile: Profile::Production,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Notifier,
+                min_profile: Profile::Careful,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Theme,
+                min_profile: Profile::Private,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Density,
+                min_profile: Profile::Private,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Locale,
+                min_profile: Profile::Private,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Provider,
+                min_profile: Profile::Careful,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Eval,
+                min_profile: Profile::Careful,
+            },
+            MutationPolicy {
+                namespace: ConfigNamespace::Replay,
+                min_profile: Profile::Careful,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -144,7 +175,9 @@ impl ConfigMutationAuthority {
         namespace: ConfigNamespace,
         actor_profile: Profile,
     ) -> Result<(), ConfigMutationError> {
-        let req = self.get(namespace).ok_or(ConfigMutationError::Missing(namespace))?;
+        let req = self
+            .get(namespace)
+            .ok_or(ConfigMutationError::Missing(namespace))?;
         if profile_rank(actor_profile) < profile_rank(req.min_profile) {
             return Err(ConfigMutationError::BelowMinimum {
                 namespace,
@@ -168,51 +201,81 @@ mod tests {
     #[test]
     fn theme_anyone_can_mutate() {
         let a = ConfigMutationAuthority::canonical();
-        a.permitted(ConfigNamespace::Theme, Profile::Private).unwrap();
-        a.permitted(ConfigNamespace::Theme, Profile::Production).unwrap();
+        a.permitted(ConfigNamespace::Theme, Profile::Private)
+            .unwrap();
+        a.permitted(ConfigNamespace::Theme, Profile::Production)
+            .unwrap();
     }
 
     #[test]
     fn boundary_requires_production() {
         let a = ConfigMutationAuthority::canonical();
-        assert!(a.permitted(ConfigNamespace::Boundary, Profile::Private).is_err());
-        assert!(a.permitted(ConfigNamespace::Boundary, Profile::Careful).is_err());
-        a.permitted(ConfigNamespace::Boundary, Profile::Production).unwrap();
+        assert!(
+            a.permitted(ConfigNamespace::Boundary, Profile::Private)
+                .is_err()
+        );
+        assert!(
+            a.permitted(ConfigNamespace::Boundary, Profile::Careful)
+                .is_err()
+        );
+        a.permitted(ConfigNamespace::Boundary, Profile::Production)
+            .unwrap();
     }
 
     #[test]
     fn notifier_requires_careful() {
         let a = ConfigMutationAuthority::canonical();
-        assert!(a.permitted(ConfigNamespace::Notifier, Profile::Fast).is_err());
-        a.permitted(ConfigNamespace::Notifier, Profile::Careful).unwrap();
-        a.permitted(ConfigNamespace::Notifier, Profile::Production).unwrap();
+        assert!(
+            a.permitted(ConfigNamespace::Notifier, Profile::Fast)
+                .is_err()
+        );
+        a.permitted(ConfigNamespace::Notifier, Profile::Careful)
+            .unwrap();
+        a.permitted(ConfigNamespace::Notifier, Profile::Production)
+            .unwrap();
     }
 
     #[test]
     fn replay_requires_careful() {
         let a = ConfigMutationAuthority::canonical();
-        assert!(a.permitted(ConfigNamespace::Replay, Profile::Private).is_err());
-        a.permitted(ConfigNamespace::Replay, Profile::Careful).unwrap();
+        assert!(
+            a.permitted(ConfigNamespace::Replay, Profile::Private)
+                .is_err()
+        );
+        a.permitted(ConfigNamespace::Replay, Profile::Careful)
+            .unwrap();
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut a = ConfigMutationAuthority::canonical();
         a.policies.pop();
-        assert!(matches!(a.validate().unwrap_err(), ConfigMutationError::CountInvalid(7)));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            ConfigMutationError::CountInvalid(7)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = ConfigMutationAuthority::canonical();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), ConfigMutationError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            ConfigMutationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn namespace_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ConfigNamespace::Boundary).unwrap(), "\"boundary\"");
-        assert_eq!(serde_json::to_string(&ConfigNamespace::Provider).unwrap(), "\"provider\"");
+        assert_eq!(
+            serde_json::to_string(&ConfigNamespace::Boundary).unwrap(),
+            "\"boundary\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ConfigNamespace::Provider).unwrap(),
+            "\"provider\""
+        );
     }
 
     #[test]

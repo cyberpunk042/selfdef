@@ -88,8 +88,14 @@ impl ActionWitnessPolicy {
     }
 
     /// Submit a distinct witness (idempotent).
-    pub fn submit_witness(&mut self, action_id: &str, witness_id: &str) -> Result<(), WitnessError> {
-        if action_id.is_empty() || witness_id.is_empty() { return Err(WitnessError::EmptyId); }
+    pub fn submit_witness(
+        &mut self,
+        action_id: &str,
+        witness_id: &str,
+    ) -> Result<(), WitnessError> {
+        if action_id.is_empty() || witness_id.is_empty() {
+            return Err(WitnessError::EmptyId);
+        }
         let entry = self.witnesses.entry(action_id.into()).or_default();
         if !entry.iter().any(|w| w == witness_id) {
             entry.push(witness_id.into());
@@ -100,7 +106,10 @@ impl ActionWitnessPolicy {
 
     /// Distinct witness count for action.
     pub fn count(&self, action_id: &str) -> u32 {
-        self.witnesses.get(action_id).map(|v| v.len() as u32).unwrap_or(0)
+        self.witnesses
+            .get(action_id)
+            .map(|v| v.len() as u32)
+            .unwrap_or(0)
     }
 
     /// Decide.
@@ -129,7 +138,9 @@ impl ActionWitnessPolicy {
 }
 
 impl Default for ActionWitnessPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -139,16 +150,28 @@ mod tests {
     #[test]
     fn local_no_witnesses_needed() {
         let p = ActionWitnessPolicy::new();
-        assert!(matches!(p.admit("a", BlastRadius::LocalEphemeral), WitnessVerdict::Allow));
+        assert!(matches!(
+            p.admit("a", BlastRadius::LocalEphemeral),
+            WitnessVerdict::Allow
+        ));
     }
 
     #[test]
     fn cross_session_needs_one() {
         let mut p = ActionWitnessPolicy::new();
         let v = p.admit("a", BlastRadius::CrossSession);
-        assert!(matches!(v, WitnessVerdict::Pending { required: 1, observed: 0 }));
+        assert!(matches!(
+            v,
+            WitnessVerdict::Pending {
+                required: 1,
+                observed: 0
+            }
+        ));
         p.submit_witness("a", "w1").unwrap();
-        assert!(matches!(p.admit("a", BlastRadius::CrossSession), WitnessVerdict::Allow));
+        assert!(matches!(
+            p.admit("a", BlastRadius::CrossSession),
+            WitnessVerdict::Allow
+        ));
     }
 
     #[test]
@@ -156,10 +179,16 @@ mod tests {
         let mut p = ActionWitnessPolicy::new();
         p.submit_witness("a", "w1").unwrap();
         p.submit_witness("a", "w1").unwrap(); // dup
-        assert!(matches!(p.admit("a", BlastRadius::Public), WitnessVerdict::Pending { observed: 1, .. }));
+        assert!(matches!(
+            p.admit("a", BlastRadius::Public),
+            WitnessVerdict::Pending { observed: 1, .. }
+        ));
         p.submit_witness("a", "w2").unwrap();
         p.submit_witness("a", "w3").unwrap();
-        assert!(matches!(p.admit("a", BlastRadius::Public), WitnessVerdict::Allow));
+        assert!(matches!(
+            p.admit("a", BlastRadius::Public),
+            WitnessVerdict::Allow
+        ));
     }
 
     #[test]
@@ -179,21 +208,34 @@ mod tests {
     #[test]
     fn empty_ids_rejected() {
         let mut p = ActionWitnessPolicy::new();
-        assert!(matches!(p.submit_witness("", "w").unwrap_err(), WitnessError::EmptyId));
-        assert!(matches!(p.submit_witness("a", "").unwrap_err(), WitnessError::EmptyId));
+        assert!(matches!(
+            p.submit_witness("", "w").unwrap_err(),
+            WitnessError::EmptyId
+        ));
+        assert!(matches!(
+            p.submit_witness("a", "").unwrap_err(),
+            WitnessError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ActionWitnessPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), WitnessError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            WitnessError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
         let v = WitnessVerdict::Allow;
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"allow\""));
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"allow\"")
+        );
     }
 
     #[test]

@@ -64,27 +64,36 @@ impl UnionFind {
 
     /// Add element (as a singleton).
     pub fn add(&mut self, id: &str) -> Result<(), UfError> {
-        if id.is_empty() { return Err(UfError::EmptyId); }
+        if id.is_empty() {
+            return Err(UfError::EmptyId);
+        }
         if self.entries.contains_key(id) {
             return Err(UfError::DuplicateId(id.into()));
         }
-        self.entries.insert(id.into(), Entry {
-            parent: id.into(),
-            rank: 0,
-            size: 1,
-        });
+        self.entries.insert(
+            id.into(),
+            Entry {
+                parent: id.into(),
+                rank: 0,
+                size: 1,
+            },
+        );
         Ok(())
     }
 
     /// Find root with path compression.
     pub fn find(&mut self, id: &str) -> Result<String, UfError> {
-        if !self.entries.contains_key(id) { return Err(UfError::UnknownId(id.into())); }
+        if !self.entries.contains_key(id) {
+            return Err(UfError::UnknownId(id.into()));
+        }
         // Walk up.
         let mut cur = id.to_string();
         let mut path: Vec<String> = Vec::new();
         loop {
             let parent = self.entries.get(&cur).unwrap().parent.clone();
-            if parent == cur { break; }
+            if parent == cur {
+                break;
+            }
             path.push(cur.clone());
             cur = parent;
         }
@@ -100,14 +109,20 @@ impl UnionFind {
     pub fn union(&mut self, a: &str, b: &str) -> Result<(), UfError> {
         let ra = self.find(a)?;
         let rb = self.find(b)?;
-        if ra == rb { return Ok(()); }
+        if ra == rb {
+            return Ok(());
+        }
         let rank_a = self.entries.get(&ra).unwrap().rank;
         let rank_b = self.entries.get(&rb).unwrap().rank;
         let size_a = self.entries.get(&ra).unwrap().size;
         let size_b = self.entries.get(&rb).unwrap().size;
-        let (root, child) = if rank_a < rank_b { (rb.clone(), ra.clone()) }
-            else if rank_a > rank_b { (ra.clone(), rb.clone()) }
-            else { (ra.clone(), rb.clone()) }; // ties: a wins, bump rank
+        let (root, child) = if rank_a < rank_b {
+            (rb.clone(), ra.clone())
+        } else if rank_a > rank_b {
+            (ra.clone(), rb.clone())
+        } else {
+            (ra.clone(), rb.clone())
+        }; // ties: a wins, bump rank
         self.entries.get_mut(&child).unwrap().parent = root.clone();
         self.entries.get_mut(&root).unwrap().size = size_a.saturating_add(size_b);
         if rank_a == rank_b {
@@ -124,9 +139,13 @@ impl UnionFind {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), UfError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(UfError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(UfError::SchemaMismatch);
+        }
         for (id, e) in &self.entries {
-            if id.is_empty() { return Err(UfError::EmptyId); }
+            if id.is_empty() {
+                return Err(UfError::EmptyId);
+            }
             if !self.entries.contains_key(&e.parent) {
                 return Err(UfError::UnknownId(e.parent.clone()));
             }
@@ -136,7 +155,9 @@ impl UnionFind {
 }
 
 impl Default for UnionFind {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

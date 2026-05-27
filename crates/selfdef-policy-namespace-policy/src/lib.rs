@@ -80,9 +80,14 @@ impl PolicyNamespacePolicy {
 
     /// Set value in a namespace.
     pub fn set(&mut self, ns_id: &str, key: &str, value: &str) -> Result<(), NamespaceError> {
-        let ns = self.namespaces.iter_mut().find(|n| n.id == ns_id)
+        let ns = self
+            .namespaces
+            .iter_mut()
+            .find(|n| n.id == ns_id)
             .ok_or_else(|| NamespaceError::Unknown(ns_id.into()))?;
-        if !ns.mutable { return Err(NamespaceError::Sealed(ns_id.into())); }
+        if !ns.mutable {
+            return Err(NamespaceError::Sealed(ns_id.into()));
+        }
         ns.values.insert(key.into(), value.into());
         Ok(())
     }
@@ -94,7 +99,10 @@ impl PolicyNamespacePolicy {
             if let Some(v) = ns.values.get(key) {
                 return Some(v.as_str());
             }
-            current = ns.parent_id.as_ref().and_then(|p| self.namespaces.iter().find(|n| &n.id == p));
+            current = ns
+                .parent_id
+                .as_ref()
+                .and_then(|p| self.namespaces.iter().find(|n| &n.id == p));
         }
         None
     }
@@ -113,7 +121,9 @@ fn check_namespaces(ns: &[Namespace]) -> Result<(), NamespaceError> {
     let mut ids: HashSet<&str> = HashSet::new();
     let mut parents: HashMap<&str, Option<&str>> = HashMap::new();
     for n in ns {
-        if n.id.is_empty() { return Err(NamespaceError::EmptyId); }
+        if n.id.is_empty() {
+            return Err(NamespaceError::EmptyId);
+        }
         if !ids.insert(n.id.as_str()) {
             return Err(NamespaceError::DuplicateId(n.id.clone()));
         }
@@ -122,7 +132,10 @@ fn check_namespaces(ns: &[Namespace]) -> Result<(), NamespaceError> {
     for n in ns {
         if let Some(p) = &n.parent_id {
             if !ids.contains(p.as_str()) {
-                return Err(NamespaceError::UnknownParent { ns: n.id.clone(), parent: p.clone() });
+                return Err(NamespaceError::UnknownParent {
+                    ns: n.id.clone(),
+                    parent: p.clone(),
+                });
             }
         }
     }
@@ -155,7 +168,10 @@ mod tests {
 
     #[test]
     fn empty_validates() {
-        PolicyNamespacePolicy::new(vec![]).unwrap().validate().unwrap();
+        PolicyNamespacePolicy::new(vec![])
+            .unwrap()
+            .validate()
+            .unwrap();
     }
 
     #[test]
@@ -168,7 +184,10 @@ mod tests {
     #[test]
     fn set_in_sealed_rejected() {
         let mut p = PolicyNamespacePolicy::new(vec![ns("a", None, false)]).unwrap();
-        assert!(matches!(p.set("a", "k", "v").unwrap_err(), NamespaceError::Sealed(_)));
+        assert!(matches!(
+            p.set("a", "k", "v").unwrap_err(),
+            NamespaceError::Sealed(_)
+        ));
     }
 
     #[test]
@@ -176,7 +195,8 @@ mod tests {
         let mut p = PolicyNamespacePolicy::new(vec![
             ns("root", None, true),
             ns("child", Some("root"), true),
-        ]).unwrap();
+        ])
+        .unwrap();
         p.set("root", "shared", "v-root").unwrap();
         assert_eq!(p.resolve("child", "shared"), Some("v-root"));
     }
@@ -186,7 +206,8 @@ mod tests {
         let mut p = PolicyNamespacePolicy::new(vec![
             ns("root", None, true),
             ns("child", Some("root"), true),
-        ]).unwrap();
+        ])
+        .unwrap();
         p.set("root", "shared", "v-root").unwrap();
         p.set("child", "shared", "v-child").unwrap();
         assert_eq!(p.resolve("child", "shared"), Some("v-child"));
@@ -195,7 +216,10 @@ mod tests {
     #[test]
     fn unknown_namespace_rejected() {
         let mut p = PolicyNamespacePolicy::new(vec![]).unwrap();
-        assert!(matches!(p.set("ghost", "k", "v").unwrap_err(), NamespaceError::Unknown(_)));
+        assert!(matches!(
+            p.set("ghost", "k", "v").unwrap_err(),
+            NamespaceError::Unknown(_)
+        ));
     }
 
     #[test]
@@ -209,7 +233,10 @@ mod tests {
     #[test]
     fn cycle_detected() {
         let nss = vec![ns("a", Some("b"), true), ns("b", Some("a"), true)];
-        assert!(matches!(PolicyNamespacePolicy::new(nss).unwrap_err(), NamespaceError::Cycle(_)));
+        assert!(matches!(
+            PolicyNamespacePolicy::new(nss).unwrap_err(),
+            NamespaceError::Cycle(_)
+        ));
     }
 
     #[test]
@@ -224,7 +251,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = PolicyNamespacePolicy::new(vec![ns("a", None, true)]).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), NamespaceError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            NamespaceError::SchemaMismatch
+        ));
     }
 
     #[test]

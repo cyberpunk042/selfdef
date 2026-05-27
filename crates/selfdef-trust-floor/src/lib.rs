@@ -75,12 +75,36 @@ impl TrustFloorManifest {
     /// Canonical operator-tuned defaults.
     pub fn canonical() -> Self {
         let floors = vec![
-            FloorRecord { side_effect: SideEffectClass::None,           floor:  0,  grace: 0 },
-            FloorRecord { side_effect: SideEffectClass::ReadOnly,       floor: 10,  grace: 5 },
-            FloorRecord { side_effect: SideEffectClass::FsWrite,        floor: 40,  grace: 10 },
-            FloorRecord { side_effect: SideEffectClass::NetworkEgress,  floor: 35,  grace: 10 },
-            FloorRecord { side_effect: SideEffectClass::Process,        floor: 60,  grace: 15 },
-            FloorRecord { side_effect: SideEffectClass::Persistent,     floor: 80,  grace: 10 },
+            FloorRecord {
+                side_effect: SideEffectClass::None,
+                floor: 0,
+                grace: 0,
+            },
+            FloorRecord {
+                side_effect: SideEffectClass::ReadOnly,
+                floor: 10,
+                grace: 5,
+            },
+            FloorRecord {
+                side_effect: SideEffectClass::FsWrite,
+                floor: 40,
+                grace: 10,
+            },
+            FloorRecord {
+                side_effect: SideEffectClass::NetworkEgress,
+                floor: 35,
+                grace: 10,
+            },
+            FloorRecord {
+                side_effect: SideEffectClass::Process,
+                floor: 60,
+                grace: 15,
+            },
+            FloorRecord {
+                side_effect: SideEffectClass::Persistent,
+                floor: 80,
+                grace: 10,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -103,7 +127,10 @@ impl TrustFloorManifest {
         }
         for r in &self.floors {
             if r.floor > 100 {
-                return Err(FloorError::FloorOutOfRange { side_effect: r.side_effect, floor: r.floor });
+                return Err(FloorError::FloorOutOfRange {
+                    side_effect: r.side_effect,
+                    floor: r.floor,
+                });
             }
         }
         Ok(())
@@ -119,9 +146,17 @@ impl TrustFloorManifest {
     /// - `Allow` if `trust >= floor`
     /// - `Ask`   if `floor - grace <= trust < floor`
     /// - `Deny`  if `trust < floor - grace`
-    pub fn decide_outcome(&self, side_effect: SideEffectClass, trust: u8) -> Result<Outcome, FloorError> {
-        if trust > 100 { return Err(FloorError::TrustOutOfRange(trust)); }
-        let r = self.get(side_effect).ok_or(FloorError::Missing(side_effect))?;
+    pub fn decide_outcome(
+        &self,
+        side_effect: SideEffectClass,
+        trust: u8,
+    ) -> Result<Outcome, FloorError> {
+        if trust > 100 {
+            return Err(FloorError::TrustOutOfRange(trust));
+        }
+        let r = self
+            .get(side_effect)
+            .ok_or(FloorError::Missing(side_effect))?;
         if trust >= r.floor {
             Ok(Outcome::Allow)
         } else if (r.floor as i16 - trust as i16) <= r.grace as i16 {
@@ -145,68 +180,112 @@ mod tests {
     fn allow_above_floor() {
         let m = TrustFloorManifest::canonical();
         // FsWrite floor=40 → trust 50 allows
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 50).unwrap(), Outcome::Allow);
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 40).unwrap(), Outcome::Allow);
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 50).unwrap(),
+            Outcome::Allow
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 40).unwrap(),
+            Outcome::Allow
+        );
     }
 
     #[test]
     fn ask_within_grace() {
         let m = TrustFloorManifest::canonical();
         // FsWrite floor=40 grace=10 → 30..40 = Ask
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 35).unwrap(), Outcome::Ask);
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 30).unwrap(), Outcome::Ask);
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 35).unwrap(),
+            Outcome::Ask
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 30).unwrap(),
+            Outcome::Ask
+        );
     }
 
     #[test]
     fn deny_below_grace() {
         let m = TrustFloorManifest::canonical();
         // FsWrite floor=40 grace=10 → trust<30 = Deny
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 29).unwrap(), Outcome::Deny);
-        assert_eq!(m.decide_outcome(SideEffectClass::FsWrite, 0).unwrap(), Outcome::Deny);
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 29).unwrap(),
+            Outcome::Deny
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::FsWrite, 0).unwrap(),
+            Outcome::Deny
+        );
     }
 
     #[test]
     fn persistent_requires_high_trust() {
         let m = TrustFloorManifest::canonical();
         // Persistent floor=80 grace=10 → trust=85 Allow; trust=75 Ask; trust=69 Deny
-        assert_eq!(m.decide_outcome(SideEffectClass::Persistent, 85).unwrap(), Outcome::Allow);
-        assert_eq!(m.decide_outcome(SideEffectClass::Persistent, 75).unwrap(), Outcome::Ask);
-        assert_eq!(m.decide_outcome(SideEffectClass::Persistent, 69).unwrap(), Outcome::Deny);
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::Persistent, 85).unwrap(),
+            Outcome::Allow
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::Persistent, 75).unwrap(),
+            Outcome::Ask
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::Persistent, 69).unwrap(),
+            Outcome::Deny
+        );
     }
 
     #[test]
     fn none_floor_zero_always_allows() {
         let m = TrustFloorManifest::canonical();
-        assert_eq!(m.decide_outcome(SideEffectClass::None, 0).unwrap(), Outcome::Allow);
-        assert_eq!(m.decide_outcome(SideEffectClass::None, 100).unwrap(), Outcome::Allow);
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::None, 0).unwrap(),
+            Outcome::Allow
+        );
+        assert_eq!(
+            m.decide_outcome(SideEffectClass::None, 100).unwrap(),
+            Outcome::Allow
+        );
     }
 
     #[test]
     fn trust_out_of_range_rejected() {
         let m = TrustFloorManifest::canonical();
-        assert!(matches!(m.decide_outcome(SideEffectClass::FsWrite, 200).unwrap_err(),
-            FloorError::TrustOutOfRange(200)));
+        assert!(matches!(
+            m.decide_outcome(SideEffectClass::FsWrite, 200).unwrap_err(),
+            FloorError::TrustOutOfRange(200)
+        ));
     }
 
     #[test]
     fn floor_out_of_range_caught() {
         let mut m = TrustFloorManifest::canonical();
         m.floors[0].floor = 200;
-        assert!(matches!(m.validate().unwrap_err(), FloorError::FloorOutOfRange { .. }));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            FloorError::FloorOutOfRange { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = TrustFloorManifest::canonical();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), FloorError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            FloorError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut m = TrustFloorManifest::canonical();
         m.floors.pop();
-        assert!(matches!(m.validate().unwrap_err(), FloorError::CountInvalid(5)));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            FloorError::CountInvalid(5)
+        ));
     }
 
     #[test]

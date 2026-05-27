@@ -83,10 +83,34 @@ impl RetryPolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            transient: ClassRetry { max_attempts: 5, base_delay_ms: 200, multiplier: 2.0, max_delay_ms: 30_000, jitter_pct: 25 },
-            throttled: ClassRetry { max_attempts: 4, base_delay_ms: 1_000, multiplier: 2.0, max_delay_ms: 60_000, jitter_pct: 50 },
-            auth: ClassRetry { max_attempts: 2, base_delay_ms: 500, multiplier: 2.0, max_delay_ms: 5_000, jitter_pct: 10 },
-            permanent: ClassRetry { max_attempts: 1, base_delay_ms: 0, multiplier: 1.0, max_delay_ms: 0, jitter_pct: 0 },
+            transient: ClassRetry {
+                max_attempts: 5,
+                base_delay_ms: 200,
+                multiplier: 2.0,
+                max_delay_ms: 30_000,
+                jitter_pct: 25,
+            },
+            throttled: ClassRetry {
+                max_attempts: 4,
+                base_delay_ms: 1_000,
+                multiplier: 2.0,
+                max_delay_ms: 60_000,
+                jitter_pct: 50,
+            },
+            auth: ClassRetry {
+                max_attempts: 2,
+                base_delay_ms: 500,
+                multiplier: 2.0,
+                max_delay_ms: 5_000,
+                jitter_pct: 10,
+            },
+            permanent: ClassRetry {
+                max_attempts: 1,
+                base_delay_ms: 0,
+                multiplier: 1.0,
+                max_delay_ms: 0,
+                jitter_pct: 0,
+            },
         }
     }
 
@@ -155,7 +179,10 @@ mod tests {
     fn permanent_never_retries() {
         let p = RetryPolicy::canonical();
         for attempt in 1..10 {
-            assert!(p.should_retry(FailureClass::Permanent, attempt, 42).is_none());
+            assert!(
+                p.should_retry(FailureClass::Permanent, attempt, 42)
+                    .is_none()
+            );
         }
     }
 
@@ -191,8 +218,12 @@ mod tests {
     #[test]
     fn jitter_deterministic_per_seed() {
         let p = RetryPolicy::canonical();
-        let a = p.should_retry(FailureClass::Throttled, 2, 0xdeadbeef).unwrap();
-        let b = p.should_retry(FailureClass::Throttled, 2, 0xdeadbeef).unwrap();
+        let a = p
+            .should_retry(FailureClass::Throttled, 2, 0xdeadbeef)
+            .unwrap();
+        let b = p
+            .should_retry(FailureClass::Throttled, 2, 0xdeadbeef)
+            .unwrap();
         assert_eq!(a, b);
     }
 
@@ -208,27 +239,42 @@ mod tests {
     fn bad_multiplier_rejected() {
         let mut p = RetryPolicy::canonical();
         p.transient.multiplier = 0.5;
-        assert!(matches!(p.validate().unwrap_err(), RetryError::BadMultiplier(_, _)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetryError::BadMultiplier(_, _)
+        ));
     }
 
     #[test]
     fn bad_jitter_rejected() {
         let mut p = RetryPolicy::canonical();
         p.throttled.jitter_pct = 150;
-        assert!(matches!(p.validate().unwrap_err(), RetryError::BadJitter(_, _)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetryError::BadJitter(_, _)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = RetryPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RetryError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RetryError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&FailureClass::Throttled).unwrap(), "\"throttled\"");
-        assert_eq!(serde_json::to_string(&FailureClass::Permanent).unwrap(), "\"permanent\"");
+        assert_eq!(
+            serde_json::to_string(&FailureClass::Throttled).unwrap(),
+            "\"throttled\""
+        );
+        assert_eq!(
+            serde_json::to_string(&FailureClass::Permanent).unwrap(),
+            "\"permanent\""
+        );
     }
 
     #[test]

@@ -97,9 +97,11 @@ impl ActionSideEffectClassifier {
             Verb::Send | Verb::Spawn => SideEffectClass::External,
         };
         // External calls escalate Pure/Idempotent/Mutating to External.
-        let class = if f.has_external_call && matches!(base,
-            SideEffectClass::Pure | SideEffectClass::Idempotent | SideEffectClass::Mutating
-        ) {
+        let class = if f.has_external_call
+            && matches!(
+                base,
+                SideEffectClass::Pure | SideEffectClass::Idempotent | SideEffectClass::Mutating
+            ) {
             SideEffectClass::External
         } else if f.is_repeatable && matches!(base, SideEffectClass::Mutating) {
             // Operator-asserted repeatable mutation promotes to Idempotent.
@@ -120,7 +122,11 @@ pub struct ActionSideEffectClassifierEnv {
 
 impl ActionSideEffectClassifierEnv {
     /// New.
-    pub fn new() -> Self { Self { schema_version: SCHEMA_VERSION.into() } }
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SideEffectError> {
@@ -132,7 +138,9 @@ impl ActionSideEffectClassifierEnv {
 }
 
 impl Default for ActionSideEffectClassifierEnv {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +148,11 @@ mod tests {
     use super::*;
 
     fn f(verb: Verb, external: bool, repeatable: bool) -> ActionFeatures {
-        ActionFeatures { verb, has_external_call: external, is_repeatable: repeatable }
+        ActionFeatures {
+            verb,
+            has_external_call: external,
+            is_repeatable: repeatable,
+        }
     }
 
     #[test]
@@ -208,13 +220,22 @@ mod tests {
     fn schema_drift_rejected() {
         let mut e = ActionSideEffectClassifierEnv::new();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), SideEffectError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            SideEffectError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SideEffectClass::Destructive).unwrap(), "\"destructive\"");
-        assert_eq!(serde_json::to_string(&SideEffectClass::External).unwrap(), "\"external\"");
+        assert_eq!(
+            serde_json::to_string(&SideEffectClass::Destructive).unwrap(),
+            "\"destructive\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SideEffectClass::External).unwrap(),
+            "\"external\""
+        );
     }
 
     #[test]

@@ -77,10 +77,22 @@ impl PolicyVersionPin {
 
     /// Pin.
     pub fn pin(&mut self, actor: &str, bundle_id: &str, version: &str) -> Result<(), PinError> {
-        if actor.is_empty() { return Err(PinError::EmptyActor); }
-        if bundle_id.is_empty() { return Err(PinError::EmptyBundle); }
-        if version.is_empty() { return Err(PinError::EmptyVersion); }
-        self.pins.insert(actor.into(), Pin { bundle_id: bundle_id.into(), version: version.into() });
+        if actor.is_empty() {
+            return Err(PinError::EmptyActor);
+        }
+        if bundle_id.is_empty() {
+            return Err(PinError::EmptyBundle);
+        }
+        if version.is_empty() {
+            return Err(PinError::EmptyVersion);
+        }
+        self.pins.insert(
+            actor.into(),
+            Pin {
+                bundle_id: bundle_id.into(),
+                version: version.into(),
+            },
+        );
         Ok(())
     }
 
@@ -92,25 +104,38 @@ impl PolicyVersionPin {
     /// Resolve.
     pub fn resolve(&self, actor: &str) -> PinVerdict {
         match self.pins.get(actor) {
-            Some(p) => PinVerdict::Pinned { bundle_id: p.bundle_id.clone(), version: p.version.clone() },
+            Some(p) => PinVerdict::Pinned {
+                bundle_id: p.bundle_id.clone(),
+                version: p.version.clone(),
+            },
             None => PinVerdict::Unpinned,
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PinError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PinError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PinError::SchemaMismatch);
+        }
         for (a, p) in &self.pins {
-            if a.is_empty() { return Err(PinError::EmptyActor); }
-            if p.bundle_id.is_empty() { return Err(PinError::EmptyBundle); }
-            if p.version.is_empty() { return Err(PinError::EmptyVersion); }
+            if a.is_empty() {
+                return Err(PinError::EmptyActor);
+            }
+            if p.bundle_id.is_empty() {
+                return Err(PinError::EmptyBundle);
+            }
+            if p.version.is_empty() {
+                return Err(PinError::EmptyVersion);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyVersionPin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -161,16 +186,28 @@ mod tests {
     #[test]
     fn empty_fields_rejected() {
         let mut p = PolicyVersionPin::new();
-        assert!(matches!(p.pin("", "b", "v").unwrap_err(), PinError::EmptyActor));
-        assert!(matches!(p.pin("a", "", "v").unwrap_err(), PinError::EmptyBundle));
-        assert!(matches!(p.pin("a", "b", "").unwrap_err(), PinError::EmptyVersion));
+        assert!(matches!(
+            p.pin("", "b", "v").unwrap_err(),
+            PinError::EmptyActor
+        ));
+        assert!(matches!(
+            p.pin("a", "", "v").unwrap_err(),
+            PinError::EmptyBundle
+        ));
+        assert!(matches!(
+            p.pin("a", "b", "").unwrap_err(),
+            PinError::EmptyVersion
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PolicyVersionPin::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PinError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PinError::SchemaMismatch
+        ));
     }
 
     #[test]

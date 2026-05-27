@@ -133,10 +133,18 @@ impl RevocationLog {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for (idx, e) in self.entries.iter().enumerate() {
-            if e.grant_id.is_empty() { return Err(RevocationError::MissingGrantId { idx }); }
-            if e.actor.is_empty() { return Err(RevocationError::MissingActor { idx }); }
-            if e.revoked_at.is_empty() { return Err(RevocationError::MissingTimestamp { idx }); }
-            if e.trace_id.is_empty() { return Err(RevocationError::MissingTraceId { idx }); }
+            if e.grant_id.is_empty() {
+                return Err(RevocationError::MissingGrantId { idx });
+            }
+            if e.actor.is_empty() {
+                return Err(RevocationError::MissingActor { idx });
+            }
+            if e.revoked_at.is_empty() {
+                return Err(RevocationError::MissingTimestamp { idx });
+            }
+            if e.trace_id.is_empty() {
+                return Err(RevocationError::MissingTraceId { idx });
+            }
             if !seen.insert(e.grant_id.as_str()) {
                 return Err(RevocationError::DuplicateGrant(e.grant_id.clone()));
             }
@@ -146,7 +154,9 @@ impl RevocationLog {
 }
 
 impl Default for RevocationLog {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -173,7 +183,12 @@ mod tests {
     #[test]
     fn revoke_and_lookup() {
         let mut log = RevocationLog::new();
-        log.revoke(entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced)).unwrap();
+        log.revoke(entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        ))
+        .unwrap();
         assert!(log.is_revoked("g1"));
         assert!(!log.is_revoked("g2"));
         log.validate().unwrap();
@@ -182,17 +197,43 @@ mod tests {
     #[test]
     fn duplicate_revocation_rejected() {
         let mut log = RevocationLog::new();
-        log.revoke(entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced)).unwrap();
-        let err = log.revoke(entry("g1", GrantKind::Filesystem, RevocationReason::DriftDetected)).unwrap_err();
+        log.revoke(entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        ))
+        .unwrap();
+        let err = log
+            .revoke(entry(
+                "g1",
+                GrantKind::Filesystem,
+                RevocationReason::DriftDetected,
+            ))
+            .unwrap_err();
         assert!(matches!(err, RevocationError::DuplicateGrant(ref id) if id == "g1"));
     }
 
     #[test]
     fn count_by_reason() {
         let mut log = RevocationLog::new();
-        log.revoke(entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced)).unwrap();
-        log.revoke(entry("g2", GrantKind::Network, RevocationReason::OperatorForced)).unwrap();
-        log.revoke(entry("g3", GrantKind::Capability, RevocationReason::DriftDetected)).unwrap();
+        log.revoke(entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        ))
+        .unwrap();
+        log.revoke(entry(
+            "g2",
+            GrantKind::Network,
+            RevocationReason::OperatorForced,
+        ))
+        .unwrap();
+        log.revoke(entry(
+            "g3",
+            GrantKind::Capability,
+            RevocationReason::DriftDetected,
+        ))
+        .unwrap();
         assert_eq!(log.count_by_reason(RevocationReason::OperatorForced), 2);
         assert_eq!(log.count_by_reason(RevocationReason::DriftDetected), 1);
         assert_eq!(log.count_by_reason(RevocationReason::Superseded), 0);
@@ -210,57 +251,109 @@ mod tests {
             trace_id: "tr".into(),
             note: String::new(),
         });
-        assert!(matches!(log.validate().unwrap_err(), RevocationError::MissingGrantId { idx: 0 }));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RevocationError::MissingGrantId { idx: 0 }
+        ));
     }
 
     #[test]
     fn missing_actor_caught() {
         let mut log = RevocationLog::new();
-        let mut e = entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced);
+        let mut e = entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        );
         e.actor = String::new();
         log.entries.push(e);
-        assert!(matches!(log.validate().unwrap_err(), RevocationError::MissingActor { idx: 0 }));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RevocationError::MissingActor { idx: 0 }
+        ));
     }
 
     #[test]
     fn missing_timestamp_caught() {
         let mut log = RevocationLog::new();
-        let mut e = entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced);
+        let mut e = entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        );
         e.revoked_at = String::new();
         log.entries.push(e);
-        assert!(matches!(log.validate().unwrap_err(), RevocationError::MissingTimestamp { idx: 0 }));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RevocationError::MissingTimestamp { idx: 0 }
+        ));
     }
 
     #[test]
     fn missing_trace_id_caught() {
         let mut log = RevocationLog::new();
-        let mut e = entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced);
+        let mut e = entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        );
         e.trace_id = String::new();
         log.entries.push(e);
-        assert!(matches!(log.validate().unwrap_err(), RevocationError::MissingTraceId { idx: 0 }));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RevocationError::MissingTraceId { idx: 0 }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut log = RevocationLog::new();
         log.schema_version = "9.9.9".into();
-        assert!(matches!(log.validate().unwrap_err(), RevocationError::SchemaMismatch));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RevocationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn reason_serde_kebab() {
-        assert_eq!(serde_json::to_string(&RevocationReason::OperatorForced).unwrap(), "\"operator-forced\"");
-        assert_eq!(serde_json::to_string(&RevocationReason::DriftDetected).unwrap(), "\"drift-detected\"");
-        assert_eq!(serde_json::to_string(&RevocationReason::TtlCut).unwrap(), "\"ttl-cut\"");
-        assert_eq!(serde_json::to_string(&RevocationReason::AnomalyTriggered).unwrap(), "\"anomaly-triggered\"");
-        assert_eq!(serde_json::to_string(&RevocationReason::Superseded).unwrap(), "\"superseded\"");
+        assert_eq!(
+            serde_json::to_string(&RevocationReason::OperatorForced).unwrap(),
+            "\"operator-forced\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RevocationReason::DriftDetected).unwrap(),
+            "\"drift-detected\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RevocationReason::TtlCut).unwrap(),
+            "\"ttl-cut\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RevocationReason::AnomalyTriggered).unwrap(),
+            "\"anomaly-triggered\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RevocationReason::Superseded).unwrap(),
+            "\"superseded\""
+        );
     }
 
     #[test]
     fn log_serde_roundtrip() {
         let mut log = RevocationLog::new();
-        log.revoke(entry("g1", GrantKind::Filesystem, RevocationReason::OperatorForced)).unwrap();
-        log.revoke(entry("g2", GrantKind::Network, RevocationReason::DriftDetected)).unwrap();
+        log.revoke(entry(
+            "g1",
+            GrantKind::Filesystem,
+            RevocationReason::OperatorForced,
+        ))
+        .unwrap();
+        log.revoke(entry(
+            "g2",
+            GrantKind::Network,
+            RevocationReason::DriftDetected,
+        ))
+        .unwrap();
         let j = serde_json::to_string(&log).unwrap();
         let back: RevocationLog = serde_json::from_str(&j).unwrap();
         assert_eq!(log, back);

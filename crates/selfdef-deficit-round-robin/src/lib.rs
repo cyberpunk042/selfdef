@@ -78,21 +78,33 @@ impl DeficitRoundRobin {
 
     /// Add a flow.
     pub fn add_flow(&mut self, id: &str, quantum: u64) -> Result<(), DrrError> {
-        if id.is_empty() { return Err(DrrError::EmptyId); }
-        if quantum == 0 { return Err(DrrError::ZeroQuantum); }
+        if id.is_empty() {
+            return Err(DrrError::EmptyId);
+        }
+        if quantum == 0 {
+            return Err(DrrError::ZeroQuantum);
+        }
         if self.flows.iter().any(|f| f.id == id) {
             return Err(DrrError::Duplicate(id.into()));
         }
         self.flows.push(Flow {
-            id: id.into(), quantum, deficit: 0, queue: VecDeque::new(),
+            id: id.into(),
+            quantum,
+            deficit: 0,
+            queue: VecDeque::new(),
         });
         Ok(())
     }
 
     /// Enqueue a packet on a flow.
     pub fn enqueue(&mut self, id: &str, size: u64) -> Result<(), DrrError> {
-        if size == 0 { return Err(DrrError::ZeroSize); }
-        let f = self.flows.iter_mut().find(|f| f.id == id)
+        if size == 0 {
+            return Err(DrrError::ZeroSize);
+        }
+        let f = self
+            .flows
+            .iter_mut()
+            .find(|f| f.id == id)
             .ok_or_else(|| DrrError::Unknown(id.into()))?;
         f.queue.push_back(size);
         Ok(())
@@ -100,7 +112,9 @@ impl DeficitRoundRobin {
 
     /// Service the next packet. Returns (flow_id, size) or None.
     pub fn service(&mut self) -> Option<(String, u64)> {
-        if self.flows.is_empty() { return None; }
+        if self.flows.is_empty() {
+            return None;
+        }
         let n = self.flows.len();
         // Find a flow that can serve at least one packet within one
         // full sweep. Each sweep adds quantum to non-empty flows; if
@@ -130,24 +144,34 @@ impl DeficitRoundRobin {
                 }
                 self.cursor = (self.cursor + 1) % n;
             }
-            if !any_non_empty { return None; }
+            if !any_non_empty {
+                return None;
+            }
         }
         None
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DrrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DrrError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DrrError::SchemaMismatch);
+        }
         for f in &self.flows {
-            if f.id.is_empty() { return Err(DrrError::EmptyId); }
-            if f.quantum == 0 { return Err(DrrError::ZeroQuantum); }
+            if f.id.is_empty() {
+                return Err(DrrError::EmptyId);
+            }
+            if f.quantum == 0 {
+                return Err(DrrError::ZeroQuantum);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DeficitRoundRobin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -159,14 +183,24 @@ mod tests {
         let mut s = DeficitRoundRobin::new();
         s.add_flow("a", 1000).unwrap();
         s.add_flow("b", 500).unwrap();
-        for _ in 0..10 { s.enqueue("a", 100).unwrap(); }
-        for _ in 0..10 { s.enqueue("b", 100).unwrap(); }
+        for _ in 0..10 {
+            s.enqueue("a", 100).unwrap();
+        }
+        for _ in 0..10 {
+            s.enqueue("b", 100).unwrap();
+        }
         let mut served_a = 0u64;
         let mut served_b = 0u64;
         // Service everything.
         while let Some((id, _)) = s.service() {
-            if id == "a" { served_a += 1; } else { served_b += 1; }
-            if served_a + served_b > 30 { break; }
+            if id == "a" {
+                served_a += 1;
+            } else {
+                served_b += 1;
+            }
+            if served_a + served_b > 30 {
+                break;
+            }
         }
         // Both should be fully drained.
         assert_eq!(served_a, 10);
@@ -189,21 +223,33 @@ mod tests {
     #[test]
     fn unknown_flow_rejected_on_enqueue() {
         let mut s = DeficitRoundRobin::new();
-        assert!(matches!(s.enqueue("a", 10).unwrap_err(), DrrError::Unknown(_)));
+        assert!(matches!(
+            s.enqueue("a", 10).unwrap_err(),
+            DrrError::Unknown(_)
+        ));
     }
 
     #[test]
     fn duplicate_flow_rejected() {
         let mut s = DeficitRoundRobin::new();
         s.add_flow("a", 100).unwrap();
-        assert!(matches!(s.add_flow("a", 100).unwrap_err(), DrrError::Duplicate(_)));
+        assert!(matches!(
+            s.add_flow("a", 100).unwrap_err(),
+            DrrError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn zero_inputs_rejected() {
         let mut s = DeficitRoundRobin::new();
-        assert!(matches!(s.add_flow("", 100).unwrap_err(), DrrError::EmptyId));
-        assert!(matches!(s.add_flow("a", 0).unwrap_err(), DrrError::ZeroQuantum));
+        assert!(matches!(
+            s.add_flow("", 100).unwrap_err(),
+            DrrError::EmptyId
+        ));
+        assert!(matches!(
+            s.add_flow("a", 0).unwrap_err(),
+            DrrError::ZeroQuantum
+        ));
         s.add_flow("a", 100).unwrap();
         assert!(matches!(s.enqueue("a", 0).unwrap_err(), DrrError::ZeroSize));
     }
@@ -212,7 +258,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = DeficitRoundRobin::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), DrrError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            DrrError::SchemaMismatch
+        ));
     }
 
     #[test]

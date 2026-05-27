@@ -106,9 +106,19 @@ impl ExclusiveLockPolicy {
     }
 
     /// Acquire.
-    pub fn acquire(&mut self, resource_id: &str, owner: &str, now_ms: u64, max_hold_ms: u64) -> Result<AcquireVerdict, LockError> {
-        if resource_id.is_empty() { return Err(LockError::EmptyResource); }
-        if owner.is_empty() { return Err(LockError::EmptyOwner); }
+    pub fn acquire(
+        &mut self,
+        resource_id: &str,
+        owner: &str,
+        now_ms: u64,
+        max_hold_ms: u64,
+    ) -> Result<AcquireVerdict, LockError> {
+        if resource_id.is_empty() {
+            return Err(LockError::EmptyResource);
+        }
+        if owner.is_empty() {
+            return Err(LockError::EmptyOwner);
+        }
         let existing = self.leases.get(resource_id).cloned();
         match existing {
             Some(lease) => {
@@ -122,31 +132,42 @@ impl ExclusiveLockPolicy {
                         max_hold_ms,
                     };
                     self.leases.insert(resource_id.into(), updated);
-                    Ok(AcquireVerdict::SelfReacquired { lease_id: lease.lease_id })
+                    Ok(AcquireVerdict::SelfReacquired {
+                        lease_id: lease.lease_id,
+                    })
                 } else if now_ms >= expires {
                     // Other owner's lease expired — we take over.
                     let lease_id = self.next_id;
                     self.next_id = self.next_id.wrapping_add(1);
-                    self.leases.insert(resource_id.into(), Lease {
-                        lease_id,
-                        owner: owner.into(),
-                        acquired_at_ms: now_ms,
-                        max_hold_ms,
-                    });
+                    self.leases.insert(
+                        resource_id.into(),
+                        Lease {
+                            lease_id,
+                            owner: owner.into(),
+                            acquired_at_ms: now_ms,
+                            max_hold_ms,
+                        },
+                    );
                     Ok(AcquireVerdict::Acquired { lease_id })
                 } else {
-                    Ok(AcquireVerdict::HeldByOther { owner: lease.owner, held_until_ms: expires })
+                    Ok(AcquireVerdict::HeldByOther {
+                        owner: lease.owner,
+                        held_until_ms: expires,
+                    })
                 }
             }
             None => {
                 let lease_id = self.next_id;
                 self.next_id = self.next_id.wrapping_add(1);
-                self.leases.insert(resource_id.into(), Lease {
-                    lease_id,
-                    owner: owner.into(),
-                    acquired_at_ms: now_ms,
-                    max_hold_ms,
-                });
+                self.leases.insert(
+                    resource_id.into(),
+                    Lease {
+                        lease_id,
+                        owner: owner.into(),
+                        acquired_at_ms: now_ms,
+                        max_hold_ms,
+                    },
+                );
                 Ok(AcquireVerdict::Acquired { lease_id })
             }
         }
@@ -167,17 +188,25 @@ impl ExclusiveLockPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LockError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LockError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LockError::SchemaMismatch);
+        }
         for (id, l) in &self.leases {
-            if id.is_empty() { return Err(LockError::EmptyResource); }
-            if l.owner.is_empty() { return Err(LockError::EmptyOwner); }
+            if id.is_empty() {
+                return Err(LockError::EmptyResource);
+            }
+            if l.owner.is_empty() {
+                return Err(LockError::EmptyOwner);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ExclusiveLockPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -211,7 +240,10 @@ mod tests {
         let mut l = ExclusiveLockPolicy::new();
         l.acquire("r", "alice", 0, 1000).unwrap();
         match l.acquire("r", "bob", 100, 1000).unwrap() {
-            AcquireVerdict::HeldByOther { owner, held_until_ms } => {
+            AcquireVerdict::HeldByOther {
+                owner,
+                held_until_ms,
+            } => {
                 assert_eq!(owner, "alice");
                 assert_eq!(held_until_ms, 1000);
             }
@@ -224,7 +256,10 @@ mod tests {
         let mut l = ExclusiveLockPolicy::new();
         l.acquire("r", "alice", 0, 1000).unwrap();
         // Long after alice's lease expires, bob takes over.
-        assert!(matches!(l.acquire("r", "bob", 5000, 1000).unwrap(), AcquireVerdict::Acquired { .. }));
+        assert!(matches!(
+            l.acquire("r", "bob", 5000, 1000).unwrap(),
+            AcquireVerdict::Acquired { .. }
+        ));
     }
 
     #[test]
@@ -248,15 +283,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut l = ExclusiveLockPolicy::new();
-        assert!(matches!(l.acquire("", "o", 0, 1).unwrap_err(), LockError::EmptyResource));
-        assert!(matches!(l.acquire("r", "", 0, 1).unwrap_err(), LockError::EmptyOwner));
+        assert!(matches!(
+            l.acquire("", "o", 0, 1).unwrap_err(),
+            LockError::EmptyResource
+        ));
+        assert!(matches!(
+            l.acquire("r", "", 0, 1).unwrap_err(),
+            LockError::EmptyOwner
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = ExclusiveLockPolicy::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LockError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LockError::SchemaMismatch
+        ));
     }
 
     #[test]

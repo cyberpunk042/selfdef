@@ -11,8 +11,8 @@
 #![warn(missing_docs)]
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use std::collections::VecDeque;
+use thiserror::Error;
 
 /// Schema version.
 pub const SCHEMA_VERSION: &str = "1.0.0";
@@ -77,7 +77,9 @@ pub enum RingError {
 impl ReplayRing {
     /// New ring with the given capacity.
     pub fn new(capacity: u32) -> Result<Self, RingError> {
-        if capacity == 0 { return Err(RingError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(RingError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -106,10 +108,14 @@ impl ReplayRing {
     }
 
     /// Number of frames currently retained.
-    pub fn len(&self) -> usize { self.frames.len() }
+    pub fn len(&self) -> usize {
+        self.frames.len()
+    }
 
     /// Is the ring empty?
-    pub fn is_empty(&self) -> bool { self.frames.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
 
     /// Iterate frames oldest → newest.
     pub fn iter(&self) -> impl Iterator<Item = &ReplayFrame> {
@@ -132,15 +138,24 @@ impl ReplayRing {
         if self.schema_version != SCHEMA_VERSION {
             return Err(RingError::SchemaMismatch);
         }
-        if self.capacity == 0 { return Err(RingError::ZeroCapacity); }
+        if self.capacity == 0 {
+            return Err(RingError::ZeroCapacity);
+        }
         if self.frames.len() as u32 > self.capacity {
-            return Err(RingError::OverCapacity { len: self.frames.len(), cap: self.capacity });
+            return Err(RingError::OverCapacity {
+                len: self.frames.len(),
+                cap: self.capacity,
+            });
         }
         let mut prev: Option<u64> = None;
         for (idx, f) in self.frames.iter().enumerate() {
             if let Some(p) = prev {
                 if f.seq <= p {
-                    return Err(RingError::SeqNonMonotonic { idx, got: f.seq, prev: p });
+                    return Err(RingError::SeqNonMonotonic {
+                        idx,
+                        got: f.seq,
+                        prev: p,
+                    });
                 }
             }
             prev = Some(f.seq);
@@ -155,7 +170,10 @@ mod tests {
 
     #[test]
     fn capacity_zero_rejected() {
-        assert!(matches!(ReplayRing::new(0).unwrap_err(), RingError::ZeroCapacity));
+        assert!(matches!(
+            ReplayRing::new(0).unwrap_err(),
+            RingError::ZeroCapacity
+        ));
     }
 
     #[test]
@@ -214,25 +232,68 @@ mod tests {
     #[test]
     fn over_capacity_invalidated() {
         let mut r = ReplayRing::new(2).unwrap();
-        r.frames.push_back(ReplayFrame { seq: 0, at: "t".into(), trace_id: "x".into(), source: "x".into(), payload: "{}".into() });
-        r.frames.push_back(ReplayFrame { seq: 1, at: "t".into(), trace_id: "x".into(), source: "x".into(), payload: "{}".into() });
-        r.frames.push_back(ReplayFrame { seq: 2, at: "t".into(), trace_id: "x".into(), source: "x".into(), payload: "{}".into() });
-        assert!(matches!(r.validate().unwrap_err(), RingError::OverCapacity { len: 3, cap: 2 }));
+        r.frames.push_back(ReplayFrame {
+            seq: 0,
+            at: "t".into(),
+            trace_id: "x".into(),
+            source: "x".into(),
+            payload: "{}".into(),
+        });
+        r.frames.push_back(ReplayFrame {
+            seq: 1,
+            at: "t".into(),
+            trace_id: "x".into(),
+            source: "x".into(),
+            payload: "{}".into(),
+        });
+        r.frames.push_back(ReplayFrame {
+            seq: 2,
+            at: "t".into(),
+            trace_id: "x".into(),
+            source: "x".into(),
+            payload: "{}".into(),
+        });
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RingError::OverCapacity { len: 3, cap: 2 }
+        ));
     }
 
     #[test]
     fn seq_non_monotonic_caught() {
         let mut r = ReplayRing::new(4).unwrap();
-        r.frames.push_back(ReplayFrame { seq: 5, at: "t".into(), trace_id: "x".into(), source: "x".into(), payload: "{}".into() });
-        r.frames.push_back(ReplayFrame { seq: 3, at: "t".into(), trace_id: "x".into(), source: "x".into(), payload: "{}".into() });
-        assert!(matches!(r.validate().unwrap_err(), RingError::SeqNonMonotonic { idx: 1, got: 3, prev: 5 }));
+        r.frames.push_back(ReplayFrame {
+            seq: 5,
+            at: "t".into(),
+            trace_id: "x".into(),
+            source: "x".into(),
+            payload: "{}".into(),
+        });
+        r.frames.push_back(ReplayFrame {
+            seq: 3,
+            at: "t".into(),
+            trace_id: "x".into(),
+            source: "x".into(),
+            payload: "{}".into(),
+        });
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RingError::SeqNonMonotonic {
+                idx: 1,
+                got: 3,
+                prev: 5
+            }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = ReplayRing::new(2).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RingError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RingError::SchemaMismatch
+        ));
     }
 
     #[test]

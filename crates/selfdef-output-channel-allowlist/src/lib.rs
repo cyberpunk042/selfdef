@@ -77,7 +77,11 @@ pub enum AllowlistError {
 
 impl OutputChannelAllowlist {
     /// New.
-    pub fn new() -> Self { Self { schema_version: SCHEMA_VERSION.into() } }
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
+    }
 
     /// Decide.
     pub fn decide(&self, s: Sensitivity, c: OutputChannel) -> ChannelDecision {
@@ -109,7 +113,9 @@ impl OutputChannelAllowlist {
 }
 
 impl Default for OutputChannelAllowlist {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -119,35 +125,74 @@ mod tests {
     #[test]
     fn top_secret_only_audit() {
         let p = OutputChannelAllowlist::new();
-        assert_eq!(p.decide(Sensitivity::TopSecret, OutputChannel::AuditLog), ChannelDecision::Allow);
-        assert_eq!(p.decide(Sensitivity::TopSecret, OutputChannel::OperatorChat), ChannelDecision::Deny);
-        assert_eq!(p.decide(Sensitivity::TopSecret, OutputChannel::Webhook), ChannelDecision::Deny);
+        assert_eq!(
+            p.decide(Sensitivity::TopSecret, OutputChannel::AuditLog),
+            ChannelDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Sensitivity::TopSecret, OutputChannel::OperatorChat),
+            ChannelDecision::Deny
+        );
+        assert_eq!(
+            p.decide(Sensitivity::TopSecret, OutputChannel::Webhook),
+            ChannelDecision::Deny
+        );
     }
 
     #[test]
     fn confidential_audit_and_chat() {
         let p = OutputChannelAllowlist::new();
-        assert_eq!(p.decide(Sensitivity::Confidential, OutputChannel::AuditLog), ChannelDecision::Allow);
-        assert_eq!(p.decide(Sensitivity::Confidential, OutputChannel::OperatorChat), ChannelDecision::Allow);
-        assert_eq!(p.decide(Sensitivity::Confidential, OutputChannel::EmailOut), ChannelDecision::Deny);
+        assert_eq!(
+            p.decide(Sensitivity::Confidential, OutputChannel::AuditLog),
+            ChannelDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Confidential, OutputChannel::OperatorChat),
+            ChannelDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Confidential, OutputChannel::EmailOut),
+            ChannelDecision::Deny
+        );
     }
 
     #[test]
     fn internal_blocks_external_broadcast() {
         let p = OutputChannelAllowlist::new();
-        assert_eq!(p.decide(Sensitivity::Internal, OutputChannel::OperatorChat), ChannelDecision::Allow);
-        assert_eq!(p.decide(Sensitivity::Internal, OutputChannel::Stdout), ChannelDecision::Allow);
-        assert_eq!(p.decide(Sensitivity::Internal, OutputChannel::Webhook), ChannelDecision::Deny);
-        assert_eq!(p.decide(Sensitivity::Internal, OutputChannel::EmailOut), ChannelDecision::Deny);
-        assert_eq!(p.decide(Sensitivity::Internal, OutputChannel::Notification), ChannelDecision::Deny);
+        assert_eq!(
+            p.decide(Sensitivity::Internal, OutputChannel::OperatorChat),
+            ChannelDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Internal, OutputChannel::Stdout),
+            ChannelDecision::Allow
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Internal, OutputChannel::Webhook),
+            ChannelDecision::Deny
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Internal, OutputChannel::EmailOut),
+            ChannelDecision::Deny
+        );
+        assert_eq!(
+            p.decide(Sensitivity::Internal, OutputChannel::Notification),
+            ChannelDecision::Deny
+        );
     }
 
     #[test]
     fn public_allows_everything() {
         let p = OutputChannelAllowlist::new();
-        for c in [OutputChannel::Stdout, OutputChannel::AuditLog, OutputChannel::OperatorChat,
-                  OutputChannel::Webhook, OutputChannel::EmailOut, OutputChannel::Notification,
-                  OutputChannel::FileOut] {
+        for c in [
+            OutputChannel::Stdout,
+            OutputChannel::AuditLog,
+            OutputChannel::OperatorChat,
+            OutputChannel::Webhook,
+            OutputChannel::EmailOut,
+            OutputChannel::Notification,
+            OutputChannel::FileOut,
+        ] {
             assert_eq!(p.decide(Sensitivity::Public, c), ChannelDecision::Allow);
         }
     }
@@ -156,19 +201,34 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = OutputChannelAllowlist::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AllowlistError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AllowlistError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn channel_serde_kebab() {
-        assert_eq!(serde_json::to_string(&OutputChannel::EmailOut).unwrap(), "\"email-out\"");
-        assert_eq!(serde_json::to_string(&OutputChannel::OperatorChat).unwrap(), "\"operator-chat\"");
-        assert_eq!(serde_json::to_string(&OutputChannel::AuditLog).unwrap(), "\"audit-log\"");
+        assert_eq!(
+            serde_json::to_string(&OutputChannel::EmailOut).unwrap(),
+            "\"email-out\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputChannel::OperatorChat).unwrap(),
+            "\"operator-chat\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OutputChannel::AuditLog).unwrap(),
+            "\"audit-log\""
+        );
     }
 
     #[test]
     fn sensitivity_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Sensitivity::TopSecret).unwrap(), "\"top-secret\"");
+        assert_eq!(
+            serde_json::to_string(&Sensitivity::TopSecret).unwrap(),
+            "\"top-secret\""
+        );
     }
 
     #[test]

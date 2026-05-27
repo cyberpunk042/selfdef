@@ -123,17 +123,27 @@ impl SubstrateFdQuota {
         };
         let open = self.handles.iter().filter(|h| h.profile == profile).count() as u32;
         if open >= cfg.max_open_fds {
-            return OpenVerdict::Exhausted { open, cap: cfg.max_open_fds };
+            return OpenVerdict::Exhausted {
+                open,
+                cap: cfg.max_open_fds,
+            };
         }
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.handles.push(Handle { handle_id: id, profile, label: label.into() });
+        self.handles.push(Handle {
+            handle_id: id,
+            profile,
+            label: label.into(),
+        });
         OpenVerdict::Granted { handle_id: id }
     }
 
     /// Close.
     pub fn close(&mut self, handle_id: u64) -> Result<(), FdError> {
-        let pos = self.handles.iter().position(|h| h.handle_id == handle_id)
+        let pos = self
+            .handles
+            .iter()
+            .position(|h| h.handle_id == handle_id)
             .ok_or(FdError::UnknownHandle(handle_id))?;
         self.handles.remove(pos);
         Ok(())
@@ -160,18 +170,25 @@ mod tests {
     #[test]
     fn open_grants() {
         let mut q = SubstrateFdQuota::canonical();
-        assert!(matches!(q.open(Profile::Fast, "a"), OpenVerdict::Granted { .. }));
+        assert!(matches!(
+            q.open(Profile::Fast, "a"),
+            OpenVerdict::Granted { .. }
+        ));
     }
 
     #[test]
     fn exhausted_when_full() {
         let mut q = SubstrateFdQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileFd { max_open_fds: 2 });
+        q.profiles
+            .insert(Profile::Fast, ProfileFd { max_open_fds: 2 });
         q.open(Profile::Fast, "a");
         q.open(Profile::Fast, "b");
         let v = q.open(Profile::Fast, "c");
         match v {
-            OpenVerdict::Exhausted { open, cap } => { assert_eq!(open, 2); assert_eq!(cap, 2); }
+            OpenVerdict::Exhausted { open, cap } => {
+                assert_eq!(open, 2);
+                assert_eq!(cap, 2);
+            }
             _ => panic!("expected exhausted"),
         }
     }
@@ -179,46 +196,68 @@ mod tests {
     #[test]
     fn close_frees() {
         let mut q = SubstrateFdQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileFd { max_open_fds: 1 });
+        q.profiles
+            .insert(Profile::Fast, ProfileFd { max_open_fds: 1 });
         let id = match q.open(Profile::Fast, "a") {
             OpenVerdict::Granted { handle_id } => handle_id,
             _ => unreachable!(),
         };
-        assert!(matches!(q.open(Profile::Fast, "b"), OpenVerdict::Exhausted { .. }));
+        assert!(matches!(
+            q.open(Profile::Fast, "b"),
+            OpenVerdict::Exhausted { .. }
+        ));
         q.close(id).unwrap();
-        assert!(matches!(q.open(Profile::Fast, "b"), OpenVerdict::Granted { .. }));
+        assert!(matches!(
+            q.open(Profile::Fast, "b"),
+            OpenVerdict::Granted { .. }
+        ));
     }
 
     #[test]
     fn close_unknown_rejected() {
         let mut q = SubstrateFdQuota::canonical();
-        assert!(matches!(q.close(999).unwrap_err(), FdError::UnknownHandle(_)));
+        assert!(matches!(
+            q.close(999).unwrap_err(),
+            FdError::UnknownHandle(_)
+        ));
     }
 
     #[test]
     fn unconfigured_returns_unconfigured() {
         let mut q = SubstrateFdQuota::canonical();
         q.profiles.clear();
-        assert!(matches!(q.open(Profile::Fast, "a"), OpenVerdict::Unconfigured));
+        assert!(matches!(
+            q.open(Profile::Fast, "a"),
+            OpenVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn per_profile_isolation() {
         let mut q = SubstrateFdQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileFd { max_open_fds: 1 });
+        q.profiles
+            .insert(Profile::Fast, ProfileFd { max_open_fds: 1 });
         q.open(Profile::Fast, "a");
         // Fast is full; other profiles still grant.
-        assert!(matches!(q.open(Profile::Production, "x"), OpenVerdict::Granted { .. }));
-        assert!(matches!(q.open(Profile::Fast, "b"), OpenVerdict::Exhausted { .. }));
+        assert!(matches!(
+            q.open(Profile::Production, "x"),
+            OpenVerdict::Granted { .. }
+        ));
+        assert!(matches!(
+            q.open(Profile::Fast, "b"),
+            OpenVerdict::Exhausted { .. }
+        ));
     }
 
     #[test]
     fn handle_ids_unique() {
         let mut q = SubstrateFdQuota::canonical();
-        let ids: Vec<u64> = (0..5).map(|i| match q.open(Profile::Fast, &format!("h{i}")) {
-            OpenVerdict::Granted { handle_id } => handle_id,
-            _ => 0,
-        }).collect();
+        let ids: Vec<u64> = (0..5)
+            .map(|i| match q.open(Profile::Fast, &format!("h{i}")) {
+                OpenVerdict::Granted { handle_id } => handle_id,
+                _ => 0,
+            })
+            .collect();
         let mut sorted = ids.clone();
         sorted.sort();
         sorted.dedup();

@@ -58,8 +58,12 @@ impl CollectorJitterPolicy {
 
     /// Signed jitter in [-max/2, +max/2].
     pub fn jitter(&self, collector_id: &str) -> Result<i64, JitterError> {
-        if collector_id.is_empty() { return Err(JitterError::EmptyId); }
-        if self.max_jitter_ms == 0 { return Ok(0); }
+        if collector_id.is_empty() {
+            return Err(JitterError::EmptyId);
+        }
+        if self.max_jitter_ms == 0 {
+            return Ok(0);
+        }
         let h = hash_fnv1a64(collector_id);
         let bucket = (h % self.max_jitter_ms) as i64;
         let half = (self.max_jitter_ms as i64) / 2;
@@ -78,7 +82,9 @@ impl CollectorJitterPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), JitterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(JitterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(JitterError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -128,14 +134,20 @@ mod tests {
     fn empty_id_rejected() {
         let p = CollectorJitterPolicy::new(1000);
         assert!(matches!(p.jitter("").unwrap_err(), JitterError::EmptyId));
-        assert!(matches!(p.next_at("", 0).unwrap_err(), JitterError::EmptyId));
+        assert!(matches!(
+            p.next_at("", 0).unwrap_err(),
+            JitterError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = CollectorJitterPolicy::new(1000);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), JitterError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            JitterError::SchemaMismatch
+        ));
     }
 
     #[test]

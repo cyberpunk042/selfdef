@@ -71,21 +71,42 @@ impl PolicyBundleStaging {
     }
 
     /// Stage.
-    pub fn stage(&mut self, bundle_id: &str, version: &str, content_hash: &str, staged_at_ms: u64) -> Result<(), StagingError> {
-        if bundle_id.is_empty() { return Err(StagingError::EmptyBundleId); }
-        if version.is_empty() { return Err(StagingError::EmptyVersion); }
-        if content_hash.is_empty() { return Err(StagingError::EmptyContentHash); }
-        self.staged.entry(bundle_id.into()).or_default().insert(version.into(), Candidate {
-            version: version.into(),
-            content_hash: content_hash.into(),
-            staged_at_ms,
-        });
+    pub fn stage(
+        &mut self,
+        bundle_id: &str,
+        version: &str,
+        content_hash: &str,
+        staged_at_ms: u64,
+    ) -> Result<(), StagingError> {
+        if bundle_id.is_empty() {
+            return Err(StagingError::EmptyBundleId);
+        }
+        if version.is_empty() {
+            return Err(StagingError::EmptyVersion);
+        }
+        if content_hash.is_empty() {
+            return Err(StagingError::EmptyContentHash);
+        }
+        self.staged.entry(bundle_id.into()).or_default().insert(
+            version.into(),
+            Candidate {
+                version: version.into(),
+                content_hash: content_hash.into(),
+                staged_at_ms,
+            },
+        );
         Ok(())
     }
 
     /// Promote. Returns the previously-active version if any.
-    pub fn promote(&mut self, bundle_id: &str, version: &str) -> Result<Option<String>, StagingError> {
-        let by_version = self.staged.get(bundle_id)
+    pub fn promote(
+        &mut self,
+        bundle_id: &str,
+        version: &str,
+    ) -> Result<Option<String>, StagingError> {
+        let by_version = self
+            .staged
+            .get(bundle_id)
             .ok_or_else(|| StagingError::NotStaged(version.into(), bundle_id.into()))?;
         if !by_version.contains_key(version) {
             return Err(StagingError::NotStaged(version.into(), bundle_id.into()));
@@ -98,7 +119,9 @@ impl PolicyBundleStaging {
     pub fn reject(&mut self, bundle_id: &str, version: &str) -> bool {
         if let Some(by_version) = self.staged.get_mut(bundle_id) {
             if by_version.remove(version).is_some() {
-                if by_version.is_empty() { self.staged.remove(bundle_id); }
+                if by_version.is_empty() {
+                    self.staged.remove(bundle_id);
+                }
                 return true;
             }
         }
@@ -107,7 +130,8 @@ impl PolicyBundleStaging {
 
     /// List staged candidates for a bundle.
     pub fn list_staged(&self, bundle_id: &str) -> Vec<Candidate> {
-        self.staged.get(bundle_id)
+        self.staged
+            .get(bundle_id)
             .map(|m| m.values().cloned().collect())
             .unwrap_or_default()
     }
@@ -119,12 +143,20 @@ impl PolicyBundleStaging {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StagingError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StagingError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StagingError::SchemaMismatch);
+        }
         for (bid, m) in &self.staged {
-            if bid.is_empty() { return Err(StagingError::EmptyBundleId); }
+            if bid.is_empty() {
+                return Err(StagingError::EmptyBundleId);
+            }
             for (v, c) in m {
-                if v.is_empty() { return Err(StagingError::EmptyVersion); }
-                if c.content_hash.is_empty() { return Err(StagingError::EmptyContentHash); }
+                if v.is_empty() {
+                    return Err(StagingError::EmptyVersion);
+                }
+                if c.content_hash.is_empty() {
+                    return Err(StagingError::EmptyContentHash);
+                }
             }
         }
         Ok(())
@@ -132,7 +164,9 @@ impl PolicyBundleStaging {
 }
 
 impl Default for PolicyBundleStaging {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -160,7 +194,10 @@ mod tests {
     #[test]
     fn promote_unstaged_rejected() {
         let mut s = PolicyBundleStaging::new();
-        assert!(matches!(s.promote("b", "1.0.0").unwrap_err(), StagingError::NotStaged(_, _)));
+        assert!(matches!(
+            s.promote("b", "1.0.0").unwrap_err(),
+            StagingError::NotStaged(_, _)
+        ));
     }
 
     #[test]
@@ -174,16 +211,28 @@ mod tests {
     #[test]
     fn empty_fields_rejected() {
         let mut s = PolicyBundleStaging::new();
-        assert!(matches!(s.stage("", "v", "h", 0).unwrap_err(), StagingError::EmptyBundleId));
-        assert!(matches!(s.stage("b", "", "h", 0).unwrap_err(), StagingError::EmptyVersion));
-        assert!(matches!(s.stage("b", "v", "", 0).unwrap_err(), StagingError::EmptyContentHash));
+        assert!(matches!(
+            s.stage("", "v", "h", 0).unwrap_err(),
+            StagingError::EmptyBundleId
+        ));
+        assert!(matches!(
+            s.stage("b", "", "h", 0).unwrap_err(),
+            StagingError::EmptyVersion
+        ));
+        assert!(matches!(
+            s.stage("b", "v", "", 0).unwrap_err(),
+            StagingError::EmptyContentHash
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = PolicyBundleStaging::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), StagingError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            StagingError::SchemaMismatch
+        ));
     }
 
     #[test]

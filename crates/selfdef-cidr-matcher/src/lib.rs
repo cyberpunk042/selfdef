@@ -49,31 +49,51 @@ pub fn parse_ip(s: &str) -> Result<u32, CidrError> {
     let mut parts: [u32; 4] = [0; 4];
     let mut count = 0usize;
     for (i, p) in s.split('.').enumerate() {
-        if i >= 4 { return Err(CidrError::BadIp(s.into())); }
+        if i >= 4 {
+            return Err(CidrError::BadIp(s.into()));
+        }
         let v: u32 = p.parse().map_err(|_| CidrError::BadIp(s.into()))?;
-        if v > 255 { return Err(CidrError::BadIp(s.into())); }
+        if v > 255 {
+            return Err(CidrError::BadIp(s.into()));
+        }
         parts[i] = v;
         count += 1;
     }
-    if count != 4 { return Err(CidrError::BadIp(s.into())); }
+    if count != 4 {
+        return Err(CidrError::BadIp(s.into()));
+    }
     Ok((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3])
 }
 
 /// Parse "A.B.C.D/p". Network is masked by the prefix (host bits zeroed).
 pub fn parse_cidr(s: &str) -> Result<(u32, u8), CidrError> {
-    let (ip_s, prefix_s) = s.split_once('/').ok_or_else(|| CidrError::BadCidr(s.into()))?;
+    let (ip_s, prefix_s) = s
+        .split_once('/')
+        .ok_or_else(|| CidrError::BadCidr(s.into()))?;
     let ip = parse_ip(ip_s)?;
     let prefix: u8 = prefix_s.parse().map_err(|_| CidrError::BadCidr(s.into()))?;
-    if prefix > 32 { return Err(CidrError::BadPrefix); }
-    let mask = if prefix == 0 { 0u32 } else { (!0u32) << (32 - prefix) };
+    if prefix > 32 {
+        return Err(CidrError::BadPrefix);
+    }
+    let mask = if prefix == 0 {
+        0u32
+    } else {
+        (!0u32) << (32 - prefix)
+    };
     let network = ip & mask;
     Ok((network, prefix))
 }
 
 /// True iff ip is within (network, prefix).
 pub fn contains(network: u32, prefix: u8, ip: u32) -> Result<bool, CidrError> {
-    if prefix > 32 { return Err(CidrError::BadPrefix); }
-    let mask = if prefix == 0 { 0u32 } else { (!0u32) << (32 - prefix) };
+    if prefix > 32 {
+        return Err(CidrError::BadPrefix);
+    }
+    let mask = if prefix == 0 {
+        0u32
+    } else {
+        (!0u32) << (32 - prefix)
+    };
     Ok((ip & mask) == (network & mask))
 }
 
@@ -101,8 +121,12 @@ impl CidrMatcher {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CidrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CidrError::SchemaMismatch); }
-        if self.prefix > 32 { return Err(CidrError::BadPrefix); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CidrError::SchemaMismatch);
+        }
+        if self.prefix > 32 {
+            return Err(CidrError::BadPrefix);
+        }
         Ok(())
     }
 }
@@ -120,9 +144,18 @@ mod tests {
 
     #[test]
     fn bad_ip_rejected() {
-        assert!(matches!(parse_ip("256.0.0.1").unwrap_err(), CidrError::BadIp(_)));
-        assert!(matches!(parse_ip("1.2.3").unwrap_err(), CidrError::BadIp(_)));
-        assert!(matches!(parse_ip("a.b.c.d").unwrap_err(), CidrError::BadIp(_)));
+        assert!(matches!(
+            parse_ip("256.0.0.1").unwrap_err(),
+            CidrError::BadIp(_)
+        ));
+        assert!(matches!(
+            parse_ip("1.2.3").unwrap_err(),
+            CidrError::BadIp(_)
+        ));
+        assert!(matches!(
+            parse_ip("a.b.c.d").unwrap_err(),
+            CidrError::BadIp(_)
+        ));
     }
 
     #[test]
@@ -162,14 +195,20 @@ mod tests {
 
     #[test]
     fn bad_prefix_rejected() {
-        assert!(matches!(parse_cidr("10.0.0.0/33").unwrap_err(), CidrError::BadPrefix));
+        assert!(matches!(
+            parse_cidr("10.0.0.0/33").unwrap_err(),
+            CidrError::BadPrefix
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = CidrMatcher::parse("10.0.0.0/8").unwrap();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), CidrError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            CidrError::SchemaMismatch
+        ));
     }
 
     #[test]

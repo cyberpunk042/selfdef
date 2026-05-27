@@ -67,13 +67,21 @@ impl DelayQueue {
 
     /// Schedule.
     pub fn schedule(&mut self, id: &str, fire_at_ms: u64, payload: &str) -> Result<(), QueueError> {
-        if id.is_empty() { return Err(QueueError::EmptyId); }
+        if id.is_empty() {
+            return Err(QueueError::EmptyId);
+        }
         if self.entries.iter().any(|e| e.id == id) {
             return Err(QueueError::DuplicateId(id.into()));
         }
-        let entry = Entry { id: id.into(), fire_at_ms, payload: payload.into() };
+        let entry = Entry {
+            id: id.into(),
+            fire_at_ms,
+            payload: payload.into(),
+        };
         // Binary-insert to keep sorted.
-        let pos = self.entries.binary_search_by(|e| e.fire_at_ms.cmp(&fire_at_ms))
+        let pos = self
+            .entries
+            .binary_search_by(|e| e.fire_at_ms.cmp(&fire_at_ms))
             .unwrap_or_else(|p| p);
         self.entries.insert(pos, entry);
         Ok(())
@@ -109,14 +117,20 @@ impl DelayQueue {
     }
 
     /// Pending count.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), QueueError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(QueueError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(QueueError::SchemaMismatch);
+        }
         for w in self.entries.windows(2) {
             if w[0].fire_at_ms > w[1].fire_at_ms {
                 return Err(QueueError::EmptyId); // re-use as ordering error
@@ -127,7 +141,9 @@ impl DelayQueue {
 }
 
 impl Default for DelayQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -184,20 +200,29 @@ mod tests {
     fn duplicate_id_rejected() {
         let mut q = DelayQueue::new();
         q.schedule("a", 100, "x").unwrap();
-        assert!(matches!(q.schedule("a", 200, "y").unwrap_err(), QueueError::DuplicateId(_)));
+        assert!(matches!(
+            q.schedule("a", 200, "y").unwrap_err(),
+            QueueError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut q = DelayQueue::new();
-        assert!(matches!(q.schedule("", 100, "x").unwrap_err(), QueueError::EmptyId));
+        assert!(matches!(
+            q.schedule("", 100, "x").unwrap_err(),
+            QueueError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = DelayQueue::new();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QueueError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QueueError::SchemaMismatch
+        ));
     }
 
     #[test]

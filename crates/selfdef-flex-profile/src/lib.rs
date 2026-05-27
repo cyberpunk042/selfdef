@@ -229,9 +229,7 @@ mod tests {
             actor: String::new(),
             reason: "attach".into(),
             applied_at_ms: 0,
-            operation: DeltaOp::AttachModel {
-                slug: "x".into(),
-            },
+            operation: DeltaOp::AttachModel { slug: "x".into() },
         };
         assert!(matches!(
             p.apply(d),
@@ -247,9 +245,7 @@ mod tests {
             actor: "op".into(),
             reason: String::new(),
             applied_at_ms: 0,
-            operation: DeltaOp::AttachModel {
-                slug: "x".into(),
-            },
+            operation: DeltaOp::AttachModel { slug: "x".into() },
         };
         assert!(matches!(
             p.apply(d),
@@ -310,9 +306,7 @@ mod tests {
             actor: "op".into(),
             reason: "test".into(),
             applied_at_ms: 1,
-            operation: DeltaOp::AttachModel {
-                slug: "m".into(),
-            },
+            operation: DeltaOp::AttachModel { slug: "m".into() },
         })
         .unwrap();
         let s = serde_json::to_string(&p).unwrap();

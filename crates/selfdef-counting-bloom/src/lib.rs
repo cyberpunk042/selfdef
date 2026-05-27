@@ -56,7 +56,9 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 impl CountingBloom {
     /// New.
     pub fn new(m: u32, k: u32) -> Result<Self, BloomError> {
-        if m == 0 || k == 0 { return Err(BloomError::ZeroDim); }
+        if m == 0 || k == 0 {
+            return Err(BloomError::ZeroDim);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             m,
@@ -75,7 +77,9 @@ impl CountingBloom {
     pub fn add(&mut self, key: &str) {
         for i in 0..self.k {
             let p = self.pos(i, key);
-            if self.counters[p] < 255 { self.counters[p] += 1; }
+            if self.counters[p] < 255 {
+                self.counters[p] += 1;
+            }
         }
     }
 
@@ -95,21 +99,31 @@ impl CountingBloom {
     pub fn contains(&self, key: &str) -> bool {
         for i in 0..self.k {
             let p = self.pos(i, key);
-            if self.counters[p] == 0 { return false; }
+            if self.counters[p] == 0 {
+                return false;
+            }
         }
         true
     }
 
     /// Reset.
     pub fn clear(&mut self) {
-        for c in self.counters.iter_mut() { *c = 0; }
+        for c in self.counters.iter_mut() {
+            *c = 0;
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BloomError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BloomError::SchemaMismatch); }
-        if self.m == 0 || self.k == 0 { return Err(BloomError::ZeroDim); }
-        if self.counters.len() != self.m as usize { return Err(BloomError::BadCounters); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BloomError::SchemaMismatch);
+        }
+        if self.m == 0 || self.k == 0 {
+            return Err(BloomError::ZeroDim);
+        }
+        if self.counters.len() != self.m as usize {
+            return Err(BloomError::BadCounters);
+        }
         Ok(())
     }
 }
@@ -158,8 +172,14 @@ mod tests {
 
     #[test]
     fn zero_dim_rejected() {
-        assert!(matches!(CountingBloom::new(0, 4).unwrap_err(), BloomError::ZeroDim));
-        assert!(matches!(CountingBloom::new(64, 0).unwrap_err(), BloomError::ZeroDim));
+        assert!(matches!(
+            CountingBloom::new(0, 4).unwrap_err(),
+            BloomError::ZeroDim
+        ));
+        assert!(matches!(
+            CountingBloom::new(64, 0).unwrap_err(),
+            BloomError::ZeroDim
+        ));
     }
 
     #[test]
@@ -173,7 +193,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = CountingBloom::new(8, 2).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BloomError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BloomError::SchemaMismatch
+        ));
     }
 
     #[test]

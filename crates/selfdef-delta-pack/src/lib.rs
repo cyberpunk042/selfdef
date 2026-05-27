@@ -55,10 +55,7 @@ pub enum DeltaError {
 }
 
 /// diff produces sorted ops in key-ascending order.
-pub fn diff(
-    old: &BTreeMap<String, String>,
-    new: &BTreeMap<String, String>,
-) -> Vec<Op> {
+pub fn diff(old: &BTreeMap<String, String>, new: &BTreeMap<String, String>) -> Vec<Op> {
     let mut out = Vec::new();
     let mut a = old.iter().peekable();
     let mut b = new.iter().peekable();
@@ -71,7 +68,10 @@ pub fn diff(
                 a.next();
             }
             (None, Some((k, v))) => {
-                out.push(Op::Add { key: (*k).clone(), value: (*v).clone() });
+                out.push(Op::Add {
+                    key: (*k).clone(),
+                    value: (*v).clone(),
+                });
                 b.next();
             }
             (Some((ka, va)), Some((kb, vb))) => {
@@ -83,12 +83,18 @@ pub fn diff(
                         a.next();
                     }
                     Greater => {
-                        out.push(Op::Add { key: (*kb).clone(), value: (*vb).clone() });
+                        out.push(Op::Add {
+                            key: (*kb).clone(),
+                            value: (*vb).clone(),
+                        });
                         b.next();
                     }
                     Equal => {
                         if va != vb {
-                            out.push(Op::Update { key: (*ka).clone(), value: (*vb).clone() });
+                            out.push(Op::Update {
+                                key: (*ka).clone(),
+                                value: (*vb).clone(),
+                            });
                         }
                         a.next();
                         b.next();
@@ -104,16 +110,24 @@ pub fn diff(
 pub fn apply(map: &mut BTreeMap<String, String>, ops: &[Op]) {
     for op in ops {
         match op {
-            Op::Add { key, value } => { map.insert(key.clone(), value.clone()); }
-            Op::Remove { key } => { map.remove(key); }
-            Op::Update { key, value } => { map.insert(key.clone(), value.clone()); }
+            Op::Add { key, value } => {
+                map.insert(key.clone(), value.clone());
+            }
+            Op::Remove { key } => {
+                map.remove(key);
+            }
+            Op::Update { key, value } => {
+                map.insert(key.clone(), value.clone());
+            }
         }
     }
 }
 
 /// Validate.
 pub fn validate_schema_version(s: &str) -> Result<(), DeltaError> {
-    if s != SCHEMA_VERSION { return Err(DeltaError::SchemaMismatch); }
+    if s != SCHEMA_VERSION {
+        return Err(DeltaError::SchemaMismatch);
+    }
     Ok(())
 }
 
@@ -122,7 +136,10 @@ mod tests {
     use super::*;
 
     fn m(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -130,11 +147,20 @@ mod tests {
         let old = m(&[("a", "1"), ("b", "2"), ("c", "3")]);
         let new = m(&[("a", "1"), ("c", "X"), ("d", "4")]);
         let ops = diff(&old, &new);
-        assert_eq!(ops, vec![
-            Op::Remove { key: "b".into() },
-            Op::Update { key: "c".into(), value: "X".into() },
-            Op::Add { key: "d".into(), value: "4".into() },
-        ]);
+        assert_eq!(
+            ops,
+            vec![
+                Op::Remove { key: "b".into() },
+                Op::Update {
+                    key: "c".into(),
+                    value: "X".into()
+                },
+                Op::Add {
+                    key: "d".into(),
+                    value: "4".into()
+                },
+            ]
+        );
     }
 
     #[test]
@@ -194,9 +220,15 @@ mod tests {
     #[test]
     fn op_serde_roundtrip() {
         let ops = vec![
-            Op::Add { key: "a".into(), value: "1".into() },
+            Op::Add {
+                key: "a".into(),
+                value: "1".into(),
+            },
             Op::Remove { key: "b".into() },
-            Op::Update { key: "c".into(), value: "x".into() },
+            Op::Update {
+                key: "c".into(),
+                value: "x".into(),
+            },
         ];
         let j = serde_json::to_string(&ops).unwrap();
         let back: Vec<Op> = serde_json::from_str(&j).unwrap();

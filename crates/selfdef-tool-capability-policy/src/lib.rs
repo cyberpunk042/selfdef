@@ -63,8 +63,13 @@ pub enum CapabilityError {
 impl ToolId {
     /// All 8 tools.
     pub const ALL: [ToolId; 8] = [
-        ToolId::Shell, ToolId::FsRead, ToolId::FsWrite, ToolId::WebFetch,
-        ToolId::ModelInference, ToolId::McpBridge, ToolId::ReplayControl,
+        ToolId::Shell,
+        ToolId::FsRead,
+        ToolId::FsWrite,
+        ToolId::WebFetch,
+        ToolId::ModelInference,
+        ToolId::McpBridge,
+        ToolId::ReplayControl,
         ToolId::CliBridge,
     ];
 }
@@ -87,33 +92,33 @@ pub fn is_authorized(tool: ToolId, mode: ExecutionMode, profile: Profile) -> boo
         ToolId::FsRead => true,
         ToolId::ModelInference => true,
         ToolId::CliBridge => profile != Private,
-        ToolId::FsWrite => {
-            profile != Private && matches!(mode, Sandbox | Execute | Debug)
-        }
+        ToolId::FsWrite => profile != Private && matches!(mode, Sandbox | Execute | Debug),
         ToolId::Shell => {
             matches!(profile, Careful | Autonomous | Production)
                 && matches!(mode, Sandbox | Execute | Debug)
         }
-        ToolId::WebFetch => {
-            profile != Private && matches!(mode, DryRun | Shadow | Execute | Debug)
-        }
+        ToolId::WebFetch => profile != Private && matches!(mode, DryRun | Shadow | Execute | Debug),
         ToolId::McpBridge => {
             profile != Private && matches!(mode, DryRun | Shadow | Execute | Debug)
         }
-        ToolId::ReplayControl => {
-            profile != Private && matches!(mode, Replay | Debug)
-        }
+        ToolId::ReplayControl => profile != Private && matches!(mode, Replay | Debug),
     }
 }
 
 /// Refuse with descriptive error if not authorized.
 pub fn require_authorized(
-    tool: ToolId, mode: ExecutionMode, profile: Profile,
+    tool: ToolId,
+    mode: ExecutionMode,
+    profile: Profile,
 ) -> Result<(), CapabilityError> {
     if is_authorized(tool, mode, profile) {
         Ok(())
     } else {
-        Err(CapabilityError::NotAuthorized { tool, mode, profile })
+        Err(CapabilityError::NotAuthorized {
+            tool,
+            mode,
+            profile,
+        })
     }
 }
 
@@ -127,7 +132,10 @@ mod tests {
     fn fs_read_authorized_everywhere() {
         for m in ExecutionMode::ALL {
             for p in [Private, Fast, Careful, Autonomous, Experimental, Production] {
-                assert!(is_authorized(ToolId::FsRead, m, p), "fs-read denied in {m:?}/{p:?}");
+                assert!(
+                    is_authorized(ToolId::FsRead, m, p),
+                    "fs-read denied in {m:?}/{p:?}"
+                );
             }
         }
     }
@@ -192,7 +200,11 @@ mod tests {
     fn require_authorized_emits_error() {
         let err = require_authorized(ToolId::FsWrite, Plan, Careful).unwrap_err();
         match err {
-            CapabilityError::NotAuthorized { tool, mode, profile } => {
+            CapabilityError::NotAuthorized {
+                tool,
+                mode,
+                profile,
+            } => {
                 assert_eq!(tool, ToolId::FsWrite);
                 assert_eq!(mode, Plan);
                 assert_eq!(profile, Careful);
@@ -208,8 +220,17 @@ mod tests {
 
     #[test]
     fn tool_id_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ToolId::FsRead).unwrap(), "\"fs-read\"");
-        assert_eq!(serde_json::to_string(&ToolId::ModelInference).unwrap(), "\"model-inference\"");
-        assert_eq!(serde_json::to_string(&ToolId::ReplayControl).unwrap(), "\"replay-control\"");
+        assert_eq!(
+            serde_json::to_string(&ToolId::FsRead).unwrap(),
+            "\"fs-read\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolId::ModelInference).unwrap(),
+            "\"model-inference\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ToolId::ReplayControl).unwrap(),
+            "\"replay-control\""
+        );
     }
 }

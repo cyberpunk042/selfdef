@@ -70,11 +70,16 @@ impl LayeredConfig {
 
     /// Push a layer (becomes highest priority).
     pub fn push_layer(&mut self, name: &str) -> Result<(), ConfigError> {
-        if name.is_empty() { return Err(ConfigError::EmptyName); }
+        if name.is_empty() {
+            return Err(ConfigError::EmptyName);
+        }
         if self.layers.iter().any(|l| l.name == name) {
             return Err(ConfigError::DuplicateLayer(name.into()));
         }
-        self.layers.push(Layer { name: name.into(), entries: BTreeMap::new() });
+        self.layers.push(Layer {
+            name: name.into(),
+            entries: BTreeMap::new(),
+        });
         Ok(())
     }
 
@@ -85,9 +90,16 @@ impl LayeredConfig {
 
     /// Set key=value in a named layer.
     pub fn set(&mut self, layer: &str, key: &str, value: &str) -> Result<(), ConfigError> {
-        if key.is_empty() { return Err(ConfigError::EmptyKey); }
-        if value.is_empty() { return Err(ConfigError::EmptyValue); }
-        let l = self.layers.iter_mut().find(|l| l.name == layer)
+        if key.is_empty() {
+            return Err(ConfigError::EmptyKey);
+        }
+        if value.is_empty() {
+            return Err(ConfigError::EmptyValue);
+        }
+        let l = self
+            .layers
+            .iter_mut()
+            .find(|l| l.name == layer)
             .ok_or_else(|| ConfigError::UnknownLayer(layer.into()))?;
         l.entries.insert(key.into(), value.into());
         Ok(())
@@ -105,12 +117,20 @@ impl LayeredConfig {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ConfigError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ConfigError::SchemaMismatch);
+        }
         for l in &self.layers {
-            if l.name.is_empty() { return Err(ConfigError::EmptyName); }
+            if l.name.is_empty() {
+                return Err(ConfigError::EmptyName);
+            }
             for (k, v) in &l.entries {
-                if k.is_empty() { return Err(ConfigError::EmptyKey); }
-                if v.is_empty() { return Err(ConfigError::EmptyValue); }
+                if k.is_empty() {
+                    return Err(ConfigError::EmptyKey);
+                }
+                if v.is_empty() {
+                    return Err(ConfigError::EmptyValue);
+                }
             }
         }
         Ok(())
@@ -118,7 +138,9 @@ impl LayeredConfig {
 }
 
 impl Default for LayeredConfig {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -168,29 +190,47 @@ mod tests {
     fn duplicate_layer_rejected() {
         let mut c = LayeredConfig::new();
         c.push_layer("a").unwrap();
-        assert!(matches!(c.push_layer("a").unwrap_err(), ConfigError::DuplicateLayer(_)));
+        assert!(matches!(
+            c.push_layer("a").unwrap_err(),
+            ConfigError::DuplicateLayer(_)
+        ));
     }
 
     #[test]
     fn unknown_set_rejected() {
         let mut c = LayeredConfig::new();
-        assert!(matches!(c.set("nope", "k", "v").unwrap_err(), ConfigError::UnknownLayer(_)));
+        assert!(matches!(
+            c.set("nope", "k", "v").unwrap_err(),
+            ConfigError::UnknownLayer(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut c = LayeredConfig::new();
-        assert!(matches!(c.push_layer("").unwrap_err(), ConfigError::EmptyName));
+        assert!(matches!(
+            c.push_layer("").unwrap_err(),
+            ConfigError::EmptyName
+        ));
         c.push_layer("a").unwrap();
-        assert!(matches!(c.set("a", "", "v").unwrap_err(), ConfigError::EmptyKey));
-        assert!(matches!(c.set("a", "k", "").unwrap_err(), ConfigError::EmptyValue));
+        assert!(matches!(
+            c.set("a", "", "v").unwrap_err(),
+            ConfigError::EmptyKey
+        ));
+        assert!(matches!(
+            c.set("a", "k", "").unwrap_err(),
+            ConfigError::EmptyValue
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = LayeredConfig::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ConfigError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ConfigError::SchemaMismatch
+        ));
     }
 
     #[test]

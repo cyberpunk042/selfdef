@@ -55,13 +55,21 @@ impl ClockSkew {
         let skew = remote_ms - local_ms;
         self.sum_skew += skew as i128;
         self.count = self.count.saturating_add(1);
-        self.min = Some(match self.min { Some(m) => m.min(skew), None => skew });
-        self.max = Some(match self.max { Some(m) => m.max(skew), None => skew });
+        self.min = Some(match self.min {
+            Some(m) => m.min(skew),
+            None => skew,
+        });
+        self.max = Some(match self.max {
+            Some(m) => m.max(skew),
+            None => skew,
+        });
     }
 
     /// Mean skew (None if empty).
     pub fn mean(&self) -> Option<i64> {
-        if self.count == 0 { return None; }
+        if self.count == 0 {
+            return None;
+        }
         Some((self.sum_skew / self.count as i128) as i64)
     }
 
@@ -83,13 +91,17 @@ impl ClockSkew {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SkewError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SkewError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SkewError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for ClockSkew {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -120,7 +132,7 @@ mod tests {
     fn negative_skew() {
         let mut s = ClockSkew::new();
         s.observe(100, 0); // skew = -100
-        s.observe(50, 0);  // skew = -50
+        s.observe(50, 0); // skew = -50
         assert_eq!(s.mean(), Some(-75));
     }
 
@@ -136,7 +148,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = ClockSkew::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SkewError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SkewError::SchemaMismatch
+        ));
     }
 
     #[test]

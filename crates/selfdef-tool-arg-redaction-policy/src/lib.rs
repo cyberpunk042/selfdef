@@ -47,10 +47,27 @@ impl ToolArgRedactionPolicy {
     pub fn canonical() -> Self {
         let mut p = BTreeSet::new();
         for name in [
-            "password", "passwd", "secret", "api_key", "apikey", "access_key",
-            "auth", "authorization", "bearer", "credential", "credentials",
-            "private_key", "ssh_key", "session", "session_id",
-            "*_token", "*_secret", "*_key", "aws_*", "gcp_*", "azure_*",
+            "password",
+            "passwd",
+            "secret",
+            "api_key",
+            "apikey",
+            "access_key",
+            "auth",
+            "authorization",
+            "bearer",
+            "credential",
+            "credentials",
+            "private_key",
+            "ssh_key",
+            "session",
+            "session_id",
+            "*_token",
+            "*_secret",
+            "*_key",
+            "aws_*",
+            "gcp_*",
+            "azure_*",
         ] {
             p.insert(name.into());
         }
@@ -62,7 +79,9 @@ impl ToolArgRedactionPolicy {
 
     /// Add a pattern.
     pub fn add(&mut self, pat: &str) -> Result<(), RedactError> {
-        if pat.is_empty() { return Err(RedactError::EmptyPattern); }
+        if pat.is_empty() {
+            return Err(RedactError::EmptyPattern);
+        }
         self.patterns.insert(pat.into());
         Ok(())
     }
@@ -70,14 +89,22 @@ impl ToolArgRedactionPolicy {
     fn matches(&self, name: &str) -> Option<String> {
         let n = name.to_lowercase();
         for pat in &self.patterns {
-            if pat == "*" { return Some(pat.clone()); }
+            if pat == "*" {
+                return Some(pat.clone());
+            }
             if pat.starts_with('*') && pat.ends_with('*') && pat.len() > 2 {
                 let mid = &pat[1..pat.len() - 1];
-                if n.contains(&mid.to_lowercase()) { return Some(pat.clone()); }
+                if n.contains(&mid.to_lowercase()) {
+                    return Some(pat.clone());
+                }
             } else if let Some(suffix) = pat.strip_prefix('*') {
-                if n.ends_with(&suffix.to_lowercase()) { return Some(pat.clone()); }
+                if n.ends_with(&suffix.to_lowercase()) {
+                    return Some(pat.clone());
+                }
             } else if let Some(prefix) = pat.strip_suffix('*') {
-                if n.starts_with(&prefix.to_lowercase()) { return Some(pat.clone()); }
+                if n.starts_with(&prefix.to_lowercase()) {
+                    return Some(pat.clone());
+                }
             } else if pat.to_lowercase() == n {
                 return Some(pat.clone());
             }
@@ -88,20 +115,26 @@ impl ToolArgRedactionPolicy {
     /// Redact a name/value list. Returns vec of (name, value) where
     /// matched values are replaced with `[REDACTED:<len>]`.
     pub fn redact_args(&self, args: &[(String, String)]) -> Vec<(String, String)> {
-        args.iter().map(|(n, v)| {
-            if self.matches(n).is_some() {
-                (n.clone(), format!("[REDACTED:{}]", v.chars().count()))
-            } else {
-                (n.clone(), v.clone())
-            }
-        }).collect()
+        args.iter()
+            .map(|(n, v)| {
+                if self.matches(n).is_some() {
+                    (n.clone(), format!("[REDACTED:{}]", v.chars().count()))
+                } else {
+                    (n.clone(), v.clone())
+                }
+            })
+            .collect()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RedactError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RedactError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RedactError::SchemaMismatch);
+        }
         for p in &self.patterns {
-            if p.is_empty() { return Err(RedactError::EmptyPattern); }
+            if p.is_empty() {
+                return Err(RedactError::EmptyPattern);
+            }
         }
         Ok(())
     }
@@ -111,7 +144,9 @@ impl ToolArgRedactionPolicy {
 mod tests {
     use super::*;
 
-    fn arg(n: &str, v: &str) -> (String, String) { (n.into(), v.into()) }
+    fn arg(n: &str, v: &str) -> (String, String) {
+        (n.into(), v.into())
+    }
 
     #[test]
     fn canonical_validates() {
@@ -172,7 +207,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = ToolArgRedactionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RedactError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RedactError::SchemaMismatch
+        ));
     }
 
     #[test]

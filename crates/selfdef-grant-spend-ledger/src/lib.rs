@@ -87,11 +87,20 @@ impl GrantSpendLedger {
 
     /// Issue.
     pub fn issue(&mut self, grant_id: &str, units: u64) -> Result<(), LedgerError> {
-        if grant_id.is_empty() { return Err(LedgerError::EmptyId); }
+        if grant_id.is_empty() {
+            return Err(LedgerError::EmptyId);
+        }
         if self.grants.contains_key(grant_id) {
             return Err(LedgerError::DuplicateIssue(grant_id.into()));
         }
-        self.grants.insert(grant_id.into(), Balance { issued: units, spent: 0, revoked: false });
+        self.grants.insert(
+            grant_id.into(),
+            Balance {
+                issued: units,
+                spent: 0,
+                revoked: false,
+            },
+        );
         Ok(())
     }
 
@@ -101,13 +110,17 @@ impl GrantSpendLedger {
             Some(b) => b,
             None => return SpendVerdict::UnknownGrant,
         };
-        if bal.revoked { return SpendVerdict::Revoked; }
+        if bal.revoked {
+            return SpendVerdict::Revoked;
+        }
         let remaining = bal.issued.saturating_sub(bal.spent);
         if units > remaining {
             return SpendVerdict::Exhausted { remaining };
         }
         bal.spent = bal.spent.saturating_add(units);
-        SpendVerdict::Accepted { remaining: bal.issued.saturating_sub(bal.spent) }
+        SpendVerdict::Accepted {
+            remaining: bal.issued.saturating_sub(bal.spent),
+        }
     }
 
     /// Revoke.
@@ -122,14 +135,20 @@ impl GrantSpendLedger {
 
     /// Remaining.
     pub fn remaining(&self, grant_id: &str) -> Option<u64> {
-        self.grants.get(grant_id).map(|b| b.issued.saturating_sub(b.spent))
+        self.grants
+            .get(grant_id)
+            .map(|b| b.issued.saturating_sub(b.spent))
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LedgerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LedgerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LedgerError::SchemaMismatch);
+        }
         for (id, b) in &self.grants {
-            if id.is_empty() { return Err(LedgerError::EmptyId); }
+            if id.is_empty() {
+                return Err(LedgerError::EmptyId);
+            }
             // spent ≤ issued invariant.
             if b.spent > b.issued {
                 return Err(LedgerError::DuplicateIssue(id.clone()));
@@ -140,7 +159,9 @@ impl GrantSpendLedger {
 }
 
 impl Default for GrantSpendLedger {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -197,7 +218,10 @@ mod tests {
     fn duplicate_issue_rejected() {
         let mut l = GrantSpendLedger::new();
         l.issue("g1", 50).unwrap();
-        assert!(matches!(l.issue("g1", 50).unwrap_err(), LedgerError::DuplicateIssue(_)));
+        assert!(matches!(
+            l.issue("g1", 50).unwrap_err(),
+            LedgerError::DuplicateIssue(_)
+        ));
     }
 
     #[test]
@@ -210,7 +234,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = GrantSpendLedger::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch
+        ));
     }
 
     #[test]

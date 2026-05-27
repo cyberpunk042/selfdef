@@ -101,7 +101,8 @@ impl AnomalyHint {
     ) -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            class, severity,
+            class,
+            severity,
             trace_id: trace_id.into(),
             subject: subject.into(),
             at: at.into(),
@@ -119,10 +120,18 @@ impl AnomalyHint {
         if self.score > 100 {
             return Err(AnomalyError::ScoreOutOfRange(self.score));
         }
-        if self.subject.is_empty() { return Err(AnomalyError::MissingSubject); }
-        if self.trace_id.is_empty() { return Err(AnomalyError::MissingTraceId); }
-        if self.at.is_empty() { return Err(AnomalyError::MissingTimestamp); }
-        if self.observed.is_empty() { return Err(AnomalyError::MissingObserved); }
+        if self.subject.is_empty() {
+            return Err(AnomalyError::MissingSubject);
+        }
+        if self.trace_id.is_empty() {
+            return Err(AnomalyError::MissingTraceId);
+        }
+        if self.at.is_empty() {
+            return Err(AnomalyError::MissingTimestamp);
+        }
+        if self.observed.is_empty() {
+            return Err(AnomalyError::MissingObserved);
+        }
         Ok(())
     }
 
@@ -149,8 +158,16 @@ mod tests {
     use super::*;
 
     fn h(class: AnomalyClass, score: u8) -> AnomalyHint {
-        AnomalyHint::new(class, canonical_severity(class), "tr-1", "op", "t",
-            "observed-val", "baseline-val", score)
+        AnomalyHint::new(
+            class,
+            canonical_severity(class),
+            "tr-1",
+            "op",
+            "t",
+            "observed-val",
+            "baseline-val",
+            score,
+        )
     }
 
     #[test]
@@ -162,28 +179,40 @@ mod tests {
     fn score_out_of_range_caught() {
         let mut x = h(AnomalyClass::RiskClassJump, 80);
         x.score = 101;
-        assert!(matches!(x.validate().unwrap_err(), AnomalyError::ScoreOutOfRange(101)));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            AnomalyError::ScoreOutOfRange(101)
+        ));
     }
 
     #[test]
     fn missing_subject_caught() {
         let mut x = h(AnomalyClass::RiskClassJump, 80);
         x.subject = String::new();
-        assert!(matches!(x.validate().unwrap_err(), AnomalyError::MissingSubject));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            AnomalyError::MissingSubject
+        ));
     }
 
     #[test]
     fn missing_trace_id_caught() {
         let mut x = h(AnomalyClass::RiskClassJump, 80);
         x.trace_id = String::new();
-        assert!(matches!(x.validate().unwrap_err(), AnomalyError::MissingTraceId));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            AnomalyError::MissingTraceId
+        ));
     }
 
     #[test]
     fn missing_observed_caught() {
         let mut x = h(AnomalyClass::RiskClassJump, 80);
         x.observed = String::new();
-        assert!(matches!(x.validate().unwrap_err(), AnomalyError::MissingObserved));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            AnomalyError::MissingObserved
+        ));
     }
 
     #[test]
@@ -202,27 +231,57 @@ mod tests {
 
     #[test]
     fn canonical_severity_map() {
-        assert_eq!(canonical_severity(AnomalyClass::RiskClassJump), Severity::Critical);
-        assert_eq!(canonical_severity(AnomalyClass::CapabilityWordDrift), Severity::Critical);
-        assert_eq!(canonical_severity(AnomalyClass::UntrustedSubject), Severity::Warn);
+        assert_eq!(
+            canonical_severity(AnomalyClass::RiskClassJump),
+            Severity::Critical
+        );
+        assert_eq!(
+            canonical_severity(AnomalyClass::CapabilityWordDrift),
+            Severity::Critical
+        );
+        assert_eq!(
+            canonical_severity(AnomalyClass::UntrustedSubject),
+            Severity::Warn
+        );
         assert_eq!(canonical_severity(AnomalyClass::RepeatDeny), Severity::Warn);
-        assert_eq!(canonical_severity(AnomalyClass::NovelProvider), Severity::Notice);
-        assert_eq!(canonical_severity(AnomalyClass::OffHourActivity), Severity::Notice);
+        assert_eq!(
+            canonical_severity(AnomalyClass::NovelProvider),
+            Severity::Notice
+        );
+        assert_eq!(
+            canonical_severity(AnomalyClass::OffHourActivity),
+            Severity::Notice
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = h(AnomalyClass::RiskClassJump, 80);
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), AnomalyError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            AnomalyError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AnomalyClass::RiskClassJump).unwrap(), "\"risk-class-jump\"");
-        assert_eq!(serde_json::to_string(&AnomalyClass::NovelProvider).unwrap(), "\"novel-provider\"");
-        assert_eq!(serde_json::to_string(&AnomalyClass::CapabilityWordDrift).unwrap(), "\"capability-word-drift\"");
-        assert_eq!(serde_json::to_string(&AnomalyClass::OffHourActivity).unwrap(), "\"off-hour-activity\"");
+        assert_eq!(
+            serde_json::to_string(&AnomalyClass::RiskClassJump).unwrap(),
+            "\"risk-class-jump\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AnomalyClass::NovelProvider).unwrap(),
+            "\"novel-provider\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AnomalyClass::CapabilityWordDrift).unwrap(),
+            "\"capability-word-drift\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AnomalyClass::OffHourActivity).unwrap(),
+            "\"off-hour-activity\""
+        );
     }
 
     #[test]

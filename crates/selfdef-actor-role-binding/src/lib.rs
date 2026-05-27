@@ -73,50 +73,80 @@ impl ActorRoleBinding {
 
     /// Define (or replace) a role.
     pub fn define_role(&mut self, role_id: &str, permissions: &[&str]) -> Result<(), RoleError> {
-        if role_id.is_empty() { return Err(RoleError::EmptyRole); }
+        if role_id.is_empty() {
+            return Err(RoleError::EmptyRole);
+        }
         let mut set = BTreeSet::new();
         for p in permissions {
-            if p.is_empty() { return Err(RoleError::EmptyPermission); }
+            if p.is_empty() {
+                return Err(RoleError::EmptyPermission);
+            }
             set.insert((*p).into());
         }
-        self.roles.insert(role_id.into(), Role { id: role_id.into(), permissions: set });
+        self.roles.insert(
+            role_id.into(),
+            Role {
+                id: role_id.into(),
+                permissions: set,
+            },
+        );
         Ok(())
     }
 
     /// Grant a permission on an existing role.
     pub fn grant_to_role(&mut self, role_id: &str, permission: &str) -> Result<bool, RoleError> {
-        if permission.is_empty() { return Err(RoleError::EmptyPermission); }
-        let role = self.roles.get_mut(role_id).ok_or_else(|| RoleError::UnknownRole(role_id.into()))?;
+        if permission.is_empty() {
+            return Err(RoleError::EmptyPermission);
+        }
+        let role = self
+            .roles
+            .get_mut(role_id)
+            .ok_or_else(|| RoleError::UnknownRole(role_id.into()))?;
         Ok(role.permissions.insert(permission.into()))
     }
 
     /// Revoke a permission from an existing role.
     pub fn revoke_from_role(&mut self, role_id: &str, permission: &str) -> Result<bool, RoleError> {
-        let role = self.roles.get_mut(role_id).ok_or_else(|| RoleError::UnknownRole(role_id.into()))?;
+        let role = self
+            .roles
+            .get_mut(role_id)
+            .ok_or_else(|| RoleError::UnknownRole(role_id.into()))?;
         Ok(role.permissions.remove(permission))
     }
 
     /// Bind actor → role.
     pub fn bind(&mut self, actor: &str, role_id: &str) -> Result<bool, RoleError> {
-        if actor.is_empty() { return Err(RoleError::EmptyActor); }
+        if actor.is_empty() {
+            return Err(RoleError::EmptyActor);
+        }
         if !self.roles.contains_key(role_id) {
             return Err(RoleError::UnknownRole(role_id.into()));
         }
-        Ok(self.bindings.entry(actor.into()).or_default().insert(role_id.into()))
+        Ok(self
+            .bindings
+            .entry(actor.into())
+            .or_default()
+            .insert(role_id.into()))
     }
 
     /// Unbind actor from role.
     pub fn unbind(&mut self, actor: &str, role_id: &str) -> bool {
-        let Some(set) = self.bindings.get_mut(actor) else { return false; };
+        let Some(set) = self.bindings.get_mut(actor) else {
+            return false;
+        };
         let removed = set.remove(role_id);
-        if set.is_empty() { self.bindings.remove(actor); }
+        if set.is_empty() {
+            self.bindings.remove(actor);
+        }
         removed
     }
 
     /// Effective permissions (union across actor's bound roles).
     pub fn effective_permissions(&self, actor: &str) -> BTreeSet<String> {
         let mut out = BTreeSet::new();
-        let Some(role_ids) = self.bindings.get(actor) else { return out; };
+        let Some(role_ids) = self.bindings.get(actor) else {
+            return out;
+        };
         for rid in role_ids {
             if let Some(role) = self.roles.get(rid) {
                 for p in &role.permissions {
@@ -129,7 +159,9 @@ impl ActorRoleBinding {
 
     /// Has permission?
     pub fn has_permission(&self, actor: &str, permission: &str) -> bool {
-        let Some(role_ids) = self.bindings.get(actor) else { return false; };
+        let Some(role_ids) = self.bindings.get(actor) else {
+            return false;
+        };
         for rid in role_ids {
             if let Some(role) = self.roles.get(rid) {
                 if role.permissions.contains(permission) {
@@ -142,20 +174,31 @@ impl ActorRoleBinding {
 
     /// Roles bound to an actor.
     pub fn roles_of(&self, actor: &str) -> Vec<String> {
-        self.bindings.get(actor).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.bindings
+            .get(actor)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RoleError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RoleError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RoleError::SchemaMismatch);
+        }
         for (rid, r) in &self.roles {
-            if rid.is_empty() { return Err(RoleError::EmptyRole); }
+            if rid.is_empty() {
+                return Err(RoleError::EmptyRole);
+            }
             for p in &r.permissions {
-                if p.is_empty() { return Err(RoleError::EmptyPermission); }
+                if p.is_empty() {
+                    return Err(RoleError::EmptyPermission);
+                }
             }
         }
         for (a, set) in &self.bindings {
-            if a.is_empty() { return Err(RoleError::EmptyActor); }
+            if a.is_empty() {
+                return Err(RoleError::EmptyActor);
+            }
             for rid in set {
                 if !self.roles.contains_key(rid) {
                     return Err(RoleError::UnknownRole(rid.clone()));
@@ -167,7 +210,9 @@ impl ActorRoleBinding {
 }
 
 impl Default for ActorRoleBinding {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -229,7 +274,10 @@ mod tests {
     #[test]
     fn bind_unknown_role_rejected() {
         let mut b = ActorRoleBinding::new();
-        assert!(matches!(b.bind("a", "nope").unwrap_err(), RoleError::UnknownRole(_)));
+        assert!(matches!(
+            b.bind("a", "nope").unwrap_err(),
+            RoleError::UnknownRole(_)
+        ));
     }
 
     #[test]
@@ -247,17 +295,29 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut b = ActorRoleBinding::new();
-        assert!(matches!(b.define_role("", &[]).unwrap_err(), RoleError::EmptyRole));
-        assert!(matches!(b.define_role("r", &[""]).unwrap_err(), RoleError::EmptyPermission));
+        assert!(matches!(
+            b.define_role("", &[]).unwrap_err(),
+            RoleError::EmptyRole
+        ));
+        assert!(matches!(
+            b.define_role("r", &[""]).unwrap_err(),
+            RoleError::EmptyPermission
+        ));
         b.define_role("r", &["p"]).unwrap();
-        assert!(matches!(b.bind("", "r").unwrap_err(), RoleError::EmptyActor));
+        assert!(matches!(
+            b.bind("", "r").unwrap_err(),
+            RoleError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ActorRoleBinding::new();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), RoleError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            RoleError::SchemaMismatch
+        ));
     }
 
     #[test]

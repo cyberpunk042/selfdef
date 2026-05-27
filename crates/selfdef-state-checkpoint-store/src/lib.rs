@@ -90,35 +90,45 @@ impl StateCheckpointStore {
 
     /// Add a checkpoint.
     pub fn add(&mut self, label: &str, bytes: Vec<u8>, ts_ms: u64) -> Result<u64, CheckpointError> {
-        if label.is_empty() { return Err(CheckpointError::EmptyLabel); }
+        if label.is_empty() {
+            return Err(CheckpointError::EmptyLabel);
+        }
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
         let payload_hash = fnv1a_64(&bytes);
-        self.checkpoints.insert(id, Checkpoint {
+        self.checkpoints.insert(
             id,
-            ts_ms,
-            label: label.into(),
-            payload_hash,
-            bytes,
-        });
+            Checkpoint {
+                id,
+                ts_ms,
+                label: label.into(),
+                payload_hash,
+                bytes,
+            },
+        );
         Ok(id)
     }
 
     /// Latest checkpoint (by ts then id).
     pub fn latest(&self) -> Option<&Checkpoint> {
-        self.checkpoints.values()
+        self.checkpoints
+            .values()
             .max_by(|a, b| a.ts_ms.cmp(&b.ts_ms).then(a.id.cmp(&b.id)))
     }
 
     /// Restore.
     pub fn restore(&self, id: u64) -> Result<&Checkpoint, CheckpointError> {
-        self.checkpoints.get(&id).ok_or(CheckpointError::UnknownId(id))
+        self.checkpoints
+            .get(&id)
+            .ok_or(CheckpointError::UnknownId(id))
     }
 
     /// Prune by count + age (floor min_keep enforced).
     pub fn prune(&mut self, now_ms: u64) -> usize {
         let total = self.checkpoints.len();
-        if total <= self.min_keep { return 0; }
+        if total <= self.min_keep {
+            return 0;
+        }
         // Order ids by recency (newest first).
         let mut ids: Vec<u64> = self.checkpoints.keys().copied().collect();
         ids.sort_by(|a, b| {
@@ -130,7 +140,9 @@ impl StateCheckpointStore {
         let mut to_remove: Vec<u64> = Vec::new();
         for (idx, id) in ids.iter().enumerate() {
             // Keep at least min_keep.
-            if total - removed <= self.min_keep { break; }
+            if total - removed <= self.min_keep {
+                break;
+            }
             let cp = &self.checkpoints[id];
             let too_old = self.max_age_ms > 0 && now_ms.saturating_sub(cp.ts_ms) > self.max_age_ms;
             let over_count = idx >= self.max_count;
@@ -154,16 +166,22 @@ impl StateCheckpointStore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CheckpointError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CheckpointError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CheckpointError::SchemaMismatch);
+        }
         for cp in self.checkpoints.values() {
-            if cp.label.is_empty() { return Err(CheckpointError::EmptyLabel); }
+            if cp.label.is_empty() {
+                return Err(CheckpointError::EmptyLabel);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for StateCheckpointStore {
-    fn default() -> Self { Self::new(10, 0, 1) }
+    fn default() -> Self {
+        Self::new(10, 0, 1)
+    }
 }
 
 #[cfg(test)]
@@ -224,13 +242,19 @@ mod tests {
     #[test]
     fn restore_unknown_rejected() {
         let s = StateCheckpointStore::new(10, 0, 1);
-        assert!(matches!(s.restore(999).unwrap_err(), CheckpointError::UnknownId(_)));
+        assert!(matches!(
+            s.restore(999).unwrap_err(),
+            CheckpointError::UnknownId(_)
+        ));
     }
 
     #[test]
     fn empty_label_rejected() {
         let mut s = StateCheckpointStore::new(10, 0, 1);
-        assert!(matches!(s.add("", vec![], 0).unwrap_err(), CheckpointError::EmptyLabel));
+        assert!(matches!(
+            s.add("", vec![], 0).unwrap_err(),
+            CheckpointError::EmptyLabel
+        ));
     }
 
     #[test]
@@ -247,7 +271,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = StateCheckpointStore::new(10, 0, 1);
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), CheckpointError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            CheckpointError::SchemaMismatch
+        ));
     }
 
     #[test]

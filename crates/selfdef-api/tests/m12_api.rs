@@ -1673,8 +1673,13 @@ async fn watchdog_scheduler_weights_route_returns_six_profile_matrix() {
         .iter()
         .find(|e| e["profile"].as_str() == Some("careful"))
         .expect("careful profile missing");
-    let risk = careful["weights"]["risk"].as_f64().expect("risk weight is number");
-    assert!((risk - 1.0).abs() < 0.001, "careful.risk should be 1.0, got {risk}");
+    let risk = careful["weights"]["risk"]
+        .as_f64()
+        .expect("risk weight is number");
+    assert!(
+        (risk - 1.0).abs() < 0.001,
+        "careful.risk should be 1.0, got {risk}"
+    );
 }
 
 #[tokio::test]
@@ -1816,7 +1821,7 @@ async fn dashboard_prefs_get_returns_default_when_file_missing() {
     // env var is unset on the CI runner, so the default
     // /etc/selfdef/dashboard-prefs.toml is used; that file is
     // ALSO missing on the CI runner.
-    let _ = path;  // (path unused — see env-mutation note above)
+    let _ = path; // (path unused — see env-mutation note above)
 
     let (state, _bus, _store, _dir) = build_state().await;
     let app = app(state);
@@ -2057,7 +2062,10 @@ async fn modules_route_returns_200_with_list() {
     let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(v["modules"].is_array(), "modules field must be array");
-    assert!(v["modules_dir"].is_string(), "modules_dir field must be string");
+    assert!(
+        v["modules_dir"].is_string(),
+        "modules_dir field must be string"
+    );
 }
 
 #[tokio::test]
@@ -2076,7 +2084,10 @@ async fn module_metrics_emitted_through_metrics_endpoint() {
     assert_eq!(res.status(), StatusCode::OK);
     let body_bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
     let body = std::str::from_utf8(&body_bytes).unwrap();
-    for series in ["selfdef_modules_shipped_total", "selfdef_modules_active_total"] {
+    for series in [
+        "selfdef_modules_shipped_total",
+        "selfdef_modules_active_total",
+    ] {
         assert!(
             body.contains(&format!("# HELP {series}")),
             "missing HELP comment for {series}"
@@ -2126,10 +2137,7 @@ async fn watchdog_metrics_values_are_valid_prometheus_numbers() {
         let value = parts[1];
         // Must parse as i64 OR finite f64. Reject NaN/Inf/non-numeric.
         let parsed = value.parse::<i64>().is_ok()
-            || value
-                .parse::<f64>()
-                .map(|f| f.is_finite())
-                .unwrap_or(false);
+            || value.parse::<f64>().map(|f| f.is_finite()).unwrap_or(false);
         assert!(
             parsed,
             "watchdog metric line has non-numeric/non-finite value: {line:?}",
@@ -2264,15 +2272,13 @@ async fn tool_authority_route_returns_200_with_canonical_schema() {
     assert_eq!(res.status(), StatusCode::OK);
     let bytes = to_bytes(res.into_body(), 64 * 1024).await.unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(v["tool_ids"].as_array().unwrap().len(), 8, "8 canonical tools");
     assert_eq!(
-        v["tool_ids"][0]["id"].as_str().unwrap(),
-        "Shell"
+        v["tool_ids"].as_array().unwrap().len(),
+        8,
+        "8 canonical tools"
     );
-    assert_eq!(
-        v["tool_ids"][7]["id"].as_str().unwrap(),
-        "CliBridge"
-    );
+    assert_eq!(v["tool_ids"][0]["id"].as_str().unwrap(), "Shell");
+    assert_eq!(v["tool_ids"][7]["id"].as_str().unwrap(), "CliBridge");
     assert_eq!(v["execution_modes"].as_array().unwrap().len(), 7);
     assert_eq!(v["profiles"].as_array().unwrap().len(), 6);
     let gates = v["gate_pipeline"].as_array().unwrap();
@@ -2355,7 +2361,10 @@ async fn audit_chains_route_returns_200_with_three_chains() {
     );
     let chains = v["chains"].as_array().expect("chains must be array");
     assert_eq!(chains.len(), 3);
-    let names: Vec<&str> = chains.iter().map(|c| c["watchdog"].as_str().unwrap()).collect();
+    let names: Vec<&str> = chains
+        .iter()
+        .map(|c| c["watchdog"].as_str().unwrap())
+        .collect();
     assert_eq!(names, vec!["perimeter", "guardian", "scheduler"]);
     for (i, c) in chains.iter().enumerate() {
         assert!(c["path"].is_string(), "row {i} path must be string");
@@ -2367,7 +2376,10 @@ async fn audit_chains_route_returns_200_with_three_chains() {
         // error is null when ok=true, string when ok=false
         let ok = c["ok"].as_bool().unwrap();
         if ok {
-            assert!(c["error"].is_null(), "row {i} error must be null when ok=true");
+            assert!(
+                c["error"].is_null(),
+                "row {i} error must be null when ok=true"
+            );
         } else {
             assert!(
                 c["error"].is_string(),
@@ -2399,7 +2411,9 @@ async fn health_route_returns_200_with_composite_body() {
         "worst must be normalized to ok/warn/critical/unknown; got {worst}"
     );
 
-    let comps = v["components"].as_array().expect("components must be array");
+    let comps = v["components"]
+        .as_array()
+        .expect("components must be array");
     let expected_names = ["alerts", "network", "storage", "raid", "gpu", "cpu"];
     assert_eq!(
         comps.len(),
@@ -2409,11 +2423,7 @@ async fn health_route_returns_200_with_composite_body() {
     );
     for (i, exp) in expected_names.iter().enumerate() {
         let c = &comps[i];
-        assert_eq!(
-            c["name"].as_str().unwrap(),
-            *exp,
-            "row {i} name mismatch"
-        );
+        assert_eq!(c["name"].as_str().unwrap(), *exp, "row {i} name mismatch");
         let s = c["state"].as_str().unwrap();
         assert!(
             ["ok", "warn", "critical", "unknown"].contains(&s),
@@ -2581,7 +2591,10 @@ async fn storage_route_returns_200_with_well_formed_body() {
     for (i, m) in mounts.iter().enumerate() {
         assert!(m["source"].is_string(), "row {i} source must be string");
         assert!(m["fstype"].is_string(), "row {i} fstype must be string");
-        assert!(m["mountpoint"].is_string(), "row {i} mountpoint must be string");
+        assert!(
+            m["mountpoint"].is_string(),
+            "row {i} mountpoint must be string"
+        );
         assert!(m["used_pct"].is_number(), "row {i} used_pct must be number");
         let s = m["state"].as_str().unwrap();
         assert!(

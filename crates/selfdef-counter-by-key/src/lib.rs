@@ -47,7 +47,9 @@ impl CounterByKey {
 
     /// Increment by 1.
     pub fn inc(&mut self, key: &str) -> Result<u64, CounterError> {
-        if key.is_empty() { return Err(CounterError::EmptyKey); }
+        if key.is_empty() {
+            return Err(CounterError::EmptyKey);
+        }
         let entry = self.counts.entry(key.into()).or_insert(0);
         *entry = entry.saturating_add(1);
         Ok(*entry)
@@ -55,7 +57,9 @@ impl CounterByKey {
 
     /// Increment by n.
     pub fn inc_by(&mut self, key: &str, n: u64) -> Result<u64, CounterError> {
-        if key.is_empty() { return Err(CounterError::EmptyKey); }
+        if key.is_empty() {
+            return Err(CounterError::EmptyKey);
+        }
         let entry = self.counts.entry(key.into()).or_insert(0);
         *entry = entry.saturating_add(n);
         Ok(*entry)
@@ -86,16 +90,22 @@ impl CounterByKey {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CounterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CounterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CounterError::SchemaMismatch);
+        }
         for k in self.counts.keys() {
-            if k.is_empty() { return Err(CounterError::EmptyKey); }
+            if k.is_empty() {
+                return Err(CounterError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for CounterByKey {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +173,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = CounterByKey::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

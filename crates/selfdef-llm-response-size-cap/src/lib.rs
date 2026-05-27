@@ -101,12 +101,54 @@ impl ResponseSizeCap {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Private,      ProfileResponseCap { max_completion_tokens: 2048,  max_response_chars: 8000,    max_attached_blobs: 2 });
-        p.insert(Profile::Fast,         ProfileResponseCap { max_completion_tokens: 4096,  max_response_chars: 16_000,  max_attached_blobs: 4 });
-        p.insert(Profile::Careful,      ProfileResponseCap { max_completion_tokens: 2048,  max_response_chars: 8000,    max_attached_blobs: 2 });
-        p.insert(Profile::Autonomous,   ProfileResponseCap { max_completion_tokens: 8192,  max_response_chars: 32_000,  max_attached_blobs: 8 });
-        p.insert(Profile::Experimental, ProfileResponseCap { max_completion_tokens: 16_384,max_response_chars: 64_000,  max_attached_blobs: 16 });
-        p.insert(Profile::Production,   ProfileResponseCap { max_completion_tokens: 4096,  max_response_chars: 16_000,  max_attached_blobs: 4 });
+        p.insert(
+            Profile::Private,
+            ProfileResponseCap {
+                max_completion_tokens: 2048,
+                max_response_chars: 8000,
+                max_attached_blobs: 2,
+            },
+        );
+        p.insert(
+            Profile::Fast,
+            ProfileResponseCap {
+                max_completion_tokens: 4096,
+                max_response_chars: 16_000,
+                max_attached_blobs: 4,
+            },
+        );
+        p.insert(
+            Profile::Careful,
+            ProfileResponseCap {
+                max_completion_tokens: 2048,
+                max_response_chars: 8000,
+                max_attached_blobs: 2,
+            },
+        );
+        p.insert(
+            Profile::Autonomous,
+            ProfileResponseCap {
+                max_completion_tokens: 8192,
+                max_response_chars: 32_000,
+                max_attached_blobs: 8,
+            },
+        );
+        p.insert(
+            Profile::Experimental,
+            ProfileResponseCap {
+                max_completion_tokens: 16_384,
+                max_response_chars: 64_000,
+                max_attached_blobs: 16,
+            },
+        );
+        p.insert(
+            Profile::Production,
+            ProfileResponseCap {
+                max_completion_tokens: 4096,
+                max_response_chars: 16_000,
+                max_attached_blobs: 4,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -122,7 +164,9 @@ impl ResponseSizeCap {
         let over = req.completion_tokens > cfg.max_completion_tokens
             || req.response_chars > cfg.max_response_chars
             || req.attached_blobs > cfg.max_attached_blobs;
-        if !over { return PlanVerdict::Granted; }
+        if !over {
+            return PlanVerdict::Granted;
+        }
         PlanVerdict::Capped {
             adjusted: ResponseRequest {
                 completion_tokens: req.completion_tokens.min(cfg.max_completion_tokens),
@@ -146,7 +190,11 @@ mod tests {
     use super::*;
 
     fn req(t: u32, c: u32, b: u32) -> ResponseRequest {
-        ResponseRequest { completion_tokens: t, response_chars: c, attached_blobs: b }
+        ResponseRequest {
+            completion_tokens: t,
+            response_chars: c,
+            attached_blobs: b,
+        }
     }
 
     #[test]
@@ -157,7 +205,10 @@ mod tests {
     #[test]
     fn grant_under_caps() {
         let c = ResponseSizeCap::canonical();
-        assert_eq!(c.plan(Profile::Fast, req(100, 1000, 1)), PlanVerdict::Granted);
+        assert_eq!(
+            c.plan(Profile::Fast, req(100, 1000, 1)),
+            PlanVerdict::Granted
+        );
     }
 
     #[test]
@@ -192,23 +243,35 @@ mod tests {
     fn unconfigured_profile() {
         let mut c = ResponseSizeCap::canonical();
         c.profiles.clear();
-        assert_eq!(c.plan(Profile::Fast, req(10, 10, 0)), PlanVerdict::Unconfigured);
+        assert_eq!(
+            c.plan(Profile::Fast, req(10, 10, 0)),
+            PlanVerdict::Unconfigured
+        );
     }
 
     #[test]
     fn per_profile_isolation() {
         let c = ResponseSizeCap::canonical();
         // Experimental allows much bigger responses.
-        assert_eq!(c.plan(Profile::Experimental, req(10_000, 50_000, 10)), PlanVerdict::Granted);
+        assert_eq!(
+            c.plan(Profile::Experimental, req(10_000, 50_000, 10)),
+            PlanVerdict::Granted
+        );
         // Same request capped under Production.
-        assert!(matches!(c.plan(Profile::Production, req(10_000, 50_000, 10)), PlanVerdict::Capped { .. }));
+        assert!(matches!(
+            c.plan(Profile::Production, req(10_000, 50_000, 10)),
+            PlanVerdict::Capped { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ResponseSizeCap::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CapError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CapError::SchemaMismatch
+        ));
     }
 
     #[test]

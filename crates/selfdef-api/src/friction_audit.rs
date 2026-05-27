@@ -92,9 +92,7 @@ pub(crate) async fn show() -> Result<Json<FrictionAuditBody>, ApiError> {
 }
 
 /// `GET /v1/friction-audit/history?limit=N` — all verdicts newest-first.
-pub(crate) async fn history(
-    Query(q): Query<HistoryQuery>,
-) -> Result<Json<HistoryBody>, ApiError> {
+pub(crate) async fn history(Query(q): Query<HistoryQuery>) -> Result<Json<HistoryBody>, ApiError> {
     let limit = q.limit.unwrap_or(32).min(256) as usize;
     let all = read_ring_buffer(Path::new(DEFAULT_RING_DIR))
         .map_err(|e| ApiError::Internal(format!("ring buffer read: {e}")))?;

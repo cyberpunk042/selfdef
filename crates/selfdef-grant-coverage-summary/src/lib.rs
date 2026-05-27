@@ -61,7 +61,9 @@ impl CoverageSummary {
         let mut earliest: Option<&str> = None;
         let mut total = 0u32;
         for e in entries {
-            if e.state != GrantState::Active { continue; }
+            if e.state != GrantState::Active {
+                continue;
+            }
             total += 1;
             *by_actor.entry(e.actor.clone()).or_insert(0) += 1;
             *by_kind.entry(kind_key(e.kind).into()).or_insert(0) += 1;
@@ -73,7 +75,8 @@ impl CoverageSummary {
         }
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            by_actor, by_kind,
+            by_actor,
+            by_kind,
             earliest_expiry: earliest.unwrap_or("").into(),
             total_active: total,
         }
@@ -122,11 +125,36 @@ mod tests {
     #[test]
     fn counts_active_only() {
         let entries = vec![
-            entry("alice", GrantKind::Filesystem, GrantState::Active, "2026-05-19T01:00:00Z"),
-            entry("alice", GrantKind::Network, GrantState::Active, "2026-05-19T02:00:00Z"),
-            entry("alice", GrantKind::Filesystem, GrantState::Expired, "2026-05-19T03:00:00Z"),
-            entry("bob", GrantKind::Capability, GrantState::Revoked, "2026-05-19T04:00:00Z"),
-            entry("bob", GrantKind::Sandbox, GrantState::Active, "2026-05-19T05:00:00Z"),
+            entry(
+                "alice",
+                GrantKind::Filesystem,
+                GrantState::Active,
+                "2026-05-19T01:00:00Z",
+            ),
+            entry(
+                "alice",
+                GrantKind::Network,
+                GrantState::Active,
+                "2026-05-19T02:00:00Z",
+            ),
+            entry(
+                "alice",
+                GrantKind::Filesystem,
+                GrantState::Expired,
+                "2026-05-19T03:00:00Z",
+            ),
+            entry(
+                "bob",
+                GrantKind::Capability,
+                GrantState::Revoked,
+                "2026-05-19T04:00:00Z",
+            ),
+            entry(
+                "bob",
+                GrantKind::Sandbox,
+                GrantState::Active,
+                "2026-05-19T05:00:00Z",
+            ),
         ];
         let s = CoverageSummary::build(&entries);
         assert_eq!(s.total_active, 3);
@@ -140,9 +168,24 @@ mod tests {
     #[test]
     fn earliest_expiry_picked_min() {
         let entries = vec![
-            entry("a", GrantKind::Filesystem, GrantState::Active, "2026-05-19T05:00:00Z"),
-            entry("a", GrantKind::Network, GrantState::Active, "2026-05-19T01:00:00Z"),
-            entry("a", GrantKind::Sandbox, GrantState::Active, "2026-05-19T03:00:00Z"),
+            entry(
+                "a",
+                GrantKind::Filesystem,
+                GrantState::Active,
+                "2026-05-19T05:00:00Z",
+            ),
+            entry(
+                "a",
+                GrantKind::Network,
+                GrantState::Active,
+                "2026-05-19T01:00:00Z",
+            ),
+            entry(
+                "a",
+                GrantKind::Sandbox,
+                GrantState::Active,
+                "2026-05-19T03:00:00Z",
+            ),
         ];
         let s = CoverageSummary::build(&entries);
         assert_eq!(s.earliest_expiry, "2026-05-19T01:00:00Z");
@@ -163,14 +206,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = CoverageSummary::build(&[]);
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), CoverageError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            CoverageError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn summary_serde_roundtrip() {
-        let entries = vec![
-            entry("a", GrantKind::Filesystem, GrantState::Active, "2026-05-19T01:00:00Z"),
-        ];
+        let entries = vec![entry(
+            "a",
+            GrantKind::Filesystem,
+            GrantState::Active,
+            "2026-05-19T01:00:00Z",
+        )];
         let s = CoverageSummary::build(&entries);
         let j = serde_json::to_string(&s).unwrap();
         let back: CoverageSummary = serde_json::from_str(&j).unwrap();

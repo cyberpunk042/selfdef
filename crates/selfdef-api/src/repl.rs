@@ -74,8 +74,7 @@ const TIERS: &[TierDescriptor] = &[
     },
 ];
 
-const BOOTSTRAP_COMMAND: &str =
-    "python3 -i -c \"$(selfdefctl repl bootstrap)\"";
+const BOOTSTRAP_COMMAND: &str = "python3 -i -c \"$(selfdefctl repl bootstrap)\"";
 
 pub(crate) async fn show() -> Json<ReplSchema> {
     Json(ReplSchema {

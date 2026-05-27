@@ -45,7 +45,9 @@ pub enum ThrottleError {
     #[error("subject empty")]
     EmptySubject,
     /// Throttled.
-    #[error("subject {subject} throttled: {count} promotions in window {window_ms}ms >= ceiling {ceiling}")]
+    #[error(
+        "subject {subject} throttled: {count} promotions in window {window_ms}ms >= ceiling {ceiling}"
+    )]
     Throttled {
         /// subject.
         subject: String,
@@ -61,8 +63,12 @@ pub enum ThrottleError {
 impl PromotionThrottle {
     /// New with `window_ms` + `ceiling`.
     pub fn new(window_ms: u64, ceiling: u32) -> Result<Self, ThrottleError> {
-        if window_ms == 0 { return Err(ThrottleError::ZeroWindow); }
-        if ceiling == 0 { return Err(ThrottleError::ZeroCeiling); }
+        if window_ms == 0 {
+            return Err(ThrottleError::ZeroWindow);
+        }
+        if ceiling == 0 {
+            return Err(ThrottleError::ZeroCeiling);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_ms,
@@ -73,7 +79,9 @@ impl PromotionThrottle {
 
     /// Try to record a promotion.
     pub fn try_promote(&mut self, subject: &str, now_ms: u64) -> Result<(), ThrottleError> {
-        if subject.is_empty() { return Err(ThrottleError::EmptySubject); }
+        if subject.is_empty() {
+            return Err(ThrottleError::EmptySubject);
+        }
         let cutoff = now_ms.saturating_sub(self.window_ms);
         let entry = self.timestamps.entry(subject.into()).or_default();
         entry.retain(|t| *t >= cutoff);
@@ -110,8 +118,12 @@ impl PromotionThrottle {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ThrottleError::SchemaMismatch);
         }
-        if self.window_ms == 0 { return Err(ThrottleError::ZeroWindow); }
-        if self.ceiling == 0 { return Err(ThrottleError::ZeroCeiling); }
+        if self.window_ms == 0 {
+            return Err(ThrottleError::ZeroWindow);
+        }
+        if self.ceiling == 0 {
+            return Err(ThrottleError::ZeroCeiling);
+        }
         Ok(())
     }
 }
@@ -122,12 +134,18 @@ mod tests {
 
     #[test]
     fn new_with_zero_window_rejected() {
-        assert!(matches!(PromotionThrottle::new(0, 1).unwrap_err(), ThrottleError::ZeroWindow));
+        assert!(matches!(
+            PromotionThrottle::new(0, 1).unwrap_err(),
+            ThrottleError::ZeroWindow
+        ));
     }
 
     #[test]
     fn new_with_zero_ceiling_rejected() {
-        assert!(matches!(PromotionThrottle::new(1000, 0).unwrap_err(), ThrottleError::ZeroCeiling));
+        assert!(matches!(
+            PromotionThrottle::new(1000, 0).unwrap_err(),
+            ThrottleError::ZeroCeiling
+        ));
     }
 
     #[test]
@@ -140,7 +158,10 @@ mod tests {
     fn second_within_window_blocked() {
         let mut t = PromotionThrottle::new(3_600_000, 1).unwrap();
         t.try_promote("alice", 1_000).unwrap();
-        assert!(matches!(t.try_promote("alice", 100_000).unwrap_err(), ThrottleError::Throttled { .. }));
+        assert!(matches!(
+            t.try_promote("alice", 100_000).unwrap_err(),
+            ThrottleError::Throttled { .. }
+        ));
     }
 
     #[test]
@@ -156,7 +177,10 @@ mod tests {
         t.try_promote("alice", 1).unwrap();
         t.try_promote("alice", 2).unwrap();
         t.try_promote("alice", 3).unwrap();
-        assert!(matches!(t.try_promote("alice", 4).unwrap_err(), ThrottleError::Throttled { .. }));
+        assert!(matches!(
+            t.try_promote("alice", 4).unwrap_err(),
+            ThrottleError::Throttled { .. }
+        ));
     }
 
     #[test]
@@ -177,14 +201,20 @@ mod tests {
     #[test]
     fn empty_subject_rejected() {
         let mut t = PromotionThrottle::new(1000, 1).unwrap();
-        assert!(matches!(t.try_promote("", 0).unwrap_err(), ThrottleError::EmptySubject));
+        assert!(matches!(
+            t.try_promote("", 0).unwrap_err(),
+            ThrottleError::EmptySubject
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = PromotionThrottle::new(1000, 1).unwrap();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), ThrottleError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            ThrottleError::SchemaMismatch
+        ));
     }
 
     #[test]

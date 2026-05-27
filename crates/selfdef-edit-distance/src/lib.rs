@@ -34,9 +34,17 @@ pub enum DistError {
 pub fn distance(a: &str, b: &str) -> u32 {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
-    if a.is_empty() { return b.len() as u32; }
-    if b.is_empty() { return a.len() as u32; }
-    let (shorter, longer) = if a.len() <= b.len() { (&a, &b) } else { (&b, &a) };
+    if a.is_empty() {
+        return b.len() as u32;
+    }
+    if b.is_empty() {
+        return a.len() as u32;
+    }
+    let (shorter, longer) = if a.len() <= b.len() {
+        (&a, &b)
+    } else {
+        (&b, &a)
+    };
     let n = shorter.len();
     let m = longer.len();
     let mut prev: Vec<u32> = (0..=n as u32).collect();
@@ -44,10 +52,12 @@ pub fn distance(a: &str, b: &str) -> u32 {
     for i in 1..=m {
         curr[0] = i as u32;
         for j in 1..=n {
-            let cost = if longer[i - 1] == shorter[j - 1] { 0 } else { 1 };
-            curr[j] = (curr[j - 1] + 1)
-                .min(prev[j] + 1)
-                .min(prev[j - 1] + cost);
+            let cost = if longer[i - 1] == shorter[j - 1] {
+                0
+            } else {
+                1
+            };
+            curr[j] = (curr[j - 1] + 1).min(prev[j] + 1).min(prev[j - 1] + cost);
         }
         std::mem::swap(&mut prev, &mut curr);
     }
@@ -56,9 +66,13 @@ pub fn distance(a: &str, b: &str) -> u32 {
 
 /// Similarity 0..=10000 (bp); 10000 = identical (or both empty).
 pub fn similarity_bp(a: &str, b: &str) -> u32 {
-    if a.is_empty() && b.is_empty() { return 10_000; }
+    if a.is_empty() && b.is_empty() {
+        return 10_000;
+    }
     let max_len = a.chars().count().max(b.chars().count()) as u32;
-    if max_len == 0 { return 10_000; }
+    if max_len == 0 {
+        return 10_000;
+    }
     let d = distance(a, b);
     ((max_len.saturating_sub(d)) as u64 * 10_000 / max_len as u64) as u32
 }
@@ -66,18 +80,24 @@ pub fn similarity_bp(a: &str, b: &str) -> u32 {
 impl EditDistanceState {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DistError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DistError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DistError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for EditDistanceState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -126,7 +146,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = EditDistanceState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), DistError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            DistError::SchemaMismatch
+        ));
     }
 
     #[test]

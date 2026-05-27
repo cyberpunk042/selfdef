@@ -75,7 +75,10 @@ pub fn fnv1a_64(bytes: &[u8]) -> u64 {
 pub fn fingerprint(d: &EgressDescriptor) -> String {
     let method = method_str(d.method);
     let content = content_str(d.content_class);
-    let s = format!("{}|{}|{}|{}|{}", d.host, d.port, method, d.path_shape, content);
+    let s = format!(
+        "{}|{}|{}|{}|{}",
+        d.host, d.port, method, d.path_shape, content
+    );
     let h = fnv1a_64(s.as_bytes());
     format!("0x{h:016x}")
 }
@@ -117,8 +120,12 @@ pub enum EgressFingerprintError {
 impl EgressDescriptor {
     /// Validate the descriptor.
     pub fn validate(&self) -> Result<(), EgressFingerprintError> {
-        if self.host.is_empty() { return Err(EgressFingerprintError::EmptyHost); }
-        if self.path_shape.is_empty() { return Err(EgressFingerprintError::EmptyPathShape); }
+        if self.host.is_empty() {
+            return Err(EgressFingerprintError::EmptyHost);
+        }
+        if self.path_shape.is_empty() {
+            return Err(EgressFingerprintError::EmptyPathShape);
+        }
         Ok(())
     }
 }
@@ -176,26 +183,41 @@ mod tests {
     fn empty_host_rejected() {
         let mut x = d();
         x.host = String::new();
-        assert!(matches!(x.validate().unwrap_err(), EgressFingerprintError::EmptyHost));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            EgressFingerprintError::EmptyHost
+        ));
     }
 
     #[test]
     fn empty_path_shape_rejected() {
         let mut x = d();
         x.path_shape = String::new();
-        assert!(matches!(x.validate().unwrap_err(), EgressFingerprintError::EmptyPathShape));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            EgressFingerprintError::EmptyPathShape
+        ));
     }
 
     #[test]
     fn method_serde_kebab() {
         assert_eq!(serde_json::to_string(&Method::Get).unwrap(), "\"get\"");
-        assert_eq!(serde_json::to_string(&Method::Delete).unwrap(), "\"delete\"");
+        assert_eq!(
+            serde_json::to_string(&Method::Delete).unwrap(),
+            "\"delete\""
+        );
     }
 
     #[test]
     fn content_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ContentClass::Text).unwrap(), "\"text\"");
-        assert_eq!(serde_json::to_string(&ContentClass::Stream).unwrap(), "\"stream\"");
+        assert_eq!(
+            serde_json::to_string(&ContentClass::Text).unwrap(),
+            "\"text\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ContentClass::Stream).unwrap(),
+            "\"stream\""
+        );
     }
 
     #[test]

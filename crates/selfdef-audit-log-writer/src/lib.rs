@@ -72,16 +72,24 @@ impl AuditRecord {
         if self.schema_version != SCHEMA_VERSION {
             return Err(AuditWriterError::SchemaMismatch);
         }
-        if self.at.is_empty() { return Err(AuditWriterError::FieldEmpty("at")); }
-        if self.trace_id.is_empty() { return Err(AuditWriterError::FieldEmpty("trace_id")); }
-        if self.actor.is_empty() { return Err(AuditWriterError::FieldEmpty("actor")); }
-        if self.kind.is_empty() { return Err(AuditWriterError::FieldEmpty("kind")); }
+        if self.at.is_empty() {
+            return Err(AuditWriterError::FieldEmpty("at"));
+        }
+        if self.trace_id.is_empty() {
+            return Err(AuditWriterError::FieldEmpty("trace_id"));
+        }
+        if self.actor.is_empty() {
+            return Err(AuditWriterError::FieldEmpty("actor"));
+        }
+        if self.kind.is_empty() {
+            return Err(AuditWriterError::FieldEmpty("kind"));
+        }
         if self.chain_hash.is_empty() {
             return Err(AuditWriterError::ChainHashMissing);
         }
         // Compute serialised size + newline.
         let json = serde_json::to_string(self).unwrap_or_default();
-        let total = json.len() + 1;  // +1 for trailing newline
+        let total = json.len() + 1; // +1 for trailing newline
         if total > PIPE_BUF_BYTES {
             return Err(AuditWriterError::RecordTooLarge(total));
         }
@@ -93,7 +101,8 @@ impl AuditRecord {
     /// would exceed PIPE_BUF (the atomicity boundary).
     pub fn to_atomic_line(&self) -> Result<Vec<u8>, AuditWriterError> {
         self.validate()?;
-        let mut buf = serde_json::to_vec(self).map_err(|_| AuditWriterError::FieldEmpty("serde_failed"))?;
+        let mut buf =
+            serde_json::to_vec(self).map_err(|_| AuditWriterError::FieldEmpty("serde_failed"))?;
         buf.push(b'\n');
         Ok(buf)
     }
@@ -107,7 +116,11 @@ pub fn verify_chain_continuity(records: &[AuditRecord]) -> Result<(), AuditWrite
         let prev = &window[0];
         let next = &window[1];
         if next.prev_chain_hash != prev.chain_hash {
-            return Err(AuditWriterError::FieldEmpty(if i == 0 { "chain_break_at_index_1" } else { "chain_break_mid_log" }));
+            return Err(AuditWriterError::FieldEmpty(if i == 0 {
+                "chain_break_at_index_1"
+            } else {
+                "chain_break_mid_log"
+            }));
         }
     }
     Ok(())
@@ -139,44 +152,70 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = ok_record();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn empty_at_rejected() {
-        let mut r = ok_record(); r.at = String::new();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::FieldEmpty("at")));
+        let mut r = ok_record();
+        r.at = String::new();
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::FieldEmpty("at")
+        ));
     }
 
     #[test]
     fn empty_trace_rejected() {
-        let mut r = ok_record(); r.trace_id = String::new();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::FieldEmpty("trace_id")));
+        let mut r = ok_record();
+        r.trace_id = String::new();
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::FieldEmpty("trace_id")
+        ));
     }
 
     #[test]
     fn empty_actor_rejected() {
-        let mut r = ok_record(); r.actor = String::new();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::FieldEmpty("actor")));
+        let mut r = ok_record();
+        r.actor = String::new();
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::FieldEmpty("actor")
+        ));
     }
 
     #[test]
     fn empty_kind_rejected() {
-        let mut r = ok_record(); r.kind = String::new();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::FieldEmpty("kind")));
+        let mut r = ok_record();
+        r.kind = String::new();
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::FieldEmpty("kind")
+        ));
     }
 
     #[test]
     fn empty_chain_hash_rejected() {
-        let mut r = ok_record(); r.chain_hash = String::new();
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::ChainHashMissing));
+        let mut r = ok_record();
+        r.chain_hash = String::new();
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::ChainHashMissing
+        ));
     }
 
     #[test]
     fn oversized_record_rejected() {
         let mut r = ok_record();
-        r.summary = "x".repeat(5000);  // pushes total > PIPE_BUF
-        assert!(matches!(r.validate().unwrap_err(), AuditWriterError::RecordTooLarge(_)));
+        r.summary = "x".repeat(5000); // pushes total > PIPE_BUF
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            AuditWriterError::RecordTooLarge(_)
+        ));
     }
 
     #[test]
@@ -209,8 +248,11 @@ mod tests {
 
     #[test]
     fn chain_continuity_detects_break() {
-        let mut r1 = ok_record(); r1.chain_hash = "0xaa".into();
-        let mut r2 = ok_record(); r2.prev_chain_hash = "WRONG".into(); r2.chain_hash = "0xbb".into();
+        let mut r1 = ok_record();
+        r1.chain_hash = "0xaa".into();
+        let mut r2 = ok_record();
+        r2.prev_chain_hash = "WRONG".into();
+        r2.chain_hash = "0xbb".into();
         assert!(verify_chain_continuity(&[r1, r2]).is_err());
     }
 

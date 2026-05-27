@@ -57,36 +57,51 @@ impl FlagSet {
 
     /// Register a flag (idempotent).
     pub fn register(&mut self, name: &str) -> Result<u8, FlagError> {
-        if name.is_empty() { return Err(FlagError::EmptyName); }
+        if name.is_empty() {
+            return Err(FlagError::EmptyName);
+        }
         if let Some(&b) = self.bits.get(name) {
             return Ok(b);
         }
-        if self.bits.len() >= 64 { return Err(FlagError::Full); }
+        if self.bits.len() >= 64 {
+            return Err(FlagError::Full);
+        }
         // Next free bit.
         let used: u64 = self.bits.values().map(|b| 1u64 << b).sum();
         let mut idx = 0u8;
-        while idx < 64 && (used & (1u64 << idx)) != 0 { idx += 1; }
+        while idx < 64 && (used & (1u64 << idx)) != 0 {
+            idx += 1;
+        }
         self.bits.insert(name.into(), idx);
         Ok(idx)
     }
 
     /// Set flag.
     pub fn set(&mut self, name: &str) -> Result<(), FlagError> {
-        let &b = self.bits.get(name).ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
+        let &b = self
+            .bits
+            .get(name)
+            .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
         self.mask |= 1u64 << b;
         Ok(())
     }
 
     /// Clear flag.
     pub fn clear(&mut self, name: &str) -> Result<(), FlagError> {
-        let &b = self.bits.get(name).ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
+        let &b = self
+            .bits
+            .get(name)
+            .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
         self.mask &= !(1u64 << b);
         Ok(())
     }
 
     /// Contains flag?
     pub fn contains(&self, name: &str) -> Result<bool, FlagError> {
-        let &b = self.bits.get(name).ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
+        let &b = self
+            .bits
+            .get(name)
+            .ok_or_else(|| FlagError::UnknownFlag(name.into()))?;
         Ok((self.mask & (1u64 << b)) != 0)
     }
 
@@ -106,11 +121,14 @@ impl FlagSet {
     }
 
     /// Count of set bits.
-    pub fn count(&self) -> u32 { self.mask.count_ones() }
+    pub fn count(&self) -> u32 {
+        self.mask.count_ones()
+    }
 
     /// Names of currently-set flags (bit-order ascending).
     pub fn active_names(&self) -> Vec<String> {
-        let mut pairs: Vec<(u8, String)> = self.bits
+        let mut pairs: Vec<(u8, String)> = self
+            .bits
             .iter()
             .filter(|&(_, &b)| (self.mask & (1u64 << b)) != 0)
             .map(|(k, &b)| (b, k.clone()))
@@ -121,16 +139,22 @@ impl FlagSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FlagError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FlagError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FlagError::SchemaMismatch);
+        }
         for k in self.bits.keys() {
-            if k.is_empty() { return Err(FlagError::EmptyName); }
+            if k.is_empty() {
+                return Err(FlagError::EmptyName);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for FlagSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -220,14 +244,20 @@ mod tests {
     #[test]
     fn unknown_set_rejected() {
         let mut s = FlagSet::new();
-        assert!(matches!(s.set("nope").unwrap_err(), FlagError::UnknownFlag(_)));
+        assert!(matches!(
+            s.set("nope").unwrap_err(),
+            FlagError::UnknownFlag(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = FlagSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), FlagError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            FlagError::SchemaMismatch
+        ));
     }
 
     #[test]

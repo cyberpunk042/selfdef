@@ -73,24 +73,31 @@ impl DecisionPreCommitHook {
 
     /// Register.
     pub fn register(&mut self, id: &str, priority: u32, on_block: bool) -> Result<(), HookError> {
-        if id.is_empty() { return Err(HookError::EmptyId); }
+        if id.is_empty() {
+            return Err(HookError::EmptyId);
+        }
         if self.hooks.contains_key(id) {
             return Err(HookError::DuplicateId(id.into()));
         }
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
-        self.hooks.insert(id.into(), Hook {
-            id: id.into(),
-            priority,
-            on_block,
-            seq,
-        });
+        self.hooks.insert(
+            id.into(),
+            Hook {
+                id: id.into(),
+                priority,
+                on_block,
+                seq,
+            },
+        );
         Ok(())
     }
 
     /// Deregister.
     pub fn deregister(&mut self, id: &str) -> Result<(), HookError> {
-        self.hooks.remove(id).ok_or_else(|| HookError::UnknownHook(id.into()))?;
+        self.hooks
+            .remove(id)
+            .ok_or_else(|| HookError::UnknownHook(id.into()))?;
         Ok(())
     }
 
@@ -103,21 +110,30 @@ impl DecisionPreCommitHook {
 
     /// Subset of veto-capable hooks in fire order.
     pub fn veto_capable(&self) -> Vec<Hook> {
-        self.fire_order().into_iter().filter(|h| h.on_block).collect()
+        self.fire_order()
+            .into_iter()
+            .filter(|h| h.on_block)
+            .collect()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HookError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HookError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HookError::SchemaMismatch);
+        }
         for (k, _) in &self.hooks {
-            if k.is_empty() { return Err(HookError::EmptyId); }
+            if k.is_empty() {
+                return Err(HookError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DecisionPreCommitHook {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -156,13 +172,19 @@ mod tests {
     fn duplicate_rejected() {
         let mut r = DecisionPreCommitHook::new();
         r.register("a", 1, false).unwrap();
-        assert!(matches!(r.register("a", 5, false).unwrap_err(), HookError::DuplicateId(_)));
+        assert!(matches!(
+            r.register("a", 5, false).unwrap_err(),
+            HookError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn deregister_unknown() {
         let mut r = DecisionPreCommitHook::new();
-        assert!(matches!(r.deregister("nope").unwrap_err(), HookError::UnknownHook(_)));
+        assert!(matches!(
+            r.deregister("nope").unwrap_err(),
+            HookError::UnknownHook(_)
+        ));
     }
 
     #[test]
@@ -176,14 +198,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut r = DecisionPreCommitHook::new();
-        assert!(matches!(r.register("", 1, false).unwrap_err(), HookError::EmptyId));
+        assert!(matches!(
+            r.register("", 1, false).unwrap_err(),
+            HookError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = DecisionPreCommitHook::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), HookError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            HookError::SchemaMismatch
+        ));
     }
 
     #[test]

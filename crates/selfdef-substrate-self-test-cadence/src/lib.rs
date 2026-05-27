@@ -78,11 +78,26 @@ impl SubstrateSelfTestCadence {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            fingerprint_match: ClassCadence { interval_seconds: 3600, must_run_before_first_use: true },
-            attestation_chain: ClassCadence { interval_seconds: 300, must_run_before_first_use: true },
-            canary_baseline: ClassCadence { interval_seconds: 60, must_run_before_first_use: true },
-            network_egress_probe: ClassCadence { interval_seconds: 300, must_run_before_first_use: false },
-            inference_smoke: ClassCadence { interval_seconds: 900, must_run_before_first_use: false },
+            fingerprint_match: ClassCadence {
+                interval_seconds: 3600,
+                must_run_before_first_use: true,
+            },
+            attestation_chain: ClassCadence {
+                interval_seconds: 300,
+                must_run_before_first_use: true,
+            },
+            canary_baseline: ClassCadence {
+                interval_seconds: 60,
+                must_run_before_first_use: true,
+            },
+            network_egress_probe: ClassCadence {
+                interval_seconds: 300,
+                must_run_before_first_use: false,
+            },
+            inference_smoke: ClassCadence {
+                interval_seconds: 900,
+                must_run_before_first_use: false,
+            },
         }
     }
 
@@ -166,20 +181,32 @@ mod tests {
     fn interval_zero_rejected() {
         let mut p = SubstrateSelfTestCadence::canonical();
         p.canary_baseline.interval_seconds = 0;
-        assert!(matches!(p.validate().unwrap_err(), CadenceError::IntervalZero(CheckClass::CanaryBaseline)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CadenceError::IntervalZero(CheckClass::CanaryBaseline)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstrateSelfTestCadence::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CadenceError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CadenceError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CheckClass::FingerprintMatch).unwrap(), "\"fingerprint-match\"");
-        assert_eq!(serde_json::to_string(&CheckClass::InferenceSmoke).unwrap(), "\"inference-smoke\"");
+        assert_eq!(
+            serde_json::to_string(&CheckClass::FingerprintMatch).unwrap(),
+            "\"fingerprint-match\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckClass::InferenceSmoke).unwrap(),
+            "\"inference-smoke\""
+        );
     }
 
     #[test]

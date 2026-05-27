@@ -41,7 +41,9 @@ pub fn apply(value: i64, bp: u32) -> i64 {
 
 /// numer × 10000 / denom; saturating to u32::MAX on overflow.
 pub fn ratio_bp(numer: u64, denom: u64) -> Result<u32, BpError> {
-    if denom == 0 { return Err(BpError::ZeroDenominator); }
+    if denom == 0 {
+        return Err(BpError::ZeroDenominator);
+    }
     let r = (numer as u128 * 10_000) / denom as u128;
     Ok(r.min(u32::MAX as u128) as u32)
 }
@@ -54,18 +56,24 @@ pub fn clamp_bp(bp: u32) -> u32 {
 impl BpMathState {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BpError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BpError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BpError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for BpMathState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -106,7 +114,10 @@ mod tests {
 
     #[test]
     fn ratio_zero_denom_rejected() {
-        assert!(matches!(ratio_bp(100, 0).unwrap_err(), BpError::ZeroDenominator));
+        assert!(matches!(
+            ratio_bp(100, 0).unwrap_err(),
+            BpError::ZeroDenominator
+        ));
     }
 
     #[test]

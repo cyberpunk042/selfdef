@@ -103,14 +103,21 @@ impl WatcherChannel {
 
     /// Register a watcher.
     pub fn register(&mut self, w: WatcherEntry) -> Result<(), WatcherError> {
-        if w.path.is_empty() { return Err(WatcherError::EmptyPath); }
+        if w.path.is_empty() {
+            return Err(WatcherError::EmptyPath);
+        }
         if matches!(w.kind, WatchKind::File | WatchKind::Directory) && !w.path.starts_with('/') {
             return Err(WatcherError::NotAbsolute(w.path));
         }
         if w.recursive && w.kind != WatchKind::Directory {
-            return Err(WatcherError::RecursiveOnNonDir { path: w.path, kind: w.kind });
+            return Err(WatcherError::RecursiveOnNonDir {
+                path: w.path,
+                kind: w.kind,
+            });
         }
-        if w.owner.is_empty() { return Err(WatcherError::EmptyOwner(w.path)); }
+        if w.owner.is_empty() {
+            return Err(WatcherError::EmptyOwner(w.path));
+        }
         if self.watchers.iter().any(|x| x.path == w.path) {
             return Err(WatcherError::DuplicatePath(w.path));
         }
@@ -126,14 +133,22 @@ impl WatcherChannel {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for w in &self.watchers {
-            if w.path.is_empty() { return Err(WatcherError::EmptyPath); }
-            if matches!(w.kind, WatchKind::File | WatchKind::Directory) && !w.path.starts_with('/') {
+            if w.path.is_empty() {
+                return Err(WatcherError::EmptyPath);
+            }
+            if matches!(w.kind, WatchKind::File | WatchKind::Directory) && !w.path.starts_with('/')
+            {
                 return Err(WatcherError::NotAbsolute(w.path.clone()));
             }
             if w.recursive && w.kind != WatchKind::Directory {
-                return Err(WatcherError::RecursiveOnNonDir { path: w.path.clone(), kind: w.kind });
+                return Err(WatcherError::RecursiveOnNonDir {
+                    path: w.path.clone(),
+                    kind: w.kind,
+                });
             }
-            if w.owner.is_empty() { return Err(WatcherError::EmptyOwner(w.path.clone())); }
+            if w.owner.is_empty() {
+                return Err(WatcherError::EmptyOwner(w.path.clone()));
+            }
             if !seen.insert(w.path.as_str()) {
                 return Err(WatcherError::DuplicatePath(w.path.clone()));
             }
@@ -153,7 +168,9 @@ impl WatcherChannel {
 }
 
 impl Default for WatcherChannel {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -161,7 +178,12 @@ mod tests {
     use super::*;
 
     fn w(path: &str, kind: WatchKind, recursive: bool, owner: &str) -> WatcherEntry {
-        WatcherEntry { path: path.into(), kind, recursive, owner: owner.into() }
+        WatcherEntry {
+            path: path.into(),
+            kind,
+            recursive,
+            owner: owner.into(),
+        }
     }
 
     #[test]
@@ -172,34 +194,46 @@ mod tests {
     #[test]
     fn register_file_watch() {
         let mut c = WatcherChannel::new();
-        c.register(w("/etc/sovereign/config.toml", WatchKind::File, false, "policy-bus")).unwrap();
+        c.register(w(
+            "/etc/sovereign/config.toml",
+            WatchKind::File,
+            false,
+            "policy-bus",
+        ))
+        .unwrap();
         assert!(c.get("/etc/sovereign/config.toml").is_some());
     }
 
     #[test]
     fn directory_recursive_ok() {
         let mut c = WatcherChannel::new();
-        c.register(w("/workspace", WatchKind::Directory, true, "audit-log")).unwrap();
+        c.register(w("/workspace", WatchKind::Directory, true, "audit-log"))
+            .unwrap();
     }
 
     #[test]
     fn recursive_on_file_rejected() {
         let mut c = WatcherChannel::new();
-        let err = c.register(w("/etc/x.toml", WatchKind::File, true, "p")).unwrap_err();
+        let err = c
+            .register(w("/etc/x.toml", WatchKind::File, true, "p"))
+            .unwrap_err();
         assert!(matches!(err, WatcherError::RecursiveOnNonDir { .. }));
     }
 
     #[test]
     fn non_absolute_path_rejected_for_file_dir() {
         let mut c = WatcherChannel::new();
-        let err = c.register(w("relative/path", WatchKind::File, false, "p")).unwrap_err();
+        let err = c
+            .register(w("relative/path", WatchKind::File, false, "p"))
+            .unwrap_err();
         assert!(matches!(err, WatcherError::NotAbsolute(_)));
     }
 
     #[test]
     fn socket_path_can_be_non_absolute() {
         let mut c = WatcherChannel::new();
-        c.register(w("@abstract-socket", WatchKind::UnixSocket, false, "p")).unwrap();
+        c.register(w("@abstract-socket", WatchKind::UnixSocket, false, "p"))
+            .unwrap();
     }
 
     #[test]
@@ -220,7 +254,9 @@ mod tests {
     fn duplicate_path_rejected() {
         let mut c = WatcherChannel::new();
         c.register(w("/x", WatchKind::File, false, "p")).unwrap();
-        let err = c.register(w("/x", WatchKind::File, false, "q")).unwrap_err();
+        let err = c
+            .register(w("/x", WatchKind::File, false, "q"))
+            .unwrap_err();
         assert!(matches!(err, WatcherError::DuplicatePath(_)));
     }
 
@@ -239,21 +275,32 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = WatcherChannel::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), WatcherError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WatcherError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&WatchKind::Directory).unwrap(), "\"directory\"");
-        assert_eq!(serde_json::to_string(&WatchKind::UnixSocket).unwrap(), "\"unix-socket\"");
+        assert_eq!(
+            serde_json::to_string(&WatchKind::Directory).unwrap(),
+            "\"directory\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WatchKind::UnixSocket).unwrap(),
+            "\"unix-socket\""
+        );
         assert_eq!(serde_json::to_string(&WatchKind::Fifo).unwrap(), "\"fifo\"");
     }
 
     #[test]
     fn channel_serde_roundtrip() {
         let mut c = WatcherChannel::new();
-        c.register(w("/etc/x.toml", WatchKind::File, false, "p")).unwrap();
-        c.register(w("/workspace", WatchKind::Directory, true, "q")).unwrap();
+        c.register(w("/etc/x.toml", WatchKind::File, false, "p"))
+            .unwrap();
+        c.register(w("/workspace", WatchKind::Directory, true, "q"))
+            .unwrap();
         let j = serde_json::to_string(&c).unwrap();
         let back: WatcherChannel = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

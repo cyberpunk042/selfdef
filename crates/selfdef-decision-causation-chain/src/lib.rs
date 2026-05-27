@@ -89,14 +89,26 @@ impl DecisionCausationChain {
     }
 
     /// Record.
-    pub fn record(&mut self, id: &str, summary: &str, ts_ms: u64, caused_by: &[&str]) -> Result<(), CausationError> {
-        if id.is_empty() { return Err(CausationError::EmptyId); }
-        if summary.is_empty() { return Err(CausationError::EmptySummary); }
+    pub fn record(
+        &mut self,
+        id: &str,
+        summary: &str,
+        ts_ms: u64,
+        caused_by: &[&str],
+    ) -> Result<(), CausationError> {
+        if id.is_empty() {
+            return Err(CausationError::EmptyId);
+        }
+        if summary.is_empty() {
+            return Err(CausationError::EmptySummary);
+        }
         if self.decisions.contains_key(id) {
             return Err(CausationError::DuplicateId(id.into()));
         }
         for c in caused_by {
-            if c == &id { return Err(CausationError::SelfCause(id.into())); }
+            if c == &id {
+                return Err(CausationError::SelfCause(id.into()));
+            }
             if !self.decisions.contains_key(*c) {
                 return Err(CausationError::UnknownCause((*c).into()));
             }
@@ -108,21 +120,29 @@ impl DecisionCausationChain {
         for c in caused_by {
             set.insert((*c).into());
         }
-        self.decisions.insert(id.into(), Decision {
-            id: id.into(),
-            summary: summary.into(),
-            ts_ms,
-            caused_by: set,
-        });
+        self.decisions.insert(
+            id.into(),
+            Decision {
+                id: id.into(),
+                summary: summary.into(),
+                ts_ms,
+                caused_by: set,
+            },
+        );
         for c in caused_by {
-            self.consequences.entry((*c).into()).or_default().insert(id.into());
+            self.consequences
+                .entry((*c).into())
+                .or_default()
+                .insert(id.into());
         }
         Ok(())
     }
 
     /// Add a cause relationship after recording (validates no cycle).
     pub fn add_cause(&mut self, decision: &str, cause: &str) -> Result<(), CausationError> {
-        if decision == cause { return Err(CausationError::SelfCause(decision.into())); }
+        if decision == cause {
+            return Err(CausationError::SelfCause(decision.into()));
+        }
         if !self.decisions.contains_key(cause) {
             return Err(CausationError::UnknownCause(cause.into()));
         }
@@ -132,10 +152,20 @@ impl DecisionCausationChain {
         // If `decision` is already an ancestor of `cause`, adding
         // cause→decision would loop.
         if self.is_ancestor(decision, cause) {
-            return Err(CausationError::WouldCycle { decision: decision.into(), cause: cause.into() });
+            return Err(CausationError::WouldCycle {
+                decision: decision.into(),
+                cause: cause.into(),
+            });
         }
-        self.decisions.get_mut(decision).unwrap().caused_by.insert(cause.into());
-        self.consequences.entry(cause.into()).or_default().insert(decision.into());
+        self.decisions
+            .get_mut(decision)
+            .unwrap()
+            .caused_by
+            .insert(cause.into());
+        self.consequences
+            .entry(cause.into())
+            .or_default()
+            .insert(decision.into());
         Ok(())
     }
 
@@ -146,7 +176,9 @@ impl DecisionCausationChain {
         q.push_back(start.into());
         seen.insert(start.into());
         while let Some(n) = q.pop_front() {
-            if n == candidate_ancestor { return true; }
+            if n == candidate_ancestor {
+                return true;
+            }
             if let Some(d) = self.decisions.get(&n) {
                 for c in &d.caused_by {
                     if seen.insert(c.clone()) {
@@ -173,7 +205,9 @@ impl DecisionCausationChain {
                     }
                 }
             }
-            if next.is_empty() { break; }
+            if next.is_empty() {
+                break;
+            }
             frontier = next;
         }
         out
@@ -194,7 +228,9 @@ impl DecisionCausationChain {
                     }
                 }
             }
-            if next.is_empty() { break; }
+            if next.is_empty() {
+                break;
+            }
             frontier = next;
         }
         out
@@ -202,10 +238,16 @@ impl DecisionCausationChain {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CausationError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CausationError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CausationError::SchemaMismatch);
+        }
         for (id, d) in &self.decisions {
-            if id.is_empty() { return Err(CausationError::EmptyId); }
-            if d.summary.is_empty() { return Err(CausationError::EmptySummary); }
+            if id.is_empty() {
+                return Err(CausationError::EmptyId);
+            }
+            if d.summary.is_empty() {
+                return Err(CausationError::EmptySummary);
+            }
             for c in &d.caused_by {
                 if !self.decisions.contains_key(c) {
                     return Err(CausationError::UnknownCause(c.clone()));
@@ -217,7 +259,9 @@ impl DecisionCausationChain {
 }
 
 impl Default for DecisionCausationChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -243,7 +287,10 @@ mod tests {
     #[test]
     fn unknown_cause_rejected() {
         let mut c = DecisionCausationChain::new();
-        assert!(matches!(c.record("b", "x", 0, &["nope"]).unwrap_err(), CausationError::UnknownCause(_)));
+        assert!(matches!(
+            c.record("b", "x", 0, &["nope"]).unwrap_err(),
+            CausationError::UnknownCause(_)
+        ));
     }
 
     #[test]
@@ -253,7 +300,10 @@ mod tests {
         // record() catches it because the cause is the same id (it won't even be in decisions yet, but we check before insertion).
         let mut c2 = DecisionCausationChain::new();
         c2.record("a", "x", 0, &[]).unwrap();
-        assert!(matches!(c2.add_cause("a", "a").unwrap_err(), CausationError::SelfCause(_)));
+        assert!(matches!(
+            c2.add_cause("a", "a").unwrap_err(),
+            CausationError::SelfCause(_)
+        ));
     }
 
     #[test]
@@ -263,7 +313,10 @@ mod tests {
         c.record("b", "x", 1, &["a"]).unwrap();
         c.record("c", "x", 2, &["b"]).unwrap();
         // a → b → c. Adding c as cause of a creates a→c→b→a.
-        assert!(matches!(c.add_cause("a", "c").unwrap_err(), CausationError::WouldCycle { .. }));
+        assert!(matches!(
+            c.add_cause("a", "c").unwrap_err(),
+            CausationError::WouldCycle { .. }
+        ));
     }
 
     #[test]
@@ -284,7 +337,10 @@ mod tests {
     fn duplicate_rejected() {
         let mut c = DecisionCausationChain::new();
         c.record("a", "x", 0, &[]).unwrap();
-        assert!(matches!(c.record("a", "x", 0, &[]).unwrap_err(), CausationError::DuplicateId(_)));
+        assert!(matches!(
+            c.record("a", "x", 0, &[]).unwrap_err(),
+            CausationError::DuplicateId(_)
+        ));
     }
 
     #[test]
@@ -304,15 +360,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut c = DecisionCausationChain::new();
-        assert!(matches!(c.record("", "x", 0, &[]).unwrap_err(), CausationError::EmptyId));
-        assert!(matches!(c.record("a", "", 0, &[]).unwrap_err(), CausationError::EmptySummary));
+        assert!(matches!(
+            c.record("", "x", 0, &[]).unwrap_err(),
+            CausationError::EmptyId
+        ));
+        assert!(matches!(
+            c.record("a", "", 0, &[]).unwrap_err(),
+            CausationError::EmptySummary
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = DecisionCausationChain::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CausationError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CausationError::SchemaMismatch
+        ));
     }
 
     #[test]

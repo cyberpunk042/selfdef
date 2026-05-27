@@ -14,7 +14,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 fn fetch_endpoint() -> Result<String> {
     let socket =
@@ -65,10 +65,18 @@ fn fetch_endpoint() -> Result<String> {
 /// probe — but the shell-out for `--version` is a direct local action,
 /// not a probe, so it stands alone.
 const BACKENDS: &[(&str, &str, &str)] = &[
-    ("llama.cpp",  "llama-server", "SELFDEF_INFERENCE_LLAMA_CPP_BIN"),
-    ("vllm",       "vllm",         "SELFDEF_INFERENCE_VLLM_BIN"),
-    ("bitnet.cpp", "bitnet-cli",   "SELFDEF_INFERENCE_BITNET_CPP_BIN"),
-    ("unsloth",    "unsloth-cli",  "SELFDEF_INFERENCE_UNSLOTH_BIN"),
+    (
+        "llama.cpp",
+        "llama-server",
+        "SELFDEF_INFERENCE_LLAMA_CPP_BIN",
+    ),
+    ("vllm", "vllm", "SELFDEF_INFERENCE_VLLM_BIN"),
+    (
+        "bitnet.cpp",
+        "bitnet-cli",
+        "SELFDEF_INFERENCE_BITNET_CPP_BIN",
+    ),
+    ("unsloth", "unsloth-cli", "SELFDEF_INFERENCE_UNSLOTH_BIN"),
 ];
 
 pub(crate) fn run_version(backend: &str) -> Result<i32> {
@@ -108,11 +116,7 @@ pub(crate) fn run_version(backend: &str) -> Result<i32> {
     if !stderr.is_empty() {
         eprint!("{}", stderr);
     }
-    if out.status.success() {
-        Ok(0)
-    } else {
-        Ok(2)
-    }
+    if out.status.success() { Ok(0) } else { Ok(2) }
 }
 
 pub(crate) fn run(json: bool) -> Result<i32> {
@@ -121,10 +125,13 @@ pub(crate) fn run(json: bool) -> Result<i32> {
         println!("{}", body);
         return Ok(0);
     }
-    let parsed: serde_json::Value = serde_json::from_str(&body).ok().ok_or_else(|| {
-        anyhow!("daemon returned non-JSON body for /v1/inference-backends")
-    })?;
-    let worst = parsed.get("worst").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let parsed: serde_json::Value = serde_json::from_str(&body)
+        .ok()
+        .ok_or_else(|| anyhow!("daemon returned non-JSON body for /v1/inference-backends"))?;
+    let worst = parsed
+        .get("worst")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
     let backends = parsed
         .get("backends")
         .and_then(|v| v.as_array())
@@ -144,7 +151,11 @@ pub(crate) fn run(json: bool) -> Result<i32> {
             "{:<14} {:<10} {:<20} {}",
             name,
             state.to_uppercase(),
-            if version.len() > 20 { &version[..20] } else { version },
+            if version.len() > 20 {
+                &version[..20]
+            } else {
+                version
+            },
             binary
         );
     }

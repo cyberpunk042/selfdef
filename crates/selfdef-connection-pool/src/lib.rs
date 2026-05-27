@@ -77,7 +77,9 @@ pub enum PoolError {
 impl ConnectionPool {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, PoolError> {
-        if capacity == 0 { return Err(PoolError::ZeroCap); }
+        if capacity == 0 {
+            return Err(PoolError::ZeroCap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -87,20 +89,31 @@ impl ConnectionPool {
 
     /// Register an id.
     pub fn add(&mut self, id: &str, now_ms: u64) -> Result<(), PoolError> {
-        if id.is_empty() { return Err(PoolError::EmptyId); }
-        if self.conns.contains_key(id) { return Err(PoolError::Duplicate(id.into())); }
-        if self.conns.len() >= self.capacity as usize { return Err(PoolError::Full); }
-        self.conns.insert(id.into(), Conn {
-            phase: Phase::Idle,
-            idle_since_ms: now_ms,
-            unhealthy_until_ms: 0,
-        });
+        if id.is_empty() {
+            return Err(PoolError::EmptyId);
+        }
+        if self.conns.contains_key(id) {
+            return Err(PoolError::Duplicate(id.into()));
+        }
+        if self.conns.len() >= self.capacity as usize {
+            return Err(PoolError::Full);
+        }
+        self.conns.insert(
+            id.into(),
+            Conn {
+                phase: Phase::Idle,
+                idle_since_ms: now_ms,
+                unhealthy_until_ms: 0,
+            },
+        );
         Ok(())
     }
 
     /// Acquire an idle, healthy id.
     pub fn acquire(&mut self, now_ms: u64) -> Option<String> {
-        let pick = self.conns.iter()
+        let pick = self
+            .conns
+            .iter()
             .find(|(_, c)| c.phase == Phase::Idle && c.unhealthy_until_ms <= now_ms)
             .map(|(id, _)| id.clone());
         if let Some(id) = pick {
@@ -114,7 +127,10 @@ impl ConnectionPool {
 
     /// Release.
     pub fn release(&mut self, id: &str, now_ms: u64) -> Result<(), PoolError> {
-        let c = self.conns.get_mut(id).ok_or_else(|| PoolError::Unknown(id.into()))?;
+        let c = self
+            .conns
+            .get_mut(id)
+            .ok_or_else(|| PoolError::Unknown(id.into()))?;
         c.phase = Phase::Idle;
         c.idle_since_ms = now_ms;
         Ok(())
@@ -122,7 +138,10 @@ impl ConnectionPool {
 
     /// Mark id unhealthy.
     pub fn mark_bad(&mut self, id: &str, now_ms: u64, cooldown_ms: u64) -> Result<(), PoolError> {
-        let c = self.conns.get_mut(id).ok_or_else(|| PoolError::Unknown(id.into()))?;
+        let c = self
+            .conns
+            .get_mut(id)
+            .ok_or_else(|| PoolError::Unknown(id.into()))?;
         c.unhealthy_until_ms = now_ms.saturating_add(cooldown_ms);
         c.phase = Phase::Idle;
         c.idle_since_ms = now_ms;
@@ -131,13 +150,18 @@ impl ConnectionPool {
 
     /// Reap idle ids that have been idle past idle_max_ms.
     pub fn reap_idle(&mut self, now_ms: u64, idle_max_ms: u64) -> u32 {
-        let to_remove: Vec<String> = self.conns.iter()
-            .filter(|(_, c)| c.phase == Phase::Idle
-                && now_ms.saturating_sub(c.idle_since_ms) > idle_max_ms)
+        let to_remove: Vec<String> = self
+            .conns
+            .iter()
+            .filter(|(_, c)| {
+                c.phase == Phase::Idle && now_ms.saturating_sub(c.idle_since_ms) > idle_max_ms
+            })
             .map(|(id, _)| id.clone())
             .collect();
         let n = to_remove.len() as u32;
-        for id in to_remove { self.conns.remove(&id); }
+        for id in to_remove {
+            self.conns.remove(&id);
+        }
         n
     }
 
@@ -151,17 +175,25 @@ impl ConnectionPool {
                 Phase::Idle => idle += 1,
                 Phase::InUse => in_use += 1,
             }
-            if c.unhealthy_until_ms > now_ms { unhealthy += 1; }
+            if c.unhealthy_until_ms > now_ms {
+                unhealthy += 1;
+            }
         }
         (idle, in_use, unhealthy)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PoolError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PoolError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(PoolError::ZeroCap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PoolError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(PoolError::ZeroCap);
+        }
         for k in self.conns.keys() {
-            if k.is_empty() { return Err(PoolError::EmptyId); }
+            if k.is_empty() {
+                return Err(PoolError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -227,14 +259,20 @@ mod tests {
     #[test]
     fn unknown_release_rejected() {
         let mut p = ConnectionPool::new(5).unwrap();
-        assert!(matches!(p.release("nope", 0).unwrap_err(), PoolError::Unknown(_)));
+        assert!(matches!(
+            p.release("nope", 0).unwrap_err(),
+            PoolError::Unknown(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ConnectionPool::new(5).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PoolError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PoolError::SchemaMismatch
+        ));
     }
 
     #[test]

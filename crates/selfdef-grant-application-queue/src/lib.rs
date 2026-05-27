@@ -99,8 +99,12 @@ impl ApplicationQueue {
 
     /// Submit an application.
     pub fn submit(&mut self, mut app: Application) -> Result<(), QueueError> {
-        if app.app_id.is_empty() { return Err(QueueError::EmptyAppId); }
-        if app.subject.is_empty() { return Err(QueueError::EmptySubject); }
+        if app.app_id.is_empty() {
+            return Err(QueueError::EmptyAppId);
+        }
+        if app.subject.is_empty() {
+            return Err(QueueError::EmptySubject);
+        }
         if app.justification.is_empty() {
             return Err(QueueError::EmptyJustification(app.app_id));
         }
@@ -124,8 +128,17 @@ impl ApplicationQueue {
         self.decide(app_id, AppState::Rejected, actor, at)
     }
 
-    fn decide(&mut self, app_id: &str, target: AppState, actor: &str, at: &str) -> Result<(), QueueError> {
-        let app = self.applications.iter_mut().find(|a| a.app_id == app_id)
+    fn decide(
+        &mut self,
+        app_id: &str,
+        target: AppState,
+        actor: &str,
+        at: &str,
+    ) -> Result<(), QueueError> {
+        let app = self
+            .applications
+            .iter_mut()
+            .find(|a| a.app_id == app_id)
             .ok_or_else(|| QueueError::Unknown(app_id.into()))?;
         if app.state != AppState::Pending {
             return Err(QueueError::IllegalTransition(app.state, target));
@@ -138,7 +151,10 @@ impl ApplicationQueue {
 
     /// All pending applications in submit order.
     pub fn pending(&self) -> Vec<&Application> {
-        self.applications.iter().filter(|a| a.state == AppState::Pending).collect()
+        self.applications
+            .iter()
+            .filter(|a| a.state == AppState::Pending)
+            .collect()
     }
 
     /// Lookup.
@@ -154,8 +170,12 @@ impl ApplicationQueue {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for a in &self.applications {
-            if a.app_id.is_empty() { return Err(QueueError::EmptyAppId); }
-            if a.subject.is_empty() { return Err(QueueError::EmptySubject); }
+            if a.app_id.is_empty() {
+                return Err(QueueError::EmptyAppId);
+            }
+            if a.subject.is_empty() {
+                return Err(QueueError::EmptySubject);
+            }
             if a.justification.is_empty() {
                 return Err(QueueError::EmptyJustification(a.app_id.clone()));
             }
@@ -168,7 +188,9 @@ impl ApplicationQueue {
 }
 
 impl Default for ApplicationQueue {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -197,7 +219,8 @@ mod tests {
     #[test]
     fn submit_and_approve() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap();
+        q.submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
         q.approve("a1", "op", "2026-05-19T03:01:00Z").unwrap();
         let a = q.get("a1").unwrap();
         assert_eq!(a.state, AppState::Approved);
@@ -207,7 +230,8 @@ mod tests {
     #[test]
     fn submit_and_reject() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::SandboxTier2)).unwrap();
+        q.submit(app("a1", "alice", TemplateId::SandboxTier2))
+            .unwrap();
         q.reject("a1", "op", "t").unwrap();
         assert_eq!(q.get("a1").unwrap().state, AppState::Rejected);
     }
@@ -215,17 +239,24 @@ mod tests {
     #[test]
     fn double_decide_rejected() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap();
+        q.submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
         q.approve("a1", "op", "t").unwrap();
         let err = q.reject("a1", "op", "t").unwrap_err();
-        assert!(matches!(err, QueueError::IllegalTransition(AppState::Approved, AppState::Rejected)));
+        assert!(matches!(
+            err,
+            QueueError::IllegalTransition(AppState::Approved, AppState::Rejected)
+        ));
     }
 
     #[test]
     fn duplicate_submit_rejected() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap();
-        let err = q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap_err();
+        q.submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
+        let err = q
+            .submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap_err();
         assert!(matches!(err, QueueError::DuplicateAppId(_)));
     }
 
@@ -239,14 +270,18 @@ mod tests {
     #[test]
     fn empty_app_id_rejected() {
         let mut q = ApplicationQueue::new();
-        let err = q.submit(app("", "alice", TemplateId::ReadWorkspace)).unwrap_err();
+        let err = q
+            .submit(app("", "alice", TemplateId::ReadWorkspace))
+            .unwrap_err();
         assert!(matches!(err, QueueError::EmptyAppId));
     }
 
     #[test]
     fn empty_subject_rejected() {
         let mut q = ApplicationQueue::new();
-        let err = q.submit(app("a1", "", TemplateId::ReadWorkspace)).unwrap_err();
+        let err = q
+            .submit(app("a1", "", TemplateId::ReadWorkspace))
+            .unwrap_err();
         assert!(matches!(err, QueueError::EmptySubject));
     }
 
@@ -262,9 +297,12 @@ mod tests {
     #[test]
     fn pending_returns_only_pending() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap();
-        q.submit(app("a2", "alice", TemplateId::ReadWorkspace)).unwrap();
-        q.submit(app("a3", "alice", TemplateId::ReadWorkspace)).unwrap();
+        q.submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
+        q.submit(app("a2", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
+        q.submit(app("a3", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
         q.approve("a2", "op", "t").unwrap();
         let v = q.pending();
         assert_eq!(v.len(), 2);
@@ -276,20 +314,33 @@ mod tests {
     fn schema_drift_rejected() {
         let mut q = ApplicationQueue::new();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QueueError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QueueError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn state_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AppState::Pending).unwrap(), "\"pending\"");
-        assert_eq!(serde_json::to_string(&AppState::Approved).unwrap(), "\"approved\"");
-        assert_eq!(serde_json::to_string(&AppState::Rejected).unwrap(), "\"rejected\"");
+        assert_eq!(
+            serde_json::to_string(&AppState::Pending).unwrap(),
+            "\"pending\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AppState::Approved).unwrap(),
+            "\"approved\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AppState::Rejected).unwrap(),
+            "\"rejected\""
+        );
     }
 
     #[test]
     fn queue_serde_roundtrip() {
         let mut q = ApplicationQueue::new();
-        q.submit(app("a1", "alice", TemplateId::ReadWorkspace)).unwrap();
+        q.submit(app("a1", "alice", TemplateId::ReadWorkspace))
+            .unwrap();
         let j = serde_json::to_string(&q).unwrap();
         let back: ApplicationQueue = serde_json::from_str(&j).unwrap();
         assert_eq!(q, back);

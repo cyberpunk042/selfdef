@@ -55,7 +55,9 @@ pub enum LogError {
 impl EventLog {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, LogError> {
-        if capacity == 0 { return Err(LogError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(LogError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -66,13 +68,18 @@ impl EventLog {
 
     /// Append; returns assigned seq.
     pub fn append(&mut self, payload: &str) -> Result<u64, LogError> {
-        if payload.is_empty() { return Err(LogError::EmptyPayload); }
+        if payload.is_empty() {
+            return Err(LogError::EmptyPayload);
+        }
         let seq = self.next_seq;
         self.next_seq = self.next_seq.saturating_add(1);
         if (self.events.len() as u32) >= self.capacity {
             self.events.remove(0);
         }
-        self.events.push(Event { seq, payload: payload.into() });
+        self.events.push(Event {
+            seq,
+            payload: payload.into(),
+        });
         Ok(seq)
     }
 
@@ -82,21 +89,33 @@ impl EventLog {
     }
 
     /// Earliest retained seq (None if empty).
-    pub fn earliest_seq(&self) -> Option<u64> { self.events.first().map(|e| e.seq) }
+    pub fn earliest_seq(&self) -> Option<u64> {
+        self.events.first().map(|e| e.seq)
+    }
 
     /// Latest retained seq.
-    pub fn latest_seq(&self) -> Option<u64> { self.events.last().map(|e| e.seq) }
+    pub fn latest_seq(&self) -> Option<u64> {
+        self.events.last().map(|e| e.seq)
+    }
 
     /// Count.
-    pub fn len(&self) -> usize { self.events.len() }
+    pub fn len(&self) -> usize {
+        self.events.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.events.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LogError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LogError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(LogError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LogError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(LogError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -152,14 +171,20 @@ mod tests {
     fn empty_inputs_rejected() {
         let mut l = EventLog::new(5).unwrap();
         assert!(matches!(l.append("").unwrap_err(), LogError::EmptyPayload));
-        assert!(matches!(EventLog::new(0).unwrap_err(), LogError::ZeroCapacity));
+        assert!(matches!(
+            EventLog::new(0).unwrap_err(),
+            LogError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = EventLog::new(5).unwrap();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LogError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LogError::SchemaMismatch
+        ));
     }
 
     #[test]

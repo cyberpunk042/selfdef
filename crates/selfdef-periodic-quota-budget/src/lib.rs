@@ -75,7 +75,9 @@ pub enum BudgetError {
 impl PeriodicQuotaBudget {
     /// New.
     pub fn new(period_ms: u64) -> Result<Self, BudgetError> {
-        if period_ms == 0 { return Err(BudgetError::ZeroPeriod); }
+        if period_ms == 0 {
+            return Err(BudgetError::ZeroPeriod);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             period_ms,
@@ -84,8 +86,15 @@ impl PeriodicQuotaBudget {
     }
 
     /// Set cap (creates entry with consumed=0).
-    pub fn set_cap(&mut self, actor: &str, cap_per_period: u64, now_ms: u64) -> Result<(), BudgetError> {
-        if actor.is_empty() { return Err(BudgetError::EmptyActor); }
+    pub fn set_cap(
+        &mut self,
+        actor: &str,
+        cap_per_period: u64,
+        now_ms: u64,
+    ) -> Result<(), BudgetError> {
+        if actor.is_empty() {
+            return Err(BudgetError::EmptyActor);
+        }
         let entry = self.actors.entry(actor.into()).or_insert(ActorBudget {
             cap_per_period,
             consumed: 0,
@@ -101,25 +110,40 @@ impl PeriodicQuotaBudget {
             // Snap forward by whole periods.
             let elapsed = now_ms.saturating_sub(b.current_period_start_ms);
             let periods = elapsed / self.period_ms;
-            b.current_period_start_ms = b.current_period_start_ms.saturating_add(periods.saturating_mul(self.period_ms));
+            b.current_period_start_ms = b
+                .current_period_start_ms
+                .saturating_add(periods.saturating_mul(self.period_ms));
             b.consumed = 0;
         }
     }
 
     /// Charge.
-    pub fn charge(&mut self, actor: &str, units: u64, now_ms: u64) -> Result<ChargeVerdict, BudgetError> {
+    pub fn charge(
+        &mut self,
+        actor: &str,
+        units: u64,
+        now_ms: u64,
+    ) -> Result<ChargeVerdict, BudgetError> {
         let period_ms = self.period_ms;
-        let b = self.actors.get_mut(actor).ok_or_else(|| BudgetError::UnknownActor(actor.into()))?;
+        let b = self
+            .actors
+            .get_mut(actor)
+            .ok_or_else(|| BudgetError::UnknownActor(actor.into()))?;
         // Inline roll (avoid double borrow).
         if now_ms.saturating_sub(b.current_period_start_ms) >= period_ms {
             let elapsed = now_ms.saturating_sub(b.current_period_start_ms);
             let periods = elapsed / period_ms;
-            b.current_period_start_ms = b.current_period_start_ms.saturating_add(periods.saturating_mul(period_ms));
+            b.current_period_start_ms = b
+                .current_period_start_ms
+                .saturating_add(periods.saturating_mul(period_ms));
             b.consumed = 0;
         }
         let available = b.cap_per_period.saturating_sub(b.consumed);
         if units > available {
-            return Ok(ChargeVerdict::Exceeded { available, requested: units });
+            return Ok(ChargeVerdict::Exceeded {
+                available,
+                requested: units,
+            });
         }
         b.consumed = b.consumed.saturating_add(units);
         Ok(ChargeVerdict::Accepted)
@@ -132,7 +156,9 @@ impl PeriodicQuotaBudget {
         if now_ms.saturating_sub(b.current_period_start_ms) >= period_ms {
             let elapsed = now_ms.saturating_sub(b.current_period_start_ms);
             let periods = elapsed / period_ms;
-            b.current_period_start_ms = b.current_period_start_ms.saturating_add(periods.saturating_mul(period_ms));
+            b.current_period_start_ms = b
+                .current_period_start_ms
+                .saturating_add(periods.saturating_mul(period_ms));
             b.consumed = 0;
         }
         Some(b.cap_per_period.saturating_sub(b.consumed))
@@ -140,10 +166,16 @@ impl PeriodicQuotaBudget {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
-        if self.period_ms == 0 { return Err(BudgetError::ZeroPeriod); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
+        if self.period_ms == 0 {
+            return Err(BudgetError::ZeroPeriod);
+        }
         for k in self.actors.keys() {
-            if k.is_empty() { return Err(BudgetError::EmptyActor); }
+            if k.is_empty() {
+                return Err(BudgetError::EmptyActor);
+            }
         }
         Ok(())
     }
@@ -166,7 +198,10 @@ mod tests {
         b.set_cap("a", 100, 0).unwrap();
         b.charge("a", 100, 0).unwrap();
         match b.charge("a", 50, 100).unwrap() {
-            ChargeVerdict::Exceeded { available, requested } => {
+            ChargeVerdict::Exceeded {
+                available,
+                requested,
+            } => {
                 assert_eq!(available, 0);
                 assert_eq!(requested, 50);
             }
@@ -203,25 +238,37 @@ mod tests {
     #[test]
     fn unknown_actor_rejected() {
         let mut b = PeriodicQuotaBudget::new(1000).unwrap();
-        assert!(matches!(b.charge("nope", 1, 0).unwrap_err(), BudgetError::UnknownActor(_)));
+        assert!(matches!(
+            b.charge("nope", 1, 0).unwrap_err(),
+            BudgetError::UnknownActor(_)
+        ));
     }
 
     #[test]
     fn zero_period_rejected() {
-        assert!(matches!(PeriodicQuotaBudget::new(0).unwrap_err(), BudgetError::ZeroPeriod));
+        assert!(matches!(
+            PeriodicQuotaBudget::new(0).unwrap_err(),
+            BudgetError::ZeroPeriod
+        ));
     }
 
     #[test]
     fn empty_actor_rejected() {
         let mut b = PeriodicQuotaBudget::new(1000).unwrap();
-        assert!(matches!(b.set_cap("", 100, 0).unwrap_err(), BudgetError::EmptyActor));
+        assert!(matches!(
+            b.set_cap("", 100, 0).unwrap_err(),
+            BudgetError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = PeriodicQuotaBudget::new(1000).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

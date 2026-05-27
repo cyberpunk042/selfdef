@@ -62,11 +62,16 @@ impl RateWindowAggregator {
 
     /// Record an event.
     pub fn record(&mut self, key: &str, ts_ms: u64) -> Result<(), AggError> {
-        if key.is_empty() { return Err(AggError::EmptyKey); }
+        if key.is_empty() {
+            return Err(AggError::EmptyKey);
+        }
         let v = self.series.entry(key.into()).or_default();
         if let Some(&last) = v.last() {
             if ts_ms < last {
-                return Err(AggError::NonMonotonic { prev: last, new: ts_ms });
+                return Err(AggError::NonMonotonic {
+                    prev: last,
+                    new: ts_ms,
+                });
             }
         }
         v.push(ts_ms);
@@ -93,12 +98,18 @@ impl RateWindowAggregator {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AggError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AggError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AggError::SchemaMismatch);
+        }
         for (k, v) in &self.series {
-            if k.is_empty() { return Err(AggError::EmptyKey); }
+            if k.is_empty() {
+                return Err(AggError::EmptyKey);
+            }
             let mut prev = 0u64;
             for &t in v {
-                if t < prev { return Err(AggError::NonMonotonic { prev, new: t }); }
+                if t < prev {
+                    return Err(AggError::NonMonotonic { prev, new: t });
+                }
                 prev = t;
             }
         }
@@ -140,7 +151,10 @@ mod tests {
     fn nonmonotonic_rejected() {
         let mut a = RateWindowAggregator::new(1000);
         a.record("k", 200).unwrap();
-        assert!(matches!(a.record("k", 100).unwrap_err(), AggError::NonMonotonic { .. }));
+        assert!(matches!(
+            a.record("k", 100).unwrap_err(),
+            AggError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -172,7 +186,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut a = RateWindowAggregator::new(1000);
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), AggError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AggError::SchemaMismatch
+        ));
     }
 
     #[test]

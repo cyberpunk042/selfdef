@@ -84,7 +84,9 @@ pub enum IdemError {
 impl IdempotencyKeyStore {
     /// New.
     pub fn new(ttl_ms: u64) -> Result<Self, IdemError> {
-        if ttl_ms == 0 { return Err(IdemError::ZeroTtl); }
+        if ttl_ms == 0 {
+            return Err(IdemError::ZeroTtl);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             ttl_ms,
@@ -93,21 +95,33 @@ impl IdempotencyKeyStore {
     }
 
     /// Begin (or replay) for key+fp at now_ms.
-    pub fn begin(&mut self, key: &str, fingerprint: &str, now_ms: u64) -> Result<Outcome, IdemError> {
-        if key.is_empty() { return Err(IdemError::EmptyKey); }
+    pub fn begin(
+        &mut self,
+        key: &str,
+        fingerprint: &str,
+        now_ms: u64,
+    ) -> Result<Outcome, IdemError> {
+        if key.is_empty() {
+            return Err(IdemError::EmptyKey);
+        }
         // Expire stale entries lazily.
         if let Some(e) = self.entries.get(key) {
-            if e.expires_at_ms <= now_ms { self.entries.remove(key); }
+            if e.expires_at_ms <= now_ms {
+                self.entries.remove(key);
+            }
         }
         match self.entries.get(key) {
             None => {
-                self.entries.insert(key.into(), Entry {
-                    request_fingerprint: fingerprint.into(),
-                    response_status: 0,
-                    response_body: String::new(),
-                    committed: false,
-                    expires_at_ms: now_ms.saturating_add(self.ttl_ms),
-                });
+                self.entries.insert(
+                    key.into(),
+                    Entry {
+                        request_fingerprint: fingerprint.into(),
+                        response_status: 0,
+                        response_body: String::new(),
+                        committed: false,
+                        expires_at_ms: now_ms.saturating_add(self.ttl_ms),
+                    },
+                );
                 Ok(Outcome::New)
             }
             Some(e) => {
@@ -128,7 +142,10 @@ impl IdempotencyKeyStore {
 
     /// Commit a response for key.
     pub fn commit(&mut self, key: &str, status: u16, body: &str) -> Result<(), IdemError> {
-        let e = self.entries.get_mut(key).ok_or_else(|| IdemError::NotFound(key.into()))?;
+        let e = self
+            .entries
+            .get_mut(key)
+            .ok_or_else(|| IdemError::NotFound(key.into()))?;
         e.response_status = status;
         e.response_body = body.into();
         e.committed = true;
@@ -142,10 +159,16 @@ impl IdempotencyKeyStore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IdemError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IdemError::SchemaMismatch); }
-        if self.ttl_ms == 0 { return Err(IdemError::ZeroTtl); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IdemError::SchemaMismatch);
+        }
+        if self.ttl_ms == 0 {
+            return Err(IdemError::ZeroTtl);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(IdemError::EmptyKey); }
+            if k.is_empty() {
+                return Err(IdemError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -165,7 +188,10 @@ mod tests {
     fn second_begin_same_fp_in_progress() {
         let mut s = IdempotencyKeyStore::new(60_000).unwrap();
         s.begin("k1", "fp", 0).unwrap();
-        assert!(matches!(s.begin("k1", "fp", 100).unwrap(), Outcome::InProgress));
+        assert!(matches!(
+            s.begin("k1", "fp", 100).unwrap(),
+            Outcome::InProgress
+        ));
     }
 
     #[test]
@@ -200,20 +226,29 @@ mod tests {
     #[test]
     fn empty_key_rejected() {
         let mut s = IdempotencyKeyStore::new(1000).unwrap();
-        assert!(matches!(s.begin("", "fp", 0).unwrap_err(), IdemError::EmptyKey));
+        assert!(matches!(
+            s.begin("", "fp", 0).unwrap_err(),
+            IdemError::EmptyKey
+        ));
     }
 
     #[test]
     fn commit_unknown_rejected() {
         let mut s = IdempotencyKeyStore::new(1000).unwrap();
-        assert!(matches!(s.commit("nope", 200, "x").unwrap_err(), IdemError::NotFound(_)));
+        assert!(matches!(
+            s.commit("nope", 200, "x").unwrap_err(),
+            IdemError::NotFound(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = IdempotencyKeyStore::new(1000).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), IdemError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            IdemError::SchemaMismatch
+        ));
     }
 
     #[test]

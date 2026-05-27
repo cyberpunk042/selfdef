@@ -94,9 +94,15 @@ impl AttestationChain {
         fingerprint: &str,
         at: &str,
     ) -> Result<(), AttestationError> {
-        if component.is_empty() { return Err(AttestationError::EmptyComponent); }
-        if version.is_empty() { return Err(AttestationError::EmptyVersion); }
-        if fingerprint.is_empty() { return Err(AttestationError::EmptyFingerprint); }
+        if component.is_empty() {
+            return Err(AttestationError::EmptyComponent);
+        }
+        if version.is_empty() {
+            return Err(AttestationError::EmptyVersion);
+        }
+        if fingerprint.is_empty() {
+            return Err(AttestationError::EmptyFingerprint);
+        }
         let prev_link = self.entries.last().map(link_of).unwrap_or(GENESIS_LINK);
         self.entries.push(AttestationEntry {
             component: component.into(),
@@ -131,9 +137,15 @@ impl AttestationChain {
             return Err(AttestationError::SchemaMismatch);
         }
         for e in &self.entries {
-            if e.component.is_empty() { return Err(AttestationError::EmptyComponent); }
-            if e.version.is_empty() { return Err(AttestationError::EmptyVersion); }
-            if e.fingerprint.is_empty() { return Err(AttestationError::EmptyFingerprint); }
+            if e.component.is_empty() {
+                return Err(AttestationError::EmptyComponent);
+            }
+            if e.version.is_empty() {
+                return Err(AttestationError::EmptyVersion);
+            }
+            if e.fingerprint.is_empty() {
+                return Err(AttestationError::EmptyFingerprint);
+            }
         }
         self.verify()
     }
@@ -166,7 +178,9 @@ fn link_of(e: &AttestationEntry) -> u64 {
 }
 
 impl Default for AttestationChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -225,9 +239,18 @@ mod tests {
     #[test]
     fn append_empty_fields_rejected() {
         let mut c = AttestationChain::new();
-        assert!(matches!(c.append("", "v", "f", "t").unwrap_err(), AttestationError::EmptyComponent));
-        assert!(matches!(c.append("c", "", "f", "t").unwrap_err(), AttestationError::EmptyVersion));
-        assert!(matches!(c.append("c", "v", "", "t").unwrap_err(), AttestationError::EmptyFingerprint));
+        assert!(matches!(
+            c.append("", "v", "f", "t").unwrap_err(),
+            AttestationError::EmptyComponent
+        ));
+        assert!(matches!(
+            c.append("c", "", "f", "t").unwrap_err(),
+            AttestationError::EmptyVersion
+        ));
+        assert!(matches!(
+            c.append("c", "v", "", "t").unwrap_err(),
+            AttestationError::EmptyFingerprint
+        ));
     }
 
     #[test]
@@ -257,7 +280,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = AttestationChain::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), AttestationError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            AttestationError::SchemaMismatch
+        ));
     }
 
     #[test]
@@ -265,7 +291,10 @@ mod tests {
         let mut c = AttestationChain::new();
         populate(&mut c);
         c.entries[1].fingerprint = "broken".into();
-        assert!(matches!(c.validate().unwrap_err(), AttestationError::BrokenChain { .. }));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            AttestationError::BrokenChain { .. }
+        ));
     }
 
     #[test]

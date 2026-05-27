@@ -84,7 +84,9 @@ impl RecoverySnapshotPolicy {
 
     /// Add a snapshot.
     pub fn add(&mut self, s: Snapshot) -> Result<(), SnapshotError> {
-        if s.id.is_empty() { return Err(SnapshotError::EmptyId); }
+        if s.id.is_empty() {
+            return Err(SnapshotError::EmptyId);
+        }
         if self.snapshots.iter().any(|x| x.id == s.id) {
             return Err(SnapshotError::DuplicateId(s.id));
         }
@@ -94,19 +96,26 @@ impl RecoverySnapshotPolicy {
 
     /// Snapshots that may be pruned without violating per-class min_kept.
     pub fn eligible_for_eviction(&self) -> Vec<&Snapshot> {
-        for class in [SnapshotClass::Hourly, SnapshotClass::Daily, SnapshotClass::Weekly] {
+        for class in [
+            SnapshotClass::Hourly,
+            SnapshotClass::Daily,
+            SnapshotClass::Weekly,
+        ] {
             let _ = class;
         }
         let mut eligible: Vec<&Snapshot> = Vec::new();
-        for class in [SnapshotClass::Hourly, SnapshotClass::Daily, SnapshotClass::Weekly] {
+        for class in [
+            SnapshotClass::Hourly,
+            SnapshotClass::Daily,
+            SnapshotClass::Weekly,
+        ] {
             let min_kept = match class {
                 SnapshotClass::Hourly => self.min_hourly,
                 SnapshotClass::Daily => self.min_daily,
                 SnapshotClass::Weekly => self.min_weekly,
             } as usize;
-            let mut of_class: Vec<&Snapshot> = self.snapshots.iter()
-                .filter(|s| s.class == class)
-                .collect();
+            let mut of_class: Vec<&Snapshot> =
+                self.snapshots.iter().filter(|s| s.class == class).collect();
             of_class.sort_by_key(|s| std::cmp::Reverse(s.at_unix));
             // Keep first `min_kept`; rest are eligible.
             for s in of_class.into_iter().skip(min_kept) {
@@ -118,7 +127,8 @@ impl RecoverySnapshotPolicy {
 
     /// Pick the most-recent snapshot at-or-before `target_unix`.
     pub fn select_for_recovery(&self, target_unix: u64) -> Option<&Snapshot> {
-        self.snapshots.iter()
+        self.snapshots
+            .iter()
             .filter(|s| s.at_unix <= target_unix)
             .max_by_key(|s| s.at_unix)
     }
@@ -136,7 +146,9 @@ impl RecoverySnapshotPolicy {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for s in &self.snapshots {
-            if s.id.is_empty() { return Err(SnapshotError::EmptyId); }
+            if s.id.is_empty() {
+                return Err(SnapshotError::EmptyId);
+            }
             if !seen.insert(s.id.as_str()) {
                 return Err(SnapshotError::DuplicateId(s.id.clone()));
             }
@@ -150,7 +162,12 @@ mod tests {
     use super::*;
 
     fn snap(id: &str, class: SnapshotClass, at: u64) -> Snapshot {
-        Snapshot { id: id.into(), class, at_unix: at, size_bytes: 1024 }
+        Snapshot {
+            id: id.into(),
+            class,
+            at_unix: at,
+            size_bytes: 1024,
+        }
     }
 
     #[test]
@@ -184,7 +201,11 @@ mod tests {
         p.add(snap("b", SnapshotClass::Hourly, 200)).unwrap();
         p.add(snap("c", SnapshotClass::Hourly, 300)).unwrap();
         p.add(snap("d", SnapshotClass::Hourly, 400)).unwrap();
-        let e: Vec<&str> = p.eligible_for_eviction().iter().map(|s| s.id.as_str()).collect();
+        let e: Vec<&str> = p
+            .eligible_for_eviction()
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
         // 4 hourly, keep 2 newest (d, c). a + b eligible.
         assert!(e.contains(&"a"));
         assert!(e.contains(&"b"));
@@ -198,8 +219,10 @@ mod tests {
         p.min_hourly = 1;
         p.min_daily = 1;
         for i in 0..3 {
-            p.add(snap(&format!("h{i}"), SnapshotClass::Hourly, 100 + i)).unwrap();
-            p.add(snap(&format!("d{i}"), SnapshotClass::Daily, 200 + i)).unwrap();
+            p.add(snap(&format!("h{i}"), SnapshotClass::Hourly, 100 + i))
+                .unwrap();
+            p.add(snap(&format!("d{i}"), SnapshotClass::Daily, 200 + i))
+                .unwrap();
         }
         // 3 hourly: keep newest, evict 2. Same for daily.
         let e = p.eligible_for_eviction();
@@ -237,13 +260,22 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = RecoverySnapshotPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SnapshotError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SnapshotError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SnapshotClass::Hourly).unwrap(), "\"hourly\"");
-        assert_eq!(serde_json::to_string(&SnapshotClass::Weekly).unwrap(), "\"weekly\"");
+        assert_eq!(
+            serde_json::to_string(&SnapshotClass::Hourly).unwrap(),
+            "\"hourly\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SnapshotClass::Weekly).unwrap(),
+            "\"weekly\""
+        );
     }
 
     #[test]

@@ -64,19 +64,39 @@ impl DecisionMemoTable {
     }
 
     /// Store.
-    pub fn store(&mut self, policy_version: &str, input_hash: u64, decision: &str, ts_ms: u64) -> Result<(), MemoError> {
-        if policy_version.is_empty() { return Err(MemoError::EmptyVersion); }
-        if decision.is_empty() { return Err(MemoError::EmptyDecision); }
-        self.by_version.entry(policy_version.into()).or_default().insert(input_hash, CacheEntry {
-            decision: decision.into(),
-            ts_ms,
-        });
+    pub fn store(
+        &mut self,
+        policy_version: &str,
+        input_hash: u64,
+        decision: &str,
+        ts_ms: u64,
+    ) -> Result<(), MemoError> {
+        if policy_version.is_empty() {
+            return Err(MemoError::EmptyVersion);
+        }
+        if decision.is_empty() {
+            return Err(MemoError::EmptyDecision);
+        }
+        self.by_version
+            .entry(policy_version.into())
+            .or_default()
+            .insert(
+                input_hash,
+                CacheEntry {
+                    decision: decision.into(),
+                    ts_ms,
+                },
+            );
         Ok(())
     }
 
     /// Lookup (mut → bumps hit/miss counters).
     pub fn lookup(&mut self, policy_version: &str, input_hash: u64) -> Option<String> {
-        let hit = self.by_version.get(policy_version).and_then(|m| m.get(&input_hash)).map(|e| e.decision.clone());
+        let hit = self
+            .by_version
+            .get(policy_version)
+            .and_then(|m| m.get(&input_hash))
+            .map(|e| e.decision.clone());
         if hit.is_some() {
             self.hits = self.hits.saturating_add(1);
         } else {
@@ -87,7 +107,10 @@ impl DecisionMemoTable {
 
     /// Invalidate all entries for a policy version.
     pub fn invalidate_version(&mut self, policy_version: &str) -> usize {
-        self.by_version.remove(policy_version).map(|m| m.len()).unwrap_or(0)
+        self.by_version
+            .remove(policy_version)
+            .map(|m| m.len())
+            .unwrap_or(0)
     }
 
     /// Total cached.
@@ -102,11 +125,17 @@ impl DecisionMemoTable {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MemoError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MemoError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MemoError::SchemaMismatch);
+        }
         for (v, m) in &self.by_version {
-            if v.is_empty() { return Err(MemoError::EmptyVersion); }
+            if v.is_empty() {
+                return Err(MemoError::EmptyVersion);
+            }
             for e in m.values() {
-                if e.decision.is_empty() { return Err(MemoError::EmptyDecision); }
+                if e.decision.is_empty() {
+                    return Err(MemoError::EmptyDecision);
+                }
             }
         }
         Ok(())
@@ -114,7 +143,9 @@ impl DecisionMemoTable {
 }
 
 impl Default for DecisionMemoTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,15 +194,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut t = DecisionMemoTable::new();
-        assert!(matches!(t.store("", 1, "a", 0).unwrap_err(), MemoError::EmptyVersion));
-        assert!(matches!(t.store("v", 1, "", 0).unwrap_err(), MemoError::EmptyDecision));
+        assert!(matches!(
+            t.store("", 1, "a", 0).unwrap_err(),
+            MemoError::EmptyVersion
+        ));
+        assert!(matches!(
+            t.store("v", 1, "", 0).unwrap_err(),
+            MemoError::EmptyDecision
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = DecisionMemoTable::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), MemoError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            MemoError::SchemaMismatch
+        ));
     }
 
     #[test]

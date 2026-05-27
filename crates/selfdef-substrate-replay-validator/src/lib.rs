@@ -134,7 +134,11 @@ pub struct SubstrateReplayValidator {
 
 impl SubstrateReplayValidator {
     /// New.
-    pub fn new() -> Self { Self { schema_version: SCHEMA_VERSION.into() } }
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ValidatorError> {
@@ -146,7 +150,9 @@ impl SubstrateReplayValidator {
 }
 
 impl Default for SubstrateReplayValidator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -157,7 +163,10 @@ mod tests {
         ReplayEnv {
             engine_version: engine.into(),
             rule_bundle_digest: bundle.into(),
-            tool_versions: tools.iter().map(|(id, v)| ((*id).into(), (*v).into())).collect(),
+            tool_versions: tools
+                .iter()
+                .map(|(id, v)| ((*id).into(), (*v).into()))
+                .collect(),
         }
     }
 
@@ -165,14 +174,20 @@ mod tests {
     fn identical_matches() {
         let a = env("1.0.0", "abc", &[("git", "v1"), ("ls", "v2")]);
         let b = env("1.0.0", "abc", &[("git", "v1"), ("ls", "v2")]);
-        assert!(matches!(ReplayEnvValidator::compare(&a, &b), CompatVerdict::Identical));
+        assert!(matches!(
+            ReplayEnvValidator::compare(&a, &b),
+            CompatVerdict::Identical
+        ));
     }
 
     #[test]
     fn engine_only_compatible() {
         let a = env("1.0.0", "abc", &[("git", "v1")]);
         let b = env("1.0.1", "abc", &[("git", "v1")]);
-        assert!(matches!(ReplayEnvValidator::compare(&a, &b), CompatVerdict::Compatible { .. }));
+        assert!(matches!(
+            ReplayEnvValidator::compare(&a, &b),
+            CompatVerdict::Compatible { .. }
+        ));
     }
 
     #[test]
@@ -231,13 +246,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut v = SubstrateReplayValidator::new();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), ValidatorError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            ValidatorError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
         let v = CompatVerdict::Identical;
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"identical\""));
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"identical\"")
+        );
     }
 
     #[test]

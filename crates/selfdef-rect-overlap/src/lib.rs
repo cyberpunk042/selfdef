@@ -42,16 +42,24 @@ pub enum RectError {
 impl Rect {
     /// New (validates dims).
     pub fn new(x: i64, y: i64, w: i64, h: i64) -> Result<Self, RectError> {
-        if w < 1 || h < 1 { return Err(RectError::BadDims); }
+        if w < 1 || h < 1 {
+            return Err(RectError::BadDims);
+        }
         Ok(Self { x, y, w, h })
     }
 
     /// Right edge (exclusive).
-    pub fn right(&self) -> i64 { self.x + self.w }
+    pub fn right(&self) -> i64 {
+        self.x + self.w
+    }
     /// Bottom edge (exclusive).
-    pub fn bottom(&self) -> i64 { self.y + self.h }
+    pub fn bottom(&self) -> i64 {
+        self.y + self.h
+    }
     /// Area.
-    pub fn area(&self) -> i128 { self.w as i128 * self.h as i128 }
+    pub fn area(&self) -> i128 {
+        self.w as i128 * self.h as i128
+    }
 
     /// Intersect with other.
     pub fn intersect(&self, other: &Rect) -> Option<Rect> {
@@ -72,7 +80,12 @@ impl Rect {
         let lo_y = self.y.min(other.y);
         let hi_x = self.right().max(other.right());
         let hi_y = self.bottom().max(other.bottom());
-        Rect { x: lo_x, y: lo_y, w: hi_x - lo_x, h: hi_y - lo_y }
+        Rect {
+            x: lo_x,
+            y: lo_y,
+            w: hi_x - lo_x,
+            h: hi_y - lo_y,
+        }
     }
 
     /// Contains point?
@@ -99,18 +112,24 @@ pub struct RectState {
 impl RectState {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RectError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RectError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RectError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for RectState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +141,15 @@ mod tests {
         let a = Rect::new(0, 0, 10, 10).unwrap();
         let b = Rect::new(5, 5, 10, 10).unwrap();
         let i = a.intersect(&b).unwrap();
-        assert_eq!(i, Rect { x: 5, y: 5, w: 5, h: 5 });
+        assert_eq!(
+            i,
+            Rect {
+                x: 5,
+                y: 5,
+                w: 5,
+                h: 5
+            }
+        );
     }
 
     #[test]
@@ -145,7 +172,15 @@ mod tests {
         let a = Rect::new(0, 0, 5, 5).unwrap();
         let b = Rect::new(10, 10, 5, 5).unwrap();
         let bb = a.bounding_box(&b);
-        assert_eq!(bb, Rect { x: 0, y: 0, w: 15, h: 15 });
+        assert_eq!(
+            bb,
+            Rect {
+                x: 0,
+                y: 0,
+                w: 15,
+                h: 15
+            }
+        );
     }
 
     #[test]
@@ -173,15 +208,24 @@ mod tests {
 
     #[test]
     fn bad_dims_rejected() {
-        assert!(matches!(Rect::new(0, 0, 0, 5).unwrap_err(), RectError::BadDims));
-        assert!(matches!(Rect::new(0, 0, 5, 0).unwrap_err(), RectError::BadDims));
+        assert!(matches!(
+            Rect::new(0, 0, 0, 5).unwrap_err(),
+            RectError::BadDims
+        ));
+        assert!(matches!(
+            Rect::new(0, 0, 5, 0).unwrap_err(),
+            RectError::BadDims
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = RectState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), RectError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            RectError::SchemaMismatch
+        ));
     }
 
     #[test]

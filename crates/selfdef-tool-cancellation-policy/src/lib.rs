@@ -98,11 +98,16 @@ impl ToolCancellationPolicy {
 
     /// Register a tool with its CancelMode.
     pub fn register(&mut self, tool_id: &str, mode: CancelMode) -> Result<(), CancelError> {
-        if tool_id.is_empty() { return Err(CancelError::EmptyToolId); }
+        if tool_id.is_empty() {
+            return Err(CancelError::EmptyToolId);
+        }
         if self.tools.iter().any(|t| t.tool_id == tool_id) {
             return Err(CancelError::DuplicateToolId(tool_id.into()));
         }
-        self.tools.push(ToolCancelPolicy { tool_id: tool_id.into(), mode });
+        self.tools.push(ToolCancelPolicy {
+            tool_id: tool_id.into(),
+            mode,
+        });
         Ok(())
     }
 
@@ -116,7 +121,11 @@ impl ToolCancellationPolicy {
             CancelMode::Never => CancelDecision::DeniedTool,
             CancelMode::Anytime => CancelDecision::Allow,
             CancelMode::SafeOnly => {
-                if phase == ExecPhase::Prepare { CancelDecision::Allow } else { CancelDecision::DeniedPhase }
+                if phase == ExecPhase::Prepare {
+                    CancelDecision::Allow
+                } else {
+                    CancelDecision::DeniedPhase
+                }
             }
         }
     }
@@ -129,7 +138,9 @@ impl ToolCancellationPolicy {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for t in &self.tools {
-            if t.tool_id.is_empty() { return Err(CancelError::EmptyToolId); }
+            if t.tool_id.is_empty() {
+                return Err(CancelError::EmptyToolId);
+            }
             if !seen.insert(t.tool_id.as_str()) {
                 return Err(CancelError::DuplicateToolId(t.tool_id.clone()));
             }
@@ -139,7 +150,9 @@ impl ToolCancellationPolicy {
 }
 
 impl Default for ToolCancellationPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -149,14 +162,22 @@ mod tests {
     #[test]
     fn unknown_tool_denied() {
         let p = ToolCancellationPolicy::new();
-        assert_eq!(p.cancel("ghost", ExecPhase::Prepare), CancelDecision::DeniedUnknown);
+        assert_eq!(
+            p.cancel("ghost", ExecPhase::Prepare),
+            CancelDecision::DeniedUnknown
+        );
     }
 
     #[test]
     fn never_always_denied() {
         let mut p = ToolCancellationPolicy::new();
         p.register("commit", CancelMode::Never).unwrap();
-        for ph in [ExecPhase::Prepare, ExecPhase::Streaming, ExecPhase::Commit, ExecPhase::Finalize] {
+        for ph in [
+            ExecPhase::Prepare,
+            ExecPhase::Streaming,
+            ExecPhase::Commit,
+            ExecPhase::Finalize,
+        ] {
             assert_eq!(p.cancel("commit", ph), CancelDecision::DeniedTool);
         }
     }
@@ -165,7 +186,12 @@ mod tests {
     fn anytime_always_allow() {
         let mut p = ToolCancellationPolicy::new();
         p.register("search", CancelMode::Anytime).unwrap();
-        for ph in [ExecPhase::Prepare, ExecPhase::Streaming, ExecPhase::Commit, ExecPhase::Finalize] {
+        for ph in [
+            ExecPhase::Prepare,
+            ExecPhase::Streaming,
+            ExecPhase::Commit,
+            ExecPhase::Finalize,
+        ] {
             assert_eq!(p.cancel("search", ph), CancelDecision::Allow);
         }
     }
@@ -174,39 +200,63 @@ mod tests {
     fn safe_only_prepare_ok_rest_denied() {
         let mut p = ToolCancellationPolicy::new();
         p.register("upload", CancelMode::SafeOnly).unwrap();
-        assert_eq!(p.cancel("upload", ExecPhase::Prepare), CancelDecision::Allow);
-        assert_eq!(p.cancel("upload", ExecPhase::Streaming), CancelDecision::DeniedPhase);
-        assert_eq!(p.cancel("upload", ExecPhase::Commit), CancelDecision::DeniedPhase);
+        assert_eq!(
+            p.cancel("upload", ExecPhase::Prepare),
+            CancelDecision::Allow
+        );
+        assert_eq!(
+            p.cancel("upload", ExecPhase::Streaming),
+            CancelDecision::DeniedPhase
+        );
+        assert_eq!(
+            p.cancel("upload", ExecPhase::Commit),
+            CancelDecision::DeniedPhase
+        );
     }
 
     #[test]
     fn duplicate_rejected() {
         let mut p = ToolCancellationPolicy::new();
         p.register("a", CancelMode::Never).unwrap();
-        assert!(matches!(p.register("a", CancelMode::Anytime).unwrap_err(), CancelError::DuplicateToolId(_)));
+        assert!(matches!(
+            p.register("a", CancelMode::Anytime).unwrap_err(),
+            CancelError::DuplicateToolId(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = ToolCancellationPolicy::new();
-        assert!(matches!(p.register("", CancelMode::Never).unwrap_err(), CancelError::EmptyToolId));
+        assert!(matches!(
+            p.register("", CancelMode::Never).unwrap_err(),
+            CancelError::EmptyToolId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ToolCancellationPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CancelError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CancelError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn mode_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CancelMode::SafeOnly).unwrap(), "\"safe-only\"");
+        assert_eq!(
+            serde_json::to_string(&CancelMode::SafeOnly).unwrap(),
+            "\"safe-only\""
+        );
     }
 
     #[test]
     fn phase_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExecPhase::Streaming).unwrap(), "\"streaming\"");
+        assert_eq!(
+            serde_json::to_string(&ExecPhase::Streaming).unwrap(),
+            "\"streaming\""
+        );
     }
 
     #[test]

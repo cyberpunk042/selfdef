@@ -83,12 +83,50 @@ impl PromptAttachmentMimePolicy {
     /// Canonical.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Private,      ["image/png".into(), "image/jpeg".into()].into_iter().collect());
-        p.insert(Profile::Fast,         ["image/*".into(), "application/pdf".into()].into_iter().collect());
-        p.insert(Profile::Careful,      ["image/png".into(), "image/jpeg".into(), "application/pdf".into()].into_iter().collect());
-        p.insert(Profile::Autonomous,   ["image/*".into(), "application/pdf".into(), "text/plain".into(), "text/markdown".into()].into_iter().collect());
+        p.insert(
+            Profile::Private,
+            ["image/png".into(), "image/jpeg".into()]
+                .into_iter()
+                .collect(),
+        );
+        p.insert(
+            Profile::Fast,
+            ["image/*".into(), "application/pdf".into()]
+                .into_iter()
+                .collect(),
+        );
+        p.insert(
+            Profile::Careful,
+            [
+                "image/png".into(),
+                "image/jpeg".into(),
+                "application/pdf".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        p.insert(
+            Profile::Autonomous,
+            [
+                "image/*".into(),
+                "application/pdf".into(),
+                "text/plain".into(),
+                "text/markdown".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
         p.insert(Profile::Experimental, ["*".into()].into_iter().collect());
-        p.insert(Profile::Production,   ["image/png".into(), "image/jpeg".into(), "application/pdf".into()].into_iter().collect());
+        p.insert(
+            Profile::Production,
+            [
+                "image/png".into(),
+                "image/jpeg".into(),
+                "application/pdf".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -97,32 +135,48 @@ impl PromptAttachmentMimePolicy {
 
     /// Classify.
     pub fn classify(&self, profile: Profile, mime: &str) -> Result<MimeVerdict, MimeError> {
-        if mime.is_empty() { return Err(MimeError::EmptyMime); }
-        let slash = mime.find('/').ok_or_else(|| MimeError::Malformed(mime.into()))?;
+        if mime.is_empty() {
+            return Err(MimeError::EmptyMime);
+        }
+        let slash = mime
+            .find('/')
+            .ok_or_else(|| MimeError::Malformed(mime.into()))?;
         let typ = &mime[..slash];
         let allow = match self.profiles.get(&profile) {
             Some(s) => s,
             None => return Ok(MimeVerdict::Unconfigured),
         };
         if allow.contains("*") {
-            return Ok(MimeVerdict::Allowed { matched: "*".into() });
+            return Ok(MimeVerdict::Allowed {
+                matched: "*".into(),
+            });
         }
         if allow.contains(mime) {
-            return Ok(MimeVerdict::Allowed { matched: mime.into() });
+            return Ok(MimeVerdict::Allowed {
+                matched: mime.into(),
+            });
         }
         let subtype_glob = format!("{}/*", typ);
         if allow.contains(&subtype_glob) {
-            return Ok(MimeVerdict::Allowed { matched: subtype_glob });
+            return Ok(MimeVerdict::Allowed {
+                matched: subtype_glob,
+            });
         }
-        Ok(MimeVerdict::Denied { allowed: allow.iter().cloned().collect() })
+        Ok(MimeVerdict::Denied {
+            allowed: allow.iter().cloned().collect(),
+        })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MimeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MimeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MimeError::SchemaMismatch);
+        }
         for set in self.profiles.values() {
             for r in set {
-                if r.is_empty() { return Err(MimeError::EmptyMime); }
+                if r.is_empty() {
+                    return Err(MimeError::EmptyMime);
+                }
                 if r != "*" && !r.contains('/') {
                     return Err(MimeError::Malformed(r.clone()));
                 }
@@ -144,7 +198,10 @@ mod tests {
     #[test]
     fn exact_match() {
         let c = PromptAttachmentMimePolicy::canonical();
-        assert!(matches!(c.classify(Profile::Production, "image/png").unwrap(), MimeVerdict::Allowed { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, "image/png").unwrap(),
+            MimeVerdict::Allowed { .. }
+        ));
     }
 
     #[test]
@@ -160,13 +217,18 @@ mod tests {
     #[test]
     fn denied_when_not_allowed() {
         let c = PromptAttachmentMimePolicy::canonical();
-        assert!(matches!(c.classify(Profile::Production, "audio/mpeg").unwrap(), MimeVerdict::Denied { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, "audio/mpeg").unwrap(),
+            MimeVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn full_wildcard() {
         let c = PromptAttachmentMimePolicy::canonical();
-        let v = c.classify(Profile::Experimental, "anything/anywhere").unwrap();
+        let v = c
+            .classify(Profile::Experimental, "anything/anywhere")
+            .unwrap();
         match v {
             MimeVerdict::Allowed { matched } => assert_eq!(matched, "*"),
             _ => panic!("expected allowed"),
@@ -176,27 +238,39 @@ mod tests {
     #[test]
     fn empty_mime_rejected() {
         let c = PromptAttachmentMimePolicy::canonical();
-        assert!(matches!(c.classify(Profile::Production, "").unwrap_err(), MimeError::EmptyMime));
+        assert!(matches!(
+            c.classify(Profile::Production, "").unwrap_err(),
+            MimeError::EmptyMime
+        ));
     }
 
     #[test]
     fn malformed_mime_rejected() {
         let c = PromptAttachmentMimePolicy::canonical();
-        assert!(matches!(c.classify(Profile::Production, "notmime").unwrap_err(), MimeError::Malformed(_)));
+        assert!(matches!(
+            c.classify(Profile::Production, "notmime").unwrap_err(),
+            MimeError::Malformed(_)
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut c = PromptAttachmentMimePolicy::canonical();
         c.profiles.clear();
-        assert!(matches!(c.classify(Profile::Production, "image/png").unwrap(), MimeVerdict::Unconfigured));
+        assert!(matches!(
+            c.classify(Profile::Production, "image/png").unwrap(),
+            MimeVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = PromptAttachmentMimePolicy::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), MimeError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            MimeError::SchemaMismatch
+        ));
     }
 
     #[test]

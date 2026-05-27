@@ -117,11 +117,20 @@ impl ActionConfirmationTier {
     }
 
     /// Gate. `expected_name` is the action's specific name required at TypedName tier.
-    pub fn gate(&self, radius: BlastRadius, input: &OperatorInput, expected_name: &str) -> GateDecision {
+    pub fn gate(
+        &self,
+        radius: BlastRadius,
+        input: &OperatorInput,
+        expected_name: &str,
+    ) -> GateDecision {
         match self.required_tier(radius) {
             ConfirmationTier::None => GateDecision::Allow,
             ConfirmationTier::SingleClick => {
-                if matches!(input, OperatorInput::Click) { GateDecision::Allow } else { GateDecision::Deny }
+                if matches!(input, OperatorInput::Click) {
+                    GateDecision::Allow
+                } else {
+                    GateDecision::Deny
+                }
             }
             ConfirmationTier::TypedConfirm => {
                 let need = match radius {
@@ -134,12 +143,10 @@ impl ActionConfirmationTier {
                     _ => GateDecision::Deny,
                 }
             }
-            ConfirmationTier::TypedName => {
-                match input {
-                    OperatorInput::Typed { text } if text == expected_name => GateDecision::Allow,
-                    _ => GateDecision::Deny,
-                }
-            }
+            ConfirmationTier::TypedName => match input {
+                OperatorInput::Typed { text } if text == expected_name => GateDecision::Allow,
+                _ => GateDecision::Deny,
+            },
         }
     }
 
@@ -148,7 +155,8 @@ impl ActionConfirmationTier {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ConfirmError::SchemaMismatch);
         }
-        if self.cross_machine_confirm_text.is_empty() || self.cross_session_confirm_text.is_empty() {
+        if self.cross_machine_confirm_text.is_empty() || self.cross_session_confirm_text.is_empty()
+        {
             return Err(ConfirmError::EmptyConfirmText);
         }
         Ok(())
@@ -167,42 +175,106 @@ mod tests {
     #[test]
     fn local_ephemeral_no_confirm() {
         let p = ActionConfirmationTier::canonical();
-        assert_eq!(p.gate(BlastRadius::LocalEphemeral, &OperatorInput::Empty, ""), GateDecision::Allow);
+        assert_eq!(
+            p.gate(BlastRadius::LocalEphemeral, &OperatorInput::Empty, ""),
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn local_persistent_requires_click() {
         let p = ActionConfirmationTier::canonical();
-        assert_eq!(p.gate(BlastRadius::LocalPersistent, &OperatorInput::Empty, ""), GateDecision::Deny);
-        assert_eq!(p.gate(BlastRadius::LocalPersistent, &OperatorInput::Click, ""), GateDecision::Allow);
+        assert_eq!(
+            p.gate(BlastRadius::LocalPersistent, &OperatorInput::Empty, ""),
+            GateDecision::Deny
+        );
+        assert_eq!(
+            p.gate(BlastRadius::LocalPersistent, &OperatorInput::Click, ""),
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn cross_session_yes_required() {
         let p = ActionConfirmationTier::canonical();
-        assert_eq!(p.gate(BlastRadius::CrossSession, &OperatorInput::Click, ""), GateDecision::Deny);
-        assert_eq!(p.gate(BlastRadius::CrossSession, &OperatorInput::Typed { text: "yes".into() }, ""), GateDecision::Allow);
-        assert_eq!(p.gate(BlastRadius::CrossSession, &OperatorInput::Typed { text: "no".into() }, ""), GateDecision::Deny);
+        assert_eq!(
+            p.gate(BlastRadius::CrossSession, &OperatorInput::Click, ""),
+            GateDecision::Deny
+        );
+        assert_eq!(
+            p.gate(
+                BlastRadius::CrossSession,
+                &OperatorInput::Typed { text: "yes".into() },
+                ""
+            ),
+            GateDecision::Allow
+        );
+        assert_eq!(
+            p.gate(
+                BlastRadius::CrossSession,
+                &OperatorInput::Typed { text: "no".into() },
+                ""
+            ),
+            GateDecision::Deny
+        );
     }
 
     #[test]
     fn cross_machine_CONFIRM_required() {
         let p = ActionConfirmationTier::canonical();
-        assert_eq!(p.gate(BlastRadius::CrossMachine, &OperatorInput::Typed { text: "yes".into() }, ""), GateDecision::Deny);
-        assert_eq!(p.gate(BlastRadius::CrossMachine, &OperatorInput::Typed { text: "CONFIRM".into() }, ""), GateDecision::Allow);
+        assert_eq!(
+            p.gate(
+                BlastRadius::CrossMachine,
+                &OperatorInput::Typed { text: "yes".into() },
+                ""
+            ),
+            GateDecision::Deny
+        );
+        assert_eq!(
+            p.gate(
+                BlastRadius::CrossMachine,
+                &OperatorInput::Typed {
+                    text: "CONFIRM".into()
+                },
+                ""
+            ),
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn public_typed_name_required() {
         let p = ActionConfirmationTier::canonical();
-        assert_eq!(p.gate(BlastRadius::Public, &OperatorInput::Typed { text: "wrong".into() }, "delete-prod"), GateDecision::Deny);
-        assert_eq!(p.gate(BlastRadius::Public, &OperatorInput::Typed { text: "delete-prod".into() }, "delete-prod"), GateDecision::Allow);
+        assert_eq!(
+            p.gate(
+                BlastRadius::Public,
+                &OperatorInput::Typed {
+                    text: "wrong".into()
+                },
+                "delete-prod"
+            ),
+            GateDecision::Deny
+        );
+        assert_eq!(
+            p.gate(
+                BlastRadius::Public,
+                &OperatorInput::Typed {
+                    text: "delete-prod".into()
+                },
+                "delete-prod"
+            ),
+            GateDecision::Allow
+        );
     }
 
     #[test]
     fn empty_input_denies_high_tiers() {
         let p = ActionConfirmationTier::canonical();
-        for r in [BlastRadius::CrossSession, BlastRadius::CrossMachine, BlastRadius::Public] {
+        for r in [
+            BlastRadius::CrossSession,
+            BlastRadius::CrossMachine,
+            BlastRadius::Public,
+        ] {
             assert_eq!(p.gate(r, &OperatorInput::Empty, "x"), GateDecision::Deny);
         }
     }
@@ -211,26 +283,42 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = ActionConfirmationTier::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ConfirmError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ConfirmError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn empty_confirm_text_rejected() {
         let mut p = ActionConfirmationTier::canonical();
         p.cross_machine_confirm_text = String::new();
-        assert!(matches!(p.validate().unwrap_err(), ConfirmError::EmptyConfirmText));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ConfirmError::EmptyConfirmText
+        ));
     }
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ConfirmationTier::SingleClick).unwrap(), "\"single-click\"");
-        assert_eq!(serde_json::to_string(&ConfirmationTier::TypedName).unwrap(), "\"typed-name\"");
+        assert_eq!(
+            serde_json::to_string(&ConfirmationTier::SingleClick).unwrap(),
+            "\"single-click\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ConfirmationTier::TypedName).unwrap(),
+            "\"typed-name\""
+        );
     }
 
     #[test]
     fn input_serde_kebab() {
         let t = OperatorInput::Typed { text: "x".into() };
-        assert!(serde_json::to_string(&t).unwrap().contains("\"kind\":\"typed\""));
+        assert!(
+            serde_json::to_string(&t)
+                .unwrap()
+                .contains("\"kind\":\"typed\"")
+        );
     }
 
     #[test]

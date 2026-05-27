@@ -81,8 +81,15 @@ impl PolicyCooldownWindow {
     }
 
     /// Try to fire; returns true if allowed (and records timestamp).
-    pub fn try_fire(&mut self, class: PolicyClass, key: &str, now_unix: u64) -> Result<bool, CooldownError> {
-        if key.is_empty() { return Err(CooldownError::EmptyKey); }
+    pub fn try_fire(
+        &mut self,
+        class: PolicyClass,
+        key: &str,
+        now_unix: u64,
+    ) -> Result<bool, CooldownError> {
+        if key.is_empty() {
+            return Err(CooldownError::EmptyKey);
+        }
         let composite = format!("{:?}:{}", class, key);
         let last = self.last_fires.get(&composite).copied().unwrap_or(0);
         let cooldown = self.cooldown(class) as u64;
@@ -97,7 +104,9 @@ impl PolicyCooldownWindow {
     pub fn seconds_to_next(&self, class: PolicyClass, key: &str, now_unix: u64) -> u64 {
         let composite = format!("{:?}:{}", class, key);
         let last = self.last_fires.get(&composite).copied().unwrap_or(0);
-        if last == 0 { return 0; }
+        if last == 0 {
+            return 0;
+        }
         let cooldown = self.cooldown(class) as u64;
         let next_fire = last + cooldown;
         next_fire.saturating_sub(now_unix)
@@ -167,19 +176,28 @@ mod tests {
     #[test]
     fn empty_key_rejected() {
         let mut c = PolicyCooldownWindow::canonical();
-        assert!(matches!(c.try_fire(PolicyClass::Alert, "", 0).unwrap_err(), CooldownError::EmptyKey));
+        assert!(matches!(
+            c.try_fire(PolicyClass::Alert, "", 0).unwrap_err(),
+            CooldownError::EmptyKey
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = PolicyCooldownWindow::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CooldownError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CooldownError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PolicyClass::OperatorPrompt).unwrap(), "\"operator-prompt\"");
+        assert_eq!(
+            serde_json::to_string(&PolicyClass::OperatorPrompt).unwrap(),
+            "\"operator-prompt\""
+        );
     }
 
     #[test]

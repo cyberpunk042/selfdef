@@ -171,7 +171,9 @@ impl ActorRegistry {
     /// Returns `Err(ActorNotRegistered)` if absent.
     /// Returns `Err(ActorRevoked)` if registered but revoked.
     pub fn assert_active_actor(&self, fingerprint: &str) -> Result<&ActorEntry, RegistryError> {
-        let entry = self.actors.get(fingerprint)
+        let entry = self
+            .actors
+            .get(fingerprint)
             .ok_or_else(|| RegistryError::ActorNotRegistered(fingerprint.into()))?;
         if !entry.is_active() {
             return Err(RegistryError::ActorRevoked {
@@ -194,7 +196,9 @@ impl ActorRegistry {
 
     /// Revoke an actor's fingerprint (sets revoked_at).
     pub fn revoke(&mut self, fingerprint: &str, revoked_at: &str) -> Result<(), RegistryError> {
-        let entry = self.actors.get_mut(fingerprint)
+        let entry = self
+            .actors
+            .get_mut(fingerprint)
             .ok_or_else(|| RegistryError::ActorNotRegistered(fingerprint.into()))?;
         entry.revoked_at = revoked_at.into();
         Ok(())
@@ -207,7 +211,10 @@ impl ActorRegistry {
 
     /// Count of actors by role.
     pub fn count_by_kind(&self, kind: ActorKind) -> usize {
-        self.actors.values().filter(|e| e.is_active() && e.kind == kind).count()
+        self.actors
+            .values()
+            .filter(|e| e.is_active() && e.kind == kind)
+            .count()
     }
 }
 
@@ -221,7 +228,11 @@ mod tests {
             name: format!("actor-{}", &fp[..8]),
             kind,
             registered_at: "2026-05-19T00:00:00Z".into(),
-            revoked_at: if revoked { "2026-05-19T03:00:00Z".into() } else { String::new() },
+            revoked_at: if revoked {
+                "2026-05-19T03:00:00Z".into()
+            } else {
+                String::new()
+            },
             notes: String::new(),
         }
     }
@@ -230,14 +241,17 @@ mod tests {
         // 32-char uppercase hex fingerprint
         let mut s = String::with_capacity(32);
         s.push(prefix.to_ascii_uppercase());
-        for _ in 0..31 { s.push('A'); }
+        for _ in 0..31 {
+            s.push('A');
+        }
         s
     }
 
     fn ok_registry() -> ActorRegistry {
         let mut r = ActorRegistry::default();
         r.signature = "ms003-sig".into();
-        r.insert(mk_entry(&fp32('A'), ActorKind::Operator, false)).unwrap();
+        r.insert(mk_entry(&fp32('A'), ActorKind::Operator, false))
+            .unwrap();
         r
     }
 
@@ -285,14 +299,20 @@ mod tests {
     fn unsigned_registry_rejected() {
         let mut r = ok_registry();
         r.signature = String::new();
-        assert!(matches!(r.validate().unwrap_err(), RegistryError::RegistryUnsigned));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RegistryError::RegistryUnsigned
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = ok_registry();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RegistryError::SchemaMismatch { .. }));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RegistryError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -303,7 +323,10 @@ mod tests {
         let key = fp32('C');
         e.fingerprint = fp32('D');
         r.actors.insert(key, e);
-        assert!(matches!(r.validate().unwrap_err(), RegistryError::DuplicateFingerprint(_)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RegistryError::DuplicateFingerprint(_)
+        ));
     }
 
     // --- insert / revoke ---
@@ -311,7 +334,8 @@ mod tests {
     #[test]
     fn insert_new_actor() {
         let mut r = ok_registry();
-        r.insert(mk_entry(&fp32('B'), ActorKind::Guardian, false)).unwrap();
+        r.insert(mk_entry(&fp32('B'), ActorKind::Guardian, false))
+            .unwrap();
         assert_eq!(r.actors.len(), 2);
     }
 
@@ -319,7 +343,10 @@ mod tests {
     fn insert_duplicate_refused() {
         let mut r = ok_registry();
         let dup = mk_entry(&fp32('A'), ActorKind::Operator, false);
-        assert!(matches!(r.insert(dup).unwrap_err(), RegistryError::DuplicateFingerprint(_)));
+        assert!(matches!(
+            r.insert(dup).unwrap_err(),
+            RegistryError::DuplicateFingerprint(_)
+        ));
     }
 
     #[test]
@@ -360,7 +387,10 @@ mod tests {
         let mut r = ok_registry();
         r.revoke(&fp32('A'), "2026-05-19T04:00:00Z").unwrap();
         match r.assert_active_actor(&fp32('A')).unwrap_err() {
-            RegistryError::ActorRevoked { fingerprint, revoked_at } => {
+            RegistryError::ActorRevoked {
+                fingerprint,
+                revoked_at,
+            } => {
                 assert_eq!(fingerprint, fp32('A'));
                 assert_eq!(revoked_at, "2026-05-19T04:00:00Z");
             }
@@ -373,9 +403,12 @@ mod tests {
     #[test]
     fn active_count_and_count_by_kind() {
         let mut r = ok_registry();
-        r.insert(mk_entry(&fp32('B'), ActorKind::Guardian, false)).unwrap();
-        r.insert(mk_entry(&fp32('C'), ActorKind::Agent, false)).unwrap();
-        r.insert(mk_entry(&fp32('D'), ActorKind::Agent, true)).unwrap();
+        r.insert(mk_entry(&fp32('B'), ActorKind::Guardian, false))
+            .unwrap();
+        r.insert(mk_entry(&fp32('C'), ActorKind::Agent, false))
+            .unwrap();
+        r.insert(mk_entry(&fp32('D'), ActorKind::Agent, true))
+            .unwrap();
         assert_eq!(r.active_count(), 3); // A, B, C
         assert_eq!(r.count_by_kind(ActorKind::Operator), 1);
         assert_eq!(r.count_by_kind(ActorKind::Guardian), 1);
@@ -392,9 +425,18 @@ mod tests {
 
     #[test]
     fn actor_kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ActorKind::SovereignRuntime).unwrap(), "\"sovereign-runtime\"");
-        assert_eq!(serde_json::to_string(&ActorKind::Operator).unwrap(), "\"operator\"");
-        assert_eq!(serde_json::to_string(&ActorKind::External).unwrap(), "\"external\"");
+        assert_eq!(
+            serde_json::to_string(&ActorKind::SovereignRuntime).unwrap(),
+            "\"sovereign-runtime\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActorKind::Operator).unwrap(),
+            "\"operator\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActorKind::External).unwrap(),
+            "\"external\""
+        );
     }
 
     // --- Serde ---

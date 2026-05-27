@@ -61,7 +61,9 @@ pub enum SemaphoreError {
 impl PermitSemaphore {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, SemaphoreError> {
-        if capacity == 0 { return Err(SemaphoreError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(SemaphoreError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -80,21 +82,30 @@ impl PermitSemaphore {
 
     /// Try to acquire `n` permits.
     pub fn try_acquire(&mut self, n: u32) -> Result<(), SemaphoreError> {
-        if n == 0 { return Err(SemaphoreError::ZeroN); }
+        if n == 0 {
+            return Err(SemaphoreError::ZeroN);
+        }
         let av = self.available();
         if n > av {
             self.rejected = self.rejected.saturating_add(1);
-            return Err(SemaphoreError::Exhausted { needed: n, available: av });
+            return Err(SemaphoreError::Exhausted {
+                needed: n,
+                available: av,
+            });
         }
         self.held = self.held.saturating_add(n);
-        if self.held > self.high_water { self.high_water = self.held; }
+        if self.held > self.high_water {
+            self.high_water = self.held;
+        }
         self.acquired = self.acquired.saturating_add(1);
         Ok(())
     }
 
     /// Release `n` permits (saturating at 0).
     pub fn release(&mut self, n: u32) -> Result<(), SemaphoreError> {
-        if n == 0 { return Err(SemaphoreError::ZeroN); }
+        if n == 0 {
+            return Err(SemaphoreError::ZeroN);
+        }
         self.held = self.held.saturating_sub(n);
         self.released = self.released.saturating_add(1);
         Ok(())
@@ -102,8 +113,12 @@ impl PermitSemaphore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SemaphoreError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SemaphoreError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(SemaphoreError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SemaphoreError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(SemaphoreError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -126,7 +141,13 @@ mod tests {
     fn exhaustion_errors() {
         let mut s = PermitSemaphore::new(3).unwrap();
         s.try_acquire(2).unwrap();
-        assert!(matches!(s.try_acquire(2).unwrap_err(), SemaphoreError::Exhausted { needed: 2, available: 1 }));
+        assert!(matches!(
+            s.try_acquire(2).unwrap_err(),
+            SemaphoreError::Exhausted {
+                needed: 2,
+                available: 1
+            }
+        ));
         assert_eq!(s.rejected, 1);
     }
 
@@ -151,20 +172,29 @@ mod tests {
     #[test]
     fn zero_n_rejected() {
         let mut s = PermitSemaphore::new(5).unwrap();
-        assert!(matches!(s.try_acquire(0).unwrap_err(), SemaphoreError::ZeroN));
+        assert!(matches!(
+            s.try_acquire(0).unwrap_err(),
+            SemaphoreError::ZeroN
+        ));
         assert!(matches!(s.release(0).unwrap_err(), SemaphoreError::ZeroN));
     }
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(PermitSemaphore::new(0).unwrap_err(), SemaphoreError::ZeroCapacity));
+        assert!(matches!(
+            PermitSemaphore::new(0).unwrap_err(),
+            SemaphoreError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = PermitSemaphore::new(5).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SemaphoreError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SemaphoreError::SchemaMismatch
+        ));
     }
 
     #[test]

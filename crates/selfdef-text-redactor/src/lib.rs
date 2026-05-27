@@ -48,7 +48,9 @@ impl TextRedactor {
 
     /// Add a literal.
     pub fn add_literal(&mut self, needle: &str) -> Result<(), RedactorError> {
-        if needle.is_empty() { return Err(RedactorError::EmptyNeedle); }
+        if needle.is_empty() {
+            return Err(RedactorError::EmptyNeedle);
+        }
         self.needles.insert(needle.into());
         Ok(())
     }
@@ -80,16 +82,22 @@ impl TextRedactor {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RedactorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RedactorError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RedactorError::SchemaMismatch);
+        }
         for n in &self.needles {
-            if n.is_empty() { return Err(RedactorError::EmptyNeedle); }
+            if n.is_empty() {
+                return Err(RedactorError::EmptyNeedle);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TextRedactor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -136,14 +144,20 @@ mod tests {
     #[test]
     fn empty_needle_rejected() {
         let mut r = TextRedactor::new();
-        assert!(matches!(r.add_literal("").unwrap_err(), RedactorError::EmptyNeedle));
+        assert!(matches!(
+            r.add_literal("").unwrap_err(),
+            RedactorError::EmptyNeedle
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = TextRedactor::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RedactorError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RedactorError::SchemaMismatch
+        ));
     }
 
     #[test]

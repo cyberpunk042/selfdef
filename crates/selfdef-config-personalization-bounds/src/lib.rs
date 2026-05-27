@@ -135,12 +135,24 @@ impl ConfigPersonalizationBounds {
     }
 
     /// Set a bound.
-    pub fn set(&mut self, profile: Profile, knob_id: &str, bound: Bound) -> Result<(), BoundsError> {
-        if knob_id.is_empty() { return Err(BoundsError::EmptyId); }
-        if let Bound::IntRange { min, max } = &bound {
-            if min > max { return Err(BoundsError::BadBound); }
+    pub fn set(
+        &mut self,
+        profile: Profile,
+        knob_id: &str,
+        bound: Bound,
+    ) -> Result<(), BoundsError> {
+        if knob_id.is_empty() {
+            return Err(BoundsError::EmptyId);
         }
-        self.bounds.entry(profile).or_default().insert(knob_id.into(), bound);
+        if let Bound::IntRange { min, max } = &bound {
+            if min > max {
+                return Err(BoundsError::BadBound);
+            }
+        }
+        self.bounds
+            .entry(profile)
+            .or_default()
+            .insert(knob_id.into(), bound);
         Ok(())
     }
 
@@ -157,7 +169,10 @@ impl ConfigPersonalizationBounds {
         if Self::passes(&b, value) {
             CheckVerdict::Ok
         } else {
-            CheckVerdict::OutOfBound { bound: b, observed: value.clone() }
+            CheckVerdict::OutOfBound {
+                bound: b,
+                observed: value.clone(),
+            }
         }
     }
 
@@ -173,12 +188,18 @@ impl ConfigPersonalizationBounds {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BoundsError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BoundsError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BoundsError::SchemaMismatch);
+        }
         for map in self.bounds.values() {
             for (k, b) in map {
-                if k.is_empty() { return Err(BoundsError::EmptyId); }
+                if k.is_empty() {
+                    return Err(BoundsError::EmptyId);
+                }
                 if let Bound::IntRange { min, max } = b {
-                    if min > max { return Err(BoundsError::BadBound); }
+                    if min > max {
+                        return Err(BoundsError::BadBound);
+                    }
                 }
             }
         }
@@ -187,7 +208,9 @@ impl ConfigPersonalizationBounds {
 }
 
 impl Default for ConfigPersonalizationBounds {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -197,15 +220,23 @@ mod tests {
     #[test]
     fn int_in_range_ok() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 }).unwrap();
-        assert_eq!(c.check(Profile::Fast, "n", &Value::Int { v: 5 }), CheckVerdict::Ok);
+        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 })
+            .unwrap();
+        assert_eq!(
+            c.check(Profile::Fast, "n", &Value::Int { v: 5 }),
+            CheckVerdict::Ok
+        );
     }
 
     #[test]
     fn int_out_of_range() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 }).unwrap();
-        assert!(matches!(c.check(Profile::Fast, "n", &Value::Int { v: 99 }), CheckVerdict::OutOfBound { .. }));
+        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 })
+            .unwrap();
+        assert!(matches!(
+            c.check(Profile::Fast, "n", &Value::Int { v: 99 }),
+            CheckVerdict::OutOfBound { .. }
+        ));
     }
 
     #[test]
@@ -214,65 +245,107 @@ mod tests {
         let mut allowed = BTreeSet::new();
         allowed.insert("on".into());
         allowed.insert("off".into());
-        c.set(Profile::Fast, "mode", Bound::EnumOf { allowed }).unwrap();
-        assert_eq!(c.check(Profile::Fast, "mode", &Value::Str { v: "on".into() }), CheckVerdict::Ok);
-        assert!(matches!(c.check(Profile::Fast, "mode", &Value::Str { v: "wat".into() }), CheckVerdict::OutOfBound { .. }));
+        c.set(Profile::Fast, "mode", Bound::EnumOf { allowed })
+            .unwrap();
+        assert_eq!(
+            c.check(Profile::Fast, "mode", &Value::Str { v: "on".into() }),
+            CheckVerdict::Ok
+        );
+        assert!(matches!(
+            c.check(Profile::Fast, "mode", &Value::Str { v: "wat".into() }),
+            CheckVerdict::OutOfBound { .. }
+        ));
     }
 
     #[test]
     fn bool_either() {
         let mut c = ConfigPersonalizationBounds::new();
         c.set(Profile::Fast, "flag", Bound::BoolEither).unwrap();
-        assert_eq!(c.check(Profile::Fast, "flag", &Value::Bool { v: true }), CheckVerdict::Ok);
-        assert_eq!(c.check(Profile::Fast, "flag", &Value::Bool { v: false }), CheckVerdict::Ok);
+        assert_eq!(
+            c.check(Profile::Fast, "flag", &Value::Bool { v: true }),
+            CheckVerdict::Ok
+        );
+        assert_eq!(
+            c.check(Profile::Fast, "flag", &Value::Bool { v: false }),
+            CheckVerdict::Ok
+        );
     }
 
     #[test]
     fn str_len_at_most() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "label", Bound::StrLenAtMost { max: 3 }).unwrap();
-        assert_eq!(c.check(Profile::Fast, "label", &Value::Str { v: "ab".into() }), CheckVerdict::Ok);
-        assert!(matches!(c.check(Profile::Fast, "label", &Value::Str { v: "abcd".into() }), CheckVerdict::OutOfBound { .. }));
+        c.set(Profile::Fast, "label", Bound::StrLenAtMost { max: 3 })
+            .unwrap();
+        assert_eq!(
+            c.check(Profile::Fast, "label", &Value::Str { v: "ab".into() }),
+            CheckVerdict::Ok
+        );
+        assert!(matches!(
+            c.check(Profile::Fast, "label", &Value::Str { v: "abcd".into() }),
+            CheckVerdict::OutOfBound { .. }
+        ));
     }
 
     #[test]
     fn type_mismatch_is_out_of_bound() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 }).unwrap();
-        assert!(matches!(c.check(Profile::Fast, "n", &Value::Str { v: "x".into() }), CheckVerdict::OutOfBound { .. }));
+        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 })
+            .unwrap();
+        assert!(matches!(
+            c.check(Profile::Fast, "n", &Value::Str { v: "x".into() }),
+            CheckVerdict::OutOfBound { .. }
+        ));
     }
 
     #[test]
     fn unknown_knob_and_profile() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 }).unwrap();
-        assert_eq!(c.check(Profile::Fast, "missing", &Value::Int { v: 0 }), CheckVerdict::UnknownKnob);
-        assert_eq!(c.check(Profile::Production, "n", &Value::Int { v: 0 }), CheckVerdict::UnknownProfile);
+        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 })
+            .unwrap();
+        assert_eq!(
+            c.check(Profile::Fast, "missing", &Value::Int { v: 0 }),
+            CheckVerdict::UnknownKnob
+        );
+        assert_eq!(
+            c.check(Profile::Production, "n", &Value::Int { v: 0 }),
+            CheckVerdict::UnknownProfile
+        );
     }
 
     #[test]
     fn bad_bound_rejected() {
         let mut c = ConfigPersonalizationBounds::new();
-        assert!(matches!(c.set(Profile::Fast, "n", Bound::IntRange { min: 10, max: 1 }).unwrap_err(), BoundsError::BadBound));
+        assert!(matches!(
+            c.set(Profile::Fast, "n", Bound::IntRange { min: 10, max: 1 })
+                .unwrap_err(),
+            BoundsError::BadBound
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut c = ConfigPersonalizationBounds::new();
-        assert!(matches!(c.set(Profile::Fast, "", Bound::BoolEither).unwrap_err(), BoundsError::EmptyId));
+        assert!(matches!(
+            c.set(Profile::Fast, "", Bound::BoolEither).unwrap_err(),
+            BoundsError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ConfigPersonalizationBounds::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), BoundsError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            BoundsError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn bounds_serde_roundtrip() {
         let mut c = ConfigPersonalizationBounds::new();
-        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 }).unwrap();
+        c.set(Profile::Fast, "n", Bound::IntRange { min: 0, max: 10 })
+            .unwrap();
         let j = serde_json::to_string(&c).unwrap();
         let back: ConfigPersonalizationBounds = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

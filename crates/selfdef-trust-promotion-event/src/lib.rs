@@ -123,19 +123,32 @@ impl PromotionLog {
 
     /// Append a promotion entry; runs kind/direction check.
     pub fn record(&mut self, e: PromotionEntry) -> Result<(), PromotionError> {
-        if e.subject.is_empty() { return Err(PromotionError::MissingSubject(self.entries.len())); }
-        if e.actor.is_empty() { return Err(PromotionError::MissingActor(self.entries.len())); }
-        if e.trace_id.is_empty() { return Err(PromotionError::MissingTraceId(self.entries.len())); }
-        if e.at.is_empty() { return Err(PromotionError::MissingTimestamp(self.entries.len())); }
+        if e.subject.is_empty() {
+            return Err(PromotionError::MissingSubject(self.entries.len()));
+        }
+        if e.actor.is_empty() {
+            return Err(PromotionError::MissingActor(self.entries.len()));
+        }
+        if e.trace_id.is_empty() {
+            return Err(PromotionError::MissingTraceId(self.entries.len()));
+        }
+        if e.at.is_empty() {
+            return Err(PromotionError::MissingTimestamp(self.entries.len()));
+        }
         if e.from == e.to {
-            return Err(PromotionError::NoOp { idx: self.entries.len(), cohort: e.from });
+            return Err(PromotionError::NoOp {
+                idx: self.entries.len(),
+                cohort: e.from,
+            });
         }
         let going_up = e.to > e.from;
         let kind_says_up = e.kind == PromotionKind::Promotion;
         if going_up != kind_says_up {
             return Err(PromotionError::KindMismatch {
                 idx: self.entries.len(),
-                kind: e.kind, from: e.from, to: e.to,
+                kind: e.kind,
+                from: e.from,
+                to: e.to,
             });
         }
         self.entries.push(e);
@@ -149,7 +162,11 @@ impl PromotionLog {
 
     /// Latest cohort known for subject (most recent entry's `to`).
     pub fn latest_cohort(&self, subject: &str) -> Option<Cohort> {
-        self.entries.iter().rev().find(|e| e.subject == subject).map(|e| e.to)
+        self.entries
+            .iter()
+            .rev()
+            .find(|e| e.subject == subject)
+            .map(|e| e.to)
     }
 
     /// Validate the log.
@@ -158,15 +175,33 @@ impl PromotionLog {
             return Err(PromotionError::SchemaMismatch);
         }
         for (idx, e) in self.entries.iter().enumerate() {
-            if e.subject.is_empty() { return Err(PromotionError::MissingSubject(idx)); }
-            if e.actor.is_empty() { return Err(PromotionError::MissingActor(idx)); }
-            if e.trace_id.is_empty() { return Err(PromotionError::MissingTraceId(idx)); }
-            if e.at.is_empty() { return Err(PromotionError::MissingTimestamp(idx)); }
-            if e.from == e.to { return Err(PromotionError::NoOp { idx, cohort: e.from }); }
+            if e.subject.is_empty() {
+                return Err(PromotionError::MissingSubject(idx));
+            }
+            if e.actor.is_empty() {
+                return Err(PromotionError::MissingActor(idx));
+            }
+            if e.trace_id.is_empty() {
+                return Err(PromotionError::MissingTraceId(idx));
+            }
+            if e.at.is_empty() {
+                return Err(PromotionError::MissingTimestamp(idx));
+            }
+            if e.from == e.to {
+                return Err(PromotionError::NoOp {
+                    idx,
+                    cohort: e.from,
+                });
+            }
             let going_up = e.to > e.from;
             let kind_says_up = e.kind == PromotionKind::Promotion;
             if going_up != kind_says_up {
-                return Err(PromotionError::KindMismatch { idx, kind: e.kind, from: e.from, to: e.to });
+                return Err(PromotionError::KindMismatch {
+                    idx,
+                    kind: e.kind,
+                    from: e.from,
+                    to: e.to,
+                });
             }
         }
         Ok(())
@@ -174,17 +209,28 @@ impl PromotionLog {
 }
 
 impl Default for PromotionLog {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn entry(subject: &str, from: Cohort, to: Cohort, kind: PromotionKind, reason: PromotionReason) -> PromotionEntry {
+    fn entry(
+        subject: &str,
+        from: Cohort,
+        to: Cohort,
+        kind: PromotionKind,
+        reason: PromotionReason,
+    ) -> PromotionEntry {
         PromotionEntry {
             subject: subject.into(),
-            from, to, kind, reason,
+            from,
+            to,
+            kind,
+            reason,
             actor: "op-fp".into(),
             at: "2026-05-19T03:00:00Z".into(),
             trace_id: "tr-1".into(),
@@ -199,21 +245,43 @@ mod tests {
     #[test]
     fn record_promotion() {
         let mut l = PromotionLog::new();
-        l.record(entry("alice", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap();
+        l.record(entry(
+            "alice",
+            Cohort::Newcomer,
+            Cohort::Probationary,
+            PromotionKind::Promotion,
+            PromotionReason::Earned,
+        ))
+        .unwrap();
         assert_eq!(l.latest_cohort("alice"), Some(Cohort::Probationary));
     }
 
     #[test]
     fn record_demotion() {
         let mut l = PromotionLog::new();
-        l.record(entry("alice", Cohort::Trusted, Cohort::Probationary, PromotionKind::Demotion, PromotionReason::PostIncident)).unwrap();
+        l.record(entry(
+            "alice",
+            Cohort::Trusted,
+            Cohort::Probationary,
+            PromotionKind::Demotion,
+            PromotionReason::PostIncident,
+        ))
+        .unwrap();
         assert_eq!(l.latest_cohort("alice"), Some(Cohort::Probationary));
     }
 
     #[test]
     fn no_op_rejected() {
         let mut l = PromotionLog::new();
-        let err = l.record(entry("a", Cohort::Trusted, Cohort::Trusted, PromotionKind::Promotion, PromotionReason::Earned)).unwrap_err();
+        let err = l
+            .record(entry(
+                "a",
+                Cohort::Trusted,
+                Cohort::Trusted,
+                PromotionKind::Promotion,
+                PromotionReason::Earned,
+            ))
+            .unwrap_err();
         assert!(matches!(err, PromotionError::NoOp { .. }));
     }
 
@@ -221,16 +289,45 @@ mod tests {
     fn kind_mismatch_caught() {
         let mut l = PromotionLog::new();
         // Going down but marked Promotion
-        let err = l.record(entry("a", Cohort::Trusted, Cohort::Newcomer, PromotionKind::Promotion, PromotionReason::PostIncident)).unwrap_err();
+        let err = l
+            .record(entry(
+                "a",
+                Cohort::Trusted,
+                Cohort::Newcomer,
+                PromotionKind::Promotion,
+                PromotionReason::PostIncident,
+            ))
+            .unwrap_err();
         assert!(matches!(err, PromotionError::KindMismatch { .. }));
     }
 
     #[test]
     fn count_by_reason() {
         let mut l = PromotionLog::new();
-        l.record(entry("a", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap();
-        l.record(entry("b", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap();
-        l.record(entry("c", Cohort::Probationary, Cohort::Trusted, PromotionKind::Promotion, PromotionReason::OperatorVouched)).unwrap();
+        l.record(entry(
+            "a",
+            Cohort::Newcomer,
+            Cohort::Probationary,
+            PromotionKind::Promotion,
+            PromotionReason::Earned,
+        ))
+        .unwrap();
+        l.record(entry(
+            "b",
+            Cohort::Newcomer,
+            Cohort::Probationary,
+            PromotionKind::Promotion,
+            PromotionReason::Earned,
+        ))
+        .unwrap();
+        l.record(entry(
+            "c",
+            Cohort::Probationary,
+            Cohort::Trusted,
+            PromotionKind::Promotion,
+            PromotionReason::OperatorVouched,
+        ))
+        .unwrap();
         assert_eq!(l.count_by_reason(PromotionReason::Earned), 2);
         assert_eq!(l.count_by_reason(PromotionReason::OperatorVouched), 1);
         assert_eq!(l.count_by_reason(PromotionReason::PostIncident), 0);
@@ -239,8 +336,22 @@ mod tests {
     #[test]
     fn latest_cohort_returns_most_recent() {
         let mut l = PromotionLog::new();
-        l.record(entry("a", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap();
-        l.record(entry("a", Cohort::Probationary, Cohort::Trusted, PromotionKind::Promotion, PromotionReason::OperatorVouched)).unwrap();
+        l.record(entry(
+            "a",
+            Cohort::Newcomer,
+            Cohort::Probationary,
+            PromotionKind::Promotion,
+            PromotionReason::Earned,
+        ))
+        .unwrap();
+        l.record(entry(
+            "a",
+            Cohort::Probationary,
+            Cohort::Trusted,
+            PromotionKind::Promotion,
+            PromotionReason::OperatorVouched,
+        ))
+        .unwrap();
         assert_eq!(l.latest_cohort("a"), Some(Cohort::Trusted));
     }
 
@@ -253,7 +364,15 @@ mod tests {
     #[test]
     fn missing_subject_caught() {
         let mut l = PromotionLog::new();
-        let err = l.record(entry("", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap_err();
+        let err = l
+            .record(entry(
+                "",
+                Cohort::Newcomer,
+                Cohort::Probationary,
+                PromotionKind::Promotion,
+                PromotionReason::Earned,
+            ))
+            .unwrap_err();
         assert!(matches!(err, PromotionError::MissingSubject(_)));
     }
 
@@ -261,20 +380,39 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = PromotionLog::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), PromotionError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            PromotionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn reason_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PromotionReason::Earned).unwrap(), "\"earned\"");
-        assert_eq!(serde_json::to_string(&PromotionReason::OperatorVouched).unwrap(), "\"operator-vouched\"");
-        assert_eq!(serde_json::to_string(&PromotionReason::RepeatedDenies).unwrap(), "\"repeated-denies\"");
+        assert_eq!(
+            serde_json::to_string(&PromotionReason::Earned).unwrap(),
+            "\"earned\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PromotionReason::OperatorVouched).unwrap(),
+            "\"operator-vouched\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PromotionReason::RepeatedDenies).unwrap(),
+            "\"repeated-denies\""
+        );
     }
 
     #[test]
     fn log_serde_roundtrip() {
         let mut l = PromotionLog::new();
-        l.record(entry("a", Cohort::Newcomer, Cohort::Probationary, PromotionKind::Promotion, PromotionReason::Earned)).unwrap();
+        l.record(entry(
+            "a",
+            Cohort::Newcomer,
+            Cohort::Probationary,
+            PromotionKind::Promotion,
+            PromotionReason::Earned,
+        ))
+        .unwrap();
         let j = serde_json::to_string(&l).unwrap();
         let back: PromotionLog = serde_json::from_str(&j).unwrap();
         assert_eq!(l, back);

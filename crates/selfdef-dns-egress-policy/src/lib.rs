@@ -113,7 +113,11 @@ impl DnsEgressPolicy {
         if self.schema_version != SCHEMA_VERSION {
             return Err(DnsEgressError::SchemaMismatch);
         }
-        for (sec, list) in [("allow", &self.allow), ("deny", &self.deny), ("never_resolve", &self.never_resolve)] {
+        for (sec, list) in [
+            ("allow", &self.allow),
+            ("deny", &self.deny),
+            ("never_resolve", &self.never_resolve),
+        ] {
             for p in list {
                 if p.is_empty() {
                     return Err(DnsEgressError::EmptyPattern(sec.into()));
@@ -128,7 +132,9 @@ impl DnsEgressPolicy {
 }
 
 fn valid_pattern(p: &str) -> bool {
-    if p == "*" { return false; } // bare * disallowed
+    if p == "*" {
+        return false;
+    } // bare * disallowed
     // Allow `*.suffix.tld` or exact host.
     if let Some(rest) = p.strip_prefix("*.") {
         !rest.is_empty() && rest.chars().all(is_host_char)
@@ -155,7 +161,9 @@ fn pattern_match(p: &str, host: &str) -> bool {
 }
 
 impl Default for DnsEgressPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -173,15 +181,24 @@ mod tests {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("example.com".into());
         assert!(matches!(p.decide("example.com"), DnsDecision::Allow { .. }));
-        assert!(matches!(p.decide("a.example.com"), DnsDecision::DenyImplicit));
+        assert!(matches!(
+            p.decide("a.example.com"),
+            DnsDecision::DenyImplicit
+        ));
     }
 
     #[test]
     fn allow_wildcard_subdomain() {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("*.example.com".into());
-        assert!(matches!(p.decide("a.example.com"), DnsDecision::Allow { .. }));
-        assert!(matches!(p.decide("a.b.example.com"), DnsDecision::Allow { .. }));
+        assert!(matches!(
+            p.decide("a.example.com"),
+            DnsDecision::Allow { .. }
+        ));
+        assert!(matches!(
+            p.decide("a.b.example.com"),
+            DnsDecision::Allow { .. }
+        ));
         // Wildcard does NOT match the bare base.
         assert!(matches!(p.decide("example.com"), DnsDecision::DenyImplicit));
     }
@@ -191,7 +208,10 @@ mod tests {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("*.example.com".into());
         p.deny.push("evil.example.com".into());
-        assert!(matches!(p.decide("evil.example.com"), DnsDecision::DenyByDeny { .. }));
+        assert!(matches!(
+            p.decide("evil.example.com"),
+            DnsDecision::DenyByDeny { .. }
+        ));
     }
 
     #[test]
@@ -207,8 +227,14 @@ mod tests {
     #[test]
     fn canonical_blocks_exfil_hosts() {
         let p = DnsEgressPolicy::canonical();
-        assert!(matches!(p.decide("transfer.sh"), DnsDecision::DenyByNever { .. }));
-        assert!(matches!(p.decide("foo.pastebin.com"), DnsDecision::DenyByNever { .. }));
+        assert!(matches!(
+            p.decide("transfer.sh"),
+            DnsDecision::DenyByNever { .. }
+        ));
+        assert!(matches!(
+            p.decide("foo.pastebin.com"),
+            DnsDecision::DenyByNever { .. }
+        ));
     }
 
     #[test]
@@ -222,33 +248,48 @@ mod tests {
     fn trailing_dot_normalized() {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("example.com".into());
-        assert!(matches!(p.decide("example.com."), DnsDecision::Allow { .. }));
+        assert!(matches!(
+            p.decide("example.com."),
+            DnsDecision::Allow { .. }
+        ));
     }
 
     #[test]
     fn empty_host_denied() {
-        assert!(matches!(DnsEgressPolicy::new().decide(""), DnsDecision::DenyImplicit));
+        assert!(matches!(
+            DnsEgressPolicy::new().decide(""),
+            DnsDecision::DenyImplicit
+        ));
     }
 
     #[test]
     fn empty_pattern_rejected_on_validate() {
         let mut p = DnsEgressPolicy::new();
         p.allow.push(String::new());
-        assert!(matches!(p.validate().unwrap_err(), DnsEgressError::EmptyPattern(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            DnsEgressError::EmptyPattern(_)
+        ));
     }
 
     #[test]
     fn bare_star_rejected_on_validate() {
         let mut p = DnsEgressPolicy::new();
         p.allow.push("*".into());
-        assert!(matches!(p.validate().unwrap_err(), DnsEgressError::InvalidPattern(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            DnsEgressError::InvalidPattern(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = DnsEgressPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), DnsEgressError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            DnsEgressError::SchemaMismatch
+        ));
     }
 
     #[test]

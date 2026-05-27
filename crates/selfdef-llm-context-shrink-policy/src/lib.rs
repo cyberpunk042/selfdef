@@ -94,7 +94,9 @@ impl ContextShrinkPolicy {
     pub fn plan_shrink(&self, messages: &[Msg], over_by_tokens: u32) -> Vec<DropAction> {
         let n = messages.len();
         let mut plan = vec![DropAction::Keep; n];
-        if over_by_tokens == 0 { return plan; }
+        if over_by_tokens == 0 {
+            return plan;
+        }
 
         // Mark always-keep: system + pinned + last keep_recent_n non-system.
         let mut recent_left = self.keep_recent_n as usize;
@@ -113,8 +115,12 @@ impl ContextShrinkPolicy {
         let mut freed: u64 = 0;
         let need = over_by_tokens as u64;
         for (i, m) in messages.iter().enumerate() {
-            if freed >= need { break; }
-            if keep_always[i] { continue; }
+            if freed >= need {
+                break;
+            }
+            if keep_always[i] {
+                continue;
+            }
             if m.role == Role::Scratch {
                 plan[i] = DropAction::Drop;
                 freed += m.tokens as u64;
@@ -123,8 +129,12 @@ impl ContextShrinkPolicy {
 
         // Then tool outputs.
         for (i, m) in messages.iter().enumerate() {
-            if freed >= need { break; }
-            if keep_always[i] || plan[i] != DropAction::Keep { continue; }
+            if freed >= need {
+                break;
+            }
+            if keep_always[i] || plan[i] != DropAction::Keep {
+                continue;
+            }
             if m.role == Role::Tool {
                 plan[i] = DropAction::Drop;
                 freed += m.tokens as u64;
@@ -133,8 +143,12 @@ impl ContextShrinkPolicy {
 
         // Then assistant + user turns — Summarize (preserve continuity).
         for (i, m) in messages.iter().enumerate() {
-            if freed >= need { break; }
-            if keep_always[i] || plan[i] != DropAction::Keep { continue; }
+            if freed >= need {
+                break;
+            }
+            if keep_always[i] || plan[i] != DropAction::Keep {
+                continue;
+            }
             if matches!(m.role, Role::Assistant | Role::User) {
                 plan[i] = DropAction::Summarize;
                 // Assume summarize reduces to ~16 tokens.
@@ -148,7 +162,9 @@ impl ContextShrinkPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ShrinkError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ShrinkError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ShrinkError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -157,7 +173,9 @@ impl ContextShrinkPolicy {
 mod tests {
     use super::*;
 
-    fn m(role: Role, tokens: u32) -> Msg { Msg { role, tokens } }
+    fn m(role: Role, tokens: u32) -> Msg {
+        Msg { role, tokens }
+    }
 
     #[test]
     fn no_shrink_when_zero() {
@@ -216,14 +234,20 @@ mod tests {
         ];
         // keep_recent_n = 2 → last two scratch stay.
         let plan = p.plan_shrink(&msgs, 50);
-        assert_eq!(plan, vec![DropAction::Drop, DropAction::Keep, DropAction::Keep]);
+        assert_eq!(
+            plan,
+            vec![DropAction::Drop, DropAction::Keep, DropAction::Keep]
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ContextShrinkPolicy::new(2);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ShrinkError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ShrinkError::SchemaMismatch
+        ));
     }
 
     #[test]

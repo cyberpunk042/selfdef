@@ -38,14 +38,38 @@ pub(crate) struct GateDescriptor {
 }
 
 const TOOL_IDS: &[ToolDescriptor] = &[
-    ToolDescriptor { id: "Shell", description: "arbitrary shell command" },
-    ToolDescriptor { id: "FsRead", description: "filesystem read" },
-    ToolDescriptor { id: "FsWrite", description: "filesystem write" },
-    ToolDescriptor { id: "WebFetch", description: "HTTP GET / POST (gated by SDD-046 NetworkProfile)" },
-    ToolDescriptor { id: "ModelInference", description: "LLM call" },
-    ToolDescriptor { id: "McpBridge", description: "MCP tool dispatch" },
-    ToolDescriptor { id: "ReplayControl", description: "replay / counterfactual" },
-    ToolDescriptor { id: "CliBridge", description: "selfdefctl bridge call" },
+    ToolDescriptor {
+        id: "Shell",
+        description: "arbitrary shell command",
+    },
+    ToolDescriptor {
+        id: "FsRead",
+        description: "filesystem read",
+    },
+    ToolDescriptor {
+        id: "FsWrite",
+        description: "filesystem write",
+    },
+    ToolDescriptor {
+        id: "WebFetch",
+        description: "HTTP GET / POST (gated by SDD-046 NetworkProfile)",
+    },
+    ToolDescriptor {
+        id: "ModelInference",
+        description: "LLM call",
+    },
+    ToolDescriptor {
+        id: "McpBridge",
+        description: "MCP tool dispatch",
+    },
+    ToolDescriptor {
+        id: "ReplayControl",
+        description: "replay / counterfactual",
+    },
+    ToolDescriptor {
+        id: "CliBridge",
+        description: "selfdefctl bridge call",
+    },
 ];
 
 const EXECUTION_MODES: &[&str] = &[
@@ -53,19 +77,69 @@ const EXECUTION_MODES: &[&str] = &[
 ];
 
 const PROFILES: &[&str] = &[
-    "Private", "Fast", "Careful", "Autonomous", "Experimental", "Production",
+    "Private",
+    "Fast",
+    "Careful",
+    "Autonomous",
+    "Experimental",
+    "Production",
 ];
 
 const GATE_PIPELINE: &[GateDescriptor] = &[
-    GateDescriptor { order: 1, name: "admit", crate_name: "selfdef-tool-invocation-rate-limit", vocabulary: "Allow / Denied" },
-    GateDescriptor { order: 2, name: "permits", crate_name: "selfdef-tool-capability-policy", vocabulary: "Allow / NotAuthorized" },
-    GateDescriptor { order: 3, name: "version-pin", crate_name: "selfdef-tool-version-pinning", vocabulary: "Allow / VersionMismatch" },
-    GateDescriptor { order: 4, name: "redact-args", crate_name: "selfdef-tool-arg-redaction-policy", vocabulary: "exact / suffix / prefix / wildcard" },
-    GateDescriptor { order: 5, name: "audit", crate_name: "selfdef-commit-authority", vocabulary: "SDD-043 ToolSideEffect commit envelope" },
-    GateDescriptor { order: 6, name: "invoke", crate_name: "(caller-owned)", vocabulary: "execute the tool" },
-    GateDescriptor { order: 7, name: "watchdog", crate_name: "selfdef-tool-stream-watchdog", vocabulary: "Ok / Silence / TotalElapsed" },
-    GateDescriptor { order: 8, name: "admit_chunk", crate_name: "selfdef-tool-output-byte-quota", vocabulary: "Accept / Truncate / Refuse" },
-    GateDescriptor { order: 9, name: "truncate", crate_name: "selfdef-tool-output-truncation-policy", vocabulary: "HeadOnly / HeadTail / MiddleEllipsis" },
+    GateDescriptor {
+        order: 1,
+        name: "admit",
+        crate_name: "selfdef-tool-invocation-rate-limit",
+        vocabulary: "Allow / Denied",
+    },
+    GateDescriptor {
+        order: 2,
+        name: "permits",
+        crate_name: "selfdef-tool-capability-policy",
+        vocabulary: "Allow / NotAuthorized",
+    },
+    GateDescriptor {
+        order: 3,
+        name: "version-pin",
+        crate_name: "selfdef-tool-version-pinning",
+        vocabulary: "Allow / VersionMismatch",
+    },
+    GateDescriptor {
+        order: 4,
+        name: "redact-args",
+        crate_name: "selfdef-tool-arg-redaction-policy",
+        vocabulary: "exact / suffix / prefix / wildcard",
+    },
+    GateDescriptor {
+        order: 5,
+        name: "audit",
+        crate_name: "selfdef-commit-authority",
+        vocabulary: "SDD-043 ToolSideEffect commit envelope",
+    },
+    GateDescriptor {
+        order: 6,
+        name: "invoke",
+        crate_name: "(caller-owned)",
+        vocabulary: "execute the tool",
+    },
+    GateDescriptor {
+        order: 7,
+        name: "watchdog",
+        crate_name: "selfdef-tool-stream-watchdog",
+        vocabulary: "Ok / Silence / TotalElapsed",
+    },
+    GateDescriptor {
+        order: 8,
+        name: "admit_chunk",
+        crate_name: "selfdef-tool-output-byte-quota",
+        vocabulary: "Accept / Truncate / Refuse",
+    },
+    GateDescriptor {
+        order: 9,
+        name: "truncate",
+        crate_name: "selfdef-tool-output-truncation-policy",
+        vocabulary: "HeadOnly / HeadTail / MiddleEllipsis",
+    },
 ];
 
 const POST_PIPELINE: &[&str] = &[

@@ -59,7 +59,9 @@ pub enum LatchError {
 impl CountdownLatch {
     /// New.
     pub fn new(initial: u32) -> Result<Self, LatchError> {
-        if initial == 0 { return Err(LatchError::BadInitial); }
+        if initial == 0 {
+            return Err(LatchError::BadInitial);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             initial,
@@ -72,7 +74,9 @@ impl CountdownLatch {
 
     /// Arrive once (by N) — returns new Status.
     pub fn arrive(&mut self, by: u32, now_ms: u64) -> Result<Status, LatchError> {
-        if by == 0 { return Err(LatchError::ZeroArrive); }
+        if by == 0 {
+            return Err(LatchError::ZeroArrive);
+        }
         self.arrivals = self.arrivals.saturating_add(by as u64);
         if self.remaining == 0 {
             // Already open — excess arrivals counted.
@@ -89,13 +93,21 @@ impl CountdownLatch {
 
     /// Current status.
     pub fn status(&self) -> Status {
-        if self.remaining == 0 { Status::Open } else { Status::Waiting }
+        if self.remaining == 0 {
+            Status::Open
+        } else {
+            Status::Waiting
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LatchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LatchError::SchemaMismatch); }
-        if self.initial == 0 { return Err(LatchError::BadInitial); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LatchError::SchemaMismatch);
+        }
+        if self.initial == 0 {
+            return Err(LatchError::BadInitial);
+        }
         Ok(())
     }
 }
@@ -157,20 +169,29 @@ mod tests {
 
     #[test]
     fn bad_initial_rejected() {
-        assert!(matches!(CountdownLatch::new(0).unwrap_err(), LatchError::BadInitial));
+        assert!(matches!(
+            CountdownLatch::new(0).unwrap_err(),
+            LatchError::BadInitial
+        ));
     }
 
     #[test]
     fn zero_arrive_rejected() {
         let mut l = CountdownLatch::new(3).unwrap();
-        assert!(matches!(l.arrive(0, 0).unwrap_err(), LatchError::ZeroArrive));
+        assert!(matches!(
+            l.arrive(0, 0).unwrap_err(),
+            LatchError::ZeroArrive
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = CountdownLatch::new(3).unwrap();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LatchError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LatchError::SchemaMismatch
+        ));
     }
 
     #[test]

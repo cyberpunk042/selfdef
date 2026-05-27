@@ -133,13 +133,19 @@ impl BlastRadiusClassifier {
         // Bump by visibility.
         match f.visibility {
             Visibility::Public
-                if matches!(r, BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession | BR::CrossMachine) =>
+                if matches!(
+                    r,
+                    BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession | BR::CrossMachine
+                ) =>
             {
                 notes.push("bumped: visibility public".into());
                 r = BR::Public;
             }
             Visibility::Fleet
-                if matches!(r, BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession) =>
+                if matches!(
+                    r,
+                    BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession
+                ) =>
             {
                 notes.push("bumped: visibility fleet".into());
                 r = BR::CrossMachine;
@@ -147,9 +153,13 @@ impl BlastRadiusClassifier {
             _ => {}
         }
         // Bump: System + Irreversible always at least CrossMachine.
-        if matches!(f.target, TargetScope::System) && f.reversibility == Reversibility::Irreversible {
+        if matches!(f.target, TargetScope::System) && f.reversibility == Reversibility::Irreversible
+        {
             notes.push("bumped: system+irreversible".into());
-            if matches!(r, BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession) {
+            if matches!(
+                r,
+                BR::LocalEphemeral | BR::LocalPersistent | BR::CrossSession
+            ) {
                 r = BR::CrossMachine;
             }
         }
@@ -179,7 +189,11 @@ mod tests {
     use Visibility::*;
 
     fn feat(t: TargetScope, r: Reversibility, v: Visibility) -> OperationFeatures {
-        OperationFeatures { target: t, reversibility: r, visibility: v }
+        OperationFeatures {
+            target: t,
+            reversibility: r,
+            visibility: v,
+        }
     }
 
     #[test]
@@ -243,19 +257,34 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = BlastRadiusClassifier::classify(feat(InMemorySession, Reversible, EngineOnly));
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), BlastError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            BlastError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn target_serde_kebab() {
-        assert_eq!(serde_json::to_string(&InMemorySession).unwrap(), "\"in-memory-session\"");
-        assert_eq!(serde_json::to_string(&PublicInternet).unwrap(), "\"public-internet\"");
+        assert_eq!(
+            serde_json::to_string(&InMemorySession).unwrap(),
+            "\"in-memory-session\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PublicInternet).unwrap(),
+            "\"public-internet\""
+        );
     }
 
     #[test]
     fn radius_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BlastRadius::LocalEphemeral).unwrap(), "\"local-ephemeral\"");
-        assert_eq!(serde_json::to_string(&BlastRadius::CrossMachine).unwrap(), "\"cross-machine\"");
+        assert_eq!(
+            serde_json::to_string(&BlastRadius::LocalEphemeral).unwrap(),
+            "\"local-ephemeral\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BlastRadius::CrossMachine).unwrap(),
+            "\"cross-machine\""
+        );
     }
 
     #[test]

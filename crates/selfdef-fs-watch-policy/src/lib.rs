@@ -102,10 +102,16 @@ impl FsWatchPolicy {
         if self.schema_version != SCHEMA_VERSION {
             return Err(FsWatchError::SchemaMismatch);
         }
-        for (sec, list) in [("allow", &self.allow), ("deny", &self.deny), ("never_watch", &self.never_watch)] {
+        for (sec, list) in [
+            ("allow", &self.allow),
+            ("deny", &self.deny),
+            ("never_watch", &self.never_watch),
+        ] {
             for p in list {
                 if p.is_empty() {
-                    return Err(FsWatchError::EmptyPattern { section: sec.into() });
+                    return Err(FsWatchError::EmptyPattern {
+                        section: sec.into(),
+                    });
                 }
                 if !p.starts_with('/') {
                     return Err(FsWatchError::NotAbsolute(p.clone()));
@@ -132,7 +138,9 @@ fn match_inner(pat: &[u8], mut pi: usize, path: &[u8], mut si: usize) -> bool {
             if pi + 1 < pat.len() && pat[pi + 1] == b'*' {
                 pi += 2;
                 // Skip a trailing /.
-                if pi < pat.len() && pat[pi] == b'/' { pi += 1; }
+                if pi < pat.len() && pat[pi] == b'/' {
+                    pi += 1;
+                }
                 // Try matching tail at every suffix.
                 for end in si..=path.len() {
                     if match_inner(pat, pi, path, end) {
@@ -144,7 +152,9 @@ fn match_inner(pat: &[u8], mut pi: usize, path: &[u8], mut si: usize) -> bool {
                 pi += 1;
                 // Match any chars except '/'.
                 for end in si..=path.len() {
-                    if end > si && path[end - 1] == b'/' { break; }
+                    if end > si && path[end - 1] == b'/' {
+                        break;
+                    }
                     if match_inner(pat, pi, path, end) {
                         return true;
                     }
@@ -169,7 +179,9 @@ fn match_inner(pat: &[u8], mut pi: usize, path: &[u8], mut si: usize) -> bool {
 }
 
 impl Default for FsWatchPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -202,7 +214,10 @@ mod tests {
         let mut p = FsWatchPolicy::new();
         p.allow.push("/home/user/**".into());
         p.deny.push("/home/user/private/**".into());
-        assert_eq!(p.decide("/home/user/private/secret.txt"), WatchDecision::Deny);
+        assert_eq!(
+            p.decide("/home/user/private/secret.txt"),
+            WatchDecision::Deny
+        );
     }
 
     #[test]
@@ -225,7 +240,10 @@ mod tests {
     fn double_star_matches_slash() {
         let mut p = FsWatchPolicy::new();
         p.allow.push("/home/user/**/*.rs".into());
-        assert_eq!(p.decide("/home/user/code/sub/deep/main.rs"), WatchDecision::Allow);
+        assert_eq!(
+            p.decide("/home/user/code/sub/deep/main.rs"),
+            WatchDecision::Allow
+        );
     }
 
     #[test]
@@ -248,27 +266,42 @@ mod tests {
     fn empty_pattern_rejected_on_validate() {
         let mut p = FsWatchPolicy::new();
         p.allow.push(String::new());
-        assert!(matches!(p.validate().unwrap_err(), FsWatchError::EmptyPattern { .. }));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            FsWatchError::EmptyPattern { .. }
+        ));
     }
 
     #[test]
     fn relative_pattern_rejected_on_validate() {
         let mut p = FsWatchPolicy::new();
         p.allow.push("rel/path".into());
-        assert!(matches!(p.validate().unwrap_err(), FsWatchError::NotAbsolute(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            FsWatchError::NotAbsolute(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = FsWatchPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), FsWatchError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            FsWatchError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&WatchDecision::Allow).unwrap(), "\"allow\"");
-        assert_eq!(serde_json::to_string(&WatchDecision::Deny).unwrap(), "\"deny\"");
+        assert_eq!(
+            serde_json::to_string(&WatchDecision::Allow).unwrap(),
+            "\"allow\""
+        );
+        assert_eq!(
+            serde_json::to_string(&WatchDecision::Deny).unwrap(),
+            "\"deny\""
+        );
     }
 
     #[test]

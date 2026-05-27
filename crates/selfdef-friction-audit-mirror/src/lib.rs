@@ -169,7 +169,9 @@ impl Verdict {
     /// empty hostname, zero timestamp, or empty override manifest.
     pub fn validate(&self) -> Result<(), FrictionAuditError> {
         if self.schema_version != SCHEMA_VERSION {
-            return Err(FrictionAuditError::SchemaMismatch(self.schema_version.clone()));
+            return Err(FrictionAuditError::SchemaMismatch(
+                self.schema_version.clone(),
+            ));
         }
         if self.signer_kid_policy.is_empty() {
             return Err(FrictionAuditError::EmptyPolicySigner);
@@ -180,7 +182,10 @@ impl Verdict {
         if self.ts_ms == 0 {
             return Err(FrictionAuditError::BadTimestamp);
         }
-        if let Status::OverrideActive { manifest_sha256, .. } = &self.status {
+        if let Status::OverrideActive {
+            manifest_sha256, ..
+        } = &self.status
+        {
             if manifest_sha256.is_empty() {
                 return Err(FrictionAuditError::EmptyOverrideManifest);
             }
@@ -206,8 +211,8 @@ impl Verdict {
     /// Returns `FrictionAuditError::Serde` on parse failure or any
     /// validation error from `validate()`.
     pub fn from_json(bytes: &[u8]) -> Result<Self, FrictionAuditError> {
-        let v: Self = serde_json::from_slice(bytes)
-            .map_err(|e| FrictionAuditError::Serde(e.to_string()))?;
+        let v: Self =
+            serde_json::from_slice(bytes).map_err(|e| FrictionAuditError::Serde(e.to_string()))?;
         v.validate()?;
         Ok(v)
     }
@@ -218,7 +223,13 @@ mod tests {
     use super::*;
 
     fn sample_pass() -> Verdict {
-        Verdict::new(Gate::Pcie, Status::Pass, 1_700_000_000_000, "host-A", "kid-policy-1")
+        Verdict::new(
+            Gate::Pcie,
+            Status::Pass,
+            1_700_000_000_000,
+            "host-A",
+            "kid-policy-1",
+        )
     }
 
     #[test]
@@ -377,7 +388,11 @@ mod tests {
             (Gate::Timeout, "timeout"),
         ] {
             let j = serde_json::to_string(g).unwrap();
-            assert_eq!(j, format!("\"{want}\""), "gate {g:?} did not serialize as {want}");
+            assert_eq!(
+                j,
+                format!("\"{want}\""),
+                "gate {g:?} did not serialize as {want}"
+            );
         }
     }
 }

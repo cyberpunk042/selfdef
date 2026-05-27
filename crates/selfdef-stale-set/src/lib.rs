@@ -58,21 +58,34 @@ pub enum StaleError {
 impl StaleSet {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), stale: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            stale: BTreeMap::new(),
+        }
     }
 
     /// Flag.
     pub fn flag(&mut self, key: &str, now_ms: u64) -> Result<(), StaleError> {
-        if key.is_empty() { return Err(StaleError::EmptyKey); }
-        self.stale.entry(key.into()).or_insert(Stale::Pending(now_ms));
+        if key.is_empty() {
+            return Err(StaleError::EmptyKey);
+        }
+        self.stale
+            .entry(key.into())
+            .or_insert(Stale::Pending(now_ms));
         Ok(())
     }
 
     /// Begin refresh.
     pub fn start_refresh(&mut self, key: &str, now_ms: u64) -> Result<(), StaleError> {
-        let s = self.stale.get_mut(key).ok_or_else(|| StaleError::Unknown(key.into()))?;
+        let s = self
+            .stale
+            .get_mut(key)
+            .ok_or_else(|| StaleError::Unknown(key.into()))?;
         match s {
-            Stale::Pending(_) => { *s = Stale::Refreshing(now_ms); Ok(()) }
+            Stale::Pending(_) => {
+                *s = Stale::Refreshing(now_ms);
+                Ok(())
+            }
             _ => Err(StaleError::InvalidPhase),
         }
     }
@@ -80,7 +93,10 @@ impl StaleSet {
     /// Confirm refresh succeeded — clears the key.
     pub fn confirm(&mut self, key: &str) -> Result<(), StaleError> {
         match self.stale.get(key) {
-            Some(Stale::Refreshing(_)) => { self.stale.remove(key); Ok(()) }
+            Some(Stale::Refreshing(_)) => {
+                self.stale.remove(key);
+                Ok(())
+            }
             Some(_) => Err(StaleError::InvalidPhase),
             None => Err(StaleError::Unknown(key.into())),
         }
@@ -88,9 +104,15 @@ impl StaleSet {
 
     /// Refresh failed — revert to Pending (carries the original since).
     pub fn fail(&mut self, key: &str, now_ms: u64) -> Result<(), StaleError> {
-        let s = self.stale.get_mut(key).ok_or_else(|| StaleError::Unknown(key.into()))?;
+        let s = self
+            .stale
+            .get_mut(key)
+            .ok_or_else(|| StaleError::Unknown(key.into()))?;
         match s {
-            Stale::Refreshing(_) => { *s = Stale::Pending(now_ms); Ok(()) }
+            Stale::Refreshing(_) => {
+                *s = Stale::Pending(now_ms);
+                Ok(())
+            }
             _ => Err(StaleError::InvalidPhase),
         }
     }
@@ -102,21 +124,30 @@ impl StaleSet {
 
     /// Pending-only count (queue depth for refresh scheduler).
     pub fn pending_count(&self) -> usize {
-        self.stale.values().filter(|s| matches!(s, Stale::Pending(_))).count()
+        self.stale
+            .values()
+            .filter(|s| matches!(s, Stale::Pending(_)))
+            .count()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StaleError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StaleError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StaleError::SchemaMismatch);
+        }
         for k in self.stale.keys() {
-            if k.is_empty() { return Err(StaleError::EmptyKey); }
+            if k.is_empty() {
+                return Err(StaleError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for StaleSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -161,13 +192,19 @@ mod tests {
     fn confirm_when_pending_rejected() {
         let mut s = StaleSet::new();
         s.flag("a", 0).unwrap();
-        assert!(matches!(s.confirm("a").unwrap_err(), StaleError::InvalidPhase));
+        assert!(matches!(
+            s.confirm("a").unwrap_err(),
+            StaleError::InvalidPhase
+        ));
     }
 
     #[test]
     fn unknown_key_rejected() {
         let mut s = StaleSet::new();
-        assert!(matches!(s.start_refresh("nope", 0).unwrap_err(), StaleError::Unknown(_)));
+        assert!(matches!(
+            s.start_refresh("nope", 0).unwrap_err(),
+            StaleError::Unknown(_)
+        ));
     }
 
     #[test]
@@ -180,7 +217,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = StaleSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), StaleError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            StaleError::SchemaMismatch
+        ));
     }
 
     #[test]

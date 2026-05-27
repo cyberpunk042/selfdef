@@ -83,12 +83,34 @@ impl NetworkEgressDomainAllowlist {
     /// Canonical.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Private,      BTreeSet::new());
-        p.insert(Profile::Fast,         ["*.huggingface.co".into(), "raw.githubusercontent.com".into()].into_iter().collect());
-        p.insert(Profile::Careful,      BTreeSet::new());
-        p.insert(Profile::Autonomous,   ["*.huggingface.co".into(), "*.github.com".into(), "api.anthropic.com".into()].into_iter().collect());
+        p.insert(Profile::Private, BTreeSet::new());
+        p.insert(
+            Profile::Fast,
+            [
+                "*.huggingface.co".into(),
+                "raw.githubusercontent.com".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
+        p.insert(Profile::Careful, BTreeSet::new());
+        p.insert(
+            Profile::Autonomous,
+            [
+                "*.huggingface.co".into(),
+                "*.github.com".into(),
+                "api.anthropic.com".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
         p.insert(Profile::Experimental, ["*".into()].into_iter().collect());
-        p.insert(Profile::Production,   ["api.anthropic.com".into(), "*.huggingface.co".into()].into_iter().collect());
+        p.insert(
+            Profile::Production,
+            ["api.anthropic.com".into(), "*.huggingface.co".into()]
+                .into_iter()
+                .collect(),
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -97,17 +119,23 @@ impl NetworkEgressDomainAllowlist {
 
     /// Classify.
     pub fn classify(&self, profile: Profile, host: &str) -> Result<DomainVerdict, DomainError> {
-        if host.is_empty() { return Err(DomainError::EmptyHost); }
+        if host.is_empty() {
+            return Err(DomainError::EmptyHost);
+        }
         let h = host.to_ascii_lowercase();
         let set = match self.profiles.get(&profile) {
             Some(s) => s,
             None => return Ok(DomainVerdict::Unconfigured),
         };
         if set.contains("*") {
-            return Ok(DomainVerdict::Allowed { matched: "*".into() });
+            return Ok(DomainVerdict::Allowed {
+                matched: "*".into(),
+            });
         }
         for rule in set {
-            if rule == "*" { continue; }
+            if rule == "*" {
+                continue;
+            }
             let rule_lc = rule.to_ascii_lowercase();
             if let Some(suffix) = rule_lc.strip_prefix("*.") {
                 // suffix must NOT be empty after `*.`, and host must end with `.suffix`.
@@ -116,23 +144,35 @@ impl NetworkEgressDomainAllowlist {
                 }
                 let probe = format!(".{}", suffix);
                 if h.ends_with(&probe) {
-                    return Ok(DomainVerdict::Allowed { matched: rule.clone() });
+                    return Ok(DomainVerdict::Allowed {
+                        matched: rule.clone(),
+                    });
                 }
             } else if h == rule_lc {
-                return Ok(DomainVerdict::Allowed { matched: rule.clone() });
+                return Ok(DomainVerdict::Allowed {
+                    matched: rule.clone(),
+                });
             }
         }
-        Ok(DomainVerdict::Denied { allowed_count: set.len() })
+        Ok(DomainVerdict::Denied {
+            allowed_count: set.len(),
+        })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DomainError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DomainError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DomainError::SchemaMismatch);
+        }
         for set in self.profiles.values() {
             for r in set {
-                if r.is_empty() { return Err(DomainError::EmptyHost); }
+                if r.is_empty() {
+                    return Err(DomainError::EmptyHost);
+                }
                 if let Some(suffix) = r.strip_prefix("*.") {
-                    if suffix.is_empty() { return Err(DomainError::BadRule(r.clone())); }
+                    if suffix.is_empty() {
+                        return Err(DomainError::BadRule(r.clone()));
+                    }
                 }
             }
         }
@@ -146,13 +186,19 @@ mod tests {
 
     #[test]
     fn canonical_validates() {
-        NetworkEgressDomainAllowlist::canonical().validate().unwrap();
+        NetworkEgressDomainAllowlist::canonical()
+            .validate()
+            .unwrap();
     }
 
     #[test]
     fn exact_allowed() {
         let a = NetworkEgressDomainAllowlist::canonical();
-        assert!(matches!(a.classify(Profile::Production, "api.anthropic.com").unwrap(), DomainVerdict::Allowed { .. }));
+        assert!(matches!(
+            a.classify(Profile::Production, "api.anthropic.com")
+                .unwrap(),
+            DomainVerdict::Allowed { .. }
+        ));
     }
 
     #[test]
@@ -169,13 +215,18 @@ mod tests {
     fn wildcard_subdomain_not_bare() {
         let a = NetworkEgressDomainAllowlist::canonical();
         // *.github.com does NOT match bare github.com.
-        assert!(matches!(a.classify(Profile::Autonomous, "github.com").unwrap(), DomainVerdict::Denied { .. }));
+        assert!(matches!(
+            a.classify(Profile::Autonomous, "github.com").unwrap(),
+            DomainVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn full_wildcard_admits_all() {
         let a = NetworkEgressDomainAllowlist::canonical();
-        let v = a.classify(Profile::Experimental, "anywhere.example").unwrap();
+        let v = a
+            .classify(Profile::Experimental, "anywhere.example")
+            .unwrap();
         match v {
             DomainVerdict::Allowed { matched } => assert_eq!(matched, "*"),
             _ => panic!(),
@@ -185,33 +236,49 @@ mod tests {
     #[test]
     fn empty_host_rejected() {
         let a = NetworkEgressDomainAllowlist::canonical();
-        assert!(matches!(a.classify(Profile::Production, "").unwrap_err(), DomainError::EmptyHost));
+        assert!(matches!(
+            a.classify(Profile::Production, "").unwrap_err(),
+            DomainError::EmptyHost
+        ));
     }
 
     #[test]
     fn private_empty_set_denies_all() {
         let a = NetworkEgressDomainAllowlist::canonical();
-        assert!(matches!(a.classify(Profile::Private, "api.anthropic.com").unwrap(), DomainVerdict::Denied { .. }));
+        assert!(matches!(
+            a.classify(Profile::Private, "api.anthropic.com").unwrap(),
+            DomainVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn case_insensitive_match() {
         let a = NetworkEgressDomainAllowlist::canonical();
-        assert!(matches!(a.classify(Profile::Production, "API.Anthropic.COM").unwrap(), DomainVerdict::Allowed { .. }));
+        assert!(matches!(
+            a.classify(Profile::Production, "API.Anthropic.COM")
+                .unwrap(),
+            DomainVerdict::Allowed { .. }
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut a = NetworkEgressDomainAllowlist::canonical();
         a.profiles.clear();
-        assert!(matches!(a.classify(Profile::Production, "x").unwrap(), DomainVerdict::Unconfigured));
+        assert!(matches!(
+            a.classify(Profile::Production, "x").unwrap(),
+            DomainVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = NetworkEgressDomainAllowlist::canonical();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), DomainError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            DomainError::SchemaMismatch
+        ));
     }
 
     #[test]

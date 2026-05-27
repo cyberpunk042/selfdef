@@ -41,7 +41,9 @@ pub enum EstError {
 
 /// One-shot estimate.
 pub fn estimate(text: &str, divisor: u32) -> Result<u64, EstError> {
-    if divisor == 0 { return Err(EstError::ZeroDivisor); }
+    if divisor == 0 {
+        return Err(EstError::ZeroDivisor);
+    }
     let chars = text.chars().count() as u64;
     Ok(chars.div_ceil(divisor as u64))
 }
@@ -49,7 +51,9 @@ pub fn estimate(text: &str, divisor: u32) -> Result<u64, EstError> {
 impl TokenEstimator {
     /// New (divisor must be >= 1).
     pub fn new(divisor: u32) -> Result<Self, EstError> {
-        if divisor == 0 { return Err(EstError::ZeroDivisor); }
+        if divisor == 0 {
+            return Err(EstError::ZeroDivisor);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             divisor,
@@ -79,8 +83,12 @@ impl TokenEstimator {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EstError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EstError::SchemaMismatch); }
-        if self.divisor == 0 { return Err(EstError::ZeroDivisor); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EstError::SchemaMismatch);
+        }
+        if self.divisor == 0 {
+            return Err(EstError::ZeroDivisor);
+        }
         Ok(())
     }
 }
@@ -136,15 +144,24 @@ mod tests {
 
     #[test]
     fn zero_divisor_rejected() {
-        assert!(matches!(TokenEstimator::new(0).unwrap_err(), EstError::ZeroDivisor));
-        assert!(matches!(estimate("x", 0).unwrap_err(), EstError::ZeroDivisor));
+        assert!(matches!(
+            TokenEstimator::new(0).unwrap_err(),
+            EstError::ZeroDivisor
+        ));
+        assert!(matches!(
+            estimate("x", 0).unwrap_err(),
+            EstError::ZeroDivisor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = TokenEstimator::new(4).unwrap();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), EstError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            EstError::SchemaMismatch
+        ));
     }
 
     #[test]

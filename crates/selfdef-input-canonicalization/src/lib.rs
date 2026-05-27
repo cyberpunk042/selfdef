@@ -66,11 +66,21 @@ impl InputCanonicalizer {
         };
         // 2. Zero-width drop.
         let mut zw_seen = false;
-        let no_zw: String = after_bom.chars().filter(|c| {
-            let is_zw = matches!(*c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}');
-            if is_zw { zw_seen = true; false } else { true }
-        }).collect();
-        if zw_seen { transforms.push(Transform::ZeroWidthDropped); }
+        let no_zw: String = after_bom
+            .chars()
+            .filter(|c| {
+                let is_zw = matches!(*c, '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}');
+                if is_zw {
+                    zw_seen = true;
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        if zw_seen {
+            transforms.push(Transform::ZeroWidthDropped);
+        }
         // 3. Line ending normalize.
         let mut line_norm = false;
         let normalized_lines: String = if no_zw.contains("\r\n") || no_zw.contains('\r') {
@@ -79,7 +89,9 @@ impl InputCanonicalizer {
         } else {
             no_zw
         };
-        if line_norm { transforms.push(Transform::LineEndingNormalized); }
+        if line_norm {
+            transforms.push(Transform::LineEndingNormalized);
+        }
         // 4. Collapse internal whitespace runs (≥2 spaces/tabs → single space; keep \n).
         let mut collapsed = String::with_capacity(normalized_lines.len());
         let mut last_was_space = false;
@@ -98,7 +110,9 @@ impl InputCanonicalizer {
                 last_was_space = false;
             }
         }
-        if ws_collapsed_observed { transforms.push(Transform::WhitespaceCollapsed); }
+        if ws_collapsed_observed {
+            transforms.push(Transform::WhitespaceCollapsed);
+        }
         // 5. Trim.
         let trimmed = collapsed.trim();
         if trimmed.len() != collapsed.len() {
@@ -201,13 +215,22 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = InputCanonicalizer::canonicalize("ok");
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), CanonError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            CanonError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn transform_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Transform::BomStripped).unwrap(), "\"bom-stripped\"");
-        assert_eq!(serde_json::to_string(&Transform::LineEndingNormalized).unwrap(), "\"line-ending-normalized\"");
+        assert_eq!(
+            serde_json::to_string(&Transform::BomStripped).unwrap(),
+            "\"bom-stripped\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Transform::LineEndingNormalized).unwrap(),
+            "\"line-ending-normalized\""
+        );
     }
 
     #[test]

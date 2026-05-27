@@ -107,17 +107,26 @@ pub enum ReplaySourceError {
 
 /// Authority check.
 pub fn approve(source: &ReplaySource) -> Result<(), ReplaySourceError> {
-    if source.label.is_empty() { return Err(ReplaySourceError::EmptyLabel); }
-    if source.path.is_empty() { return Err(ReplaySourceError::EmptyPath); }
+    if source.label.is_empty() {
+        return Err(ReplaySourceError::EmptyLabel);
+    }
+    if source.path.is_empty() {
+        return Err(ReplaySourceError::EmptyPath);
+    }
     if !source.path.starts_with('/') {
         return Err(ReplaySourceError::NotAbsolute(source.path.clone()));
     }
     if !source.path.ends_with(".jsonl") {
         return Err(ReplaySourceError::NotJsonl(source.path.clone()));
     }
-    if source.trace_id.is_empty() { return Err(ReplaySourceError::MissingTraceId); }
-    if source.signature.is_empty() { return Err(ReplaySourceError::Unsigned(source.label.clone())); }
-    if !source.captured_from.is_empty() && !source.captured_to.is_empty()
+    if source.trace_id.is_empty() {
+        return Err(ReplaySourceError::MissingTraceId);
+    }
+    if source.signature.is_empty() {
+        return Err(ReplaySourceError::Unsigned(source.label.clone()));
+    }
+    if !source.captured_from.is_empty()
+        && !source.captured_to.is_empty()
         && source.captured_to < source.captured_from
     {
         return Err(ReplaySourceError::WindowInverted {
@@ -169,7 +178,9 @@ impl ApprovedSources {
 }
 
 impl Default for ApprovedSources {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -182,7 +193,11 @@ mod tests {
             path: "/var/lib/selfdef/replay/2026-05-19.jsonl".into(),
             kind,
             trace_id: "tr-1".into(),
-            canary_id: if kind == SourceKind::SyntheticCanary { "canary-007".into() } else { String::new() },
+            canary_id: if kind == SourceKind::SyntheticCanary {
+                "canary-007".into()
+            } else {
+                String::new()
+            },
             captured_from: "2026-05-19T01:00:00Z".into(),
             captured_to: "2026-05-19T02:00:00Z".into(),
             signature: "ms003-hex".into(),
@@ -203,35 +218,50 @@ mod tests {
     fn empty_label_rejected() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.label = String::new();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::EmptyLabel));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::EmptyLabel
+        ));
     }
 
     #[test]
     fn non_absolute_path_rejected() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.path = "relative/x.jsonl".into();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::NotAbsolute(_)));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::NotAbsolute(_)
+        ));
     }
 
     #[test]
     fn non_jsonl_path_rejected() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.path = "/var/replay.txt".into();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::NotJsonl(_)));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::NotJsonl(_)
+        ));
     }
 
     #[test]
     fn unsigned_rejected() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.signature = String::new();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::Unsigned(_)));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::Unsigned(_)
+        ));
     }
 
     #[test]
     fn empty_trace_id_rejected() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.trace_id = String::new();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::MissingTraceId));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::MissingTraceId
+        ));
     }
 
     #[test]
@@ -239,21 +269,30 @@ mod tests {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.captured_from = "2026-05-19T05:00:00Z".into();
         s.captured_to = "2026-05-19T01:00:00Z".into();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::WindowInverted { .. }));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::WindowInverted { .. }
+        ));
     }
 
     #[test]
     fn canary_id_required_for_canary_kind() {
         let mut s = ok_source(SourceKind::SyntheticCanary);
         s.canary_id = String::new();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::CanaryIdMissing));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::CanaryIdMissing
+        ));
     }
 
     #[test]
     fn canary_id_forbidden_on_non_canary_kind() {
         let mut s = ok_source(SourceKind::LiveCapture);
         s.canary_id = "canary-007".into();
-        assert!(matches!(approve(&s).unwrap_err(), ReplaySourceError::StrayCanaryId(SourceKind::LiveCapture)));
+        assert!(matches!(
+            approve(&s).unwrap_err(),
+            ReplaySourceError::StrayCanaryId(SourceKind::LiveCapture)
+        ));
     }
 
     #[test]
@@ -268,14 +307,26 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = ApprovedSources::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ReplaySourceError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReplaySourceError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SourceKind::LiveCapture).unwrap(), "\"live-capture\"");
-        assert_eq!(serde_json::to_string(&SourceKind::SyntheticCanary).unwrap(), "\"synthetic-canary\"");
-        assert_eq!(serde_json::to_string(&SourceKind::ArchivedHistory).unwrap(), "\"archived-history\"");
+        assert_eq!(
+            serde_json::to_string(&SourceKind::LiveCapture).unwrap(),
+            "\"live-capture\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::SyntheticCanary).unwrap(),
+            "\"synthetic-canary\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::ArchivedHistory).unwrap(),
+            "\"archived-history\""
+        );
     }
 
     #[test]

@@ -105,11 +105,21 @@ impl SubstrateFingerprint {
         if self.schema_version != SCHEMA_VERSION {
             return Err(FingerprintError::SchemaMismatch);
         }
-        if self.captured_at.is_empty() { return Err(FingerprintError::MissingField("captured_at")); }
-        if self.rule_pack_summary.is_empty() { return Err(FingerprintError::MissingField("rule_pack_summary")); }
-        if self.doctrine_text_hash.is_empty() { return Err(FingerprintError::MissingField("doctrine_text_hash")); }
-        if self.collector_summary.is_empty() { return Err(FingerprintError::MissingField("collector_summary")); }
-        if self.host_fingerprint.is_empty() { return Err(FingerprintError::MissingField("host_fingerprint")); }
+        if self.captured_at.is_empty() {
+            return Err(FingerprintError::MissingField("captured_at"));
+        }
+        if self.rule_pack_summary.is_empty() {
+            return Err(FingerprintError::MissingField("rule_pack_summary"));
+        }
+        if self.doctrine_text_hash.is_empty() {
+            return Err(FingerprintError::MissingField("doctrine_text_hash"));
+        }
+        if self.collector_summary.is_empty() {
+            return Err(FingerprintError::MissingField("collector_summary"));
+        }
+        if self.host_fingerprint.is_empty() {
+            return Err(FingerprintError::MissingField("host_fingerprint"));
+        }
         Ok(())
     }
 
@@ -154,8 +164,16 @@ mod tests {
 
     fn sample() -> SubstrateFingerprint {
         SubstrateFingerprint::compute(
-            &["1.0.0".into(), "1.1.0".into(), "1.2.3".into(), "2.0.0".into(),
-              "1.0.0".into(), "1.0.0".into(), "1.0.0".into(), "1.0.0".into()],
+            &[
+                "1.0.0".into(),
+                "1.1.0".into(),
+                "1.2.3".into(),
+                "2.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+            ],
             &["doctrine-a".into(), "doctrine-b".into()],
             &["auditd".into(), "tetragon".into(), "ebpf".into()],
             "host-fp-abc",
@@ -213,8 +231,16 @@ mod tests {
     fn collector_drift_caught() {
         let a = sample();
         let pinned = SubstrateFingerprint::compute(
-            &["1.0.0".into(), "1.1.0".into(), "1.2.3".into(), "2.0.0".into(),
-              "1.0.0".into(), "1.0.0".into(), "1.0.0".into(), "1.0.0".into()],
+            &[
+                "1.0.0".into(),
+                "1.1.0".into(),
+                "1.2.3".into(),
+                "2.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+                "1.0.0".into(),
+            ],
             &["doctrine-a".into(), "doctrine-b".into()],
             &["auditd".into()], // missing tetragon and ebpf
             "host-fp-abc",
@@ -260,14 +286,20 @@ mod tests {
     fn missing_field_caught() {
         let mut f = sample();
         f.host_fingerprint = String::new();
-        assert!(matches!(f.validate().unwrap_err(), FingerprintError::MissingField("host_fingerprint")));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FingerprintError::MissingField("host_fingerprint")
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = sample();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FingerprintError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FingerprintError::SchemaMismatch
+        ));
     }
 
     #[test]

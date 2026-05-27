@@ -79,11 +79,7 @@ const POLICY_OUTCOMES: &[&str] = &["Allowed", "AllowedWithCaveats", "Denied"];
 
 const ROLLBACK_STATUSES: &[&str] = &["Reversible", "Reversed", "Unavailable"];
 
-const HIGH_RISK_GATE_FIELDS: &[&str] = &[
-    "snapshot_id",
-    "test_eval_id",
-    "oracle_or_human",
-];
+const HIGH_RISK_GATE_FIELDS: &[&str] = &["snapshot_id", "test_eval_id", "oracle_or_human"];
 
 const HIGH_RISK_CLASSIFIER_RULES: &[&str] = &[
     "F04871: commit_type=AdapterPromotion → ALWAYS high-risk",

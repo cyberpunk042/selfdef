@@ -93,7 +93,9 @@ impl ServiceHealthProbe {
 
     /// Register (defaults to Healthy).
     pub fn register(&mut self, svc: &str) -> Result<(), HealthError> {
-        if svc.is_empty() { return Err(HealthError::EmptyService); }
+        if svc.is_empty() {
+            return Err(HealthError::EmptyService);
+        }
         self.services.entry(svc.into()).or_insert(ServiceProbe {
             health: Health::Healthy,
             consec_fail: 0,
@@ -107,7 +109,9 @@ impl ServiceHealthProbe {
 
     /// Record a probe (success/failure). Returns the new health.
     pub fn record(&mut self, svc: &str, success: bool, ts_ms: u64) -> Result<Health, HealthError> {
-        if svc.is_empty() { return Err(HealthError::EmptyService); }
+        if svc.is_empty() {
+            return Err(HealthError::EmptyService);
+        }
         let fail_thresh = self.fail_to_down;
         let pass_thresh = self.pass_to_healthy;
         let s = self.services.entry(svc.into()).or_insert(ServiceProbe {
@@ -127,8 +131,11 @@ impl ServiceHealthProbe {
             s.health = match s.health {
                 Health::Down => Health::Degraded,
                 Health::Degraded => {
-                    if s.consec_pass >= pass_thresh { Health::Healthy }
-                    else { Health::Degraded }
+                    if s.consec_pass >= pass_thresh {
+                        Health::Healthy
+                    } else {
+                        Health::Degraded
+                    }
                 }
                 Health::Healthy => Health::Healthy,
             };
@@ -140,8 +147,11 @@ impl ServiceHealthProbe {
             s.health = match s.health {
                 Health::Healthy => Health::Degraded,
                 Health::Degraded => {
-                    if s.consec_fail >= fail_thresh { Health::Down }
-                    else { Health::Degraded }
+                    if s.consec_fail >= fail_thresh {
+                        Health::Down
+                    } else {
+                        Health::Degraded
+                    }
                 }
                 Health::Down => Health::Down,
             };
@@ -156,7 +166,8 @@ impl ServiceHealthProbe {
 
     /// All currently Down.
     pub fn down_services(&self) -> Vec<String> {
-        self.services.iter()
+        self.services
+            .iter()
             .filter(|(_, s)| s.health == Health::Down)
             .map(|(k, _)| k.clone())
             .collect()
@@ -164,19 +175,25 @@ impl ServiceHealthProbe {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HealthError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HealthError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HealthError::SchemaMismatch);
+        }
         if self.fail_to_down == 0 || self.pass_to_healthy == 0 {
             return Err(HealthError::ZeroThreshold);
         }
         for k in self.services.keys() {
-            if k.is_empty() { return Err(HealthError::EmptyService); }
+            if k.is_empty() {
+                return Err(HealthError::EmptyService);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ServiceHealthProbe {
-    fn default() -> Self { Self::new(3, 3).unwrap() }
+    fn default() -> Self {
+        Self::new(3, 3).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -200,14 +217,18 @@ mod tests {
     #[test]
     fn three_failures_down() {
         let mut h = ServiceHealthProbe::new(3, 3).unwrap();
-        for _ in 0..3 { h.record("api", false, 0).unwrap(); }
+        for _ in 0..3 {
+            h.record("api", false, 0).unwrap();
+        }
         assert_eq!(h.health_of("api"), Some(Health::Down));
     }
 
     #[test]
     fn first_success_after_down_degrades() {
         let mut h = ServiceHealthProbe::new(3, 3).unwrap();
-        for _ in 0..3 { h.record("api", false, 0).unwrap(); }
+        for _ in 0..3 {
+            h.record("api", false, 0).unwrap();
+        }
         h.record("api", true, 0).unwrap();
         assert_eq!(h.health_of("api"), Some(Health::Degraded));
     }
@@ -216,7 +237,9 @@ mod tests {
     fn three_successes_back_to_healthy() {
         let mut h = ServiceHealthProbe::new(3, 3).unwrap();
         h.record("api", false, 0).unwrap(); // Healthy → Degraded
-        for _ in 0..3 { h.record("api", true, 0).unwrap(); }
+        for _ in 0..3 {
+            h.record("api", true, 0).unwrap();
+        }
         assert_eq!(h.health_of("api"), Some(Health::Healthy));
     }
 
@@ -243,27 +266,41 @@ mod tests {
     #[test]
     fn down_services_lists() {
         let mut h = ServiceHealthProbe::new(2, 2).unwrap();
-        for _ in 0..2 { h.record("a", false, 0).unwrap(); }
+        for _ in 0..2 {
+            h.record("a", false, 0).unwrap();
+        }
         assert_eq!(h.down_services(), vec!["a".to_string()]);
     }
 
     #[test]
     fn zero_threshold_rejected() {
-        assert!(matches!(ServiceHealthProbe::new(0, 1).unwrap_err(), HealthError::ZeroThreshold));
-        assert!(matches!(ServiceHealthProbe::new(1, 0).unwrap_err(), HealthError::ZeroThreshold));
+        assert!(matches!(
+            ServiceHealthProbe::new(0, 1).unwrap_err(),
+            HealthError::ZeroThreshold
+        ));
+        assert!(matches!(
+            ServiceHealthProbe::new(1, 0).unwrap_err(),
+            HealthError::ZeroThreshold
+        ));
     }
 
     #[test]
     fn empty_service_rejected() {
         let mut h = ServiceHealthProbe::new(1, 1).unwrap();
-        assert!(matches!(h.record("", true, 0).unwrap_err(), HealthError::EmptyService));
+        assert!(matches!(
+            h.record("", true, 0).unwrap_err(),
+            HealthError::EmptyService
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut h = ServiceHealthProbe::new(1, 1).unwrap();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HealthError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HealthError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -76,12 +76,12 @@ impl LlmThinkingBudget {
     /// Canonical.
     pub fn canonical() -> Self {
         let mut t = BTreeMap::new();
-        t.insert(Profile::Private,      1024);
-        t.insert(Profile::Fast,         2048);
-        t.insert(Profile::Careful,      4096);
-        t.insert(Profile::Autonomous,   8192);
+        t.insert(Profile::Private, 1024);
+        t.insert(Profile::Fast, 2048);
+        t.insert(Profile::Careful, 4096);
+        t.insert(Profile::Autonomous, 8192);
         t.insert(Profile::Experimental, 32_768);
-        t.insert(Profile::Production,   4096);
+        t.insert(Profile::Production, 4096);
         Self {
             schema_version: SCHEMA_VERSION.into(),
             max_thinking_tokens: t,
@@ -103,7 +103,9 @@ impl LlmThinkingBudget {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -154,7 +156,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = LlmThinkingBudget::canonical();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

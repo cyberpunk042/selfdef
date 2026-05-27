@@ -54,10 +54,20 @@ impl ActorGroupMembership {
 
     /// Add.
     pub fn add(&mut self, group: &str, actor: &str) -> Result<(), MembershipError> {
-        if group.is_empty() { return Err(MembershipError::EmptyGroup); }
-        if actor.is_empty() { return Err(MembershipError::EmptyActor); }
-        self.by_group.entry(group.into()).or_default().insert(actor.into());
-        self.by_actor.entry(actor.into()).or_default().insert(group.into());
+        if group.is_empty() {
+            return Err(MembershipError::EmptyGroup);
+        }
+        if actor.is_empty() {
+            return Err(MembershipError::EmptyActor);
+        }
+        self.by_group
+            .entry(group.into())
+            .or_default()
+            .insert(actor.into());
+        self.by_actor
+            .entry(actor.into())
+            .or_default()
+            .insert(group.into());
         Ok(())
     }
 
@@ -67,13 +77,17 @@ impl ActorGroupMembership {
         if let Some(set) = self.by_group.get_mut(group) {
             if set.remove(actor) {
                 changed = true;
-                if set.is_empty() { self.by_group.remove(group); }
+                if set.is_empty() {
+                    self.by_group.remove(group);
+                }
             }
         }
         if let Some(set) = self.by_actor.get_mut(actor) {
             if set.remove(group) {
                 changed = true;
-                if set.is_empty() { self.by_actor.remove(actor); }
+                if set.is_empty() {
+                    self.by_actor.remove(actor);
+                }
             }
         }
         changed
@@ -81,12 +95,18 @@ impl ActorGroupMembership {
 
     /// Members of a group.
     pub fn members_of(&self, group: &str) -> Vec<String> {
-        self.by_group.get(group).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.by_group
+            .get(group)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Groups of an actor.
     pub fn groups_of(&self, actor: &str) -> Vec<String> {
-        self.by_actor.get(actor).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.by_actor
+            .get(actor)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Is member?
@@ -96,11 +116,17 @@ impl ActorGroupMembership {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MembershipError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MembershipError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MembershipError::SchemaMismatch);
+        }
         for (g, set) in &self.by_group {
-            if g.is_empty() { return Err(MembershipError::EmptyGroup); }
+            if g.is_empty() {
+                return Err(MembershipError::EmptyGroup);
+            }
             for a in set {
-                if a.is_empty() { return Err(MembershipError::EmptyActor); }
+                if a.is_empty() {
+                    return Err(MembershipError::EmptyActor);
+                }
             }
         }
         Ok(())
@@ -108,7 +134,9 @@ impl ActorGroupMembership {
 }
 
 impl Default for ActorGroupMembership {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,15 +191,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut m = ActorGroupMembership::new();
-        assert!(matches!(m.add("", "a").unwrap_err(), MembershipError::EmptyGroup));
-        assert!(matches!(m.add("g", "").unwrap_err(), MembershipError::EmptyActor));
+        assert!(matches!(
+            m.add("", "a").unwrap_err(),
+            MembershipError::EmptyGroup
+        ));
+        assert!(matches!(
+            m.add("g", "").unwrap_err(),
+            MembershipError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = ActorGroupMembership::new();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), MembershipError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            MembershipError::SchemaMismatch
+        ));
     }
 
     #[test]

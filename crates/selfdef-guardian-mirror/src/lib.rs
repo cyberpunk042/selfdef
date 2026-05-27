@@ -246,8 +246,8 @@ impl Verdict {
     /// Returns `GuardianError::Serde` on parse failure or any
     /// validation error from `validate()`.
     pub fn from_json(bytes: &[u8]) -> Result<Self, GuardianError> {
-        let v: Self = serde_json::from_slice(bytes)
-            .map_err(|e| GuardianError::Serde(e.to_string()))?;
+        let v: Self =
+            serde_json::from_slice(bytes).map_err(|e| GuardianError::Serde(e.to_string()))?;
         v.validate()?;
         Ok(v)
     }
@@ -259,9 +259,18 @@ mod tests {
 
     fn three_step_ok() -> Vec<StepResult> {
         vec![
-            StepResult { step: ResponseStep::Sigkill, outcome: StepOutcome::Ok },
-            StepResult { step: ResponseStep::AuditAppend, outcome: StepOutcome::Ok },
-            StepResult { step: ResponseStep::ConsoleAlert, outcome: StepOutcome::Ok },
+            StepResult {
+                step: ResponseStep::Sigkill,
+                outcome: StepOutcome::Ok,
+            },
+            StepResult {
+                step: ResponseStep::AuditAppend,
+                outcome: StepOutcome::Ok,
+            },
+            StepResult {
+                step: ResponseStep::ConsoleAlert,
+                outcome: StepOutcome::Ok,
+            },
         ]
     }
 
@@ -289,42 +298,60 @@ mod tests {
     fn schema_drift_rejected() {
         let mut v = sample();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::SchemaMismatch(_)));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::SchemaMismatch(_)
+        ));
     }
 
     #[test]
     fn empty_event_id_rejected() {
         let mut v = sample();
         v.event_id.clear();
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::EmptyEventId));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::EmptyEventId
+        ));
     }
 
     #[test]
     fn empty_signer_rejected() {
         let mut v = sample();
         v.signer_kid_policy.clear();
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::EmptyPolicySigner));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::EmptyPolicySigner
+        ));
     }
 
     #[test]
     fn empty_hostname_rejected() {
         let mut v = sample();
         v.hostname.clear();
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::EmptyHostname));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::EmptyHostname
+        ));
     }
 
     #[test]
     fn zero_timestamp_rejected() {
         let mut v = sample();
         v.ts_ms = 0;
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::BadTimestamp));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::BadTimestamp
+        ));
     }
 
     #[test]
     fn empty_response_steps_rejected() {
         let mut v = sample();
         v.response_steps.clear();
-        assert!(matches!(v.validate().unwrap_err(), GuardianError::EmptyResponseSteps));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            GuardianError::EmptyResponseSteps
+        ));
     }
 
     #[test]

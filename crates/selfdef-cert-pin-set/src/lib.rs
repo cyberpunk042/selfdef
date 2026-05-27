@@ -54,31 +54,54 @@ fn is_valid_fp(fp: &str) -> bool {
 impl CertPinSet {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), pins: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            pins: BTreeMap::new(),
+        }
     }
 
     /// Pin a fingerprint for host (ttl=0 → permanent).
     pub fn pin(&mut self, host: &str, fp: &str, now_ms: u64, ttl_ms: u64) -> Result<(), PinError> {
-        if host.is_empty() { return Err(PinError::EmptyHost); }
-        if fp.is_empty() { return Err(PinError::EmptyFp); }
-        if !is_valid_fp(fp) { return Err(PinError::BadFp); }
-        let exp = if ttl_ms == 0 { 0 } else { now_ms.saturating_add(ttl_ms) };
-        self.pins.entry(host.into()).or_default().insert(fp.to_ascii_lowercase(), exp);
+        if host.is_empty() {
+            return Err(PinError::EmptyHost);
+        }
+        if fp.is_empty() {
+            return Err(PinError::EmptyFp);
+        }
+        if !is_valid_fp(fp) {
+            return Err(PinError::BadFp);
+        }
+        let exp = if ttl_ms == 0 {
+            0
+        } else {
+            now_ms.saturating_add(ttl_ms)
+        };
+        self.pins
+            .entry(host.into())
+            .or_default()
+            .insert(fp.to_ascii_lowercase(), exp);
         Ok(())
     }
 
     /// Unpin a specific fingerprint.
     pub fn unpin(&mut self, host: &str, fp: &str) -> Result<(), PinError> {
-        let host_pins = self.pins.get_mut(host)
+        let host_pins = self
+            .pins
+            .get_mut(host)
             .ok_or_else(|| PinError::UnknownHost(host.into()))?;
         host_pins.remove(&fp.to_ascii_lowercase());
-        if host_pins.is_empty() { self.pins.remove(host); }
+        if host_pins.is_empty() {
+            self.pins.remove(host);
+        }
         Ok(())
     }
 
     /// Does fp match any non-expired pin for host?
     pub fn matches(&self, host: &str, fp: &str, now_ms: u64) -> bool {
-        let host_pins = match self.pins.get(host) { Some(p) => p, None => return false };
+        let host_pins = match self.pins.get(host) {
+            Some(p) => p,
+            None => return false,
+        };
         let fp_lc = fp.to_ascii_lowercase();
         match host_pins.get(&fp_lc) {
             Some(&exp) => exp == 0 || exp > now_ms,
@@ -96,11 +119,17 @@ impl CertPinSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PinError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PinError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PinError::SchemaMismatch);
+        }
         for (h, fps) in &self.pins {
-            if h.is_empty() { return Err(PinError::EmptyHost); }
+            if h.is_empty() {
+                return Err(PinError::EmptyHost);
+            }
             for f in fps.keys() {
-                if !is_valid_fp(f) { return Err(PinError::BadFp); }
+                if !is_valid_fp(f) {
+                    return Err(PinError::BadFp);
+                }
             }
         }
         Ok(())
@@ -108,7 +137,9 @@ impl CertPinSet {
 }
 
 impl Default for CertPinSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,9 +194,18 @@ mod tests {
     #[test]
     fn bad_fp_rejected() {
         let mut s = CertPinSet::new();
-        assert!(matches!(s.pin("h", "short", 0, 0).unwrap_err(), PinError::BadFp));
-        assert!(matches!(s.pin("h", "", 0, 0).unwrap_err(), PinError::EmptyFp));
-        assert!(matches!(s.pin("", FP_A, 0, 0).unwrap_err(), PinError::EmptyHost));
+        assert!(matches!(
+            s.pin("h", "short", 0, 0).unwrap_err(),
+            PinError::BadFp
+        ));
+        assert!(matches!(
+            s.pin("h", "", 0, 0).unwrap_err(),
+            PinError::EmptyFp
+        ));
+        assert!(matches!(
+            s.pin("", FP_A, 0, 0).unwrap_err(),
+            PinError::EmptyHost
+        ));
     }
 
     #[test]
@@ -180,7 +220,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = CertPinSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), PinError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            PinError::SchemaMismatch
+        ));
     }
 
     #[test]

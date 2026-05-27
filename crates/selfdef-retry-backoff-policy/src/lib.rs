@@ -56,27 +56,43 @@ impl RetryBackoffPolicy {
     }
 
     /// Delay for attempt n (1-based).
-    pub fn delay_for_attempt(&self, n: u32, base_ms: u64, max_ms: u64, seed: u64) -> Result<u64, BackoffError> {
-        if n == 0 { return Err(BackoffError::AttemptZero); }
+    pub fn delay_for_attempt(
+        &self,
+        n: u32,
+        base_ms: u64,
+        max_ms: u64,
+        seed: u64,
+    ) -> Result<u64, BackoffError> {
+        if n == 0 {
+            return Err(BackoffError::AttemptZero);
+        }
         let shift = (n - 1).min(63) as u32;
         let raw = base_ms.checked_shl(shift).unwrap_or(u64::MAX);
         let core = raw.min(max_ms);
-        let jitter = if self.jitter_ms == 0 { 0 } else {
+        let jitter = if self.jitter_ms == 0 {
+            0
+        } else {
             let h = fnv1a64(seed.wrapping_add(n as u64));
             h % self.jitter_ms
         };
-        Ok(core.saturating_add(jitter).min(max_ms.saturating_add(self.jitter_ms)))
+        Ok(core
+            .saturating_add(jitter)
+            .min(max_ms.saturating_add(self.jitter_ms)))
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BackoffError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BackoffError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BackoffError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for RetryBackoffPolicy {
-    fn default() -> Self { Self::new(0) }
+    fn default() -> Self {
+        Self::new(0)
+    }
 }
 
 #[cfg(test)]
@@ -86,7 +102,10 @@ mod tests {
     #[test]
     fn attempt_zero_rejected() {
         let p = RetryBackoffPolicy::new(0);
-        assert!(matches!(p.delay_for_attempt(0, 100, 10_000, 0).unwrap_err(), BackoffError::AttemptZero));
+        assert!(matches!(
+            p.delay_for_attempt(0, 100, 10_000, 0).unwrap_err(),
+            BackoffError::AttemptZero
+        ));
     }
 
     #[test]
@@ -120,7 +139,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = RetryBackoffPolicy::new(0);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), BackoffError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BackoffError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -116,7 +116,11 @@ fn bundled_profile_writes_scrape_and_dashboard_to_configured_dirs() {
     // MS027 four-watchdog alert rules: bundled profile drops the
     // alerts template to prometheus_rules_dir.
     let alerts = fx.root.join("prom-rules/selfdef.yml");
-    assert!(alerts.is_file(), "alerts rules not written: {}", alerts.display());
+    assert!(
+        alerts.is_file(),
+        "alerts rules not written: {}",
+        alerts.display()
+    );
     let alerts_body = std::fs::read_to_string(&alerts).unwrap();
     for alert_name in [
         "SelfdefFrictionAuditFailingGate",

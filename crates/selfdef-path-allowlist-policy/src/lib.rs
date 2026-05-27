@@ -117,28 +117,44 @@ impl PathAllowlistPolicy {
 
     /// Register substrate.
     pub fn register(&mut self, substrate_id: &str) -> Result<(), PathPolicyError> {
-        if substrate_id.is_empty() { return Err(PathPolicyError::EmptySubstrate); }
+        if substrate_id.is_empty() {
+            return Err(PathPolicyError::EmptySubstrate);
+        }
         self.substrates.entry(substrate_id.into()).or_default();
         Ok(())
     }
 
     /// Add a grant. Later grants are checked after earlier ones; if
     /// the same prefix is added twice, the new mode replaces.
-    pub fn grant(&mut self, substrate_id: &str, prefix: &str, mode: Mode) -> Result<(), PathPolicyError> {
-        if prefix.is_empty() { return Err(PathPolicyError::EmptyPrefix); }
-        let s = self.substrates.get_mut(substrate_id)
+    pub fn grant(
+        &mut self,
+        substrate_id: &str,
+        prefix: &str,
+        mode: Mode,
+    ) -> Result<(), PathPolicyError> {
+        if prefix.is_empty() {
+            return Err(PathPolicyError::EmptyPrefix);
+        }
+        let s = self
+            .substrates
+            .get_mut(substrate_id)
             .ok_or_else(|| PathPolicyError::UnknownSubstrate(substrate_id.into()))?;
         if let Some(g) = s.grants.iter_mut().find(|g| g.prefix == prefix) {
             g.mode = mode;
         } else {
-            s.grants.push(PrefixGrant { prefix: prefix.into(), mode });
+            s.grants.push(PrefixGrant {
+                prefix: prefix.into(),
+                mode,
+            });
         }
         Ok(())
     }
 
     /// Revoke a prefix.
     pub fn revoke(&mut self, substrate_id: &str, prefix: &str) -> Result<bool, PathPolicyError> {
-        let s = self.substrates.get_mut(substrate_id)
+        let s = self
+            .substrates
+            .get_mut(substrate_id)
             .ok_or_else(|| PathPolicyError::UnknownSubstrate(substrate_id.into()))?;
         let before = s.grants.len();
         s.grants.retain(|g| g.prefix != prefix);
@@ -147,13 +163,18 @@ impl PathAllowlistPolicy {
 
     /// Decide.
     pub fn decide(&self, substrate_id: &str, path: &str, requested: Mode) -> PathVerdict {
-        let Some(s) = self.substrates.get(substrate_id) else { return PathVerdict::Unknown; };
+        let Some(s) = self.substrates.get(substrate_id) else {
+            return PathVerdict::Unknown;
+        };
         for g in &s.grants {
             if path.starts_with(&g.prefix) {
                 if g.mode.satisfies(requested) {
                     return PathVerdict::Allowed;
                 }
-                return PathVerdict::DeniedMode { prefix: g.prefix.clone(), granted: g.mode };
+                return PathVerdict::DeniedMode {
+                    prefix: g.prefix.clone(),
+                    granted: g.mode,
+                };
             }
         }
         PathVerdict::DeniedNoMatch
@@ -161,11 +182,17 @@ impl PathAllowlistPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PathPolicyError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PathPolicyError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PathPolicyError::SchemaMismatch);
+        }
         for (id, s) in &self.substrates {
-            if id.is_empty() { return Err(PathPolicyError::EmptySubstrate); }
+            if id.is_empty() {
+                return Err(PathPolicyError::EmptySubstrate);
+            }
             for g in &s.grants {
-                if g.prefix.is_empty() { return Err(PathPolicyError::EmptyPrefix); }
+                if g.prefix.is_empty() {
+                    return Err(PathPolicyError::EmptyPrefix);
+                }
             }
         }
         Ok(())
@@ -173,7 +200,9 @@ impl PathAllowlistPolicy {
 }
 
 impl Default for PathAllowlistPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -185,7 +214,10 @@ mod tests {
         let mut p = PathAllowlistPolicy::new();
         p.register("box").unwrap();
         p.grant("box", "/etc/", Mode::Read).unwrap();
-        assert_eq!(p.decide("box", "/etc/hosts", Mode::Read), PathVerdict::Allowed);
+        assert_eq!(
+            p.decide("box", "/etc/hosts", Mode::Read),
+            PathVerdict::Allowed
+        );
     }
 
     #[test]
@@ -206,7 +238,10 @@ mod tests {
     fn deny_no_match() {
         let mut p = PathAllowlistPolicy::new();
         p.register("box").unwrap();
-        assert_eq!(p.decide("box", "/var/log", Mode::Read), PathVerdict::DeniedNoMatch);
+        assert_eq!(
+            p.decide("box", "/var/log", Mode::Read),
+            PathVerdict::DeniedNoMatch
+        );
     }
 
     #[test]
@@ -215,7 +250,10 @@ mod tests {
         p.register("box").unwrap();
         p.grant("box", "/tmp/", Mode::ReadWrite).unwrap();
         assert_eq!(p.decide("box", "/tmp/a", Mode::Read), PathVerdict::Allowed);
-        assert_eq!(p.decide("box", "/tmp/a", Mode::WriteOnly), PathVerdict::Allowed);
+        assert_eq!(
+            p.decide("box", "/tmp/a", Mode::WriteOnly),
+            PathVerdict::Allowed
+        );
     }
 
     #[test]
@@ -245,7 +283,10 @@ mod tests {
         p.register("box").unwrap();
         p.grant("box", "/etc/", Mode::Read).unwrap();
         p.grant("box", "/etc/", Mode::ReadWrite).unwrap();
-        assert_eq!(p.decide("box", "/etc/x", Mode::WriteOnly), PathVerdict::Allowed);
+        assert_eq!(
+            p.decide("box", "/etc/x", Mode::WriteOnly),
+            PathVerdict::Allowed
+        );
     }
 
     #[test]
@@ -254,28 +295,43 @@ mod tests {
         p.register("box").unwrap();
         p.grant("box", "/etc/", Mode::Read).unwrap();
         assert!(p.revoke("box", "/etc/").unwrap());
-        assert_eq!(p.decide("box", "/etc/x", Mode::Read), PathVerdict::DeniedNoMatch);
+        assert_eq!(
+            p.decide("box", "/etc/x", Mode::Read),
+            PathVerdict::DeniedNoMatch
+        );
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut p = PathAllowlistPolicy::new();
-        assert!(matches!(p.register("").unwrap_err(), PathPolicyError::EmptySubstrate));
+        assert!(matches!(
+            p.register("").unwrap_err(),
+            PathPolicyError::EmptySubstrate
+        ));
         p.register("s").unwrap();
-        assert!(matches!(p.grant("s", "", Mode::Read).unwrap_err(), PathPolicyError::EmptyPrefix));
+        assert!(matches!(
+            p.grant("s", "", Mode::Read).unwrap_err(),
+            PathPolicyError::EmptyPrefix
+        ));
     }
 
     #[test]
     fn unknown_substrate_grant_rejected() {
         let mut p = PathAllowlistPolicy::new();
-        assert!(matches!(p.grant("nope", "/a", Mode::Read).unwrap_err(), PathPolicyError::UnknownSubstrate(_)));
+        assert!(matches!(
+            p.grant("nope", "/a", Mode::Read).unwrap_err(),
+            PathPolicyError::UnknownSubstrate(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PathAllowlistPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PathPolicyError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PathPolicyError::SchemaMismatch
+        ));
     }
 
     #[test]

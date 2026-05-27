@@ -87,7 +87,9 @@ pub enum RotationError {
 impl ActorRotationLog {
     /// New with a genesis fingerprint.
     pub fn new(genesis_fp: &str) -> Result<Self, RotationError> {
-        if genesis_fp.is_empty() { return Err(RotationError::EmptyGenesis); }
+        if genesis_fp.is_empty() {
+            return Err(RotationError::EmptyGenesis);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             genesis_fp: genesis_fp.into(),
@@ -100,21 +102,32 @@ impl ActorRotationLog {
     pub fn record(&mut self, rotation: Rotation) -> Result<(), RotationError> {
         let idx = self.rotations.len();
         if rotation.old_fp == rotation.new_fp {
-            return Err(RotationError::SelfRotation { idx, fp: rotation.old_fp });
+            return Err(RotationError::SelfRotation {
+                idx,
+                fp: rotation.old_fp,
+            });
         }
         if rotation.at.is_empty() {
             return Err(RotationError::MissingTimestamp { idx });
         }
         if rotation.old_sig.is_empty() {
-            return Err(RotationError::MissingSig { idx, field: "old_sig" });
+            return Err(RotationError::MissingSig {
+                idx,
+                field: "old_sig",
+            });
         }
         if rotation.new_sig.is_empty() {
-            return Err(RotationError::MissingSig { idx, field: "new_sig" });
+            return Err(RotationError::MissingSig {
+                idx,
+                field: "new_sig",
+            });
         }
         let expected_old = self.current_fp().to_string();
         if rotation.old_fp != expected_old {
             return Err(RotationError::ChainBroken {
-                idx, got: rotation.old_fp, expected: expected_old,
+                idx,
+                got: rotation.old_fp,
+                expected: expected_old,
             });
         }
         self.rotations.push(rotation);
@@ -130,19 +143,27 @@ impl ActorRotationLog {
     }
 
     /// True if fp is the current one.
-    pub fn is_current(&self, fp: &str) -> bool { self.current_fp() == fp }
+    pub fn is_current(&self, fp: &str) -> bool {
+        self.current_fp() == fp
+    }
 
     /// True if fp appeared in rotation history but is not current.
     pub fn is_retired(&self, fp: &str) -> bool {
-        if self.is_current(fp) { return false; }
-        if fp == self.genesis_fp { return !self.rotations.is_empty(); }
+        if self.is_current(fp) {
+            return false;
+        }
+        if fp == self.genesis_fp {
+            return !self.rotations.is_empty();
+        }
         self.rotations.iter().any(|r| r.old_fp == fp)
     }
 
     /// Full chain of fingerprints from genesis to current.
     pub fn chain(&self) -> Vec<String> {
         let mut v = vec![self.genesis_fp.clone()];
-        for r in &self.rotations { v.push(r.new_fp.clone()); }
+        for r in &self.rotations {
+            v.push(r.new_fp.clone());
+        }
         v
     }
 
@@ -151,18 +172,37 @@ impl ActorRotationLog {
         if self.schema_version != SCHEMA_VERSION {
             return Err(RotationError::SchemaMismatch);
         }
-        if self.genesis_fp.is_empty() { return Err(RotationError::EmptyGenesis); }
+        if self.genesis_fp.is_empty() {
+            return Err(RotationError::EmptyGenesis);
+        }
         let mut expected_old = self.genesis_fp.clone();
         for (idx, r) in self.rotations.iter().enumerate() {
             if r.old_fp == r.new_fp {
-                return Err(RotationError::SelfRotation { idx, fp: r.old_fp.clone() });
+                return Err(RotationError::SelfRotation {
+                    idx,
+                    fp: r.old_fp.clone(),
+                });
             }
-            if r.at.is_empty() { return Err(RotationError::MissingTimestamp { idx }); }
-            if r.old_sig.is_empty() { return Err(RotationError::MissingSig { idx, field: "old_sig" }); }
-            if r.new_sig.is_empty() { return Err(RotationError::MissingSig { idx, field: "new_sig" }); }
+            if r.at.is_empty() {
+                return Err(RotationError::MissingTimestamp { idx });
+            }
+            if r.old_sig.is_empty() {
+                return Err(RotationError::MissingSig {
+                    idx,
+                    field: "old_sig",
+                });
+            }
+            if r.new_sig.is_empty() {
+                return Err(RotationError::MissingSig {
+                    idx,
+                    field: "new_sig",
+                });
+            }
             if r.old_fp != expected_old {
                 return Err(RotationError::ChainBroken {
-                    idx, got: r.old_fp.clone(), expected: expected_old,
+                    idx,
+                    got: r.old_fp.clone(),
+                    expected: expected_old,
                 });
             }
             expected_old = r.new_fp.clone();
@@ -177,15 +217,20 @@ mod tests {
 
     fn r(old: &str, new: &str) -> Rotation {
         Rotation {
-            old_fp: old.into(), new_fp: new.into(),
+            old_fp: old.into(),
+            new_fp: new.into(),
             at: "2026-05-19T03:00:00Z".into(),
-            old_sig: "old-sig".into(), new_sig: "new-sig".into(),
+            old_sig: "old-sig".into(),
+            new_sig: "new-sig".into(),
         }
     }
 
     #[test]
     fn new_empty_genesis_rejected() {
-        assert!(matches!(ActorRotationLog::new("").unwrap_err(), RotationError::EmptyGenesis));
+        assert!(matches!(
+            ActorRotationLog::new("").unwrap_err(),
+            RotationError::EmptyGenesis
+        ));
     }
 
     #[test]
@@ -216,13 +261,19 @@ mod tests {
     #[test]
     fn self_rotation_rejected() {
         let mut log = ActorRotationLog::new("v1").unwrap();
-        assert!(matches!(log.record(r("v1", "v1")).unwrap_err(), RotationError::SelfRotation { .. }));
+        assert!(matches!(
+            log.record(r("v1", "v1")).unwrap_err(),
+            RotationError::SelfRotation { .. }
+        ));
     }
 
     #[test]
     fn chain_broken_rejected() {
         let mut log = ActorRotationLog::new("v1").unwrap();
-        assert!(matches!(log.record(r("other", "v2")).unwrap_err(), RotationError::ChainBroken { .. }));
+        assert!(matches!(
+            log.record(r("other", "v2")).unwrap_err(),
+            RotationError::ChainBroken { .. }
+        ));
     }
 
     #[test]
@@ -230,7 +281,10 @@ mod tests {
         let mut log = ActorRotationLog::new("v1").unwrap();
         let mut rot = r("v1", "v2");
         rot.new_sig = String::new();
-        assert!(matches!(log.record(rot).unwrap_err(), RotationError::MissingSig { .. }));
+        assert!(matches!(
+            log.record(rot).unwrap_err(),
+            RotationError::MissingSig { .. }
+        ));
     }
 
     #[test]
@@ -254,7 +308,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut log = ActorRotationLog::new("v1").unwrap();
         log.schema_version = "9.9.9".into();
-        assert!(matches!(log.validate().unwrap_err(), RotationError::SchemaMismatch));
+        assert!(matches!(
+            log.validate().unwrap_err(),
+            RotationError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -81,11 +81,14 @@ impl ActionTraceBudget {
 
     /// Start.
     pub fn start(&mut self, action_id: &str, max_spans: u32) -> Result<(), BudgetError> {
-        if action_id.is_empty() { return Err(BudgetError::EmptyId); }
+        if action_id.is_empty() {
+            return Err(BudgetError::EmptyId);
+        }
         if self.counters.contains_key(action_id) {
             return Err(BudgetError::Duplicate(action_id.into()));
         }
-        self.counters.insert(action_id.into(), Counter { max_spans, used: 0 });
+        self.counters
+            .insert(action_id.into(), Counter { max_spans, used: 0 });
         Ok(())
     }
 
@@ -104,22 +107,30 @@ impl ActionTraceBudget {
 
     /// Finish.
     pub fn finish(&mut self, action_id: &str) -> Result<(), BudgetError> {
-        self.counters.remove(action_id).ok_or_else(|| BudgetError::Unknown(action_id.into()))?;
+        self.counters
+            .remove(action_id)
+            .ok_or_else(|| BudgetError::Unknown(action_id.into()))?;
         Ok(())
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
         for k in self.counters.keys() {
-            if k.is_empty() { return Err(BudgetError::EmptyId); }
+            if k.is_empty() {
+                return Err(BudgetError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionTraceBudget {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -145,13 +156,19 @@ mod tests {
     fn duplicate_start_rejected() {
         let mut b = ActionTraceBudget::new();
         b.start("x", 1).unwrap();
-        assert!(matches!(b.start("x", 1).unwrap_err(), BudgetError::Duplicate(_)));
+        assert!(matches!(
+            b.start("x", 1).unwrap_err(),
+            BudgetError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn finish_unknown_rejected() {
         let mut b = ActionTraceBudget::new();
-        assert!(matches!(b.finish("x").unwrap_err(), BudgetError::Unknown(_)));
+        assert!(matches!(
+            b.finish("x").unwrap_err(),
+            BudgetError::Unknown(_)
+        ));
     }
 
     #[test]
@@ -172,7 +189,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = ActionTraceBudget::new();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

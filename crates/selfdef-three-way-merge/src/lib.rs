@@ -66,15 +66,21 @@ pub fn merge(
         match (b, o, t) {
             // No changes.
             (b, o, t) if o == b && t == b => {
-                if let Some(v) = b { out.insert(k.clone(), v.clone()); }
+                if let Some(v) = b {
+                    out.insert(k.clone(), v.clone());
+                }
             }
             // Ours unchanged → take theirs.
             (b, o, t) if o == b => {
-                if let Some(v) = t { out.insert(k.clone(), v.clone()); }
+                if let Some(v) = t {
+                    out.insert(k.clone(), v.clone());
+                }
             }
             // Theirs unchanged → take ours.
             (b, o, t) if t == b => {
-                if let Some(v) = o { out.insert(k.clone(), v.clone()); }
+                if let Some(v) = o {
+                    out.insert(k.clone(), v.clone());
+                }
             }
             // Both changed to same value.
             (_, Some(ov), Some(tv)) if ov == tv => {
@@ -86,7 +92,11 @@ pub fn merge(
             }
         }
     }
-    if conflicts.is_empty() { Outcome::Merged(out) } else { Outcome::Conflict(conflicts) }
+    if conflicts.is_empty() {
+        Outcome::Merged(out)
+    } else {
+        Outcome::Conflict(conflicts)
+    }
 }
 
 impl ThreeWayMerge {
@@ -111,13 +121,17 @@ impl ThreeWayMerge {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MergeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MergeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MergeError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for ThreeWayMerge {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -125,7 +139,10 @@ mod tests {
     use super::*;
 
     fn m(items: &[(&str, &str)]) -> BTreeMap<String, String> {
-        items.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+        items
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
     }
 
     #[test]
@@ -144,7 +161,9 @@ mod tests {
         let o = m(&[("a", "2")]);
         let r = merge(&b, &o, &b);
         assert!(matches!(&r, Outcome::Merged(_)));
-        if let Outcome::Merged(out) = r { assert_eq!(out.get("a"), Some(&"2".into())); }
+        if let Outcome::Merged(out) = r {
+            assert_eq!(out.get("a"), Some(&"2".into()));
+        }
     }
 
     #[test]
@@ -152,8 +171,11 @@ mod tests {
         let b = m(&[("a", "1")]);
         let t = m(&[("a", "2")]);
         let r = merge(&b, &b, &t);
-        if let Outcome::Merged(out) = r { assert_eq!(out.get("a"), Some(&"2".into())); }
-        else { panic!("expected merged"); }
+        if let Outcome::Merged(out) = r {
+            assert_eq!(out.get("a"), Some(&"2".into()));
+        } else {
+            panic!("expected merged");
+        }
     }
 
     #[test]
@@ -161,8 +183,11 @@ mod tests {
         let b = m(&[("a", "1")]);
         let o = m(&[("a", "2")]);
         let r = merge(&b, &o, &o);
-        if let Outcome::Merged(out) = r { assert_eq!(out.get("a"), Some(&"2".into())); }
-        else { panic!("expected merged"); }
+        if let Outcome::Merged(out) = r {
+            assert_eq!(out.get("a"), Some(&"2".into()));
+        } else {
+            panic!("expected merged");
+        }
     }
 
     #[test]
@@ -183,8 +208,11 @@ mod tests {
         let o = m(&[]);
         let t = m(&[("a", "1")]);
         let r = merge(&b, &o, &t);
-        if let Outcome::Merged(out) = r { assert!(out.get("a").is_none()); }
-        else { panic!("expected merged"); }
+        if let Outcome::Merged(out) = r {
+            assert!(out.get("a").is_none());
+        } else {
+            panic!("expected merged");
+        }
     }
 
     #[test]
@@ -193,15 +221,21 @@ mod tests {
         let o = m(&[("x", "1")]);
         let t = m(&[]);
         let r = merge(&b, &o, &t);
-        if let Outcome::Merged(out) = r { assert_eq!(out.get("x"), Some(&"1".into())); }
-        else { panic!("expected merged"); }
+        if let Outcome::Merged(out) = r {
+            assert_eq!(out.get("x"), Some(&"1".into()));
+        } else {
+            panic!("expected merged");
+        }
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = ThreeWayMerge::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), MergeError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            MergeError::SchemaMismatch
+        ));
     }
 
     #[test]

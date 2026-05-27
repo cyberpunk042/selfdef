@@ -48,7 +48,9 @@ impl NamespacePrecedence {
 
     /// Set.
     pub fn set(&mut self, namespace: &str, priority: u32) -> Result<(), PrecError> {
-        if namespace.is_empty() { return Err(PrecError::EmptyNamespace); }
+        if namespace.is_empty() {
+            return Err(PrecError::EmptyNamespace);
+        }
         self.priorities.insert(namespace.into(), priority);
         Ok(())
     }
@@ -74,16 +76,22 @@ impl NamespacePrecedence {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PrecError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PrecError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PrecError::SchemaMismatch);
+        }
         for k in self.priorities.keys() {
-            if k.is_empty() { return Err(PrecError::EmptyNamespace); }
+            if k.is_empty() {
+                return Err(PrecError::EmptyNamespace);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for NamespacePrecedence {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -128,14 +136,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut p = NamespacePrecedence::new();
-        assert!(matches!(p.set("", 1).unwrap_err(), PrecError::EmptyNamespace));
+        assert!(matches!(
+            p.set("", 1).unwrap_err(),
+            PrecError::EmptyNamespace
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = NamespacePrecedence::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PrecError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PrecError::SchemaMismatch
+        ));
     }
 
     #[test]

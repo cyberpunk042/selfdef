@@ -91,11 +91,17 @@ impl PatchTarget {
         for o in ops {
             match o {
                 Op::Set { key, value } => {
-                    if key.is_empty() { return Err(PatchError::EmptyKey); }
-                    if value.is_empty() { return Err(PatchError::EmptyValue); }
+                    if key.is_empty() {
+                        return Err(PatchError::EmptyKey);
+                    }
+                    if value.is_empty() {
+                        return Err(PatchError::EmptyValue);
+                    }
                 }
                 Op::Remove { key } | Op::Test { key, .. } => {
-                    if key.is_empty() { return Err(PatchError::EmptyKey); }
+                    if key.is_empty() {
+                        return Err(PatchError::EmptyKey);
+                    }
                 }
             }
         }
@@ -137,17 +143,25 @@ impl PatchTarget {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PatchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PatchError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PatchError::SchemaMismatch);
+        }
         for (k, v) in &self.entries {
-            if k.is_empty() { return Err(PatchError::EmptyKey); }
-            if v.is_empty() { return Err(PatchError::EmptyValue); }
+            if k.is_empty() {
+                return Err(PatchError::EmptyKey);
+            }
+            if v.is_empty() {
+                return Err(PatchError::EmptyValue);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PatchTarget {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -157,14 +171,22 @@ mod tests {
     #[test]
     fn set_applies() {
         let mut t = PatchTarget::new();
-        t.apply(&[Op::Set { key: "a".into(), value: "1".into() }]).unwrap();
+        t.apply(&[Op::Set {
+            key: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
         assert_eq!(t.get("a"), Some("1"));
     }
 
     #[test]
     fn remove_applies() {
         let mut t = PatchTarget::new();
-        t.apply(&[Op::Set { key: "a".into(), value: "1".into() }]).unwrap();
+        t.apply(&[Op::Set {
+            key: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
         t.apply(&[Op::Remove { key: "a".into() }]).unwrap();
         assert!(t.get("a").is_none());
     }
@@ -172,21 +194,42 @@ mod tests {
     #[test]
     fn test_pass_allows_apply() {
         let mut t = PatchTarget::new();
-        t.apply(&[Op::Set { key: "a".into(), value: "1".into() }]).unwrap();
+        t.apply(&[Op::Set {
+            key: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
         t.apply(&[
-            Op::Test { key: "a".into(), expected: "1".into() },
-            Op::Set { key: "b".into(), value: "2".into() },
-        ]).unwrap();
+            Op::Test {
+                key: "a".into(),
+                expected: "1".into(),
+            },
+            Op::Set {
+                key: "b".into(),
+                value: "2".into(),
+            },
+        ])
+        .unwrap();
         assert_eq!(t.get("b"), Some("2"));
     }
 
     #[test]
     fn test_fail_aborts_all() {
         let mut t = PatchTarget::new();
-        t.apply(&[Op::Set { key: "a".into(), value: "1".into() }]).unwrap();
+        t.apply(&[Op::Set {
+            key: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
         let r = t.apply(&[
-            Op::Test { key: "a".into(), expected: "OTHER".into() },
-            Op::Set { key: "b".into(), value: "2".into() },
+            Op::Test {
+                key: "a".into(),
+                expected: "OTHER".into(),
+            },
+            Op::Set {
+                key: "b".into(),
+                value: "2".into(),
+            },
         ]);
         assert!(matches!(r.unwrap_err(), PatchError::TestFailed { .. }));
         assert!(t.get("b").is_none());
@@ -197,8 +240,14 @@ mod tests {
     fn test_missing_aborts() {
         let mut t = PatchTarget::new();
         let r = t.apply(&[
-            Op::Test { key: "absent".into(), expected: "x".into() },
-            Op::Set { key: "b".into(), value: "2".into() },
+            Op::Test {
+                key: "absent".into(),
+                expected: "x".into(),
+            },
+            Op::Set {
+                key: "b".into(),
+                value: "2".into(),
+            },
         ]);
         assert!(matches!(r.unwrap_err(), PatchError::TestMissing { .. }));
         assert!(t.get("b").is_none());
@@ -208,11 +257,19 @@ mod tests {
     fn empty_inputs_rejected() {
         let mut t = PatchTarget::new();
         assert!(matches!(
-            t.apply(&[Op::Set { key: "".into(), value: "v".into() }]).unwrap_err(),
+            t.apply(&[Op::Set {
+                key: "".into(),
+                value: "v".into()
+            }])
+            .unwrap_err(),
             PatchError::EmptyKey
         ));
         assert!(matches!(
-            t.apply(&[Op::Set { key: "k".into(), value: "".into() }]).unwrap_err(),
+            t.apply(&[Op::Set {
+                key: "k".into(),
+                value: "".into()
+            }])
+            .unwrap_err(),
             PatchError::EmptyValue
         ));
     }
@@ -221,13 +278,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = PatchTarget::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), PatchError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            PatchError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn target_serde_roundtrip() {
         let mut t = PatchTarget::new();
-        t.apply(&[Op::Set { key: "a".into(), value: "1".into() }]).unwrap();
+        t.apply(&[Op::Set {
+            key: "a".into(),
+            value: "1".into(),
+        }])
+        .unwrap();
         let j = serde_json::to_string(&t).unwrap();
         let back: PatchTarget = serde_json::from_str(&j).unwrap();
         assert_eq!(t, back);

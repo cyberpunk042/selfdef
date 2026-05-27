@@ -56,7 +56,10 @@ pub enum FenceError {
 impl FenceIssuer {
     /// New (starts at 1; 0 is reserved as "no token yet").
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), next: 1 }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            next: 1,
+        }
     }
 
     /// Issue the next token.
@@ -67,23 +70,32 @@ impl FenceIssuer {
     }
 
     /// Peek without issuing.
-    pub fn peek(&self) -> u64 { self.next }
+    pub fn peek(&self) -> u64 {
+        self.next
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FenceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FenceError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FenceError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for FenceIssuer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FenceAcceptor {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), last_accepted: 0 }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            last_accepted: 0,
+        }
     }
 
     /// Accept token; advances last_accepted if >= last_accepted.
@@ -91,7 +103,10 @@ impl FenceAcceptor {
     /// accepted as idempotent retries.)
     pub fn accept(&mut self, token: u64) -> Result<(), FenceError> {
         if token < self.last_accepted {
-            return Err(FenceError::Stale { token, last: self.last_accepted });
+            return Err(FenceError::Stale {
+                token,
+                last: self.last_accepted,
+            });
         }
         self.last_accepted = token;
         Ok(())
@@ -99,13 +114,17 @@ impl FenceAcceptor {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FenceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FenceError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FenceError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for FenceAcceptor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -158,7 +177,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut i = FenceIssuer::new();
         i.schema_version = "9.9.9".into();
-        assert!(matches!(i.validate().unwrap_err(), FenceError::SchemaMismatch));
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            FenceError::SchemaMismatch
+        ));
     }
 
     #[test]

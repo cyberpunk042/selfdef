@@ -87,12 +87,17 @@ impl McpToolValidator {
             return Err(ValidationError::EmptyDescription);
         }
         if d.parameters.len() > MAX_PARAMETERS {
-            return Err(ValidationError::TooManyParameters(d.parameters.len(), MAX_PARAMETERS));
+            return Err(ValidationError::TooManyParameters(
+                d.parameters.len(),
+                MAX_PARAMETERS,
+            ));
         }
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for p in &d.parameters {
-            if p.name.is_empty() { return Err(ValidationError::EmptyParameterName); }
+            if p.name.is_empty() {
+                return Err(ValidationError::EmptyParameterName);
+            }
             if !seen.insert(p.name.as_str()) {
                 return Err(ValidationError::DuplicateParameterName(p.name.clone()));
             }
@@ -106,10 +111,16 @@ impl McpToolValidator {
 
 fn valid_name(n: &str) -> bool {
     let len = n.len();
-    if !(2..=64).contains(&len) { return false; }
+    if !(2..=64).contains(&len) {
+        return false;
+    }
     let bytes = n.as_bytes();
-    if !bytes[0].is_ascii_lowercase() { return false; }
-    bytes.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'_' || *b == b'-')
+    if !bytes[0].is_ascii_lowercase() {
+        return false;
+    }
+    bytes
+        .iter()
+        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'_' || *b == b'-')
 }
 
 #[cfg(test)]
@@ -126,7 +137,11 @@ mod tests {
     }
 
     fn p(name: &str, ty: &str) -> ToolParameter {
-        ToolParameter { name: name.into(), r#type: ty.into(), required: true }
+        ToolParameter {
+            name: name.into(),
+            r#type: ty.into(),
+            required: true,
+        }
     }
 
     #[test]
@@ -139,62 +154,92 @@ mod tests {
     fn bad_schema_rejected() {
         let mut x = d("ls", "list", vec![]);
         x.schema_version = "9.9.9".into();
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::SchemaMismatch(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::SchemaMismatch(_)
+        ));
     }
 
     #[test]
     fn bad_name_uppercase_rejected() {
         let x = d("Ls", "list", vec![]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::BadName(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::BadName(_)
+        ));
     }
 
     #[test]
     fn bad_name_too_short_rejected() {
         let x = d("a", "list", vec![]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::BadName(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::BadName(_)
+        ));
     }
 
     #[test]
     fn bad_name_too_long_rejected() {
         let x = d(&"a".repeat(65), "list", vec![]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::BadName(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::BadName(_)
+        ));
     }
 
     #[test]
     fn bad_name_special_char_rejected() {
         let x = d("ls!", "list", vec![]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::BadName(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::BadName(_)
+        ));
     }
 
     #[test]
     fn empty_description_rejected() {
         let x = d("ls", "", vec![]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::EmptyDescription));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::EmptyDescription
+        ));
     }
 
     #[test]
     fn too_many_params_rejected() {
         let params: Vec<ToolParameter> = (0..40).map(|i| p(&format!("p{i}"), "string")).collect();
         let x = d("ls", "list", params);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::TooManyParameters(_, _)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::TooManyParameters(_, _)
+        ));
     }
 
     #[test]
     fn duplicate_param_rejected() {
         let x = d("ls", "list", vec![p("a", "s"), p("a", "s")]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::DuplicateParameterName(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::DuplicateParameterName(_)
+        ));
     }
 
     #[test]
     fn empty_param_name_rejected() {
         let x = d("ls", "list", vec![p("", "s")]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::EmptyParameterName));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::EmptyParameterName
+        ));
     }
 
     #[test]
     fn empty_param_type_rejected() {
         let x = d("ls", "list", vec![p("a", "")]);
-        assert!(matches!(McpToolValidator::validate(&x).unwrap_err(), ValidationError::EmptyParameterType(_)));
+        assert!(matches!(
+            McpToolValidator::validate(&x).unwrap_err(),
+            ValidationError::EmptyParameterType(_)
+        ));
     }
 
     #[test]

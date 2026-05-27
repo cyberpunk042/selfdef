@@ -9,7 +9,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,8 +83,8 @@ pub(crate) fn run(json: bool) -> Result<i32> {
         println!("{}", body);
         return Ok(0);
     }
-    let parsed: DashboardsBody = serde_json::from_str(&body)
-        .context("daemon returned non-JSON body for /v1/dashboards")?;
+    let parsed: DashboardsBody =
+        serde_json::from_str(&body).context("daemon returned non-JSON body for /v1/dashboards")?;
     println!("{} operator-named dashboard view presets:", parsed.count);
     println!();
     println!(

@@ -84,7 +84,9 @@ pub enum BucketError {
 }
 
 fn refill(b: &mut Bucket, now_ms: u64) {
-    if now_ms <= b.last_refill_ms { return; }
+    if now_ms <= b.last_refill_ms {
+        return;
+    }
     let elapsed_ms = now_ms - b.last_refill_ms;
     let total_ms = elapsed_ms.saturating_add(b.remainder_ms);
     // tokens to add = total_ms × refill / 1000
@@ -110,28 +112,46 @@ impl TokenBucketRateLimit {
     }
 
     /// Register / reset a bucket.
-    pub fn register(&mut self, id: &str, capacity: u64, refill_per_sec: u64, now_ms: u64) -> Result<(), BucketError> {
-        if id.is_empty() { return Err(BucketError::EmptyId); }
-        if capacity == 0 { return Err(BucketError::ZeroCapacity); }
-        self.buckets.insert(id.into(), Bucket {
-            capacity,
-            refill_per_sec,
-            tokens: capacity, // start full
-            last_refill_ms: now_ms,
-            remainder_ms: 0,
-            granted_total: 0,
-            throttled_total: 0,
-        });
+    pub fn register(
+        &mut self,
+        id: &str,
+        capacity: u64,
+        refill_per_sec: u64,
+        now_ms: u64,
+    ) -> Result<(), BucketError> {
+        if id.is_empty() {
+            return Err(BucketError::EmptyId);
+        }
+        if capacity == 0 {
+            return Err(BucketError::ZeroCapacity);
+        }
+        self.buckets.insert(
+            id.into(),
+            Bucket {
+                capacity,
+                refill_per_sec,
+                tokens: capacity, // start full
+                last_refill_ms: now_ms,
+                remainder_ms: 0,
+                granted_total: 0,
+                throttled_total: 0,
+            },
+        );
         Ok(())
     }
 
     /// Try to acquire `cost` tokens.
     pub fn try_acquire(&mut self, id: &str, cost: u64, now_ms: u64) -> AcquireVerdict {
-        let Some(b) = self.buckets.get_mut(id) else { return AcquireVerdict::Unknown; };
+        let Some(b) = self.buckets.get_mut(id) else {
+            return AcquireVerdict::Unknown;
+        };
         refill(b, now_ms);
         if cost > b.tokens {
             b.throttled_total = b.throttled_total.saturating_add(1);
-            return AcquireVerdict::Throttled { available: b.tokens, requested: cost };
+            return AcquireVerdict::Throttled {
+                available: b.tokens,
+                requested: cost,
+            };
         }
         b.tokens -= cost;
         b.granted_total = b.granted_total.saturating_add(1);
@@ -145,17 +165,25 @@ impl TokenBucketRateLimit {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BucketError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BucketError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BucketError::SchemaMismatch);
+        }
         for (id, b) in &self.buckets {
-            if id.is_empty() { return Err(BucketError::EmptyId); }
-            if b.capacity == 0 { return Err(BucketError::ZeroCapacity); }
+            if id.is_empty() {
+                return Err(BucketError::EmptyId);
+            }
+            if b.capacity == 0 {
+                return Err(BucketError::ZeroCapacity);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TokenBucketRateLimit {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -183,7 +211,10 @@ mod tests {
         l.register("b", 10, 1, 0).unwrap();
         l.try_acquire("b", 10, 0);
         match l.try_acquire("b", 5, 0) {
-            AcquireVerdict::Throttled { available, requested } => {
+            AcquireVerdict::Throttled {
+                available,
+                requested,
+            } => {
                 assert_eq!(available, 0);
                 assert_eq!(requested, 5);
             }
@@ -249,20 +280,29 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut l = TokenBucketRateLimit::new();
-        assert!(matches!(l.register("", 1, 1, 0).unwrap_err(), BucketError::EmptyId));
+        assert!(matches!(
+            l.register("", 1, 1, 0).unwrap_err(),
+            BucketError::EmptyId
+        ));
     }
 
     #[test]
     fn zero_capacity_rejected() {
         let mut l = TokenBucketRateLimit::new();
-        assert!(matches!(l.register("b", 0, 1, 0).unwrap_err(), BucketError::ZeroCapacity));
+        assert!(matches!(
+            l.register("b", 0, 1, 0).unwrap_err(),
+            BucketError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = TokenBucketRateLimit::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), BucketError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            BucketError::SchemaMismatch
+        ));
     }
 
     #[test]

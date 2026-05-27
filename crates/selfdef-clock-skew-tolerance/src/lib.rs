@@ -91,14 +91,20 @@ impl ClockSkewTolerance {
         let skew = event_ts_ms as i64 - now_ms as i64;
         if skew >= 0 {
             if (skew as u64) > self.max_ahead_ms {
-                SkewVerdict::TooFarFuture { skew_ms: skew, max_ahead_ms: self.max_ahead_ms }
+                SkewVerdict::TooFarFuture {
+                    skew_ms: skew,
+                    max_ahead_ms: self.max_ahead_ms,
+                }
             } else {
                 SkewVerdict::InWindow { skew_ms: skew }
             }
         } else {
             let behind = (-skew) as u64;
             if behind > self.max_behind_ms {
-                SkewVerdict::TooFarPast { skew_ms: skew, max_behind_ms: self.max_behind_ms }
+                SkewVerdict::TooFarPast {
+                    skew_ms: skew,
+                    max_behind_ms: self.max_behind_ms,
+                }
             } else {
                 SkewVerdict::InWindow { skew_ms: skew }
             }
@@ -109,10 +115,16 @@ impl ClockSkewTolerance {
     pub fn observe(&mut self, event_ts_ms: u64, now_ms: u64) -> SkewVerdict {
         let v = self.accept(event_ts_ms, now_ms);
         let skew = event_ts_ms as i64 - now_ms as i64;
-        if skew > self.max_observed_ahead_ms { self.max_observed_ahead_ms = skew; }
-        if skew < self.max_observed_behind_ms { self.max_observed_behind_ms = skew; }
+        if skew > self.max_observed_ahead_ms {
+            self.max_observed_ahead_ms = skew;
+        }
+        if skew < self.max_observed_behind_ms {
+            self.max_observed_behind_ms = skew;
+        }
         match v {
-            SkewVerdict::InWindow { .. } => self.accepted_count = self.accepted_count.saturating_add(1),
+            SkewVerdict::InWindow { .. } => {
+                self.accepted_count = self.accepted_count.saturating_add(1)
+            }
             _ => self.rejected_count = self.rejected_count.saturating_add(1),
         }
         v
@@ -128,13 +140,17 @@ impl ClockSkewTolerance {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SkewError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SkewError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SkewError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for ClockSkewTolerance {
-    fn default() -> Self { Self::new(60_000, 60_000) }
+    fn default() -> Self {
+        Self::new(60_000, 60_000)
+    }
 }
 
 #[cfg(test)]
@@ -144,7 +160,10 @@ mod tests {
     #[test]
     fn in_window_zero_skew() {
         let s = ClockSkewTolerance::new(1000, 1000);
-        assert!(matches!(s.accept(500, 500), SkewVerdict::InWindow { skew_ms: 0 }));
+        assert!(matches!(
+            s.accept(500, 500),
+            SkewVerdict::InWindow { skew_ms: 0 }
+        ));
     }
 
     #[test]
@@ -169,7 +188,10 @@ mod tests {
     fn too_far_future() {
         let s = ClockSkewTolerance::new(1000, 1000);
         match s.accept(5000, 1000) {
-            SkewVerdict::TooFarFuture { skew_ms, max_ahead_ms } => {
+            SkewVerdict::TooFarFuture {
+                skew_ms,
+                max_ahead_ms,
+            } => {
                 assert_eq!(skew_ms, 4000);
                 assert_eq!(max_ahead_ms, 1000);
             }
@@ -181,7 +203,10 @@ mod tests {
     fn too_far_past() {
         let s = ClockSkewTolerance::new(1000, 1000);
         match s.accept(0, 5000) {
-            SkewVerdict::TooFarPast { skew_ms, max_behind_ms } => {
+            SkewVerdict::TooFarPast {
+                skew_ms,
+                max_behind_ms,
+            } => {
                 assert_eq!(skew_ms, -5000);
                 assert_eq!(max_behind_ms, 1000);
             }
@@ -192,9 +217,9 @@ mod tests {
     #[test]
     fn observe_tracks_max_ahead_behind() {
         let mut s = ClockSkewTolerance::new(10_000, 10_000);
-        s.observe(5000, 1000);  // skew +4000
-        s.observe(0, 3000);     // skew -3000
-        s.observe(7000, 1000);  // skew +6000
+        s.observe(5000, 1000); // skew +4000
+        s.observe(0, 3000); // skew -3000
+        s.observe(7000, 1000); // skew +6000
         assert_eq!(s.max_observed_ahead_ms, 6000);
         assert_eq!(s.max_observed_behind_ms, -3000);
     }
@@ -202,8 +227,8 @@ mod tests {
     #[test]
     fn observe_counters() {
         let mut s = ClockSkewTolerance::new(1000, 1000);
-        s.observe(500, 1000);   // in window
-        s.observe(5000, 1000);  // too far future
+        s.observe(500, 1000); // in window
+        s.observe(5000, 1000); // too far future
         assert_eq!(s.accepted_count, 1);
         assert_eq!(s.rejected_count, 1);
     }
@@ -221,7 +246,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = ClockSkewTolerance::new(1, 1);
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SkewError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SkewError::SchemaMismatch
+        ));
     }
 
     #[test]

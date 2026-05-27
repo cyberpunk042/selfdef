@@ -61,7 +61,9 @@ fn shingles(text: &str, k: u32) -> BTreeSet<String> {
     let chars: Vec<char> = text.chars().collect();
     let mut out = BTreeSet::new();
     let k = k as usize;
-    if chars.len() < k { return out; }
+    if chars.len() < k {
+        return out;
+    }
     for i in 0..=(chars.len() - k) {
         let sh: String = chars[i..i + k].iter().collect();
         out.insert(sh);
@@ -70,17 +72,23 @@ fn shingles(text: &str, k: u32) -> BTreeSet<String> {
 }
 
 fn jaccard_bp(a: &BTreeSet<String>, b: &BTreeSet<String>) -> u32 {
-    if a.is_empty() && b.is_empty() { return 10_000; }
+    if a.is_empty() && b.is_empty() {
+        return 10_000;
+    }
     let inter = a.intersection(b).count();
     let union = a.union(b).count();
-    if union == 0 { return 0; }
+    if union == 0 {
+        return 0;
+    }
     ((inter as u64 * 10_000) / union as u64) as u32
 }
 
 impl DuplicateDetect {
     /// New.
     pub fn new(k: u32) -> Result<Self, DupError> {
-        if k == 0 { return Err(DupError::BadK); }
+        if k == 0 {
+            return Err(DupError::BadK);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             entries: BTreeMap::new(),
@@ -90,16 +98,23 @@ impl DuplicateDetect {
 
     /// Record.
     pub fn observe(&mut self, id: &str, text: &str) -> Result<(), DupError> {
-        if id.is_empty() { return Err(DupError::EmptyId); }
-        if text.is_empty() { return Err(DupError::EmptyText); }
+        if id.is_empty() {
+            return Err(DupError::EmptyId);
+        }
+        if text.is_empty() {
+            return Err(DupError::EmptyText);
+        }
         if self.entries.contains_key(id) {
             return Err(DupError::DuplicateId(id.into()));
         }
         let sh = shingles(text, self.k);
-        self.entries.insert(id.into(), DupEntry {
-            text: text.into(),
-            shingles: sh,
-        });
+        self.entries.insert(
+            id.into(),
+            DupEntry {
+                text: text.into(),
+                shingles: sh,
+            },
+        );
         Ok(())
     }
 
@@ -116,11 +131,19 @@ impl DuplicateDetect {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DupError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DupError::SchemaMismatch); }
-        if self.k == 0 { return Err(DupError::BadK); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DupError::SchemaMismatch);
+        }
+        if self.k == 0 {
+            return Err(DupError::BadK);
+        }
         for (id, e) in &self.entries {
-            if id.is_empty() { return Err(DupError::EmptyId); }
-            if e.text.is_empty() { return Err(DupError::EmptyText); }
+            if id.is_empty() {
+                return Err(DupError::EmptyId);
+            }
+            if e.text.is_empty() {
+                return Err(DupError::EmptyText);
+            }
         }
         Ok(())
     }
@@ -159,22 +182,34 @@ mod tests {
     fn duplicate_id_rejected() {
         let mut d = DuplicateDetect::new(3).unwrap();
         d.observe("a", "x").unwrap();
-        assert!(matches!(d.observe("a", "y").unwrap_err(), DupError::DuplicateId(_)));
+        assert!(matches!(
+            d.observe("a", "y").unwrap_err(),
+            DupError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut d = DuplicateDetect::new(3).unwrap();
         assert!(matches!(d.observe("", "x").unwrap_err(), DupError::EmptyId));
-        assert!(matches!(d.observe("i", "").unwrap_err(), DupError::EmptyText));
-        assert!(matches!(DuplicateDetect::new(0).unwrap_err(), DupError::BadK));
+        assert!(matches!(
+            d.observe("i", "").unwrap_err(),
+            DupError::EmptyText
+        ));
+        assert!(matches!(
+            DuplicateDetect::new(0).unwrap_err(),
+            DupError::BadK
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = DuplicateDetect::new(3).unwrap();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DupError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DupError::SchemaMismatch
+        ));
     }
 
     #[test]

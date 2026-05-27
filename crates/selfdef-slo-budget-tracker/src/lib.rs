@@ -89,26 +89,39 @@ impl SloBudgetTracker {
 
     /// Register an SLO.
     pub fn register(&mut self, id: &str, target_bp: u32) -> Result<(), SloError> {
-        if id.is_empty() { return Err(SloError::EmptyId); }
-        if target_bp == 0 || target_bp > 10000 { return Err(SloError::BadTarget(target_bp)); }
-        self.slos.insert(id.into(), Slo {
-            target_bp,
-            successes: 0,
-            failures: 0,
-        });
+        if id.is_empty() {
+            return Err(SloError::EmptyId);
+        }
+        if target_bp == 0 || target_bp > 10000 {
+            return Err(SloError::BadTarget(target_bp));
+        }
+        self.slos.insert(
+            id.into(),
+            Slo {
+                target_bp,
+                successes: 0,
+                failures: 0,
+            },
+        );
         Ok(())
     }
 
     /// Record success.
     pub fn record_success(&mut self, id: &str) -> Result<(), SloError> {
-        let s = self.slos.get_mut(id).ok_or_else(|| SloError::UnknownSlo(id.into()))?;
+        let s = self
+            .slos
+            .get_mut(id)
+            .ok_or_else(|| SloError::UnknownSlo(id.into()))?;
         s.successes = s.successes.saturating_add(1);
         Ok(())
     }
 
     /// Record failure.
     pub fn record_failure(&mut self, id: &str) -> Result<(), SloError> {
-        let s = self.slos.get_mut(id).ok_or_else(|| SloError::UnknownSlo(id.into()))?;
+        let s = self
+            .slos
+            .get_mut(id)
+            .ok_or_else(|| SloError::UnknownSlo(id.into()))?;
         s.failures = s.failures.saturating_add(1);
         Ok(())
     }
@@ -143,7 +156,10 @@ impl SloBudgetTracker {
 
     /// Reset counters for an SLO.
     pub fn reset(&mut self, id: &str) -> Result<(), SloError> {
-        let s = self.slos.get_mut(id).ok_or_else(|| SloError::UnknownSlo(id.into()))?;
+        let s = self
+            .slos
+            .get_mut(id)
+            .ok_or_else(|| SloError::UnknownSlo(id.into()))?;
         s.successes = 0;
         s.failures = 0;
         Ok(())
@@ -151,17 +167,25 @@ impl SloBudgetTracker {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SloError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SloError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SloError::SchemaMismatch);
+        }
         for (id, s) in &self.slos {
-            if id.is_empty() { return Err(SloError::EmptyId); }
-            if s.target_bp == 0 || s.target_bp > 10000 { return Err(SloError::BadTarget(s.target_bp)); }
+            if id.is_empty() {
+                return Err(SloError::EmptyId);
+            }
+            if s.target_bp == 0 || s.target_bp > 10000 {
+                return Err(SloError::BadTarget(s.target_bp));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for SloBudgetTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -173,7 +197,9 @@ mod tests {
         let mut t = SloBudgetTracker::new();
         t.register("api", 9990).unwrap();
         // 1000 events, 1 failure — exactly the SLO.
-        for _ in 0..999 { t.record_success("api").unwrap(); }
+        for _ in 0..999 {
+            t.record_success("api").unwrap();
+        }
         t.record_failure("api").unwrap();
         let b = t.budget("api").unwrap();
         assert_eq!(b.total, 1000);
@@ -188,7 +214,9 @@ mod tests {
         let mut t = SloBudgetTracker::new();
         t.register("api", 9900).unwrap();
         // 100 events, 0 failures.
-        for _ in 0..100 { t.record_success("api").unwrap(); }
+        for _ in 0..100 {
+            t.record_success("api").unwrap();
+        }
         let b = t.budget("api").unwrap();
         assert!(!b.exhausted);
         assert_eq!(b.actual_failures, 0);
@@ -198,8 +226,12 @@ mod tests {
     fn over_budget() {
         let mut t = SloBudgetTracker::new();
         t.register("api", 9000).unwrap(); // 90% target → 10% error budget
-        for _ in 0..10 { t.record_success("api").unwrap(); }
-        for _ in 0..5 { t.record_failure("api").unwrap(); }
+        for _ in 0..10 {
+            t.record_success("api").unwrap();
+        }
+        for _ in 0..5 {
+            t.record_failure("api").unwrap();
+        }
         let b = t.budget("api").unwrap();
         // total 15, allowed = 15 × 1000 / 10000 = 1
         assert_eq!(b.allowed_failures, 1);
@@ -230,20 +262,32 @@ mod tests {
     #[test]
     fn bad_target_rejected() {
         let mut t = SloBudgetTracker::new();
-        assert!(matches!(t.register("a", 0).unwrap_err(), SloError::BadTarget(0)));
-        assert!(matches!(t.register("a", 10001).unwrap_err(), SloError::BadTarget(10001)));
+        assert!(matches!(
+            t.register("a", 0).unwrap_err(),
+            SloError::BadTarget(0)
+        ));
+        assert!(matches!(
+            t.register("a", 10001).unwrap_err(),
+            SloError::BadTarget(10001)
+        ));
     }
 
     #[test]
     fn unknown_slo_rejected() {
         let mut t = SloBudgetTracker::new();
-        assert!(matches!(t.record_success("nope").unwrap_err(), SloError::UnknownSlo(_)));
+        assert!(matches!(
+            t.record_success("nope").unwrap_err(),
+            SloError::UnknownSlo(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut t = SloBudgetTracker::new();
-        assert!(matches!(t.register("", 9990).unwrap_err(), SloError::EmptyId));
+        assert!(matches!(
+            t.register("", 9990).unwrap_err(),
+            SloError::EmptyId
+        ));
     }
 
     #[test]
@@ -256,7 +300,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = SloBudgetTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), SloError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            SloError::SchemaMismatch
+        ));
     }
 
     #[test]

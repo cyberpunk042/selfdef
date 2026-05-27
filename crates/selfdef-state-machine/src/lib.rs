@@ -75,8 +75,12 @@ fn key(from: &str, event: &str) -> String {
 impl StateMachine {
     /// New.
     pub fn new(initial: &str, history_capacity: u32) -> Result<Self, FsmError> {
-        if initial.is_empty() { return Err(FsmError::EmptyState); }
-        if history_capacity == 0 { return Err(FsmError::ZeroCapacity); }
+        if initial.is_empty() {
+            return Err(FsmError::EmptyState);
+        }
+        if history_capacity == 0 {
+            return Err(FsmError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             current: initial.into(),
@@ -88,8 +92,12 @@ impl StateMachine {
 
     /// Add a transition.
     pub fn add_transition(&mut self, from: &str, event: &str, to: &str) -> Result<(), FsmError> {
-        if from.is_empty() || to.is_empty() { return Err(FsmError::EmptyState); }
-        if event.is_empty() { return Err(FsmError::EmptyEvent); }
+        if from.is_empty() || to.is_empty() {
+            return Err(FsmError::EmptyState);
+        }
+        if event.is_empty() {
+            return Err(FsmError::EmptyEvent);
+        }
         let k = key(from, event);
         if self.transitions.contains_key(&k) {
             return Err(FsmError::DuplicateTransition(from.into(), event.into()));
@@ -100,9 +108,13 @@ impl StateMachine {
 
     /// Fire event.
     pub fn fire(&mut self, event: &str, ts_ms: u64) -> Result<&str, FsmError> {
-        if event.is_empty() { return Err(FsmError::EmptyEvent); }
+        if event.is_empty() {
+            return Err(FsmError::EmptyEvent);
+        }
         let k = key(&self.current, event);
-        let to = self.transitions.get(&k)
+        let to = self
+            .transitions
+            .get(&k)
             .ok_or_else(|| FsmError::UndefinedTransition(self.current.clone(), event.into()))?
             .clone();
         let from = self.current.clone();
@@ -110,15 +122,26 @@ impl StateMachine {
         if (self.history.len() as u32) >= self.history_capacity {
             self.history.remove(0);
         }
-        self.history.push(HistoryEntry { from, event: event.into(), to, ts_ms });
+        self.history.push(HistoryEntry {
+            from,
+            event: event.into(),
+            to,
+            ts_ms,
+        });
         Ok(&self.current)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FsmError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FsmError::SchemaMismatch); }
-        if self.current.is_empty() { return Err(FsmError::EmptyState); }
-        if self.history_capacity == 0 { return Err(FsmError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FsmError::SchemaMismatch);
+        }
+        if self.current.is_empty() {
+            return Err(FsmError::EmptyState);
+        }
+        if self.history_capacity == 0 {
+            return Err(FsmError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -146,7 +169,10 @@ mod tests {
     #[test]
     fn undefined_transition_rejected() {
         let mut m = traffic_light();
-        assert!(matches!(m.fire("bogus", 0).unwrap_err(), FsmError::UndefinedTransition(_, _)));
+        assert!(matches!(
+            m.fire("bogus", 0).unwrap_err(),
+            FsmError::UndefinedTransition(_, _)
+        ));
         // State unchanged.
         assert_eq!(m.current, "red");
     }
@@ -155,7 +181,10 @@ mod tests {
     fn duplicate_transition_rejected() {
         let mut m = StateMachine::new("a", 5).unwrap();
         m.add_transition("a", "go", "b").unwrap();
-        assert!(matches!(m.add_transition("a", "go", "c").unwrap_err(), FsmError::DuplicateTransition(_, _)));
+        assert!(matches!(
+            m.add_transition("a", "go", "c").unwrap_err(),
+            FsmError::DuplicateTransition(_, _)
+        ));
     }
 
     #[test]
@@ -183,16 +212,28 @@ mod tests {
     fn empty_inputs_rejected() {
         let mut m = StateMachine::new("a", 5).unwrap();
         assert!(matches!(m.fire("", 0).unwrap_err(), FsmError::EmptyEvent));
-        assert!(matches!(m.add_transition("", "e", "b").unwrap_err(), FsmError::EmptyState));
-        assert!(matches!(StateMachine::new("", 5).unwrap_err(), FsmError::EmptyState));
-        assert!(matches!(StateMachine::new("a", 0).unwrap_err(), FsmError::ZeroCapacity));
+        assert!(matches!(
+            m.add_transition("", "e", "b").unwrap_err(),
+            FsmError::EmptyState
+        ));
+        assert!(matches!(
+            StateMachine::new("", 5).unwrap_err(),
+            FsmError::EmptyState
+        ));
+        assert!(matches!(
+            StateMachine::new("a", 0).unwrap_err(),
+            FsmError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = traffic_light();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), FsmError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            FsmError::SchemaMismatch
+        ));
     }
 
     #[test]

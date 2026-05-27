@@ -51,25 +51,35 @@ impl UrlParts {
     /// Parse.
     pub fn parse(input: &str) -> Result<Self, UrlError> {
         // Split scheme.
-        let (scheme, rest) = input.split_once("://").ok_or_else(|| UrlError::BadUrl(input.into()))?;
-        if scheme.is_empty() { return Err(UrlError::BadUrl(input.into())); }
+        let (scheme, rest) = input
+            .split_once("://")
+            .ok_or_else(|| UrlError::BadUrl(input.into()))?;
+        if scheme.is_empty() {
+            return Err(UrlError::BadUrl(input.into()));
+        }
         // Split path from authority.
         let (authority, path_query) = match rest.find('/') {
             Some(i) => (&rest[..i], &rest[i..]),
             None => (rest, "/"),
         };
         // Authority must be non-empty.
-        if authority.is_empty() { return Err(UrlError::BadUrl(input.into())); }
+        if authority.is_empty() {
+            return Err(UrlError::BadUrl(input.into()));
+        }
         // Optional :port.
         let (host, port) = match authority.rsplit_once(':') {
             Some((h, p)) if !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()) => {
                 let port: u16 = p.parse().map_err(|_| UrlError::BadPort(p.into()))?;
-                if port == 0 { return Err(UrlError::BadPort(p.into())); }
+                if port == 0 {
+                    return Err(UrlError::BadPort(p.into()));
+                }
                 (h, Some(port))
             }
             _ => (authority, None),
         };
-        if host.is_empty() { return Err(UrlError::BadUrl(input.into())); }
+        if host.is_empty() {
+            return Err(UrlError::BadUrl(input.into()));
+        }
         // Path and query.
         let (path, query) = match path_query.find('?') {
             Some(i) => (&path_query[..i], &path_query[i + 1..]),
@@ -106,12 +116,16 @@ impl UrlParts {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), UrlError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(UrlError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(UrlError::SchemaMismatch);
+        }
         if self.scheme.is_empty() || self.host.is_empty() {
             return Err(UrlError::BadUrl("".into()));
         }
         if let Some(p) = self.port {
-            if p == 0 { return Err(UrlError::BadPort("0".into())); }
+            if p == 0 {
+                return Err(UrlError::BadPort("0".into()));
+            }
         }
         Ok(())
     }
@@ -154,13 +168,22 @@ mod tests {
 
     #[test]
     fn bad_url_rejected() {
-        assert!(matches!(UrlParts::parse("noscheme.com/").unwrap_err(), UrlError::BadUrl(_)));
-        assert!(matches!(UrlParts::parse("://nohost").unwrap_err(), UrlError::BadUrl(_)));
+        assert!(matches!(
+            UrlParts::parse("noscheme.com/").unwrap_err(),
+            UrlError::BadUrl(_)
+        ));
+        assert!(matches!(
+            UrlParts::parse("://nohost").unwrap_err(),
+            UrlError::BadUrl(_)
+        ));
     }
 
     #[test]
     fn bad_port_rejected() {
-        assert!(matches!(UrlParts::parse("http://example.com:0/").unwrap_err(), UrlError::BadPort(_)));
+        assert!(matches!(
+            UrlParts::parse("http://example.com:0/").unwrap_err(),
+            UrlError::BadPort(_)
+        ));
     }
 
     #[test]
@@ -173,7 +196,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut u = UrlParts::parse("https://example.com/").unwrap();
         u.schema_version = "9.9.9".into();
-        assert!(matches!(u.validate().unwrap_err(), UrlError::SchemaMismatch));
+        assert!(matches!(
+            u.validate().unwrap_err(),
+            UrlError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -1004,12 +1004,12 @@ spec:
 mod ms047 {
     use std::path::{Path, PathBuf};
 
-    use anyhow::{anyhow, Context as _, Result};
+    use anyhow::{Context as _, Result, anyhow};
     use selfdef_perimeter::{
-        audit_chain_check, default_extension_path, emit_ocsf_detection_2004, now_ms,
-        read_ring_buffer, ExtensionManifest, ExtensionStore, Outcome, PerimeterError, Verdict,
         DEFAULT_ALLOWLIST, DEFAULT_OCSF_PATH, DEFAULT_POLICY_PATH, DEFAULT_RING_DIR,
-        DEFAULT_TRUST_ROOTS_DIR,
+        DEFAULT_TRUST_ROOTS_DIR, ExtensionManifest, ExtensionStore, Outcome, PerimeterError,
+        Verdict, audit_chain_check, default_extension_path, emit_ocsf_detection_2004, now_ms,
+        read_ring_buffer,
     };
 
     fn ring_dir() -> PathBuf {
@@ -1021,9 +1021,7 @@ mod ms047 {
     fn extension_dir() -> PathBuf {
         std::env::var("SELFDEF_PERIMETER_EXTENSION_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                PathBuf::from(selfdef_perimeter::DEFAULT_EXTENSION_DIR)
-            })
+            .unwrap_or_else(|_| PathBuf::from(selfdef_perimeter::DEFAULT_EXTENSION_DIR))
     }
 
     fn trust_roots_dir() -> PathBuf {
@@ -1048,15 +1046,12 @@ mod ms047 {
     /// extensions (the "operator dashboard" snapshot). Read-only.
     pub(crate) fn run_show(json: bool) -> Result<i32> {
         let verdicts = read_ring_buffer(&ring_dir()).context("read ring buffer")?;
-        let (store, _report) =
-            load_extensions_best_effort().context("load extensions")?;
+        let (store, _report) = load_extensions_best_effort().context("load extensions")?;
         let now = now_ms();
         let active_extensions: Vec<&ExtensionManifest> = store.active(now);
         let active_paths = store.active_paths(now);
         let policy_present = policy_path().exists();
-        let chain_events = audit_chain_check(&ocsf_path())
-            .map(Some)
-            .unwrap_or(None);
+        let chain_events = audit_chain_check(&ocsf_path()).map(Some).unwrap_or(None);
         let last_n: Vec<&Verdict> = verdicts.iter().take(16).collect();
 
         if json {
@@ -1082,7 +1077,13 @@ mod ms047 {
             });
             println!("{}", serde_json::to_string_pretty(&payload)?);
         } else {
-            render_human(policy_present, &last_n, &active_extensions, &active_paths, chain_events);
+            render_human(
+                policy_present,
+                &last_n,
+                &active_extensions,
+                &active_paths,
+                chain_events,
+            );
         }
         Ok(0)
     }
@@ -1095,7 +1096,10 @@ mod ms047 {
             println!("{}", serde_json::to_string_pretty(&limited)?);
         } else {
             if limited.is_empty() {
-                println!("(no perimeter verdicts in ring buffer at {})", ring_dir().display());
+                println!(
+                    "(no perimeter verdicts in ring buffer at {})",
+                    ring_dir().display()
+                );
             }
             for v in &limited {
                 print_verdict_row(v);
@@ -1124,8 +1128,7 @@ mod ms047 {
             .map_err(|e| anyhow!("copy {} → {}: {e}", signed.display(), dest.display()))?;
         let sig_src = signed.with_extension("json.minisig");
         let sig_dest = dest.with_extension("json.minisig");
-        std::fs::copy(&sig_src, &sig_dest)
-            .map_err(|e| anyhow!("copy sig: {e}"))?;
+        std::fs::copy(&sig_src, &sig_dest).map_err(|e| anyhow!("copy sig: {e}"))?;
 
         if json {
             println!(
@@ -1139,16 +1142,17 @@ mod ms047 {
                 }))?
             );
         } else {
-            println!("perimeter extend: installed extension '{}'", manifest.extension_id);
+            println!(
+                "perimeter extend: installed extension '{}'",
+                manifest.extension_id
+            );
             for p in &manifest.binary_paths {
                 println!("  + {p}");
             }
             println!("  expires_at_ms: {}", manifest.expires_at_ms);
             println!("  manifest: {}", dest.display());
             println!("  signature: {}", sig_dest.display());
-            println!(
-                "  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`."
-            );
+            println!("  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`.");
         }
         Ok(0)
     }
@@ -1165,8 +1169,7 @@ mod ms047 {
         let mut removed = Vec::<PathBuf>::new();
         for p in [&manifest_path, &sig_path] {
             if p.exists() {
-                std::fs::remove_file(p)
-                    .map_err(|e| anyhow!("remove {}: {e}", p.display()))?;
+                std::fs::remove_file(p).map_err(|e| anyhow!("remove {}: {e}", p.display()))?;
                 removed.push(p.clone());
             }
         }
@@ -1186,9 +1189,7 @@ mod ms047 {
             for p in &removed {
                 println!("  - {}", p.display());
             }
-            println!(
-                "  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`."
-            );
+            println!("  NOTE: Tetragon will need to reload — `systemctl reload tetragon.service`.");
         }
         Ok(0)
     }
@@ -1207,7 +1208,8 @@ mod ms047 {
                 .map_err(|e| anyhow!("emit_ocsf_detection_2004: {e}"))?;
             emitted += 1;
         }
-        let chain_events = audit_chain_check(&ocsf).map_err(|e| anyhow!("audit_chain_check: {e}"))?;
+        let chain_events =
+            audit_chain_check(&ocsf).map_err(|e| anyhow!("audit_chain_check: {e}"))?;
         if json {
             println!(
                 "{}",
@@ -1256,7 +1258,10 @@ mod ms047 {
         if active_extensions.is_empty() {
             println!("  operator extensions: (none)");
         } else {
-            println!("  operator extensions ({} active):", active_extensions.len());
+            println!(
+                "  operator extensions ({} active):",
+                active_extensions.len()
+            );
             for m in active_extensions {
                 println!(
                     "    [{}] expires_at_ms={} signer={} auditor={}",
@@ -1287,8 +1292,13 @@ mod ms047 {
         let outcome_tag = match &v.outcome {
             Outcome::Sigkill => "SIGKILL".to_string(),
             Outcome::Allowlisted => "ALLOWED".to_string(),
-            Outcome::ExtensionAllowed { manifest_sha256, .. } => {
-                format!("EXTEND[{}]", &manifest_sha256[..manifest_sha256.len().min(8)])
+            Outcome::ExtensionAllowed {
+                manifest_sha256, ..
+            } => {
+                format!(
+                    "EXTEND[{}]",
+                    &manifest_sha256[..manifest_sha256.len().min(8)]
+                )
             }
         };
         println!(
@@ -1312,6 +1322,4 @@ mod ms047 {
     // bats L2 smoke tests in `packaging/test/L2-perimeter-cli.bats`.
 }
 
-pub(crate) use ms047::{
-    run_audit_cycle_replay, run_extend, run_history, run_revoke, run_show,
-};
+pub(crate) use ms047::{run_audit_cycle_replay, run_extend, run_history, run_revoke, run_show};

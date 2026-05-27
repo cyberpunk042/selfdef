@@ -82,7 +82,9 @@ impl BundlePack {
         if self.schema_version != SCHEMA_VERSION {
             return Err(BundlePackError::SchemaMismatch);
         }
-        if self.name.is_empty() { return Err(BundlePackError::EmptyName); }
+        if self.name.is_empty() {
+            return Err(BundlePackError::EmptyName);
+        }
         if self.description.is_empty() {
             return Err(BundlePackError::EmptyDescription(self.name.clone()));
         }
@@ -92,7 +94,9 @@ impl BundlePack {
         if self.signature.is_empty() {
             return Err(BundlePackError::Unsigned(self.name.clone()));
         }
-        self.rule_packs.validate().map_err(|e| BundlePackError::InvalidRulePacks(self.name.clone(), e.to_string()))?;
+        self.rule_packs
+            .validate()
+            .map_err(|e| BundlePackError::InvalidRulePacks(self.name.clone(), e.to_string()))?;
         Ok(())
     }
 }
@@ -123,7 +127,10 @@ impl BundlePackRegistry {
 
     /// Atomic swap of active bundle. Validates the target before swapping.
     pub fn swap_active(&mut self, name: &str) -> Result<(), BundlePackError> {
-        let pack = self.packs.iter().find(|p| p.name == name)
+        let pack = self
+            .packs
+            .iter()
+            .find(|p| p.name == name)
             .ok_or_else(|| BundlePackError::Unknown(name.into()))?;
         pack.validate()?;
         self.active = name.into();
@@ -164,7 +171,9 @@ impl BundlePackRegistry {
 }
 
 impl Default for BundlePackRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -174,18 +183,26 @@ mod tests {
 
     fn rule_manifest() -> RulePackManifest {
         let kinds = [
-            PackKind::Filesystem, PackKind::Network, PackKind::Capability,
-            PackKind::Sandbox, PackKind::Communication, PackKind::CollectorBudget,
-            PackKind::Quarantine, PackKind::CommitAuthority,
+            PackKind::Filesystem,
+            PackKind::Network,
+            PackKind::Capability,
+            PackKind::Sandbox,
+            PackKind::Communication,
+            PackKind::CollectorBudget,
+            PackKind::Quarantine,
+            PackKind::CommitAuthority,
         ];
         RulePackManifest {
             schema_version: "1.0.0".into(),
-            packs: kinds.iter().map(|k| RulePack {
-                kind: *k,
-                semver: "1.0.0".into(),
-                signature: "sig".into(),
-                loaded_at: "t".into(),
-            }).collect(),
+            packs: kinds
+                .iter()
+                .map(|k| RulePack {
+                    kind: *k,
+                    semver: "1.0.0".into(),
+                    signature: "sig".into(),
+                    loaded_at: "t".into(),
+                })
+                .collect(),
         }
     }
 
@@ -234,41 +251,59 @@ mod tests {
     fn swap_unknown_rejected() {
         let mut r = BundlePackRegistry::new();
         r.register(pack("baseline")).unwrap();
-        assert!(matches!(r.swap_active("none").unwrap_err(), BundlePackError::Unknown(_)));
+        assert!(matches!(
+            r.swap_active("none").unwrap_err(),
+            BundlePackError::Unknown(_)
+        ));
     }
 
     #[test]
     fn duplicate_name_rejected() {
         let mut r = BundlePackRegistry::new();
         r.register(pack("baseline")).unwrap();
-        assert!(matches!(r.register(pack("baseline")).unwrap_err(), BundlePackError::Duplicate(_)));
+        assert!(matches!(
+            r.register(pack("baseline")).unwrap_err(),
+            BundlePackError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn unsigned_pack_rejected() {
         let mut p = pack("x");
         p.signature = String::new();
-        assert!(matches!(p.validate().unwrap_err(), BundlePackError::Unsigned(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BundlePackError::Unsigned(_)
+        ));
     }
 
     #[test]
     fn empty_name_rejected() {
         let p = pack("");
-        assert!(matches!(p.validate().unwrap_err(), BundlePackError::EmptyName));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BundlePackError::EmptyName
+        ));
     }
 
     #[test]
     fn invalid_rule_packs_rejected() {
         let mut p = pack("x");
         p.rule_packs.packs.pop();
-        assert!(matches!(p.validate().unwrap_err(), BundlePackError::InvalidRulePacks(_, _)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BundlePackError::InvalidRulePacks(_, _)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = BundlePackRegistry::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), BundlePackError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BundlePackError::SchemaMismatch
+        ));
     }
 
     #[test]

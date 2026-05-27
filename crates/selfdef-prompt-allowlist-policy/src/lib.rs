@@ -106,15 +106,19 @@ impl PromptAllowlistPolicy {
         use std::collections::HashSet;
         let supplied_set: HashSet<&str> = supplied.iter().map(String::as_str).collect();
         let declared_set: HashSet<&str> = t.params.iter().map(String::as_str).collect();
-        let missing: Vec<String> = declared_set.difference(&supplied_set)
-            .map(|s| (*s).to_string()).collect();
+        let missing: Vec<String> = declared_set
+            .difference(&supplied_set)
+            .map(|s| (*s).to_string())
+            .collect();
         if !missing.is_empty() {
             let mut m = missing;
             m.sort();
             return AdmitDecision::MissingParams { missing: m };
         }
-        let extra: Vec<String> = supplied_set.difference(&declared_set)
-            .map(|s| (*s).to_string()).collect();
+        let extra: Vec<String> = supplied_set
+            .difference(&declared_set)
+            .map(|s| (*s).to_string())
+            .collect();
         if !extra.is_empty() {
             let mut e = extra;
             e.sort();
@@ -141,12 +145,18 @@ impl PromptAllowlistPolicy {
 }
 
 fn check_template(t: &PromptTemplate) -> Result<(), AllowlistError> {
-    if t.id.is_empty() { return Err(AllowlistError::EmptyId); }
-    if t.version.is_empty() { return Err(AllowlistError::EmptyVersion(t.id.clone())); }
+    if t.id.is_empty() {
+        return Err(AllowlistError::EmptyId);
+    }
+    if t.version.is_empty() {
+        return Err(AllowlistError::EmptyVersion(t.id.clone()));
+    }
     use std::collections::HashSet;
     let mut seen: HashSet<&str> = HashSet::new();
     for p in &t.params {
-        if p.is_empty() { return Err(AllowlistError::EmptyParamName(t.id.clone())); }
+        if p.is_empty() {
+            return Err(AllowlistError::EmptyParamName(t.id.clone()));
+        }
         if !seen.insert(p.as_str()) {
             return Err(AllowlistError::DuplicateParam(t.id.clone(), p.clone()));
         }
@@ -155,7 +165,9 @@ fn check_template(t: &PromptTemplate) -> Result<(), AllowlistError> {
 }
 
 impl Default for PromptAllowlistPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -210,13 +222,19 @@ mod tests {
     fn duplicate_template_rejected() {
         let mut p = PromptAllowlistPolicy::new();
         p.register(tmpl("a", &[])).unwrap();
-        assert!(matches!(p.register(tmpl("a", &[])).unwrap_err(), AllowlistError::DuplicateId(_)));
+        assert!(matches!(
+            p.register(tmpl("a", &[])).unwrap_err(),
+            AllowlistError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = PromptAllowlistPolicy::new();
-        assert!(matches!(p.register(tmpl("", &[])).unwrap_err(), AllowlistError::EmptyId));
+        assert!(matches!(
+            p.register(tmpl("", &[])).unwrap_err(),
+            AllowlistError::EmptyId
+        ));
     }
 
     #[test]
@@ -224,13 +242,19 @@ mod tests {
         let mut p = PromptAllowlistPolicy::new();
         let mut t = tmpl("a", &[]);
         t.version = String::new();
-        assert!(matches!(p.register(t).unwrap_err(), AllowlistError::EmptyVersion(_)));
+        assert!(matches!(
+            p.register(t).unwrap_err(),
+            AllowlistError::EmptyVersion(_)
+        ));
     }
 
     #[test]
     fn empty_param_rejected() {
         let mut p = PromptAllowlistPolicy::new();
-        assert!(matches!(p.register(tmpl("a", &[""])).unwrap_err(), AllowlistError::EmptyParamName(_)));
+        assert!(matches!(
+            p.register(tmpl("a", &[""])).unwrap_err(),
+            AllowlistError::EmptyParamName(_)
+        ));
     }
 
     #[test]
@@ -246,7 +270,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = PromptAllowlistPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AllowlistError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AllowlistError::SchemaMismatch
+        ));
     }
 
     #[test]

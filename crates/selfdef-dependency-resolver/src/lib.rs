@@ -57,11 +57,17 @@ impl DependencyResolver {
 
     /// Register a node.
     pub fn add(&mut self, id: &str, deps: Vec<String>) -> Result<(), DepError> {
-        if id.is_empty() { return Err(DepError::EmptyId); }
-        for d in &deps {
-            if d.is_empty() { return Err(DepError::EmptyId); }
+        if id.is_empty() {
+            return Err(DepError::EmptyId);
         }
-        if self.nodes.contains_key(id) { return Err(DepError::DuplicateNode(id.into())); }
+        for d in &deps {
+            if d.is_empty() {
+                return Err(DepError::EmptyId);
+            }
+        }
+        if self.nodes.contains_key(id) {
+            return Err(DepError::DuplicateNode(id.into()));
+        }
         self.nodes.insert(id.into(), deps.into_iter().collect());
         Ok(())
     }
@@ -75,17 +81,25 @@ impl DependencyResolver {
         let mut reachable: BTreeSet<String> = BTreeSet::new();
         let mut stack = vec![target.to_string()];
         while let Some(id) = stack.pop() {
-            if !reachable.insert(id.clone()) { continue; }
-            let deps = self.nodes.get(&id).ok_or_else(|| DepError::Missing(id.clone()))?;
+            if !reachable.insert(id.clone()) {
+                continue;
+            }
+            let deps = self
+                .nodes
+                .get(&id)
+                .ok_or_else(|| DepError::Missing(id.clone()))?;
             for d in deps {
                 if !self.nodes.contains_key(d) {
                     return Err(DepError::Missing(d.clone()));
                 }
-                if !reachable.contains(d) { stack.push(d.clone()); }
+                if !reachable.contains(d) {
+                    stack.push(d.clone());
+                }
             }
         }
         // Kahn over reachable set.
-        let mut indegree: BTreeMap<String, u32> = reachable.iter().map(|k| (k.clone(), 0)).collect();
+        let mut indegree: BTreeMap<String, u32> =
+            reachable.iter().map(|k| (k.clone(), 0)).collect();
         for id in &reachable {
             for d in self.nodes.get(id).unwrap() {
                 // edge: d → id; indegree of id increases.
@@ -94,7 +108,11 @@ impl DependencyResolver {
                 let _ = d;
             }
         }
-        let mut ready: BTreeSet<String> = indegree.iter().filter(|&(_, &d)| d == 0).map(|(k, _)| k.clone()).collect();
+        let mut ready: BTreeSet<String> = indegree
+            .iter()
+            .filter(|&(_, &d)| d == 0)
+            .map(|(k, _)| k.clone())
+            .collect();
         let mut out: Vec<String> = Vec::new();
         while let Some(n) = ready.iter().next().cloned() {
             ready.remove(&n);
@@ -104,7 +122,9 @@ impl DependencyResolver {
                 let deps = self.nodes.get(m).unwrap();
                 if deps.contains(&n) {
                     let d = indegree.get_mut(m).unwrap();
-                    if *d > 0 { *d -= 1; }
+                    if *d > 0 {
+                        *d -= 1;
+                    }
                     if *d == 0 && m != &n && !out.iter().any(|x| x == m) {
                         ready.insert(m.clone());
                     }
@@ -119,11 +139,17 @@ impl DependencyResolver {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DepError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DepError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DepError::SchemaMismatch);
+        }
         for (id, deps) in &self.nodes {
-            if id.is_empty() { return Err(DepError::EmptyId); }
+            if id.is_empty() {
+                return Err(DepError::EmptyId);
+            }
             for d in deps {
-                if d.is_empty() { return Err(DepError::EmptyId); }
+                if d.is_empty() {
+                    return Err(DepError::EmptyId);
+                }
             }
         }
         Ok(())
@@ -131,7 +157,9 @@ impl DependencyResolver {
 }
 
 impl Default for DependencyResolver {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -180,28 +208,40 @@ mod tests {
     #[test]
     fn unknown_target_rejected() {
         let r = DependencyResolver::new();
-        assert!(matches!(r.resolve("nope").unwrap_err(), DepError::Missing(_)));
+        assert!(matches!(
+            r.resolve("nope").unwrap_err(),
+            DepError::Missing(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut r = DependencyResolver::new();
         assert!(matches!(r.add("", vec![]).unwrap_err(), DepError::EmptyId));
-        assert!(matches!(r.add("a", vec!["".into()]).unwrap_err(), DepError::EmptyId));
+        assert!(matches!(
+            r.add("a", vec!["".into()]).unwrap_err(),
+            DepError::EmptyId
+        ));
     }
 
     #[test]
     fn duplicate_node_rejected() {
         let mut r = DependencyResolver::new();
         r.add("a", vec![]).unwrap();
-        assert!(matches!(r.add("a", vec![]).unwrap_err(), DepError::DuplicateNode(_)));
+        assert!(matches!(
+            r.add("a", vec![]).unwrap_err(),
+            DepError::DuplicateNode(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = DependencyResolver::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), DepError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            DepError::SchemaMismatch
+        ));
     }
 
     #[test]

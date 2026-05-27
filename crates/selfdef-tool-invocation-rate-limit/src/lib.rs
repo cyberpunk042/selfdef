@@ -81,10 +81,22 @@ impl ToolInvocationRateLimit {
     }
 
     /// Register a tool. Initial tokens = burst_size.
-    pub fn register(&mut self, tool_id: &str, max_per_minute: u32, burst_size: u32, now: u64) -> Result<(), RateLimitError> {
-        if tool_id.is_empty() { return Err(RateLimitError::EmptyToolId); }
-        if max_per_minute == 0 { return Err(RateLimitError::MaxZero(tool_id.into())); }
-        if burst_size == 0 { return Err(RateLimitError::BurstZero(tool_id.into())); }
+    pub fn register(
+        &mut self,
+        tool_id: &str,
+        max_per_minute: u32,
+        burst_size: u32,
+        now: u64,
+    ) -> Result<(), RateLimitError> {
+        if tool_id.is_empty() {
+            return Err(RateLimitError::EmptyToolId);
+        }
+        if max_per_minute == 0 {
+            return Err(RateLimitError::MaxZero(tool_id.into()));
+        }
+        if burst_size == 0 {
+            return Err(RateLimitError::BurstZero(tool_id.into()));
+        }
         if self.buckets.iter().any(|b| b.tool_id == tool_id) {
             return Err(RateLimitError::DuplicateToolId(tool_id.into()));
         }
@@ -101,7 +113,9 @@ impl ToolInvocationRateLimit {
     /// Refill bucket lazily based on elapsed seconds since last_refill.
     fn refill(b: &mut ToolBucket, now: u64) {
         let dt = now.saturating_sub(b.last_refill_unix);
-        if dt == 0 { return; }
+        if dt == 0 {
+            return;
+        }
         let rate_per_sec = b.max_per_minute as f64 / 60.0;
         let add = rate_per_sec * dt as f64;
         b.tokens = (b.tokens + add).min(b.burst_size as f64);
@@ -138,9 +152,15 @@ impl ToolInvocationRateLimit {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for b in &self.buckets {
-            if b.tool_id.is_empty() { return Err(RateLimitError::EmptyToolId); }
-            if b.max_per_minute == 0 { return Err(RateLimitError::MaxZero(b.tool_id.clone())); }
-            if b.burst_size == 0 { return Err(RateLimitError::BurstZero(b.tool_id.clone())); }
+            if b.tool_id.is_empty() {
+                return Err(RateLimitError::EmptyToolId);
+            }
+            if b.max_per_minute == 0 {
+                return Err(RateLimitError::MaxZero(b.tool_id.clone()));
+            }
+            if b.burst_size == 0 {
+                return Err(RateLimitError::BurstZero(b.tool_id.clone()));
+            }
             if !seen.insert(b.tool_id.as_str()) {
                 return Err(RateLimitError::DuplicateToolId(b.tool_id.clone()));
             }
@@ -150,7 +170,9 @@ impl ToolInvocationRateLimit {
 }
 
 impl Default for ToolInvocationRateLimit {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -199,38 +221,59 @@ mod tests {
     fn duplicate_tool_id_rejected() {
         let mut p = ToolInvocationRateLimit::new();
         p.register("git", 60, 1, 0).unwrap();
-        assert!(matches!(p.register("git", 30, 1, 0).unwrap_err(), RateLimitError::DuplicateToolId(_)));
+        assert!(matches!(
+            p.register("git", 30, 1, 0).unwrap_err(),
+            RateLimitError::DuplicateToolId(_)
+        ));
     }
 
     #[test]
     fn empty_tool_id_rejected() {
         let mut p = ToolInvocationRateLimit::new();
-        assert!(matches!(p.register("", 1, 1, 0).unwrap_err(), RateLimitError::EmptyToolId));
+        assert!(matches!(
+            p.register("", 1, 1, 0).unwrap_err(),
+            RateLimitError::EmptyToolId
+        ));
     }
 
     #[test]
     fn zero_max_rejected() {
         let mut p = ToolInvocationRateLimit::new();
-        assert!(matches!(p.register("a", 0, 1, 0).unwrap_err(), RateLimitError::MaxZero(_)));
+        assert!(matches!(
+            p.register("a", 0, 1, 0).unwrap_err(),
+            RateLimitError::MaxZero(_)
+        ));
     }
 
     #[test]
     fn zero_burst_rejected() {
         let mut p = ToolInvocationRateLimit::new();
-        assert!(matches!(p.register("a", 1, 0, 0).unwrap_err(), RateLimitError::BurstZero(_)));
+        assert!(matches!(
+            p.register("a", 1, 0, 0).unwrap_err(),
+            RateLimitError::BurstZero(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ToolInvocationRateLimit::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RateLimitError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RateLimitError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AdmitDecision::Allow).unwrap(), "\"allow\"");
-        assert_eq!(serde_json::to_string(&AdmitDecision::UnknownTool).unwrap(), "\"unknown-tool\"");
+        assert_eq!(
+            serde_json::to_string(&AdmitDecision::Allow).unwrap(),
+            "\"allow\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AdmitDecision::UnknownTool).unwrap(),
+            "\"unknown-tool\""
+        );
     }
 
     #[test]

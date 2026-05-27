@@ -70,9 +70,17 @@ pub enum WatchdogError {
 
 impl ToolStreamWatchdog {
     /// Start a new watchdog at given time.
-    pub fn start(silence_timeout_ms: u32, total_timeout_ms: u32, started_at_ms: u64) -> Result<Self, WatchdogError> {
-        if silence_timeout_ms == 0 { return Err(WatchdogError::SilenceZero); }
-        if total_timeout_ms == 0 { return Err(WatchdogError::TotalZero); }
+    pub fn start(
+        silence_timeout_ms: u32,
+        total_timeout_ms: u32,
+        started_at_ms: u64,
+    ) -> Result<Self, WatchdogError> {
+        if silence_timeout_ms == 0 {
+            return Err(WatchdogError::SilenceZero);
+        }
+        if total_timeout_ms == 0 {
+            return Err(WatchdogError::TotalZero);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             silence_timeout_ms,
@@ -113,8 +121,12 @@ impl ToolStreamWatchdog {
         if self.schema_version != SCHEMA_VERSION {
             return Err(WatchdogError::SchemaMismatch);
         }
-        if self.silence_timeout_ms == 0 { return Err(WatchdogError::SilenceZero); }
-        if self.total_timeout_ms == 0 { return Err(WatchdogError::TotalZero); }
+        if self.silence_timeout_ms == 0 {
+            return Err(WatchdogError::SilenceZero);
+        }
+        if self.total_timeout_ms == 0 {
+            return Err(WatchdogError::TotalZero);
+        }
         Ok(())
     }
 }
@@ -129,12 +141,18 @@ mod tests {
 
     #[test]
     fn zero_silence_rejected() {
-        assert!(matches!(ToolStreamWatchdog::start(0, 1000, 0).unwrap_err(), WatchdogError::SilenceZero));
+        assert!(matches!(
+            ToolStreamWatchdog::start(0, 1000, 0).unwrap_err(),
+            WatchdogError::SilenceZero
+        ));
     }
 
     #[test]
     fn zero_total_rejected() {
-        assert!(matches!(ToolStreamWatchdog::start(100, 0, 0).unwrap_err(), WatchdogError::TotalZero));
+        assert!(matches!(
+            ToolStreamWatchdog::start(100, 0, 0).unwrap_err(),
+            WatchdogError::TotalZero
+        ));
     }
 
     #[test]
@@ -154,7 +172,10 @@ mod tests {
     fn total_dominates_when_both_exceeded() {
         let w = w();
         // At 6000: total exceeded (5900>5000) and silence too. Total wins by order.
-        assert!(matches!(w.verdict(6000), StreamVerdict::TotalElapsed { .. }));
+        assert!(matches!(
+            w.verdict(6000),
+            StreamVerdict::TotalElapsed { .. }
+        ));
     }
 
     #[test]
@@ -170,15 +191,29 @@ mod tests {
     fn schema_drift_rejected() {
         let mut w = w();
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), WatchdogError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WatchdogError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
         let v = StreamVerdict::Ok;
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"ok\""));
-        let v = StreamVerdict::TotalElapsed { elapsed_ms: 1, cap_ms: 2 };
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"total-elapsed\""));
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"ok\"")
+        );
+        let v = StreamVerdict::TotalElapsed {
+            elapsed_ms: 1,
+            cap_ms: 2,
+        };
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"total-elapsed\"")
+        );
     }
 
     #[test]

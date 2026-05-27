@@ -94,32 +94,50 @@ impl AlertEscalationPolicy {
     pub fn new(notify_to_page_ms: u64, page_to_wake_ms: u64) -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            waits: Waits { notify_to_page_ms, page_to_wake_ms },
+            waits: Waits {
+                notify_to_page_ms,
+                page_to_wake_ms,
+            },
             alerts: BTreeMap::new(),
         }
     }
 
     /// Register a new alert (starts at Notify).
-    pub fn alert_at(&mut self, alert_id: &str, severity: &str, ts_ms: u64) -> Result<(), AlertError> {
-        if alert_id.is_empty() { return Err(AlertError::EmptyId); }
-        if severity.is_empty() { return Err(AlertError::EmptySeverity); }
+    pub fn alert_at(
+        &mut self,
+        alert_id: &str,
+        severity: &str,
+        ts_ms: u64,
+    ) -> Result<(), AlertError> {
+        if alert_id.is_empty() {
+            return Err(AlertError::EmptyId);
+        }
+        if severity.is_empty() {
+            return Err(AlertError::EmptySeverity);
+        }
         if self.alerts.contains_key(alert_id) {
             return Err(AlertError::DuplicateId(alert_id.into()));
         }
-        self.alerts.insert(alert_id.into(), Alert {
-            id: alert_id.into(),
-            stage: Stage::Notify,
-            raised_at_ms: ts_ms,
-            last_stage_ts_ms: ts_ms,
-            severity: severity.into(),
-            acked_at_ms: None,
-        });
+        self.alerts.insert(
+            alert_id.into(),
+            Alert {
+                id: alert_id.into(),
+                stage: Stage::Notify,
+                raised_at_ms: ts_ms,
+                last_stage_ts_ms: ts_ms,
+                severity: severity.into(),
+                acked_at_ms: None,
+            },
+        );
         Ok(())
     }
 
     /// Ack.
     pub fn ack(&mut self, alert_id: &str, ts_ms: u64) -> Result<(), AlertError> {
-        let a = self.alerts.get_mut(alert_id).ok_or_else(|| AlertError::UnknownAlert(alert_id.into()))?;
+        let a = self
+            .alerts
+            .get_mut(alert_id)
+            .ok_or_else(|| AlertError::UnknownAlert(alert_id.into()))?;
         a.acked_at_ms = Some(ts_ms);
         a.stage = Stage::Resolved;
         Ok(())
@@ -131,7 +149,9 @@ impl AlertEscalationPolicy {
         let waits = self.waits;
         let mut changes = Vec::new();
         for a in self.alerts.values_mut() {
-            if a.acked_at_ms.is_some() { continue; }
+            if a.acked_at_ms.is_some() {
+                continue;
+            }
             let elapsed = now_ms.saturating_sub(a.last_stage_ts_ms);
             match a.stage {
                 Stage::Notify => {
@@ -156,22 +176,33 @@ impl AlertEscalationPolicy {
 
     /// Pending count.
     pub fn pending_count(&self) -> usize {
-        self.alerts.values().filter(|a| a.acked_at_ms.is_none()).count()
+        self.alerts
+            .values()
+            .filter(|a| a.acked_at_ms.is_none())
+            .count()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AlertError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AlertError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AlertError::SchemaMismatch);
+        }
         for (id, a) in &self.alerts {
-            if id.is_empty() { return Err(AlertError::EmptyId); }
-            if a.severity.is_empty() { return Err(AlertError::EmptySeverity); }
+            if id.is_empty() {
+                return Err(AlertError::EmptyId);
+            }
+            if a.severity.is_empty() {
+                return Err(AlertError::EmptySeverity);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for AlertEscalationPolicy {
-    fn default() -> Self { Self::new(300_000, 900_000) }
+    fn default() -> Self {
+        Self::new(300_000, 900_000)
+    }
 }
 
 #[cfg(test)]
@@ -237,27 +268,42 @@ mod tests {
     fn duplicate_alert_rejected() {
         let mut p = AlertEscalationPolicy::new(1, 1);
         p.alert_at("a", "x", 0).unwrap();
-        assert!(matches!(p.alert_at("a", "x", 0).unwrap_err(), AlertError::DuplicateId(_)));
+        assert!(matches!(
+            p.alert_at("a", "x", 0).unwrap_err(),
+            AlertError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut p = AlertEscalationPolicy::new(1, 1);
-        assert!(matches!(p.alert_at("", "x", 0).unwrap_err(), AlertError::EmptyId));
-        assert!(matches!(p.alert_at("a", "", 0).unwrap_err(), AlertError::EmptySeverity));
+        assert!(matches!(
+            p.alert_at("", "x", 0).unwrap_err(),
+            AlertError::EmptyId
+        ));
+        assert!(matches!(
+            p.alert_at("a", "", 0).unwrap_err(),
+            AlertError::EmptySeverity
+        ));
     }
 
     #[test]
     fn unknown_ack_rejected() {
         let mut p = AlertEscalationPolicy::new(1, 1);
-        assert!(matches!(p.ack("nope", 0).unwrap_err(), AlertError::UnknownAlert(_)));
+        assert!(matches!(
+            p.ack("nope", 0).unwrap_err(),
+            AlertError::UnknownAlert(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = AlertEscalationPolicy::new(1, 1);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AlertError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AlertError::SchemaMismatch
+        ));
     }
 
     #[test]

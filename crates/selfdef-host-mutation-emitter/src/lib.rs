@@ -75,9 +75,15 @@ pub fn emit(
     at: &str,
     trace_id: &str,
 ) -> Result<HostMutationEvent, EmitterError> {
-    if at.is_empty() { return Err(EmitterError::MissingTimestamp); }
-    if trace_id.is_empty() { return Err(EmitterError::MissingTraceId); }
-    let watcher = channel.get(path).ok_or_else(|| EmitterError::UnknownPath(path.into()))?;
+    if at.is_empty() {
+        return Err(EmitterError::MissingTimestamp);
+    }
+    if trace_id.is_empty() {
+        return Err(EmitterError::MissingTraceId);
+    }
+    let watcher = channel
+        .get(path)
+        .ok_or_else(|| EmitterError::UnknownPath(path.into()))?;
     Ok(HostMutationEvent {
         schema_version: SCHEMA_VERSION.into(),
         path: path.into(),
@@ -94,8 +100,12 @@ impl HostMutationEvent {
         if self.schema_version != SCHEMA_VERSION {
             return Err(EmitterError::SchemaMismatch);
         }
-        if self.at.is_empty() { return Err(EmitterError::MissingTimestamp); }
-        if self.trace_id.is_empty() { return Err(EmitterError::MissingTraceId); }
+        if self.at.is_empty() {
+            return Err(EmitterError::MissingTimestamp);
+        }
+        if self.trace_id.is_empty() {
+            return Err(EmitterError::MissingTraceId);
+        }
         Ok(())
     }
 }
@@ -112,14 +122,22 @@ mod tests {
             kind: WatchKind::File,
             recursive: false,
             owner: owner.into(),
-        }).unwrap();
+        })
+        .unwrap();
         c
     }
 
     #[test]
     fn emit_known_path() {
         let c = channel_with_one("/etc/x.toml", "policy-bus");
-        let e = emit(&c, "/etc/x.toml", MutationKind::Modified, "2026-05-19T03:00:00Z", "tr-1").unwrap();
+        let e = emit(
+            &c,
+            "/etc/x.toml",
+            MutationKind::Modified,
+            "2026-05-19T03:00:00Z",
+            "tr-1",
+        )
+        .unwrap();
         assert_eq!(e.owner, "policy-bus");
         assert_eq!(e.kind, MutationKind::Modified);
         e.validate().unwrap();
@@ -135,15 +153,19 @@ mod tests {
     #[test]
     fn missing_timestamp_rejected() {
         let c = channel_with_one("/etc/x.toml", "p");
-        assert!(matches!(emit(&c, "/etc/x.toml", MutationKind::Modified, "", "tr").unwrap_err(),
-            EmitterError::MissingTimestamp));
+        assert!(matches!(
+            emit(&c, "/etc/x.toml", MutationKind::Modified, "", "tr").unwrap_err(),
+            EmitterError::MissingTimestamp
+        ));
     }
 
     #[test]
     fn missing_trace_id_rejected() {
         let c = channel_with_one("/etc/x.toml", "p");
-        assert!(matches!(emit(&c, "/etc/x.toml", MutationKind::Modified, "t", "").unwrap_err(),
-            EmitterError::MissingTraceId));
+        assert!(matches!(
+            emit(&c, "/etc/x.toml", MutationKind::Modified, "t", "").unwrap_err(),
+            EmitterError::MissingTraceId
+        ));
     }
 
     #[test]
@@ -151,16 +173,34 @@ mod tests {
         let c = channel_with_one("/etc/x.toml", "p");
         let mut e = emit(&c, "/etc/x.toml", MutationKind::Modified, "t", "tr").unwrap();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), EmitterError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            EmitterError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&MutationKind::Created).unwrap(), "\"created\"");
-        assert_eq!(serde_json::to_string(&MutationKind::Modified).unwrap(), "\"modified\"");
-        assert_eq!(serde_json::to_string(&MutationKind::Deleted).unwrap(), "\"deleted\"");
-        assert_eq!(serde_json::to_string(&MutationKind::Renamed).unwrap(), "\"renamed\"");
-        assert_eq!(serde_json::to_string(&MutationKind::PermChanged).unwrap(), "\"perm-changed\"");
+        assert_eq!(
+            serde_json::to_string(&MutationKind::Created).unwrap(),
+            "\"created\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MutationKind::Modified).unwrap(),
+            "\"modified\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MutationKind::Deleted).unwrap(),
+            "\"deleted\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MutationKind::Renamed).unwrap(),
+            "\"renamed\""
+        );
+        assert_eq!(
+            serde_json::to_string(&MutationKind::PermChanged).unwrap(),
+            "\"perm-changed\""
+        );
     }
 
     #[test]

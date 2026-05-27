@@ -123,7 +123,10 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
     // GitHub tokens: ghp_, gho_, ghu_, ghs_, ghr_ + 36 chars.
     for prefix in ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"] {
         if rest.starts_with(prefix) {
-            let body_len = rest[prefix.len()..].chars().take_while(|c| c.is_ascii_alphanumeric()).count();
+            let body_len = rest[prefix.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .count();
             if body_len >= 20 {
                 return Some((SecretClass::GithubToken, prefix.len() + body_len));
             }
@@ -131,14 +134,20 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
     }
     // AWS access key: AKIA + 16 alnum.
     if rest.starts_with("AKIA") {
-        let body_len = rest[4..].chars().take_while(|c| c.is_ascii_alphanumeric()).count();
+        let body_len = rest[4..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .count();
         if body_len >= 16 {
             return Some((SecretClass::AwsAccessKey, 4 + body_len.min(16)));
         }
     }
     // Provider "sk-..." (sk-ant-, sk-proj-, sk-...).
     if rest.starts_with("sk-") {
-        let body_len = rest[3..].chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').count();
+        let body_len = rest[3..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .count();
         if body_len >= 24 {
             return Some((SecretClass::ProviderApiKey, 3 + body_len));
         }
@@ -146,7 +155,9 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
     // JWT: three dot-separated base64 segments.
     if rest.starts_with("eyJ") {
         let seg = |s: &str| -> usize {
-            s.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').count()
+            s.chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .count()
         };
         let a = seg(rest);
         if a >= 10 && rest.as_bytes().get(a) == Some(&b'.') {
@@ -166,14 +177,22 @@ fn match_secret(input: &str, i: usize) -> Option<(SecretClass, usize)> {
         "https://discordapp.com/api/webhooks/",
     ] {
         if rest.starts_with(prefix) {
-            let body_len = rest[prefix.len()..].chars().take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '/')).count();
+            let body_len = rest[prefix.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '/'))
+                .count();
             if body_len >= 10 {
                 return Some((SecretClass::WebhookUrl, prefix.len() + body_len));
             }
         }
     }
     // Generic high-entropy: 40+ hex chars (preceded by non-alnum / start of input).
-    if i == 0 || !input[..i].chars().last().is_some_and(|c| c.is_ascii_alphanumeric()) {
+    if i == 0
+        || !input[..i]
+            .chars()
+            .last()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
+    {
         let body_len = rest.chars().take_while(|c| c.is_ascii_hexdigit()).count();
         if body_len >= 40 {
             return Some((SecretClass::GenericHighEntropy, body_len));
@@ -236,14 +255,22 @@ mod tests {
     #[test]
     fn aws_key_redacted() {
         let r = SecretRedactor::redact("AKIAIOSFODNN7EXAMPLE rest");
-        assert!(r.events.iter().any(|e| e.class == SecretClass::AwsAccessKey));
+        assert!(
+            r.events
+                .iter()
+                .any(|e| e.class == SecretClass::AwsAccessKey)
+        );
         assert!(r.redacted.contains("[REDACTED:AWS-KEY:"));
     }
 
     #[test]
     fn provider_api_key_redacted() {
         let r = SecretRedactor::redact("sk-ant-abcdefghijklmnopqrstuvwx12345");
-        assert!(r.events.iter().any(|e| e.class == SecretClass::ProviderApiKey));
+        assert!(
+            r.events
+                .iter()
+                .any(|e| e.class == SecretClass::ProviderApiKey)
+        );
     }
 
     #[test]
@@ -272,7 +299,11 @@ mod tests {
     fn generic_high_entropy_redacted() {
         let blob = "abcdef0123456789abcdef0123456789abcdef0123";
         let r = SecretRedactor::redact(blob);
-        assert!(r.events.iter().any(|e| e.class == SecretClass::GenericHighEntropy));
+        assert!(
+            r.events
+                .iter()
+                .any(|e| e.class == SecretClass::GenericHighEntropy)
+        );
     }
 
     #[test]
@@ -302,13 +333,22 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = SecretRedactor::redact("ok");
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RedactionError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RedactionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SecretClass::AwsAccessKey).unwrap(), "\"aws-access-key\"");
-        assert_eq!(serde_json::to_string(&SecretClass::ProviderApiKey).unwrap(), "\"provider-api-key\"");
+        assert_eq!(
+            serde_json::to_string(&SecretClass::AwsAccessKey).unwrap(),
+            "\"aws-access-key\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SecretClass::ProviderApiKey).unwrap(),
+            "\"provider-api-key\""
+        );
     }
 
     #[test]

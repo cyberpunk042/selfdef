@@ -89,12 +89,22 @@ impl CollectorCoalescing {
     }
 
     /// Observe.
-    pub fn observe(&mut self, source: &str, fingerprint: u64, ts_ms: u64) -> Result<ObserveVerdict, CoalesceError> {
-        if source.is_empty() { return Err(CoalesceError::EmptySource); }
+    pub fn observe(
+        &mut self,
+        source: &str,
+        fingerprint: u64,
+        ts_ms: u64,
+    ) -> Result<ObserveVerdict, CoalesceError> {
+        if source.is_empty() {
+            return Err(CoalesceError::EmptySource);
+        }
         let by_fp = self.open.entry(source.into()).or_default();
         if let Some(o) = by_fp.get_mut(&fingerprint) {
             if ts_ms < o.last_ts_ms {
-                return Err(CoalesceError::NonMonotonic { prev: o.last_ts_ms, new: ts_ms });
+                return Err(CoalesceError::NonMonotonic {
+                    prev: o.last_ts_ms,
+                    new: ts_ms,
+                });
             }
             if ts_ms.saturating_sub(o.first_ts_ms) <= self.coalesce_ms {
                 o.last_ts_ms = ts_ms;
@@ -111,13 +121,16 @@ impl CollectorCoalescing {
             };
             return Ok(ObserveVerdict::Started { count: 1 });
         }
-        by_fp.insert(fingerprint, Observation {
-            source: source.into(),
+        by_fp.insert(
             fingerprint,
-            first_ts_ms: ts_ms,
-            last_ts_ms: ts_ms,
-            count: 1,
-        });
+            Observation {
+                source: source.into(),
+                fingerprint,
+                first_ts_ms: ts_ms,
+                last_ts_ms: ts_ms,
+                count: 1,
+            },
+        );
         Ok(ObserveVerdict::Started { count: 1 })
     }
 
@@ -128,14 +141,19 @@ impl CollectorCoalescing {
         let sources: Vec<String> = self.open.keys().cloned().collect();
         for src in sources {
             if let Some(map) = self.open.get_mut(&src) {
-                let expired: Vec<u64> = map.iter()
+                let expired: Vec<u64> = map
+                    .iter()
                     .filter(|(_, o)| now_ms.saturating_sub(o.first_ts_ms) > cutoff)
                     .map(|(fp, _)| *fp)
                     .collect();
                 for fp in expired {
-                    if let Some(o) = map.remove(&fp) { out.push(o); }
+                    if let Some(o) = map.remove(&fp) {
+                        out.push(o);
+                    }
                 }
-                if map.is_empty() { self.open.remove(&src); }
+                if map.is_empty() {
+                    self.open.remove(&src);
+                }
             }
         }
         out
@@ -143,9 +161,13 @@ impl CollectorCoalescing {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CoalesceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CoalesceError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CoalesceError::SchemaMismatch);
+        }
         for k in self.open.keys() {
-            if k.is_empty() { return Err(CoalesceError::EmptySource); }
+            if k.is_empty() {
+                return Err(CoalesceError::EmptySource);
+            }
         }
         Ok(())
     }
@@ -182,14 +204,20 @@ mod tests {
     fn distinct_fingerprints_independent() {
         let mut c = CollectorCoalescing::new(1000);
         c.observe("s", 0xabc, 100).unwrap();
-        assert_eq!(c.observe("s", 0xdef, 100).unwrap(), ObserveVerdict::Started { count: 1 });
+        assert_eq!(
+            c.observe("s", 0xdef, 100).unwrap(),
+            ObserveVerdict::Started { count: 1 }
+        );
     }
 
     #[test]
     fn distinct_sources_independent() {
         let mut c = CollectorCoalescing::new(1000);
         c.observe("s1", 0xabc, 100).unwrap();
-        assert_eq!(c.observe("s2", 0xabc, 100).unwrap(), ObserveVerdict::Started { count: 1 });
+        assert_eq!(
+            c.observe("s2", 0xabc, 100).unwrap(),
+            ObserveVerdict::Started { count: 1 }
+        );
     }
 
     #[test]
@@ -214,20 +242,29 @@ mod tests {
     fn nonmonotonic_rejected() {
         let mut c = CollectorCoalescing::new(1000);
         c.observe("s", 0xabc, 200).unwrap();
-        assert!(matches!(c.observe("s", 0xabc, 100).unwrap_err(), CoalesceError::NonMonotonic { .. }));
+        assert!(matches!(
+            c.observe("s", 0xabc, 100).unwrap_err(),
+            CoalesceError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
     fn empty_source_rejected() {
         let mut c = CollectorCoalescing::new(1000);
-        assert!(matches!(c.observe("", 0xabc, 0).unwrap_err(), CoalesceError::EmptySource));
+        assert!(matches!(
+            c.observe("", 0xabc, 0).unwrap_err(),
+            CoalesceError::EmptySource
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = CollectorCoalescing::new(1000);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CoalesceError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CoalesceError::SchemaMismatch
+        ));
     }
 
     #[test]

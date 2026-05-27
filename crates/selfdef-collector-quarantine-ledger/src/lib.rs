@@ -11,8 +11,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use selfdef_collector_source_taxonomy::CollectorKind;
 use selfdef_collector_budget_guard::BudgetVerdict;
+use selfdef_collector_source_taxonomy::CollectorKind;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -117,7 +117,9 @@ impl QuarantineLedger {
 
     /// True if the collector has an open entry.
     pub fn is_quarantined(&self, kind: CollectorKind) -> bool {
-        self.entries.iter().any(|e| e.kind == kind && e.cleared_at.is_empty())
+        self.entries
+            .iter()
+            .any(|e| e.kind == kind && e.cleared_at.is_empty())
     }
 
     /// Count currently-quarantined collectors (distinct).
@@ -154,7 +156,9 @@ impl QuarantineLedger {
 }
 
 impl Default for QuarantineLedger {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Translate a BudgetVerdict + sampled EPS into the corresponding ledger
@@ -186,7 +190,12 @@ mod tests {
     #[test]
     fn open_then_close_roundtrip() {
         let mut l = QuarantineLedger::new();
-        l.open(CollectorKind::Auditd, QuarantineReason::HardEpsBreach, 25_000, "2026-05-19T03:00:00Z");
+        l.open(
+            CollectorKind::Auditd,
+            QuarantineReason::HardEpsBreach,
+            25_000,
+            "2026-05-19T03:00:00Z",
+        );
         assert!(l.is_quarantined(CollectorKind::Auditd));
         assert_eq!(l.open_count(), 1);
         assert!(l.close(CollectorKind::Auditd, "2026-05-19T03:05:00Z"));
@@ -204,8 +213,18 @@ mod tests {
     #[test]
     fn open_count_distinct_per_collector() {
         let mut l = QuarantineLedger::new();
-        l.open(CollectorKind::Auditd, QuarantineReason::HardEpsBreach, 25_000, "t1");
-        l.open(CollectorKind::Suricata, QuarantineReason::SchemaInvalid, 9_000, "t2");
+        l.open(
+            CollectorKind::Auditd,
+            QuarantineReason::HardEpsBreach,
+            25_000,
+            "t1",
+        );
+        l.open(
+            CollectorKind::Suricata,
+            QuarantineReason::SchemaInvalid,
+            9_000,
+            "t2",
+        );
         assert_eq!(l.open_count(), 2);
         l.close(CollectorKind::Auditd, "t3");
         assert_eq!(l.open_count(), 1);
@@ -215,7 +234,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = QuarantineLedger::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch
+        ));
     }
 
     #[test]
@@ -228,7 +250,10 @@ mod tests {
             quarantined_at: String::new(),
             cleared_at: String::new(),
         });
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::MissingTimestamp { idx: 0 }));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::MissingTimestamp { idx: 0 }
+        ));
     }
 
     #[test]
@@ -250,7 +275,13 @@ mod tests {
     #[test]
     fn apply_verdict_quarantines_on_hard() {
         let mut l = QuarantineLedger::new();
-        let opened = apply_verdict(&mut l, CollectorKind::Ebpf, BudgetVerdict::Quarantine, 45_000, "t1");
+        let opened = apply_verdict(
+            &mut l,
+            CollectorKind::Ebpf,
+            BudgetVerdict::Quarantine,
+            45_000,
+            "t1",
+        );
         assert!(opened);
         assert!(l.is_quarantined(CollectorKind::Ebpf));
     }
@@ -258,33 +289,77 @@ mod tests {
     #[test]
     fn apply_verdict_noop_on_warn_or_within() {
         let mut l = QuarantineLedger::new();
-        assert!(!apply_verdict(&mut l, CollectorKind::Ebpf, BudgetVerdict::Warn, 15_000, "t"));
-        assert!(!apply_verdict(&mut l, CollectorKind::Ebpf, BudgetVerdict::Within, 100, "t"));
+        assert!(!apply_verdict(
+            &mut l,
+            CollectorKind::Ebpf,
+            BudgetVerdict::Warn,
+            15_000,
+            "t"
+        ));
+        assert!(!apply_verdict(
+            &mut l,
+            CollectorKind::Ebpf,
+            BudgetVerdict::Within,
+            100,
+            "t"
+        ));
         assert!(l.entries.is_empty());
     }
 
     #[test]
     fn apply_verdict_idempotent_if_already_open() {
         let mut l = QuarantineLedger::new();
-        apply_verdict(&mut l, CollectorKind::Ebpf, BudgetVerdict::Quarantine, 45_000, "t1");
-        let second = apply_verdict(&mut l, CollectorKind::Ebpf, BudgetVerdict::Quarantine, 50_000, "t2");
+        apply_verdict(
+            &mut l,
+            CollectorKind::Ebpf,
+            BudgetVerdict::Quarantine,
+            45_000,
+            "t1",
+        );
+        let second = apply_verdict(
+            &mut l,
+            CollectorKind::Ebpf,
+            BudgetVerdict::Quarantine,
+            50_000,
+            "t2",
+        );
         assert!(!second);
         assert_eq!(l.entries.len(), 1);
     }
 
     #[test]
     fn reason_serde_kebab() {
-        assert_eq!(serde_json::to_string(&QuarantineReason::HardEpsBreach).unwrap(), "\"hard-eps-breach\"");
-        assert_eq!(serde_json::to_string(&QuarantineReason::SchemaInvalid).unwrap(), "\"schema-invalid\"");
-        assert_eq!(serde_json::to_string(&QuarantineReason::HandleDied).unwrap(), "\"handle-died\"");
-        assert_eq!(serde_json::to_string(&QuarantineReason::OperatorForced).unwrap(), "\"operator-forced\"");
-        assert_eq!(serde_json::to_string(&QuarantineReason::SelfTestDrift).unwrap(), "\"self-test-drift\"");
+        assert_eq!(
+            serde_json::to_string(&QuarantineReason::HardEpsBreach).unwrap(),
+            "\"hard-eps-breach\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineReason::SchemaInvalid).unwrap(),
+            "\"schema-invalid\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineReason::HandleDied).unwrap(),
+            "\"handle-died\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineReason::OperatorForced).unwrap(),
+            "\"operator-forced\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineReason::SelfTestDrift).unwrap(),
+            "\"self-test-drift\""
+        );
     }
 
     #[test]
     fn ledger_serde_roundtrip() {
         let mut l = QuarantineLedger::new();
-        l.open(CollectorKind::Auditd, QuarantineReason::HardEpsBreach, 25_000, "t1");
+        l.open(
+            CollectorKind::Auditd,
+            QuarantineReason::HardEpsBreach,
+            25_000,
+            "t1",
+        );
         l.close(CollectorKind::Auditd, "t2");
         let j = serde_json::to_string(&l).unwrap();
         let back: QuarantineLedger = serde_json::from_str(&j).unwrap();

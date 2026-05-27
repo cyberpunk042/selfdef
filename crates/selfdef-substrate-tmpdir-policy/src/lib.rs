@@ -106,12 +106,48 @@ impl SubstrateTmpdirPolicy {
         let mut p = BTreeMap::new();
         let mib = 1u64 << 20;
         let day = 24 * 60 * 60 * 1000;
-        p.insert(Profile::Private,      ProfileCaps { max_bytes: 16 * mib, max_age_ms: 1 * day });
-        p.insert(Profile::Fast,         ProfileCaps { max_bytes: 256 * mib, max_age_ms: 1 * day });
-        p.insert(Profile::Careful,      ProfileCaps { max_bytes: 64 * mib, max_age_ms: 1 * day });
-        p.insert(Profile::Autonomous,   ProfileCaps { max_bytes: 1024 * mib, max_age_ms: 7 * day });
-        p.insert(Profile::Experimental, ProfileCaps { max_bytes: 4096 * mib, max_age_ms: 7 * day });
-        p.insert(Profile::Production,   ProfileCaps { max_bytes: 512 * mib, max_age_ms: 1 * day });
+        p.insert(
+            Profile::Private,
+            ProfileCaps {
+                max_bytes: 16 * mib,
+                max_age_ms: 1 * day,
+            },
+        );
+        p.insert(
+            Profile::Fast,
+            ProfileCaps {
+                max_bytes: 256 * mib,
+                max_age_ms: 1 * day,
+            },
+        );
+        p.insert(
+            Profile::Careful,
+            ProfileCaps {
+                max_bytes: 64 * mib,
+                max_age_ms: 1 * day,
+            },
+        );
+        p.insert(
+            Profile::Autonomous,
+            ProfileCaps {
+                max_bytes: 1024 * mib,
+                max_age_ms: 7 * day,
+            },
+        );
+        p.insert(
+            Profile::Experimental,
+            ProfileCaps {
+                max_bytes: 4096 * mib,
+                max_age_ms: 7 * day,
+            },
+        );
+        p.insert(
+            Profile::Production,
+            ProfileCaps {
+                max_bytes: 512 * mib,
+                max_age_ms: 1 * day,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -128,18 +164,28 @@ impl SubstrateTmpdirPolicy {
         let over_age = oldest_age_ms >= caps.max_age_ms;
         match (over_size, over_age) {
             (false, false) => TmpdirVerdict::Healthy,
-            (true, false) => TmpdirVerdict::OverSize { cap_bytes: caps.max_bytes, used_bytes },
-            (false, true) => TmpdirVerdict::OverAge { cap_ms: caps.max_age_ms, oldest_age_ms },
+            (true, false) => TmpdirVerdict::OverSize {
+                cap_bytes: caps.max_bytes,
+                used_bytes,
+            },
+            (false, true) => TmpdirVerdict::OverAge {
+                cap_ms: caps.max_age_ms,
+                oldest_age_ms,
+            },
             (true, true) => TmpdirVerdict::OverBoth {
-                cap_bytes: caps.max_bytes, used_bytes,
-                cap_ms: caps.max_age_ms, oldest_age_ms,
+                cap_bytes: caps.max_bytes,
+                used_bytes,
+                cap_ms: caps.max_age_ms,
+                oldest_age_ms,
             },
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TmpdirError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TmpdirError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TmpdirError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -156,7 +202,10 @@ mod tests {
     #[test]
     fn healthy() {
         let p = SubstrateTmpdirPolicy::canonical();
-        assert_eq!(p.classify(Profile::Production, 100, 100), TmpdirVerdict::Healthy);
+        assert_eq!(
+            p.classify(Profile::Production, 100, 100),
+            TmpdirVerdict::Healthy
+        );
     }
 
     #[test]
@@ -189,14 +238,20 @@ mod tests {
     fn unconfigured_profile() {
         let mut p = SubstrateTmpdirPolicy::canonical();
         p.profiles.clear();
-        assert_eq!(p.classify(Profile::Production, 0, 0), TmpdirVerdict::Unconfigured);
+        assert_eq!(
+            p.classify(Profile::Production, 0, 0),
+            TmpdirVerdict::Unconfigured
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstrateTmpdirPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TmpdirError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TmpdirError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -72,24 +72,31 @@ pub enum TransitionAuthorityError {
 
 /// IPS-authoritative gate classification for a (from, to) pair.
 pub fn gate_for(from: ExecutionMode, to: ExecutionMode) -> TransitionGate {
-    if from == to { return TransitionGate::Routine; }
+    if from == to {
+        return TransitionGate::Routine;
+    }
     use ExecutionMode::*;
     // 1) Forbidden transitions: Replay can only return to Plan.
-    if from == Replay && to != Plan { return TransitionGate::Forbidden; }
+    if from == Replay && to != Plan {
+        return TransitionGate::Forbidden;
+    }
     // 2) Direct-shift: Plan->Execute, DryRun->Execute (skipping Sandbox),
     //    Shadow->Execute, any non-Execute non-Debug -> Debug.
-    if matches!((from, to),
+    if matches!(
+        (from, to),
         (Plan, Execute)
-        | (DryRun, Execute)
-        | (Shadow, Execute)
-        | (Plan, Debug)
-        | (DryRun, Debug)
-        | (Shadow, Debug)
+            | (DryRun, Execute)
+            | (Shadow, Execute)
+            | (Plan, Debug)
+            | (DryRun, Debug)
+            | (Shadow, Debug)
     ) {
         return TransitionGate::DirectShift;
     }
     // 3) Snapshot required when entering Execute from any non-DirectShift source.
-    if to == Execute { return TransitionGate::Snapshot; }
+    if to == Execute {
+        return TransitionGate::Snapshot;
+    }
     TransitionGate::Routine
 }
 
@@ -175,8 +182,11 @@ mod tests {
     fn replay_can_only_exit_to_plan() {
         assert_eq!(gate_for(Replay, Plan), TransitionGate::Routine);
         for to in [DryRun, Shadow, Sandbox, Execute, Debug] {
-            assert_eq!(gate_for(Replay, to), TransitionGate::Forbidden,
-                "Replay -> {to:?} should be forbidden");
+            assert_eq!(
+                gate_for(Replay, to),
+                TransitionGate::Forbidden,
+                "Replay -> {to:?} should be forbidden"
+            );
             assert!(matches!(
                 approve_transition(Replay, to, true, true).unwrap_err(),
                 TransitionAuthorityError::Forbidden { .. }
@@ -219,9 +229,21 @@ mod tests {
 
     #[test]
     fn gate_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TransitionGate::Routine).unwrap(), "\"routine\"");
-        assert_eq!(serde_json::to_string(&TransitionGate::DirectShift).unwrap(), "\"direct-shift\"");
-        assert_eq!(serde_json::to_string(&TransitionGate::Snapshot).unwrap(), "\"snapshot\"");
-        assert_eq!(serde_json::to_string(&TransitionGate::Forbidden).unwrap(), "\"forbidden\"");
+        assert_eq!(
+            serde_json::to_string(&TransitionGate::Routine).unwrap(),
+            "\"routine\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TransitionGate::DirectShift).unwrap(),
+            "\"direct-shift\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TransitionGate::Snapshot).unwrap(),
+            "\"snapshot\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TransitionGate::Forbidden).unwrap(),
+            "\"forbidden\""
+        );
     }
 }

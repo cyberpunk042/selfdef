@@ -95,9 +95,20 @@ impl EventBusBackpressure {
 
     /// Register or replace a kind config.
     pub fn register(&mut self, kind: &str, high_water: u32, cap: u32) -> Result<(), BpError> {
-        if kind.is_empty() { return Err(BpError::EmptyKind); }
-        if high_water > cap { return Err(BpError::BadConfig(high_water, cap)); }
-        self.kinds.insert(kind.into(), KindConfig { high_water, cap, pending: 0 });
+        if kind.is_empty() {
+            return Err(BpError::EmptyKind);
+        }
+        if high_water > cap {
+            return Err(BpError::BadConfig(high_water, cap));
+        }
+        self.kinds.insert(
+            kind.into(),
+            KindConfig {
+                high_water,
+                cap,
+                pending: 0,
+            },
+        );
         Ok(())
     }
 
@@ -108,13 +119,21 @@ impl EventBusBackpressure {
             None => return EnqueueVerdict::UnknownKind,
         };
         if cfg.pending >= cfg.cap {
-            return EnqueueVerdict::Saturated { pending: cfg.pending, cap: cfg.cap };
+            return EnqueueVerdict::Saturated {
+                pending: cfg.pending,
+                cap: cfg.cap,
+            };
         }
         cfg.pending += 1;
         if cfg.pending >= cfg.high_water {
-            EnqueueVerdict::HighWater { pending: cfg.pending, high_water: cfg.high_water }
+            EnqueueVerdict::HighWater {
+                pending: cfg.pending,
+                high_water: cfg.high_water,
+            }
         } else {
-            EnqueueVerdict::Accepted { pending: cfg.pending }
+            EnqueueVerdict::Accepted {
+                pending: cfg.pending,
+            }
         }
     }
 
@@ -130,17 +149,25 @@ impl EventBusBackpressure {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BpError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BpError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BpError::SchemaMismatch);
+        }
         for (k, c) in &self.kinds {
-            if k.is_empty() { return Err(BpError::EmptyKind); }
-            if c.high_water > c.cap { return Err(BpError::BadConfig(c.high_water, c.cap)); }
+            if k.is_empty() {
+                return Err(BpError::EmptyKind);
+            }
+            if c.high_water > c.cap {
+                return Err(BpError::BadConfig(c.high_water, c.cap));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for EventBusBackpressure {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -151,7 +178,10 @@ mod tests {
     fn accept_under_high_water() {
         let mut b = EventBusBackpressure::new();
         b.register("policy.update", 5, 10).unwrap();
-        assert_eq!(b.enqueue("policy.update"), EnqueueVerdict::Accepted { pending: 1 });
+        assert_eq!(
+            b.enqueue("policy.update"),
+            EnqueueVerdict::Accepted { pending: 1 }
+        );
     }
 
     #[test]
@@ -160,7 +190,13 @@ mod tests {
         b.register("policy.update", 2, 10).unwrap();
         b.enqueue("policy.update");
         let v = b.enqueue("policy.update");
-        assert_eq!(v, EnqueueVerdict::HighWater { pending: 2, high_water: 2 });
+        assert_eq!(
+            v,
+            EnqueueVerdict::HighWater {
+                pending: 2,
+                high_water: 2
+            }
+        );
     }
 
     #[test]
@@ -180,7 +216,10 @@ mod tests {
         b.enqueue("policy.update");
         b.enqueue("policy.update");
         b.dequeue("policy.update");
-        assert!(matches!(b.enqueue("policy.update"), EnqueueVerdict::HighWater { .. } | EnqueueVerdict::Accepted { .. }));
+        assert!(matches!(
+            b.enqueue("policy.update"),
+            EnqueueVerdict::HighWater { .. } | EnqueueVerdict::Accepted { .. }
+        ));
     }
 
     #[test]
@@ -193,13 +232,19 @@ mod tests {
     #[test]
     fn bad_config_rejected() {
         let mut b = EventBusBackpressure::new();
-        assert!(matches!(b.register("x", 10, 5).unwrap_err(), BpError::BadConfig(_, _)));
+        assert!(matches!(
+            b.register("x", 10, 5).unwrap_err(),
+            BpError::BadConfig(_, _)
+        ));
     }
 
     #[test]
     fn empty_kind_rejected() {
         let mut b = EventBusBackpressure::new();
-        assert!(matches!(b.register("", 1, 2).unwrap_err(), BpError::EmptyKind));
+        assert!(matches!(
+            b.register("", 1, 2).unwrap_err(),
+            BpError::EmptyKind
+        ));
     }
 
     #[test]

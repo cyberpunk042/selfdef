@@ -113,15 +113,22 @@ impl CollectorCatalog {
     /// Canonical empty catalog (all unsubscribed).
     pub fn empty_canonical() -> Self {
         let collectors = [
-            CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-            CollectorKind::EventStream, CollectorKind::Journald,
-            CollectorKind::Suricata, CollectorKind::Tetragon,
-        ].into_iter().map(|k| CollectorEntry {
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
+        ]
+        .into_iter()
+        .map(|k| CollectorEntry {
             kind: k,
             crate_name: k.crate_name().into(),
             subscribed: false,
             eps: 0,
-        }).collect();
+        })
+        .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             collectors,
@@ -137,9 +144,13 @@ impl CollectorCatalog {
             return Err(CollectorError::CountInvalid(self.collectors.len()));
         }
         let required = [
-            CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-            CollectorKind::EventStream, CollectorKind::Journald,
-            CollectorKind::Suricata, CollectorKind::Tetragon,
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
         ];
         for k in required {
             if !self.collectors.iter().any(|e| e.kind == k) {
@@ -171,9 +182,11 @@ impl CollectorCatalog {
 
     /// Total EPS across subscribed collectors.
     pub fn total_eps(&self) -> u64 {
-        self.collectors.iter()
+        self.collectors
+            .iter()
             .filter(|e| e.subscribed)
-            .map(|e| e.eps as u64).sum()
+            .map(|e| e.eps as u64)
+            .sum()
     }
 }
 
@@ -184,9 +197,12 @@ mod tests {
     #[test]
     fn seven_collectors_positioned() {
         for (k, p) in [
-            (CollectorKind::Auditd, 1), (CollectorKind::Canary, 2),
-            (CollectorKind::Ebpf, 3), (CollectorKind::EventStream, 4),
-            (CollectorKind::Journald, 5), (CollectorKind::Suricata, 6),
+            (CollectorKind::Auditd, 1),
+            (CollectorKind::Canary, 2),
+            (CollectorKind::Ebpf, 3),
+            (CollectorKind::EventStream, 4),
+            (CollectorKind::Journald, 5),
+            (CollectorKind::Suricata, 6),
             (CollectorKind::Tetragon, 7),
         ] {
             assert_eq!(k.position(), p);
@@ -195,9 +211,18 @@ mod tests {
 
     #[test]
     fn crate_names_match_existing_workspace() {
-        assert_eq!(CollectorKind::Auditd.crate_name(), "selfdef-collector-auditd");
-        assert_eq!(CollectorKind::EventStream.crate_name(), "selfdef-collector-eventstream");
-        assert_eq!(CollectorKind::Tetragon.crate_name(), "selfdef-collector-tetragon");
+        assert_eq!(
+            CollectorKind::Auditd.crate_name(),
+            "selfdef-collector-auditd"
+        );
+        assert_eq!(
+            CollectorKind::EventStream.crate_name(),
+            "selfdef-collector-eventstream"
+        );
+        assert_eq!(
+            CollectorKind::Tetragon.crate_name(),
+            "selfdef-collector-tetragon"
+        );
     }
 
     #[test]
@@ -209,14 +234,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = CollectorCatalog::empty_canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CollectorError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CollectorError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut c = CollectorCatalog::empty_canonical();
         c.collectors.pop();
-        assert!(matches!(c.validate().unwrap_err(), CollectorError::CountInvalid(6)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CollectorError::CountInvalid(6)
+        ));
     }
 
     #[test]
@@ -224,7 +255,11 @@ mod tests {
         let mut c = CollectorCatalog::empty_canonical();
         c.collectors[0].crate_name = "wrong".into();
         match c.validate().unwrap_err() {
-            CollectorError::CrateNameMismatch { kind, declared: _, canonical: _ } => {
+            CollectorError::CrateNameMismatch {
+                kind,
+                declared: _,
+                canonical: _,
+            } => {
                 assert_eq!(kind, CollectorKind::Auditd);
             }
             other => panic!("unexpected: {other:?}"),
@@ -234,8 +269,10 @@ mod tests {
     #[test]
     fn subscribed_count_and_total_eps() {
         let mut c = CollectorCatalog::empty_canonical();
-        c.collectors[0].subscribed = true; c.collectors[0].eps = 100;
-        c.collectors[2].subscribed = true; c.collectors[2].eps = 50;
+        c.collectors[0].subscribed = true;
+        c.collectors[0].eps = 100;
+        c.collectors[2].subscribed = true;
+        c.collectors[2].eps = 50;
         c.collectors[4].eps = 200; // not subscribed → excluded
         assert_eq!(c.subscribed_count(), 2);
         assert_eq!(c.total_eps(), 150);
@@ -243,8 +280,14 @@ mod tests {
 
     #[test]
     fn collector_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CollectorKind::EventStream).unwrap(), "\"event-stream\"");
-        assert_eq!(serde_json::to_string(&CollectorKind::Ebpf).unwrap(), "\"ebpf\"");
+        assert_eq!(
+            serde_json::to_string(&CollectorKind::EventStream).unwrap(),
+            "\"event-stream\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CollectorKind::Ebpf).unwrap(),
+            "\"ebpf\""
+        );
     }
 
     #[test]

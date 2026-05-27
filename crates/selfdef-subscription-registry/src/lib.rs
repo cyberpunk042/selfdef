@@ -76,28 +76,51 @@ impl SubscriptionRegistry {
     }
 
     /// Subscribe.
-    pub fn subscribe(&mut self, id: &str, subscriber: &str, topic: &str, now_ms: u64, ttl_ms: u64) -> Result<(), SubError> {
-        if id.is_empty() { return Err(SubError::EmptyId); }
-        if subscriber.is_empty() { return Err(SubError::EmptySubscriber); }
-        if topic.is_empty() { return Err(SubError::EmptyTopic); }
-        if ttl_ms == 0 { return Err(SubError::ZeroTtl); }
+    pub fn subscribe(
+        &mut self,
+        id: &str,
+        subscriber: &str,
+        topic: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), SubError> {
+        if id.is_empty() {
+            return Err(SubError::EmptyId);
+        }
+        if subscriber.is_empty() {
+            return Err(SubError::EmptySubscriber);
+        }
+        if topic.is_empty() {
+            return Err(SubError::EmptyTopic);
+        }
+        if ttl_ms == 0 {
+            return Err(SubError::ZeroTtl);
+        }
         if self.subscriptions.contains_key(id) {
             return Err(SubError::DuplicateId(id.into()));
         }
-        self.subscriptions.insert(id.into(), Subscription {
-            id: id.into(),
-            subscriber: subscriber.into(),
-            topic: topic.into(),
-            created_at_ms: now_ms,
-            expires_at_ms: now_ms.saturating_add(ttl_ms),
-        });
+        self.subscriptions.insert(
+            id.into(),
+            Subscription {
+                id: id.into(),
+                subscriber: subscriber.into(),
+                topic: topic.into(),
+                created_at_ms: now_ms,
+                expires_at_ms: now_ms.saturating_add(ttl_ms),
+            },
+        );
         Ok(())
     }
 
     /// Renew.
     pub fn renew(&mut self, id: &str, now_ms: u64, ttl_ms: u64) -> Result<(), SubError> {
-        if ttl_ms == 0 { return Err(SubError::ZeroTtl); }
-        let s = self.subscriptions.get_mut(id).ok_or_else(|| SubError::UnknownSubscription(id.into()))?;
+        if ttl_ms == 0 {
+            return Err(SubError::ZeroTtl);
+        }
+        let s = self
+            .subscriptions
+            .get_mut(id)
+            .ok_or_else(|| SubError::UnknownSubscription(id.into()))?;
         s.expires_at_ms = now_ms.saturating_add(ttl_ms);
         Ok(())
     }
@@ -109,23 +132,31 @@ impl SubscriptionRegistry {
 
     /// Prune expired.
     pub fn prune(&mut self, now_ms: u64) -> usize {
-        let expired: Vec<String> = self.subscriptions.iter()
+        let expired: Vec<String> = self
+            .subscriptions
+            .iter()
             .filter(|(_, s)| now_ms >= s.expires_at_ms)
             .map(|(k, _)| k.clone())
             .collect();
         let n = expired.len();
-        for k in expired { self.subscriptions.remove(&k); }
+        for k in expired {
+            self.subscriptions.remove(&k);
+        }
         n
     }
 
     /// Active count.
     pub fn active_count(&self, now_ms: u64) -> usize {
-        self.subscriptions.values().filter(|s| now_ms < s.expires_at_ms).count()
+        self.subscriptions
+            .values()
+            .filter(|s| now_ms < s.expires_at_ms)
+            .count()
     }
 
     /// Subscriptions for a topic at now.
     pub fn by_topic(&self, topic: &str, now_ms: u64) -> Vec<String> {
-        self.subscriptions.values()
+        self.subscriptions
+            .values()
             .filter(|s| s.topic == topic && now_ms < s.expires_at_ms)
             .map(|s| s.subscriber.clone())
             .collect()
@@ -133,18 +164,28 @@ impl SubscriptionRegistry {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SubError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SubError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SubError::SchemaMismatch);
+        }
         for (id, s) in &self.subscriptions {
-            if id.is_empty() { return Err(SubError::EmptyId); }
-            if s.subscriber.is_empty() { return Err(SubError::EmptySubscriber); }
-            if s.topic.is_empty() { return Err(SubError::EmptyTopic); }
+            if id.is_empty() {
+                return Err(SubError::EmptyId);
+            }
+            if s.subscriber.is_empty() {
+                return Err(SubError::EmptySubscriber);
+            }
+            if s.topic.is_empty() {
+                return Err(SubError::EmptyTopic);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for SubscriptionRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -196,34 +237,55 @@ mod tests {
     fn duplicate_rejected() {
         let mut r = SubscriptionRegistry::new();
         r.subscribe("s1", "alice", "t", 0, 1000).unwrap();
-        assert!(matches!(r.subscribe("s1", "bob", "t", 0, 1000).unwrap_err(), SubError::DuplicateId(_)));
+        assert!(matches!(
+            r.subscribe("s1", "bob", "t", 0, 1000).unwrap_err(),
+            SubError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn zero_ttl_rejected() {
         let mut r = SubscriptionRegistry::new();
-        assert!(matches!(r.subscribe("s", "a", "t", 0, 0).unwrap_err(), SubError::ZeroTtl));
+        assert!(matches!(
+            r.subscribe("s", "a", "t", 0, 0).unwrap_err(),
+            SubError::ZeroTtl
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut r = SubscriptionRegistry::new();
-        assert!(matches!(r.subscribe("", "a", "t", 0, 1).unwrap_err(), SubError::EmptyId));
-        assert!(matches!(r.subscribe("s", "", "t", 0, 1).unwrap_err(), SubError::EmptySubscriber));
-        assert!(matches!(r.subscribe("s", "a", "", 0, 1).unwrap_err(), SubError::EmptyTopic));
+        assert!(matches!(
+            r.subscribe("", "a", "t", 0, 1).unwrap_err(),
+            SubError::EmptyId
+        ));
+        assert!(matches!(
+            r.subscribe("s", "", "t", 0, 1).unwrap_err(),
+            SubError::EmptySubscriber
+        ));
+        assert!(matches!(
+            r.subscribe("s", "a", "", 0, 1).unwrap_err(),
+            SubError::EmptyTopic
+        ));
     }
 
     #[test]
     fn renew_unknown_rejected() {
         let mut r = SubscriptionRegistry::new();
-        assert!(matches!(r.renew("nope", 0, 1).unwrap_err(), SubError::UnknownSubscription(_)));
+        assert!(matches!(
+            r.renew("nope", 0, 1).unwrap_err(),
+            SubError::UnknownSubscription(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = SubscriptionRegistry::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), SubError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            SubError::SchemaMismatch
+        ));
     }
 
     #[test]

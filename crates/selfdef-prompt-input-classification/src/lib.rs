@@ -101,7 +101,11 @@ pub struct PromptInputClassification {
 
 impl PromptInputClassification {
     /// New.
-    pub fn new() -> Self { Self { schema_version: SCHEMA_VERSION.into() } }
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), InputError> {
@@ -113,7 +117,9 @@ impl PromptInputClassification {
 }
 
 impl Default for PromptInputClassification {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,19 +169,28 @@ mod tests {
 
     #[test]
     fn source_serde_kebab() {
-        assert_eq!(serde_json::to_string(&InputSource::PriorOutput).unwrap(), "\"prior-output\"");
+        assert_eq!(
+            serde_json::to_string(&InputSource::PriorOutput).unwrap(),
+            "\"prior-output\""
+        );
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TrustClass::Untrusted).unwrap(), "\"untrusted\"");
+        assert_eq!(
+            serde_json::to_string(&TrustClass::Untrusted).unwrap(),
+            "\"untrusted\""
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = PromptInputClassification::new();
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), InputError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            InputError::SchemaMismatch
+        ));
     }
 
     #[test]

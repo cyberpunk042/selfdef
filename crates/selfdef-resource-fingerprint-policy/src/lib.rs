@@ -78,7 +78,9 @@ impl ResourceFingerprintPolicy {
 
     /// Pin a resource.
     pub fn pin(&mut self, id: &str, expected_hex: &str) -> Result<(), FpError> {
-        if id.is_empty() { return Err(FpError::EmptyId); }
+        if id.is_empty() {
+            return Err(FpError::EmptyId);
+        }
         if !valid_hex(expected_hex) {
             return Err(FpError::BadExpectedHex(id.into()));
         }
@@ -122,7 +124,9 @@ impl ResourceFingerprintPolicy {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for p in &self.pins {
-            if p.id.is_empty() { return Err(FpError::EmptyId); }
+            if p.id.is_empty() {
+                return Err(FpError::EmptyId);
+            }
             if !valid_hex(&p.expected_hex) {
                 return Err(FpError::BadExpectedHex(p.id.clone()));
             }
@@ -148,7 +152,9 @@ fn fnv1a_64(data: &[u8]) -> u64 {
 }
 
 impl Default for ResourceFingerprintPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -184,7 +190,10 @@ mod tests {
         let mut p = ResourceFingerprintPolicy::new();
         let hex = ResourceFingerprintPolicy::compute_hex(b"x");
         p.pin("a", &hex).unwrap();
-        assert!(matches!(p.pin("a", &hex).unwrap_err(), FpError::DuplicateId(_)));
+        assert!(matches!(
+            p.pin("a", &hex).unwrap_err(),
+            FpError::DuplicateId(_)
+        ));
     }
 
     #[test]
@@ -197,8 +206,14 @@ mod tests {
     #[test]
     fn bad_hex_rejected() {
         let mut p = ResourceFingerprintPolicy::new();
-        assert!(matches!(p.pin("a", "notlonghex").unwrap_err(), FpError::BadExpectedHex(_)));
-        assert!(matches!(p.pin("a", "ZZZZZZZZZZZZZZZZ").unwrap_err(), FpError::BadExpectedHex(_)));
+        assert!(matches!(
+            p.pin("a", "notlonghex").unwrap_err(),
+            FpError::BadExpectedHex(_)
+        ));
+        assert!(matches!(
+            p.pin("a", "ZZZZZZZZZZZZZZZZ").unwrap_err(),
+            FpError::BadExpectedHex(_)
+        ));
     }
 
     #[test]
@@ -219,8 +234,15 @@ mod tests {
 
     #[test]
     fn result_serde_kebab() {
-        let d = VerifyResult::Drift { expected: "x".into(), observed: "y".into() };
-        assert!(serde_json::to_string(&d).unwrap().contains("\"kind\":\"drift\""));
+        let d = VerifyResult::Drift {
+            expected: "x".into(),
+            observed: "y".into(),
+        };
+        assert!(
+            serde_json::to_string(&d)
+                .unwrap()
+                .contains("\"kind\":\"drift\"")
+        );
     }
 
     #[test]

@@ -63,7 +63,9 @@ pub enum ShaperError {
 impl LeakyBucketShaper {
     /// New.
     pub fn new(capacity: u64, drain_per_sec: u64) -> Result<Self, ShaperError> {
-        if capacity == 0 { return Err(ShaperError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(ShaperError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -77,7 +79,9 @@ impl LeakyBucketShaper {
     }
 
     fn drain(&mut self, now_ms: u64) {
-        if now_ms <= self.last_drain_ms { return; }
+        if now_ms <= self.last_drain_ms {
+            return;
+        }
         let elapsed_ms = now_ms - self.last_drain_ms;
         let total_ms = elapsed_ms.saturating_add(self.remainder_ms);
         let drained = total_ms.saturating_mul(self.drain_per_sec) / 1000;
@@ -97,7 +101,9 @@ impl LeakyBucketShaper {
         let available = self.capacity.saturating_sub(self.level);
         if units > available {
             self.rejected_total = self.rejected_total.saturating_add(1);
-            OfferVerdict::Rejected { overflow: units - available }
+            OfferVerdict::Rejected {
+                overflow: units - available,
+            }
         } else {
             self.level = self.level.saturating_add(units);
             self.accepted_total = self.accepted_total.saturating_add(1);
@@ -112,8 +118,12 @@ impl LeakyBucketShaper {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ShaperError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ShaperError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(ShaperError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ShaperError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(ShaperError::ZeroCapacity);
+        }
         Ok(())
     }
 }
@@ -159,14 +169,20 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(LeakyBucketShaper::new(0, 1).unwrap_err(), ShaperError::ZeroCapacity));
+        assert!(matches!(
+            LeakyBucketShaper::new(0, 1).unwrap_err(),
+            ShaperError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = LeakyBucketShaper::new(10, 1).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), ShaperError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ShaperError::SchemaMismatch
+        ));
     }
 
     #[test]

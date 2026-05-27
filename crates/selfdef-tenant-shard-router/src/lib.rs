@@ -58,9 +58,13 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 impl TenantShardRouter {
     /// New.
     pub fn new(shards: &[&str]) -> Result<Self, RouterError> {
-        if shards.is_empty() { return Err(RouterError::NoShards); }
+        if shards.is_empty() {
+            return Err(RouterError::NoShards);
+        }
         for s in shards {
-            if s.is_empty() { return Err(RouterError::EmptyId); }
+            if s.is_empty() {
+                return Err(RouterError::EmptyId);
+            }
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -71,25 +75,38 @@ impl TenantShardRouter {
 
     /// Set shard list (preserves valid pins, drops invalid ones).
     pub fn set_shards(&mut self, shards: &[&str]) -> Result<usize, RouterError> {
-        if shards.is_empty() { return Err(RouterError::NoShards); }
-        for s in shards {
-            if s.is_empty() { return Err(RouterError::EmptyId); }
+        if shards.is_empty() {
+            return Err(RouterError::NoShards);
         }
-        let new_set: std::collections::BTreeSet<String> = shards.iter().map(|s| (*s).into()).collect();
-        let to_unpin: Vec<String> = self.pinned.iter()
+        for s in shards {
+            if s.is_empty() {
+                return Err(RouterError::EmptyId);
+            }
+        }
+        let new_set: std::collections::BTreeSet<String> =
+            shards.iter().map(|s| (*s).into()).collect();
+        let to_unpin: Vec<String> = self
+            .pinned
+            .iter()
             .filter(|(_, v)| !new_set.contains(v.as_str()))
             .map(|(k, _)| k.clone())
             .collect();
         let n = to_unpin.len();
-        for k in to_unpin { self.pinned.remove(&k); }
+        for k in to_unpin {
+            self.pinned.remove(&k);
+        }
         self.shards = shards.iter().map(|s| (*s).into()).collect();
         Ok(n)
     }
 
     /// Pin tenant to a shard.
     pub fn pin(&mut self, tenant: &str, shard: &str) -> Result<(), RouterError> {
-        if tenant.is_empty() { return Err(RouterError::EmptyId); }
-        if shard.is_empty() { return Err(RouterError::EmptyId); }
+        if tenant.is_empty() {
+            return Err(RouterError::EmptyId);
+        }
+        if shard.is_empty() {
+            return Err(RouterError::EmptyId);
+        }
         if !self.shards.iter().any(|s| s == shard) {
             return Err(RouterError::UnknownShard(shard.into()));
         }
@@ -104,8 +121,12 @@ impl TenantShardRouter {
 
     /// Route.
     pub fn route(&self, tenant: &str) -> Result<String, RouterError> {
-        if tenant.is_empty() { return Err(RouterError::EmptyId); }
-        if self.shards.is_empty() { return Err(RouterError::NoShards); }
+        if tenant.is_empty() {
+            return Err(RouterError::EmptyId);
+        }
+        if self.shards.is_empty() {
+            return Err(RouterError::NoShards);
+        }
         if let Some(s) = self.pinned.get(tenant) {
             return Ok(s.clone());
         }
@@ -116,15 +137,25 @@ impl TenantShardRouter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RouterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RouterError::SchemaMismatch); }
-        if self.shards.is_empty() { return Err(RouterError::NoShards); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RouterError::SchemaMismatch);
+        }
+        if self.shards.is_empty() {
+            return Err(RouterError::NoShards);
+        }
         for s in &self.shards {
-            if s.is_empty() { return Err(RouterError::EmptyId); }
+            if s.is_empty() {
+                return Err(RouterError::EmptyId);
+            }
         }
         let set: std::collections::BTreeSet<&String> = self.shards.iter().collect();
         for (t, s) in &self.pinned {
-            if t.is_empty() { return Err(RouterError::EmptyId); }
-            if !set.contains(s) { return Err(RouterError::UnknownShard(s.clone())); }
+            if t.is_empty() {
+                return Err(RouterError::EmptyId);
+            }
+            if !set.contains(s) {
+                return Err(RouterError::UnknownShard(s.clone()));
+            }
         }
         Ok(())
     }
@@ -188,13 +219,22 @@ mod tests {
     #[test]
     fn unknown_shard_pin_rejected() {
         let mut r = TenantShardRouter::new(&["s1"]).unwrap();
-        assert!(matches!(r.pin("alice", "s2").unwrap_err(), RouterError::UnknownShard(_)));
+        assert!(matches!(
+            r.pin("alice", "s2").unwrap_err(),
+            RouterError::UnknownShard(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
-        assert!(matches!(TenantShardRouter::new(&[]).unwrap_err(), RouterError::NoShards));
-        assert!(matches!(TenantShardRouter::new(&[""]).unwrap_err(), RouterError::EmptyId));
+        assert!(matches!(
+            TenantShardRouter::new(&[]).unwrap_err(),
+            RouterError::NoShards
+        ));
+        assert!(matches!(
+            TenantShardRouter::new(&[""]).unwrap_err(),
+            RouterError::EmptyId
+        ));
         let r = TenantShardRouter::new(&["s1"]).unwrap();
         assert!(matches!(r.route("").unwrap_err(), RouterError::EmptyId));
     }
@@ -203,7 +243,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = TenantShardRouter::new(&["s1"]).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RouterError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RouterError::SchemaMismatch
+        ));
     }
 
     #[test]

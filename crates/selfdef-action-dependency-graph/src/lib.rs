@@ -74,35 +74,54 @@ impl ActionDependencyGraph {
 
     /// Add a node.
     pub fn add_node(&mut self, id: &str) -> Result<bool, GraphError> {
-        if id.is_empty() { return Err(GraphError::EmptyId); }
+        if id.is_empty() {
+            return Err(GraphError::EmptyId);
+        }
         Ok(self.nodes.insert(id.into()))
     }
 
     /// Add an edge parent → child.
     pub fn add_edge(&mut self, parent: &str, child: &str) -> Result<(), GraphError> {
-        if parent.is_empty() || child.is_empty() { return Err(GraphError::EmptyId); }
-        if parent == child { return Err(GraphError::SelfLoop(parent.into())); }
+        if parent.is_empty() || child.is_empty() {
+            return Err(GraphError::EmptyId);
+        }
+        if parent == child {
+            return Err(GraphError::SelfLoop(parent.into()));
+        }
         // Insert nodes first (clean to roll back since we check cycle next).
         self.nodes.insert(parent.into());
         self.nodes.insert(child.into());
         // Check for cycle: would adding parent→child create a path child →* parent already?
         if self.reachable(child, parent) {
-            return Err(GraphError::WouldCycle { parent: parent.into(), child: child.into() });
+            return Err(GraphError::WouldCycle {
+                parent: parent.into(),
+                child: child.into(),
+            });
         }
-        self.children.entry(parent.into()).or_default().insert(child.into());
-        self.parents.entry(child.into()).or_default().insert(parent.into());
+        self.children
+            .entry(parent.into())
+            .or_default()
+            .insert(child.into());
+        self.parents
+            .entry(child.into())
+            .or_default()
+            .insert(parent.into());
         Ok(())
     }
 
     /// Reachability: is `to` reachable from `from`?
     fn reachable(&self, from: &str, to: &str) -> bool {
-        if from == to { return true; }
+        if from == to {
+            return true;
+        }
         let mut q: VecDeque<&str> = VecDeque::new();
         let mut seen: BTreeSet<&str> = BTreeSet::new();
         q.push_back(from);
         seen.insert(from);
         while let Some(n) = q.pop_front() {
-            if n == to { return true; }
+            if n == to {
+                return true;
+            }
             if let Some(kids) = self.children.get(n) {
                 for k in kids {
                     let s: &str = k.as_str();
@@ -117,12 +136,18 @@ impl ActionDependencyGraph {
 
     /// Parents of a node.
     pub fn parents_of(&self, id: &str) -> Vec<String> {
-        self.parents.get(id).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.parents
+            .get(id)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Children of a node.
     pub fn children_of(&self, id: &str) -> Vec<String> {
-        self.children.get(id).map(|s| s.iter().cloned().collect()).unwrap_or_default()
+        self.children
+            .get(id)
+            .map(|s| s.iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Topological order (Kahn's algorithm; alphabetical tie-break).
@@ -158,7 +183,9 @@ impl ActionDependencyGraph {
 
     /// Remove a node and all its edges.
     pub fn remove_node(&mut self, id: &str) -> bool {
-        if !self.nodes.remove(id) { return false; }
+        if !self.nodes.remove(id) {
+            return false;
+        }
         let parents = self.parents.remove(id).unwrap_or_default();
         for p in &parents {
             if let Some(set) = self.children.get_mut(p) {
@@ -176,16 +203,22 @@ impl ActionDependencyGraph {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GraphError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GraphError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GraphError::SchemaMismatch);
+        }
         for n in &self.nodes {
-            if n.is_empty() { return Err(GraphError::EmptyId); }
+            if n.is_empty() {
+                return Err(GraphError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionDependencyGraph {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -216,7 +249,10 @@ mod tests {
         let mut g = ActionDependencyGraph::new();
         g.add_edge("a", "b").unwrap();
         g.add_edge("b", "c").unwrap();
-        assert!(matches!(g.add_edge("c", "a").unwrap_err(), GraphError::WouldCycle { .. }));
+        assert!(matches!(
+            g.add_edge("c", "a").unwrap_err(),
+            GraphError::WouldCycle { .. }
+        ));
         // Graph still acyclic.
         assert!(g.topological_order().is_ok());
     }
@@ -224,7 +260,10 @@ mod tests {
     #[test]
     fn self_loop_rejected() {
         let mut g = ActionDependencyGraph::new();
-        assert!(matches!(g.add_edge("a", "a").unwrap_err(), GraphError::SelfLoop(_)));
+        assert!(matches!(
+            g.add_edge("a", "a").unwrap_err(),
+            GraphError::SelfLoop(_)
+        ));
     }
 
     #[test]
@@ -272,14 +311,20 @@ mod tests {
     fn empty_id_rejected() {
         let mut g = ActionDependencyGraph::new();
         assert!(matches!(g.add_node("").unwrap_err(), GraphError::EmptyId));
-        assert!(matches!(g.add_edge("", "x").unwrap_err(), GraphError::EmptyId));
+        assert!(matches!(
+            g.add_edge("", "x").unwrap_err(),
+            GraphError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = ActionDependencyGraph::new();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GraphError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GraphError::SchemaMismatch
+        ));
     }
 
     #[test]

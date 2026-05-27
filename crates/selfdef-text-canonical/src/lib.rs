@@ -62,7 +62,10 @@ pub enum CanonError {
 pub fn canonicalize(input: &str, opts: Options) -> String {
     let mut s = input.to_string();
     if opts.strip_non_printable {
-        s = s.chars().filter(|c| !c.is_control() || *c == ' ' || *c == '\t' || *c == '\n').collect();
+        s = s
+            .chars()
+            .filter(|c| !c.is_control() || *c == ' ' || *c == '\t' || *c == '\n')
+            .collect();
     }
     if opts.lowercase {
         s = s.to_ascii_lowercase();
@@ -72,7 +75,9 @@ pub fn canonicalize(input: &str, opts: Options) -> String {
         let mut last_ws = false;
         for c in s.chars() {
             if c.is_whitespace() {
-                if !last_ws { out.push(' '); }
+                if !last_ws {
+                    out.push(' ');
+                }
                 last_ws = true;
             } else {
                 out.push(c);
@@ -103,7 +108,9 @@ impl TextCanonical {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CanonError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CanonError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CanonError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -120,34 +127,43 @@ mod tests {
 
     #[test]
     fn no_options_passthrough() {
-        let s = canonicalize("  HI  ", Options {
-            lowercase: false,
-            trim: false,
-            collapse_whitespace: false,
-            strip_non_printable: false,
-        });
+        let s = canonicalize(
+            "  HI  ",
+            Options {
+                lowercase: false,
+                trim: false,
+                collapse_whitespace: false,
+                strip_non_printable: false,
+            },
+        );
         assert_eq!(s, "  HI  ");
     }
 
     #[test]
     fn strip_non_printable() {
-        let s = canonicalize("hi\x07there", Options {
-            lowercase: false,
-            trim: false,
-            collapse_whitespace: false,
-            strip_non_printable: true,
-        });
+        let s = canonicalize(
+            "hi\x07there",
+            Options {
+                lowercase: false,
+                trim: false,
+                collapse_whitespace: false,
+                strip_non_printable: true,
+            },
+        );
         assert_eq!(s, "hithere");
     }
 
     #[test]
     fn collapse_only() {
-        let s = canonicalize("a   b\t\tc", Options {
-            lowercase: false,
-            trim: false,
-            collapse_whitespace: true,
-            strip_non_printable: false,
-        });
+        let s = canonicalize(
+            "a   b\t\tc",
+            Options {
+                lowercase: false,
+                trim: false,
+                collapse_whitespace: true,
+                strip_non_printable: false,
+            },
+        );
         assert_eq!(s, "a b c");
     }
 
@@ -161,7 +177,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = TextCanonical::new(Options::all());
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CanonError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CanonError::SchemaMismatch
+        ));
     }
 
     #[test]

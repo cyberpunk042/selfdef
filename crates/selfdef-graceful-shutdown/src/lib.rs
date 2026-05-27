@@ -68,7 +68,9 @@ impl GracefulShutdown {
 
     /// Begin shutdown (Running → StopAccepting).
     pub fn begin(&mut self, ts_ms: u64) -> Result<(), ShutdownError> {
-        if self.stage != Stage::Running { return Err(ShutdownError::InvalidTransition(self.stage)); }
+        if self.stage != Stage::Running {
+            return Err(ShutdownError::InvalidTransition(self.stage));
+        }
         self.stage = Stage::StopAccepting;
         self.stage_entered_ms = ts_ms;
         Ok(())
@@ -118,7 +120,9 @@ impl GracefulShutdown {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ShutdownError> {
-        if self.schema_version_marker != 1 { return Err(ShutdownError::SchemaMismatch); }
+        if self.schema_version_marker != 1 {
+            return Err(ShutdownError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -138,7 +142,10 @@ mod tests {
     fn double_begin_rejected() {
         let mut s = GracefulShutdown::new(1000, 5000);
         s.begin(0).unwrap();
-        assert!(matches!(s.begin(1).unwrap_err(), ShutdownError::InvalidTransition(_)));
+        assert!(matches!(
+            s.begin(1).unwrap_err(),
+            ShutdownError::InvalidTransition(_)
+        ));
     }
 
     #[test]
@@ -172,7 +179,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = GracefulShutdown::new(1, 1);
         s.schema_version_marker = 99;
-        assert!(matches!(s.validate().unwrap_err(), ShutdownError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ShutdownError::SchemaMismatch
+        ));
     }
 
     #[test]

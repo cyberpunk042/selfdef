@@ -159,7 +159,10 @@ mod tests {
     fn decision_denial_always_kept() {
         let p = TraceSamplingPolicy::canonical();
         for i in 0..100 {
-            assert_eq!(p.sample(&format!("t{i}"), SpanClass::DecisionDenial), SampleDecision::Keep);
+            assert_eq!(
+                p.sample(&format!("t{i}"), SpanClass::DecisionDenial),
+                SampleDecision::Keep
+            );
         }
     }
 
@@ -167,7 +170,10 @@ mod tests {
     fn canary_trip_always_kept() {
         let p = TraceSamplingPolicy::canonical();
         for i in 0..100 {
-            assert_eq!(p.sample(&format!("t{i}"), SpanClass::CanaryTrip), SampleDecision::Keep);
+            assert_eq!(
+                p.sample(&format!("t{i}"), SpanClass::CanaryTrip),
+                SampleDecision::Keep
+            );
         }
     }
 
@@ -175,7 +181,10 @@ mod tests {
     fn decision_100pct_always_kept() {
         let p = TraceSamplingPolicy::canonical();
         for i in 0..100 {
-            assert_eq!(p.sample(&format!("t{i}"), SpanClass::Decision), SampleDecision::Keep);
+            assert_eq!(
+                p.sample(&format!("t{i}"), SpanClass::Decision),
+                SampleDecision::Keep
+            );
         }
     }
 
@@ -204,20 +213,32 @@ mod tests {
     fn ppm_out_of_range_rejected() {
         let mut p = TraceSamplingPolicy::canonical();
         p.llm_ppm = 2_000_000;
-        assert!(matches!(p.validate().unwrap_err(), SamplingError::PpmOutOfRange(SpanClass::Llm, 2_000_000)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SamplingError::PpmOutOfRange(SpanClass::Llm, 2_000_000)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TraceSamplingPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SamplingError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SamplingError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SpanClass::DecisionDenial).unwrap(), "\"decision-denial\"");
-        assert_eq!(serde_json::to_string(&SpanClass::CanaryTrip).unwrap(), "\"canary-trip\"");
+        assert_eq!(
+            serde_json::to_string(&SpanClass::DecisionDenial).unwrap(),
+            "\"decision-denial\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SpanClass::CanaryTrip).unwrap(),
+            "\"canary-trip\""
+        );
     }
 
     #[test]
@@ -225,7 +246,10 @@ mod tests {
         let mut p = TraceSamplingPolicy::canonical();
         p.tool_ppm = 0;
         for i in 0..50 {
-            assert_eq!(p.sample(&format!("t{i}"), SpanClass::Tool), SampleDecision::Drop);
+            assert_eq!(
+                p.sample(&format!("t{i}"), SpanClass::Tool),
+                SampleDecision::Drop
+            );
         }
     }
 
@@ -234,7 +258,10 @@ mod tests {
         let mut p = TraceSamplingPolicy::canonical();
         p.tool_ppm = 1_000_000;
         for i in 0..50 {
-            assert_eq!(p.sample(&format!("t{i}"), SpanClass::Tool), SampleDecision::Keep);
+            assert_eq!(
+                p.sample(&format!("t{i}"), SpanClass::Tool),
+                SampleDecision::Keep
+            );
         }
     }
 

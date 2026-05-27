@@ -64,7 +64,10 @@ impl MonotonicCounter {
     pub fn observe(&mut self, value: u64) -> Result<(), CounterError> {
         if value <= self.last {
             self.regressions = self.regressions.saturating_add(1);
-            return Err(CounterError::Regression { value, last: self.last });
+            return Err(CounterError::Regression {
+                value,
+                last: self.last,
+            });
         }
         self.last = value;
         self.advances = self.advances.saturating_add(1);
@@ -75,7 +78,10 @@ impl MonotonicCounter {
     pub fn observe_eq(&mut self, value: u64) -> Result<bool, CounterError> {
         if value < self.last {
             self.regressions = self.regressions.saturating_add(1);
-            return Err(CounterError::Regression { value, last: self.last });
+            return Err(CounterError::Regression {
+                value,
+                last: self.last,
+            });
         }
         if value == self.last {
             return Ok(false); // idempotent — no advance recorded
@@ -95,13 +101,17 @@ impl MonotonicCounter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CounterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CounterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CounterError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for MonotonicCounter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +132,10 @@ mod tests {
     fn equal_rejected_in_strict() {
         let mut c = MonotonicCounter::new();
         c.observe(5).unwrap();
-        assert!(matches!(c.observe(5).unwrap_err(), CounterError::Regression { .. }));
+        assert!(matches!(
+            c.observe(5).unwrap_err(),
+            CounterError::Regression { .. }
+        ));
         assert_eq!(c.regressions, 1);
         assert_eq!(c.last, 5);
     }
@@ -131,7 +144,10 @@ mod tests {
     fn regression_rejected() {
         let mut c = MonotonicCounter::new();
         c.observe(10).unwrap();
-        assert!(matches!(c.observe(5).unwrap_err(), CounterError::Regression { .. }));
+        assert!(matches!(
+            c.observe(5).unwrap_err(),
+            CounterError::Regression { .. }
+        ));
     }
 
     #[test]
@@ -175,7 +191,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = MonotonicCounter::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -57,9 +57,17 @@ pub struct PolicyExplanationFormatter;
 
 impl PolicyExplanationFormatter {
     /// Format.
-    pub fn format(policy_id: &str, reason_code: &str, context: &BTreeMap<String, String>) -> Result<Explanation, ExplainError> {
-        if policy_id.is_empty() { return Err(ExplainError::EmptyPolicyId); }
-        if reason_code.is_empty() { return Err(ExplainError::EmptyReasonCode); }
+    pub fn format(
+        policy_id: &str,
+        reason_code: &str,
+        context: &BTreeMap<String, String>,
+    ) -> Result<Explanation, ExplainError> {
+        if policy_id.is_empty() {
+            return Err(ExplainError::EmptyPolicyId);
+        }
+        if reason_code.is_empty() {
+            return Err(ExplainError::EmptyReasonCode);
+        }
         let headline = format!("Policy '{policy_id}' denied: {reason_code}");
         if headline.chars().count() > 80 {
             return Err(ExplainError::HeadlineTooLong(headline.chars().count()));
@@ -69,15 +77,26 @@ impl PolicyExplanationFormatter {
         for (k, v) in context {
             let line = format!("  {k}: {v}");
             if line.chars().count() > 120 {
-                return Err(ExplainError::DetailLineTooLong(detail_lines.len(), line.chars().count()));
+                return Err(ExplainError::DetailLineTooLong(
+                    detail_lines.len(),
+                    line.chars().count(),
+                ));
             }
             detail_lines.push(line);
         }
         let fix_suggestions = match reason_code {
-            "quota-exhausted" => vec!["Wait for the quota window to reset, or raise the cap in operator settings.".into()],
-            "approval-required" => vec!["Trigger an operator-approval flow before re-attempting the action.".into()],
-            "schema-drift" => vec!["Refresh the engine and re-apply the affected rule bundle.".into()],
-            "emergency-stop-engaged" => vec!["Release the kill switch with the configured release authority.".into()],
+            "quota-exhausted" => vec![
+                "Wait for the quota window to reset, or raise the cap in operator settings.".into(),
+            ],
+            "approval-required" => {
+                vec!["Trigger an operator-approval flow before re-attempting the action.".into()]
+            }
+            "schema-drift" => {
+                vec!["Refresh the engine and re-apply the affected rule bundle.".into()]
+            }
+            "emergency-stop-engaged" => {
+                vec!["Release the kill switch with the configured release authority.".into()]
+            }
             _ => vec![],
         };
         Ok(Explanation {
@@ -119,7 +138,8 @@ mod tests {
     #[test]
     fn empty_policy_rejected() {
         assert!(matches!(
-            PolicyExplanationFormatter::format("", "quota-exhausted", &BTreeMap::new()).unwrap_err(),
+            PolicyExplanationFormatter::format("", "quota-exhausted", &BTreeMap::new())
+                .unwrap_err(),
             ExplainError::EmptyPolicyId
         ));
     }
@@ -134,13 +154,16 @@ mod tests {
 
     #[test]
     fn quota_suggestion_emitted() {
-        let r = PolicyExplanationFormatter::format("rate-limit", "quota-exhausted", &BTreeMap::new()).unwrap();
+        let r =
+            PolicyExplanationFormatter::format("rate-limit", "quota-exhausted", &BTreeMap::new())
+                .unwrap();
         assert_eq!(r.fix_suggestions.len(), 1);
     }
 
     #[test]
     fn approval_suggestion_emitted() {
-        let r = PolicyExplanationFormatter::format("p", "approval-required", &BTreeMap::new()).unwrap();
+        let r =
+            PolicyExplanationFormatter::format("p", "approval-required", &BTreeMap::new()).unwrap();
         assert_eq!(r.fix_suggestions.len(), 1);
     }
 
@@ -160,16 +183,24 @@ mod tests {
 
     #[test]
     fn schema_drift_rejected() {
-        let mut r = PolicyExplanationFormatter::format("p", "policy-other", &BTreeMap::new()).unwrap();
+        let mut r =
+            PolicyExplanationFormatter::format("p", "policy-other", &BTreeMap::new()).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ExplainError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ExplainError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn detail_too_long_rejected_on_validate() {
-        let mut r = PolicyExplanationFormatter::format("p", "policy-other", &BTreeMap::new()).unwrap();
+        let mut r =
+            PolicyExplanationFormatter::format("p", "policy-other", &BTreeMap::new()).unwrap();
         r.detail_lines.push("x".repeat(130));
-        assert!(matches!(r.validate().unwrap_err(), ExplainError::DetailLineTooLong(_, _)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ExplainError::DetailLineTooLong(_, _)
+        ));
     }
 
     #[test]
@@ -180,7 +211,8 @@ mod tests {
 
     #[test]
     fn explanation_serde_roundtrip() {
-        let r = PolicyExplanationFormatter::format("p", "quota-exhausted", &BTreeMap::new()).unwrap();
+        let r =
+            PolicyExplanationFormatter::format("p", "quota-exhausted", &BTreeMap::new()).unwrap();
         let j = serde_json::to_string(&r).unwrap();
         let back: Explanation = serde_json::from_str(&j).unwrap();
         assert_eq!(r, back);

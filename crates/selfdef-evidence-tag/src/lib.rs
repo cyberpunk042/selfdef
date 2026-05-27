@@ -79,20 +79,48 @@ pub enum TagError {
 }
 
 const REQUIRED: [EvidenceTag; 6] = [
-    EvidenceTag::Decision, EvidenceTag::Grant, EvidenceTag::Quarantine,
-    EvidenceTag::Promotion, EvidenceTag::SelfTest, EvidenceTag::Anomaly,
+    EvidenceTag::Decision,
+    EvidenceTag::Grant,
+    EvidenceTag::Quarantine,
+    EvidenceTag::Promotion,
+    EvidenceTag::SelfTest,
+    EvidenceTag::Anomaly,
 ];
 
 impl EvidenceTagManifest {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let policies = vec![
-            TagPolicy { tag: EvidenceTag::Decision,   retention: Retention::Purgable, cockpit_visible: true },
-            TagPolicy { tag: EvidenceTag::Grant,      retention: Retention::Eternal,  cockpit_visible: true },
-            TagPolicy { tag: EvidenceTag::Quarantine, retention: Retention::Eternal,  cockpit_visible: true },
-            TagPolicy { tag: EvidenceTag::Promotion,  retention: Retention::Eternal,  cockpit_visible: true },
-            TagPolicy { tag: EvidenceTag::SelfTest,   retention: Retention::Purgable, cockpit_visible: false },
-            TagPolicy { tag: EvidenceTag::Anomaly,    retention: Retention::Purgable, cockpit_visible: true },
+            TagPolicy {
+                tag: EvidenceTag::Decision,
+                retention: Retention::Purgable,
+                cockpit_visible: true,
+            },
+            TagPolicy {
+                tag: EvidenceTag::Grant,
+                retention: Retention::Eternal,
+                cockpit_visible: true,
+            },
+            TagPolicy {
+                tag: EvidenceTag::Quarantine,
+                retention: Retention::Eternal,
+                cockpit_visible: true,
+            },
+            TagPolicy {
+                tag: EvidenceTag::Promotion,
+                retention: Retention::Eternal,
+                cockpit_visible: true,
+            },
+            TagPolicy {
+                tag: EvidenceTag::SelfTest,
+                retention: Retention::Purgable,
+                cockpit_visible: false,
+            },
+            TagPolicy {
+                tag: EvidenceTag::Anomaly,
+                retention: Retention::Purgable,
+                cockpit_visible: true,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -176,14 +204,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = EvidenceTagManifest::canonical();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), TagError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            TagError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut m = EvidenceTagManifest::canonical();
         m.policies.pop();
-        assert!(matches!(m.validate().unwrap_err(), TagError::CountInvalid(5)));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            TagError::CountInvalid(5)
+        ));
     }
 
     #[test]
@@ -195,20 +229,38 @@ mod tests {
                 p.tag = EvidenceTag::Decision;
             }
         }
-        assert!(matches!(m.validate().unwrap_err(), TagError::Missing(EvidenceTag::Grant)));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            TagError::Missing(EvidenceTag::Grant)
+        ));
     }
 
     #[test]
     fn tag_serde_kebab() {
-        assert_eq!(serde_json::to_string(&EvidenceTag::Decision).unwrap(), "\"decision\"");
-        assert_eq!(serde_json::to_string(&EvidenceTag::SelfTest).unwrap(), "\"self-test\"");
-        assert_eq!(serde_json::to_string(&EvidenceTag::Anomaly).unwrap(), "\"anomaly\"");
+        assert_eq!(
+            serde_json::to_string(&EvidenceTag::Decision).unwrap(),
+            "\"decision\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EvidenceTag::SelfTest).unwrap(),
+            "\"self-test\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EvidenceTag::Anomaly).unwrap(),
+            "\"anomaly\""
+        );
     }
 
     #[test]
     fn retention_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Retention::Eternal).unwrap(), "\"eternal\"");
-        assert_eq!(serde_json::to_string(&Retention::Purgable).unwrap(), "\"purgable\"");
+        assert_eq!(
+            serde_json::to_string(&Retention::Eternal).unwrap(),
+            "\"eternal\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Retention::Purgable).unwrap(),
+            "\"purgable\""
+        );
     }
 
     #[test]

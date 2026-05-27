@@ -16,7 +16,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 fn fetch_audit_chains() -> Result<String> {
     let socket =
@@ -62,8 +62,8 @@ fn fetch_audit_chains() -> Result<String> {
 
 pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
     let body = fetch_audit_chains()?;
-    let parsed: serde_json::Value = serde_json::from_str(&body)
-        .context("parsing /v1/audit-chains JSON response")?;
+    let parsed: serde_json::Value =
+        serde_json::from_str(&body).context("parsing /v1/audit-chains JSON response")?;
     let worst = parsed
         .get("worst")
         .and_then(|v| v.as_str())
@@ -84,10 +84,7 @@ pub(crate) fn run(json: bool, quiet: bool) -> Result<i32> {
         );
         println!("{}", "─".repeat(100));
         for c in chains {
-            let watchdog = c
-                .get("watchdog")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let watchdog = c.get("watchdog").and_then(|v| v.as_str()).unwrap_or("?");
             let ok = c.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
             let state = if ok { "OK" } else { "BROKEN" };
             let events = c

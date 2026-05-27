@@ -72,12 +72,12 @@ impl SubstrateCpuAffinity {
     /// Fast 6..=9, Autonomous 10..=11, Experimental 12..=15, Private 0.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Production,   (0u32..=3).collect());
-        p.insert(Profile::Careful,      (4u32..=5).collect());
-        p.insert(Profile::Fast,         (6u32..=9).collect());
-        p.insert(Profile::Autonomous,   (10u32..=11).collect());
+        p.insert(Profile::Production, (0u32..=3).collect());
+        p.insert(Profile::Careful, (4u32..=5).collect());
+        p.insert(Profile::Fast, (6u32..=9).collect());
+        p.insert(Profile::Autonomous, (10u32..=11).collect());
         p.insert(Profile::Experimental, (12u32..=15).collect());
-        p.insert(Profile::Private,      [0u32].into_iter().collect());
+        p.insert(Profile::Private, [0u32].into_iter().collect());
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -93,7 +93,9 @@ impl SubstrateCpuAffinity {
         if set.contains(&core) {
             AffinityVerdict::Allowed
         } else {
-            AffinityVerdict::Denied { allowed: set.iter().copied().collect() }
+            AffinityVerdict::Denied {
+                allowed: set.iter().copied().collect(),
+            }
         }
     }
 
@@ -125,14 +127,23 @@ mod tests {
         let c = SubstrateCpuAffinity::canonical();
         assert_eq!(c.classify(Profile::Production, 0), AffinityVerdict::Allowed);
         assert_eq!(c.classify(Profile::Production, 3), AffinityVerdict::Allowed);
-        assert!(matches!(c.classify(Profile::Production, 4), AffinityVerdict::Denied { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, 4),
+            AffinityVerdict::Denied { .. }
+        ));
     }
 
     #[test]
     fn experimental_owns_top_cores() {
         let c = SubstrateCpuAffinity::canonical();
-        assert_eq!(c.classify(Profile::Experimental, 15), AffinityVerdict::Allowed);
-        assert!(matches!(c.classify(Profile::Experimental, 0), AffinityVerdict::Denied { .. }));
+        assert_eq!(
+            c.classify(Profile::Experimental, 15),
+            AffinityVerdict::Allowed
+        );
+        assert!(matches!(
+            c.classify(Profile::Experimental, 0),
+            AffinityVerdict::Denied { .. }
+        ));
     }
 
     #[test]
@@ -178,7 +189,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = SubstrateCpuAffinity::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), AffinityError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            AffinityError::SchemaMismatch
+        ));
     }
 
     #[test]

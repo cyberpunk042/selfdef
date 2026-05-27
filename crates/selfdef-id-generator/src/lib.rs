@@ -74,7 +74,10 @@ impl IdGenerator {
     /// Emit next id at now_ms.
     pub fn next(&mut self, now_ms: u64) -> Result<String, IdError> {
         if now_ms < self.last_ts_ms {
-            return Err(IdError::ClockRegression { now: now_ms, last: self.last_ts_ms });
+            return Err(IdError::ClockRegression {
+                now: now_ms,
+                last: self.last_ts_ms,
+            });
         }
         if now_ms > self.last_ts_ms {
             self.last_ts_ms = now_ms;
@@ -93,13 +96,17 @@ impl IdGenerator {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IdError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IdError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IdError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for IdGenerator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -144,7 +151,10 @@ mod tests {
     fn clock_regression_rejected() {
         let mut g = IdGenerator::new();
         g.next(100).unwrap();
-        assert!(matches!(g.next(50).unwrap_err(), IdError::ClockRegression { .. }));
+        assert!(matches!(
+            g.next(50).unwrap_err(),
+            IdError::ClockRegression { .. }
+        ));
     }
 
     #[test]

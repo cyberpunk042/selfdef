@@ -49,14 +49,16 @@ pub(crate) fn run_show(json: bool) -> Result<i32> {
     let verdicts = load_latest_per_gate(&dir)?;
     let failing = verdicts.iter().any(Verdict::is_failing);
     if json {
-        let body = serde_json::to_string_pretty(&verdicts)
-            .context("serializing verdicts as JSON")?;
+        let body =
+            serde_json::to_string_pretty(&verdicts).context("serializing verdicts as JSON")?;
         println!("{body}");
     } else {
         if verdicts.is_empty() {
             println!("friction-audit: no verdicts recorded.");
             println!("(Ring buffer empty at {}.)", dir.display());
-            println!("Run `sudo /usr/local/bin/friction-audit` to populate, or check sovereign-guard.service.");
+            println!(
+                "Run `sudo /usr/local/bin/friction-audit` to populate, or check sovereign-guard.service."
+            );
             return Ok(0);
         }
         render_human(&verdicts);
@@ -73,8 +75,7 @@ pub(crate) fn run_history(limit: u32, json: bool) -> Result<i32> {
     let all = load_all(&ring_dir())?;
     let slice: Vec<&Verdict> = all.iter().take(limit as usize).collect();
     if json {
-        let body = serde_json::to_string_pretty(&slice)
-            .context("serializing verdicts as JSON")?;
+        let body = serde_json::to_string_pretty(&slice).context("serializing verdicts as JSON")?;
         println!("{body}");
     } else if slice.is_empty() {
         println!("friction-audit: no verdicts recorded.");
@@ -101,13 +102,19 @@ pub(crate) fn run_replay(json: bool) -> Result<i32> {
     let script = Path::new("/usr/local/bin/friction-audit");
     if !script.exists() {
         if json {
-            println!("{}", serde_json::json!({
-                "error": "script_missing",
-                "expected_path": "/usr/local/bin/friction-audit",
-                "hint": "package may not be installed; run apt-get install selfdef-daemon"
-            }));
+            println!(
+                "{}",
+                serde_json::json!({
+                    "error": "script_missing",
+                    "expected_path": "/usr/local/bin/friction-audit",
+                    "hint": "package may not be installed; run apt-get install selfdef-daemon"
+                })
+            );
         } else {
-            eprintln!("friction-audit: script not installed at {}", script.display());
+            eprintln!(
+                "friction-audit: script not installed at {}",
+                script.display()
+            );
             eprintln!("hint: package may not be installed; run `apt-get install selfdef-daemon`");
         }
         return Ok(127);
@@ -117,10 +124,13 @@ pub(crate) fn run_replay(json: bool) -> Result<i32> {
         .context("invoking friction-audit script")?;
     let code = status.code().unwrap_or(-1);
     if json {
-        println!("{}", serde_json::json!({
-            "exit_code": code,
-            "passed": code == 0
-        }));
+        println!(
+            "{}",
+            serde_json::json!({
+                "exit_code": code,
+                "passed": code == 0
+            })
+        );
     }
     Ok(code)
 }
@@ -159,8 +169,7 @@ fn load_all(ring: &Path) -> Result<Vec<Verdict>> {
 
 fn load_latest_per_gate(ring: &Path) -> Result<Vec<Verdict>> {
     let all = load_all(ring)?;
-    let mut seen: std::collections::BTreeMap<String, Verdict> =
-        std::collections::BTreeMap::new();
+    let mut seen: std::collections::BTreeMap<String, Verdict> = std::collections::BTreeMap::new();
     for v in all {
         let key = format!("{:?}", v.gate);
         seen.entry(key).or_insert(v);
@@ -183,7 +192,10 @@ fn load_latest_per_gate(ring: &Path) -> Result<Vec<Verdict>> {
 }
 
 fn render_human(verdicts: &[Verdict]) {
-    println!("FRICTION-AUDIT verdict summary ({} gates recorded)", verdicts.len());
+    println!(
+        "FRICTION-AUDIT verdict summary ({} gates recorded)",
+        verdicts.len()
+    );
     println!("─────────────────────────────────────────────────────");
     for v in verdicts {
         print_row(v);
@@ -200,9 +212,11 @@ fn print_row(v: &Verdict) {
             expires_at_ms,
         } => (
             "OVRD",
-            format!(" (manifest {}…, expires {})",
+            format!(
+                " (manifest {}…, expires {})",
                 &manifest_sha256.chars().take(8).collect::<String>(),
-                expires_at_ms),
+                expires_at_ms
+            ),
         ),
     };
     println!(

@@ -90,10 +90,22 @@ impl ConsistentHashRing {
 
     /// Register node with given vnode count.
     pub fn register(&mut self, id: &str, vnodes: u32) -> Result<(), RingError> {
-        if id.is_empty() { return Err(RingError::EmptyId); }
-        if vnodes == 0 { return Err(RingError::ZeroVnodes); }
-        if self.nodes.contains_key(id) { return Err(RingError::DuplicateNode(id.into())); }
-        self.nodes.insert(id.into(), Node { id: id.into(), vnodes });
+        if id.is_empty() {
+            return Err(RingError::EmptyId);
+        }
+        if vnodes == 0 {
+            return Err(RingError::ZeroVnodes);
+        }
+        if self.nodes.contains_key(id) {
+            return Err(RingError::DuplicateNode(id.into()));
+        }
+        self.nodes.insert(
+            id.into(),
+            Node {
+                id: id.into(),
+                vnodes,
+            },
+        );
         for i in 0..vnodes {
             self.ring.insert(vnode_hash(id, i), id.into());
         }
@@ -102,7 +114,10 @@ impl ConsistentHashRing {
 
     /// Unregister node.
     pub fn unregister(&mut self, id: &str) -> Result<(), RingError> {
-        let n = self.nodes.remove(id).ok_or_else(|| RingError::UnknownNode(id.into()))?;
+        let n = self
+            .nodes
+            .remove(id)
+            .ok_or_else(|| RingError::UnknownNode(id.into()))?;
         for i in 0..n.vnodes {
             self.ring.remove(&vnode_hash(id, i));
         }
@@ -111,9 +126,14 @@ impl ConsistentHashRing {
 
     /// Assign key to the first node clockwise from its hash.
     pub fn assign(&self, key: &str) -> Result<&str, RingError> {
-        if self.ring.is_empty() { return Err(RingError::EmptyRing); }
+        if self.ring.is_empty() {
+            return Err(RingError::EmptyRing);
+        }
         let h = fnv1a_64(key.as_bytes());
-        let owner = self.ring.range(h..).next()
+        let owner = self
+            .ring
+            .range(h..)
+            .next()
             .or_else(|| self.ring.iter().next())
             .map(|(_, v)| v.as_str())
             .unwrap();
@@ -122,38 +142,54 @@ impl ConsistentHashRing {
 
     /// Assign key to top-N replicas clockwise (deduped node ids).
     pub fn assign_replicas(&self, key: &str, n: usize) -> Result<Vec<String>, RingError> {
-        if self.ring.is_empty() { return Err(RingError::EmptyRing); }
+        if self.ring.is_empty() {
+            return Err(RingError::EmptyRing);
+        }
         let h = fnv1a_64(key.as_bytes());
         let mut out: Vec<String> = Vec::with_capacity(n);
         let iter = self.ring.range(h..).chain(self.ring.range(..h));
         for (_, node) in iter {
             if !out.iter().any(|s| s == node) {
                 out.push(node.clone());
-                if out.len() >= n { break; }
+                if out.len() >= n {
+                    break;
+                }
             }
         }
         Ok(out)
     }
 
     /// Node count.
-    pub fn node_count(&self) -> usize { self.nodes.len() }
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
 
     /// Ring slot count.
-    pub fn slot_count(&self) -> usize { self.ring.len() }
+    pub fn slot_count(&self) -> usize {
+        self.ring.len()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RingError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RingError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RingError::SchemaMismatch);
+        }
         for (id, n) in &self.nodes {
-            if id.is_empty() { return Err(RingError::EmptyId); }
-            if n.vnodes == 0 { return Err(RingError::ZeroVnodes); }
+            if id.is_empty() {
+                return Err(RingError::EmptyId);
+            }
+            if n.vnodes == 0 {
+                return Err(RingError::ZeroVnodes);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ConsistentHashRing {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -236,21 +272,30 @@ mod tests {
     fn duplicate_node_rejected() {
         let mut r = ConsistentHashRing::new();
         r.register("n1", 1).unwrap();
-        assert!(matches!(r.register("n1", 1).unwrap_err(), RingError::DuplicateNode(_)));
+        assert!(matches!(
+            r.register("n1", 1).unwrap_err(),
+            RingError::DuplicateNode(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut r = ConsistentHashRing::new();
         assert!(matches!(r.register("", 1).unwrap_err(), RingError::EmptyId));
-        assert!(matches!(r.register("n", 0).unwrap_err(), RingError::ZeroVnodes));
+        assert!(matches!(
+            r.register("n", 0).unwrap_err(),
+            RingError::ZeroVnodes
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = ConsistentHashRing::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RingError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RingError::SchemaMismatch
+        ));
     }
 
     #[test]

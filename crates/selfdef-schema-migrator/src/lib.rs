@@ -83,9 +83,14 @@ impl SchemaMigrator {
 
     /// Register.
     pub fn register(&mut self, step: Step) -> Result<(), MigratorError> {
-        if step.label.is_empty() { return Err(MigratorError::EmptyLabel); }
+        if step.label.is_empty() {
+            return Err(MigratorError::EmptyLabel);
+        }
         if step.to != step.from.saturating_add(1) {
-            return Err(MigratorError::NonConsecutive { from: step.from, to: step.to });
+            return Err(MigratorError::NonConsecutive {
+                from: step.from,
+                to: step.to,
+            });
         }
         if self.steps.contains_key(&step.from) {
             return Err(MigratorError::Duplicate(step.from));
@@ -96,7 +101,9 @@ impl SchemaMigrator {
 
     /// Plan (forward or backward).
     pub fn plan(&self, from: u32, to: u32) -> Result<Vec<String>, MigratorError> {
-        if from == to { return Ok(Vec::new()); }
+        if from == to {
+            return Ok(Vec::new());
+        }
         let mut out = Vec::new();
         if from < to {
             let mut cur = from;
@@ -112,7 +119,10 @@ impl SchemaMigrator {
                 let prev = cur.saturating_sub(1);
                 let step = self.steps.get(&prev).ok_or(MigratorError::Missing(prev))?;
                 if !step.reversible {
-                    return Err(MigratorError::NotReversible { from: step.from, to: step.to });
+                    return Err(MigratorError::NotReversible {
+                        from: step.from,
+                        to: step.to,
+                    });
                 }
                 out.push(format!("rollback:{}", step.label));
                 cur = prev;
@@ -128,20 +138,34 @@ impl SchemaMigrator {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MigratorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MigratorError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MigratorError::SchemaMismatch);
+        }
         for (k, s) in &self.steps {
-            if *k != s.from { return Err(MigratorError::NonConsecutive { from: *k, to: s.from }); }
-            if s.to != s.from.saturating_add(1) {
-                return Err(MigratorError::NonConsecutive { from: s.from, to: s.to });
+            if *k != s.from {
+                return Err(MigratorError::NonConsecutive {
+                    from: *k,
+                    to: s.from,
+                });
             }
-            if s.label.is_empty() { return Err(MigratorError::EmptyLabel); }
+            if s.to != s.from.saturating_add(1) {
+                return Err(MigratorError::NonConsecutive {
+                    from: s.from,
+                    to: s.to,
+                });
+            }
+            if s.label.is_empty() {
+                return Err(MigratorError::EmptyLabel);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for SchemaMigrator {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -149,7 +173,12 @@ mod tests {
     use super::*;
 
     fn step(from: u32, label: &str, reversible: bool) -> Step {
-        Step { from, to: from + 1, label: label.into(), reversible }
+        Step {
+            from,
+            to: from + 1,
+            label: label.into(),
+            reversible,
+        }
     }
 
     #[test]
@@ -174,7 +203,10 @@ mod tests {
     fn non_reversible_blocks_backward() {
         let mut m = SchemaMigrator::new();
         m.register(step(1, "destroy data", false)).unwrap();
-        assert!(matches!(m.plan(2, 1).unwrap_err(), MigratorError::NotReversible { .. }));
+        assert!(matches!(
+            m.plan(2, 1).unwrap_err(),
+            MigratorError::NotReversible { .. }
+        ));
     }
 
     #[test]
@@ -182,7 +214,10 @@ mod tests {
         let mut m = SchemaMigrator::new();
         m.register(step(1, "x", true)).unwrap();
         // No step from 2.
-        assert!(matches!(m.plan(1, 3).unwrap_err(), MigratorError::Missing(2)));
+        assert!(matches!(
+            m.plan(1, 3).unwrap_err(),
+            MigratorError::Missing(2)
+        ));
     }
 
     #[test]
@@ -194,21 +229,35 @@ mod tests {
     #[test]
     fn non_consecutive_rejected() {
         let mut m = SchemaMigrator::new();
-        let bad = Step { from: 1, to: 3, label: "x".into(), reversible: true };
-        assert!(matches!(m.register(bad).unwrap_err(), MigratorError::NonConsecutive { .. }));
+        let bad = Step {
+            from: 1,
+            to: 3,
+            label: "x".into(),
+            reversible: true,
+        };
+        assert!(matches!(
+            m.register(bad).unwrap_err(),
+            MigratorError::NonConsecutive { .. }
+        ));
     }
 
     #[test]
     fn duplicate_rejected() {
         let mut m = SchemaMigrator::new();
         m.register(step(1, "x", true)).unwrap();
-        assert!(matches!(m.register(step(1, "y", true)).unwrap_err(), MigratorError::Duplicate(1)));
+        assert!(matches!(
+            m.register(step(1, "y", true)).unwrap_err(),
+            MigratorError::Duplicate(1)
+        ));
     }
 
     #[test]
     fn empty_label_rejected() {
         let mut m = SchemaMigrator::new();
-        assert!(matches!(m.register(step(1, "", true)).unwrap_err(), MigratorError::EmptyLabel));
+        assert!(matches!(
+            m.register(step(1, "", true)).unwrap_err(),
+            MigratorError::EmptyLabel
+        ));
     }
 
     #[test]
@@ -223,7 +272,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = SchemaMigrator::new();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), MigratorError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            MigratorError::SchemaMismatch
+        ));
     }
 
     #[test]

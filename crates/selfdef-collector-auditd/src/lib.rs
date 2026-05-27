@@ -10,7 +10,7 @@
 
 mod parser;
 
-pub use parser::{parse_avc_decision, parse_execve_argv, AuditRecord};
+pub use parser::{AuditRecord, parse_avc_decision, parse_execve_argv};
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -155,9 +155,8 @@ impl AuditdCollector {
                             if let Some((syscall_rec, syscall_line)) = pending_syscall.take() {
                                 if syscall_rec.serial == record.serial {
                                     // Pair! Emit one combined event.
-                                    let evt = self.build_syscall_execve_event(
-                                        &syscall_rec, &record,
-                                    );
+                                    let evt =
+                                        self.build_syscall_execve_event(&syscall_rec, &record);
                                     self.publisher.publish_lossy(evt);
                                 } else {
                                     // Serial mismatch — flush the
@@ -285,11 +284,7 @@ impl AuditdCollector {
     /// (Tactic::Execution) — every exec IS the technique foundation;
     /// the correlator narrows to a specific T1059.<sub> at decision
     /// time based on the argv contents.
-    fn build_syscall_execve_event(
-        &self,
-        syscall: &AuditRecord,
-        execve: &AuditRecord,
-    ) -> Event {
+    fn build_syscall_execve_event(&self, syscall: &AuditRecord, execve: &AuditRecord) -> Event {
         let seq = self.next_sequence();
         let argv = parser::parse_execve_argv(execve);
         let argc = execve
@@ -374,8 +369,16 @@ impl AuditdCollector {
     fn build_avc_event(&self, record: &AuditRecord, raw_line: &str, seq: u64) -> Event {
         let decision = parser::parse_avc_decision(raw_line).unwrap_or("unknown");
         let denied = decision == "denied";
-        let severity = if denied { SeverityId::High } else { SeverityId::Informational };
-        let status = if denied { StatusId::Failure } else { StatusId::Success };
+        let severity = if denied {
+            SeverityId::High
+        } else {
+            SeverityId::Informational
+        };
+        let status = if denied {
+            StatusId::Failure
+        } else {
+            StatusId::Success
+        };
 
         let comm = record.get("comm").unwrap_or("?");
         let target_name = record.get("name").unwrap_or("?");
@@ -497,9 +500,8 @@ impl AuditdCollector {
         let old_prom = record.get("old_prom").unwrap_or("?");
         let auid = record.get("auid").unwrap_or("?");
 
-        let message = format!(
-            "ANOM_PROMISCUOUS: dev={dev} old_prom={old_prom} prom={prom} auid={auid}"
-        );
+        let message =
+            format!("ANOM_PROMISCUOUS: dev={dev} old_prom={old_prom} prom={prom} auid={auid}");
         let raw = serde_json::to_value(&record.fields).unwrap_or(serde_json::Value::Null);
 
         Event::new(

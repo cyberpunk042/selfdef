@@ -75,7 +75,12 @@ pub enum AmpError {
 
 impl DecisionScrutinyAmplifier {
     /// New.
-    pub fn new(window_ms: u64, elevated_at: u32, high_at: u32, critical_at: u32) -> Result<Self, AmpError> {
+    pub fn new(
+        window_ms: u64,
+        elevated_at: u32,
+        high_at: u32,
+        critical_at: u32,
+    ) -> Result<Self, AmpError> {
         if !(elevated_at < high_at && high_at < critical_at) {
             return Err(AmpError::BadThresholds(elevated_at, high_at, critical_at));
         }
@@ -91,12 +96,19 @@ impl DecisionScrutinyAmplifier {
 
     /// Record a decision.
     pub fn record_decision(&mut self, actor: &str, ok: bool, ts_ms: u64) -> Result<(), AmpError> {
-        if actor.is_empty() { return Err(AmpError::EmptyActor); }
-        if ok { return Ok(()); }
+        if actor.is_empty() {
+            return Err(AmpError::EmptyActor);
+        }
+        if ok {
+            return Ok(());
+        }
         let v = self.failures.entry(actor.into()).or_default();
         if let Some(&last) = v.last() {
             if ts_ms < last {
-                return Err(AmpError::NonMonotonic { prev: last, new: ts_ms });
+                return Err(AmpError::NonMonotonic {
+                    prev: last,
+                    new: ts_ms,
+                });
             }
         }
         v.push(ts_ms);
@@ -106,13 +118,20 @@ impl DecisionScrutinyAmplifier {
     /// Tier.
     pub fn level(&self, actor: &str, now_ms: u64) -> Tier {
         let cutoff = now_ms.saturating_sub(self.window_ms);
-        let count = self.failures.get(actor)
+        let count = self
+            .failures
+            .get(actor)
             .map(|v| v.iter().filter(|t| **t >= cutoff && **t <= now_ms).count() as u32)
             .unwrap_or(0);
-        if count >= self.critical_at { Tier::Critical }
-        else if count >= self.high_at { Tier::High }
-        else if count >= self.elevated_at { Tier::Elevated }
-        else { Tier::Normal }
+        if count >= self.critical_at {
+            Tier::Critical
+        } else if count >= self.high_at {
+            Tier::High
+        } else if count >= self.elevated_at {
+            Tier::Elevated
+        } else {
+            Tier::Normal
+        }
     }
 
     /// Drop out-of-window failures.
@@ -126,9 +145,15 @@ impl DecisionScrutinyAmplifier {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AmpError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AmpError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AmpError::SchemaMismatch);
+        }
         if !(self.elevated_at < self.high_at && self.high_at < self.critical_at) {
-            return Err(AmpError::BadThresholds(self.elevated_at, self.high_at, self.critical_at));
+            return Err(AmpError::BadThresholds(
+                self.elevated_at,
+                self.high_at,
+                self.critical_at,
+            ));
         }
         Ok(())
     }
@@ -175,21 +200,27 @@ mod tests {
     #[test]
     fn three_failures_high() {
         let mut a = amp();
-        for i in 0..3 { a.record_decision("actor", false, i * 100).unwrap(); }
+        for i in 0..3 {
+            a.record_decision("actor", false, i * 100).unwrap();
+        }
         assert_eq!(a.level("actor", 5000), Tier::High);
     }
 
     #[test]
     fn five_failures_critical() {
         let mut a = amp();
-        for i in 0..5 { a.record_decision("actor", false, i * 100).unwrap(); }
+        for i in 0..5 {
+            a.record_decision("actor", false, i * 100).unwrap();
+        }
         assert_eq!(a.level("actor", 5000), Tier::Critical);
     }
 
     #[test]
     fn failures_age_out() {
         let mut a = amp();
-        for i in 0..5 { a.record_decision("actor", false, i * 100).unwrap(); }
+        for i in 0..5 {
+            a.record_decision("actor", false, i * 100).unwrap();
+        }
         // Far past window.
         assert_eq!(a.level("actor", 5_000_000), Tier::Normal);
     }
@@ -198,7 +229,10 @@ mod tests {
     fn nonmonotonic_rejected() {
         let mut a = amp();
         a.record_decision("actor", false, 200).unwrap();
-        assert!(matches!(a.record_decision("actor", false, 100).unwrap_err(), AmpError::NonMonotonic { .. }));
+        assert!(matches!(
+            a.record_decision("actor", false, 100).unwrap_err(),
+            AmpError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -213,7 +247,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut a = amp();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), AmpError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AmpError::SchemaMismatch
+        ));
     }
 
     #[test]

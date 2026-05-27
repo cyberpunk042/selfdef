@@ -69,7 +69,11 @@ pub enum BatcherError {
 }
 
 fn batch_hash(decisions: &[PolicyDecision]) -> String {
-    let s: String = decisions.iter().map(|d| d.trace_id.as_str()).collect::<Vec<_>>().join("|");
+    let s: String = decisions
+        .iter()
+        .map(|d| d.trace_id.as_str())
+        .collect::<Vec<_>>()
+        .join("|");
     format!("0x{:016x}", fnv1a_64(s.as_bytes()))
 }
 
@@ -84,7 +88,8 @@ impl PolicyDecisionBatcher {
 
     /// Push a decision after validating it.
     pub fn push(&mut self, d: PolicyDecision) -> Result<(), BatcherError> {
-        d.validate().map_err(|e| BatcherError::InvalidDecision(e.to_string()))?;
+        d.validate()
+            .map_err(|e| BatcherError::InvalidDecision(e.to_string()))?;
         if self.pending.len() >= MAX_BATCH {
             return Err(BatcherError::Full);
         }
@@ -93,11 +98,15 @@ impl PolicyDecisionBatcher {
     }
 
     /// Whether the batch is at MAX_BATCH.
-    pub fn is_full(&self) -> bool { self.pending.len() >= MAX_BATCH }
+    pub fn is_full(&self) -> bool {
+        self.pending.len() >= MAX_BATCH
+    }
 
     /// Flush the pending decisions into a `DecisionBatch`. Clears pending.
     pub fn flush(&mut self, emitted_at: &str) -> Result<DecisionBatch, BatcherError> {
-        if self.pending.is_empty() { return Err(BatcherError::Empty); }
+        if self.pending.is_empty() {
+            return Err(BatcherError::Empty);
+        }
         let decisions = std::mem::take(&mut self.pending);
         let hash = batch_hash(&decisions);
         Ok(DecisionBatch {
@@ -123,7 +132,9 @@ impl DecisionBatch {
         if self.schema_version != SCHEMA_VERSION {
             return Err(BatcherError::SchemaMismatch);
         }
-        if self.decisions.is_empty() { return Err(BatcherError::Empty); }
+        if self.decisions.is_empty() {
+            return Err(BatcherError::Empty);
+        }
         let recomputed = batch_hash(&self.decisions);
         if recomputed != self.batch_hash {
             return Err(BatcherError::InvalidDecision(format!(
@@ -136,13 +147,17 @@ impl DecisionBatch {
 }
 
 impl Default for PolicyDecisionBatcher {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_policy_decision::{ContextSensitivity, Outcome, RiskClass, SideEffectClass, UserApprovalState};
+    use selfdef_policy_decision::{
+        ContextSensitivity, Outcome, RiskClass, SideEffectClass, UserApprovalState,
+    };
 
     fn d(trace: &str) -> PolicyDecision {
         PolicyDecision {
@@ -187,7 +202,10 @@ mod tests {
             b.push(d(&format!("tr-{i}"))).unwrap();
         }
         assert!(b.is_full());
-        assert!(matches!(b.push(d("overflow")).unwrap_err(), BatcherError::Full));
+        assert!(matches!(
+            b.push(d("overflow")).unwrap_err(),
+            BatcherError::Full
+        ));
     }
 
     #[test]
@@ -201,7 +219,10 @@ mod tests {
         let mut b = PolicyDecisionBatcher::new();
         let mut bad = d("tr-1");
         bad.subject = String::new();
-        assert!(matches!(b.push(bad).unwrap_err(), BatcherError::InvalidDecision(_)));
+        assert!(matches!(
+            b.push(bad).unwrap_err(),
+            BatcherError::InvalidDecision(_)
+        ));
     }
 
     #[test]
@@ -210,7 +231,10 @@ mod tests {
         b.push(d("tr-1")).unwrap();
         let mut batch = b.flush("t").unwrap();
         batch.batch_hash = "0xdeadbeefdeadbeef".into();
-        assert!(matches!(batch.validate().unwrap_err(), BatcherError::InvalidDecision(_)));
+        assert!(matches!(
+            batch.validate().unwrap_err(),
+            BatcherError::InvalidDecision(_)
+        ));
     }
 
     #[test]
@@ -230,7 +254,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = PolicyDecisionBatcher::new();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BatcherError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BatcherError::SchemaMismatch
+        ));
     }
 
     #[test]

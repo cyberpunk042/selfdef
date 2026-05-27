@@ -11,8 +11,8 @@
 #![warn(missing_docs)]
 
 use selfdef_audit_log_writer::AuditRecord;
-use selfdef_policy_bus::{plan as bus_plan, DispatchPlan};
-use selfdef_policy_decision::{PolicyDecision, Outcome};
+use selfdef_policy_bus::{DispatchPlan, plan as bus_plan};
+use selfdef_policy_decision::{Outcome, PolicyDecision};
 use selfdef_trace_span::TraceSpan;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -70,9 +70,13 @@ pub fn emit(
     audit: AuditRecord,
 ) -> Result<EmissionBundle, EmitterError> {
     // Validate each sub-component
-    decision.validate().map_err(|e| EmitterError::DecisionInvalid(e.to_string()))?;
+    decision
+        .validate()
+        .map_err(|e| EmitterError::DecisionInvalid(e.to_string()))?;
     selfdef_trace_span::validate(&span).map_err(|e| EmitterError::SpanInvalid(e.to_string()))?;
-    audit.validate().map_err(|e| EmitterError::AuditInvalid(e.to_string()))?;
+    audit
+        .validate()
+        .map_err(|e| EmitterError::AuditInvalid(e.to_string()))?;
 
     // Cross-validate trace_id consistency
     if decision.trace_id != span.trace_id || span.trace_id != audit.trace_id {
@@ -110,7 +114,9 @@ impl EmissionBundle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_policy_decision::{ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState};
+    use selfdef_policy_decision::{
+        ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState,
+    };
     use selfdef_trace_span::{HardwareTarget, PolicyResult};
 
     fn ok_decision(trace: &str) -> PolicyDecision {
@@ -141,9 +147,13 @@ mod tests {
             model: "claude-opus".into(),
             provider: "cloud-anthropic".into(),
             hardware: HardwareTarget::BlackwellOracle,
-            tokens_prompt: 100, tokens_completion: 50,
-            latency_ms: 800, cost_millicents: 100, risk_score: 10,
-            memory_refs: vec![], tool_refs: vec![],
+            tokens_prompt: 100,
+            tokens_completion: 50,
+            latency_ms: 800,
+            cost_millicents: 100,
+            risk_score: 10,
+            memory_refs: vec![],
+            tool_refs: vec![],
             policy_result: PolicyResult::Allow,
             branch_id: "branch-main".into(),
             signature: "ms003".into(),
@@ -166,7 +176,12 @@ mod tests {
 
     #[test]
     fn ok_bundle_emits_with_matching_trace_ids() {
-        let b = emit(ok_decision("trace-001"), ok_span("trace-001"), ok_audit("trace-001")).unwrap();
+        let b = emit(
+            ok_decision("trace-001"),
+            ok_span("trace-001"),
+            ok_audit("trace-001"),
+        )
+        .unwrap();
         assert!(b.proceeds());
         assert!(b.fanout() >= 4); // baselines always fire
     }
@@ -175,7 +190,11 @@ mod tests {
     fn mismatched_trace_ids_caught() {
         let err = emit(ok_decision("a"), ok_span("b"), ok_audit("c")).unwrap_err();
         match err {
-            EmitterError::TraceIdMismatch { decision, span, audit } => {
+            EmitterError::TraceIdMismatch {
+                decision,
+                span,
+                audit,
+            } => {
                 assert_eq!(decision, "a");
                 assert_eq!(span, "b");
                 assert_eq!(audit, "c");
@@ -237,7 +256,12 @@ mod tests {
 
     #[test]
     fn bundle_serde_roundtrip() {
-        let b = emit(ok_decision("trace-1"), ok_span("trace-1"), ok_audit("trace-1")).unwrap();
+        let b = emit(
+            ok_decision("trace-1"),
+            ok_span("trace-1"),
+            ok_audit("trace-1"),
+        )
+        .unwrap();
         let j = serde_json::to_string(&b).unwrap();
         let back: EmissionBundle = serde_json::from_str(&j).unwrap();
         assert_eq!(b, back);

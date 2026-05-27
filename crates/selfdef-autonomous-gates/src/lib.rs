@@ -16,7 +16,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use selfdef_profile_authority_gate::{Profile, AuthorityLevel};
+use selfdef_profile_authority_gate::{AuthorityLevel, Profile};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -145,22 +145,34 @@ impl AutonomousGatesConfig {
 
     /// Check whether a given path is in the union of allow-lists across all gates.
     pub fn path_allowed(&self, path: &str) -> bool {
-        self.gates.iter().any(|g| g.allowed_paths.iter().any(|allowed| matches_glob(allowed, path)))
+        self.gates.iter().any(|g| {
+            g.allowed_paths
+                .iter()
+                .any(|allowed| matches_glob(allowed, path))
+        })
     }
 
     /// Check whether a given domain is in the allow-list across all gates.
     pub fn domain_allowed(&self, domain: &str) -> bool {
-        self.gates.iter().any(|g| g.allowed_domains.iter().any(|allowed| allowed == domain))
+        self.gates
+            .iter()
+            .any(|g| g.allowed_domains.iter().any(|allowed| allowed == domain))
     }
 
     /// Check whether a given tool is in the allow-list across all gates.
     pub fn tool_allowed(&self, tool: &str) -> bool {
-        self.gates.iter().any(|g| g.allowed_tools.iter().any(|allowed| allowed == tool))
+        self.gates
+            .iter()
+            .any(|g| g.allowed_tools.iter().any(|allowed| allowed == tool))
     }
 
     /// Lowest max-TTL across all gates. Used as the effective ceiling.
     pub fn effective_max_ttl(&self) -> u32 {
-        self.gates.iter().map(|g| g.max_ttl_seconds).min().unwrap_or(0)
+        self.gates
+            .iter()
+            .map(|g| g.max_ttl_seconds)
+            .min()
+            .unwrap_or(0)
     }
 
     /// Sum of budgets in micro-USD.
@@ -239,13 +251,19 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = mk_config(vec![mk_gate("primary")]);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), GateConfigError::SchemaMismatch { .. }));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            GateConfigError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
     fn zero_gates_refused() {
         let c = mk_config(vec![]);
-        assert!(matches!(c.validate().unwrap_err(), GateConfigError::NoGates));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            GateConfigError::NoGates
+        ));
     }
 
     #[test]
@@ -270,7 +288,10 @@ mod tests {
         g.allowed_domains.clear();
         g.allowed_tools.clear();
         let c = mk_config(vec![g]);
-        assert!(matches!(c.validate().unwrap_err(), GateConfigError::EmptyAllowLists(_)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            GateConfigError::EmptyAllowLists(_)
+        ));
     }
 
     #[test]
@@ -278,14 +299,20 @@ mod tests {
         let mut g = mk_gate("unsigned");
         g.signature = String::new();
         let c = mk_config(vec![g]);
-        assert!(matches!(c.validate().unwrap_err(), GateConfigError::SignatureMissing(_)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            GateConfigError::SignatureMissing(_)
+        ));
     }
 
     #[test]
     fn missing_envelope_signature_refused() {
         let mut c = mk_config(vec![mk_gate("primary")]);
         c.envelope_signature = String::new();
-        assert!(matches!(c.validate().unwrap_err(), GateConfigError::EnvelopeSignatureMissing));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            GateConfigError::EnvelopeSignatureMissing
+        ));
     }
 
     #[test]
@@ -315,16 +342,20 @@ mod tests {
 
     #[test]
     fn effective_max_ttl_min_across_gates() {
-        let mut g1 = mk_gate("a"); g1.max_ttl_seconds = 3600;
-        let mut g2 = mk_gate("b"); g2.max_ttl_seconds = 600;
+        let mut g1 = mk_gate("a");
+        g1.max_ttl_seconds = 3600;
+        let mut g2 = mk_gate("b");
+        g2.max_ttl_seconds = 600;
         let c = mk_config(vec![g1, g2]);
         assert_eq!(c.effective_max_ttl(), 600);
     }
 
     #[test]
     fn total_budget_sums_across_gates() {
-        let mut g1 = mk_gate("a"); g1.budget_micro_usd = 1_000_000;
-        let mut g2 = mk_gate("b"); g2.budget_micro_usd = 4_500_000;
+        let mut g1 = mk_gate("a");
+        g1.budget_micro_usd = 1_000_000;
+        let mut g2 = mk_gate("b");
+        g2.budget_micro_usd = 4_500_000;
         let c = mk_config(vec![g1, g2]);
         assert_eq!(c.total_budget_micro_usd(), 5_500_000);
     }
@@ -332,13 +363,16 @@ mod tests {
     #[test]
     fn assert_level_within_autonomous_allows_l5() {
         let c = mk_config(vec![mk_gate("primary")]);
-        c.assert_level_within_autonomous("primary", AuthorityLevel::L5Commit).unwrap();
+        c.assert_level_within_autonomous("primary", AuthorityLevel::L5Commit)
+            .unwrap();
     }
 
     #[test]
     fn assert_level_within_autonomous_refuses_l6() {
         let c = mk_config(vec![mk_gate("primary")]);
-        let err = c.assert_level_within_autonomous("primary", AuthorityLevel::L6Persist).unwrap_err();
+        let err = c
+            .assert_level_within_autonomous("primary", AuthorityLevel::L6Persist)
+            .unwrap_err();
         match err {
             GateConfigError::LevelExceedsAutonomous { gate, .. } => assert_eq!(gate, "primary"),
             other => panic!("unexpected: {other:?}"),
@@ -347,7 +381,10 @@ mod tests {
 
     #[test]
     fn canonical_disk_path_matches_spec() {
-        assert_eq!(GATE_CONFIG_PATH, "/etc/selfdef/profiles/autonomous-gates.toml");
+        assert_eq!(
+            GATE_CONFIG_PATH,
+            "/etc/selfdef/profiles/autonomous-gates.toml"
+        );
     }
 
     #[test]
@@ -368,6 +405,9 @@ mod tests {
     #[test]
     fn glob_matches_single_star_siblings() {
         assert!(matches_glob("/etc/*", "/etc/passwd"));
-        assert!(!matches_glob("/etc/*", "/etc/selfdef/profiles/autonomous-gates.toml"));
+        assert!(!matches_glob(
+            "/etc/*",
+            "/etc/selfdef/profiles/autonomous-gates.toml"
+        ));
     }
 }

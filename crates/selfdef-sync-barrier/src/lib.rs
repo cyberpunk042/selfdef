@@ -68,7 +68,9 @@ impl SyncBarrier {
     pub fn new(expected: &[&str], deadline_ms: u64) -> Result<Self, BarrierError> {
         let mut set = BTreeSet::new();
         for p in expected {
-            if p.is_empty() { return Err(BarrierError::EmptyParty); }
+            if p.is_empty() {
+                return Err(BarrierError::EmptyParty);
+            }
             set.insert((*p).into());
         }
         Ok(Self {
@@ -82,7 +84,9 @@ impl SyncBarrier {
 
     /// Arrive.
     pub fn arrive(&mut self, party: &str, now_ms: u64) -> Result<Status, BarrierError> {
-        if party.is_empty() { return Err(BarrierError::EmptyParty); }
+        if party.is_empty() {
+            return Err(BarrierError::EmptyParty);
+        }
         // Check timeout first.
         if matches!(self.status, Status::Waiting) && now_ms >= self.deadline_ms {
             self.status = Status::TimedOut;
@@ -92,7 +96,9 @@ impl SyncBarrier {
             Status::TimedOut => return Ok(Status::TimedOut),
             Status::Waiting => {}
         }
-        if !self.expected.contains(party) { return Err(BarrierError::NotExpected(party.into())); }
+        if !self.expected.contains(party) {
+            return Err(BarrierError::NotExpected(party.into()));
+        }
         if !self.arrived.insert(party.into()) {
             return Err(BarrierError::AlreadyArrived(party.into()));
         }
@@ -112,9 +118,13 @@ impl SyncBarrier {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BarrierError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BarrierError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BarrierError::SchemaMismatch);
+        }
         for p in self.expected.iter().chain(self.arrived.iter()) {
-            if p.is_empty() { return Err(BarrierError::EmptyParty); }
+            if p.is_empty() {
+                return Err(BarrierError::EmptyParty);
+            }
         }
         Ok(())
     }
@@ -141,14 +151,20 @@ mod tests {
     #[test]
     fn not_expected_rejected() {
         let mut b = SyncBarrier::new(&["a"], 1000).unwrap();
-        assert!(matches!(b.arrive("z", 0).unwrap_err(), BarrierError::NotExpected(_)));
+        assert!(matches!(
+            b.arrive("z", 0).unwrap_err(),
+            BarrierError::NotExpected(_)
+        ));
     }
 
     #[test]
     fn already_arrived_rejected() {
         let mut b = SyncBarrier::new(&["a", "b"], 1000).unwrap();
         b.arrive("a", 0).unwrap();
-        assert!(matches!(b.arrive("a", 0).unwrap_err(), BarrierError::AlreadyArrived(_)));
+        assert!(matches!(
+            b.arrive("a", 0).unwrap_err(),
+            BarrierError::AlreadyArrived(_)
+        ));
     }
 
     #[test]
@@ -162,7 +178,10 @@ mod tests {
     fn arrive_after_trip_rejected() {
         let mut b = SyncBarrier::new(&["a"], 1000).unwrap();
         b.arrive("a", 0).unwrap();
-        assert!(matches!(b.arrive("a", 0).unwrap_err(), BarrierError::AlreadyTripped));
+        assert!(matches!(
+            b.arrive("a", 0).unwrap_err(),
+            BarrierError::AlreadyTripped
+        ));
     }
 
     #[test]
@@ -174,14 +193,20 @@ mod tests {
     #[test]
     fn empty_party_rejected() {
         let mut b = SyncBarrier::new(&["a"], 100).unwrap();
-        assert!(matches!(b.arrive("", 0).unwrap_err(), BarrierError::EmptyParty));
+        assert!(matches!(
+            b.arrive("", 0).unwrap_err(),
+            BarrierError::EmptyParty
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = SyncBarrier::new(&["a"], 100).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BarrierError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BarrierError::SchemaMismatch
+        ));
     }
 
     #[test]

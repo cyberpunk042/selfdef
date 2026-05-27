@@ -102,7 +102,11 @@ impl PreFlightReport {
 
     /// Failed check kinds.
     pub fn failures(&self) -> Vec<CheckKind> {
-        self.results.iter().filter(|r| !r.passed).map(|r| r.kind).collect()
+        self.results
+            .iter()
+            .filter(|r| !r.passed)
+            .map(|r| r.kind)
+            .collect()
     }
 
     /// Assert all passed — else `Refused`.
@@ -139,7 +143,11 @@ mod tests {
     use super::*;
 
     fn check(kind: CheckKind, passed: bool) -> CheckResult {
-        CheckResult { kind, passed, detail: if passed { String::new() } else { "fail".into() } }
+        CheckResult {
+            kind,
+            passed,
+            detail: if passed { String::new() } else { "fail".into() },
+        }
     }
 
     fn all_pass_report(mode: ExecutionMode) -> PreFlightReport {
@@ -187,7 +195,10 @@ mod tests {
     fn count_invalid_caught() {
         let mut r = all_pass_report(ExecutionMode::Execute);
         r.results.pop();
-        assert!(matches!(r.validate().unwrap_err(), PreFlightError::CountInvalid(4)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            PreFlightError::CountInvalid(4)
+        ));
     }
 
     #[test]
@@ -195,23 +206,40 @@ mod tests {
         let mut r = all_pass_report(ExecutionMode::Execute);
         // Replace SnapshotFresh with duplicate EvalRecent.
         for c in r.results.iter_mut() {
-            if c.kind == CheckKind::SnapshotFresh { c.kind = CheckKind::EvalRecent; }
+            if c.kind == CheckKind::SnapshotFresh {
+                c.kind = CheckKind::EvalRecent;
+            }
         }
-        assert!(matches!(r.validate().unwrap_err(), PreFlightError::Missing(CheckKind::SnapshotFresh)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            PreFlightError::Missing(CheckKind::SnapshotFresh)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = all_pass_report(ExecutionMode::Execute);
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), PreFlightError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            PreFlightError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn check_kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CheckKind::SnapshotFresh).unwrap(), "\"snapshot-fresh\"");
-        assert_eq!(serde_json::to_string(&CheckKind::AuditLogHealthy).unwrap(), "\"audit-log-healthy\"");
-        assert_eq!(serde_json::to_string(&CheckKind::BoundaryPoliciesSigned).unwrap(), "\"boundary-policies-signed\"");
+        assert_eq!(
+            serde_json::to_string(&CheckKind::SnapshotFresh).unwrap(),
+            "\"snapshot-fresh\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckKind::AuditLogHealthy).unwrap(),
+            "\"audit-log-healthy\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CheckKind::BoundaryPoliciesSigned).unwrap(),
+            "\"boundary-policies-signed\""
+        );
     }
 
     #[test]

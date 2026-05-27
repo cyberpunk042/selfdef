@@ -41,17 +41,33 @@ pub enum SemverError {
 impl Version {
     /// New.
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 
     /// Parse "M.N.P".
     pub fn parse(s: &str) -> Result<Self, SemverError> {
         let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() != 3 { return Err(SemverError::BadVersion(s.into())); }
-        let major: u32 = parts[0].parse().map_err(|_| SemverError::BadVersion(s.into()))?;
-        let minor: u32 = parts[1].parse().map_err(|_| SemverError::BadVersion(s.into()))?;
-        let patch: u32 = parts[2].parse().map_err(|_| SemverError::BadVersion(s.into()))?;
-        Ok(Self { major, minor, patch })
+        if parts.len() != 3 {
+            return Err(SemverError::BadVersion(s.into()));
+        }
+        let major: u32 = parts[0]
+            .parse()
+            .map_err(|_| SemverError::BadVersion(s.into()))?;
+        let minor: u32 = parts[1]
+            .parse()
+            .map_err(|_| SemverError::BadVersion(s.into()))?;
+        let patch: u32 = parts[2]
+            .parse()
+            .map_err(|_| SemverError::BadVersion(s.into()))?;
+        Ok(Self {
+            major,
+            minor,
+            patch,
+        })
     }
 
     /// "M.N.P" display.
@@ -61,9 +77,15 @@ impl Version {
 
     /// Is `other` semver-compatible with `self` (same major, >= minor.patch)?
     pub fn is_compatible_with(&self, other: &Version) -> bool {
-        if self.major != other.major { return false; }
-        if other.minor > self.minor { return true; }
-        if other.minor < self.minor { return false; }
+        if self.major != other.major {
+            return false;
+        }
+        if other.minor > self.minor {
+            return true;
+        }
+        if other.minor < self.minor {
+            return false;
+        }
         other.patch >= self.patch
     }
 }
@@ -88,13 +110,17 @@ impl SemverState {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SemverError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SemverError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SemverError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for SemverState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -159,12 +185,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = SemverState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SemverError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SemverError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn state_serde_roundtrip() {
-        let s = SemverState { schema_version: SCHEMA_VERSION.into(), last: Some(Version::new(1, 0, 0)) };
+        let s = SemverState {
+            schema_version: SCHEMA_VERSION.into(),
+            last: Some(Version::new(1, 0, 0)),
+        };
         let j = serde_json::to_string(&s).unwrap();
         let back: SemverState = serde_json::from_str(&j).unwrap();
         assert_eq!(s, back);

@@ -172,7 +172,8 @@ mod tests {
         let r = PolicyConflictResolver::resolve(vec![
             v("a", 0, Decision::Allow),
             v("b", 1, Decision::Deny),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.decision, Decision::Deny);
         assert_eq!(r.winning_source, "b");
     }
@@ -183,7 +184,8 @@ mod tests {
             v("a", 0, Decision::Allow),
             v("b", 1, Decision::Sandbox),
             v("c", 2, Decision::Ask),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.decision, Decision::Ask);
         assert_eq!(r.winning_source, "c");
     }
@@ -193,7 +195,8 @@ mod tests {
         let r = PolicyConflictResolver::resolve(vec![
             v("ask", 0, Decision::Ask),
             v("deny", 5, Decision::Deny),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.decision, Decision::Deny);
         assert_eq!(r.winning_source, "deny");
     }
@@ -203,7 +206,8 @@ mod tests {
         let r = PolicyConflictResolver::resolve(vec![
             v("a", 0, Decision::Allow),
             v("b", 1, Decision::Sandbox),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.decision, Decision::Sandbox);
     }
 
@@ -212,7 +216,8 @@ mod tests {
         let r = PolicyConflictResolver::resolve(vec![
             v("low-prio", 10, Decision::Deny),
             v("high-prio", 1, Decision::Deny),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.winning_source, "high-prio");
     }
 
@@ -240,7 +245,8 @@ mod tests {
             v("a", 0, Decision::Allow),
             v("b", 1, Decision::Allow),
             v("c", 2, Decision::Allow),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.decision, Decision::Allow);
     }
 
@@ -250,7 +256,8 @@ mod tests {
             v("first", 0, Decision::Allow),
             v("second", 1, Decision::Ask),
             v("third", 2, Decision::Sandbox),
-        ]).unwrap();
+        ])
+        .unwrap();
         assert_eq!(r.votes[0].source, "first");
         assert_eq!(r.votes[1].source, "second");
         assert_eq!(r.votes[2].source, "third");
@@ -260,12 +267,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = PolicyConflictResolver::resolve(vec![v("p", 0, Decision::Allow)]).unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ConflictError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ConflictError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Decision::Sandbox).unwrap(), "\"sandbox\"");
+        assert_eq!(
+            serde_json::to_string(&Decision::Sandbox).unwrap(),
+            "\"sandbox\""
+        );
         assert_eq!(serde_json::to_string(&Decision::Ask).unwrap(), "\"ask\"");
     }
 
@@ -281,7 +294,8 @@ mod tests {
         let r = PolicyConflictResolver::resolve(vec![
             v("a", 0, Decision::Allow),
             v("b", 1, Decision::Deny),
-        ]).unwrap();
+        ])
+        .unwrap();
         let j = serde_json::to_string(&r).unwrap();
         let back: ConflictResolution = serde_json::from_str(&j).unwrap();
         assert_eq!(r, back);

@@ -64,15 +64,22 @@ impl DecisionEmitterPolicy {
 
     /// Set sinks for a kind (replaces existing).
     pub fn set(&mut self, decision_kind: &str, sinks: BTreeSet<Sink>) -> Result<(), EmitterError> {
-        if decision_kind.is_empty() { return Err(EmitterError::EmptyKind); }
+        if decision_kind.is_empty() {
+            return Err(EmitterError::EmptyKind);
+        }
         self.routes.insert(decision_kind.into(), sinks);
         Ok(())
     }
 
     /// Add a sink to a kind.
     pub fn add_sink(&mut self, decision_kind: &str, sink: Sink) -> Result<(), EmitterError> {
-        if decision_kind.is_empty() { return Err(EmitterError::EmptyKind); }
-        self.routes.entry(decision_kind.into()).or_default().insert(sink);
+        if decision_kind.is_empty() {
+            return Err(EmitterError::EmptyKind);
+        }
+        self.routes
+            .entry(decision_kind.into())
+            .or_default()
+            .insert(sink);
         Ok(())
     }
 
@@ -80,7 +87,9 @@ impl DecisionEmitterPolicy {
     pub fn remove_sink(&mut self, decision_kind: &str, sink: Sink) -> bool {
         if let Some(set) = self.routes.get_mut(decision_kind) {
             let r = set.remove(&sink);
-            if set.is_empty() { self.routes.remove(decision_kind); }
+            if set.is_empty() {
+                self.routes.remove(decision_kind);
+            }
             return r;
         }
         false
@@ -88,23 +97,30 @@ impl DecisionEmitterPolicy {
 
     /// Sinks for a kind.
     pub fn emitted_to(&self, decision_kind: &str) -> Vec<Sink> {
-        self.routes.get(decision_kind)
+        self.routes
+            .get(decision_kind)
             .map(|s| s.iter().copied().collect())
             .unwrap_or_default()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EmitterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EmitterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EmitterError::SchemaMismatch);
+        }
         for k in self.routes.keys() {
-            if k.is_empty() { return Err(EmitterError::EmptyKind); }
+            if k.is_empty() {
+                return Err(EmitterError::EmptyKind);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DecisionEmitterPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -139,7 +155,10 @@ mod tests {
     #[test]
     fn empty_kind_rejected() {
         let mut p = DecisionEmitterPolicy::new();
-        assert!(matches!(p.set("", BTreeSet::new()).unwrap_err(), EmitterError::EmptyKind));
+        assert!(matches!(
+            p.set("", BTreeSet::new()).unwrap_err(),
+            EmitterError::EmptyKind
+        ));
     }
 
     #[test]
@@ -160,7 +179,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = DecisionEmitterPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), EmitterError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            EmitterError::SchemaMismatch
+        ));
     }
 
     #[test]

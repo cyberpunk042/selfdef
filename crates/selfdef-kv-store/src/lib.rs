@@ -69,8 +69,13 @@ impl KvStore {
 
     /// Set (returns new generation).
     pub fn set(&mut self, key: &str, value: &str) -> Result<u64, KvError> {
-        if key.is_empty() { return Err(KvError::EmptyKey); }
-        let e = self.entries.entry(key.into()).or_insert(Entry { value: None, generation: 0 });
+        if key.is_empty() {
+            return Err(KvError::EmptyKey);
+        }
+        let e = self.entries.entry(key.into()).or_insert(Entry {
+            value: None,
+            generation: 0,
+        });
         e.generation = e.generation.saturating_add(1);
         e.value = Some(value.into());
         self.mutations = self.mutations.saturating_add(1);
@@ -79,12 +84,20 @@ impl KvStore {
 
     /// CAS update.
     pub fn cas(&mut self, key: &str, expected_gen: u64, value: &str) -> Result<u64, KvError> {
-        if key.is_empty() { return Err(KvError::EmptyKey); }
+        if key.is_empty() {
+            return Err(KvError::EmptyKey);
+        }
         let current = self.entries.get(key).map(|e| e.generation).unwrap_or(0);
         if current != expected_gen {
-            return Err(KvError::GenerationMismatch { expected: expected_gen, current });
+            return Err(KvError::GenerationMismatch {
+                expected: expected_gen,
+                current,
+            });
         }
-        let e = self.entries.entry(key.into()).or_insert(Entry { value: None, generation: 0 });
+        let e = self.entries.entry(key.into()).or_insert(Entry {
+            value: None,
+            generation: 0,
+        });
         e.generation = e.generation.saturating_add(1);
         e.value = Some(value.into());
         self.mutations = self.mutations.saturating_add(1);
@@ -98,7 +111,9 @@ impl KvStore {
 
     /// Get (value, gen).
     pub fn get_with_gen(&self, key: &str) -> Option<(&str, u64)> {
-        self.entries.get(key).and_then(|e| e.value.as_deref().map(|v| (v, e.generation)))
+        self.entries
+            .get(key)
+            .and_then(|e| e.value.as_deref().map(|v| (v, e.generation)))
     }
 
     /// Delete (tombstones; generation advances).
@@ -117,16 +132,22 @@ impl KvStore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), KvError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(KvError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(KvError::SchemaMismatch);
+        }
         for k in self.entries.keys() {
-            if k.is_empty() { return Err(KvError::EmptyKey); }
+            if k.is_empty() {
+                return Err(KvError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for KvStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +184,10 @@ mod tests {
     fn cas_mismatch_rejected() {
         let mut s = KvStore::new();
         s.set("k", "v1").unwrap();
-        assert!(matches!(s.cas("k", 99, "v2").unwrap_err(), KvError::GenerationMismatch { .. }));
+        assert!(matches!(
+            s.cas("k", 99, "v2").unwrap_err(),
+            KvError::GenerationMismatch { .. }
+        ));
         assert_eq!(s.get("k"), Some("v1"));
     }
 

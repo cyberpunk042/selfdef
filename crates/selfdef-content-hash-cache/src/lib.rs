@@ -88,14 +88,20 @@ impl ContentHashCache {
         if let Some(e) = self.entries.get_mut(&hash) {
             e.seen_count = e.seen_count.saturating_add(1);
             e.last_seen_at_ms = now_ms;
-            ObserveVerdict::Existing { hash, seen_count: e.seen_count }
-        } else {
-            self.entries.insert(hash, Entry {
+            ObserveVerdict::Existing {
                 hash,
-                first_seen_at_ms: now_ms,
-                last_seen_at_ms: now_ms,
-                seen_count: 1,
-            });
+                seen_count: e.seen_count,
+            }
+        } else {
+            self.entries.insert(
+                hash,
+                Entry {
+                    hash,
+                    first_seen_at_ms: now_ms,
+                    last_seen_at_ms: now_ms,
+                    seen_count: 1,
+                },
+            );
             ObserveVerdict::New { hash }
         }
     }
@@ -103,24 +109,32 @@ impl ContentHashCache {
     /// Prune entries older than max_age (by last_seen).
     pub fn prune(&mut self, now_ms: u64, max_age_ms: u64) -> usize {
         let cutoff = now_ms.saturating_sub(max_age_ms);
-        let to_drop: Vec<u64> = self.entries.iter()
+        let to_drop: Vec<u64> = self
+            .entries
+            .iter()
             .filter(|(_, e)| e.last_seen_at_ms < cutoff)
             .map(|(k, _)| *k)
             .collect();
         let n = to_drop.len();
-        for k in to_drop { self.entries.remove(&k); }
+        for k in to_drop {
+            self.entries.remove(&k);
+        }
         n
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CacheError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CacheError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CacheError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for ContentHashCache {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -176,7 +190,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = ContentHashCache::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CacheError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CacheError::SchemaMismatch
+        ));
     }
 
     #[test]

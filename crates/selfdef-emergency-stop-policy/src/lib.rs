@@ -186,9 +186,9 @@ impl EmergencyStopPolicy {
             | OperationClass::AuditDrain
             | OperationClass::WindDown
             | OperationClass::Inspect => StopGateDecision::Allow,
-            OperationClass::Execute
-            | OperationClass::Configure
-            | OperationClass::NewWork => StopGateDecision::Deny,
+            OperationClass::Execute | OperationClass::Configure | OperationClass::NewWork => {
+                StopGateDecision::Deny
+            }
         }
     }
 
@@ -257,8 +257,13 @@ mod tests {
     #[test]
     fn engaged_denies_execute_configure_newwork() {
         let mut p = p();
-        p.engage(StopTrigger::Operator, "panic", "2026-05-19T00:00:00Z", "ops-1")
-            .unwrap();
+        p.engage(
+            StopTrigger::Operator,
+            "panic",
+            "2026-05-19T00:00:00Z",
+            "ops-1",
+        )
+        .unwrap();
         assert!(p.is_engaged());
         assert_eq!(p.gate(OperationClass::Execute), StopGateDecision::Deny);
         assert_eq!(p.gate(OperationClass::Configure), StopGateDecision::Deny);
@@ -279,8 +284,13 @@ mod tests {
     #[test]
     fn release_clears_engagement() {
         let mut p = p();
-        p.engage(StopTrigger::Operator, "panic", "2026-05-19T00:00:00Z", "ops-1")
-            .unwrap();
+        p.engage(
+            StopTrigger::Operator,
+            "panic",
+            "2026-05-19T00:00:00Z",
+            "ops-1",
+        )
+        .unwrap();
         p.release("operator-root").unwrap();
         assert!(!p.is_engaged());
     }
@@ -288,8 +298,13 @@ mod tests {
     #[test]
     fn release_wrong_authority_rejected() {
         let mut p = p();
-        p.engage(StopTrigger::Operator, "panic", "2026-05-19T00:00:00Z", "ops-1")
-            .unwrap();
+        p.engage(
+            StopTrigger::Operator,
+            "panic",
+            "2026-05-19T00:00:00Z",
+            "ops-1",
+        )
+        .unwrap();
         assert!(matches!(
             p.release("intruder").unwrap_err(),
             StopError::AuthorityMismatch { .. }
@@ -300,7 +315,10 @@ mod tests {
     #[test]
     fn release_when_not_engaged_rejected() {
         let mut p = p();
-        assert!(matches!(p.release("operator-root").unwrap_err(), StopError::NotEngaged));
+        assert!(matches!(
+            p.release("operator-root").unwrap_err(),
+            StopError::NotEngaged
+        ));
     }
 
     #[test]
@@ -317,7 +335,8 @@ mod tests {
         let mut p = p();
         let long = "x".repeat(201);
         assert!(matches!(
-            p.engage(StopTrigger::Operator, &long, "t", "by").unwrap_err(),
+            p.engage(StopTrigger::Operator, &long, "t", "by")
+                .unwrap_err(),
             StopError::ReasonTooLong(201)
         ));
     }
@@ -334,8 +353,10 @@ mod tests {
     #[test]
     fn re_engage_overwrites() {
         let mut p = p();
-        p.engage(StopTrigger::Operator, "first", "t1", "ops").unwrap();
-        p.engage(StopTrigger::Guard, "second", "t2", "guard").unwrap();
+        p.engage(StopTrigger::Operator, "first", "t1", "ops")
+            .unwrap();
+        p.engage(StopTrigger::Guard, "second", "t2", "guard")
+            .unwrap();
         let e = p.engaged.as_ref().unwrap();
         assert_eq!(e.trigger, StopTrigger::Guard);
         assert_eq!(e.reason, "second");
@@ -345,28 +366,54 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = p();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), StopError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            StopError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn trigger_serde_kebab() {
-        assert_eq!(serde_json::to_string(&StopTrigger::Operator).unwrap(), "\"operator\"");
-        assert_eq!(serde_json::to_string(&StopTrigger::QuorumLoss).unwrap(), "\"quorum-loss\"");
-        assert_eq!(serde_json::to_string(&StopTrigger::SelfTestFail).unwrap(), "\"self-test-fail\"");
+        assert_eq!(
+            serde_json::to_string(&StopTrigger::Operator).unwrap(),
+            "\"operator\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StopTrigger::QuorumLoss).unwrap(),
+            "\"quorum-loss\""
+        );
+        assert_eq!(
+            serde_json::to_string(&StopTrigger::SelfTestFail).unwrap(),
+            "\"self-test-fail\""
+        );
     }
 
     #[test]
     fn op_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&OperationClass::AuditDrain).unwrap(), "\"audit-drain\"");
-        assert_eq!(serde_json::to_string(&OperationClass::WindDown).unwrap(), "\"wind-down\"");
-        assert_eq!(serde_json::to_string(&OperationClass::NewWork).unwrap(), "\"new-work\"");
+        assert_eq!(
+            serde_json::to_string(&OperationClass::AuditDrain).unwrap(),
+            "\"audit-drain\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OperationClass::WindDown).unwrap(),
+            "\"wind-down\""
+        );
+        assert_eq!(
+            serde_json::to_string(&OperationClass::NewWork).unwrap(),
+            "\"new-work\""
+        );
     }
 
     #[test]
     fn policy_serde_roundtrip() {
         let mut p = p();
-        p.engage(StopTrigger::Operator, "panic", "2026-05-19T00:00:00Z", "ops-1")
-            .unwrap();
+        p.engage(
+            StopTrigger::Operator,
+            "panic",
+            "2026-05-19T00:00:00Z",
+            "ops-1",
+        )
+        .unwrap();
         let j = serde_json::to_string(&p).unwrap();
         let back: EmergencyStopPolicy = serde_json::from_str(&j).unwrap();
         assert_eq!(p, back);

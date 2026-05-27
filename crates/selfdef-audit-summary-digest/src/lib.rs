@@ -71,7 +71,8 @@ pub enum DigestError {
 }
 
 fn top_n(counts: HashMap<String, u64>) -> Vec<LabeledCount> {
-    let mut v: Vec<LabeledCount> = counts.into_iter()
+    let mut v: Vec<LabeledCount> = counts
+        .into_iter()
         .map(|(label, count)| LabeledCount { label, count })
         .collect();
     v.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.label.cmp(&b.label)));
@@ -102,7 +103,10 @@ impl AuditSummaryDigest {
             schema_version: SCHEMA_VERSION.into(),
             window_start: window_start.into(),
             window_end: window_end.into(),
-            allow, deny, ask, sandbox,
+            allow,
+            deny,
+            ask,
+            sandbox,
             top_actors: top_n(actor_counts),
             top_actions: top_n(action_counts),
         }
@@ -118,8 +122,12 @@ impl AuditSummaryDigest {
         if self.schema_version != SCHEMA_VERSION {
             return Err(DigestError::SchemaMismatch);
         }
-        if self.window_start.is_empty() { return Err(DigestError::MissingTimestamp("window_start")); }
-        if self.window_end.is_empty() { return Err(DigestError::MissingTimestamp("window_end")); }
+        if self.window_start.is_empty() {
+            return Err(DigestError::MissingTimestamp("window_start"));
+        }
+        if self.window_end.is_empty() {
+            return Err(DigestError::MissingTimestamp("window_end"));
+        }
         if self.window_end <= self.window_start {
             return Err(DigestError::BadWindow {
                 start: self.window_start.clone(),
@@ -133,7 +141,9 @@ impl AuditSummaryDigest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_policy_decision::{ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState};
+    use selfdef_policy_decision::{
+        ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState,
+    };
 
     fn d(subject: &str, action: &str, outcome: Outcome) -> PolicyDecision {
         PolicyDecision {
@@ -195,7 +205,9 @@ mod tests {
 
     #[test]
     fn top_actors_capped_at_three() {
-        let v: Vec<PolicyDecision> = (0..10).map(|i| d(&format!("u{i}"), "x", Outcome::Allow)).collect();
+        let v: Vec<PolicyDecision> = (0..10)
+            .map(|i| d(&format!("u{i}"), "x", Outcome::Allow))
+            .collect();
         let g = AuditSummaryDigest::build("a", "b", &v);
         assert_eq!(g.top_actors.len(), 3);
     }
@@ -215,20 +227,29 @@ mod tests {
     #[test]
     fn bad_window_caught() {
         let g = AuditSummaryDigest::build("2026-05-19T04:00:00Z", "2026-05-19T03:00:00Z", &[]);
-        assert!(matches!(g.validate().unwrap_err(), DigestError::BadWindow { .. }));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::BadWindow { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = AuditSummaryDigest::build("a", "b", &[]);
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), DigestError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            DigestError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn digest_serde_roundtrip() {
-        let g = AuditSummaryDigest::build("2026-05-19T03:00:00Z", "2026-05-19T04:00:00Z",
-            &[d("alice", "fs.read", Outcome::Allow)]);
+        let g = AuditSummaryDigest::build(
+            "2026-05-19T03:00:00Z",
+            "2026-05-19T04:00:00Z",
+            &[d("alice", "fs.read", Outcome::Allow)],
+        );
         let j = serde_json::to_string(&g).unwrap();
         let back: AuditSummaryDigest = serde_json::from_str(&j).unwrap();
         assert_eq!(g, back);

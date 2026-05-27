@@ -73,9 +73,17 @@ pub enum AlertError {
 
 impl BurnRateAlert {
     /// New.
-    pub fn new(slo_bad_rate_bp: u32, fast_factor_tenths: u32, slow_factor_tenths: u32) -> Result<Self, AlertError> {
-        if slo_bad_rate_bp == 0 || slo_bad_rate_bp > 10000 { return Err(AlertError::BadSloRate); }
-        if fast_factor_tenths == 0 || slow_factor_tenths == 0 { return Err(AlertError::ZeroFactor); }
+    pub fn new(
+        slo_bad_rate_bp: u32,
+        fast_factor_tenths: u32,
+        slow_factor_tenths: u32,
+    ) -> Result<Self, AlertError> {
+        if slo_bad_rate_bp == 0 || slo_bad_rate_bp > 10000 {
+            return Err(AlertError::BadSloRate);
+        }
+        if fast_factor_tenths == 0 || slow_factor_tenths == 0 {
+            return Err(AlertError::ZeroFactor);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             slo_bad_rate_bp,
@@ -94,7 +102,9 @@ impl BurnRateAlert {
 
     /// Burn rate of a window in tenths-of-x (so burn=2.5x → 25).
     pub fn burn_tenths(&self, w: Window) -> u64 {
-        if w.total == 0 { return 0; }
+        if w.total == 0 {
+            return 0;
+        }
         // observed_bad_rate_bp = bad * 10000 / total
         let observed_bp = (w.bad as u128 * 10_000) / w.total as u128;
         // burn = observed / slo  → in tenths
@@ -118,9 +128,15 @@ impl BurnRateAlert {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AlertError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AlertError::SchemaMismatch); }
-        if self.slo_bad_rate_bp == 0 || self.slo_bad_rate_bp > 10000 { return Err(AlertError::BadSloRate); }
-        if self.fast_factor_tenths == 0 || self.slow_factor_tenths == 0 { return Err(AlertError::ZeroFactor); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AlertError::SchemaMismatch);
+        }
+        if self.slo_bad_rate_bp == 0 || self.slo_bad_rate_bp > 10000 {
+            return Err(AlertError::BadSloRate);
+        }
+        if self.fast_factor_tenths == 0 || self.slow_factor_tenths == 0 {
+            return Err(AlertError::ZeroFactor);
+        }
         Ok(())
     }
 }
@@ -139,8 +155,14 @@ mod tests {
     fn under_slo_is_none() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
         a.set_windows(
-            Window { total: 1000, bad: 5 }, // 0.5% bad → 0.5x burn → 5 tenths
-            Window { total: 10000, bad: 50 }, // 0.5% bad → 5 tenths
+            Window {
+                total: 1000,
+                bad: 5,
+            }, // 0.5% bad → 0.5x burn → 5 tenths
+            Window {
+                total: 10000,
+                bad: 50,
+            }, // 0.5% bad → 5 tenths
         );
         assert_eq!(a.evaluate(), Severity::None);
     }
@@ -149,8 +171,14 @@ mod tests {
     fn slow_only_alert() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
         a.set_windows(
-            Window { total: 1000, bad: 5 }, // 0.5x = 5 tenths < 14.4
-            Window { total: 10000, bad: 200 }, // 2% bad = 2x → 20 tenths >= 10
+            Window {
+                total: 1000,
+                bad: 5,
+            }, // 0.5x = 5 tenths < 14.4
+            Window {
+                total: 10000,
+                bad: 200,
+            }, // 2% bad = 2x → 20 tenths >= 10
         );
         assert_eq!(a.evaluate(), Severity::Slow);
     }
@@ -159,8 +187,14 @@ mod tests {
     fn fast_only_alert() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
         a.set_windows(
-            Window { total: 1000, bad: 200 }, // 20% bad = 20x → 200 tenths >= 144
-            Window { total: 10000, bad: 50 }, // 0.5% = 5 tenths < 10
+            Window {
+                total: 1000,
+                bad: 200,
+            }, // 20% bad = 20x → 200 tenths >= 144
+            Window {
+                total: 10000,
+                bad: 50,
+            }, // 0.5% = 5 tenths < 10
         );
         assert_eq!(a.evaluate(), Severity::Fast);
     }
@@ -169,8 +203,14 @@ mod tests {
     fn both_alert() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
         a.set_windows(
-            Window { total: 1000, bad: 200 }, // 200 tenths
-            Window { total: 10000, bad: 500 }, // 5% = 5x → 50 tenths >= 10
+            Window {
+                total: 1000,
+                bad: 200,
+            }, // 200 tenths
+            Window {
+                total: 10000,
+                bad: 500,
+            }, // 5% = 5x → 50 tenths >= 10
         );
         assert_eq!(a.evaluate(), Severity::Both);
     }
@@ -183,22 +223,43 @@ mod tests {
 
     #[test]
     fn bad_inputs_rejected() {
-        assert!(matches!(BurnRateAlert::new(0, 10, 10).unwrap_err(), AlertError::BadSloRate));
-        assert!(matches!(BurnRateAlert::new(10001, 10, 10).unwrap_err(), AlertError::BadSloRate));
-        assert!(matches!(BurnRateAlert::new(100, 0, 10).unwrap_err(), AlertError::ZeroFactor));
+        assert!(matches!(
+            BurnRateAlert::new(0, 10, 10).unwrap_err(),
+            AlertError::BadSloRate
+        ));
+        assert!(matches!(
+            BurnRateAlert::new(10001, 10, 10).unwrap_err(),
+            AlertError::BadSloRate
+        ));
+        assert!(matches!(
+            BurnRateAlert::new(100, 0, 10).unwrap_err(),
+            AlertError::ZeroFactor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), AlertError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            AlertError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn alert_serde_roundtrip() {
         let mut a = BurnRateAlert::new(100, 144, 10).unwrap();
-        a.set_windows(Window { total: 1000, bad: 10 }, Window { total: 10000, bad: 100 });
+        a.set_windows(
+            Window {
+                total: 1000,
+                bad: 10,
+            },
+            Window {
+                total: 10000,
+                bad: 100,
+            },
+        );
         let j = serde_json::to_string(&a).unwrap();
         let back: BurnRateAlert = serde_json::from_str(&j).unwrap();
         assert_eq!(a, back);

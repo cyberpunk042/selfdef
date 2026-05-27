@@ -297,7 +297,9 @@ mod tests {
     #[test]
     fn dashboards_tabs_are_one_of_eight_plus_all() {
         // Tabs must match SDD-056 § 8-tab specification + "all" pseudo.
-        let valid = ["all", "models", "modules", "profiles", "hardware", "network", "logs", "mcp", "repl"];
+        let valid = [
+            "all", "models", "modules", "profiles", "hardware", "network", "logs", "mcp", "repl",
+        ];
         for d in DASHBOARDS {
             assert!(
                 valid.contains(&d.active_tab),

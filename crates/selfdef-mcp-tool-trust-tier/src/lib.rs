@@ -97,12 +97,12 @@ impl McpToolTrustTier {
     /// New.
     pub fn new() -> Self {
         let mut min = BTreeMap::new();
-        min.insert(Profile::Private,      TrustTier::Trusted);
-        min.insert(Profile::Fast,         TrustTier::SemiTrusted);
-        min.insert(Profile::Careful,      TrustTier::Trusted);
-        min.insert(Profile::Autonomous,   TrustTier::SemiTrusted);
+        min.insert(Profile::Private, TrustTier::Trusted);
+        min.insert(Profile::Fast, TrustTier::SemiTrusted);
+        min.insert(Profile::Careful, TrustTier::Trusted);
+        min.insert(Profile::Autonomous, TrustTier::SemiTrusted);
         min.insert(Profile::Experimental, TrustTier::Sandbox);
-        min.insert(Profile::Production,   TrustTier::Hardened);
+        min.insert(Profile::Production, TrustTier::Hardened);
         Self {
             schema_version: SCHEMA_VERSION.into(),
             tools: BTreeMap::new(),
@@ -112,7 +112,9 @@ impl McpToolTrustTier {
 
     /// Register a tool.
     pub fn register(&mut self, tool_id: &str, tier: TrustTier) -> Result<(), TierError> {
-        if tool_id.is_empty() { return Err(TierError::EmptyId); }
+        if tool_id.is_empty() {
+            return Err(TierError::EmptyId);
+        }
         self.tools.insert(tool_id.into(), tier);
         Ok(())
     }
@@ -136,16 +138,22 @@ impl McpToolTrustTier {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TierError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TierError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TierError::SchemaMismatch);
+        }
         for id in self.tools.keys() {
-            if id.is_empty() { return Err(TierError::EmptyId); }
+            if id.is_empty() {
+                return Err(TierError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for McpToolTrustTier {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +171,10 @@ mod tests {
     fn register_and_classify_allowed() {
         let mut t = McpToolTrustTier::new();
         t.register("read-file", TrustTier::Hardened).unwrap();
-        assert_eq!(t.classify(Profile::Production, "read-file"), TierVerdict::Allowed);
+        assert_eq!(
+            t.classify(Profile::Production, "read-file"),
+            TierVerdict::Allowed
+        );
     }
 
     #[test]
@@ -184,7 +195,10 @@ mod tests {
     fn experimental_admits_sandbox() {
         let mut t = McpToolTrustTier::new();
         t.register("hack", TrustTier::Sandbox).unwrap();
-        assert_eq!(t.classify(Profile::Experimental, "hack"), TierVerdict::Allowed);
+        assert_eq!(
+            t.classify(Profile::Experimental, "hack"),
+            TierVerdict::Allowed
+        );
     }
 
     #[test]
@@ -198,20 +212,29 @@ mod tests {
         let mut t = McpToolTrustTier::new();
         t.register("read-file", TrustTier::Hardened).unwrap();
         t.minimum_tier.clear();
-        assert_eq!(t.classify(Profile::Production, "read-file"), TierVerdict::Unconfigured);
+        assert_eq!(
+            t.classify(Profile::Production, "read-file"),
+            TierVerdict::Unconfigured
+        );
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut t = McpToolTrustTier::new();
-        assert!(matches!(t.register("", TrustTier::Sandbox).unwrap_err(), TierError::EmptyId));
+        assert!(matches!(
+            t.register("", TrustTier::Sandbox).unwrap_err(),
+            TierError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = McpToolTrustTier::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), TierError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            TierError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -156,12 +156,24 @@ impl PredicateChecks {
     /// Names of failing checks (for operator-readable summary).
     pub fn failures(&self) -> Vec<&'static str> {
         let mut v = vec![];
-        if !self.paths_inside_workspace { v.push("paths_inside_workspace"); }
-        if !self.no_forbidden_files { v.push("no_forbidden_files"); }
-        if !self.diff_parses { v.push("diff_parses"); }
-        if !self.policy_allows_writes { v.push("policy_allows_writes"); }
-        if !self.branch_budget_permits { v.push("branch_budget_permits"); }
-        if !self.user_approval_if_required { v.push("user_approval_if_required"); }
+        if !self.paths_inside_workspace {
+            v.push("paths_inside_workspace");
+        }
+        if !self.no_forbidden_files {
+            v.push("no_forbidden_files");
+        }
+        if !self.diff_parses {
+            v.push("diff_parses");
+        }
+        if !self.policy_allows_writes {
+            v.push("policy_allows_writes");
+        }
+        if !self.branch_budget_permits {
+            v.push("branch_budget_permits");
+        }
+        if !self.user_approval_if_required {
+            v.push("user_approval_if_required");
+        }
         v
     }
 }
@@ -217,7 +229,10 @@ pub enum FsBoundaryError {
 
 /// Verify a candidate absolute path lies inside the given workspace root.
 /// Rejects `..` traversal + path escapes.
-pub fn assert_path_inside_workspace(workspace: &str, candidate: &str) -> Result<(), FsBoundaryError> {
+pub fn assert_path_inside_workspace(
+    workspace: &str,
+    candidate: &str,
+) -> Result<(), FsBoundaryError> {
     if candidate.contains("/../") || candidate.starts_with("../") || candidate.ends_with("/..") {
         return Err(FsBoundaryError::PathEscapesWorkspace(candidate.into()));
     }
@@ -245,10 +260,16 @@ pub fn validate_patch(env: &PatchEnvelope, workspace: &str) -> Result<(), FsBoun
 }
 
 /// Advance the import pipeline by exactly one step.
-pub fn advance_step(current: ImportStep, target: ImportStep) -> Result<ImportStep, FsBoundaryError> {
+pub fn advance_step(
+    current: ImportStep,
+    target: ImportStep,
+) -> Result<ImportStep, FsBoundaryError> {
     let next = current.next().ok_or(FsBoundaryError::PipelineTerminal)?;
     if next != target {
-        return Err(FsBoundaryError::PipelineSkip { from: current, to: target });
+        return Err(FsBoundaryError::PipelineSkip {
+            from: current,
+            to: target,
+        });
     }
     Ok(target)
 }
@@ -310,12 +331,18 @@ mod tests {
     fn exchange_dir_paths_canonical() {
         assert_eq!(ExchangeDir::Inbox.canonical_path(), "/ai-exchange/inbox");
         assert_eq!(ExchangeDir::Outbox.canonical_path(), "/ai-exchange/outbox");
-        assert_eq!(ExchangeDir::Artifacts.canonical_path(), "/ai-exchange/artifacts");
+        assert_eq!(
+            ExchangeDir::Artifacts.canonical_path(),
+            "/ai-exchange/artifacts"
+        );
     }
 
     #[test]
     fn exchange_dir_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&ExchangeDir::Artifacts).unwrap(), "\"artifacts\"");
+        assert_eq!(
+            serde_json::to_string(&ExchangeDir::Artifacts).unwrap(),
+            "\"artifacts\""
+        );
     }
 
     // --- 6-step import pipeline ---
@@ -323,8 +350,12 @@ mod tests {
     #[test]
     fn import_steps_positioned_1_to_6() {
         let order = [
-            (ImportStep::Parse, 1), (ImportStep::Scan, 2), (ImportStep::Diff, 3),
-            (ImportStep::PolicyCheck, 4), (ImportStep::OracleReview, 5), (ImportStep::Commit, 6),
+            (ImportStep::Parse, 1),
+            (ImportStep::Scan, 2),
+            (ImportStep::Diff, 3),
+            (ImportStep::PolicyCheck, 4),
+            (ImportStep::OracleReview, 5),
+            (ImportStep::Commit, 6),
         ];
         for (s, p) in order {
             assert_eq!(s.position(), p);
@@ -333,7 +364,10 @@ mod tests {
 
     #[test]
     fn pipeline_advance_one_step() {
-        assert_eq!(advance_step(ImportStep::Parse, ImportStep::Scan).unwrap(), ImportStep::Scan);
+        assert_eq!(
+            advance_step(ImportStep::Parse, ImportStep::Scan).unwrap(),
+            ImportStep::Scan
+        );
     }
 
     #[test]
@@ -373,14 +407,20 @@ mod tests {
     fn unsigned_patch_refused() {
         let mut e = ok_env();
         e.signature = String::new();
-        assert!(matches!(validate_patch(&e, "/workspace").unwrap_err(), FsBoundaryError::PatchUnsigned));
+        assert!(matches!(
+            validate_patch(&e, "/workspace").unwrap_err(),
+            FsBoundaryError::PatchUnsigned
+        ));
     }
 
     #[test]
     fn schema_drift_refused() {
         let mut e = ok_env();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(validate_patch(&e, "/workspace").unwrap_err(), FsBoundaryError::SchemaMismatch { .. }));
+        assert!(matches!(
+            validate_patch(&e, "/workspace").unwrap_err(),
+            FsBoundaryError::SchemaMismatch { .. }
+        ));
     }
 
     // --- Path-inside-workspace ---
@@ -398,7 +438,10 @@ mod tests {
             "/workspace/sub/..",
         ] {
             let err = assert_path_inside_workspace("/workspace", bad).unwrap_err();
-            assert!(matches!(err, FsBoundaryError::PathEscapesWorkspace(_)), "bad: {bad}");
+            assert!(
+                matches!(err, FsBoundaryError::PathEscapesWorkspace(_)),
+                "bad: {bad}"
+            );
         }
     }
 
@@ -454,19 +497,28 @@ mod tests {
 
     #[test]
     fn doctrines_verbatim() {
-        assert_eq!(DOCTRINE_EXPLICIT_EXCHANGE, "Use explicit exchange directories");
-        assert_eq!(DOCTRINE_VM_WRITES_PROPOSALS, "VM writes proposals, not final state");
+        assert_eq!(
+            DOCTRINE_EXPLICIT_EXCHANGE,
+            "Use explicit exchange directories"
+        );
+        assert_eq!(
+            DOCTRINE_VM_WRITES_PROPOSALS,
+            "VM writes proposals, not final state"
+        );
         assert_doctrines_intact(
             "Use explicit exchange directories",
             "VM writes proposals, not final state",
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
     fn doctrine_tamper_caught() {
-        let err = assert_doctrines_intact("WRONG", "VM writes proposals, not final state").unwrap_err();
+        let err =
+            assert_doctrines_intact("WRONG", "VM writes proposals, not final state").unwrap_err();
         assert!(matches!(err, FsBoundaryError::DoctrineTampered { .. }));
-        let err2 = assert_doctrines_intact("Use explicit exchange directories", "WRONG").unwrap_err();
+        let err2 =
+            assert_doctrines_intact("Use explicit exchange directories", "WRONG").unwrap_err();
         assert!(matches!(err2, FsBoundaryError::DoctrineTampered { .. }));
     }
 
@@ -490,7 +542,13 @@ mod tests {
 
     #[test]
     fn import_step_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ImportStep::OracleReview).unwrap(), "\"oracle-review\"");
-        assert_eq!(serde_json::to_string(&ImportStep::PolicyCheck).unwrap(), "\"policy-check\"");
+        assert_eq!(
+            serde_json::to_string(&ImportStep::OracleReview).unwrap(),
+            "\"oracle-review\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ImportStep::PolicyCheck).unwrap(),
+            "\"policy-check\""
+        );
     }
 }

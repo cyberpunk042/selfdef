@@ -69,7 +69,9 @@ pub enum FifoError {
 impl BoundedFifo {
     /// New.
     pub fn new(capacity: u32, policy: Policy) -> Result<Self, FifoError> {
-        if capacity == 0 { return Err(FifoError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(FifoError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -81,7 +83,9 @@ impl BoundedFifo {
 
     /// Push.
     pub fn push(&mut self, item: &str) -> Result<PushResult, FifoError> {
-        if item.is_empty() { return Err(FifoError::EmptyItem); }
+        if item.is_empty() {
+            return Err(FifoError::EmptyItem);
+        }
         if (self.items.len() as u32) >= self.capacity {
             match self.policy {
                 Policy::DropOldest => {
@@ -102,24 +106,40 @@ impl BoundedFifo {
 
     /// Pop head.
     pub fn pop(&mut self) -> Option<String> {
-        if self.items.is_empty() { None } else { Some(self.items.remove(0)) }
+        if self.items.is_empty() {
+            None
+        } else {
+            Some(self.items.remove(0))
+        }
     }
 
     /// Peek head.
-    pub fn peek_head(&self) -> Option<&str> { self.items.first().map(|s| s.as_str()) }
+    pub fn peek_head(&self) -> Option<&str> {
+        self.items.first().map(|s| s.as_str())
+    }
 
     /// Count.
-    pub fn len(&self) -> usize { self.items.len() }
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.items.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FifoError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FifoError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(FifoError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FifoError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(FifoError::ZeroCapacity);
+        }
         for i in &self.items {
-            if i.is_empty() { return Err(FifoError::EmptyItem); }
+            if i.is_empty() {
+                return Err(FifoError::EmptyItem);
+            }
         }
         Ok(())
     }
@@ -173,14 +193,20 @@ mod tests {
     fn empty_inputs_rejected() {
         let mut q = BoundedFifo::new(2, Policy::DropOldest).unwrap();
         assert!(matches!(q.push("").unwrap_err(), FifoError::EmptyItem));
-        assert!(matches!(BoundedFifo::new(0, Policy::DropOldest).unwrap_err(), FifoError::ZeroCapacity));
+        assert!(matches!(
+            BoundedFifo::new(0, Policy::DropOldest).unwrap_err(),
+            FifoError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = BoundedFifo::new(2, Policy::DropOldest).unwrap();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), FifoError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            FifoError::SchemaMismatch
+        ));
     }
 
     #[test]

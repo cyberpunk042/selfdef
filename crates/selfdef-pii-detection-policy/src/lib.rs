@@ -72,7 +72,11 @@ impl PiiDetector {
         let mut i = 0usize;
         while i < bytes.len() {
             if let Some((class, len)) = match_at(input, i) {
-                hits.push(PiiHit { class, offset: i, len });
+                hits.push(PiiHit {
+                    class,
+                    offset: i,
+                    len,
+                });
                 i += len;
             } else {
                 let c = input[i..].chars().next().unwrap_or('\0');
@@ -118,25 +122,34 @@ fn match_email(rest: &str) -> Option<usize> {
     let b = rest.as_bytes();
     // local: 1+ chars [A-Za-z0-9._+-]
     let mut i = 0;
-    while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'.' | b'_' | b'+' | b'-')) {
+    while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'.' | b'_' | b'+' | b'-'))
+    {
         i += 1;
     }
-    if i == 0 || i >= b.len() || b[i] != b'@' { return None; }
+    if i == 0 || i >= b.len() || b[i] != b'@' {
+        return None;
+    }
     let local_end = i;
     i += 1;
     let domain_start = i;
     while i < b.len() && (b[i].is_ascii_alphanumeric() || matches!(b[i], b'.' | b'-')) {
         i += 1;
     }
-    if i == domain_start { return None; }
+    if i == domain_start {
+        return None;
+    }
     // Must contain a dot in domain.
-    if !rest[domain_start..i].contains('.') { return None; }
+    if !rest[domain_start..i].contains('.') {
+        return None;
+    }
     // Strip trailing dot.
     let mut end = i;
     while end > domain_start && b[end - 1] == b'.' {
         end -= 1;
     }
-    if end <= domain_start { return None; }
+    if end <= domain_start {
+        return None;
+    }
     let _ = local_end;
     Some(end)
 }
@@ -160,7 +173,19 @@ fn match_phone(rest: &str) -> Option<usize> {
         // NNN-NNN-NNNN
         let pat = |i: usize| b.get(i).is_some_and(|c| c.is_ascii_digit());
         let sep = |i: usize| matches!(b.get(i), Some(&b'-') | Some(&b'.') | Some(&b' '));
-        if pat(0) && pat(1) && pat(2) && sep(3) && pat(4) && pat(5) && pat(6) && sep(7) && pat(8) && pat(9) && pat(10) && pat(11) {
+        if pat(0)
+            && pat(1)
+            && pat(2)
+            && sep(3)
+            && pat(4)
+            && pat(5)
+            && pat(6)
+            && sep(7)
+            && pat(8)
+            && pat(9)
+            && pat(10)
+            && pat(11)
+        {
             return Some(12);
         }
     }
@@ -172,7 +197,18 @@ fn match_ssn(rest: &str) -> Option<usize> {
     if b.len() >= 11 {
         let pat = |i: usize| b.get(i).is_some_and(|c| c.is_ascii_digit());
         let dash = |i: usize| b.get(i) == Some(&b'-');
-        if pat(0) && pat(1) && pat(2) && dash(3) && pat(4) && pat(5) && dash(6) && pat(7) && pat(8) && pat(9) && pat(10) {
+        if pat(0)
+            && pat(1)
+            && pat(2)
+            && dash(3)
+            && pat(4)
+            && pat(5)
+            && dash(6)
+            && pat(7)
+            && pat(8)
+            && pat(9)
+            && pat(10)
+        {
             // Boundary check: not followed by digit/word.
             if b.get(11).is_some_and(|c| c.is_ascii_alphanumeric()) {
                 return None;
@@ -194,12 +230,18 @@ fn match_ipv4(rest: &str) -> Option<usize> {
             digits += 1;
             i += 1;
         }
-        if digits == 0 { return None; }
+        if digits == 0 {
+            return None;
+        }
         let n: u32 = rest[start..i].parse().ok()?;
-        if n > 255 { return None; }
+        if n > 255 {
+            return None;
+        }
         octets += 1;
         if octets < 4 {
-            if i >= b.len() || b[i] != b'.' { return None; }
+            if i >= b.len() || b[i] != b'.' {
+                return None;
+            }
             i += 1;
         }
     }
@@ -226,7 +268,9 @@ fn match_credit_card(rest: &str) -> Option<usize> {
             break;
         }
     }
-    if digits.len() != 16 { return None; }
+    if digits.len() != 16 {
+        return None;
+    }
     // Boundary check.
     if b.get(i).is_some_and(|c| c.is_ascii_alphanumeric()) {
         return None;
@@ -240,7 +284,9 @@ fn luhn_ok(digits: &[u8]) -> bool {
         let mut v = *d as u32;
         if idx % 2 == 1 {
             v *= 2;
-            if v > 9 { v -= 9; }
+            if v > 9 {
+                v -= 9;
+            }
         }
         sum += v;
     }
@@ -329,13 +375,22 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = PiiDetector::scan("ok");
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), PiiError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            PiiError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&PiiClass::SsnUs).unwrap(), "\"ssn-us\"");
-        assert_eq!(serde_json::to_string(&PiiClass::CreditCard).unwrap(), "\"credit-card\"");
+        assert_eq!(
+            serde_json::to_string(&PiiClass::SsnUs).unwrap(),
+            "\"ssn-us\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PiiClass::CreditCard).unwrap(),
+            "\"credit-card\""
+        );
         assert_eq!(serde_json::to_string(&PiiClass::IpV4).unwrap(), "\"ip-v4\"");
     }
 

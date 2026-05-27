@@ -40,8 +40,7 @@ const CURATION_POLICY: &[&str] = &[
     "every invocation routes through SDD-050 9-gate pipeline + SDD-043 ToolSideEffect commit envelope",
 ];
 
-const CATALOG_SOURCE: &str =
-    "selfdef-cli::mcp::tools() — invoke `selfdefctl mcp tools` for the JSON manifest; `--human` for terminal form";
+const CATALOG_SOURCE: &str = "selfdef-cli::mcp::tools() — invoke `selfdefctl mcp tools` for the JSON manifest; `--human` for terminal form";
 
 const SCHEMA_FORMAT: &str = "JSON Schema 2020-12 strict mode";
 

@@ -12,7 +12,9 @@
 
 use selfdef_cli_mirror::DOCTRINE_FULLSTACK_AT_THE_EDGES;
 use selfdef_commit_authority::DOCTRINE_COMMIT_IS_DURABLE_CHANGE;
-use selfdef_communication_boundary::{DOCTRINE_VM_NEVER_MUTATES, DOCTRINE_VM_PROPOSES_HOST_COMMITS};
+use selfdef_communication_boundary::{
+    DOCTRINE_VM_NEVER_MUTATES, DOCTRINE_VM_PROPOSES_HOST_COMMITS,
+};
 use selfdef_filesystem_boundary::{DOCTRINE_EXPLICIT_EXCHANGE, DOCTRINE_VM_WRITES_PROPOSALS};
 use selfdef_policy_decision::{DOCTRINE_EVERY_ACTION_OBSERVABLE, DOCTRINE_TRACE_AT_DECISION};
 use selfdef_profile_authority_gate::DOCTRINE_AUTHORITY_FOLLOWS_EVIDENCE;
@@ -83,11 +85,16 @@ impl DoctrineTag {
     /// Iterate every canonical tag.
     pub fn all() -> [DoctrineTag; 10] {
         [
-            DoctrineTag::FullstackAtTheEdges, DoctrineTag::NoVanityGraphs,
-            DoctrineTag::AuthorityFollowsEvidence, DoctrineTag::CommitIsDurableChange,
-            DoctrineTag::EveryActionObservable, DoctrineTag::TraceAtDecision,
-            DoctrineTag::VmNeverMutates, DoctrineTag::VmProposesHostCommits,
-            DoctrineTag::ExplicitExchange, DoctrineTag::VmWritesProposals,
+            DoctrineTag::FullstackAtTheEdges,
+            DoctrineTag::NoVanityGraphs,
+            DoctrineTag::AuthorityFollowsEvidence,
+            DoctrineTag::CommitIsDurableChange,
+            DoctrineTag::EveryActionObservable,
+            DoctrineTag::TraceAtDecision,
+            DoctrineTag::VmNeverMutates,
+            DoctrineTag::VmProposesHostCommits,
+            DoctrineTag::ExplicitExchange,
+            DoctrineTag::VmWritesProposals,
         ]
     }
 }
@@ -139,11 +146,14 @@ pub enum DoctrineError {
 impl DoctrineRegistry {
     /// Build canonical registry from this binary's compile-time constants.
     pub fn canonical() -> Self {
-        let records = DoctrineTag::all().into_iter().map(|t| DoctrineRecord {
-            tag: t,
-            text: t.verbatim().into(),
-            provenance: t.provenance().into(),
-        }).collect();
+        let records = DoctrineTag::all()
+            .into_iter()
+            .map(|t| DoctrineRecord {
+                tag: t,
+                text: t.verbatim().into(),
+                provenance: t.provenance().into(),
+            })
+            .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: "2026-05-19T00:00:00Z".into(),
@@ -160,7 +170,10 @@ impl DoctrineRegistry {
             return Err(DoctrineError::CountInvalid(self.records.len()));
         }
         for tag in DoctrineTag::all() {
-            let rec = self.records.iter().find(|r| r.tag == tag)
+            let rec = self
+                .records
+                .iter()
+                .find(|r| r.tag == tag)
                 .ok_or(DoctrineError::TagMissing(tag))?;
             let expected = tag.verbatim();
             if rec.text != expected {
@@ -192,14 +205,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = DoctrineRegistry::canonical();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), DoctrineError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            DoctrineError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_rejected() {
         let mut r = DoctrineRegistry::canonical();
         r.records.pop();
-        assert!(matches!(r.validate().unwrap_err(), DoctrineError::CountInvalid(9)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            DoctrineError::CountInvalid(9)
+        ));
     }
 
     #[test]
@@ -234,9 +253,18 @@ mod tests {
 
     #[test]
     fn doctrine_tag_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DoctrineTag::AuthorityFollowsEvidence).unwrap(), "\"authority-follows-evidence\"");
-        assert_eq!(serde_json::to_string(&DoctrineTag::CommitIsDurableChange).unwrap(), "\"commit-is-durable-change\"");
-        assert_eq!(serde_json::to_string(&DoctrineTag::TraceAtDecision).unwrap(), "\"trace-at-decision\"");
+        assert_eq!(
+            serde_json::to_string(&DoctrineTag::AuthorityFollowsEvidence).unwrap(),
+            "\"authority-follows-evidence\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DoctrineTag::CommitIsDurableChange).unwrap(),
+            "\"commit-is-durable-change\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DoctrineTag::TraceAtDecision).unwrap(),
+            "\"trace-at-decision\""
+        );
     }
 
     #[test]

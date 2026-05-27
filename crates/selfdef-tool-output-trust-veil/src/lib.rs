@@ -63,8 +63,14 @@ pub enum VeilError {
 
 impl Veil {
     /// Wrap.
-    pub fn wrap(source_tool: &str, trust_tier: TrustTier, content: &str) -> Result<Self, VeilError> {
-        if source_tool.is_empty() { return Err(VeilError::EmptySourceTool); }
+    pub fn wrap(
+        source_tool: &str,
+        trust_tier: TrustTier,
+        content: &str,
+    ) -> Result<Self, VeilError> {
+        if source_tool.is_empty() {
+            return Err(VeilError::EmptySourceTool);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             source_tool: source_tool.into(),
@@ -76,7 +82,10 @@ impl Veil {
     /// Unveil only when expected tier matches actual. Returns content.
     pub fn unveil_with_tier(&self, expected: TrustTier) -> Result<&str, VeilError> {
         if self.trust_tier != expected {
-            return Err(VeilError::TierMismatch { expected, got: self.trust_tier });
+            return Err(VeilError::TierMismatch {
+                expected,
+                got: self.trust_tier,
+            });
         }
         Ok(self.content.as_str())
     }
@@ -124,19 +133,28 @@ mod tests {
 
     #[test]
     fn empty_source_rejected() {
-        assert!(matches!(Veil::wrap("", TrustTier::Verified, "x").unwrap_err(), VeilError::EmptySourceTool));
+        assert!(matches!(
+            Veil::wrap("", TrustTier::Verified, "x").unwrap_err(),
+            VeilError::EmptySourceTool
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut v = Veil::wrap("git", TrustTier::Internal, "x").unwrap();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), VeilError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            VeilError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TrustTier::Untrusted).unwrap(), "\"untrusted\"");
+        assert_eq!(
+            serde_json::to_string(&TrustTier::Untrusted).unwrap(),
+            "\"untrusted\""
+        );
     }
 
     #[test]
@@ -149,7 +167,11 @@ mod tests {
 
     #[test]
     fn all_tiers_unveilable_with_correct_expected() {
-        for t in [TrustTier::Verified, TrustTier::Internal, TrustTier::Untrusted] {
+        for t in [
+            TrustTier::Verified,
+            TrustTier::Internal,
+            TrustTier::Untrusted,
+        ] {
             let v = Veil::wrap("tool", t, "x").unwrap();
             assert!(v.unveil_with_tier(t).is_ok());
         }

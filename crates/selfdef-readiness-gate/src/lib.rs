@@ -77,17 +77,28 @@ impl ReadinessGate {
 
     /// Register a component (initial ready=false).
     pub fn register(&mut self, id: &str, required: bool) -> Result<(), GateError> {
-        if id.is_empty() { return Err(GateError::EmptyId); }
+        if id.is_empty() {
+            return Err(GateError::EmptyId);
+        }
         if self.components.contains_key(id) {
             return Err(GateError::DuplicateComponent(id.into()));
         }
-        self.components.insert(id.into(), Component { required, ready: false });
+        self.components.insert(
+            id.into(),
+            Component {
+                required,
+                ready: false,
+            },
+        );
         Ok(())
     }
 
     /// Update ready state.
     pub fn update(&mut self, id: &str, ready: bool) -> Result<(), GateError> {
-        let c = self.components.get_mut(id).ok_or_else(|| GateError::UnknownComponent(id.into()))?;
+        let c = self
+            .components
+            .get_mut(id)
+            .ok_or_else(|| GateError::UnknownComponent(id.into()))?;
         c.ready = ready;
         Ok(())
     }
@@ -100,7 +111,9 @@ impl ReadinessGate {
         for c in self.components.values() {
             if c.required {
                 any_required = true;
-                if !c.ready { any_required_unready = true; }
+                if !c.ready {
+                    any_required_unready = true;
+                }
             } else if !c.ready {
                 any_optional_unready = true;
             }
@@ -116,16 +129,22 @@ impl ReadinessGate {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GateError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GateError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GateError::SchemaMismatch);
+        }
         for k in self.components.keys() {
-            if k.is_empty() { return Err(GateError::EmptyId); }
+            if k.is_empty() {
+                return Err(GateError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ReadinessGate {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -180,26 +199,38 @@ mod tests {
     fn duplicate_component_rejected() {
         let mut g = ReadinessGate::new();
         g.register("db", true).unwrap();
-        assert!(matches!(g.register("db", true).unwrap_err(), GateError::DuplicateComponent(_)));
+        assert!(matches!(
+            g.register("db", true).unwrap_err(),
+            GateError::DuplicateComponent(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut g = ReadinessGate::new();
-        assert!(matches!(g.register("", true).unwrap_err(), GateError::EmptyId));
+        assert!(matches!(
+            g.register("", true).unwrap_err(),
+            GateError::EmptyId
+        ));
     }
 
     #[test]
     fn unknown_update_rejected() {
         let mut g = ReadinessGate::new();
-        assert!(matches!(g.update("nope", true).unwrap_err(), GateError::UnknownComponent(_)));
+        assert!(matches!(
+            g.update("nope", true).unwrap_err(),
+            GateError::UnknownComponent(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = ReadinessGate::new();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GateError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GateError::SchemaMismatch
+        ));
     }
 
     #[test]

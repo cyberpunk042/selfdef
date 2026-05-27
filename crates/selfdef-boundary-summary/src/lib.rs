@@ -139,7 +139,9 @@ pub enum SummaryError {
         canonical: String,
     },
     /// At least one boundary is Missing — refuse daemon bring-up.
-    #[error("boundary {0:?} is Missing — daemon cannot proceed (5-boundary saturated set requires all configured)")]
+    #[error(
+        "boundary {0:?} is Missing — daemon cannot proceed (5-boundary saturated set requires all configured)"
+    )]
     BoundaryMissingStatus(BoundaryKind),
 }
 
@@ -147,14 +149,20 @@ impl BoundarySummary {
     /// Construct canonical empty summary (all 5 Missing).
     pub fn empty_canonical() -> Self {
         let boundaries = [
-            BoundaryKind::Communication, BoundaryKind::Capability,
-            BoundaryKind::Sandbox, BoundaryKind::Filesystem, BoundaryKind::Network,
-        ].into_iter().map(|b| BoundaryRecord {
+            BoundaryKind::Communication,
+            BoundaryKind::Capability,
+            BoundaryKind::Sandbox,
+            BoundaryKind::Filesystem,
+            BoundaryKind::Network,
+        ]
+        .into_iter()
+        .map(|b| BoundaryRecord {
             boundary: b,
             milestone_id: b.milestone_id().into(),
             crate_name: b.crate_name().into(),
             status: BoundaryStatus::Missing,
-        }).collect();
+        })
+        .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             doctrine: DOCTRINE_FIVE_BOUNDARIES.into(),
@@ -175,8 +183,11 @@ impl BoundarySummary {
             return Err(SummaryError::BoundaryCountInvalid(self.boundaries.len()));
         }
         let required = [
-            BoundaryKind::Communication, BoundaryKind::Capability,
-            BoundaryKind::Sandbox, BoundaryKind::Filesystem, BoundaryKind::Network,
+            BoundaryKind::Communication,
+            BoundaryKind::Capability,
+            BoundaryKind::Sandbox,
+            BoundaryKind::Filesystem,
+            BoundaryKind::Network,
         ];
         for b in required {
             if !self.boundaries.iter().any(|r| r.boundary == b) {
@@ -213,7 +224,10 @@ impl BoundarySummary {
 
     /// Count of Configured boundaries.
     pub fn configured_count(&self) -> usize {
-        self.boundaries.iter().filter(|r| r.status == BoundaryStatus::Configured).count()
+        self.boundaries
+            .iter()
+            .filter(|r| r.status == BoundaryStatus::Configured)
+            .count()
     }
 }
 
@@ -224,8 +238,10 @@ mod tests {
     #[test]
     fn five_boundaries_positioned_1_to_5() {
         for (b, p) in [
-            (BoundaryKind::Communication, 1), (BoundaryKind::Capability, 2),
-            (BoundaryKind::Sandbox, 3), (BoundaryKind::Filesystem, 4),
+            (BoundaryKind::Communication, 1),
+            (BoundaryKind::Capability, 2),
+            (BoundaryKind::Sandbox, 3),
+            (BoundaryKind::Filesystem, 4),
             (BoundaryKind::Network, 5),
         ] {
             assert_eq!(b.position(), p);
@@ -243,9 +259,18 @@ mod tests {
 
     #[test]
     fn crate_names_canonical() {
-        assert_eq!(BoundaryKind::Communication.crate_name(), "selfdef-communication-boundary");
-        assert_eq!(BoundaryKind::Capability.crate_name(), "selfdef-capability-word");
-        assert_eq!(BoundaryKind::Network.crate_name(), "selfdef-network-boundary");
+        assert_eq!(
+            BoundaryKind::Communication.crate_name(),
+            "selfdef-communication-boundary"
+        );
+        assert_eq!(
+            BoundaryKind::Capability.crate_name(),
+            "selfdef-capability-word"
+        );
+        assert_eq!(
+            BoundaryKind::Network.crate_name(),
+            "selfdef-network-boundary"
+        );
     }
 
     #[test]
@@ -260,21 +285,30 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = BoundarySummary::empty_canonical();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SummaryError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SummaryError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn doctrine_tamper_caught() {
         let mut s = BoundarySummary::empty_canonical();
         s.doctrine = "wrong".into();
-        assert!(matches!(s.validate().unwrap_err(), SummaryError::DoctrineTampered));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SummaryError::DoctrineTampered
+        ));
     }
 
     #[test]
     fn boundary_count_invalid_caught() {
         let mut s = BoundarySummary::empty_canonical();
         s.boundaries.pop();
-        assert!(matches!(s.validate().unwrap_err(), SummaryError::BoundaryCountInvalid(4)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SummaryError::BoundaryCountInvalid(4)
+        ));
     }
 
     #[test]
@@ -306,7 +340,11 @@ mod tests {
         let mut s = BoundarySummary::empty_canonical();
         s.boundaries[0].milestone_id = "MS999".into();
         match s.validate().unwrap_err() {
-            SummaryError::MilestoneMismatch { boundary, declared, canonical } => {
+            SummaryError::MilestoneMismatch {
+                boundary,
+                declared,
+                canonical,
+            } => {
                 assert_eq!(boundary, BoundaryKind::Communication);
                 assert_eq!(declared, "MS999");
                 assert_eq!(canonical, "MS034");
@@ -325,8 +363,14 @@ mod tests {
 
     #[test]
     fn boundary_kind_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BoundaryKind::Communication).unwrap(), "\"communication\"");
-        assert_eq!(serde_json::to_string(&BoundaryKind::Capability).unwrap(), "\"capability\"");
+        assert_eq!(
+            serde_json::to_string(&BoundaryKind::Communication).unwrap(),
+            "\"communication\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BoundaryKind::Capability).unwrap(),
+            "\"capability\""
+        );
     }
 
     #[test]

@@ -80,19 +80,34 @@ impl NamedLock {
     }
 
     /// Acquire.
-    pub fn acquire(&mut self, key: &str, owner: &str, now_ms: u64, ttl_ms: u64) -> Result<(), LockError> {
-        if key.is_empty() { return Err(LockError::EmptyKey); }
-        if owner.is_empty() { return Err(LockError::EmptyOwner); }
-        if ttl_ms == 0 { return Err(LockError::ZeroTtl); }
+    pub fn acquire(
+        &mut self,
+        key: &str,
+        owner: &str,
+        now_ms: u64,
+        ttl_ms: u64,
+    ) -> Result<(), LockError> {
+        if key.is_empty() {
+            return Err(LockError::EmptyKey);
+        }
+        if owner.is_empty() {
+            return Err(LockError::EmptyOwner);
+        }
+        if ttl_ms == 0 {
+            return Err(LockError::ZeroTtl);
+        }
         if let Some(h) = self.holds.get(key) {
             if h.expires_at_ms > now_ms && h.owner != owner {
                 return Err(LockError::HeldByOther(h.owner.clone()));
             }
         }
-        self.holds.insert(key.into(), Hold {
-            owner: owner.into(),
-            expires_at_ms: now_ms.saturating_add(ttl_ms),
-        });
+        self.holds.insert(
+            key.into(),
+            Hold {
+                owner: owner.into(),
+                expires_at_ms: now_ms.saturating_add(ttl_ms),
+            },
+        );
         self.acquires = self.acquires.saturating_add(1);
         Ok(())
     }
@@ -100,7 +115,9 @@ impl NamedLock {
     /// Release.
     pub fn release(&mut self, key: &str, owner: &str) -> Result<(), LockError> {
         let h = self.holds.get(key).ok_or(LockError::NotHeld)?;
-        if h.owner != owner { return Err(LockError::OwnerMismatch); }
+        if h.owner != owner {
+            return Err(LockError::OwnerMismatch);
+        }
         self.holds.remove(key);
         self.releases = self.releases.saturating_add(1);
         Ok(())
@@ -109,34 +126,50 @@ impl NamedLock {
     /// Held by (None if free or expired).
     pub fn held(&self, key: &str, now_ms: u64) -> Option<&str> {
         let h = self.holds.get(key)?;
-        if h.expires_at_ms > now_ms { Some(h.owner.as_str()) } else { None }
+        if h.expires_at_ms > now_ms {
+            Some(h.owner.as_str())
+        } else {
+            None
+        }
     }
 
     /// Sweep expired entries; return count removed.
     pub fn expire(&mut self, now_ms: u64) -> u32 {
-        let stale: Vec<String> = self.holds.iter()
+        let stale: Vec<String> = self
+            .holds
+            .iter()
             .filter(|(_, h)| h.expires_at_ms <= now_ms)
             .map(|(k, _)| k.clone())
             .collect();
         let n = stale.len() as u32;
-        for k in stale { self.holds.remove(&k); }
+        for k in stale {
+            self.holds.remove(&k);
+        }
         self.expires = self.expires.saturating_add(n as u64);
         n
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LockError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LockError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LockError::SchemaMismatch);
+        }
         for (k, h) in &self.holds {
-            if k.is_empty() { return Err(LockError::EmptyKey); }
-            if h.owner.is_empty() { return Err(LockError::EmptyOwner); }
+            if k.is_empty() {
+                return Err(LockError::EmptyKey);
+            }
+            if h.owner.is_empty() {
+                return Err(LockError::EmptyOwner);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for NamedLock {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +189,10 @@ mod tests {
     fn held_by_other_rejected() {
         let mut l = NamedLock::new();
         l.acquire("r", "owner1", 0, 1000).unwrap();
-        assert!(matches!(l.acquire("r", "owner2", 500, 1000).unwrap_err(), LockError::HeldByOther(_)));
+        assert!(matches!(
+            l.acquire("r", "owner2", 500, 1000).unwrap_err(),
+            LockError::HeldByOther(_)
+        ));
     }
 
     #[test]
@@ -179,13 +215,19 @@ mod tests {
     fn owner_mismatch_release_rejected() {
         let mut l = NamedLock::new();
         l.acquire("r", "owner1", 0, 1000).unwrap();
-        assert!(matches!(l.release("r", "owner2").unwrap_err(), LockError::OwnerMismatch));
+        assert!(matches!(
+            l.release("r", "owner2").unwrap_err(),
+            LockError::OwnerMismatch
+        ));
     }
 
     #[test]
     fn release_not_held_rejected() {
         let mut l = NamedLock::new();
-        assert!(matches!(l.release("r", "x").unwrap_err(), LockError::NotHeld));
+        assert!(matches!(
+            l.release("r", "x").unwrap_err(),
+            LockError::NotHeld
+        ));
     }
 
     #[test]
@@ -200,16 +242,28 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut l = NamedLock::new();
-        assert!(matches!(l.acquire("", "o", 0, 1).unwrap_err(), LockError::EmptyKey));
-        assert!(matches!(l.acquire("k", "", 0, 1).unwrap_err(), LockError::EmptyOwner));
-        assert!(matches!(l.acquire("k", "o", 0, 0).unwrap_err(), LockError::ZeroTtl));
+        assert!(matches!(
+            l.acquire("", "o", 0, 1).unwrap_err(),
+            LockError::EmptyKey
+        ));
+        assert!(matches!(
+            l.acquire("k", "", 0, 1).unwrap_err(),
+            LockError::EmptyOwner
+        ));
+        assert!(matches!(
+            l.acquire("k", "o", 0, 0).unwrap_err(),
+            LockError::ZeroTtl
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = NamedLock::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LockError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LockError::SchemaMismatch
+        ));
     }
 
     #[test]

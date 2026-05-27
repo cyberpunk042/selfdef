@@ -21,9 +21,9 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use selfdef_perimeter::{
-    audit_chain_check, now_ms, read_ring_buffer, ExtensionManifest, ExtensionStore, Outcome,
-    PerimeterError, Verdict, DEFAULT_ALLOWLIST, DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH,
-    DEFAULT_POLICY_PATH, DEFAULT_RING_DIR, DEFAULT_TRUST_ROOTS_DIR,
+    DEFAULT_ALLOWLIST, DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH, DEFAULT_POLICY_PATH,
+    DEFAULT_RING_DIR, DEFAULT_TRUST_ROOTS_DIR, ExtensionManifest, ExtensionStore, Outcome,
+    PerimeterError, Verdict, audit_chain_check, now_ms, read_ring_buffer,
 };
 
 /// Response body for `GET /v1/perimeter`.
@@ -85,7 +85,8 @@ pub(crate) async fn show() -> Result<Json<PerimeterBody>, ApiError> {
     )
     .map_err(|e| ApiError::Internal(format!("extension store load: {e}")))?;
 
-    let active_extensions: Vec<ExtensionManifest> = store.active(now).into_iter().cloned().collect();
+    let active_extensions: Vec<ExtensionManifest> =
+        store.active(now).into_iter().cloned().collect();
     let extension_paths = store.active_paths(now);
     let policy_present = Path::new(DEFAULT_POLICY_PATH).exists();
     let audit_chain_events = audit_chain_check(Path::new(DEFAULT_OCSF_PATH)).ok();
@@ -109,9 +110,7 @@ pub(crate) async fn show() -> Result<Json<PerimeterBody>, ApiError> {
 }
 
 /// `GET /v1/perimeter/history?limit=N` — verdicts newest-first.
-pub(crate) async fn history(
-    Query(q): Query<HistoryQuery>,
-) -> Result<Json<HistoryBody>, ApiError> {
+pub(crate) async fn history(Query(q): Query<HistoryQuery>) -> Result<Json<HistoryBody>, ApiError> {
     let limit = q.limit.unwrap_or(32).min(256) as usize;
     let all = read_ring_buffer(Path::new(DEFAULT_RING_DIR))
         .map_err(|e| ApiError::Internal(format!("ring buffer read: {e}")))?;

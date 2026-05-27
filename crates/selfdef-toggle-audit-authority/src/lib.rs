@@ -126,7 +126,11 @@ impl ToggleAuthorityLog {
 
     /// Latest value on a key.
     pub fn latest(&self, key: &str) -> Option<bool> {
-        self.entries.iter().rev().find(|e| e.key == key).map(|e| e.to)
+        self.entries
+            .iter()
+            .rev()
+            .find(|e| e.key == key)
+            .map(|e| e.to)
     }
 
     /// Entries within a scope.
@@ -147,19 +151,34 @@ impl ToggleAuthorityLog {
 }
 
 fn check_entry(e: &ToggleAuthorityEntry) -> Result<(), ToggleAuthorityError> {
-    if e.key.is_empty() { return Err(ToggleAuthorityError::EmptyKey); }
-    if e.actor.is_empty() { return Err(ToggleAuthorityError::MissingActor); }
-    if e.trace_id.is_empty() { return Err(ToggleAuthorityError::MissingTraceId); }
-    if e.at.is_empty() { return Err(ToggleAuthorityError::MissingTimestamp); }
-    if e.signature.is_empty() { return Err(ToggleAuthorityError::Unsigned { key: e.key.clone() }); }
+    if e.key.is_empty() {
+        return Err(ToggleAuthorityError::EmptyKey);
+    }
+    if e.actor.is_empty() {
+        return Err(ToggleAuthorityError::MissingActor);
+    }
+    if e.trace_id.is_empty() {
+        return Err(ToggleAuthorityError::MissingTraceId);
+    }
+    if e.at.is_empty() {
+        return Err(ToggleAuthorityError::MissingTimestamp);
+    }
+    if e.signature.is_empty() {
+        return Err(ToggleAuthorityError::Unsigned { key: e.key.clone() });
+    }
     if e.from == e.to {
-        return Err(ToggleAuthorityError::NoOpFlip { key: e.key.clone(), value: e.from });
+        return Err(ToggleAuthorityError::NoOpFlip {
+            key: e.key.clone(),
+            value: e.from,
+        });
     }
     Ok(())
 }
 
 impl Default for ToggleAuthorityLog {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -170,7 +189,8 @@ mod tests {
         ToggleAuthorityEntry {
             scope,
             key: key.into(),
-            from, to,
+            from,
+            to,
             actor: "op-fp".into(),
             trace_id: "tr-1".into(),
             at: "2026-05-19T03:00:00Z".into(),
@@ -186,18 +206,23 @@ mod tests {
     #[test]
     fn record_and_latest() {
         let mut l = ToggleAuthorityLog::new();
-        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true)).unwrap();
+        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true))
+            .unwrap();
         assert_eq!(l.latest("D-13"), Some(true));
-        l.record(ok(ToggleScope::DashboardSlot, "D-13", true, false)).unwrap();
+        l.record(ok(ToggleScope::DashboardSlot, "D-13", true, false))
+            .unwrap();
         assert_eq!(l.latest("D-13"), Some(false));
     }
 
     #[test]
     fn count_for() {
         let mut l = ToggleAuthorityLog::new();
-        l.record(ok(ToggleScope::FeatureFlag, "a", false, true)).unwrap();
-        l.record(ok(ToggleScope::FeatureFlag, "a", true, false)).unwrap();
-        l.record(ok(ToggleScope::FeatureFlag, "b", false, true)).unwrap();
+        l.record(ok(ToggleScope::FeatureFlag, "a", false, true))
+            .unwrap();
+        l.record(ok(ToggleScope::FeatureFlag, "a", true, false))
+            .unwrap();
+        l.record(ok(ToggleScope::FeatureFlag, "b", false, true))
+            .unwrap();
         assert_eq!(l.count_for("a"), 2);
         assert_eq!(l.count_for("b"), 1);
     }
@@ -205,9 +230,12 @@ mod tests {
     #[test]
     fn in_scope_filters() {
         let mut l = ToggleAuthorityLog::new();
-        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true)).unwrap();
-        l.record(ok(ToggleScope::FeatureFlag, "a", false, true)).unwrap();
-        l.record(ok(ToggleScope::DashboardSlot, "D-14", false, true)).unwrap();
+        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true))
+            .unwrap();
+        l.record(ok(ToggleScope::FeatureFlag, "a", false, true))
+            .unwrap();
+        l.record(ok(ToggleScope::DashboardSlot, "D-14", false, true))
+            .unwrap();
         assert_eq!(l.in_scope(ToggleScope::DashboardSlot).len(), 2);
         assert_eq!(l.in_scope(ToggleScope::FeatureFlag).len(), 1);
         assert_eq!(l.in_scope(ToggleScope::BoundaryPolicy).len(), 0);
@@ -216,7 +244,9 @@ mod tests {
     #[test]
     fn no_op_flip_rejected() {
         let mut l = ToggleAuthorityLog::new();
-        let err = l.record(ok(ToggleScope::DashboardSlot, "D-13", true, true)).unwrap_err();
+        let err = l
+            .record(ok(ToggleScope::DashboardSlot, "D-13", true, true))
+            .unwrap_err();
         assert!(matches!(err, ToggleAuthorityError::NoOpFlip { .. }));
     }
 
@@ -232,7 +262,9 @@ mod tests {
     #[test]
     fn empty_key_rejected() {
         let mut l = ToggleAuthorityLog::new();
-        let err = l.record(ok(ToggleScope::DashboardSlot, "", false, true)).unwrap_err();
+        let err = l
+            .record(ok(ToggleScope::DashboardSlot, "", false, true))
+            .unwrap_err();
         assert!(matches!(err, ToggleAuthorityError::EmptyKey));
     }
 
@@ -249,20 +281,33 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = ToggleAuthorityLog::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), ToggleAuthorityError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            ToggleAuthorityError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn scope_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ToggleScope::DashboardSlot).unwrap(), "\"dashboard-slot\"");
-        assert_eq!(serde_json::to_string(&ToggleScope::NotifierChannel).unwrap(), "\"notifier-channel\"");
-        assert_eq!(serde_json::to_string(&ToggleScope::BoundaryPolicy).unwrap(), "\"boundary-policy\"");
+        assert_eq!(
+            serde_json::to_string(&ToggleScope::DashboardSlot).unwrap(),
+            "\"dashboard-slot\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ToggleScope::NotifierChannel).unwrap(),
+            "\"notifier-channel\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ToggleScope::BoundaryPolicy).unwrap(),
+            "\"boundary-policy\""
+        );
     }
 
     #[test]
     fn log_serde_roundtrip() {
         let mut l = ToggleAuthorityLog::new();
-        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true)).unwrap();
+        l.record(ok(ToggleScope::DashboardSlot, "D-13", false, true))
+            .unwrap();
         let j = serde_json::to_string(&l).unwrap();
         let back: ToggleAuthorityLog = serde_json::from_str(&j).unwrap();
         assert_eq!(l, back);

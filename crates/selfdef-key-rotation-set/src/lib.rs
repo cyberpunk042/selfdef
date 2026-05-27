@@ -76,26 +76,38 @@ pub enum KeyError {
 impl KeyRotationSet {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), keys: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            keys: BTreeMap::new(),
+        }
     }
 
     /// Add a key in Verifying phase.
     pub fn add(&mut self, kid: &str, now_ms: u64) -> Result<(), KeyError> {
-        if kid.is_empty() { return Err(KeyError::EmptyKid); }
-        if self.keys.contains_key(kid) { return Err(KeyError::Duplicate(kid.into())); }
-        self.keys.insert(kid.into(), Key {
-            kid: kid.into(),
-            phase: Phase::Verifying,
-            valid_from_ms: now_ms,
-            valid_until_ms: 0,
-        });
+        if kid.is_empty() {
+            return Err(KeyError::EmptyKid);
+        }
+        if self.keys.contains_key(kid) {
+            return Err(KeyError::Duplicate(kid.into()));
+        }
+        self.keys.insert(
+            kid.into(),
+            Key {
+                kid: kid.into(),
+                phase: Phase::Verifying,
+                valid_from_ms: now_ms,
+                valid_until_ms: 0,
+            },
+        );
         Ok(())
     }
 
     /// Promote Verifying → Signing; demote prior Signing → Verifying.
     pub fn promote(&mut self, kid: &str, now_ms: u64) -> Result<(), KeyError> {
         let target_exists = self.keys.contains_key(kid);
-        if !target_exists { return Err(KeyError::Unknown(kid.into())); }
+        if !target_exists {
+            return Err(KeyError::Unknown(kid.into()));
+        }
         // Cannot promote a Retired key.
         if self.keys.get(kid).unwrap().phase == Phase::Retired {
             return Err(KeyError::BadTransition);
@@ -113,8 +125,13 @@ impl KeyRotationSet {
 
     /// Retire a key.
     pub fn retire(&mut self, kid: &str, now_ms: u64) -> Result<(), KeyError> {
-        let k = self.keys.get_mut(kid).ok_or_else(|| KeyError::Unknown(kid.into()))?;
-        if k.phase == Phase::Retired { return Err(KeyError::BadTransition); }
+        let k = self
+            .keys
+            .get_mut(kid)
+            .ok_or_else(|| KeyError::Unknown(kid.into()))?;
+        if k.phase == Phase::Retired {
+            return Err(KeyError::BadTransition);
+        }
         k.phase = Phase::Retired;
         k.valid_until_ms = now_ms;
         Ok(())
@@ -135,18 +152,30 @@ impl KeyRotationSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), KeyError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(KeyError::SchemaMismatch); }
-        let signing = self.keys.values().filter(|k| k.phase == Phase::Signing).count();
-        if signing > 1 { return Err(KeyError::BadTransition); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(KeyError::SchemaMismatch);
+        }
+        let signing = self
+            .keys
+            .values()
+            .filter(|k| k.phase == Phase::Signing)
+            .count();
+        if signing > 1 {
+            return Err(KeyError::BadTransition);
+        }
         for (k, _) in &self.keys {
-            if k.is_empty() { return Err(KeyError::EmptyKid); }
+            if k.is_empty() {
+                return Err(KeyError::EmptyKid);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for KeyRotationSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -186,21 +215,33 @@ mod tests {
         let mut s = KeyRotationSet::new();
         s.add("k1", 0).unwrap();
         s.retire("k1", 100).unwrap();
-        assert!(matches!(s.promote("k1", 200).unwrap_err(), KeyError::BadTransition));
+        assert!(matches!(
+            s.promote("k1", 200).unwrap_err(),
+            KeyError::BadTransition
+        ));
     }
 
     #[test]
     fn duplicate_add_rejected() {
         let mut s = KeyRotationSet::new();
         s.add("k1", 0).unwrap();
-        assert!(matches!(s.add("k1", 0).unwrap_err(), KeyError::Duplicate(_)));
+        assert!(matches!(
+            s.add("k1", 0).unwrap_err(),
+            KeyError::Duplicate(_)
+        ));
     }
 
     #[test]
     fn unknown_rejected() {
         let mut s = KeyRotationSet::new();
-        assert!(matches!(s.promote("nope", 0).unwrap_err(), KeyError::Unknown(_)));
-        assert!(matches!(s.retire("nope", 0).unwrap_err(), KeyError::Unknown(_)));
+        assert!(matches!(
+            s.promote("nope", 0).unwrap_err(),
+            KeyError::Unknown(_)
+        ));
+        assert!(matches!(
+            s.retire("nope", 0).unwrap_err(),
+            KeyError::Unknown(_)
+        ));
     }
 
     #[test]
@@ -213,7 +254,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = KeyRotationSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), KeyError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            KeyError::SchemaMismatch
+        ));
     }
 
     #[test]

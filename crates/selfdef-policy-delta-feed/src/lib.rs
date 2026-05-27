@@ -83,9 +83,19 @@ impl PolicyDeltaFeed {
     }
 
     /// Push.
-    pub fn push(&mut self, policy_id: &str, kind: DeltaKind, version_after: &str, ts_ms: u64) -> Result<u64, FeedError> {
-        if policy_id.is_empty() { return Err(FeedError::EmptyPolicy); }
-        if version_after.is_empty() { return Err(FeedError::EmptyVersion); }
+    pub fn push(
+        &mut self,
+        policy_id: &str,
+        kind: DeltaKind,
+        version_after: &str,
+        ts_ms: u64,
+    ) -> Result<u64, FeedError> {
+        if policy_id.is_empty() {
+            return Err(FeedError::EmptyPolicy);
+        }
+        if version_after.is_empty() {
+            return Err(FeedError::EmptyVersion);
+        }
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
         self.events.push(Event {
@@ -100,7 +110,9 @@ impl PolicyDeltaFeed {
 
     /// Read since cursor. Returns (events, new_cursor).
     pub fn since(&self, cursor: u64) -> (Vec<Event>, u64) {
-        let events: Vec<Event> = self.events.iter()
+        let events: Vec<Event> = self
+            .events
+            .iter()
             .filter(|e| e.seq > cursor)
             .cloned()
             .collect();
@@ -116,17 +128,25 @@ impl PolicyDeltaFeed {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FeedError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FeedError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FeedError::SchemaMismatch);
+        }
         for e in &self.events {
-            if e.policy_id.is_empty() { return Err(FeedError::EmptyPolicy); }
-            if e.version_after.is_empty() { return Err(FeedError::EmptyVersion); }
+            if e.policy_id.is_empty() {
+                return Err(FeedError::EmptyPolicy);
+            }
+            if e.version_after.is_empty() {
+                return Err(FeedError::EmptyVersion);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyDeltaFeed {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -174,15 +194,24 @@ mod tests {
     #[test]
     fn empty_fields_rejected() {
         let mut f = PolicyDeltaFeed::new();
-        assert!(matches!(f.push("", DeltaKind::Staged, "v", 0).unwrap_err(), FeedError::EmptyPolicy));
-        assert!(matches!(f.push("p", DeltaKind::Staged, "", 0).unwrap_err(), FeedError::EmptyVersion));
+        assert!(matches!(
+            f.push("", DeltaKind::Staged, "v", 0).unwrap_err(),
+            FeedError::EmptyPolicy
+        ));
+        assert!(matches!(
+            f.push("p", DeltaKind::Staged, "", 0).unwrap_err(),
+            FeedError::EmptyVersion
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = PolicyDeltaFeed::new();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FeedError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FeedError::SchemaMismatch
+        ));
     }
 
     #[test]

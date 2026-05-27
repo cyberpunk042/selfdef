@@ -41,11 +41,17 @@ pub enum CascadeError {
 }
 
 fn trim_trailing_slash(s: &str) -> &str {
-    if s.len() > 1 && s.ends_with('/') { &s[..s.len() - 1] } else { s }
+    if s.len() > 1 && s.ends_with('/') {
+        &s[..s.len() - 1]
+    } else {
+        s
+    }
 }
 
 fn fs_is_child(parent: &str, child: &str) -> bool {
-    if parent == child { return false; } // self
+    if parent == child {
+        return false;
+    } // self
     let p = trim_trailing_slash(parent);
     let c = trim_trailing_slash(child);
     let p_with_sep = format!("{p}/");
@@ -53,19 +59,32 @@ fn fs_is_child(parent: &str, child: &str) -> bool {
 }
 
 /// Compute cascade set.
-pub fn compute_cascade(grants: &[GrantEntry], parent_id: &str) -> Result<Vec<CascadeHit>, CascadeError> {
-    let parent = grants.iter().find(|g| g.grant_id == parent_id)
+pub fn compute_cascade(
+    grants: &[GrantEntry],
+    parent_id: &str,
+) -> Result<Vec<CascadeHit>, CascadeError> {
+    let parent = grants
+        .iter()
+        .find(|g| g.grant_id == parent_id)
         .ok_or_else(|| CascadeError::ParentMissing(parent_id.into()))?;
     if parent.state != GrantState::Active {
         return Err(CascadeError::ParentNotActive(parent_id.into()));
     }
     let mut out = Vec::new();
     for g in grants {
-        if g.grant_id == parent_id { continue; }
-        if g.state != GrantState::Active { continue; }
-        if g.kind != parent.kind { continue; }
+        if g.grant_id == parent_id {
+            continue;
+        }
+        if g.state != GrantState::Active {
+            continue;
+        }
+        if g.kind != parent.kind {
+            continue;
+        }
         // Issued after parent (string compare on ISO-8601).
-        if g.issued_at <= parent.issued_at { continue; }
+        if g.issued_at <= parent.issued_at {
+            continue;
+        }
         match parent.kind {
             GrantKind::Filesystem => {
                 if fs_is_child(&parent.scope, &g.scope) {
@@ -93,10 +112,17 @@ pub fn compute_cascade(grants: &[GrantEntry], parent_id: &str) -> Result<Vec<Cas
 mod tests {
     use super::*;
 
-    fn entry(id: &str, kind: GrantKind, scope: &str, state: GrantState, issued_at: &str) -> GrantEntry {
+    fn entry(
+        id: &str,
+        kind: GrantKind,
+        scope: &str,
+        state: GrantState,
+        issued_at: &str,
+    ) -> GrantEntry {
         GrantEntry {
             grant_id: id.into(),
-            kind, scope: scope.into(),
+            kind,
+            scope: scope.into(),
             reason: "r".into(),
             issued_at: issued_at.into(),
             expires_at: "2026-05-19T05:00:00Z".into(),
@@ -111,9 +137,13 @@ mod tests {
 
     #[test]
     fn empty_cascade_for_isolated_parent() {
-        let g = vec![
-            entry("p", GrantKind::Filesystem, "/workspace", GrantState::Active, "t1"),
-        ];
+        let g = vec![entry(
+            "p",
+            GrantKind::Filesystem,
+            "/workspace",
+            GrantState::Active,
+            "t1",
+        )];
         let c = compute_cascade(&g, "p").unwrap();
         assert!(c.is_empty());
     }
@@ -121,8 +151,20 @@ mod tests {
     #[test]
     fn filesystem_child_cascades() {
         let g = vec![
-            entry("p", GrantKind::Filesystem, "/workspace", GrantState::Active, "2026-05-19T01:00:00Z"),
-            entry("c", GrantKind::Filesystem, "/workspace/sub", GrantState::Active, "2026-05-19T02:00:00Z"),
+            entry(
+                "p",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+                "2026-05-19T01:00:00Z",
+            ),
+            entry(
+                "c",
+                GrantKind::Filesystem,
+                "/workspace/sub",
+                GrantState::Active,
+                "2026-05-19T02:00:00Z",
+            ),
         ];
         let c = compute_cascade(&g, "p").unwrap();
         assert_eq!(c.len(), 1);
@@ -132,8 +174,20 @@ mod tests {
     #[test]
     fn filesystem_earlier_grant_not_cascaded() {
         let g = vec![
-            entry("p", GrantKind::Filesystem, "/workspace", GrantState::Active, "2026-05-19T03:00:00Z"),
-            entry("c", GrantKind::Filesystem, "/workspace/sub", GrantState::Active, "2026-05-19T01:00:00Z"),
+            entry(
+                "p",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+                "2026-05-19T03:00:00Z",
+            ),
+            entry(
+                "c",
+                GrantKind::Filesystem,
+                "/workspace/sub",
+                GrantState::Active,
+                "2026-05-19T01:00:00Z",
+            ),
         ];
         let c = compute_cascade(&g, "p").unwrap();
         assert!(c.is_empty());
@@ -142,8 +196,20 @@ mod tests {
     #[test]
     fn network_exact_match_cascades() {
         let g = vec![
-            entry("p", GrantKind::Network, ".example.org", GrantState::Active, "t1"),
-            entry("c", GrantKind::Network, ".example.org", GrantState::Active, "t2"),
+            entry(
+                "p",
+                GrantKind::Network,
+                ".example.org",
+                GrantState::Active,
+                "t1",
+            ),
+            entry(
+                "c",
+                GrantKind::Network,
+                ".example.org",
+                GrantState::Active,
+                "t2",
+            ),
         ];
         let c = compute_cascade(&g, "p").unwrap();
         assert_eq!(c.len(), 1);
@@ -162,8 +228,20 @@ mod tests {
     #[test]
     fn inactive_children_excluded() {
         let g = vec![
-            entry("p", GrantKind::Filesystem, "/workspace", GrantState::Active, "t1"),
-            entry("c", GrantKind::Filesystem, "/workspace/sub", GrantState::Expired, "t2"),
+            entry(
+                "p",
+                GrantKind::Filesystem,
+                "/workspace",
+                GrantState::Active,
+                "t1",
+            ),
+            entry(
+                "c",
+                GrantKind::Filesystem,
+                "/workspace/sub",
+                GrantState::Expired,
+                "t2",
+            ),
         ];
         let c = compute_cascade(&g, "p").unwrap();
         assert!(c.is_empty());
@@ -172,20 +250,33 @@ mod tests {
     #[test]
     fn parent_missing_rejected() {
         let g = vec![];
-        assert!(matches!(compute_cascade(&g, "none").unwrap_err(), CascadeError::ParentMissing(_)));
+        assert!(matches!(
+            compute_cascade(&g, "none").unwrap_err(),
+            CascadeError::ParentMissing(_)
+        ));
     }
 
     #[test]
     fn parent_not_active_rejected() {
-        let g = vec![
-            entry("p", GrantKind::Filesystem, "/x", GrantState::Expired, "t1"),
-        ];
-        assert!(matches!(compute_cascade(&g, "p").unwrap_err(), CascadeError::ParentNotActive(_)));
+        let g = vec![entry(
+            "p",
+            GrantKind::Filesystem,
+            "/x",
+            GrantState::Expired,
+            "t1",
+        )];
+        assert!(matches!(
+            compute_cascade(&g, "p").unwrap_err(),
+            CascadeError::ParentNotActive(_)
+        ));
     }
 
     #[test]
     fn hit_serde_roundtrip() {
-        let h = CascadeHit { grant_id: "g".into(), reason: "x".into() };
+        let h = CascadeHit {
+            grant_id: "g".into(),
+            reason: "x".into(),
+        };
         let j = serde_json::to_string(&h).unwrap();
         let back: CascadeHit = serde_json::from_str(&j).unwrap();
         assert_eq!(h, back);

@@ -53,9 +53,13 @@ pub enum HistogramError {
 impl MetricHistogram {
     /// New.
     pub fn new(bucket_upper_bounds: Vec<u64>) -> Result<Self, HistogramError> {
-        if bucket_upper_bounds.is_empty() { return Err(HistogramError::NoBuckets); }
+        if bucket_upper_bounds.is_empty() {
+            return Err(HistogramError::NoBuckets);
+        }
         for w in bucket_upper_bounds.windows(2) {
-            if w[0] >= w[1] { return Err(HistogramError::BadBuckets); }
+            if w[0] >= w[1] {
+                return Err(HistogramError::BadBuckets);
+            }
         }
         let n = bucket_upper_bounds.len() + 1;
         Ok(Self {
@@ -69,7 +73,10 @@ impl MetricHistogram {
 
     /// Observe.
     pub fn observe(&mut self, value: u64) {
-        let idx = self.bucket_upper_bounds.iter().position(|b| *b >= value)
+        let idx = self
+            .bucket_upper_bounds
+            .iter()
+            .position(|b| *b >= value)
             .unwrap_or(self.bucket_upper_bounds.len()); // overflow
         self.counts[idx] = self.counts[idx].saturating_add(1);
         self.total = self.total.saturating_add(1);
@@ -79,8 +86,12 @@ impl MetricHistogram {
     /// Quantile q (0..=100). Returns the upper-bound of the chosen bucket.
     /// For the overflow bucket, returns u64::MAX.
     pub fn quantile(&self, q_x100: u16) -> Result<u64, HistogramError> {
-        if q_x100 > 100 { return Err(HistogramError::QuantileOver100(q_x100)); }
-        if self.total == 0 { return Ok(0); }
+        if q_x100 > 100 {
+            return Err(HistogramError::QuantileOver100(q_x100));
+        }
+        if self.total == 0 {
+            return Ok(0);
+        }
         let target = (self.total as u128) * (q_x100 as u128) / 100;
         let mut acc: u128 = 0;
         for (i, c) in self.counts.iter().enumerate() {
@@ -98,15 +109,25 @@ impl MetricHistogram {
 
     /// Mean (sum / total). Returns 0 when total = 0.
     pub fn mean(&self) -> u64 {
-        if self.total == 0 { 0 } else { (self.sum / self.total as u128) as u64 }
+        if self.total == 0 {
+            0
+        } else {
+            (self.sum / self.total as u128) as u64
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HistogramError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HistogramError::SchemaMismatch); }
-        if self.bucket_upper_bounds.is_empty() { return Err(HistogramError::NoBuckets); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HistogramError::SchemaMismatch);
+        }
+        if self.bucket_upper_bounds.is_empty() {
+            return Err(HistogramError::NoBuckets);
+        }
         for w in self.bucket_upper_bounds.windows(2) {
-            if w[0] >= w[1] { return Err(HistogramError::BadBuckets); }
+            if w[0] >= w[1] {
+                return Err(HistogramError::BadBuckets);
+            }
         }
         Ok(())
     }
@@ -118,21 +139,27 @@ mod tests {
 
     #[test]
     fn empty_buckets_rejected() {
-        assert!(matches!(MetricHistogram::new(vec![]).unwrap_err(), HistogramError::NoBuckets));
+        assert!(matches!(
+            MetricHistogram::new(vec![]).unwrap_err(),
+            HistogramError::NoBuckets
+        ));
     }
 
     #[test]
     fn bad_order_rejected() {
-        assert!(matches!(MetricHistogram::new(vec![100, 50]).unwrap_err(), HistogramError::BadBuckets));
+        assert!(matches!(
+            MetricHistogram::new(vec![100, 50]).unwrap_err(),
+            HistogramError::BadBuckets
+        ));
     }
 
     #[test]
     fn observe_lands_in_bucket() {
         let mut h = MetricHistogram::new(vec![10, 100, 1000]).unwrap();
-        h.observe(5);     // bucket 0 (≤ 10).
-        h.observe(50);    // bucket 1.
-        h.observe(500);   // bucket 2.
-        h.observe(5000);  // overflow.
+        h.observe(5); // bucket 0 (≤ 10).
+        h.observe(50); // bucket 1.
+        h.observe(500); // bucket 2.
+        h.observe(5000); // overflow.
         assert_eq!(h.counts, vec![1, 1, 1, 1]);
         assert_eq!(h.total, 4);
     }
@@ -140,7 +167,9 @@ mod tests {
     #[test]
     fn quantile_finds_bucket() {
         let mut h = MetricHistogram::new(vec![10, 100, 1000]).unwrap();
-        for v in [5, 5, 5, 5, 50, 500] { h.observe(v); }
+        for v in [5, 5, 5, 5, 50, 500] {
+            h.observe(v);
+        }
         // 6 observations; q=50 → target 3 → bucket 0 (count 4) → upper 10.
         assert_eq!(h.quantile(50).unwrap(), 10);
         // q=100 → target 6 → cumulate to bucket 2 → upper 1000.
@@ -158,7 +187,10 @@ mod tests {
     #[test]
     fn quantile_over_100_rejected() {
         let h = MetricHistogram::new(vec![1]).unwrap();
-        assert!(matches!(h.quantile(150).unwrap_err(), HistogramError::QuantileOver100(_)));
+        assert!(matches!(
+            h.quantile(150).unwrap_err(),
+            HistogramError::QuantileOver100(_)
+        ));
     }
 
     #[test]
@@ -180,7 +212,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut h = MetricHistogram::new(vec![10]).unwrap();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HistogramError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HistogramError::SchemaMismatch
+        ));
     }
 
     #[test]

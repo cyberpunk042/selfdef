@@ -169,18 +169,34 @@ impl IpsModuleCatalog {
     /// Construct empty canonical catalog (all 14 modules Absent + detect-host Active prerequisite).
     pub fn empty_canonical() -> Self {
         let modules = [
-            IpsModule::AgentGuard, IpsModule::BitnetGpuInference, IpsModule::BridgeL2,
-            IpsModule::DetectHost, IpsModule::HardwareTuneCache, IpsModule::IntegritySentinel,
-            IpsModule::Observability, IpsModule::Polarproxy, IpsModule::SlmCpuLoop,
-            IpsModule::Suricata, IpsModule::TensorParallelInference, IpsModule::Tetragon,
-            IpsModule::VpnBridge, IpsModule::WasmAotCache,
+            IpsModule::AgentGuard,
+            IpsModule::BitnetGpuInference,
+            IpsModule::BridgeL2,
+            IpsModule::DetectHost,
+            IpsModule::HardwareTuneCache,
+            IpsModule::IntegritySentinel,
+            IpsModule::Observability,
+            IpsModule::Polarproxy,
+            IpsModule::SlmCpuLoop,
+            IpsModule::Suricata,
+            IpsModule::TensorParallelInference,
+            IpsModule::Tetragon,
+            IpsModule::VpnBridge,
+            IpsModule::WasmAotCache,
         ];
-        let entries = modules.into_iter().map(|m| ModuleEntry {
-            module: m,
-            module_dir: m.module_dir().into(),
-            state: if m == IpsModule::DetectHost { ModuleState::Active } else { ModuleState::Absent },
-            notes: String::new(),
-        }).collect();
+        let entries = modules
+            .into_iter()
+            .map(|m| ModuleEntry {
+                module: m,
+                module_dir: m.module_dir().into(),
+                state: if m == IpsModule::DetectHost {
+                    ModuleState::Active
+                } else {
+                    ModuleState::Absent
+                },
+                notes: String::new(),
+            })
+            .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             entries,
@@ -199,11 +215,20 @@ impl IpsModuleCatalog {
             return Err(ModuleError::EntryCountInvalid(self.entries.len()));
         }
         let required = [
-            IpsModule::AgentGuard, IpsModule::BitnetGpuInference, IpsModule::BridgeL2,
-            IpsModule::DetectHost, IpsModule::HardwareTuneCache, IpsModule::IntegritySentinel,
-            IpsModule::Observability, IpsModule::Polarproxy, IpsModule::SlmCpuLoop,
-            IpsModule::Suricata, IpsModule::TensorParallelInference, IpsModule::Tetragon,
-            IpsModule::VpnBridge, IpsModule::WasmAotCache,
+            IpsModule::AgentGuard,
+            IpsModule::BitnetGpuInference,
+            IpsModule::BridgeL2,
+            IpsModule::DetectHost,
+            IpsModule::HardwareTuneCache,
+            IpsModule::IntegritySentinel,
+            IpsModule::Observability,
+            IpsModule::Polarproxy,
+            IpsModule::SlmCpuLoop,
+            IpsModule::Suricata,
+            IpsModule::TensorParallelInference,
+            IpsModule::Tetragon,
+            IpsModule::VpnBridge,
+            IpsModule::WasmAotCache,
         ];
         for m in required {
             if !self.entries.iter().any(|e| e.module == m) {
@@ -226,7 +251,11 @@ impl IpsModuleCatalog {
             }
         }
         // Substrate must be Active.
-        let substrate = self.entries.iter().find(|e| e.module == IpsModule::DetectHost).unwrap();
+        let substrate = self
+            .entries
+            .iter()
+            .find(|e| e.module == IpsModule::DetectHost)
+            .unwrap();
         if substrate.state != ModuleState::Active {
             return Err(ModuleError::SubstrateNotActive);
         }
@@ -240,7 +269,10 @@ impl IpsModuleCatalog {
 
     /// State counts (absent, active, disabled, failed).
     pub fn state_counts(&self) -> (u32, u32, u32, u32) {
-        let mut a = 0; let mut ac = 0; let mut d = 0; let mut f = 0;
+        let mut a = 0;
+        let mut ac = 0;
+        let mut d = 0;
+        let mut f = 0;
         for e in &self.entries {
             match e.state {
                 ModuleState::Absent => a += 1,
@@ -265,13 +297,20 @@ mod tests {
     #[test]
     fn fourteen_modules_positioned_1_to_14() {
         let order = [
-            (IpsModule::AgentGuard, 1), (IpsModule::BitnetGpuInference, 2),
-            (IpsModule::BridgeL2, 3), (IpsModule::DetectHost, 4),
-            (IpsModule::HardwareTuneCache, 5), (IpsModule::IntegritySentinel, 6),
-            (IpsModule::Observability, 7), (IpsModule::Polarproxy, 8),
-            (IpsModule::SlmCpuLoop, 9), (IpsModule::Suricata, 10),
-            (IpsModule::TensorParallelInference, 11), (IpsModule::Tetragon, 12),
-            (IpsModule::VpnBridge, 13), (IpsModule::WasmAotCache, 14),
+            (IpsModule::AgentGuard, 1),
+            (IpsModule::BitnetGpuInference, 2),
+            (IpsModule::BridgeL2, 3),
+            (IpsModule::DetectHost, 4),
+            (IpsModule::HardwareTuneCache, 5),
+            (IpsModule::IntegritySentinel, 6),
+            (IpsModule::Observability, 7),
+            (IpsModule::Polarproxy, 8),
+            (IpsModule::SlmCpuLoop, 9),
+            (IpsModule::Suricata, 10),
+            (IpsModule::TensorParallelInference, 11),
+            (IpsModule::Tetragon, 12),
+            (IpsModule::VpnBridge, 13),
+            (IpsModule::WasmAotCache, 14),
         ];
         for (m, p) in order {
             assert_eq!(m.position(), p);
@@ -282,8 +321,11 @@ mod tests {
     fn detect_host_is_substrate() {
         assert!(IpsModule::DetectHost.is_substrate());
         for m in [
-            IpsModule::AgentGuard, IpsModule::BridgeL2, IpsModule::Suricata,
-            IpsModule::Tetragon, IpsModule::WasmAotCache,
+            IpsModule::AgentGuard,
+            IpsModule::BridgeL2,
+            IpsModule::Suricata,
+            IpsModule::Tetragon,
+            IpsModule::WasmAotCache,
         ] {
             assert!(!m.is_substrate());
         }
@@ -292,7 +334,10 @@ mod tests {
     #[test]
     fn module_dirs_match_canonical_names() {
         assert_eq!(IpsModule::AgentGuard.module_dir(), "agent-guard");
-        assert_eq!(IpsModule::TensorParallelInference.module_dir(), "tensor-parallel-inference");
+        assert_eq!(
+            IpsModule::TensorParallelInference.module_dir(),
+            "tensor-parallel-inference"
+        );
         assert_eq!(IpsModule::WasmAotCache.module_dir(), "wasm-aot-cache");
     }
 
@@ -300,7 +345,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = IpsModuleCatalog::empty_canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ModuleError::SchemaMismatch { .. }));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ModuleError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -312,14 +360,20 @@ mod tests {
                 e.state = ModuleState::Absent;
             }
         }
-        assert!(matches!(c.validate().unwrap_err(), ModuleError::SubstrateNotActive));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ModuleError::SubstrateNotActive
+        ));
     }
 
     #[test]
     fn entry_count_invalid_caught() {
         let mut c = IpsModuleCatalog::empty_canonical();
         c.entries.pop();
-        assert!(matches!(c.validate().unwrap_err(), ModuleError::EntryCountInvalid(13)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ModuleError::EntryCountInvalid(13)
+        ));
     }
 
     #[test]
@@ -327,7 +381,11 @@ mod tests {
         let mut c = IpsModuleCatalog::empty_canonical();
         c.entries[0].module_dir = "wrong-name".into();
         match c.validate().unwrap_err() {
-            ModuleError::DirMismatch { module, expected, actual } => {
+            ModuleError::DirMismatch {
+                module,
+                expected,
+                actual,
+            } => {
                 assert_eq!(module, IpsModule::AgentGuard);
                 assert_eq!(expected, "agent-guard");
                 assert_eq!(actual, "wrong-name");
@@ -341,16 +399,25 @@ mod tests {
         let c = IpsModuleCatalog::empty_canonical();
         let (absent, active, disabled, failed) = c.state_counts();
         assert_eq!(absent, 13);
-        assert_eq!(active, 1);  // only DetectHost
+        assert_eq!(active, 1); // only DetectHost
         assert_eq!(disabled, 0);
         assert_eq!(failed, 0);
     }
 
     #[test]
     fn ips_module_serde_kebab() {
-        assert_eq!(serde_json::to_string(&IpsModule::TensorParallelInference).unwrap(), "\"tensor-parallel-inference\"");
-        assert_eq!(serde_json::to_string(&IpsModule::WasmAotCache).unwrap(), "\"wasm-aot-cache\"");
-        assert_eq!(serde_json::to_string(&IpsModule::SlmCpuLoop).unwrap(), "\"slm-cpu-loop\"");
+        assert_eq!(
+            serde_json::to_string(&IpsModule::TensorParallelInference).unwrap(),
+            "\"tensor-parallel-inference\""
+        );
+        assert_eq!(
+            serde_json::to_string(&IpsModule::WasmAotCache).unwrap(),
+            "\"wasm-aot-cache\""
+        );
+        assert_eq!(
+            serde_json::to_string(&IpsModule::SlmCpuLoop).unwrap(),
+            "\"slm-cpu-loop\""
+        );
     }
 
     #[test]

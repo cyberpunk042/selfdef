@@ -49,7 +49,9 @@ pub enum PeakError {
 impl PeakDetector {
     /// New.
     pub fn new(window_ms: u64) -> Result<Self, PeakError> {
-        if window_ms == 0 { return Err(PeakError::ZeroWindow); }
+        if window_ms == 0 {
+            return Err(PeakError::ZeroWindow);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_ms,
@@ -61,22 +63,35 @@ impl PeakDetector {
     pub fn observe(&mut self, value: i64, now_ms: u64) {
         let cutoff = now_ms.saturating_sub(self.window_ms);
         self.samples.retain(|s| s.ts_ms >= cutoff);
-        self.samples.push(Sample { ts_ms: now_ms, value });
+        self.samples.push(Sample {
+            ts_ms: now_ms,
+            value,
+        });
     }
 
     /// Peak (max) within current window (None if empty).
     pub fn current_peak(&self, now_ms: u64) -> Option<i64> {
         let cutoff = now_ms.saturating_sub(self.window_ms);
-        self.samples.iter().filter(|s| s.ts_ms >= cutoff).map(|s| s.value).max()
+        self.samples
+            .iter()
+            .filter(|s| s.ts_ms >= cutoff)
+            .map(|s| s.value)
+            .max()
     }
 
     /// Retained sample count.
-    pub fn samples_count(&self) -> usize { self.samples.len() }
+    pub fn samples_count(&self) -> usize {
+        self.samples.len()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PeakError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PeakError::SchemaMismatch); }
-        if self.window_ms == 0 { return Err(PeakError::ZeroWindow); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PeakError::SchemaMismatch);
+        }
+        if self.window_ms == 0 {
+            return Err(PeakError::ZeroWindow);
+        }
         Ok(())
     }
 }
@@ -129,14 +144,20 @@ mod tests {
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(PeakDetector::new(0).unwrap_err(), PeakError::ZeroWindow));
+        assert!(matches!(
+            PeakDetector::new(0).unwrap_err(),
+            PeakError::ZeroWindow
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PeakDetector::new(1000).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PeakError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PeakError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -73,7 +73,9 @@ impl NetworkRulePack {
 
     /// Add an allow pattern.
     pub fn add_allow(&mut self, p: Pattern) -> Result<(), RulePackError> {
-        if !pattern_ok_for_network(&p) { return Err(RulePackError::UnsupportedPattern); }
+        if !pattern_ok_for_network(&p) {
+            return Err(RulePackError::UnsupportedPattern);
+        }
         p.validate().map_err(|_| RulePackError::EmptyPattern)?;
         self.allow.push(p);
         Ok(())
@@ -81,7 +83,9 @@ impl NetworkRulePack {
 
     /// Add a deny pattern.
     pub fn add_deny(&mut self, p: Pattern) -> Result<(), RulePackError> {
-        if !pattern_ok_for_network(&p) { return Err(RulePackError::UnsupportedPattern); }
+        if !pattern_ok_for_network(&p) {
+            return Err(RulePackError::UnsupportedPattern);
+        }
         p.validate().map_err(|_| RulePackError::EmptyPattern)?;
         self.deny.push(p);
         Ok(())
@@ -104,7 +108,9 @@ impl NetworkRulePack {
             return Err(RulePackError::SchemaMismatch);
         }
         for p in self.allow.iter().chain(self.deny.iter()) {
-            if !pattern_ok_for_network(p) { return Err(RulePackError::UnsupportedPattern); }
+            if !pattern_ok_for_network(p) {
+                return Err(RulePackError::UnsupportedPattern);
+            }
             p.validate().map_err(|_| RulePackError::EmptyPattern)?;
         }
         Ok(())
@@ -112,7 +118,9 @@ impl NetworkRulePack {
 }
 
 impl Default for NetworkRulePack {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -137,7 +145,8 @@ mod tests {
     fn deny_takes_precedence_over_allow() {
         let mut p = NetworkRulePack::new();
         p.add_allow(Pattern::Fqdn(".anthropic.com".into())).unwrap();
-        p.add_deny(Pattern::Fqdn(".evil.anthropic.com".into())).unwrap();
+        p.add_deny(Pattern::Fqdn(".evil.anthropic.com".into()))
+            .unwrap();
         assert_eq!(p.decide("api.anthropic.com"), Verdict::Allow);
         assert_eq!(p.decide("a.evil.anthropic.com"), Verdict::DenyExplicit);
     }
@@ -161,14 +170,23 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = NetworkRulePack::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RulePackError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RulePackError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
         assert_eq!(serde_json::to_string(&Verdict::Allow).unwrap(), "\"allow\"");
-        assert_eq!(serde_json::to_string(&Verdict::DenyExplicit).unwrap(), "\"deny-explicit\"");
-        assert_eq!(serde_json::to_string(&Verdict::DenyDefault).unwrap(), "\"deny-default\"");
+        assert_eq!(
+            serde_json::to_string(&Verdict::DenyExplicit).unwrap(),
+            "\"deny-explicit\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Verdict::DenyDefault).unwrap(),
+            "\"deny-default\""
+        );
     }
 
     #[test]

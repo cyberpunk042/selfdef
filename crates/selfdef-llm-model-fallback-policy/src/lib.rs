@@ -99,9 +99,13 @@ impl ModelFallbackPolicy {
 
     /// Define a chain (overwrites existing).
     pub fn set_chain(&mut self, chain_id: &str, models: &[&str]) -> Result<(), FallbackError> {
-        if chain_id.is_empty() { return Err(FallbackError::EmptyChain); }
+        if chain_id.is_empty() {
+            return Err(FallbackError::EmptyChain);
+        }
         for m in models {
-            if m.is_empty() { return Err(FallbackError::EmptyModel); }
+            if m.is_empty() {
+                return Err(FallbackError::EmptyModel);
+            }
         }
         let chain = Chain {
             models: models.iter().map(|s| (*s).into()).collect(),
@@ -113,23 +117,42 @@ impl ModelFallbackPolicy {
 
     /// Pick the first usable model.
     pub fn pick(&self, chain_id: &str, now_ms: u64) -> PickVerdict {
-        let Some(chain) = self.chains.get(chain_id) else { return PickVerdict::NoModels; };
-        if chain.models.is_empty() { return PickVerdict::NoModels; }
+        let Some(chain) = self.chains.get(chain_id) else {
+            return PickVerdict::NoModels;
+        };
+        if chain.models.is_empty() {
+            return PickVerdict::NoModels;
+        }
         let mut soonest = u64::MAX;
         for (rank, m) in chain.models.iter().enumerate() {
             let h = chain.health.get(m);
             let cooldown_until = h.map(|h| h.cooldown_until_ms).unwrap_or(0);
             if now_ms >= cooldown_until {
-                return PickVerdict::Picked { model: m.clone(), rank: rank as u32 };
+                return PickVerdict::Picked {
+                    model: m.clone(),
+                    rank: rank as u32,
+                };
             }
-            if cooldown_until < soonest { soonest = cooldown_until; }
+            if cooldown_until < soonest {
+                soonest = cooldown_until;
+            }
         }
-        PickVerdict::AllInCooldown { next_available_ms: soonest }
+        PickVerdict::AllInCooldown {
+            next_available_ms: soonest,
+        }
     }
 
     /// Record a failure → place this model in cooldown.
-    pub fn record_failure(&mut self, chain_id: &str, model: &str, now_ms: u64, cooldown_ms: u64) -> Result<(), FallbackError> {
-        let chain = self.chains.get_mut(chain_id)
+    pub fn record_failure(
+        &mut self,
+        chain_id: &str,
+        model: &str,
+        now_ms: u64,
+        cooldown_ms: u64,
+    ) -> Result<(), FallbackError> {
+        let chain = self
+            .chains
+            .get_mut(chain_id)
             .ok_or_else(|| FallbackError::UnknownChain(chain_id.into()))?;
         let h = chain.health.entry(model.into()).or_default();
         h.fail_streak = h.fail_streak.saturating_add(1);
@@ -140,7 +163,9 @@ impl ModelFallbackPolicy {
 
     /// Record a success → clear streak and cooldown.
     pub fn record_success(&mut self, chain_id: &str, model: &str) -> Result<(), FallbackError> {
-        let chain = self.chains.get_mut(chain_id)
+        let chain = self
+            .chains
+            .get_mut(chain_id)
             .ok_or_else(|| FallbackError::UnknownChain(chain_id.into()))?;
         let h = chain.health.entry(model.into()).or_default();
         h.fail_streak = 0;
@@ -156,11 +181,17 @@ impl ModelFallbackPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FallbackError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FallbackError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FallbackError::SchemaMismatch);
+        }
         for (id, c) in &self.chains {
-            if id.is_empty() { return Err(FallbackError::EmptyChain); }
+            if id.is_empty() {
+                return Err(FallbackError::EmptyChain);
+            }
             for m in &c.models {
-                if m.is_empty() { return Err(FallbackError::EmptyModel); }
+                if m.is_empty() {
+                    return Err(FallbackError::EmptyModel);
+                }
             }
         }
         Ok(())
@@ -168,7 +199,9 @@ impl ModelFallbackPolicy {
 }
 
 impl Default for ModelFallbackPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -178,7 +211,8 @@ mod tests {
     #[test]
     fn picks_first_when_all_healthy() {
         let mut p = ModelFallbackPolicy::new();
-        p.set_chain("primary", &["sonnet", "haiku", "opus"]).unwrap();
+        p.set_chain("primary", &["sonnet", "haiku", "opus"])
+            .unwrap();
         match p.pick("primary", 1000) {
             PickVerdict::Picked { model, rank } => {
                 assert_eq!(model, "sonnet");
@@ -268,20 +302,29 @@ mod tests {
     #[test]
     fn empty_chain_id_rejected() {
         let mut p = ModelFallbackPolicy::new();
-        assert!(matches!(p.set_chain("", &["a"]).unwrap_err(), FallbackError::EmptyChain));
+        assert!(matches!(
+            p.set_chain("", &["a"]).unwrap_err(),
+            FallbackError::EmptyChain
+        ));
     }
 
     #[test]
     fn empty_model_id_rejected() {
         let mut p = ModelFallbackPolicy::new();
-        assert!(matches!(p.set_chain("c", &[""]).unwrap_err(), FallbackError::EmptyModel));
+        assert!(matches!(
+            p.set_chain("c", &[""]).unwrap_err(),
+            FallbackError::EmptyModel
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ModelFallbackPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), FallbackError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            FallbackError::SchemaMismatch
+        ));
     }
 
     #[test]

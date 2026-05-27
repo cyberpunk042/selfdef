@@ -71,7 +71,9 @@ impl ClassCounters {
     /// Success rate in basis points (1..=10000). Returns 0 if no records.
     pub fn success_rate_bp(&self) -> u32 {
         let t = self.total();
-        if t == 0 { return 0; }
+        if t == 0 {
+            return 0;
+        }
         ((self.success.saturating_mul(10_000)) / t) as u32
     }
 }
@@ -108,7 +110,9 @@ pub enum LedgerError {
 impl ActionOutcomeLedger {
     /// New.
     pub fn new(capacity: usize) -> Result<Self, LedgerError> {
-        if capacity == 0 { return Err(LedgerError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(LedgerError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -119,8 +123,15 @@ impl ActionOutcomeLedger {
     }
 
     /// Record.
-    pub fn record(&mut self, action_class: &str, outcome: Outcome, ts_ms: u64) -> Result<(), LedgerError> {
-        if action_class.is_empty() { return Err(LedgerError::EmptyClass); }
+    pub fn record(
+        &mut self,
+        action_class: &str,
+        outcome: Outcome,
+        ts_ms: u64,
+    ) -> Result<(), LedgerError> {
+        if action_class.is_empty() {
+            return Err(LedgerError::EmptyClass);
+        }
         if self.recent.len() == self.capacity {
             self.recent.pop_front();
             self.dropped = self.dropped.saturating_add(1);
@@ -153,20 +164,30 @@ impl ActionOutcomeLedger {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LedgerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LedgerError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(LedgerError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LedgerError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(LedgerError::ZeroCapacity);
+        }
         for k in self.counters.keys() {
-            if k.is_empty() { return Err(LedgerError::EmptyClass); }
+            if k.is_empty() {
+                return Err(LedgerError::EmptyClass);
+            }
         }
         for e in &self.recent {
-            if e.action_class.is_empty() { return Err(LedgerError::EmptyClass); }
+            if e.action_class.is_empty() {
+                return Err(LedgerError::EmptyClass);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionOutcomeLedger {
-    fn default() -> Self { Self::new(1000).unwrap() }
+    fn default() -> Self {
+        Self::new(1000).unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -188,8 +209,12 @@ mod tests {
     fn success_rate_bp() {
         let mut l = ActionOutcomeLedger::new(10).unwrap();
         // 7 successes, 3 failures → 7000 bp.
-        for _ in 0..7 { l.record("a", Outcome::Success, 0).unwrap(); }
-        for _ in 0..3 { l.record("a", Outcome::HardFailure, 0).unwrap(); }
+        for _ in 0..7 {
+            l.record("a", Outcome::Success, 0).unwrap();
+        }
+        for _ in 0..3 {
+            l.record("a", Outcome::HardFailure, 0).unwrap();
+        }
         let c = l.counters_of("a").unwrap();
         assert_eq!(c.success_rate_bp(), 7000);
     }
@@ -251,20 +276,29 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(ActionOutcomeLedger::new(0).unwrap_err(), LedgerError::ZeroCapacity));
+        assert!(matches!(
+            ActionOutcomeLedger::new(0).unwrap_err(),
+            LedgerError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn empty_class_rejected() {
         let mut l = ActionOutcomeLedger::new(10).unwrap();
-        assert!(matches!(l.record("", Outcome::Success, 0).unwrap_err(), LedgerError::EmptyClass));
+        assert!(matches!(
+            l.record("", Outcome::Success, 0).unwrap_err(),
+            LedgerError::EmptyClass
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = ActionOutcomeLedger::new(10).unwrap();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch
+        ));
     }
 
     #[test]

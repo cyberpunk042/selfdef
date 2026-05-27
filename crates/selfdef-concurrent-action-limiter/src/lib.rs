@@ -89,7 +89,9 @@ impl ConcurrentActionLimiter {
 
     /// Set per-actor limit.
     pub fn set_limit(&mut self, actor: &str, max: u32) -> Result<(), LimiterError> {
-        if actor.is_empty() { return Err(LimiterError::EmptyActor); }
+        if actor.is_empty() {
+            return Err(LimiterError::EmptyActor);
+        }
         let s = self.actors.entry(actor.into()).or_insert(ActorState {
             limit: max,
             in_flight: 0,
@@ -102,8 +104,12 @@ impl ConcurrentActionLimiter {
 
     /// Try to admit.
     pub fn admit(&mut self, actor: &str, action_id: &str) -> Result<AdmitVerdict, LimiterError> {
-        if actor.is_empty() { return Err(LimiterError::EmptyActor); }
-        if action_id.is_empty() { return Err(LimiterError::EmptyAction); }
+        if actor.is_empty() {
+            return Err(LimiterError::EmptyActor);
+        }
+        if action_id.is_empty() {
+            return Err(LimiterError::EmptyAction);
+        }
         if self.in_flight_actions.contains_key(action_id) {
             return Ok(AdmitVerdict::Duplicate);
         }
@@ -116,17 +122,23 @@ impl ConcurrentActionLimiter {
         });
         if s.in_flight >= s.limit {
             s.rejected_total = s.rejected_total.saturating_add(1);
-            return Ok(AdmitVerdict::Rejected { in_flight: s.in_flight, limit: s.limit });
+            return Ok(AdmitVerdict::Rejected {
+                in_flight: s.in_flight,
+                limit: s.limit,
+            });
         }
         s.in_flight = s.in_flight.saturating_add(1);
         s.admitted_total = s.admitted_total.saturating_add(1);
-        self.in_flight_actions.insert(action_id.into(), actor.into());
+        self.in_flight_actions
+            .insert(action_id.into(), actor.into());
         Ok(AdmitVerdict::Admitted)
     }
 
     /// Release. Returns true if the action was in flight.
     pub fn release(&mut self, action_id: &str) -> bool {
-        let Some(actor) = self.in_flight_actions.remove(action_id) else { return false; };
+        let Some(actor) = self.in_flight_actions.remove(action_id) else {
+            return false;
+        };
         if let Some(s) = self.actors.get_mut(&actor) {
             s.in_flight = s.in_flight.saturating_sub(1);
         }
@@ -140,19 +152,27 @@ impl ConcurrentActionLimiter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LimiterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LimiterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LimiterError::SchemaMismatch);
+        }
         for k in self.actors.keys() {
-            if k.is_empty() { return Err(LimiterError::EmptyActor); }
+            if k.is_empty() {
+                return Err(LimiterError::EmptyActor);
+            }
         }
         for k in self.in_flight_actions.keys() {
-            if k.is_empty() { return Err(LimiterError::EmptyAction); }
+            if k.is_empty() {
+                return Err(LimiterError::EmptyAction);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ConcurrentActionLimiter {
-    fn default() -> Self { Self::new(1) }
+    fn default() -> Self {
+        Self::new(1)
+    }
 }
 
 #[cfg(test)]
@@ -222,7 +242,10 @@ mod tests {
     fn set_limit_changes_cap() {
         let mut l = ConcurrentActionLimiter::new(1);
         l.admit("alice", "a1").unwrap();
-        assert!(matches!(l.admit("alice", "a2").unwrap(), AdmitVerdict::Rejected { .. }));
+        assert!(matches!(
+            l.admit("alice", "a2").unwrap(),
+            AdmitVerdict::Rejected { .. }
+        ));
         l.set_limit("alice", 5).unwrap();
         assert_eq!(l.admit("alice", "a2").unwrap(), AdmitVerdict::Admitted);
     }
@@ -240,16 +263,28 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut l = ConcurrentActionLimiter::new(1);
-        assert!(matches!(l.admit("", "x").unwrap_err(), LimiterError::EmptyActor));
-        assert!(matches!(l.admit("a", "").unwrap_err(), LimiterError::EmptyAction));
-        assert!(matches!(l.set_limit("", 1).unwrap_err(), LimiterError::EmptyActor));
+        assert!(matches!(
+            l.admit("", "x").unwrap_err(),
+            LimiterError::EmptyActor
+        ));
+        assert!(matches!(
+            l.admit("a", "").unwrap_err(),
+            LimiterError::EmptyAction
+        ));
+        assert!(matches!(
+            l.set_limit("", 1).unwrap_err(),
+            LimiterError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = ConcurrentActionLimiter::new(1);
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LimiterError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LimiterError::SchemaMismatch
+        ));
     }
 
     #[test]

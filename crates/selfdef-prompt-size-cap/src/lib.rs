@@ -86,22 +86,44 @@ impl PromptSizeCap {
     }
 
     /// Set caps.
-    pub fn set_caps(&mut self, actor: &str, warn_bytes: u64, hard_bytes: u64) -> Result<(), SizeError> {
-        if actor.is_empty() { return Err(SizeError::EmptyActor); }
-        if warn_bytes >= hard_bytes {
-            return Err(SizeError::BadCaps { warn: warn_bytes, hard: hard_bytes });
+    pub fn set_caps(
+        &mut self,
+        actor: &str,
+        warn_bytes: u64,
+        hard_bytes: u64,
+    ) -> Result<(), SizeError> {
+        if actor.is_empty() {
+            return Err(SizeError::EmptyActor);
         }
-        self.actors.insert(actor.into(), ActorCaps { warn_bytes, hard_bytes });
+        if warn_bytes >= hard_bytes {
+            return Err(SizeError::BadCaps {
+                warn: warn_bytes,
+                hard: hard_bytes,
+            });
+        }
+        self.actors.insert(
+            actor.into(),
+            ActorCaps {
+                warn_bytes,
+                hard_bytes,
+            },
+        );
         Ok(())
     }
 
     /// Evaluate.
     pub fn evaluate(&self, actor: &str, bytes: u64) -> SizeVerdict {
-        let Some(c) = self.actors.get(actor) else { return SizeVerdict::Unknown; };
+        let Some(c) = self.actors.get(actor) else {
+            return SizeVerdict::Unknown;
+        };
         if bytes >= c.hard_bytes {
-            SizeVerdict::Reject { over_bytes: bytes - c.hard_bytes }
+            SizeVerdict::Reject {
+                over_bytes: bytes - c.hard_bytes,
+            }
         } else if bytes >= c.warn_bytes {
-            SizeVerdict::Warn { headroom_bytes: c.hard_bytes - bytes }
+            SizeVerdict::Warn {
+                headroom_bytes: c.hard_bytes - bytes,
+            }
         } else {
             SizeVerdict::Allow
         }
@@ -114,11 +136,18 @@ impl PromptSizeCap {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SizeError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SizeError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SizeError::SchemaMismatch);
+        }
         for (a, c) in &self.actors {
-            if a.is_empty() { return Err(SizeError::EmptyActor); }
+            if a.is_empty() {
+                return Err(SizeError::EmptyActor);
+            }
             if c.warn_bytes >= c.hard_bytes {
-                return Err(SizeError::BadCaps { warn: c.warn_bytes, hard: c.hard_bytes });
+                return Err(SizeError::BadCaps {
+                    warn: c.warn_bytes,
+                    hard: c.hard_bytes,
+                });
             }
         }
         Ok(())
@@ -126,7 +155,9 @@ impl PromptSizeCap {
 }
 
 impl Default for PromptSizeCap {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -177,27 +208,42 @@ mod tests {
     fn hard_at_boundary() {
         let mut p = PromptSizeCap::new();
         p.set_caps("a", 1000, 2000).unwrap();
-        assert!(matches!(p.evaluate("a", 2000), SizeVerdict::Reject { over_bytes: 0 }));
+        assert!(matches!(
+            p.evaluate("a", 2000),
+            SizeVerdict::Reject { over_bytes: 0 }
+        ));
     }
 
     #[test]
     fn bad_caps_rejected() {
         let mut p = PromptSizeCap::new();
-        assert!(matches!(p.set_caps("a", 1000, 1000).unwrap_err(), SizeError::BadCaps { .. }));
-        assert!(matches!(p.set_caps("a", 2000, 1000).unwrap_err(), SizeError::BadCaps { .. }));
+        assert!(matches!(
+            p.set_caps("a", 1000, 1000).unwrap_err(),
+            SizeError::BadCaps { .. }
+        ));
+        assert!(matches!(
+            p.set_caps("a", 2000, 1000).unwrap_err(),
+            SizeError::BadCaps { .. }
+        ));
     }
 
     #[test]
     fn empty_actor_rejected() {
         let mut p = PromptSizeCap::new();
-        assert!(matches!(p.set_caps("", 1, 2).unwrap_err(), SizeError::EmptyActor));
+        assert!(matches!(
+            p.set_caps("", 1, 2).unwrap_err(),
+            SizeError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PromptSizeCap::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SizeError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SizeError::SchemaMismatch
+        ));
     }
 
     #[test]

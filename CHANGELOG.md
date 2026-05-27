@@ -6,6 +6,18 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — repo-wide `cargo fmt` unblocks the CI fmt job + build pipeline (2026-05-27)
+
+`cargo fmt --all -- --check` (CI's `fmt` job) was RED across 490 of ~535 crates
+(544 source files) — the crates were written/generated with non-canonical
+formatting (packed const arrays, aligned struct literals) that rustfmt reflows.
+Because the release `build` job `needs: [fmt, …]`, a red fmt blocked the ENTIRE
+pipeline. Ran `cargo fmt --all` (toolchain 1.88.0's rustfmt — identical to CI's;
+no `rustfmt.toml`, so defaults match exactly), making `--check` exit 0. The
+change is purely formatting (rustfmt preserves all tokens/semantics by
+construction; verified idempotent via the `--check` round-trip), landed as one
+standalone style commit for clean identification/revert.
+
 ### Fixed — perimeter YAML gate fails under yamllint's cosmetic indentation rule (2026-05-27)
 
 `L1-perimeter-yaml-lint.sh`'s optional yamllint pass (which the CI coherence job

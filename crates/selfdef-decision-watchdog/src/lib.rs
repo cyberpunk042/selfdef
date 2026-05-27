@@ -95,18 +95,32 @@ impl DecisionWatchdog {
     }
 
     /// Register.
-    pub fn register(&mut self, id: &str, class: DecisionClass, started_at: u64) -> Result<(), WatchdogError> {
-        if id.is_empty() { return Err(WatchdogError::EmptyId); }
+    pub fn register(
+        &mut self,
+        id: &str,
+        class: DecisionClass,
+        started_at: u64,
+    ) -> Result<(), WatchdogError> {
+        if id.is_empty() {
+            return Err(WatchdogError::EmptyId);
+        }
         if self.in_flight.iter().any(|x| x.id == id) {
             return Err(WatchdogError::DuplicateId(id.into()));
         }
-        self.in_flight.push(InFlight { id: id.into(), class, started_at });
+        self.in_flight.push(InFlight {
+            id: id.into(),
+            class,
+            started_at,
+        });
         Ok(())
     }
 
     /// Complete (drop from in-flight).
     pub fn complete(&mut self, id: &str) -> Result<(), WatchdogError> {
-        let pos = self.in_flight.iter().position(|x| x.id == id)
+        let pos = self
+            .in_flight
+            .iter()
+            .position(|x| x.id == id)
             .ok_or_else(|| WatchdogError::Unknown(id.into()))?;
         self.in_flight.remove(pos);
         Ok(())
@@ -135,12 +149,16 @@ impl DecisionWatchdog {
             (DecisionClass::Standard, self.standard_budget_seconds),
             (DecisionClass::Slow, self.slow_budget_seconds),
         ] {
-            if b == 0 { return Err(WatchdogError::BudgetZero(c)); }
+            if b == 0 {
+                return Err(WatchdogError::BudgetZero(c));
+            }
         }
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for f in &self.in_flight {
-            if f.id.is_empty() { return Err(WatchdogError::EmptyId); }
+            if f.id.is_empty() {
+                return Err(WatchdogError::EmptyId);
+            }
             if !seen.insert(f.id.as_str()) {
                 return Err(WatchdogError::DuplicateId(f.id.clone()));
             }
@@ -194,38 +212,56 @@ mod tests {
     fn duplicate_register_rejected() {
         let mut w = DecisionWatchdog::canonical();
         w.register("d1", DecisionClass::Fast, 100).unwrap();
-        assert!(matches!(w.register("d1", DecisionClass::Slow, 200).unwrap_err(), WatchdogError::DuplicateId(_)));
+        assert!(matches!(
+            w.register("d1", DecisionClass::Slow, 200).unwrap_err(),
+            WatchdogError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn complete_unknown_rejected() {
         let mut w = DecisionWatchdog::canonical();
-        assert!(matches!(w.complete("none").unwrap_err(), WatchdogError::Unknown(_)));
+        assert!(matches!(
+            w.complete("none").unwrap_err(),
+            WatchdogError::Unknown(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut w = DecisionWatchdog::canonical();
-        assert!(matches!(w.register("", DecisionClass::Fast, 100).unwrap_err(), WatchdogError::EmptyId));
+        assert!(matches!(
+            w.register("", DecisionClass::Fast, 100).unwrap_err(),
+            WatchdogError::EmptyId
+        ));
     }
 
     #[test]
     fn budget_zero_rejected_on_validate() {
         let mut w = DecisionWatchdog::canonical();
         w.fast_budget_seconds = 0;
-        assert!(matches!(w.validate().unwrap_err(), WatchdogError::BudgetZero(DecisionClass::Fast)));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WatchdogError::BudgetZero(DecisionClass::Fast)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut w = DecisionWatchdog::canonical();
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), WatchdogError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WatchdogError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DecisionClass::Standard).unwrap(), "\"standard\"");
+        assert_eq!(
+            serde_json::to_string(&DecisionClass::Standard).unwrap(),
+            "\"standard\""
+        );
     }
 
     #[test]

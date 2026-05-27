@@ -121,9 +121,14 @@ impl PolicyChangeWindow {
 
     /// Add.
     pub fn add(&mut self, w: Window) -> Result<(), WindowError> {
-        if w.name.is_empty() { return Err(WindowError::EmptyName); }
+        if w.name.is_empty() {
+            return Err(WindowError::EmptyName);
+        }
         if w.close_ms <= w.open_ms {
-            return Err(WindowError::InvertedRange { open: w.open_ms, close: w.close_ms });
+            return Err(WindowError::InvertedRange {
+                open: w.open_ms,
+                close: w.close_ms,
+            });
         }
         self.windows.insert(w.name.clone(), w);
         Ok(())
@@ -138,12 +143,22 @@ impl PolicyChangeWindow {
     pub fn decide(&self, policy_id: &str, now_ms: u64) -> ChangeVerdict {
         let mut soft: Option<String> = None;
         for w in self.windows.values() {
-            if !w.covers(now_ms) { continue; }
-            if !w.applies_to(policy_id) { continue; }
+            if !w.covers(now_ms) {
+                continue;
+            }
+            if !w.applies_to(policy_id) {
+                continue;
+            }
             match w.severity {
-                Severity::Hard => return ChangeVerdict::HardBlock { window: w.name.clone() },
+                Severity::Hard => {
+                    return ChangeVerdict::HardBlock {
+                        window: w.name.clone(),
+                    };
+                }
                 Severity::Soft => {
-                    if soft.is_none() { soft = Some(w.name.clone()); }
+                    if soft.is_none() {
+                        soft = Some(w.name.clone());
+                    }
                 }
             }
         }
@@ -155,7 +170,8 @@ impl PolicyChangeWindow {
 
     /// All windows currently active for a policy id.
     pub fn active_for(&self, policy_id: &str, now_ms: u64) -> Vec<Window> {
-        self.windows.values()
+        self.windows
+            .values()
             .filter(|w| w.covers(now_ms) && w.applies_to(policy_id))
             .cloned()
             .collect()
@@ -163,14 +179,23 @@ impl PolicyChangeWindow {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), WindowError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(WindowError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(WindowError::SchemaMismatch);
+        }
         for (name, w) in &self.windows {
-            if name.is_empty() { return Err(WindowError::EmptyName); }
+            if name.is_empty() {
+                return Err(WindowError::EmptyName);
+            }
             if w.close_ms <= w.open_ms {
-                return Err(WindowError::InvertedRange { open: w.open_ms, close: w.close_ms });
+                return Err(WindowError::InvertedRange {
+                    open: w.open_ms,
+                    close: w.close_ms,
+                });
             }
             for p in &w.scope {
-                if p.is_empty() { return Err(WindowError::EmptyPolicy); }
+                if p.is_empty() {
+                    return Err(WindowError::EmptyPolicy);
+                }
             }
         }
         Ok(())
@@ -178,7 +203,9 @@ impl PolicyChangeWindow {
 }
 
 impl Default for PolicyChangeWindow {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -216,7 +243,8 @@ mod tests {
     #[test]
     fn soft_block_inside_window() {
         let mut c = PolicyChangeWindow::new();
-        c.add(w("caution", 1000, 2000, Severity::Soft, &[])).unwrap();
+        c.add(w("caution", 1000, 2000, Severity::Soft, &[]))
+            .unwrap();
         match c.decide("p1", 1500) {
             ChangeVerdict::SoftBlock { window } => assert_eq!(window, "caution"),
             _ => panic!(),
@@ -228,17 +256,30 @@ mod tests {
         let mut c = PolicyChangeWindow::new();
         c.add(w("soft", 0, 5000, Severity::Soft, &[])).unwrap();
         c.add(w("hard", 1000, 2000, Severity::Hard, &[])).unwrap();
-        assert!(matches!(c.decide("p1", 1500), ChangeVerdict::HardBlock { .. }));
+        assert!(matches!(
+            c.decide("p1", 1500),
+            ChangeVerdict::HardBlock { .. }
+        ));
     }
 
     #[test]
     fn scope_filters() {
         let mut c = PolicyChangeWindow::new();
-        c.add(w("freeze-routing", 1000, 2000, Severity::Hard, &["routing"])).unwrap();
+        c.add(w(
+            "freeze-routing",
+            1000,
+            2000,
+            Severity::Hard,
+            &["routing"],
+        ))
+        .unwrap();
         // Different policy id — permitted.
         assert_eq!(c.decide("billing", 1500), ChangeVerdict::Permit);
         // Same policy id — blocked.
-        assert!(matches!(c.decide("routing", 1500), ChangeVerdict::HardBlock { .. }));
+        assert!(matches!(
+            c.decide("routing", 1500),
+            ChangeVerdict::HardBlock { .. }
+        ));
     }
 
     #[test]
@@ -253,7 +294,10 @@ mod tests {
     fn open_is_inclusive() {
         let mut c = PolicyChangeWindow::new();
         c.add(w("freeze", 1000, 2000, Severity::Hard, &[])).unwrap();
-        assert!(matches!(c.decide("p1", 1000), ChangeVerdict::HardBlock { .. }));
+        assert!(matches!(
+            c.decide("p1", 1000),
+            ChangeVerdict::HardBlock { .. }
+        ));
     }
 
     #[test]
@@ -268,26 +312,36 @@ mod tests {
     #[test]
     fn inverted_range_rejected() {
         let mut c = PolicyChangeWindow::new();
-        assert!(matches!(c.add(w("x", 2000, 1000, Severity::Hard, &[])).unwrap_err(), WindowError::InvertedRange { .. }));
+        assert!(matches!(
+            c.add(w("x", 2000, 1000, Severity::Hard, &[])).unwrap_err(),
+            WindowError::InvertedRange { .. }
+        ));
     }
 
     #[test]
     fn empty_name_rejected() {
         let mut c = PolicyChangeWindow::new();
-        assert!(matches!(c.add(w("", 0, 1, Severity::Hard, &[])).unwrap_err(), WindowError::EmptyName));
+        assert!(matches!(
+            c.add(w("", 0, 1, Severity::Hard, &[])).unwrap_err(),
+            WindowError::EmptyName
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = PolicyChangeWindow::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), WindowError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WindowError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn window_serde_roundtrip() {
         let mut c = PolicyChangeWindow::new();
-        c.add(w("freeze", 1000, 2000, Severity::Hard, &["p"])).unwrap();
+        c.add(w("freeze", 1000, 2000, Severity::Hard, &["p"]))
+            .unwrap();
         let j = serde_json::to_string(&c).unwrap();
         let back: PolicyChangeWindow = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

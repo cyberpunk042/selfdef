@@ -45,7 +45,9 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 
 /// Build composite key.
 pub fn key(policy_version: &str, input: &[u8]) -> Result<String, KeyError> {
-    if policy_version.is_empty() { return Err(KeyError::EmptyVersion); }
+    if policy_version.is_empty() {
+        return Err(KeyError::EmptyVersion);
+    }
     let h = fnv1a_64(input);
     Ok(format!("{}:{:016x}", policy_version, h))
 }
@@ -53,18 +55,24 @@ pub fn key(policy_version: &str, input: &[u8]) -> Result<String, KeyError> {
 impl PolicyCacheKeyState {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), KeyError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(KeyError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(KeyError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for PolicyCacheKeyState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -108,7 +116,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = PolicyCacheKeyState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), KeyError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            KeyError::SchemaMismatch
+        ));
     }
 
     #[test]

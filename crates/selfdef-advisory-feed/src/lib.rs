@@ -95,29 +95,49 @@ impl AdvisoryFeed {
     }
 
     /// Publish.
-    pub fn publish(&mut self, id: &str, severity: Severity, summary: &str, ts_ms: u64) -> Result<(), AdvisoryError> {
-        if id.is_empty() { return Err(AdvisoryError::EmptyId); }
-        if summary.is_empty() { return Err(AdvisoryError::EmptySummary); }
+    pub fn publish(
+        &mut self,
+        id: &str,
+        severity: Severity,
+        summary: &str,
+        ts_ms: u64,
+    ) -> Result<(), AdvisoryError> {
+        if id.is_empty() {
+            return Err(AdvisoryError::EmptyId);
+        }
+        if summary.is_empty() {
+            return Err(AdvisoryError::EmptySummary);
+        }
         if self.advisories.contains_key(id) {
             return Err(AdvisoryError::DuplicateId(id.into()));
         }
-        self.advisories.insert(id.into(), Advisory {
-            id: id.into(),
-            severity,
-            summary: summary.into(),
-            published_at_ms: ts_ms,
-            dismissed: false,
-            dismissed_at_ms: None,
-            dismissed_by: None,
-        });
+        self.advisories.insert(
+            id.into(),
+            Advisory {
+                id: id.into(),
+                severity,
+                summary: summary.into(),
+                published_at_ms: ts_ms,
+                dismissed: false,
+                dismissed_at_ms: None,
+                dismissed_by: None,
+            },
+        );
         Ok(())
     }
 
     /// Dismiss (idempotent — preserves first dismissal metadata).
     pub fn dismiss(&mut self, id: &str, ts_ms: u64, actor: &str) -> Result<bool, AdvisoryError> {
-        if actor.is_empty() { return Err(AdvisoryError::EmptyActor); }
-        let a = self.advisories.get_mut(id).ok_or_else(|| AdvisoryError::UnknownAdvisory(id.into()))?;
-        if a.dismissed { return Ok(false); }
+        if actor.is_empty() {
+            return Err(AdvisoryError::EmptyActor);
+        }
+        let a = self
+            .advisories
+            .get_mut(id)
+            .ok_or_else(|| AdvisoryError::UnknownAdvisory(id.into()))?;
+        if a.dismissed {
+            return Ok(false);
+        }
         a.dismissed = true;
         a.dismissed_at_ms = Some(ts_ms);
         a.dismissed_by = Some(actor.into());
@@ -126,48 +146,74 @@ impl AdvisoryFeed {
 
     /// Active advisories newest first.
     pub fn active(&self) -> Vec<Advisory> {
-        let mut v: Vec<Advisory> = self.advisories.values()
+        let mut v: Vec<Advisory> = self
+            .advisories
+            .values()
             .filter(|a| !a.dismissed)
             .cloned()
             .collect();
-        v.sort_by(|a, b| b.published_at_ms.cmp(&a.published_at_ms).then(a.id.cmp(&b.id)));
+        v.sort_by(|a, b| {
+            b.published_at_ms
+                .cmp(&a.published_at_ms)
+                .then(a.id.cmp(&b.id))
+        });
         v
     }
 
     /// By minimum severity (active only).
     pub fn by_severity(&self, min: Severity) -> Vec<Advisory> {
-        let mut v: Vec<Advisory> = self.advisories.values()
+        let mut v: Vec<Advisory> = self
+            .advisories
+            .values()
             .filter(|a| !a.dismissed && a.severity >= min)
             .cloned()
             .collect();
-        v.sort_by(|a, b| b.published_at_ms.cmp(&a.published_at_ms).then(a.id.cmp(&b.id)));
+        v.sort_by(|a, b| {
+            b.published_at_ms
+                .cmp(&a.published_at_ms)
+                .then(a.id.cmp(&b.id))
+        });
         v
     }
 
     /// Drop dismissed older than max_age_ms.
     pub fn prune(&mut self, now_ms: u64, max_age_ms: u64) -> usize {
-        let to_drop: Vec<String> = self.advisories.iter()
-            .filter(|(_, a)| a.dismissed && now_ms.saturating_sub(a.dismissed_at_ms.unwrap_or(0)) > max_age_ms)
+        let to_drop: Vec<String> = self
+            .advisories
+            .iter()
+            .filter(|(_, a)| {
+                a.dismissed && now_ms.saturating_sub(a.dismissed_at_ms.unwrap_or(0)) > max_age_ms
+            })
             .map(|(k, _)| k.clone())
             .collect();
         let n = to_drop.len();
-        for k in to_drop { self.advisories.remove(&k); }
+        for k in to_drop {
+            self.advisories.remove(&k);
+        }
         n
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AdvisoryError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AdvisoryError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AdvisoryError::SchemaMismatch);
+        }
         for (id, a) in &self.advisories {
-            if id.is_empty() { return Err(AdvisoryError::EmptyId); }
-            if a.summary.is_empty() { return Err(AdvisoryError::EmptySummary); }
+            if id.is_empty() {
+                return Err(AdvisoryError::EmptyId);
+            }
+            if a.summary.is_empty() {
+                return Err(AdvisoryError::EmptySummary);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for AdvisoryFeed {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -240,29 +286,47 @@ mod tests {
     fn duplicate_rejected() {
         let mut f = AdvisoryFeed::new();
         f.publish("a", Severity::Info, "x", 0).unwrap();
-        assert!(matches!(f.publish("a", Severity::Info, "x", 0).unwrap_err(), AdvisoryError::DuplicateId(_)));
+        assert!(matches!(
+            f.publish("a", Severity::Info, "x", 0).unwrap_err(),
+            AdvisoryError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut f = AdvisoryFeed::new();
-        assert!(matches!(f.publish("", Severity::Info, "x", 0).unwrap_err(), AdvisoryError::EmptyId));
-        assert!(matches!(f.publish("a", Severity::Info, "", 0).unwrap_err(), AdvisoryError::EmptySummary));
+        assert!(matches!(
+            f.publish("", Severity::Info, "x", 0).unwrap_err(),
+            AdvisoryError::EmptyId
+        ));
+        assert!(matches!(
+            f.publish("a", Severity::Info, "", 0).unwrap_err(),
+            AdvisoryError::EmptySummary
+        ));
         f.publish("a", Severity::Info, "x", 0).unwrap();
-        assert!(matches!(f.dismiss("a", 0, "").unwrap_err(), AdvisoryError::EmptyActor));
+        assert!(matches!(
+            f.dismiss("a", 0, "").unwrap_err(),
+            AdvisoryError::EmptyActor
+        ));
     }
 
     #[test]
     fn dismiss_unknown_rejected() {
         let mut f = AdvisoryFeed::new();
-        assert!(matches!(f.dismiss("nope", 0, "a").unwrap_err(), AdvisoryError::UnknownAdvisory(_)));
+        assert!(matches!(
+            f.dismiss("nope", 0, "a").unwrap_err(),
+            AdvisoryError::UnknownAdvisory(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = AdvisoryFeed::new();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), AdvisoryError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            AdvisoryError::SchemaMismatch
+        ));
     }
 
     #[test]

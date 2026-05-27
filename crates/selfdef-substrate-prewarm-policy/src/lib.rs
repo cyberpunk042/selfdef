@@ -88,30 +88,94 @@ impl SubstratePrewarmPolicy {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let private = vec![
-            PrewarmStep { kind: StepKind::LoadModelWeights, budget_ms: 5_000, optional: false },
-            PrewarmStep { kind: StepKind::ConnectEventBus, budget_ms: 1_000, optional: false },
+            PrewarmStep {
+                kind: StepKind::LoadModelWeights,
+                budget_ms: 5_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::ConnectEventBus,
+                budget_ms: 1_000,
+                optional: false,
+            },
         ];
         let production = vec![
-            PrewarmStep { kind: StepKind::LoadModelWeights, budget_ms: 5_000, optional: false },
-            PrewarmStep { kind: StepKind::PrimeGpuContext, budget_ms: 4_000, optional: false },
-            PrewarmStep { kind: StepKind::WarmKvCache, budget_ms: 2_000, optional: false },
-            PrewarmStep { kind: StepKind::PreresolveDns, budget_ms: 1_500, optional: true },
-            PrewarmStep { kind: StepKind::ConnectEventBus, budget_ms: 1_000, optional: false },
+            PrewarmStep {
+                kind: StepKind::LoadModelWeights,
+                budget_ms: 5_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::PrimeGpuContext,
+                budget_ms: 4_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::WarmKvCache,
+                budget_ms: 2_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::PreresolveDns,
+                budget_ms: 1_500,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::ConnectEventBus,
+                budget_ms: 1_000,
+                optional: false,
+            },
         ];
         let fast = vec![
-            PrewarmStep { kind: StepKind::LoadModelWeights, budget_ms: 3_000, optional: false },
-            PrewarmStep { kind: StepKind::PrimeGpuContext, budget_ms: 2_000, optional: true },
-            PrewarmStep { kind: StepKind::ConnectEventBus, budget_ms: 1_000, optional: false },
+            PrewarmStep {
+                kind: StepKind::LoadModelWeights,
+                budget_ms: 3_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::PrimeGpuContext,
+                budget_ms: 2_000,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::ConnectEventBus,
+                budget_ms: 1_000,
+                optional: false,
+            },
         ];
         let careful = production.clone();
         let autonomous = production.clone();
         let experimental = vec![
-            PrewarmStep { kind: StepKind::LoadModelWeights, budget_ms: 10_000, optional: false },
-            PrewarmStep { kind: StepKind::PrimeGpuContext, budget_ms: 8_000, optional: true },
-            PrewarmStep { kind: StepKind::WarmKvCache, budget_ms: 4_000, optional: true },
-            PrewarmStep { kind: StepKind::RefreshEmbeddingCache, budget_ms: 3_000, optional: true },
-            PrewarmStep { kind: StepKind::PreresolveDns, budget_ms: 2_000, optional: true },
-            PrewarmStep { kind: StepKind::ConnectEventBus, budget_ms: 1_500, optional: false },
+            PrewarmStep {
+                kind: StepKind::LoadModelWeights,
+                budget_ms: 10_000,
+                optional: false,
+            },
+            PrewarmStep {
+                kind: StepKind::PrimeGpuContext,
+                budget_ms: 8_000,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::WarmKvCache,
+                budget_ms: 4_000,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::RefreshEmbeddingCache,
+                budget_ms: 3_000,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::PreresolveDns,
+                budget_ms: 2_000,
+                optional: true,
+            },
+            PrewarmStep {
+                kind: StepKind::ConnectEventBus,
+                budget_ms: 1_500,
+                optional: false,
+            },
         ];
 
         let mut s = BTreeMap::new();
@@ -134,10 +198,14 @@ impl SubstratePrewarmPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PrewarmError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PrewarmError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PrewarmError::SchemaMismatch);
+        }
         for steps in self.schedules.values() {
             for s in steps {
-                if s.budget_ms == 0 { return Err(PrewarmError::BudgetZero); }
+                if s.budget_ms == 0 {
+                    return Err(PrewarmError::BudgetZero);
+                }
             }
         }
         Ok(())
@@ -181,7 +249,11 @@ mod tests {
     #[test]
     fn dns_step_is_optional_everywhere() {
         let p = SubstratePrewarmPolicy::canonical();
-        for prof in [Profile::Production, Profile::Experimental, Profile::Autonomous] {
+        for prof in [
+            Profile::Production,
+            Profile::Experimental,
+            Profile::Autonomous,
+        ] {
             for step in p.plan(prof) {
                 if step.kind == StepKind::PreresolveDns {
                     assert!(step.optional);
@@ -193,17 +265,28 @@ mod tests {
     #[test]
     fn budget_zero_rejected_on_validate() {
         let mut p = SubstratePrewarmPolicy::canonical();
-        p.schedules.insert(Profile::Production, vec![
-            PrewarmStep { kind: StepKind::LoadModelWeights, budget_ms: 0, optional: false },
-        ]);
-        assert!(matches!(p.validate().unwrap_err(), PrewarmError::BudgetZero));
+        p.schedules.insert(
+            Profile::Production,
+            vec![PrewarmStep {
+                kind: StepKind::LoadModelWeights,
+                budget_ms: 0,
+                optional: false,
+            }],
+        );
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PrewarmError::BudgetZero
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstratePrewarmPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PrewarmError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PrewarmError::SchemaMismatch
+        ));
     }
 
     #[test]

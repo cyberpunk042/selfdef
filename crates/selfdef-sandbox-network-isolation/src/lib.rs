@@ -80,7 +80,9 @@ pub enum IsolationError {
 impl SandboxNetworkIsolation {
     /// New canonical.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Decide given (tier, destination_class).
@@ -109,73 +111,125 @@ impl SandboxNetworkIsolation {
 }
 
 impl Default for SandboxNetworkIsolation {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn p() -> SandboxNetworkIsolation { SandboxNetworkIsolation::new() }
+    fn p() -> SandboxNetworkIsolation {
+        SandboxNetworkIsolation::new()
+    }
 
     #[test]
     fn tier0_only_inprocess() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier0, DestClass::InProcess), IsolationDecision::Allow);
-        assert_eq!(p.decide(SandboxTier::Tier0, DestClass::Loopback), IsolationDecision::Deny);
+        assert_eq!(
+            p.decide(SandboxTier::Tier0, DestClass::InProcess),
+            IsolationDecision::Allow
+        );
+        assert_eq!(
+            p.decide(SandboxTier::Tier0, DestClass::Loopback),
+            IsolationDecision::Deny
+        );
     }
 
     #[test]
     fn tier1_loopback_ok() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier1, DestClass::Loopback), IsolationDecision::Allow);
-        assert_eq!(p.decide(SandboxTier::Tier1, DestClass::Lan), IsolationDecision::Deny);
+        assert_eq!(
+            p.decide(SandboxTier::Tier1, DestClass::Loopback),
+            IsolationDecision::Allow
+        );
+        assert_eq!(
+            p.decide(SandboxTier::Tier1, DestClass::Lan),
+            IsolationDecision::Deny
+        );
     }
 
     #[test]
     fn tier2_lan_ok() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier2, DestClass::Lan), IsolationDecision::Allow);
-        assert_eq!(p.decide(SandboxTier::Tier2, DestClass::AllowlistedExternal), IsolationDecision::Deny);
+        assert_eq!(
+            p.decide(SandboxTier::Tier2, DestClass::Lan),
+            IsolationDecision::Allow
+        );
+        assert_eq!(
+            p.decide(SandboxTier::Tier2, DestClass::AllowlistedExternal),
+            IsolationDecision::Deny
+        );
     }
 
     #[test]
     fn tier3_allowlisted_ok() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier3, DestClass::AllowlistedExternal), IsolationDecision::Allow);
-        assert_eq!(p.decide(SandboxTier::Tier3, DestClass::Public), IsolationDecision::Deny);
+        assert_eq!(
+            p.decide(SandboxTier::Tier3, DestClass::AllowlistedExternal),
+            IsolationDecision::Allow
+        );
+        assert_eq!(
+            p.decide(SandboxTier::Tier3, DestClass::Public),
+            IsolationDecision::Deny
+        );
     }
 
     #[test]
     fn tier4_public_ok() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier4, DestClass::Public), IsolationDecision::Allow);
+        assert_eq!(
+            p.decide(SandboxTier::Tier4, DestClass::Public),
+            IsolationDecision::Allow
+        );
     }
 
     #[test]
     fn higher_tiers_allow_lower_classes() {
         let p = p();
-        assert_eq!(p.decide(SandboxTier::Tier4, DestClass::InProcess), IsolationDecision::Allow);
-        assert_eq!(p.decide(SandboxTier::Tier3, DestClass::Loopback), IsolationDecision::Allow);
+        assert_eq!(
+            p.decide(SandboxTier::Tier4, DestClass::InProcess),
+            IsolationDecision::Allow
+        );
+        assert_eq!(
+            p.decide(SandboxTier::Tier3, DestClass::Loopback),
+            IsolationDecision::Allow
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = p();
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), IsolationError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            IsolationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SandboxTier::Tier0).unwrap(), "\"tier0\"");
-        assert_eq!(serde_json::to_string(&SandboxTier::Tier4).unwrap(), "\"tier4\"");
+        assert_eq!(
+            serde_json::to_string(&SandboxTier::Tier0).unwrap(),
+            "\"tier0\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SandboxTier::Tier4).unwrap(),
+            "\"tier4\""
+        );
     }
 
     #[test]
     fn dest_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DestClass::AllowlistedExternal).unwrap(), "\"allowlisted-external\"");
-        assert_eq!(serde_json::to_string(&DestClass::InProcess).unwrap(), "\"in-process\"");
+        assert_eq!(
+            serde_json::to_string(&DestClass::AllowlistedExternal).unwrap(),
+            "\"allowlisted-external\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DestClass::InProcess).unwrap(),
+            "\"in-process\""
+        );
     }
 
     #[test]

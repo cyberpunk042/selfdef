@@ -80,10 +80,25 @@ impl ActorSuspensionPolicy {
     }
 
     /// Suspend.
-    pub fn suspend(&mut self, actor: &str, reason: &str, unsuspend_at_ms: u64) -> Result<(), SuspensionError> {
-        if actor.is_empty() { return Err(SuspensionError::EmptyActor); }
-        if reason.is_empty() { return Err(SuspensionError::EmptyReason); }
-        self.records.insert(actor.into(), Suspension { reason: reason.into(), unsuspend_at_ms });
+    pub fn suspend(
+        &mut self,
+        actor: &str,
+        reason: &str,
+        unsuspend_at_ms: u64,
+    ) -> Result<(), SuspensionError> {
+        if actor.is_empty() {
+            return Err(SuspensionError::EmptyActor);
+        }
+        if reason.is_empty() {
+            return Err(SuspensionError::EmptyReason);
+        }
+        self.records.insert(
+            actor.into(),
+            Suspension {
+                reason: reason.into(),
+                unsuspend_at_ms,
+            },
+        );
         Ok(())
     }
 
@@ -116,17 +131,25 @@ impl ActorSuspensionPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SuspensionError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SuspensionError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SuspensionError::SchemaMismatch);
+        }
         for (k, v) in &self.records {
-            if k.is_empty() { return Err(SuspensionError::EmptyActor); }
-            if v.reason.is_empty() { return Err(SuspensionError::EmptyReason); }
+            if k.is_empty() {
+                return Err(SuspensionError::EmptyActor);
+            }
+            if v.reason.is_empty() {
+                return Err(SuspensionError::EmptyReason);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActorSuspensionPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -145,7 +168,10 @@ mod tests {
         p.suspend("a", "spam", 1000).unwrap();
         let v = p.classify("a", 500);
         match v {
-            SuspensionVerdict::Suspended { reason, unsuspend_at_ms } => {
+            SuspensionVerdict::Suspended {
+                reason,
+                unsuspend_at_ms,
+            } => {
                 assert_eq!(reason, "spam");
                 assert_eq!(unsuspend_at_ms, 1000);
             }
@@ -178,13 +204,19 @@ mod tests {
     #[test]
     fn empty_actor_rejected() {
         let mut p = ActorSuspensionPolicy::new();
-        assert!(matches!(p.suspend("", "x", 1).unwrap_err(), SuspensionError::EmptyActor));
+        assert!(matches!(
+            p.suspend("", "x", 1).unwrap_err(),
+            SuspensionError::EmptyActor
+        ));
     }
 
     #[test]
     fn empty_reason_rejected() {
         let mut p = ActorSuspensionPolicy::new();
-        assert!(matches!(p.suspend("a", "", 1).unwrap_err(), SuspensionError::EmptyReason));
+        assert!(matches!(
+            p.suspend("a", "", 1).unwrap_err(),
+            SuspensionError::EmptyReason
+        ));
     }
 
     #[test]
@@ -201,7 +233,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = ActorSuspensionPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SuspensionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SuspensionError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -79,7 +79,9 @@ pub fn dispatch(req: &ToolRequest) -> Result<SandboxTier, DispatchError> {
 
     // Untrusted tools never run on Tier A regardless of side-effect.
     if !req.trusted {
-        let want = if req.side_effect == SideEffectClass::ReadOnly && req.network == NetworkProfile::Offline {
+        let want = if req.side_effect == SideEffectClass::ReadOnly
+            && req.network == NetworkProfile::Offline
+        {
             SandboxTier::TierB
         } else if req.network == NetworkProfile::AuthenticatedBrowser {
             SandboxTier::TierD
@@ -87,7 +89,10 @@ pub fn dispatch(req: &ToolRequest) -> Result<SandboxTier, DispatchError> {
             SandboxTier::TierC
         };
         if !req.operator_approved {
-            return Err(DispatchError::UntrustedNeedsApproval { tool: req.tool.clone(), tier: want });
+            return Err(DispatchError::UntrustedNeedsApproval {
+                tool: req.tool.clone(),
+                tier: want,
+            });
         }
         return Ok(want);
     }
@@ -95,11 +100,15 @@ pub fn dispatch(req: &ToolRequest) -> Result<SandboxTier, DispatchError> {
     // Trusted-tool dispatch: walk side-effect + network.
     let tier = match (req.side_effect, req.network) {
         // Pure read-only + offline → Tier A.
-        (SideEffectClass::None | SideEffectClass::ReadOnly, NetworkProfile::Offline) => SandboxTier::TierA,
+        (SideEffectClass::None | SideEffectClass::ReadOnly, NetworkProfile::Offline) => {
+            SandboxTier::TierA
+        }
         // Read-only + any-network → Tier B.
         (SideEffectClass::ReadOnly, _) => SandboxTier::TierB,
         // Filesystem write, package-registries → Tier B.
-        (SideEffectClass::FsWrite, NetworkProfile::Offline | NetworkProfile::PackageRegistries) => SandboxTier::TierB,
+        (SideEffectClass::FsWrite, NetworkProfile::Offline | NetworkProfile::PackageRegistries) => {
+            SandboxTier::TierB
+        }
         // Filesystem write + docs/arbitrary/authenticated → Tier C.
         (SideEffectClass::FsWrite, _) => SandboxTier::TierC,
         // Network egress + non-offline → Tier B (package-registries) or Tier C (docs+) or Tier D (authenticated).
@@ -109,11 +118,20 @@ pub fn dispatch(req: &ToolRequest) -> Result<SandboxTier, DispatchError> {
             ));
         }
         (SideEffectClass::NetworkEgress, NetworkProfile::PackageRegistries) => SandboxTier::TierB,
-        (SideEffectClass::NetworkEgress, NetworkProfile::DocsOnly | NetworkProfile::ArbitraryWeb) => SandboxTier::TierC,
-        (SideEffectClass::NetworkEgress, NetworkProfile::AuthenticatedBrowser) => SandboxTier::TierC,
+        (
+            SideEffectClass::NetworkEgress,
+            NetworkProfile::DocsOnly | NetworkProfile::ArbitraryWeb,
+        ) => SandboxTier::TierC,
+        (SideEffectClass::NetworkEgress, NetworkProfile::AuthenticatedBrowser) => {
+            SandboxTier::TierC
+        }
         // Process spawn → Tier C (or D when high-risk).
         (SideEffectClass::Process, _) => {
-            if req.risk == RiskClass::High { SandboxTier::TierD } else { SandboxTier::TierC }
+            if req.risk == RiskClass::High {
+                SandboxTier::TierD
+            } else {
+                SandboxTier::TierC
+            }
         }
         // Persistent change — should already have been L5/L6-gated; default Tier B + operator approval.
         (SideEffectClass::Persistent, _) => {
@@ -149,8 +167,12 @@ mod tests {
 
     #[test]
     fn empty_tool_rejected() {
-        let mut r = req(); r.tool = String::new();
-        assert!(matches!(dispatch(&r).unwrap_err(), DispatchError::EmptyTool));
+        let mut r = req();
+        r.tool = String::new();
+        assert!(matches!(
+            dispatch(&r).unwrap_err(),
+            DispatchError::EmptyTool
+        ));
     }
 
     #[test]
@@ -188,7 +210,10 @@ mod tests {
         let mut r = req();
         r.side_effect = SideEffectClass::NetworkEgress;
         r.network = NetworkProfile::Offline;
-        assert!(matches!(dispatch(&r).unwrap_err(), DispatchError::ImpossibleCombination(_)));
+        assert!(matches!(
+            dispatch(&r).unwrap_err(),
+            DispatchError::ImpossibleCombination(_)
+        ));
     }
 
     #[test]
@@ -220,7 +245,10 @@ mod tests {
         let mut r = req();
         r.side_effect = SideEffectClass::Persistent;
         r.operator_approved = false;
-        assert!(matches!(dispatch(&r).unwrap_err(), DispatchError::UntrustedNeedsApproval { .. }));
+        assert!(matches!(
+            dispatch(&r).unwrap_err(),
+            DispatchError::UntrustedNeedsApproval { .. }
+        ));
         r.operator_approved = true;
         assert_eq!(dispatch(&r).unwrap(), SandboxTier::TierB);
     }
@@ -230,7 +258,10 @@ mod tests {
         let mut r = req();
         r.trusted = false;
         r.operator_approved = false;
-        assert!(matches!(dispatch(&r).unwrap_err(), DispatchError::UntrustedNeedsApproval { .. }));
+        assert!(matches!(
+            dispatch(&r).unwrap_err(),
+            DispatchError::UntrustedNeedsApproval { .. }
+        ));
     }
 
     #[test]
@@ -264,6 +295,9 @@ mod tests {
         let mut r = req();
         r.risk = RiskClass::Critical;
         r.operator_approved = false;
-        assert!(matches!(dispatch(&r).unwrap_err(), DispatchError::UntrustedNeedsApproval { .. }));
+        assert!(matches!(
+            dispatch(&r).unwrap_err(),
+            DispatchError::UntrustedNeedsApproval { .. }
+        ));
     }
 }

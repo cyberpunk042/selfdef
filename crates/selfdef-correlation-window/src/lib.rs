@@ -44,7 +44,9 @@ pub enum WindowError {
 impl CorrelationWindow {
     /// New.
     pub fn new(window_ms: u64) -> Result<Self, WindowError> {
-        if window_ms == 0 { return Err(WindowError::ZeroWindow); }
+        if window_ms == 0 {
+            return Err(WindowError::ZeroWindow);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_ms,
@@ -54,8 +56,13 @@ impl CorrelationWindow {
 
     /// Record an event timestamp for a subject.
     pub fn record(&mut self, subject: &str, now_ms: u64) -> Result<(), WindowError> {
-        if subject.is_empty() { return Err(WindowError::EmptySubject); }
-        self.timestamps.entry(subject.into()).or_default().push(now_ms);
+        if subject.is_empty() {
+            return Err(WindowError::EmptySubject);
+        }
+        self.timestamps
+            .entry(subject.into())
+            .or_default()
+            .push(now_ms);
         Ok(())
     }
 
@@ -88,7 +95,8 @@ impl CorrelationWindow {
     /// Subjects with count >= threshold.
     pub fn subjects_above(&mut self, now_ms: u64, threshold: u32) -> Vec<String> {
         self.prune(now_ms);
-        self.timestamps.iter()
+        self.timestamps
+            .iter()
             .filter(|(_, v)| v.len() as u32 >= threshold)
             .map(|(s, _)| s.clone())
             .collect()
@@ -99,9 +107,13 @@ impl CorrelationWindow {
         if self.schema_version != SCHEMA_VERSION {
             return Err(WindowError::SchemaMismatch);
         }
-        if self.window_ms == 0 { return Err(WindowError::ZeroWindow); }
+        if self.window_ms == 0 {
+            return Err(WindowError::ZeroWindow);
+        }
         for s in self.timestamps.keys() {
-            if s.is_empty() { return Err(WindowError::EmptySubject); }
+            if s.is_empty() {
+                return Err(WindowError::EmptySubject);
+            }
         }
         Ok(())
     }
@@ -113,7 +125,10 @@ mod tests {
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(CorrelationWindow::new(0).unwrap_err(), WindowError::ZeroWindow));
+        assert!(matches!(
+            CorrelationWindow::new(0).unwrap_err(),
+            WindowError::ZeroWindow
+        ));
     }
 
     #[test]
@@ -157,8 +172,12 @@ mod tests {
     #[test]
     fn subjects_above_threshold() {
         let mut w = CorrelationWindow::new(60_000).unwrap();
-        for i in 0..5 { w.record("alice", 1_000 + i * 100).unwrap(); }
-        for i in 0..2 { w.record("bob", 1_000 + i * 100).unwrap(); }
+        for i in 0..5 {
+            w.record("alice", 1_000 + i * 100).unwrap();
+        }
+        for i in 0..2 {
+            w.record("bob", 1_000 + i * 100).unwrap();
+        }
         let v = w.subjects_above(2_000, 3);
         assert_eq!(v.len(), 1);
         assert_eq!(v[0], "alice");
@@ -175,14 +194,20 @@ mod tests {
     #[test]
     fn empty_subject_rejected() {
         let mut w = CorrelationWindow::new(1_000).unwrap();
-        assert!(matches!(w.record("", 0).unwrap_err(), WindowError::EmptySubject));
+        assert!(matches!(
+            w.record("", 0).unwrap_err(),
+            WindowError::EmptySubject
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut w = CorrelationWindow::new(1_000).unwrap();
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), WindowError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WindowError::SchemaMismatch
+        ));
     }
 
     #[test]

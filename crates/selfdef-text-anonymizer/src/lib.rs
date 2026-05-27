@@ -68,19 +68,33 @@ impl TextAnonymizer {
     }
 
     /// Register.
-    pub fn register(&mut self, id: &str, needle: &str, placeholder: &str) -> Result<(), AnonymizerError> {
-        if id.is_empty() { return Err(AnonymizerError::EmptyId); }
-        if needle.is_empty() { return Err(AnonymizerError::EmptyNeedle); }
-        if placeholder.is_empty() { return Err(AnonymizerError::EmptyPlaceholder); }
+    pub fn register(
+        &mut self,
+        id: &str,
+        needle: &str,
+        placeholder: &str,
+    ) -> Result<(), AnonymizerError> {
+        if id.is_empty() {
+            return Err(AnonymizerError::EmptyId);
+        }
+        if needle.is_empty() {
+            return Err(AnonymizerError::EmptyNeedle);
+        }
+        if placeholder.is_empty() {
+            return Err(AnonymizerError::EmptyPlaceholder);
+        }
         if self.patterns.contains_key(id) {
             return Err(AnonymizerError::DuplicateId(id.into()));
         }
-        self.patterns.insert(id.into(), Pattern {
-            id: id.into(),
-            needle: needle.into(),
-            placeholder: placeholder.into(),
-            hits: 0,
-        });
+        self.patterns.insert(
+            id.into(),
+            Pattern {
+                id: id.into(),
+                needle: needle.into(),
+                placeholder: placeholder.into(),
+                hits: 0,
+            },
+        );
         Ok(())
     }
 
@@ -111,23 +125,36 @@ impl TextAnonymizer {
 
     /// Total hits across all patterns.
     pub fn total_hits(&self) -> u64 {
-        self.patterns.values().map(|p| p.hits).fold(0u64, |a, b| a.saturating_add(b))
+        self.patterns
+            .values()
+            .map(|p| p.hits)
+            .fold(0u64, |a, b| a.saturating_add(b))
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AnonymizerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AnonymizerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AnonymizerError::SchemaMismatch);
+        }
         for (id, p) in &self.patterns {
-            if id.is_empty() { return Err(AnonymizerError::EmptyId); }
-            if p.needle.is_empty() { return Err(AnonymizerError::EmptyNeedle); }
-            if p.placeholder.is_empty() { return Err(AnonymizerError::EmptyPlaceholder); }
+            if id.is_empty() {
+                return Err(AnonymizerError::EmptyId);
+            }
+            if p.needle.is_empty() {
+                return Err(AnonymizerError::EmptyNeedle);
+            }
+            if p.placeholder.is_empty() {
+                return Err(AnonymizerError::EmptyPlaceholder);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TextAnonymizer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -174,15 +201,27 @@ mod tests {
     fn duplicate_rejected() {
         let mut t = TextAnonymizer::new();
         t.register("p", "x", "y").unwrap();
-        assert!(matches!(t.register("p", "x", "y").unwrap_err(), AnonymizerError::DuplicateId(_)));
+        assert!(matches!(
+            t.register("p", "x", "y").unwrap_err(),
+            AnonymizerError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut t = TextAnonymizer::new();
-        assert!(matches!(t.register("", "n", "p").unwrap_err(), AnonymizerError::EmptyId));
-        assert!(matches!(t.register("p", "", "p").unwrap_err(), AnonymizerError::EmptyNeedle));
-        assert!(matches!(t.register("p", "n", "").unwrap_err(), AnonymizerError::EmptyPlaceholder));
+        assert!(matches!(
+            t.register("", "n", "p").unwrap_err(),
+            AnonymizerError::EmptyId
+        ));
+        assert!(matches!(
+            t.register("p", "", "p").unwrap_err(),
+            AnonymizerError::EmptyNeedle
+        ));
+        assert!(matches!(
+            t.register("p", "n", "").unwrap_err(),
+            AnonymizerError::EmptyPlaceholder
+        ));
     }
 
     #[test]
@@ -198,7 +237,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = TextAnonymizer::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), AnonymizerError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            AnonymizerError::SchemaMismatch
+        ));
     }
 
     #[test]

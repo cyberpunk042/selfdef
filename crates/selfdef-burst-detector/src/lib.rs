@@ -73,9 +73,16 @@ pub enum BurstError {
 
 impl BurstDetector {
     /// New.
-    pub fn new(window_ms: u64, elevated_threshold: u32, burst_threshold: u32) -> Result<Self, BurstError> {
+    pub fn new(
+        window_ms: u64,
+        elevated_threshold: u32,
+        burst_threshold: u32,
+    ) -> Result<Self, BurstError> {
         if elevated_threshold >= burst_threshold {
-            return Err(BurstError::BadThresholds(elevated_threshold, burst_threshold));
+            return Err(BurstError::BadThresholds(
+                elevated_threshold,
+                burst_threshold,
+            ));
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -88,17 +95,26 @@ impl BurstDetector {
 
     /// Observe.
     pub fn observe(&mut self, subject: &str, kind: &str, ts_ms: u64) -> Result<(), BurstError> {
-        if subject.is_empty() { return Err(BurstError::EmptySubject); }
-        if kind.is_empty() { return Err(BurstError::EmptyKind); }
-        self.observations.entry(subject.into()).or_default()
-            .entry(kind.into()).or_default()
+        if subject.is_empty() {
+            return Err(BurstError::EmptySubject);
+        }
+        if kind.is_empty() {
+            return Err(BurstError::EmptyKind);
+        }
+        self.observations
+            .entry(subject.into())
+            .or_default()
+            .entry(kind.into())
+            .or_default()
             .push(ts_ms);
         Ok(())
     }
 
     /// Classify count in window.
     pub fn classify(&self, subject: &str, kind: &str, now_ms: u64) -> BurstVerdict {
-        let count = self.observations.get(subject)
+        let count = self
+            .observations
+            .get(subject)
             .and_then(|m| m.get(kind))
             .map(|v| {
                 let cutoff = now_ms.saturating_sub(self.window_ms);
@@ -106,7 +122,10 @@ impl BurstDetector {
             })
             .unwrap_or(0);
         if count >= self.burst_threshold {
-            BurstVerdict::Burst { count, threshold: self.burst_threshold }
+            BurstVerdict::Burst {
+                count,
+                threshold: self.burst_threshold,
+            }
         } else if count >= self.elevated_threshold {
             BurstVerdict::Elevated { count }
         } else {
@@ -118,7 +137,9 @@ impl BurstDetector {
     pub fn rotate(&mut self, now_ms: u64) {
         let cutoff = now_ms.saturating_sub(self.window_ms);
         for (_, m) in self.observations.iter_mut() {
-            for v in m.values_mut() { v.retain(|t| *t >= cutoff); }
+            for v in m.values_mut() {
+                v.retain(|t| *t >= cutoff);
+            }
             m.retain(|_, v| !v.is_empty());
         }
         self.observations.retain(|_, m| !m.is_empty());
@@ -126,9 +147,14 @@ impl BurstDetector {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BurstError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BurstError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BurstError::SchemaMismatch);
+        }
         if self.elevated_threshold >= self.burst_threshold {
-            return Err(BurstError::BadThresholds(self.elevated_threshold, self.burst_threshold));
+            return Err(BurstError::BadThresholds(
+                self.elevated_threshold,
+                self.burst_threshold,
+            ));
         }
         Ok(())
     }
@@ -140,7 +166,10 @@ mod tests {
 
     #[test]
     fn bad_thresholds_rejected() {
-        assert!(matches!(BurstDetector::new(1000, 10, 5).unwrap_err(), BurstError::BadThresholds(_, _)));
+        assert!(matches!(
+            BurstDetector::new(1000, 10, 5).unwrap_err(),
+            BurstError::BadThresholds(_, _)
+        ));
     }
 
     #[test]
@@ -153,7 +182,9 @@ mod tests {
     #[test]
     fn elevated_band() {
         let mut b = BurstDetector::new(1000, 2, 4).unwrap();
-        for i in 0..3 { b.observe("s", "k", i * 100).unwrap(); }
+        for i in 0..3 {
+            b.observe("s", "k", i * 100).unwrap();
+        }
         match b.classify("s", "k", 500) {
             BurstVerdict::Elevated { count } => assert_eq!(count, 3),
             _ => panic!(),
@@ -163,7 +194,9 @@ mod tests {
     #[test]
     fn burst_band() {
         let mut b = BurstDetector::new(1000, 2, 4).unwrap();
-        for i in 0..5 { b.observe("s", "k", i * 100).unwrap(); }
+        for i in 0..5 {
+            b.observe("s", "k", i * 100).unwrap();
+        }
         match b.classify("s", "k", 500) {
             BurstVerdict::Burst { count, threshold } => {
                 assert_eq!(count, 5);
@@ -176,7 +209,9 @@ mod tests {
     #[test]
     fn out_of_window_excluded() {
         let mut b = BurstDetector::new(1000, 2, 4).unwrap();
-        for i in 0..5 { b.observe("s", "k", i * 100).unwrap(); }
+        for i in 0..5 {
+            b.observe("s", "k", i * 100).unwrap();
+        }
         // Far in the future.
         assert_eq!(b.classify("s", "k", 1_000_000), BurstVerdict::Calm);
     }
@@ -184,8 +219,14 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut b = BurstDetector::new(1000, 2, 4).unwrap();
-        assert!(matches!(b.observe("", "k", 0).unwrap_err(), BurstError::EmptySubject));
-        assert!(matches!(b.observe("s", "", 0).unwrap_err(), BurstError::EmptyKind));
+        assert!(matches!(
+            b.observe("", "k", 0).unwrap_err(),
+            BurstError::EmptySubject
+        ));
+        assert!(matches!(
+            b.observe("s", "", 0).unwrap_err(),
+            BurstError::EmptyKind
+        ));
     }
 
     #[test]
@@ -200,7 +241,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut b = BurstDetector::new(1000, 2, 4).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BurstError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BurstError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -8,10 +8,16 @@ pub(crate) fn run_schema() -> Result<i32> {
     println!();
     println!("4 transports (per E0342 dump 3456-3462):");
     for (t, scope) in &[
-        ("VirtioVsock",     "AF_VSOCK virtio socket (host↔VM kernel-level)"),
-        ("GrpcOverVsock",   "gRPC framed over AF_VSOCK"),
+        (
+            "VirtioVsock",
+            "AF_VSOCK virtio socket (host↔VM kernel-level)",
+        ),
+        ("GrpcOverVsock", "gRPC framed over AF_VSOCK"),
         ("UnixSocketProxy", "Unix-socket forwarded over shared mount"),
-        ("SharedFolder",   "explicit-exchange dirs per SDD-045 (slowest; large payloads)"),
+        (
+            "SharedFolder",
+            "explicit-exchange dirs per SDD-045 (slowest; large payloads)",
+        ),
     ] {
         println!("  - {:<16} {}", t, scope);
     }
@@ -20,14 +26,22 @@ pub(crate) fn run_schema() -> Result<i32> {
     println!("type              direction  content");
     println!("-----------------------------------------------------------");
     for (m, dir, content) in &[
-        ("DraftRequest",      "host→VM",  "ask for generation"),
-        ("DraftResult",       "VM→host",  "drafts response"),
-        ("EmbeddingRequest",  "host→VM",  "ask for embeddings"),
-        ("RerankResult",      "VM→host",  "reranked candidates"),
-        ("VisionResult",      "VM→host",  "vision / GUI / perception output"),
-        ("ToolPlan",          "VM→host",  "proposed tool calls (PROPOSAL)"),
-        ("RiskAssessment",    "VM→host",  "scored risk (PROPOSAL)"),
-        ("PatchProposal",     "VM→host",  "file patches (PROPOSAL — SDD-045 flow)"),
+        ("DraftRequest", "host→VM", "ask for generation"),
+        ("DraftResult", "VM→host", "drafts response"),
+        ("EmbeddingRequest", "host→VM", "ask for embeddings"),
+        ("RerankResult", "VM→host", "reranked candidates"),
+        (
+            "VisionResult",
+            "VM→host",
+            "vision / GUI / perception output",
+        ),
+        ("ToolPlan", "VM→host", "proposed tool calls (PROPOSAL)"),
+        ("RiskAssessment", "VM→host", "scored risk (PROPOSAL)"),
+        (
+            "PatchProposal",
+            "VM→host",
+            "file patches (PROPOSAL — SDD-045 flow)",
+        ),
     ] {
         println!("{:<18}{:<11}{}", m, dir, content);
     }

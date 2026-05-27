@@ -50,7 +50,9 @@ pub enum SeenError {
 impl SeenSet {
     /// New.
     pub fn new(capacity: u32, ttl_ms: u64) -> Result<Self, SeenError> {
-        if capacity == 0 || ttl_ms == 0 { return Err(SeenError::ZeroParameter); }
+        if capacity == 0 || ttl_ms == 0 {
+            return Err(SeenError::ZeroParameter);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -63,7 +65,9 @@ impl SeenSet {
 
     /// First-time observation?
     pub fn first_time(&mut self, id: &str, now_ms: u64) -> Result<bool, SeenError> {
-        if id.is_empty() { return Err(SeenError::EmptyId); }
+        if id.is_empty() {
+            return Err(SeenError::EmptyId);
+        }
         self.observations = self.observations.saturating_add(1);
         // Lazy TTL prune for this id.
         if let Some(&ts) = self.seen.get(id) {
@@ -75,8 +79,14 @@ impl SeenSet {
         // Capacity check.
         if (self.seen.len() as u32) >= self.capacity {
             // Evict oldest.
-            let oldest = self.seen.iter().min_by_key(|(_, ts)| *ts).map(|(k, _)| k.clone());
-            if let Some(k) = oldest { self.seen.remove(&k); }
+            let oldest = self
+                .seen
+                .iter()
+                .min_by_key(|(_, ts)| *ts)
+                .map(|(k, _)| k.clone());
+            if let Some(k) = oldest {
+                self.seen.remove(&k);
+            }
         }
         self.seen.insert(id.into(), now_ms);
         self.first_times = self.first_times.saturating_add(1);
@@ -85,27 +95,41 @@ impl SeenSet {
 
     /// Sweep expired.
     pub fn sweep(&mut self, now_ms: u64) -> u32 {
-        let stale: Vec<String> = self.seen.iter()
+        let stale: Vec<String> = self
+            .seen
+            .iter()
             .filter(|(_, ts)| now_ms.saturating_sub(**ts) >= self.ttl_ms)
             .map(|(k, _)| k.clone())
             .collect();
         let n = stale.len() as u32;
-        for k in stale { self.seen.remove(&k); }
+        for k in stale {
+            self.seen.remove(&k);
+        }
         n
     }
 
     /// Count.
-    pub fn len(&self) -> usize { self.seen.len() }
+    pub fn len(&self) -> usize {
+        self.seen.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.seen.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.seen.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SeenError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SeenError::SchemaMismatch); }
-        if self.capacity == 0 || self.ttl_ms == 0 { return Err(SeenError::ZeroParameter); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SeenError::SchemaMismatch);
+        }
+        if self.capacity == 0 || self.ttl_ms == 0 {
+            return Err(SeenError::ZeroParameter);
+        }
         for k in self.seen.keys() {
-            if k.is_empty() { return Err(SeenError::EmptyId); }
+            if k.is_empty() {
+                return Err(SeenError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -154,20 +178,32 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut s = SeenSet::new(5, 1000).unwrap();
-        assert!(matches!(s.first_time("", 0).unwrap_err(), SeenError::EmptyId));
+        assert!(matches!(
+            s.first_time("", 0).unwrap_err(),
+            SeenError::EmptyId
+        ));
     }
 
     #[test]
     fn zero_param_rejected() {
-        assert!(matches!(SeenSet::new(0, 1000).unwrap_err(), SeenError::ZeroParameter));
-        assert!(matches!(SeenSet::new(5, 0).unwrap_err(), SeenError::ZeroParameter));
+        assert!(matches!(
+            SeenSet::new(0, 1000).unwrap_err(),
+            SeenError::ZeroParameter
+        ));
+        assert!(matches!(
+            SeenSet::new(5, 0).unwrap_err(),
+            SeenError::ZeroParameter
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = SeenSet::new(5, 1000).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SeenError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SeenError::SchemaMismatch
+        ));
     }
 
     #[test]

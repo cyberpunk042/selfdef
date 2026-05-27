@@ -101,13 +101,17 @@ impl LineDiff {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DiffError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DiffError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DiffError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for LineDiff {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -148,12 +152,15 @@ mod tests {
         let b = lines(&["a", "c", "d"]);
         let ops = diff(&a, &b);
         // Expect: Keep(a) Del(b) Keep(c) Add(d).
-        assert_eq!(ops, vec![
-            Op::Keep("a".into()),
-            Op::Del("b".into()),
-            Op::Keep("c".into()),
-            Op::Add("d".into()),
-        ]);
+        assert_eq!(
+            ops,
+            vec![
+                Op::Keep("a".into()),
+                Op::Del("b".into()),
+                Op::Keep("c".into()),
+                Op::Add("d".into()),
+            ]
+        );
     }
 
     #[test]
@@ -177,7 +184,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = LineDiff::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DiffError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DiffError::SchemaMismatch
+        ));
     }
 
     #[test]

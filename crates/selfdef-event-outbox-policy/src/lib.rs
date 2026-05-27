@@ -61,15 +61,23 @@ impl EventOutboxPolicy {
 
     /// Append.
     pub fn append(&mut self, payload: &str, ts_ms: u64) -> Result<u64, OutboxError> {
-        if payload.is_empty() { return Err(OutboxError::EmptyPayload); }
+        if payload.is_empty() {
+            return Err(OutboxError::EmptyPayload);
+        }
         let seq = self.next_seq;
         self.next_seq = self.next_seq.wrapping_add(1);
-        self.pending.push(Event { seq, payload: payload.into(), ts_ms });
+        self.pending.push(Event {
+            seq,
+            payload: payload.into(),
+            ts_ms,
+        });
         Ok(seq)
     }
 
     /// Pending events.
-    pub fn pending(&self) -> &[Event] { &self.pending }
+    pub fn pending(&self) -> &[Event] {
+        &self.pending
+    }
 
     /// Confirm up to seq (inclusive).
     pub fn confirm(&mut self, up_to_seq: u64) -> usize {
@@ -80,16 +88,22 @@ impl EventOutboxPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), OutboxError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(OutboxError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(OutboxError::SchemaMismatch);
+        }
         for e in &self.pending {
-            if e.payload.is_empty() { return Err(OutboxError::EmptyPayload); }
+            if e.payload.is_empty() {
+                return Err(OutboxError::EmptyPayload);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for EventOutboxPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -136,14 +150,20 @@ mod tests {
     #[test]
     fn empty_payload_rejected() {
         let mut o = EventOutboxPolicy::new();
-        assert!(matches!(o.append("", 0).unwrap_err(), OutboxError::EmptyPayload));
+        assert!(matches!(
+            o.append("", 0).unwrap_err(),
+            OutboxError::EmptyPayload
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut o = EventOutboxPolicy::new();
         o.schema_version = "9.9.9".into();
-        assert!(matches!(o.validate().unwrap_err(), OutboxError::SchemaMismatch));
+        assert!(matches!(
+            o.validate().unwrap_err(),
+            OutboxError::SchemaMismatch
+        ));
     }
 
     #[test]

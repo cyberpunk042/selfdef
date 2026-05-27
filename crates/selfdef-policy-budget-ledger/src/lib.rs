@@ -118,12 +118,18 @@ impl BudgetLedger {
 
     /// Add a cap.
     pub fn set_cap(&mut self, cap: Cap) -> Result<(), LedgerError> {
-        if cap.subject.is_empty() { return Err(LedgerError::CapEmptySubject); }
+        if cap.subject.is_empty() {
+            return Err(LedgerError::CapEmptySubject);
+        }
         if cap.millicents_cap == 0 {
-            return Err(LedgerError::CapZero { subject: cap.subject, window: cap.window });
+            return Err(LedgerError::CapZero {
+                subject: cap.subject,
+                window: cap.window,
+            });
         }
         // Replace existing cap for same (subject, window).
-        self.caps.retain(|c| !(c.subject == cap.subject && c.window == cap.window));
+        self.caps
+            .retain(|c| !(c.subject == cap.subject && c.window == cap.window));
         self.caps.push(cap);
         Ok(())
     }
@@ -137,8 +143,12 @@ impl BudgetLedger {
         tokens_out: u64,
         millicents: u64,
     ) -> Result<(), LedgerError> {
-        if subject.is_empty() { return Err(LedgerError::EmptySubject); }
-        if provider.is_empty() { return Err(LedgerError::EmptyProvider); }
+        if subject.is_empty() {
+            return Err(LedgerError::EmptySubject);
+        }
+        if provider.is_empty() {
+            return Err(LedgerError::EmptyProvider);
+        }
         let b = self.buckets.entry(key(subject, provider)).or_default();
         b.tokens_in += tokens_in;
         b.tokens_out += tokens_out;
@@ -148,7 +158,8 @@ impl BudgetLedger {
 
     /// Total millicents spent by subject (sum across all providers).
     pub fn subject_total_millicents(&self, subject: &str) -> u64 {
-        self.buckets.iter()
+        self.buckets
+            .iter()
             .filter(|(k, _)| k.starts_with(&format!("{subject}|")))
             .map(|(_, b)| b.millicents)
             .sum()
@@ -156,13 +167,21 @@ impl BudgetLedger {
 
     /// Evaluate verdict against a specific cap (subject, window).
     pub fn evaluate(&self, subject: &str, window: Window) -> BudgetVerdict {
-        let cap_mc = self.caps.iter()
+        let cap_mc = self
+            .caps
+            .iter()
             .find(|c| c.subject == subject && c.window == window)
             .map(|c| c.millicents_cap);
-        let Some(cap) = cap_mc else { return BudgetVerdict::Within; };
+        let Some(cap) = cap_mc else {
+            return BudgetVerdict::Within;
+        };
         let spent = self.subject_total_millicents(subject);
-        if spent >= cap { return BudgetVerdict::Breach; }
-        if spent * 10 >= cap * 9 { return BudgetVerdict::Near; }
+        if spent >= cap {
+            return BudgetVerdict::Breach;
+        }
+        if spent * 10 >= cap * 9 {
+            return BudgetVerdict::Near;
+        }
         BudgetVerdict::Within
     }
 
@@ -172,9 +191,14 @@ impl BudgetLedger {
             return Err(LedgerError::SchemaMismatch);
         }
         for c in &self.caps {
-            if c.subject.is_empty() { return Err(LedgerError::CapEmptySubject); }
+            if c.subject.is_empty() {
+                return Err(LedgerError::CapEmptySubject);
+            }
             if c.millicents_cap == 0 {
-                return Err(LedgerError::CapZero { subject: c.subject.clone(), window: c.window });
+                return Err(LedgerError::CapZero {
+                    subject: c.subject.clone(),
+                    window: c.window,
+                });
             }
         }
         Ok(())
@@ -182,7 +206,9 @@ impl BudgetLedger {
 }
 
 impl Default for BudgetLedger {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -219,7 +245,12 @@ mod tests {
     #[test]
     fn verdict_within_below_threshold() {
         let mut l = BudgetLedger::new();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 1000 }).unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 1000,
+        })
+        .unwrap();
         l.charge("alice", "p", 0, 0, 300).unwrap();
         assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Within);
     }
@@ -227,7 +258,12 @@ mod tests {
     #[test]
     fn verdict_near_at_90_percent() {
         let mut l = BudgetLedger::new();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 1000 }).unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 1000,
+        })
+        .unwrap();
         l.charge("alice", "p", 0, 0, 900).unwrap();
         assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Near);
     }
@@ -235,7 +271,12 @@ mod tests {
     #[test]
     fn verdict_breach_at_cap() {
         let mut l = BudgetLedger::new();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 1000 }).unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 1000,
+        })
+        .unwrap();
         l.charge("alice", "p", 0, 0, 1000).unwrap();
         assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Breach);
         l.charge("alice", "p", 0, 0, 5000).unwrap();
@@ -251,8 +292,18 @@ mod tests {
     #[test]
     fn set_cap_replaces_existing() {
         let mut l = BudgetLedger::new();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 1000 }).unwrap();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 5000 }).unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 1000,
+        })
+        .unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Daily,
+            millicents_cap: 5000,
+        })
+        .unwrap();
         // Now 4000 spent should be Within (not breach).
         l.charge("alice", "p", 0, 0, 4000).unwrap();
         assert_eq!(l.evaluate("alice", Window::Daily), BudgetVerdict::Within);
@@ -261,7 +312,13 @@ mod tests {
     #[test]
     fn cap_zero_rejected() {
         let mut l = BudgetLedger::new();
-        let err = l.set_cap(Cap { subject: "alice".into(), window: Window::Daily, millicents_cap: 0 }).unwrap_err();
+        let err = l
+            .set_cap(Cap {
+                subject: "alice".into(),
+                window: Window::Daily,
+                millicents_cap: 0,
+            })
+            .unwrap_err();
         assert!(matches!(err, LedgerError::CapZero { .. }));
     }
 
@@ -283,20 +340,37 @@ mod tests {
     fn schema_drift_rejected() {
         let mut l = BudgetLedger::new();
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn verdict_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BudgetVerdict::Within).unwrap(), "\"within\"");
-        assert_eq!(serde_json::to_string(&BudgetVerdict::Near).unwrap(), "\"near\"");
-        assert_eq!(serde_json::to_string(&BudgetVerdict::Breach).unwrap(), "\"breach\"");
+        assert_eq!(
+            serde_json::to_string(&BudgetVerdict::Within).unwrap(),
+            "\"within\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BudgetVerdict::Near).unwrap(),
+            "\"near\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BudgetVerdict::Breach).unwrap(),
+            "\"breach\""
+        );
     }
 
     #[test]
     fn ledger_serde_roundtrip() {
         let mut l = BudgetLedger::new();
-        l.set_cap(Cap { subject: "alice".into(), window: Window::Monthly, millicents_cap: 50_000 }).unwrap();
+        l.set_cap(Cap {
+            subject: "alice".into(),
+            window: Window::Monthly,
+            millicents_cap: 50_000,
+        })
+        .unwrap();
         l.charge("alice", "cloud-anthropic", 100, 50, 200).unwrap();
         let j = serde_json::to_string(&l).unwrap();
         let back: BudgetLedger = serde_json::from_str(&j).unwrap();

@@ -105,12 +105,48 @@ impl LlmTokenThrottle {
     pub fn canonical() -> Self {
         let mut profiles = BTreeMap::new();
         let m: u64 = 60_000;
-        profiles.insert(Profile::Private, ProfileTokens { window_ms: m, window_token_budget: 20_000 });
-        profiles.insert(Profile::Fast, ProfileTokens { window_ms: m, window_token_budget: 80_000 });
-        profiles.insert(Profile::Careful, ProfileTokens { window_ms: m, window_token_budget: 40_000 });
-        profiles.insert(Profile::Autonomous, ProfileTokens { window_ms: m, window_token_budget: 120_000 });
-        profiles.insert(Profile::Experimental, ProfileTokens { window_ms: m, window_token_budget: 240_000 });
-        profiles.insert(Profile::Production, ProfileTokens { window_ms: m, window_token_budget: 60_000 });
+        profiles.insert(
+            Profile::Private,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 20_000,
+            },
+        );
+        profiles.insert(
+            Profile::Fast,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 80_000,
+            },
+        );
+        profiles.insert(
+            Profile::Careful,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 40_000,
+            },
+        );
+        profiles.insert(
+            Profile::Autonomous,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 120_000,
+            },
+        );
+        profiles.insert(
+            Profile::Experimental,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 240_000,
+            },
+        );
+        profiles.insert(
+            Profile::Production,
+            ProfileTokens {
+                window_ms: m,
+                window_token_budget: 60_000,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles,
@@ -120,7 +156,12 @@ impl LlmTokenThrottle {
 
     /// Trim records older than the largest configured window prior to `now_ms`.
     pub fn rotate(&mut self, now_ms: u64) {
-        let max_window = self.profiles.values().map(|p| p.window_ms).max().unwrap_or(0);
+        let max_window = self
+            .profiles
+            .values()
+            .map(|p| p.window_ms)
+            .max()
+            .unwrap_or(0);
         let cutoff = now_ms.saturating_sub(max_window);
         self.records.retain(|r| r.ts_ms >= cutoff);
     }
@@ -141,10 +182,18 @@ impl LlmTokenThrottle {
     }
 
     /// Account for `tokens` at `now_ms`.
-    pub fn consume(&mut self, profile: Profile, tokens: u64, now_ms: u64) -> Result<ConsumeVerdict, ThrottleError> {
+    pub fn consume(
+        &mut self,
+        profile: Profile,
+        tokens: u64,
+        now_ms: u64,
+    ) -> Result<ConsumeVerdict, ThrottleError> {
         if let Some(last) = self.records.last() {
             if now_ms < last.ts_ms {
-                return Err(ThrottleError::NonMonotonic { prev: last.ts_ms, new: now_ms });
+                return Err(ThrottleError::NonMonotonic {
+                    prev: last.ts_ms,
+                    new: now_ms,
+                });
             }
         }
         let cfg = match self.profiles.get(&profile) {
@@ -155,7 +204,10 @@ impl LlmTokenThrottle {
         let would = used.saturating_add(tokens);
         if would > cfg.window_token_budget {
             let retry_after_ms = match oldest_in {
-                Some(t) => cfg.window_ms.saturating_sub(now_ms.saturating_sub(t)).saturating_add(1),
+                Some(t) => cfg
+                    .window_ms
+                    .saturating_sub(now_ms.saturating_sub(t))
+                    .saturating_add(1),
                 None => 0,
             };
             return Ok(ConsumeVerdict::Throttled {
@@ -164,7 +216,11 @@ impl LlmTokenThrottle {
                 budget: cfg.window_token_budget,
             });
         }
-        self.records.push(TokenRecord { ts_ms: now_ms, tokens, profile });
+        self.records.push(TokenRecord {
+            ts_ms: now_ms,
+            tokens,
+            profile,
+        });
         Ok(ConsumeVerdict::Granted)
     }
 
@@ -176,7 +232,10 @@ impl LlmTokenThrottle {
         let mut last = 0u64;
         for r in &self.records {
             if r.ts_ms < last {
-                return Err(ThrottleError::NonMonotonic { prev: last, new: r.ts_ms });
+                return Err(ThrottleError::NonMonotonic {
+                    prev: last,
+                    new: r.ts_ms,
+                });
             }
             last = r.ts_ms;
         }
@@ -196,17 +255,27 @@ mod tests {
     #[test]
     fn grant_under_budget() {
         let mut t = LlmTokenThrottle::canonical();
-        assert!(matches!(t.consume(Profile::Fast, 1000, 0).unwrap(), ConsumeVerdict::Granted));
+        assert!(matches!(
+            t.consume(Profile::Fast, 1000, 0).unwrap(),
+            ConsumeVerdict::Granted
+        ));
     }
 
     #[test]
     fn throttle_when_over() {
         let mut t = LlmTokenThrottle::canonical();
         // Production budget 60k.
-        assert!(matches!(t.consume(Profile::Production, 60_000, 0).unwrap(), ConsumeVerdict::Granted));
+        assert!(matches!(
+            t.consume(Profile::Production, 60_000, 0).unwrap(),
+            ConsumeVerdict::Granted
+        ));
         let v = t.consume(Profile::Production, 1, 1).unwrap();
         match v {
-            ConsumeVerdict::Throttled { retry_after_ms, would_total, budget } => {
+            ConsumeVerdict::Throttled {
+                retry_after_ms,
+                would_total,
+                budget,
+            } => {
                 assert_eq!(would_total, 60_001);
                 assert_eq!(budget, 60_000);
                 // Oldest record at 0, now at 1, window 60_000 → retry in ~60_000.
@@ -220,7 +289,10 @@ mod tests {
     fn unconfigured_profile() {
         let mut t = LlmTokenThrottle::canonical();
         t.profiles.clear();
-        assert!(matches!(t.consume(Profile::Fast, 10, 0).unwrap(), ConsumeVerdict::Unconfigured));
+        assert!(matches!(
+            t.consume(Profile::Fast, 10, 0).unwrap(),
+            ConsumeVerdict::Unconfigured
+        ));
     }
 
     #[test]
@@ -228,14 +300,20 @@ mod tests {
         let mut t = LlmTokenThrottle::canonical();
         t.consume(Profile::Production, 60_000, 0).unwrap();
         // 61 seconds later, the record is out of window.
-        assert!(matches!(t.consume(Profile::Production, 1, 61_000).unwrap(), ConsumeVerdict::Granted));
+        assert!(matches!(
+            t.consume(Profile::Production, 1, 61_000).unwrap(),
+            ConsumeVerdict::Granted
+        ));
     }
 
     #[test]
     fn nonmonotonic_rejected() {
         let mut t = LlmTokenThrottle::canonical();
         t.consume(Profile::Fast, 10, 100).unwrap();
-        assert!(matches!(t.consume(Profile::Fast, 10, 50).unwrap_err(), ThrottleError::NonMonotonic { .. }));
+        assert!(matches!(
+            t.consume(Profile::Fast, 10, 50).unwrap_err(),
+            ThrottleError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -250,7 +328,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = LlmTokenThrottle::canonical();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), ThrottleError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            ThrottleError::SchemaMismatch
+        ));
     }
 
     #[test]

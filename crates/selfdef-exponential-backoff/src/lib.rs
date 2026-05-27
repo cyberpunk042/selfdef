@@ -56,9 +56,18 @@ pub enum BackoffError {
 
 impl ExponentialBackoff {
     /// New.
-    pub fn new(base_ms: u64, multiplier_bp: u32, max_ms: u64, jitter_pct_bp: u32) -> Result<Self, BackoffError> {
-        if base_ms == 0 { return Err(BackoffError::ZeroBase); }
-        if multiplier_bp < 10000 { return Err(BackoffError::SubLinearMultiplier); }
+    pub fn new(
+        base_ms: u64,
+        multiplier_bp: u32,
+        max_ms: u64,
+        jitter_pct_bp: u32,
+    ) -> Result<Self, BackoffError> {
+        if base_ms == 0 {
+            return Err(BackoffError::ZeroBase);
+        }
+        if multiplier_bp < 10000 {
+            return Err(BackoffError::SubLinearMultiplier);
+        }
         Ok(Self {
             schema_version_marker: 1,
             base_ms,
@@ -75,7 +84,10 @@ impl ExponentialBackoff {
         let mut delay = self.base_ms;
         for _ in 0..attempt {
             delay = delay.saturating_mul(self.multiplier_bp as u64) / 10000;
-            if delay >= self.max_ms { delay = self.max_ms; break; }
+            if delay >= self.max_ms {
+                delay = self.max_ms;
+                break;
+            }
         }
         delay = delay.min(self.max_ms);
         if self.jitter_pct_bp > 0 {
@@ -96,9 +108,15 @@ impl ExponentialBackoff {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BackoffError> {
-        if self.schema_version_marker != 1 { return Err(BackoffError::SchemaMismatch); }
-        if self.base_ms == 0 { return Err(BackoffError::ZeroBase); }
-        if self.multiplier_bp < 10000 { return Err(BackoffError::SubLinearMultiplier); }
+        if self.schema_version_marker != 1 {
+            return Err(BackoffError::SchemaMismatch);
+        }
+        if self.base_ms == 0 {
+            return Err(BackoffError::ZeroBase);
+        }
+        if self.multiplier_bp < 10000 {
+            return Err(BackoffError::SubLinearMultiplier);
+        }
         Ok(())
     }
 }
@@ -146,19 +164,28 @@ mod tests {
 
     #[test]
     fn zero_base_rejected() {
-        assert!(matches!(ExponentialBackoff::new(0, 20000, 100, 0).unwrap_err(), BackoffError::ZeroBase));
+        assert!(matches!(
+            ExponentialBackoff::new(0, 20000, 100, 0).unwrap_err(),
+            BackoffError::ZeroBase
+        ));
     }
 
     #[test]
     fn sublinear_multiplier_rejected() {
-        assert!(matches!(ExponentialBackoff::new(100, 5000, 100, 0).unwrap_err(), BackoffError::SubLinearMultiplier));
+        assert!(matches!(
+            ExponentialBackoff::new(100, 5000, 100, 0).unwrap_err(),
+            BackoffError::SubLinearMultiplier
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ExponentialBackoff::new(100, 20000, 1000, 0).unwrap();
         b.schema_version_marker = 99;
-        assert!(matches!(b.validate().unwrap_err(), BackoffError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BackoffError::SchemaMismatch
+        ));
     }
 
     #[test]

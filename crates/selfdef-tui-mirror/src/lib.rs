@@ -208,7 +208,12 @@ impl TuiMirrorSnapshot {
         if self.panels.len() != 4 {
             return Err(MirrorError::PanelCountInvalid(self.panels.len()));
         }
-        for required in [PanelKind::Rules, PanelKind::Grants, PanelKind::Quarantine, PanelKind::Authority] {
+        for required in [
+            PanelKind::Rules,
+            PanelKind::Grants,
+            PanelKind::Quarantine,
+            PanelKind::Authority,
+        ] {
             if !self.panels.iter().any(|p| p.kind == required) {
                 return Err(MirrorError::PanelKindMissing(required));
             }
@@ -268,14 +273,40 @@ mod tests {
             title: format!("{:?}", kind),
             source_mirror: mirror.into(),
             columns: vec![
-                ColumnSpec { header: "id".into(), field: "id".into(), width: 12, right_align: false },
-                ColumnSpec { header: "state".into(), field: "state".into(), width: 0, right_align: false },
+                ColumnSpec {
+                    header: "id".into(),
+                    field: "id".into(),
+                    width: 12,
+                    right_align: false,
+                },
+                ColumnSpec {
+                    header: "state".into(),
+                    field: "state".into(),
+                    width: 0,
+                    right_align: false,
+                },
             ],
             key_bindings: vec![
-                KeyBinding { key: "j".into(), action: "next row".into(), mutating: false },
-                KeyBinding { key: "k".into(), action: "prev row".into(), mutating: false },
-                KeyBinding { key: "Enter".into(), action: "inspect".into(), mutating: false },
-                KeyBinding { key: "x".into(), action: "destructive action".into(), mutating: true },
+                KeyBinding {
+                    key: "j".into(),
+                    action: "next row".into(),
+                    mutating: false,
+                },
+                KeyBinding {
+                    key: "k".into(),
+                    action: "prev row".into(),
+                    mutating: false,
+                },
+                KeyBinding {
+                    key: "Enter".into(),
+                    action: "inspect".into(),
+                    mutating: false,
+                },
+                KeyBinding {
+                    key: "x".into(),
+                    action: "destructive action".into(),
+                    mutating: true,
+                },
             ],
             min_authority: "l0_observe".into(),
             refresh_ms: 5000,
@@ -290,15 +321,39 @@ mod tests {
             doctrine: DOCTRINE_NO_VANITY_GRAPHS.into(),
             captured_at: "2026-05-19T03:30:00Z".into(),
             panels: vec![
-                mk_panel(PanelKind::Rules,      Quadrant::TopLeft,     "selfdef-rules-mirror"),
-                mk_panel(PanelKind::Grants,     Quadrant::TopRight,    "selfdef-grants-mirror"),
-                mk_panel(PanelKind::Quarantine, Quadrant::BottomLeft,  "selfdef-quarantine-mirror"),
-                mk_panel(PanelKind::Authority,  Quadrant::BottomRight, "selfdef-capability-mirror"),
+                mk_panel(PanelKind::Rules, Quadrant::TopLeft, "selfdef-rules-mirror"),
+                mk_panel(
+                    PanelKind::Grants,
+                    Quadrant::TopRight,
+                    "selfdef-grants-mirror",
+                ),
+                mk_panel(
+                    PanelKind::Quarantine,
+                    Quadrant::BottomLeft,
+                    "selfdef-quarantine-mirror",
+                ),
+                mk_panel(
+                    PanelKind::Authority,
+                    Quadrant::BottomRight,
+                    "selfdef-capability-mirror",
+                ),
             ],
             global_keys: vec![
-                KeyBinding { key: "?".into(), action: "help".into(), mutating: false },
-                KeyBinding { key: "q".into(), action: "quit".into(), mutating: false },
-                KeyBinding { key: "Tab".into(), action: "cycle focus".into(), mutating: false },
+                KeyBinding {
+                    key: "?".into(),
+                    action: "help".into(),
+                    mutating: false,
+                },
+                KeyBinding {
+                    key: "q".into(),
+                    action: "quit".into(),
+                    mutating: false,
+                },
+                KeyBinding {
+                    key: "Tab".into(),
+                    action: "cycle focus".into(),
+                    mutating: false,
+                },
             ],
             signature: String::new(),
         }
@@ -313,7 +368,10 @@ mod tests {
     fn schema_rejects_major_drift() {
         let mut s = canonical_snap();
         s.schema_version = "2.0.0".into();
-        assert!(matches!(s.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            s.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -324,7 +382,7 @@ mod tests {
     #[test]
     fn doctrine_tamper_is_caught() {
         let mut s = canonical_snap();
-        s.doctrine = "A dashboard should show vanity graphs".into();  // tampered
+        s.doctrine = "A dashboard should show vanity graphs".into(); // tampered
         match s.validate_doctrine().unwrap_err() {
             MirrorError::DoctrineTampered { expected, actual } => {
                 assert_eq!(expected, "A dashboard should not show vanity graphs");
@@ -344,9 +402,13 @@ mod tests {
         let mut s = canonical_snap();
         s.panels.remove(0); // remove rules
         // need to keep 4 panels for count check first — add a duplicate
-        s.panels.push(mk_panel(PanelKind::Grants, Quadrant::TopLeft, "selfdef-grants-mirror"));
+        s.panels.push(mk_panel(
+            PanelKind::Grants,
+            Quadrant::TopLeft,
+            "selfdef-grants-mirror",
+        ));
         match s.validate_layout().unwrap_err() {
-            MirrorError::PanelKindMissing(PanelKind::Rules) => {},
+            MirrorError::PanelKindMissing(PanelKind::Rules) => {}
             other => panic!("unexpected: {other:?}"),
         }
     }
@@ -356,7 +418,7 @@ mod tests {
         let mut s = canonical_snap();
         s.panels.pop();
         match s.validate_layout().unwrap_err() {
-            MirrorError::PanelCountInvalid(3) => {},
+            MirrorError::PanelCountInvalid(3) => {}
             other => panic!("unexpected: {other:?}"),
         }
     }
@@ -367,7 +429,7 @@ mod tests {
         // Change one panel to collide with another
         s.panels[0].quadrant = Quadrant::TopRight;
         match s.validate_layout().unwrap_err() {
-            MirrorError::QuadrantCollision(Quadrant::TopRight) => {},
+            MirrorError::QuadrantCollision(Quadrant::TopRight) => {}
             other => panic!("unexpected: {other:?}"),
         }
     }
@@ -375,7 +437,10 @@ mod tests {
     #[test]
     fn find_panel_lookup() {
         let s = canonical_snap();
-        assert_eq!(s.find_panel(PanelKind::Authority).unwrap().source_mirror, "selfdef-capability-mirror");
+        assert_eq!(
+            s.find_panel(PanelKind::Authority).unwrap().source_mirror,
+            "selfdef-capability-mirror"
+        );
         assert!(s.find_panel(PanelKind::Rules).is_some());
     }
 
@@ -391,7 +456,11 @@ mod tests {
 
     #[test]
     fn panel_serde_roundtrip() {
-        let original = mk_panel(PanelKind::Quarantine, Quadrant::BottomLeft, "selfdef-quarantine-mirror");
+        let original = mk_panel(
+            PanelKind::Quarantine,
+            Quadrant::BottomLeft,
+            "selfdef-quarantine-mirror",
+        );
         let j = serde_json::to_string(&original).unwrap();
         let back: PanelEntry = serde_json::from_str(&j).unwrap();
         assert_eq!(original, back);
@@ -412,6 +481,9 @@ mod tests {
 
     #[test]
     fn doctrine_constant_exposed_publicly() {
-        assert_eq!(DOCTRINE_NO_VANITY_GRAPHS, "A dashboard should not show vanity graphs");
+        assert_eq!(
+            DOCTRINE_NO_VANITY_GRAPHS,
+            "A dashboard should not show vanity graphs"
+        );
     }
 }

@@ -213,7 +213,11 @@ impl AuditMirrorSnapshot {
         for s in &self.spans {
             let entry = by_cat.entry(s.ocsf_category).or_insert(CategorySummary {
                 category: s.ocsf_category,
-                total: 0, allow: 0, deny: 0, ask: 0, sandbox: 0,
+                total: 0,
+                allow: 0,
+                deny: 0,
+                ask: 0,
+                sandbox: 0,
             });
             entry.total += 1;
             match s.policy_result {
@@ -271,7 +275,13 @@ impl AuditMirrorSnapshot {
 mod tests {
     use super::*;
 
-    fn mk_span(trace: &str, cat: OcsfCategory, out: PolicyOutcome, prev: &str, hash: &str) -> SpanEntry {
+    fn mk_span(
+        trace: &str,
+        cat: OcsfCategory,
+        out: PolicyOutcome,
+        prev: &str,
+        hash: &str,
+    ) -> SpanEntry {
         SpanEntry {
             trace_id: trace.into(),
             profile: "private".into(),
@@ -328,7 +338,10 @@ mod tests {
             spans: vec![],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            snap.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -339,9 +352,27 @@ mod tests {
             summaries: vec![],
             integrity: mk_integrity(),
             spans: vec![
-                mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0x00", "0xaa"),
-                mk_span("t2", OcsfCategory::FileSystemActivity, PolicyOutcome::Allow, "0xaa", "0xbb"),
-                mk_span("t3", OcsfCategory::NetworkActivity, PolicyOutcome::Sandbox, "0xbb", "0xcc"),
+                mk_span(
+                    "t1",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Allow,
+                    "0x00",
+                    "0xaa",
+                ),
+                mk_span(
+                    "t2",
+                    OcsfCategory::FileSystemActivity,
+                    PolicyOutcome::Allow,
+                    "0xaa",
+                    "0xbb",
+                ),
+                mk_span(
+                    "t3",
+                    OcsfCategory::NetworkActivity,
+                    PolicyOutcome::Sandbox,
+                    "0xbb",
+                    "0xcc",
+                ),
             ],
             signature: String::new(),
         };
@@ -356,8 +387,20 @@ mod tests {
             summaries: vec![],
             integrity: mk_integrity(),
             spans: vec![
-                mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0x00", "0xaa"),
-                mk_span("t2", OcsfCategory::FileSystemActivity, PolicyOutcome::Allow, "WRONG", "0xbb"),
+                mk_span(
+                    "t1",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Allow,
+                    "0x00",
+                    "0xaa",
+                ),
+                mk_span(
+                    "t2",
+                    OcsfCategory::FileSystemActivity,
+                    PolicyOutcome::Allow,
+                    "WRONG",
+                    "0xbb",
+                ),
             ],
             signature: String::new(),
         };
@@ -375,20 +418,50 @@ mod tests {
             summaries: vec![],
             integrity: mk_integrity(),
             spans: vec![
-                mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0x00", "0xaa"),
-                mk_span("t2", OcsfCategory::ProcessActivity, PolicyOutcome::Deny,  "0xaa", "0xbb"),
-                mk_span("t3", OcsfCategory::NetworkActivity, PolicyOutcome::Ask,   "0xbb", "0xcc"),
-                mk_span("t4", OcsfCategory::AuthorityDecision, PolicyOutcome::Sandbox, "0xcc", "0xdd"),
+                mk_span(
+                    "t1",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Allow,
+                    "0x00",
+                    "0xaa",
+                ),
+                mk_span(
+                    "t2",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Deny,
+                    "0xaa",
+                    "0xbb",
+                ),
+                mk_span(
+                    "t3",
+                    OcsfCategory::NetworkActivity,
+                    PolicyOutcome::Ask,
+                    "0xbb",
+                    "0xcc",
+                ),
+                mk_span(
+                    "t4",
+                    OcsfCategory::AuthorityDecision,
+                    PolicyOutcome::Sandbox,
+                    "0xcc",
+                    "0xdd",
+                ),
             ],
             signature: String::new(),
         };
         let s = snap.recompute_summaries();
         assert_eq!(s.len(), 3);
-        let proc = s.iter().find(|x| x.category == OcsfCategory::ProcessActivity).unwrap();
+        let proc = s
+            .iter()
+            .find(|x| x.category == OcsfCategory::ProcessActivity)
+            .unwrap();
         assert_eq!(proc.total, 2);
         assert_eq!(proc.allow, 1);
         assert_eq!(proc.deny, 1);
-        let net = s.iter().find(|x| x.category == OcsfCategory::NetworkActivity).unwrap();
+        let net = s
+            .iter()
+            .find(|x| x.category == OcsfCategory::NetworkActivity)
+            .unwrap();
         assert_eq!(net.ask, 1);
     }
 
@@ -400,11 +473,41 @@ mod tests {
             summaries: vec![],
             integrity: mk_integrity(),
             spans: vec![
-                mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow,   "0x00", "0xaa"),
-                mk_span("t2", OcsfCategory::ProcessActivity, PolicyOutcome::Allow,   "0xaa", "0xbb"),
-                mk_span("t3", OcsfCategory::NetworkActivity, PolicyOutcome::Deny,    "0xbb", "0xcc"),
-                mk_span("t4", OcsfCategory::FileSystemActivity, PolicyOutcome::Ask,  "0xcc", "0xdd"),
-                mk_span("t5", OcsfCategory::AuthorityDecision, PolicyOutcome::Sandbox, "0xdd", "0xee"),
+                mk_span(
+                    "t1",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Allow,
+                    "0x00",
+                    "0xaa",
+                ),
+                mk_span(
+                    "t2",
+                    OcsfCategory::ProcessActivity,
+                    PolicyOutcome::Allow,
+                    "0xaa",
+                    "0xbb",
+                ),
+                mk_span(
+                    "t3",
+                    OcsfCategory::NetworkActivity,
+                    PolicyOutcome::Deny,
+                    "0xbb",
+                    "0xcc",
+                ),
+                mk_span(
+                    "t4",
+                    OcsfCategory::FileSystemActivity,
+                    PolicyOutcome::Ask,
+                    "0xcc",
+                    "0xdd",
+                ),
+                mk_span(
+                    "t5",
+                    OcsfCategory::AuthorityDecision,
+                    PolicyOutcome::Sandbox,
+                    "0xdd",
+                    "0xee",
+                ),
             ],
             signature: String::new(),
         };
@@ -414,9 +517,21 @@ mod tests {
 
     #[test]
     fn total_cost_sums() {
-        let mut s1 = mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0x00", "0xaa");
+        let mut s1 = mk_span(
+            "t1",
+            OcsfCategory::ProcessActivity,
+            PolicyOutcome::Allow,
+            "0x00",
+            "0xaa",
+        );
         s1.cost_millicents = 100;
-        let mut s2 = mk_span("t2", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0xaa", "0xbb");
+        let mut s2 = mk_span(
+            "t2",
+            OcsfCategory::ProcessActivity,
+            PolicyOutcome::Allow,
+            "0xaa",
+            "0xbb",
+        );
         s2.cost_millicents = 250;
         let snap = AuditMirrorSnapshot {
             schema_version: SCHEMA_VERSION.into(),
@@ -441,9 +556,21 @@ mod tests {
         };
         assert_eq!(empty.mean_latency_ms(), 0);
 
-        let mut s1 = mk_span("t1", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0x00", "0xaa");
+        let mut s1 = mk_span(
+            "t1",
+            OcsfCategory::ProcessActivity,
+            PolicyOutcome::Allow,
+            "0x00",
+            "0xaa",
+        );
         s1.latency_ms = 100;
-        let mut s2 = mk_span("t2", OcsfCategory::ProcessActivity, PolicyOutcome::Allow, "0xaa", "0xbb");
+        let mut s2 = mk_span(
+            "t2",
+            OcsfCategory::ProcessActivity,
+            PolicyOutcome::Allow,
+            "0xaa",
+            "0xbb",
+        );
         s2.latency_ms = 300;
         let snap = AuditMirrorSnapshot {
             schema_version: SCHEMA_VERSION.into(),
@@ -458,7 +585,13 @@ mod tests {
 
     #[test]
     fn span_serde_roundtrip_preserves_13_fields() {
-        let original = mk_span("alpha", OcsfCategory::AuthorityDecision, PolicyOutcome::Sandbox, "0xff", "0xee");
+        let original = mk_span(
+            "alpha",
+            OcsfCategory::AuthorityDecision,
+            PolicyOutcome::Sandbox,
+            "0xff",
+            "0xee",
+        );
         let j = serde_json::to_string(&original).unwrap();
         let back: SpanEntry = serde_json::from_str(&j).unwrap();
         assert_eq!(original, back);

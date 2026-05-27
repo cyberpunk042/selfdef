@@ -77,7 +77,10 @@ impl MonotonicClock {
         };
         if regress {
             self.regressions = self.regressions.saturating_add(1);
-            return Err(ClockError::Regression { now: now_ms, last: self.last_ms });
+            return Err(ClockError::Regression {
+                now: now_ms,
+                last: self.last_ms,
+            });
         }
         if now_ms > self.last_ms {
             self.advances = self.advances.saturating_add(1);
@@ -93,7 +96,9 @@ impl MonotonicClock {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ClockError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ClockError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ClockError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -106,7 +111,10 @@ mod tests {
     fn strict_advance_only() {
         let mut c = MonotonicClock::new(Strict::Yes);
         c.observe(100).unwrap();
-        assert!(matches!(c.observe(100).unwrap_err(), ClockError::Regression { .. }));
+        assert!(matches!(
+            c.observe(100).unwrap_err(),
+            ClockError::Regression { .. }
+        ));
         c.observe(101).unwrap();
     }
 
@@ -122,7 +130,10 @@ mod tests {
     fn regression_rejected() {
         let mut c = MonotonicClock::new(Strict::No);
         c.observe(200).unwrap();
-        assert!(matches!(c.observe(100).unwrap_err(), ClockError::Regression { .. }));
+        assert!(matches!(
+            c.observe(100).unwrap_err(),
+            ClockError::Regression { .. }
+        ));
     }
 
     #[test]
@@ -147,7 +158,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = MonotonicClock::new(Strict::No);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ClockError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ClockError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -118,8 +118,14 @@ impl ActionPreconditionChecker {
     }
 
     /// Set the preconditions for an action.
-    pub fn set(&mut self, action_id: &str, preconditions: Vec<Precondition>) -> Result<(), CheckerError> {
-        if action_id.is_empty() { return Err(CheckerError::EmptyId); }
+    pub fn set(
+        &mut self,
+        action_id: &str,
+        preconditions: Vec<Precondition>,
+    ) -> Result<(), CheckerError> {
+        if action_id.is_empty() {
+            return Err(CheckerError::EmptyId);
+        }
         self.map.insert(action_id.into(), preconditions);
         Ok(())
     }
@@ -132,7 +138,9 @@ impl ActionPreconditionChecker {
         };
         let mut missing = Vec::new();
         for p in preconditions {
-            if !Self::passes(p, ctx) { missing.push(p.clone()); }
+            if !Self::passes(p, ctx) {
+                missing.push(p.clone());
+            }
         }
         if missing.is_empty() {
             CheckVerdict::Met
@@ -155,29 +163,39 @@ impl ActionPreconditionChecker {
             }
             Precondition::EnvFlagPresent { name } => ctx.env_flags.contains(name),
             Precondition::MinTrustScore { floor } => ctx.trust_score >= *floor,
-            Precondition::DepActionCompleted { dep_action_id } => ctx.completed_actions.contains(dep_action_id),
+            Precondition::DepActionCompleted { dep_action_id } => {
+                ctx.completed_actions.contains(dep_action_id)
+            }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CheckerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CheckerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CheckerError::SchemaMismatch);
+        }
         for id in self.map.keys() {
-            if id.is_empty() { return Err(CheckerError::EmptyId); }
+            if id.is_empty() {
+                return Err(CheckerError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionPreconditionChecker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ctx() -> PreconditionCtx { PreconditionCtx::default() }
+    fn ctx() -> PreconditionCtx {
+        PreconditionCtx::default()
+    }
 
     #[test]
     fn met_when_no_preconditions() {
@@ -195,7 +213,13 @@ mod tests {
     #[test]
     fn has_grant() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![Precondition::HasGrant { grant_id: "g1".into() }]).unwrap();
+        c.set(
+            "a",
+            vec![Precondition::HasGrant {
+                grant_id: "g1".into(),
+            }],
+        )
+        .unwrap();
         let mut ctx = ctx();
         assert!(matches!(c.evaluate("a", &ctx), CheckVerdict::Unmet { .. }));
         ctx.held_grants.insert("g1".into());
@@ -216,7 +240,14 @@ mod tests {
     #[test]
     fn within_hours_normal() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![Precondition::WithinHours { from_min: 9 * 60, to_min: 17 * 60 }]).unwrap();
+        c.set(
+            "a",
+            vec![Precondition::WithinHours {
+                from_min: 9 * 60,
+                to_min: 17 * 60,
+            }],
+        )
+        .unwrap();
         let mut ctx = ctx();
         ctx.current_min = 8 * 60;
         assert!(matches!(c.evaluate("a", &ctx), CheckVerdict::Unmet { .. }));
@@ -228,7 +259,14 @@ mod tests {
     fn within_hours_wraps_midnight() {
         let mut c = ActionPreconditionChecker::new();
         // 22:00..02:00 → wraps.
-        c.set("a", vec![Precondition::WithinHours { from_min: 22 * 60, to_min: 2 * 60 }]).unwrap();
+        c.set(
+            "a",
+            vec![Precondition::WithinHours {
+                from_min: 22 * 60,
+                to_min: 2 * 60,
+            }],
+        )
+        .unwrap();
         let mut ctx = ctx();
         ctx.current_min = 23 * 60;
         assert_eq!(c.evaluate("a", &ctx), CheckVerdict::Met);
@@ -241,7 +279,8 @@ mod tests {
     #[test]
     fn env_flag() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![Precondition::EnvFlagPresent { name: "X".into() }]).unwrap();
+        c.set("a", vec![Precondition::EnvFlagPresent { name: "X".into() }])
+            .unwrap();
         let mut ctx = ctx();
         assert!(matches!(c.evaluate("a", &ctx), CheckVerdict::Unmet { .. }));
         ctx.env_flags.insert("X".into());
@@ -251,7 +290,8 @@ mod tests {
     #[test]
     fn min_trust_score() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![Precondition::MinTrustScore { floor: 500 }]).unwrap();
+        c.set("a", vec![Precondition::MinTrustScore { floor: 500 }])
+            .unwrap();
         let mut ctx = ctx();
         ctx.trust_score = 300;
         assert!(matches!(c.evaluate("a", &ctx), CheckVerdict::Unmet { .. }));
@@ -262,7 +302,13 @@ mod tests {
     #[test]
     fn dep_action_completed() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![Precondition::DepActionCompleted { dep_action_id: "init".into() }]).unwrap();
+        c.set(
+            "a",
+            vec![Precondition::DepActionCompleted {
+                dep_action_id: "init".into(),
+            }],
+        )
+        .unwrap();
         let mut ctx = ctx();
         assert!(matches!(c.evaluate("a", &ctx), CheckVerdict::Unmet { .. }));
         ctx.completed_actions.insert("init".into());
@@ -272,10 +318,14 @@ mod tests {
     #[test]
     fn multiple_unmet_reports_all() {
         let mut c = ActionPreconditionChecker::new();
-        c.set("a", vec![
-            Precondition::NotSuspended,
-            Precondition::MinTrustScore { floor: 500 },
-        ]).unwrap();
+        c.set(
+            "a",
+            vec![
+                Precondition::NotSuspended,
+                Precondition::MinTrustScore { floor: 500 },
+            ],
+        )
+        .unwrap();
         let mut ctx = ctx();
         ctx.suspended = true;
         ctx.trust_score = 100;
@@ -288,14 +338,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut c = ActionPreconditionChecker::new();
-        assert!(matches!(c.set("", vec![]).unwrap_err(), CheckerError::EmptyId));
+        assert!(matches!(
+            c.set("", vec![]).unwrap_err(),
+            CheckerError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ActionPreconditionChecker::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CheckerError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CheckerError::SchemaMismatch
+        ));
     }
 
     #[test]

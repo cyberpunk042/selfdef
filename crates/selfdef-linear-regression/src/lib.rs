@@ -68,17 +68,23 @@ impl LinearRegression {
 
     /// Slope in micro units (slope * 1_000_000 to keep integer precision).
     pub fn slope_micro(&self) -> Result<i64, RegError> {
-        if self.n < 2 { return Err(RegError::Degenerate); }
+        if self.n < 2 {
+            return Err(RegError::Degenerate);
+        }
         let n = self.n as i128;
         let denom = n * self.sum_xx - self.sum_x * self.sum_x;
-        if denom == 0 { return Err(RegError::Degenerate); }
+        if denom == 0 {
+            return Err(RegError::Degenerate);
+        }
         let num = n * self.sum_xy - self.sum_x * self.sum_y;
         Ok(((num * 1_000_000) / denom) as i64)
     }
 
     /// Intercept in micro units.
     pub fn intercept_micro(&self) -> Result<i64, RegError> {
-        if self.n == 0 { return Err(RegError::Degenerate); }
+        if self.n == 0 {
+            return Err(RegError::Degenerate);
+        }
         let slope_u = self.slope_micro()?;
         let n = self.n as i128;
         // intercept = (sum_y - slope*sum_x) / n; we want micro.
@@ -97,13 +103,17 @@ impl LinearRegression {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RegError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RegError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RegError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for LinearRegression {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -130,7 +140,9 @@ mod tests {
     fn perfect_line() {
         let mut r = LinearRegression::new();
         // y = 2x + 1.
-        for x in 0..5 { r.observe(x as i64, 2 * x + 1); }
+        for x in 0..5 {
+            r.observe(x as i64, 2 * x + 1);
+        }
         // Slope = 2 → 2_000_000 micro; intercept = 1 → 1_000_000.
         assert_eq!(r.slope_micro().unwrap(), 2_000_000);
         let intc = r.intercept_micro().unwrap();
@@ -141,7 +153,9 @@ mod tests {
     fn negative_slope() {
         let mut r = LinearRegression::new();
         // y = -3x + 5.
-        for x in 0..5 { r.observe(x as i64, -3 * x + 5); }
+        for x in 0..5 {
+            r.observe(x as i64, -3 * x + 5);
+        }
         assert_eq!(r.slope_micro().unwrap(), -3_000_000);
     }
 
@@ -158,7 +172,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = LinearRegression::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RegError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RegError::SchemaMismatch
+        ));
     }
 
     #[test]

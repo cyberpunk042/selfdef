@@ -168,82 +168,135 @@ mod tests {
     use super::*;
 
     fn feat(p: ProviderTier, g: GroundTruth, n: u8) -> ArtifactFeatures {
-        ArtifactFeatures { provider: p, ground_truth: g, consensus_count: n }
+        ArtifactFeatures {
+            provider: p,
+            ground_truth: g,
+            consensus_count: n,
+        }
     }
 
     #[test]
     fn consensus_zero_rejected() {
         assert!(matches!(
-            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 0)).unwrap_err(),
+            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 0))
+                .unwrap_err(),
             TrustError::ConsensusZero
         ));
     }
 
     #[test]
     fn ground_truth_passed_is_verified() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Untrusted, GroundTruth::Passed, 1)).unwrap();
+        let c = LlmOutputTrustClassifier::classify(feat(
+            ProviderTier::Untrusted,
+            GroundTruth::Passed,
+            1,
+        ))
+        .unwrap();
         assert_eq!(c.tier, TrustTier::Verified);
     }
 
     #[test]
     fn ground_truth_failed_is_contradicted() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::LocalSubstrate, GroundTruth::Failed, 5)).unwrap();
+        let c = LlmOutputTrustClassifier::classify(feat(
+            ProviderTier::LocalSubstrate,
+            GroundTruth::Failed,
+            5,
+        ))
+        .unwrap();
         assert_eq!(c.tier, TrustTier::Contradicted);
     }
 
     #[test]
     fn consensus_two_or_more_is_corroborated() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 2)).unwrap();
+        let c =
+            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 2))
+                .unwrap();
         assert_eq!(c.tier, TrustTier::Corroborated);
     }
 
     #[test]
     fn single_source_vendor_is_unverified() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 1)).unwrap();
+        let c =
+            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 1))
+                .unwrap();
         assert_eq!(c.tier, TrustTier::Unverified);
     }
 
     #[test]
     fn single_source_local_is_unverified() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::LocalSubstrate, GroundTruth::Skipped, 1)).unwrap();
+        let c = LlmOutputTrustClassifier::classify(feat(
+            ProviderTier::LocalSubstrate,
+            GroundTruth::Skipped,
+            1,
+        ))
+        .unwrap();
         assert_eq!(c.tier, TrustTier::Unverified);
     }
 
     #[test]
     fn single_source_untrusted_is_contradicted() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Untrusted, GroundTruth::Skipped, 1)).unwrap();
+        let c = LlmOutputTrustClassifier::classify(feat(
+            ProviderTier::Untrusted,
+            GroundTruth::Skipped,
+            1,
+        ))
+        .unwrap();
         assert_eq!(c.tier, TrustTier::Contradicted);
     }
 
     #[test]
     fn untrusted_with_passed_still_verified() {
         // ground-truth-pass dominates.
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Untrusted, GroundTruth::Passed, 1)).unwrap();
+        let c = LlmOutputTrustClassifier::classify(feat(
+            ProviderTier::Untrusted,
+            GroundTruth::Passed,
+            1,
+        ))
+        .unwrap();
         assert_eq!(c.tier, TrustTier::Verified);
     }
 
     #[test]
     fn schema_drift_rejected() {
-        let mut c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Passed, 1)).unwrap();
+        let mut c =
+            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Passed, 1))
+                .unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), TrustError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            TrustError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TrustTier::Verified).unwrap(), "\"verified\"");
-        assert_eq!(serde_json::to_string(&TrustTier::Corroborated).unwrap(), "\"corroborated\"");
+        assert_eq!(
+            serde_json::to_string(&TrustTier::Verified).unwrap(),
+            "\"verified\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TrustTier::Corroborated).unwrap(),
+            "\"corroborated\""
+        );
     }
 
     #[test]
     fn provider_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ProviderTier::LocalSubstrate).unwrap(), "\"local-substrate\"");
-        assert_eq!(serde_json::to_string(&ProviderTier::OpenWeights).unwrap(), "\"open-weights\"");
+        assert_eq!(
+            serde_json::to_string(&ProviderTier::LocalSubstrate).unwrap(),
+            "\"local-substrate\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ProviderTier::OpenWeights).unwrap(),
+            "\"open-weights\""
+        );
     }
 
     #[test]
     fn classification_serde_roundtrip() {
-        let c = LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 3)).unwrap();
+        let c =
+            LlmOutputTrustClassifier::classify(feat(ProviderTier::Vendor, GroundTruth::Skipped, 3))
+                .unwrap();
         let j = serde_json::to_string(&c).unwrap();
         let back: TrustClassification = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

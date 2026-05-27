@@ -112,19 +112,38 @@ pub enum PolicyError {
 
 /// Known-good selector actions (Tetragon-supported).
 pub const ALLOWED_ACTIONS: &[&str] = &[
-    "SIGKILL", "Override", "FollowFD", "UnfollowFD",
-    "CopyFD", "Post", "GetUrl", "DnsLookup", "NoPost", "Signal",
+    "SIGKILL",
+    "Override",
+    "FollowFD",
+    "UnfollowFD",
+    "CopyFD",
+    "Post",
+    "GetUrl",
+    "DnsLookup",
+    "NoPost",
+    "Signal",
 ];
 
 fn is_dns_1123_label(s: &str) -> bool {
-    if s.is_empty() || s.len() > 63 { return false; }
-    if !s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') { return false; }
-    if s.starts_with('-') || s.ends_with('-') { return false; }
+    if s.is_empty() || s.len() > 63 {
+        return false;
+    }
+    if !s
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return false;
+    }
+    if s.starts_with('-') || s.ends_with('-') {
+        return false;
+    }
     true
 }
 
 fn is_dns_1123_subdomain(s: &str) -> bool {
-    if s.is_empty() || s.len() > 253 { return false; }
+    if s.is_empty() || s.len() > 253 {
+        return false;
+    }
     s.split('.').all(is_dns_1123_label)
 }
 
@@ -192,21 +211,30 @@ mod tests {
     fn wrong_api_version_rejected() {
         let mut p = ok_policy();
         p.api_version = "v1".into();
-        assert!(matches!(p.validate().unwrap_err(), PolicyError::ApiVersionMismatch(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PolicyError::ApiVersionMismatch(_)
+        ));
     }
 
     #[test]
     fn wrong_kind_rejected() {
         let mut p = ok_policy();
         p.kind = "WrongKind".into();
-        assert!(matches!(p.validate().unwrap_err(), PolicyError::KindMismatch(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PolicyError::KindMismatch(_)
+        ));
     }
 
     #[test]
     fn empty_symbol_rejected() {
         let mut p = ok_policy();
         p.spec.symbol = String::new();
-        assert!(matches!(p.validate().unwrap_err(), PolicyError::FieldEmpty("spec.symbol")));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PolicyError::FieldEmpty("spec.symbol")
+        ));
     }
 
     #[test]
@@ -220,7 +248,10 @@ mod tests {
     fn unknown_action_rejected() {
         let mut p = ok_policy();
         p.spec.selectors[0].action = "Unauthorized".into();
-        assert!(matches!(p.validate().unwrap_err(), PolicyError::UnknownAction(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PolicyError::UnknownAction(_)
+        ));
     }
 
     #[test]
@@ -242,7 +273,10 @@ mod tests {
     fn invalid_name_rejected() {
         let mut p = ok_policy();
         p.metadata.name = "Bad Name!".into();
-        assert!(matches!(p.validate().unwrap_err(), PolicyError::NameInvalid(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PolicyError::NameInvalid(_)
+        ));
     }
 
     #[test]
@@ -254,9 +288,18 @@ mod tests {
 
     #[test]
     fn hook_type_serde_kebab() {
-        assert_eq!(serde_json::to_string(&HookType::Kprobe).unwrap(), "\"kprobe\"");
-        assert_eq!(serde_json::to_string(&HookType::Uretprobe).unwrap(), "\"uretprobe\"");
-        assert_eq!(serde_json::to_string(&HookType::Tracepoint).unwrap(), "\"tracepoint\"");
+        assert_eq!(
+            serde_json::to_string(&HookType::Kprobe).unwrap(),
+            "\"kprobe\""
+        );
+        assert_eq!(
+            serde_json::to_string(&HookType::Uretprobe).unwrap(),
+            "\"uretprobe\""
+        );
+        assert_eq!(
+            serde_json::to_string(&HookType::Tracepoint).unwrap(),
+            "\"tracepoint\""
+        );
     }
 
     #[test]

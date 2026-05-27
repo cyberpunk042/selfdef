@@ -55,7 +55,9 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 impl CountMinSketch {
     /// New.
     pub fn new(depth: u32, width: u32) -> Result<Self, CmsError> {
-        if depth == 0 || width == 0 { return Err(CmsError::ZeroDim); }
+        if depth == 0 || width == 0 {
+            return Err(CmsError::ZeroDim);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             depth,
@@ -87,20 +89,28 @@ impl CountMinSketch {
         for r in 0..self.depth {
             let c = self.col(r, key);
             let idx = (r as usize) * (self.width as usize) + c;
-            if self.cells[idx] < best { best = self.cells[idx]; }
+            if self.cells[idx] < best {
+                best = self.cells[idx];
+            }
         }
         best
     }
 
     /// Reset all cells to zero.
     pub fn reset(&mut self) {
-        for c in self.cells.iter_mut() { *c = 0; }
+        for c in self.cells.iter_mut() {
+            *c = 0;
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CmsError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CmsError::SchemaMismatch); }
-        if self.depth == 0 || self.width == 0 { return Err(CmsError::ZeroDim); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CmsError::SchemaMismatch);
+        }
+        if self.depth == 0 || self.width == 0 {
+            return Err(CmsError::ZeroDim);
+        }
         if self.cells.len() != (self.depth as usize) * (self.width as usize) {
             return Err(CmsError::BadCells);
         }
@@ -146,8 +156,14 @@ mod tests {
 
     #[test]
     fn zero_dim_rejected() {
-        assert!(matches!(CountMinSketch::new(0, 16).unwrap_err(), CmsError::ZeroDim));
-        assert!(matches!(CountMinSketch::new(4, 0).unwrap_err(), CmsError::ZeroDim));
+        assert!(matches!(
+            CountMinSketch::new(0, 16).unwrap_err(),
+            CmsError::ZeroDim
+        ));
+        assert!(matches!(
+            CountMinSketch::new(4, 0).unwrap_err(),
+            CmsError::ZeroDim
+        ));
     }
 
     #[test]
@@ -161,7 +177,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = CountMinSketch::new(2, 4).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), CmsError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            CmsError::SchemaMismatch
+        ));
     }
 
     #[test]

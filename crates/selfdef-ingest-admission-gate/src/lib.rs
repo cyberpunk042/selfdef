@@ -114,7 +114,9 @@ impl IngestAdmissionGate {
 
     /// Allow an origin.
     pub fn allow_origin(&mut self, origin: &str) -> Result<bool, GateError> {
-        if origin.is_empty() { return Err(GateError::EmptyOrigin); }
+        if origin.is_empty() {
+            return Err(GateError::EmptyOrigin);
+        }
         Ok(self.origin_allowlist.insert(origin.into()))
     }
 
@@ -125,20 +127,35 @@ impl IngestAdmissionGate {
 
     /// Deny a kind.
     pub fn deny_kind(&mut self, kind: &str) -> Result<bool, GateError> {
-        if kind.is_empty() { return Err(GateError::EmptyKind); }
+        if kind.is_empty() {
+            return Err(GateError::EmptyKind);
+        }
         Ok(self.kind_denylist.insert(kind.into()))
     }
 
     /// Pure decision (no telemetry side-effect).
     pub fn decide(&self, ev: &Inbound) -> AdmissionVerdict {
         if !self.origin_allowlist.contains(&ev.origin) {
-            return AdmissionVerdict::Rejected { reason: RejectReason::OriginNotAllowed { origin: ev.origin.clone() } };
+            return AdmissionVerdict::Rejected {
+                reason: RejectReason::OriginNotAllowed {
+                    origin: ev.origin.clone(),
+                },
+            };
         }
         if self.kind_denylist.contains(&ev.kind) {
-            return AdmissionVerdict::Rejected { reason: RejectReason::KindDenied { kind: ev.kind.clone() } };
+            return AdmissionVerdict::Rejected {
+                reason: RejectReason::KindDenied {
+                    kind: ev.kind.clone(),
+                },
+            };
         }
         if ev.size_bytes > self.max_size_bytes {
-            return AdmissionVerdict::Rejected { reason: RejectReason::OverSize { size_bytes: ev.size_bytes, limit: self.max_size_bytes } };
+            return AdmissionVerdict::Rejected {
+                reason: RejectReason::OverSize {
+                    size_bytes: ev.size_bytes,
+                    limit: self.max_size_bytes,
+                },
+            };
         }
         AdmissionVerdict::Admitted
     }
@@ -147,27 +164,39 @@ impl IngestAdmissionGate {
     pub fn observe(&mut self, ev: &Inbound) -> AdmissionVerdict {
         let v = self.decide(ev);
         match v {
-            AdmissionVerdict::Admitted => self.admitted_count = self.admitted_count.saturating_add(1),
-            AdmissionVerdict::Rejected { .. } => self.rejected_count = self.rejected_count.saturating_add(1),
+            AdmissionVerdict::Admitted => {
+                self.admitted_count = self.admitted_count.saturating_add(1)
+            }
+            AdmissionVerdict::Rejected { .. } => {
+                self.rejected_count = self.rejected_count.saturating_add(1)
+            }
         }
         v
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GateError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GateError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GateError::SchemaMismatch);
+        }
         for o in &self.origin_allowlist {
-            if o.is_empty() { return Err(GateError::EmptyOrigin); }
+            if o.is_empty() {
+                return Err(GateError::EmptyOrigin);
+            }
         }
         for k in &self.kind_denylist {
-            if k.is_empty() { return Err(GateError::EmptyKind); }
+            if k.is_empty() {
+                return Err(GateError::EmptyKind);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for IngestAdmissionGate {
-    fn default() -> Self { Self::new(1024 * 1024) }
+    fn default() -> Self {
+        Self::new(1024 * 1024)
+    }
 }
 
 #[cfg(test)]
@@ -175,21 +204,30 @@ mod tests {
     use super::*;
 
     fn ev(origin: &str, kind: &str, size: u64) -> Inbound {
-        Inbound { origin: origin.into(), kind: kind.into(), size_bytes: size }
+        Inbound {
+            origin: origin.into(),
+            kind: kind.into(),
+            size_bytes: size,
+        }
     }
 
     #[test]
     fn admit_when_all_pass() {
         let mut g = IngestAdmissionGate::new(1000);
         g.allow_origin("trusted").unwrap();
-        assert_eq!(g.decide(&ev("trusted", "audit", 500)), AdmissionVerdict::Admitted);
+        assert_eq!(
+            g.decide(&ev("trusted", "audit", 500)),
+            AdmissionVerdict::Admitted
+        );
     }
 
     #[test]
     fn reject_unknown_origin() {
         let g = IngestAdmissionGate::new(1000);
         match g.decide(&ev("rogue", "audit", 1)) {
-            AdmissionVerdict::Rejected { reason: RejectReason::OriginNotAllowed { origin } } => {
+            AdmissionVerdict::Rejected {
+                reason: RejectReason::OriginNotAllowed { origin },
+            } => {
                 assert_eq!(origin, "rogue");
             }
             _ => panic!(),
@@ -202,7 +240,9 @@ mod tests {
         g.allow_origin("trusted").unwrap();
         g.deny_kind("toxic").unwrap();
         match g.decide(&ev("trusted", "toxic", 1)) {
-            AdmissionVerdict::Rejected { reason: RejectReason::KindDenied { kind } } => {
+            AdmissionVerdict::Rejected {
+                reason: RejectReason::KindDenied { kind },
+            } => {
                 assert_eq!(kind, "toxic");
             }
             _ => panic!(),
@@ -214,7 +254,9 @@ mod tests {
         let mut g = IngestAdmissionGate::new(100);
         g.allow_origin("trusted").unwrap();
         match g.decide(&ev("trusted", "audit", 200)) {
-            AdmissionVerdict::Rejected { reason: RejectReason::OverSize { size_bytes, limit } } => {
+            AdmissionVerdict::Rejected {
+                reason: RejectReason::OverSize { size_bytes, limit },
+            } => {
                 assert_eq!(size_bytes, 200);
                 assert_eq!(limit, 100);
             }
@@ -227,7 +269,9 @@ mod tests {
         let g = IngestAdmissionGate::new(100);
         // Origin denied, kind on denylist, size over — should report origin (first check).
         match g.decide(&ev("rogue", "toxic", 200)) {
-            AdmissionVerdict::Rejected { reason: RejectReason::OriginNotAllowed { .. } } => {}
+            AdmissionVerdict::Rejected {
+                reason: RejectReason::OriginNotAllowed { .. },
+            } => {}
             _ => panic!(),
         }
     }
@@ -247,13 +291,19 @@ mod tests {
         let mut g = IngestAdmissionGate::new(100);
         g.allow_origin("trusted").unwrap();
         assert!(g.disallow_origin("trusted"));
-        assert!(matches!(g.decide(&ev("trusted", "audit", 1)), AdmissionVerdict::Rejected { .. }));
+        assert!(matches!(
+            g.decide(&ev("trusted", "audit", 1)),
+            AdmissionVerdict::Rejected { .. }
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut g = IngestAdmissionGate::new(100);
-        assert!(matches!(g.allow_origin("").unwrap_err(), GateError::EmptyOrigin));
+        assert!(matches!(
+            g.allow_origin("").unwrap_err(),
+            GateError::EmptyOrigin
+        ));
         assert!(matches!(g.deny_kind("").unwrap_err(), GateError::EmptyKind));
     }
 
@@ -261,7 +311,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut g = IngestAdmissionGate::new(100);
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GateError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GateError::SchemaMismatch
+        ));
     }
 
     #[test]

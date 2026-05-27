@@ -80,12 +80,38 @@ impl PromptLanguageAllowlist {
     /// Canonical defaults: Production = en/fr, Experimental = wildcard.
     pub fn canonical() -> Self {
         let mut p = BTreeMap::new();
-        p.insert(Profile::Private,      ["en".into(), "fr".into()].into_iter().collect());
-        p.insert(Profile::Fast,         ["en".into(), "fr".into(), "es".into(), "de".into()].into_iter().collect());
-        p.insert(Profile::Careful,      ["en".into(), "fr".into()].into_iter().collect());
-        p.insert(Profile::Autonomous,   ["en".into(), "fr".into(), "es".into(), "de".into(), "ja".into(), "zh-hans".into()].into_iter().collect());
+        p.insert(
+            Profile::Private,
+            ["en".into(), "fr".into()].into_iter().collect(),
+        );
+        p.insert(
+            Profile::Fast,
+            ["en".into(), "fr".into(), "es".into(), "de".into()]
+                .into_iter()
+                .collect(),
+        );
+        p.insert(
+            Profile::Careful,
+            ["en".into(), "fr".into()].into_iter().collect(),
+        );
+        p.insert(
+            Profile::Autonomous,
+            [
+                "en".into(),
+                "fr".into(),
+                "es".into(),
+                "de".into(),
+                "ja".into(),
+                "zh-hans".into(),
+            ]
+            .into_iter()
+            .collect(),
+        );
         p.insert(Profile::Experimental, ["*".into()].into_iter().collect());
-        p.insert(Profile::Production,   ["en".into(), "fr".into()].into_iter().collect());
+        p.insert(
+            Profile::Production,
+            ["en".into(), "fr".into()].into_iter().collect(),
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles: p,
@@ -94,32 +120,44 @@ impl PromptLanguageAllowlist {
 
     /// Classify a detected tag.
     pub fn classify(&self, profile: Profile, detected: &str) -> Result<LangVerdict, LangError> {
-        if detected.is_empty() { return Err(LangError::EmptyTag); }
+        if detected.is_empty() {
+            return Err(LangError::EmptyTag);
+        }
         let allow = match self.profiles.get(&profile) {
             Some(s) => s,
             None => return Ok(LangVerdict::Unconfigured),
         };
         let lower = detected.to_lowercase();
         if allow.contains("*") {
-            return Ok(LangVerdict::Allowed { matched: "*".into() });
+            return Ok(LangVerdict::Allowed {
+                matched: "*".into(),
+            });
         }
         if allow.contains(&lower) {
             return Ok(LangVerdict::Allowed { matched: lower });
         }
         if let Some(prim) = lower.split('-').next() {
             if allow.contains(prim) {
-                return Ok(LangVerdict::Allowed { matched: prim.into() });
+                return Ok(LangVerdict::Allowed {
+                    matched: prim.into(),
+                });
             }
         }
-        Ok(LangVerdict::Denied { allowed: allow.iter().cloned().collect() })
+        Ok(LangVerdict::Denied {
+            allowed: allow.iter().cloned().collect(),
+        })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LangError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LangError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LangError::SchemaMismatch);
+        }
         for set in self.profiles.values() {
             for t in set {
-                if t.is_empty() { return Err(LangError::EmptyTag); }
+                if t.is_empty() {
+                    return Err(LangError::EmptyTag);
+                }
             }
         }
         Ok(())
@@ -138,7 +176,10 @@ mod tests {
     #[test]
     fn exact_match() {
         let c = PromptLanguageAllowlist::canonical();
-        assert!(matches!(c.classify(Profile::Production, "en").unwrap(), LangVerdict::Allowed { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, "en").unwrap(),
+            LangVerdict::Allowed { .. }
+        ));
     }
 
     #[test]
@@ -154,7 +195,10 @@ mod tests {
     #[test]
     fn denied_when_not_in_set() {
         let c = PromptLanguageAllowlist::canonical();
-        assert!(matches!(c.classify(Profile::Production, "ja").unwrap(), LangVerdict::Denied { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, "ja").unwrap(),
+            LangVerdict::Denied { .. }
+        ));
     }
 
     #[test]
@@ -170,27 +214,39 @@ mod tests {
     #[test]
     fn empty_tag_rejected() {
         let c = PromptLanguageAllowlist::canonical();
-        assert!(matches!(c.classify(Profile::Production, "").unwrap_err(), LangError::EmptyTag));
+        assert!(matches!(
+            c.classify(Profile::Production, "").unwrap_err(),
+            LangError::EmptyTag
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut c = PromptLanguageAllowlist::canonical();
         c.profiles.clear();
-        assert!(matches!(c.classify(Profile::Production, "en").unwrap(), LangVerdict::Unconfigured));
+        assert!(matches!(
+            c.classify(Profile::Production, "en").unwrap(),
+            LangVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn case_insensitive() {
         let c = PromptLanguageAllowlist::canonical();
-        assert!(matches!(c.classify(Profile::Production, "EN-us").unwrap(), LangVerdict::Allowed { .. }));
+        assert!(matches!(
+            c.classify(Profile::Production, "EN-us").unwrap(),
+            LangVerdict::Allowed { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = PromptLanguageAllowlist::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), LangError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            LangError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -65,11 +65,15 @@ pub enum CidrError {
 /// Parse a dotted IPv4 → u32.
 pub fn parse_ipv4(s: &str) -> Result<u32, CidrError> {
     let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() != 4 { return Err(CidrError::BadIp(s.into())); }
+    if parts.len() != 4 {
+        return Err(CidrError::BadIp(s.into()));
+    }
     let mut out: u32 = 0;
     for p in &parts {
         let n: u32 = p.parse().map_err(|_| CidrError::BadIp(s.into()))?;
-        if n > 255 { return Err(CidrError::BadIp(s.into())); }
+        if n > 255 {
+            return Err(CidrError::BadIp(s.into()));
+        }
         out = (out << 8) | n;
     }
     Ok(out)
@@ -80,18 +84,29 @@ pub fn parse_cidr(s: &str) -> Result<Cidr, CidrError> {
     let mut it = s.split('/');
     let ip = it.next().ok_or_else(|| CidrError::BadCidr(s.into()))?;
     let prefix = it.next().ok_or_else(|| CidrError::BadCidr(s.into()))?;
-    if it.next().is_some() { return Err(CidrError::BadCidr(s.into())); }
+    if it.next().is_some() {
+        return Err(CidrError::BadCidr(s.into()));
+    }
     let p: u8 = prefix.parse().map_err(|_| CidrError::BadCidr(s.into()))?;
-    if p > 32 { return Err(CidrError::BadCidr(s.into())); }
+    if p > 32 {
+        return Err(CidrError::BadCidr(s.into()));
+    }
     let ip_u32 = parse_ipv4(ip)?;
     let mask = if p == 0 { 0 } else { (!0u32) << (32 - p) };
-    Ok(Cidr { network: ip_u32 & mask, prefix_len: p })
+    Ok(Cidr {
+        network: ip_u32 & mask,
+        prefix_len: p,
+    })
 }
 
 impl Cidr {
     /// Does this CIDR contain the address?
     pub fn contains(&self, ip: u32) -> bool {
-        let mask = if self.prefix_len == 0 { 0 } else { (!0u32) << (32 - self.prefix_len) };
+        let mask = if self.prefix_len == 0 {
+            0
+        } else {
+            (!0u32) << (32 - self.prefix_len)
+        };
         (ip & mask) == self.network
     }
 }
@@ -133,16 +148,22 @@ impl CidrAllowlist {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CidrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CidrError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CidrError::SchemaMismatch);
+        }
         for c in &self.cidrs {
-            if c.prefix_len > 32 { return Err(CidrError::BadCidr(format!("{:?}", c))); }
+            if c.prefix_len > 32 {
+                return Err(CidrError::BadCidr(format!("{:?}", c)));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for CidrAllowlist {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -189,8 +210,14 @@ mod tests {
         let mut a = CidrAllowlist::new();
         a.add("10.0.0.0/8").unwrap();
         a.add("192.168.0.0/16").unwrap();
-        assert!(matches!(a.decide_str("10.5.6.7").unwrap(), CidrVerdict::Allowed { .. }));
-        assert!(matches!(a.decide_str("192.168.1.1").unwrap(), CidrVerdict::Allowed { .. }));
+        assert!(matches!(
+            a.decide_str("10.5.6.7").unwrap(),
+            CidrVerdict::Allowed { .. }
+        ));
+        assert!(matches!(
+            a.decide_str("192.168.1.1").unwrap(),
+            CidrVerdict::Allowed { .. }
+        ));
         assert_eq!(a.decide_str("8.8.8.8").unwrap(), CidrVerdict::Denied);
     }
 
@@ -206,8 +233,14 @@ mod tests {
     #[test]
     fn bad_cidr_rejected() {
         let mut a = CidrAllowlist::new();
-        assert!(matches!(a.add("10.0.0.0/33").unwrap_err(), CidrError::BadCidr(_)));
-        assert!(matches!(a.add("10.0.0.0").unwrap_err(), CidrError::BadCidr(_)));
+        assert!(matches!(
+            a.add("10.0.0.0/33").unwrap_err(),
+            CidrError::BadCidr(_)
+        ));
+        assert!(matches!(
+            a.add("10.0.0.0").unwrap_err(),
+            CidrError::BadCidr(_)
+        ));
     }
 
     #[test]
@@ -220,7 +253,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut a = CidrAllowlist::new();
         a.schema_version = "9.9.9".into();
-        assert!(matches!(a.validate().unwrap_err(), CidrError::SchemaMismatch));
+        assert!(matches!(
+            a.validate().unwrap_err(),
+            CidrError::SchemaMismatch
+        ));
     }
 
     #[test]

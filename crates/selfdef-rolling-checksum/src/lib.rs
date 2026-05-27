@@ -79,7 +79,9 @@ impl RollingChecksum {
     /// Rolling update: remove `out` from head, add `in_byte` at tail.
     /// `window_len` must equal the current window length (>= 1).
     pub fn roll(&mut self, out: u8, in_byte: u8, window_len: u32) -> Result<(), ChecksumError> {
-        if window_len == 0 { return Err(ChecksumError::BadWindow); }
+        if window_len == 0 {
+            return Err(ChecksumError::BadWindow);
+        }
         let modu = MOD_ADLER as u64;
         let a64 = self.a as u64;
         let b64 = self.b as u64;
@@ -98,7 +100,9 @@ impl RollingChecksum {
 }
 
 impl Default for RollingChecksum {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RollingChecksumState {
@@ -112,13 +116,17 @@ impl RollingChecksumState {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ChecksumError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ChecksumError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ChecksumError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for RollingChecksumState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -144,7 +152,9 @@ mod tests {
         let mut a = RollingChecksum::new();
         a.extend(b"abc");
         let mut b = RollingChecksum::new();
-        b.push(b'a'); b.push(b'b'); b.push(b'c');
+        b.push(b'a');
+        b.push(b'b');
+        b.push(b'c');
         assert_eq!(a.digest(), b.digest());
     }
 
@@ -178,14 +188,20 @@ mod tests {
     fn zero_window_rejected() {
         let mut c = RollingChecksum::new();
         c.push(b'a');
-        assert!(matches!(c.roll(b'a', b'b', 0).unwrap_err(), ChecksumError::BadWindow));
+        assert!(matches!(
+            c.roll(b'a', b'b', 0).unwrap_err(),
+            ChecksumError::BadWindow
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = RollingChecksumState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), ChecksumError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ChecksumError::SchemaMismatch
+        ));
     }
 
     #[test]

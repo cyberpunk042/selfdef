@@ -107,7 +107,9 @@ impl PromptInputDedup {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DedupError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DedupError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DedupError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -127,7 +129,13 @@ mod tests {
         let mut d = PromptInputDedup::new(60_000);
         d.observe(0xabc, 1_000).unwrap();
         let v = d.check(0xabc, 30_000);
-        assert_eq!(v, DedupVerdict::Duplicate { age_ms: 29_000, original_ts_ms: 1_000 });
+        assert_eq!(
+            v,
+            DedupVerdict::Duplicate {
+                age_ms: 29_000,
+                original_ts_ms: 1_000
+            }
+        );
     }
 
     #[test]
@@ -143,14 +151,23 @@ mod tests {
         d.observe(0xabc, 1_000).unwrap();
         d.observe(0xabc, 2_000).unwrap();
         let v = d.check(0xabc, 3_000);
-        assert_eq!(v, DedupVerdict::Duplicate { age_ms: 1_000, original_ts_ms: 2_000 });
+        assert_eq!(
+            v,
+            DedupVerdict::Duplicate {
+                age_ms: 1_000,
+                original_ts_ms: 2_000
+            }
+        );
     }
 
     #[test]
     fn nonmonotonic_rejected() {
         let mut d = PromptInputDedup::new(60_000);
         d.observe(0xabc, 1_000).unwrap();
-        assert!(matches!(d.observe(0xabc, 500).unwrap_err(), DedupError::NonMonotonic { .. }));
+        assert!(matches!(
+            d.observe(0xabc, 500).unwrap_err(),
+            DedupError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -172,7 +189,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = PromptInputDedup::new(60_000);
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DedupError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DedupError::SchemaMismatch
+        ));
     }
 
     #[test]

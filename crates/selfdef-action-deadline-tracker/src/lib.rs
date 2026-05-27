@@ -88,17 +88,25 @@ impl ActionDeadlineTracker {
 
     /// Register an action with a deadline.
     pub fn register(&mut self, action_id: &str, deadline_ms: u64) -> Result<(), DeadlineError> {
-        if action_id.is_empty() { return Err(DeadlineError::EmptyAction); }
+        if action_id.is_empty() {
+            return Err(DeadlineError::EmptyAction);
+        }
         self.deadlines.insert(action_id.into(), deadline_ms);
         Ok(())
     }
 
     /// Extend (forward-only).
     pub fn extend(&mut self, action_id: &str, new_deadline_ms: u64) -> Result<(), DeadlineError> {
-        let existing = self.deadlines.get(action_id).copied()
+        let existing = self
+            .deadlines
+            .get(action_id)
+            .copied()
             .ok_or_else(|| DeadlineError::UnknownAction(action_id.into()))?;
         if new_deadline_ms < existing {
-            return Err(DeadlineError::BackwardExtend { existing, new: new_deadline_ms });
+            return Err(DeadlineError::BackwardExtend {
+                existing,
+                new: new_deadline_ms,
+            });
         }
         self.deadlines.insert(action_id.into(), new_deadline_ms);
         Ok(())
@@ -110,13 +118,19 @@ impl ActionDeadlineTracker {
             return DeadlineVerdict::Unknown;
         };
         if now_ms >= deadline {
-            return DeadlineVerdict::Expired { overdue_ms: now_ms - deadline };
+            return DeadlineVerdict::Expired {
+                overdue_ms: now_ms - deadline,
+            };
         }
         let remaining = deadline - now_ms;
         if remaining <= warn_ms {
-            DeadlineVerdict::Expiring { remaining_ms: remaining }
+            DeadlineVerdict::Expiring {
+                remaining_ms: remaining,
+            }
         } else {
-            DeadlineVerdict::OnTime { remaining_ms: remaining }
+            DeadlineVerdict::OnTime {
+                remaining_ms: remaining,
+            }
         }
     }
 
@@ -127,7 +141,8 @@ impl ActionDeadlineTracker {
 
     /// List currently-expired actions.
     pub fn expired(&self, now_ms: u64) -> Vec<String> {
-        self.deadlines.iter()
+        self.deadlines
+            .iter()
             .filter(|&(_, &d)| now_ms >= d)
             .map(|(k, _)| k.clone())
             .collect()
@@ -135,16 +150,22 @@ impl ActionDeadlineTracker {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DeadlineError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DeadlineError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DeadlineError::SchemaMismatch);
+        }
         for k in self.deadlines.keys() {
-            if k.is_empty() { return Err(DeadlineError::EmptyAction); }
+            if k.is_empty() {
+                return Err(DeadlineError::EmptyAction);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for ActionDeadlineTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +176,12 @@ mod tests {
     fn ontime_far_from_deadline() {
         let mut t = ActionDeadlineTracker::new();
         t.register("a", 10_000).unwrap();
-        assert!(matches!(t.check("a", 0, 1_000), DeadlineVerdict::OnTime { remaining_ms: 10_000 }));
+        assert!(matches!(
+            t.check("a", 0, 1_000),
+            DeadlineVerdict::OnTime {
+                remaining_ms: 10_000
+            }
+        ));
     }
 
     #[test]
@@ -204,13 +230,19 @@ mod tests {
     fn extend_backward_rejected() {
         let mut t = ActionDeadlineTracker::new();
         t.register("a", 10_000).unwrap();
-        assert!(matches!(t.extend("a", 5_000).unwrap_err(), DeadlineError::BackwardExtend { .. }));
+        assert!(matches!(
+            t.extend("a", 5_000).unwrap_err(),
+            DeadlineError::BackwardExtend { .. }
+        ));
     }
 
     #[test]
     fn extend_unknown_rejected() {
         let mut t = ActionDeadlineTracker::new();
-        assert!(matches!(t.extend("nope", 10).unwrap_err(), DeadlineError::UnknownAction(_)));
+        assert!(matches!(
+            t.extend("nope", 10).unwrap_err(),
+            DeadlineError::UnknownAction(_)
+        ));
     }
 
     #[test]
@@ -226,14 +258,20 @@ mod tests {
     #[test]
     fn empty_action_rejected() {
         let mut t = ActionDeadlineTracker::new();
-        assert!(matches!(t.register("", 1).unwrap_err(), DeadlineError::EmptyAction));
+        assert!(matches!(
+            t.register("", 1).unwrap_err(),
+            DeadlineError::EmptyAction
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = ActionDeadlineTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), DeadlineError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            DeadlineError::SchemaMismatch
+        ));
     }
 
     #[test]

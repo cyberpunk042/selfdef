@@ -92,30 +92,55 @@ impl KillSwitchRegistry {
     }
 
     /// Register.
-    pub fn register(&mut self, id: &str, description: &str, dual_control: bool) -> Result<(), SwitchError> {
-        if id.is_empty() { return Err(SwitchError::EmptyId); }
-        if description.is_empty() { return Err(SwitchError::EmptyDescription); }
+    pub fn register(
+        &mut self,
+        id: &str,
+        description: &str,
+        dual_control: bool,
+    ) -> Result<(), SwitchError> {
+        if id.is_empty() {
+            return Err(SwitchError::EmptyId);
+        }
+        if description.is_empty() {
+            return Err(SwitchError::EmptyDescription);
+        }
         if self.switches.contains_key(id) {
             return Err(SwitchError::DuplicateId(id.into()));
         }
-        self.switches.insert(id.into(), Switch {
-            id: id.into(),
-            description: description.into(),
-            tripped: false,
-            trip_reason: None,
-            tripped_at_ms: None,
-            tripped_by: None,
-            dual_control,
-            trip_count: 0,
-        });
+        self.switches.insert(
+            id.into(),
+            Switch {
+                id: id.into(),
+                description: description.into(),
+                tripped: false,
+                trip_reason: None,
+                tripped_at_ms: None,
+                tripped_by: None,
+                dual_control,
+                trip_count: 0,
+            },
+        );
         Ok(())
     }
 
     /// Trip.
-    pub fn trip(&mut self, id: &str, reason: &str, actor: &str, ts_ms: u64) -> Result<(), SwitchError> {
-        if reason.is_empty() { return Err(SwitchError::EmptyReason); }
-        if actor.is_empty() { return Err(SwitchError::EmptyActor); }
-        let s = self.switches.get_mut(id).ok_or_else(|| SwitchError::UnknownSwitch(id.into()))?;
+    pub fn trip(
+        &mut self,
+        id: &str,
+        reason: &str,
+        actor: &str,
+        ts_ms: u64,
+    ) -> Result<(), SwitchError> {
+        if reason.is_empty() {
+            return Err(SwitchError::EmptyReason);
+        }
+        if actor.is_empty() {
+            return Err(SwitchError::EmptyActor);
+        }
+        let s = self
+            .switches
+            .get_mut(id)
+            .ok_or_else(|| SwitchError::UnknownSwitch(id.into()))?;
         if s.tripped {
             return Err(SwitchError::AlreadyTripped(id.into()));
         }
@@ -129,8 +154,13 @@ impl KillSwitchRegistry {
 
     /// Re-arm (clear tripped state).
     pub fn rearm(&mut self, id: &str, actor: &str) -> Result<(), SwitchError> {
-        if actor.is_empty() { return Err(SwitchError::EmptyActor); }
-        let s = self.switches.get_mut(id).ok_or_else(|| SwitchError::UnknownSwitch(id.into()))?;
+        if actor.is_empty() {
+            return Err(SwitchError::EmptyActor);
+        }
+        let s = self
+            .switches
+            .get_mut(id)
+            .ok_or_else(|| SwitchError::UnknownSwitch(id.into()))?;
         if !s.tripped {
             return Err(SwitchError::NotTripped(id.into()));
         }
@@ -155,15 +185,25 @@ impl KillSwitchRegistry {
 
     /// List currently-tripped switches.
     pub fn tripped_ids(&self) -> Vec<String> {
-        self.switches.values().filter(|s| s.tripped).map(|s| s.id.clone()).collect()
+        self.switches
+            .values()
+            .filter(|s| s.tripped)
+            .map(|s| s.id.clone())
+            .collect()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SwitchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SwitchError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SwitchError::SchemaMismatch);
+        }
         for (id, s) in &self.switches {
-            if id.is_empty() { return Err(SwitchError::EmptyId); }
-            if s.description.is_empty() { return Err(SwitchError::EmptyDescription); }
+            if id.is_empty() {
+                return Err(SwitchError::EmptyId);
+            }
+            if s.description.is_empty() {
+                return Err(SwitchError::EmptyDescription);
+            }
             if s.tripped {
                 if s.trip_reason.as_ref().map(|r| r.is_empty()).unwrap_or(true) {
                     return Err(SwitchError::EmptyReason);
@@ -178,7 +218,9 @@ impl KillSwitchRegistry {
 }
 
 impl Default for KillSwitchRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -188,7 +230,8 @@ mod tests {
     #[test]
     fn register_starts_operational() {
         let mut r = KillSwitchRegistry::new();
-        r.register("egress", "halt all outbound traffic", false).unwrap();
+        r.register("egress", "halt all outbound traffic", false)
+            .unwrap();
         assert!(r.is_operational("egress"));
     }
 
@@ -207,7 +250,10 @@ mod tests {
         let mut r = KillSwitchRegistry::new();
         r.register("kill", "halt", true).unwrap();
         r.trip("kill", "reason", "alice", 0).unwrap();
-        assert!(matches!(r.rearm("kill", "alice").unwrap_err(), SwitchError::DualControl(_)));
+        assert!(matches!(
+            r.rearm("kill", "alice").unwrap_err(),
+            SwitchError::DualControl(_)
+        ));
         // Different actor can re-arm.
         r.rearm("kill", "bob").unwrap();
     }
@@ -217,14 +263,20 @@ mod tests {
         let mut r = KillSwitchRegistry::new();
         r.register("k", "x", false).unwrap();
         r.trip("k", "r", "a", 0).unwrap();
-        assert!(matches!(r.trip("k", "r2", "b", 1).unwrap_err(), SwitchError::AlreadyTripped(_)));
+        assert!(matches!(
+            r.trip("k", "r2", "b", 1).unwrap_err(),
+            SwitchError::AlreadyTripped(_)
+        ));
     }
 
     #[test]
     fn rearm_unarmed_rejected() {
         let mut r = KillSwitchRegistry::new();
         r.register("k", "x", false).unwrap();
-        assert!(matches!(r.rearm("k", "a").unwrap_err(), SwitchError::NotTripped(_)));
+        assert!(matches!(
+            r.rearm("k", "a").unwrap_err(),
+            SwitchError::NotTripped(_)
+        ));
     }
 
     #[test]
@@ -249,31 +301,52 @@ mod tests {
     #[test]
     fn unknown_switch_rejected() {
         let mut r = KillSwitchRegistry::new();
-        assert!(matches!(r.trip("nope", "r", "a", 0).unwrap_err(), SwitchError::UnknownSwitch(_)));
+        assert!(matches!(
+            r.trip("nope", "r", "a", 0).unwrap_err(),
+            SwitchError::UnknownSwitch(_)
+        ));
     }
 
     #[test]
     fn duplicate_register_rejected() {
         let mut r = KillSwitchRegistry::new();
         r.register("a", "x", false).unwrap();
-        assert!(matches!(r.register("a", "x", false).unwrap_err(), SwitchError::DuplicateId(_)));
+        assert!(matches!(
+            r.register("a", "x", false).unwrap_err(),
+            SwitchError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut r = KillSwitchRegistry::new();
-        assert!(matches!(r.register("", "x", false).unwrap_err(), SwitchError::EmptyId));
-        assert!(matches!(r.register("a", "", false).unwrap_err(), SwitchError::EmptyDescription));
+        assert!(matches!(
+            r.register("", "x", false).unwrap_err(),
+            SwitchError::EmptyId
+        ));
+        assert!(matches!(
+            r.register("a", "", false).unwrap_err(),
+            SwitchError::EmptyDescription
+        ));
         r.register("a", "x", false).unwrap();
-        assert!(matches!(r.trip("a", "", "x", 0).unwrap_err(), SwitchError::EmptyReason));
-        assert!(matches!(r.trip("a", "r", "", 0).unwrap_err(), SwitchError::EmptyActor));
+        assert!(matches!(
+            r.trip("a", "", "x", 0).unwrap_err(),
+            SwitchError::EmptyReason
+        ));
+        assert!(matches!(
+            r.trip("a", "r", "", 0).unwrap_err(),
+            SwitchError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = KillSwitchRegistry::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), SwitchError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            SwitchError::SchemaMismatch
+        ));
     }
 
     #[test]

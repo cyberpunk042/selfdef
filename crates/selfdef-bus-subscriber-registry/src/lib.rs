@@ -96,9 +96,15 @@ pub enum BusError {
 }
 
 const REQUIRED: [Subscriber; 9] = [
-    Subscriber::AuditLog, Subscriber::Quarantine, Subscriber::Notifier,
-    Subscriber::EvidenceLedger, Subscriber::HistorySink, Subscriber::PolicyBus,
-    Subscriber::TrustScore, Subscriber::ProfileAuthority, Subscriber::DashboardManifest,
+    Subscriber::AuditLog,
+    Subscriber::Quarantine,
+    Subscriber::Notifier,
+    Subscriber::EvidenceLedger,
+    Subscriber::HistorySink,
+    Subscriber::PolicyBus,
+    Subscriber::TrustScore,
+    Subscriber::ProfileAuthority,
+    Subscriber::DashboardManifest,
 ];
 
 impl Subscriber {
@@ -130,12 +136,15 @@ impl Subscriber {
 impl SubscriberRegistry {
     /// Canonical empty (all wired, none quarantined).
     pub fn canonical() -> Self {
-        let entries = REQUIRED.iter().map(|s| SubscriberRecord {
-            subscriber: *s,
-            delivery: s.canonical_delivery(),
-            wired: true,
-            quarantined: false,
-        }).collect();
+        let entries = REQUIRED
+            .iter()
+            .map(|s| SubscriberRecord {
+                subscriber: *s,
+                delivery: s.canonical_delivery(),
+                wired: true,
+                quarantined: false,
+            })
+            .collect();
         Self {
             schema_version: SCHEMA_VERSION.into(),
             entries,
@@ -162,8 +171,12 @@ impl SubscriberRegistry {
     pub fn assert_ready(&self) -> Result<(), BusError> {
         self.validate()?;
         for r in &self.entries {
-            if !r.wired { return Err(BusError::Unwired(r.subscriber)); }
-            if r.quarantined { return Err(BusError::Quarantined(r.subscriber)); }
+            if !r.wired {
+                return Err(BusError::Unwired(r.subscriber));
+            }
+            if r.quarantined {
+                return Err(BusError::Quarantined(r.subscriber));
+            }
         }
         Ok(())
     }
@@ -175,7 +188,11 @@ impl SubscriberRegistry {
 
     /// Subscribers currently active (wired + not quarantined).
     pub fn active_subscribers(&self) -> Vec<Subscriber> {
-        self.entries.iter().filter(|r| r.wired && !r.quarantined).map(|r| r.subscriber).collect()
+        self.entries
+            .iter()
+            .filter(|r| r.wired && !r.quarantined)
+            .map(|r| r.subscriber)
+            .collect()
     }
 }
 
@@ -200,10 +217,19 @@ mod tests {
 
     #[test]
     fn canonical_delivery_map() {
-        assert_eq!(Subscriber::AuditLog.canonical_delivery(), Delivery::Broadcast);
+        assert_eq!(
+            Subscriber::AuditLog.canonical_delivery(),
+            Delivery::Broadcast
+        );
         assert_eq!(Subscriber::Quarantine.canonical_delivery(), Delivery::Queue);
-        assert_eq!(Subscriber::TrustScore.canonical_delivery(), Delivery::Signaled);
-        assert_eq!(Subscriber::ProfileAuthority.canonical_delivery(), Delivery::Signaled);
+        assert_eq!(
+            Subscriber::TrustScore.canonical_delivery(),
+            Delivery::Signaled
+        );
+        assert_eq!(
+            Subscriber::ProfileAuthority.canonical_delivery(),
+            Delivery::Signaled
+        );
     }
 
     #[test]
@@ -230,14 +256,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = SubscriberRegistry::canonical();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), BusError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BusError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut r = SubscriberRegistry::canonical();
         r.entries.pop();
-        assert!(matches!(r.validate().unwrap_err(), BusError::CountInvalid(8)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BusError::CountInvalid(8)
+        ));
     }
 
     #[test]
@@ -253,16 +285,34 @@ mod tests {
 
     #[test]
     fn subscriber_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Subscriber::AuditLog).unwrap(), "\"audit-log\"");
-        assert_eq!(serde_json::to_string(&Subscriber::EvidenceLedger).unwrap(), "\"evidence-ledger\"");
-        assert_eq!(serde_json::to_string(&Subscriber::DashboardManifest).unwrap(), "\"dashboard-manifest\"");
+        assert_eq!(
+            serde_json::to_string(&Subscriber::AuditLog).unwrap(),
+            "\"audit-log\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Subscriber::EvidenceLedger).unwrap(),
+            "\"evidence-ledger\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Subscriber::DashboardManifest).unwrap(),
+            "\"dashboard-manifest\""
+        );
     }
 
     #[test]
     fn delivery_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Delivery::Broadcast).unwrap(), "\"broadcast\"");
-        assert_eq!(serde_json::to_string(&Delivery::Queue).unwrap(), "\"queue\"");
-        assert_eq!(serde_json::to_string(&Delivery::Signaled).unwrap(), "\"signaled\"");
+        assert_eq!(
+            serde_json::to_string(&Delivery::Broadcast).unwrap(),
+            "\"broadcast\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Delivery::Queue).unwrap(),
+            "\"queue\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Delivery::Signaled).unwrap(),
+            "\"signaled\""
+        );
     }
 
     #[test]

@@ -67,7 +67,11 @@ pub enum SelfTestError {
 }
 
 fn d(
-    action: &str, sec: SideEffectClass, outcome: Outcome, profile: &str, risk: RiskClass,
+    action: &str,
+    sec: SideEffectClass,
+    outcome: Outcome,
+    profile: &str,
+    risk: RiskClass,
 ) -> PolicyDecision {
     // Persistent Allow + Critical Allow both require Approved per policy validate.
     let user_approval = if outcome == Outcome::Allow
@@ -101,37 +105,91 @@ pub fn canonical_fixtures() -> Vec<CanaryFixture> {
     vec![
         CanaryFixture {
             name: "allow-read-only".into(),
-            decision: d("fs.read", SideEffectClass::ReadOnly, Outcome::Allow, "careful", RiskClass::Low),
-            expected_tags: vec![DoctrineTag::EveryActionObservable, DoctrineTag::TraceAtDecision],
+            decision: d(
+                "fs.read",
+                SideEffectClass::ReadOnly,
+                Outcome::Allow,
+                "careful",
+                RiskClass::Low,
+            ),
+            expected_tags: vec![
+                DoctrineTag::EveryActionObservable,
+                DoctrineTag::TraceAtDecision,
+            ],
         },
         CanaryFixture {
             name: "ask-approval-low-risk".into(),
-            decision: d("fs.read", SideEffectClass::ReadOnly, Outcome::Ask, "careful", RiskClass::Low),
+            decision: d(
+                "fs.read",
+                SideEffectClass::ReadOnly,
+                Outcome::Ask,
+                "careful",
+                RiskClass::Low,
+            ),
             expected_tags: vec![DoctrineTag::AuthorityFollowsEvidence],
         },
         CanaryFixture {
             name: "persistent-commit".into(),
-            decision: d("zfs.commit", SideEffectClass::Persistent, Outcome::Allow, "careful", RiskClass::High),
+            decision: d(
+                "zfs.commit",
+                SideEffectClass::Persistent,
+                Outcome::Allow,
+                "careful",
+                RiskClass::High,
+            ),
             expected_tags: vec![DoctrineTag::CommitIsDurableChange],
         },
         CanaryFixture {
             name: "fs-write-host".into(),
-            decision: d("fs.write", SideEffectClass::FsWrite, Outcome::Allow, "careful", RiskClass::Low),
-            expected_tags: vec![DoctrineTag::VmProposesHostCommits, DoctrineTag::VmNeverMutates],
+            decision: d(
+                "fs.write",
+                SideEffectClass::FsWrite,
+                Outcome::Allow,
+                "careful",
+                RiskClass::Low,
+            ),
+            expected_tags: vec![
+                DoctrineTag::VmProposesHostCommits,
+                DoctrineTag::VmNeverMutates,
+            ],
         },
         CanaryFixture {
             name: "network-egress".into(),
-            decision: d("net.fetch", SideEffectClass::NetworkEgress, Outcome::Allow, "careful", RiskClass::Low),
-            expected_tags: vec![DoctrineTag::VmProposesHostCommits, DoctrineTag::VmNeverMutates],
+            decision: d(
+                "net.fetch",
+                SideEffectClass::NetworkEgress,
+                Outcome::Allow,
+                "careful",
+                RiskClass::Low,
+            ),
+            expected_tags: vec![
+                DoctrineTag::VmProposesHostCommits,
+                DoctrineTag::VmNeverMutates,
+            ],
         },
         CanaryFixture {
             name: "process-spawn".into(),
-            decision: d("proc.spawn", SideEffectClass::Process, Outcome::Allow, "careful", RiskClass::Low),
-            expected_tags: vec![DoctrineTag::VmProposesHostCommits, DoctrineTag::VmNeverMutates],
+            decision: d(
+                "proc.spawn",
+                SideEffectClass::Process,
+                Outcome::Allow,
+                "careful",
+                RiskClass::Low,
+            ),
+            expected_tags: vec![
+                DoctrineTag::VmProposesHostCommits,
+                DoctrineTag::VmNeverMutates,
+            ],
         },
         CanaryFixture {
             name: "sandbox-escalation".into(),
-            decision: d("fs.write", SideEffectClass::FsWrite, Outcome::Sandbox, "autonomous", RiskClass::Medium),
+            decision: d(
+                "fs.write",
+                SideEffectClass::FsWrite,
+                Outcome::Sandbox,
+                "autonomous",
+                RiskClass::Medium,
+            ),
             expected_tags: vec![DoctrineTag::ExplicitExchange],
         },
     ]
@@ -158,7 +216,11 @@ impl SelfTestReport {
 
     /// Names of failed canaries.
     pub fn failed_names(&self) -> Vec<String> {
-        self.results.iter().filter(|r| !r.passed).map(|r| r.name.clone()).collect()
+        self.results
+            .iter()
+            .filter(|r| !r.passed)
+            .map(|r| r.name.clone())
+            .collect()
     }
 
     /// Assert all passed — daemon refuses bring-up otherwise.
@@ -172,11 +234,19 @@ impl SelfTestReport {
 
 fn run_one(f: &CanaryFixture, registry: &DoctrineRegistry) -> CanaryResult {
     if let Err(e) = f.decision.validate() {
-        return CanaryResult { name: f.name.clone(), passed: false, reason: format!("decision invalid: {e}") };
+        return CanaryResult {
+            name: f.name.clone(),
+            passed: false,
+            reason: format!("decision invalid: {e}"),
+        };
     }
     let citation = cite(&f.decision);
     if let Err(e) = citation.validate(&f.decision, registry) {
-        return CanaryResult { name: f.name.clone(), passed: false, reason: format!("citation invalid: {e}") };
+        return CanaryResult {
+            name: f.name.clone(),
+            passed: false,
+            reason: format!("citation invalid: {e}"),
+        };
     }
     for tag in &f.expected_tags {
         if !citation.cites(*tag) {
@@ -187,14 +257,20 @@ fn run_one(f: &CanaryFixture, registry: &DoctrineRegistry) -> CanaryResult {
             };
         }
     }
-    CanaryResult { name: f.name.clone(), passed: true, reason: String::new() }
+    CanaryResult {
+        name: f.name.clone(),
+        passed: true,
+        reason: String::new(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn reg() -> DoctrineRegistry { DoctrineRegistry::canonical() }
+    fn reg() -> DoctrineRegistry {
+        DoctrineRegistry::canonical()
+    }
 
     #[test]
     fn seven_canonical_fixtures() {

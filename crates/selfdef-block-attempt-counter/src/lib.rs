@@ -73,13 +73,27 @@ impl BlockAttemptCounter {
     }
 
     /// Record an attempt.
-    pub fn record(&mut self, actor: &str, action_kind: &str, ts_ms: u64, blocked: bool, reason: Option<&str>) -> Result<(), CounterError> {
-        if actor.is_empty() { return Err(CounterError::EmptyActor); }
-        if action_kind.is_empty() { return Err(CounterError::EmptyKind); }
+    pub fn record(
+        &mut self,
+        actor: &str,
+        action_kind: &str,
+        ts_ms: u64,
+        blocked: bool,
+        reason: Option<&str>,
+    ) -> Result<(), CounterError> {
+        if actor.is_empty() {
+            return Err(CounterError::EmptyActor);
+        }
+        if action_kind.is_empty() {
+            return Err(CounterError::EmptyKind);
+        }
         let by_kind = self.buckets.entry(actor.into()).or_default();
         let s = by_kind.entry(action_kind.into()).or_default();
         if ts_ms < s.last_attempt_ts_ms {
-            return Err(CounterError::NonMonotonic { prev: s.last_attempt_ts_ms, new: ts_ms });
+            return Err(CounterError::NonMonotonic {
+                prev: s.last_attempt_ts_ms,
+                new: ts_ms,
+            });
         }
         s.attempts = s.attempts.saturating_add(1);
         if blocked {
@@ -99,23 +113,30 @@ impl BlockAttemptCounter {
 
     /// Total blocked for an actor across all action kinds.
     pub fn blocked_total(&self, actor: &str) -> u32 {
-        self.buckets.get(actor)
+        self.buckets
+            .get(actor)
             .map(|by_kind| by_kind.values().map(|s| s.blocked).sum())
             .unwrap_or(0)
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CounterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CounterError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CounterError::SchemaMismatch);
+        }
         for (a, _) in &self.buckets {
-            if a.is_empty() { return Err(CounterError::EmptyActor); }
+            if a.is_empty() {
+                return Err(CounterError::EmptyActor);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for BlockAttemptCounter {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -134,7 +155,8 @@ mod tests {
     #[test]
     fn record_blocked_with_reason() {
         let mut c = BlockAttemptCounter::new();
-        c.record("actor", "write", 0, true, Some("no grant")).unwrap();
+        c.record("actor", "write", 0, true, Some("no grant"))
+            .unwrap();
         let s = c.stats("actor", "write").unwrap();
         assert_eq!(s.blocked, 1);
         assert_eq!(s.last_block_reason.as_deref(), Some("no grant"));
@@ -159,21 +181,33 @@ mod tests {
     fn nonmonotonic_rejected() {
         let mut c = BlockAttemptCounter::new();
         c.record("a", "k", 200, false, None).unwrap();
-        assert!(matches!(c.record("a", "k", 100, false, None).unwrap_err(), CounterError::NonMonotonic { .. }));
+        assert!(matches!(
+            c.record("a", "k", 100, false, None).unwrap_err(),
+            CounterError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut c = BlockAttemptCounter::new();
-        assert!(matches!(c.record("", "k", 0, false, None).unwrap_err(), CounterError::EmptyActor));
-        assert!(matches!(c.record("a", "", 0, false, None).unwrap_err(), CounterError::EmptyKind));
+        assert!(matches!(
+            c.record("", "k", 0, false, None).unwrap_err(),
+            CounterError::EmptyActor
+        ));
+        assert!(matches!(
+            c.record("a", "", 0, false, None).unwrap_err(),
+            CounterError::EmptyKind
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = BlockAttemptCounter::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

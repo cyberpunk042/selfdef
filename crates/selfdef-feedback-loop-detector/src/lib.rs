@@ -80,8 +80,12 @@ pub enum DetectorError {
 impl FeedbackLoopDetector {
     /// New.
     pub fn new(window_size: u32, repeat_threshold: u32) -> Result<Self, DetectorError> {
-        if window_size == 0 { return Err(DetectorError::WindowZero); }
-        if repeat_threshold == 0 { return Err(DetectorError::ThresholdZero); }
+        if window_size == 0 {
+            return Err(DetectorError::WindowZero);
+        }
+        if repeat_threshold == 0 {
+            return Err(DetectorError::ThresholdZero);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_size,
@@ -93,7 +97,12 @@ impl FeedbackLoopDetector {
     /// Observe one edge.
     pub fn observe(&mut self, edge: Edge) -> Observation {
         // FeedbackDetected: new output digest equals a previous input digest.
-        if let Some(prev) = self.recent.iter().find(|e| e.input_digest == edge.output_digest).cloned() {
+        if let Some(prev) = self
+            .recent
+            .iter()
+            .find(|e| e.input_digest == edge.output_digest)
+            .cloned()
+        {
             // Insert before reporting so it shows in count next round.
             self.recent.push(edge.clone());
             while (self.recent.len() as u32) > self.window_size {
@@ -125,8 +134,12 @@ impl FeedbackLoopDetector {
         if self.schema_version != SCHEMA_VERSION {
             return Err(DetectorError::SchemaMismatch);
         }
-        if self.window_size == 0 { return Err(DetectorError::WindowZero); }
-        if self.repeat_threshold == 0 { return Err(DetectorError::ThresholdZero); }
+        if self.window_size == 0 {
+            return Err(DetectorError::WindowZero);
+        }
+        if self.repeat_threshold == 0 {
+            return Err(DetectorError::ThresholdZero);
+        }
         Ok(())
     }
 }
@@ -136,17 +149,27 @@ mod tests {
     use super::*;
 
     fn e(tool: &str, ind: u64, outd: u64) -> Edge {
-        Edge { tool_id: tool.into(), input_digest: ind, output_digest: outd }
+        Edge {
+            tool_id: tool.into(),
+            input_digest: ind,
+            output_digest: outd,
+        }
     }
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(FeedbackLoopDetector::new(0, 1).unwrap_err(), DetectorError::WindowZero));
+        assert!(matches!(
+            FeedbackLoopDetector::new(0, 1).unwrap_err(),
+            DetectorError::WindowZero
+        ));
     }
 
     #[test]
     fn zero_threshold_rejected() {
-        assert!(matches!(FeedbackLoopDetector::new(5, 0).unwrap_err(), DetectorError::ThresholdZero));
+        assert!(matches!(
+            FeedbackLoopDetector::new(5, 0).unwrap_err(),
+            DetectorError::ThresholdZero
+        ));
     }
 
     #[test]
@@ -201,15 +224,29 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = FeedbackLoopDetector::new(5, 2).unwrap();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DetectorError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DetectorError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn observation_serde_kebab() {
         let o = Observation::Clean;
-        assert!(serde_json::to_string(&o).unwrap().contains("\"kind\":\"clean\""));
-        let o = Observation::CycleDetected { edge: e("a", 1, 2), count: 3 };
-        assert!(serde_json::to_string(&o).unwrap().contains("\"kind\":\"cycle-detected\""));
+        assert!(
+            serde_json::to_string(&o)
+                .unwrap()
+                .contains("\"kind\":\"clean\"")
+        );
+        let o = Observation::CycleDetected {
+            edge: e("a", 1, 2),
+            count: 3,
+        };
+        assert!(
+            serde_json::to_string(&o)
+                .unwrap()
+                .contains("\"kind\":\"cycle-detected\"")
+        );
     }
 
     #[test]

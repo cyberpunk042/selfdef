@@ -105,7 +105,11 @@ pub enum QuorumError {
 
 impl QuorumPool {
     /// New pool. `authorized` must contain `required` or more distinct ids.
-    pub fn new(action_id: &str, required: u32, authorized: Vec<String>) -> Result<Self, QuorumError> {
+    pub fn new(
+        action_id: &str,
+        required: u32,
+        authorized: Vec<String>,
+    ) -> Result<Self, QuorumError> {
         if action_id.is_empty() {
             return Err(QuorumError::EmptyActionId);
         }
@@ -132,7 +136,12 @@ impl QuorumPool {
     /// Cast a vote. Duplicate approvals from the same operator are a
     /// no-op (idempotent). A veto from any authorized operator vacates
     /// the pool.
-    pub fn cast(&mut self, operator_id: &str, vote: Vote, at: &str) -> Result<QuorumDecision, QuorumError> {
+    pub fn cast(
+        &mut self,
+        operator_id: &str,
+        vote: Vote,
+        at: &str,
+    ) -> Result<QuorumDecision, QuorumError> {
         if operator_id.is_empty() {
             return Err(QuorumError::EmptyOperatorId);
         }
@@ -156,7 +165,10 @@ impl QuorumPool {
             }
             Vote::Approve => {
                 // Idempotent: only record first Approve from this operator.
-                let already = self.ballots.iter().any(|b| b.operator_id == operator_id && b.vote == Vote::Approve);
+                let already = self
+                    .ballots
+                    .iter()
+                    .any(|b| b.operator_id == operator_id && b.vote == Vote::Approve);
                 if !already {
                     self.ballots.push(Ballot {
                         operator_id: operator_id.into(),
@@ -278,8 +290,14 @@ mod tests {
     #[test]
     fn pending_until_quorum() {
         let mut p = QuorumPool::new("act", 2, auth(&["a", "b", "c"])).unwrap();
-        assert_eq!(p.cast("a", Vote::Approve, "t1").unwrap(), QuorumDecision::Pending);
-        assert_eq!(p.cast("b", Vote::Approve, "t2").unwrap(), QuorumDecision::Cleared);
+        assert_eq!(
+            p.cast("a", Vote::Approve, "t1").unwrap(),
+            QuorumDecision::Pending
+        );
+        assert_eq!(
+            p.cast("b", Vote::Approve, "t2").unwrap(),
+            QuorumDecision::Cleared
+        );
     }
 
     #[test]
@@ -296,28 +314,40 @@ mod tests {
     fn veto_vacates_pool() {
         let mut p = QuorumPool::new("act", 2, auth(&["a", "b", "c"])).unwrap();
         p.cast("a", Vote::Approve, "t1").unwrap();
-        assert_eq!(p.cast("c", Vote::Veto, "t2").unwrap(), QuorumDecision::Vetoed);
+        assert_eq!(
+            p.cast("c", Vote::Veto, "t2").unwrap(),
+            QuorumDecision::Vetoed
+        );
         assert!(p.vetoed);
     }
 
     #[test]
     fn unauthorized_voter_rejected() {
         let mut p = QuorumPool::new("act", 1, auth(&["a"])).unwrap();
-        assert!(matches!(p.cast("z", Vote::Approve, "t").unwrap_err(), QuorumError::NotAuthorized(_)));
+        assert!(matches!(
+            p.cast("z", Vote::Approve, "t").unwrap_err(),
+            QuorumError::NotAuthorized(_)
+        ));
     }
 
     #[test]
     fn vote_after_veto_rejected() {
         let mut p = QuorumPool::new("act", 1, auth(&["a", "b"])).unwrap();
         p.cast("a", Vote::Veto, "t").unwrap();
-        assert!(matches!(p.cast("b", Vote::Approve, "t").unwrap_err(), QuorumError::AlreadyVetoed));
+        assert!(matches!(
+            p.cast("b", Vote::Approve, "t").unwrap_err(),
+            QuorumError::AlreadyVetoed
+        ));
     }
 
     #[test]
     fn vote_after_cleared_rejected() {
         let mut p = QuorumPool::new("act", 1, auth(&["a", "b"])).unwrap();
         p.cast("a", Vote::Approve, "t").unwrap();
-        assert!(matches!(p.cast("b", Vote::Approve, "t").unwrap_err(), QuorumError::AlreadyCleared));
+        assert!(matches!(
+            p.cast("b", Vote::Approve, "t").unwrap_err(),
+            QuorumError::AlreadyCleared
+        ));
     }
 
     #[test]
@@ -334,20 +364,35 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = QuorumPool::new("act", 1, auth(&["a"])).unwrap();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), QuorumError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            QuorumError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn vote_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Vote::Approve).unwrap(), "\"approve\"");
+        assert_eq!(
+            serde_json::to_string(&Vote::Approve).unwrap(),
+            "\"approve\""
+        );
         assert_eq!(serde_json::to_string(&Vote::Veto).unwrap(), "\"veto\"");
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&QuorumDecision::Cleared).unwrap(), "\"cleared\"");
-        assert_eq!(serde_json::to_string(&QuorumDecision::Pending).unwrap(), "\"pending\"");
-        assert_eq!(serde_json::to_string(&QuorumDecision::Vetoed).unwrap(), "\"vetoed\"");
+        assert_eq!(
+            serde_json::to_string(&QuorumDecision::Cleared).unwrap(),
+            "\"cleared\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuorumDecision::Pending).unwrap(),
+            "\"pending\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuorumDecision::Vetoed).unwrap(),
+            "\"vetoed\""
+        );
     }
 
     #[test]

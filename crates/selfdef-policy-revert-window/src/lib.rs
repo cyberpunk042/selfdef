@@ -76,9 +76,22 @@ impl PolicyRevertWindow {
     }
 
     /// Record a change.
-    pub fn record_change(&mut self, policy_id: &str, ts_ms: u64, prior_blob: &str) -> Result<(), RevertError> {
-        if policy_id.is_empty() { return Err(RevertError::EmptyId); }
-        self.changes.insert(policy_id.into(), Change { ts_ms, prior_blob: prior_blob.into() });
+    pub fn record_change(
+        &mut self,
+        policy_id: &str,
+        ts_ms: u64,
+        prior_blob: &str,
+    ) -> Result<(), RevertError> {
+        if policy_id.is_empty() {
+            return Err(RevertError::EmptyId);
+        }
+        self.changes.insert(
+            policy_id.into(),
+            Change {
+                ts_ms,
+                prior_blob: prior_blob.into(),
+            },
+        );
         Ok(())
     }
 
@@ -92,20 +105,27 @@ impl PolicyRevertWindow {
             return RevertVerdict::Stale;
         }
         self.changes.remove(policy_id);
-        RevertVerdict::Accepted { prior_blob: entry.prior_blob }
+        RevertVerdict::Accepted {
+            prior_blob: entry.prior_blob,
+        }
     }
 
     /// Drop expired entries.
     pub fn rotate(&mut self, now_ms: u64) {
         let w = self.revert_ms;
-        self.changes.retain(|_, c| now_ms.saturating_sub(c.ts_ms) <= w);
+        self.changes
+            .retain(|_, c| now_ms.saturating_sub(c.ts_ms) <= w);
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RevertError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RevertError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RevertError::SchemaMismatch);
+        }
         for id in self.changes.keys() {
-            if id.is_empty() { return Err(RevertError::EmptyId); }
+            if id.is_empty() {
+                return Err(RevertError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -150,7 +170,10 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut w = PolicyRevertWindow::new(60_000);
-        assert!(matches!(w.record_change("", 0, "x").unwrap_err(), RevertError::EmptyId));
+        assert!(matches!(
+            w.record_change("", 0, "x").unwrap_err(),
+            RevertError::EmptyId
+        ));
     }
 
     #[test]
@@ -177,7 +200,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut w = PolicyRevertWindow::new(1);
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), RevertError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            RevertError::SchemaMismatch
+        ));
     }
 
     #[test]

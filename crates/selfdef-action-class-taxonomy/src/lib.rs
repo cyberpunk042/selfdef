@@ -80,26 +80,82 @@ pub enum ActionClassError {
 }
 
 const REQUIRED: [ActionClass; 10] = [
-    ActionClass::FsRead, ActionClass::FsWrite, ActionClass::FsDelete,
-    ActionClass::NetFetch, ActionClass::NetPost,
-    ActionClass::ProcSpawn, ActionClass::ProcKill,
-    ActionClass::ConfigChange, ActionClass::SecretRead, ActionClass::IpsAdmin,
+    ActionClass::FsRead,
+    ActionClass::FsWrite,
+    ActionClass::FsDelete,
+    ActionClass::NetFetch,
+    ActionClass::NetPost,
+    ActionClass::ProcSpawn,
+    ActionClass::ProcKill,
+    ActionClass::ConfigChange,
+    ActionClass::SecretRead,
+    ActionClass::IpsAdmin,
 ];
 
 impl ActionClassTaxonomy {
     /// Canonical taxonomy.
     pub fn canonical() -> Self {
         let defaults = vec![
-            ActionClassDefaults { class: ActionClass::FsRead,       risk: RiskClass::Low,      side_effect: SideEffectClass::ReadOnly,      min_profile: Profile::Private },
-            ActionClassDefaults { class: ActionClass::FsWrite,      risk: RiskClass::Medium,   side_effect: SideEffectClass::FsWrite,       min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::FsDelete,     risk: RiskClass::High,     side_effect: SideEffectClass::FsWrite,       min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::NetFetch,     risk: RiskClass::Low,      side_effect: SideEffectClass::NetworkEgress, min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::NetPost,      risk: RiskClass::Medium,   side_effect: SideEffectClass::NetworkEgress, min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::ProcSpawn,    risk: RiskClass::Medium,   side_effect: SideEffectClass::Process,       min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::ProcKill,     risk: RiskClass::High,     side_effect: SideEffectClass::Process,       min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::ConfigChange, risk: RiskClass::High,     side_effect: SideEffectClass::Persistent,    min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::SecretRead,   risk: RiskClass::High,     side_effect: SideEffectClass::ReadOnly,      min_profile: Profile::Careful },
-            ActionClassDefaults { class: ActionClass::IpsAdmin,     risk: RiskClass::Critical, side_effect: SideEffectClass::Persistent,    min_profile: Profile::Production },
+            ActionClassDefaults {
+                class: ActionClass::FsRead,
+                risk: RiskClass::Low,
+                side_effect: SideEffectClass::ReadOnly,
+                min_profile: Profile::Private,
+            },
+            ActionClassDefaults {
+                class: ActionClass::FsWrite,
+                risk: RiskClass::Medium,
+                side_effect: SideEffectClass::FsWrite,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::FsDelete,
+                risk: RiskClass::High,
+                side_effect: SideEffectClass::FsWrite,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::NetFetch,
+                risk: RiskClass::Low,
+                side_effect: SideEffectClass::NetworkEgress,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::NetPost,
+                risk: RiskClass::Medium,
+                side_effect: SideEffectClass::NetworkEgress,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::ProcSpawn,
+                risk: RiskClass::Medium,
+                side_effect: SideEffectClass::Process,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::ProcKill,
+                risk: RiskClass::High,
+                side_effect: SideEffectClass::Process,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::ConfigChange,
+                risk: RiskClass::High,
+                side_effect: SideEffectClass::Persistent,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::SecretRead,
+                risk: RiskClass::High,
+                side_effect: SideEffectClass::ReadOnly,
+                min_profile: Profile::Careful,
+            },
+            ActionClassDefaults {
+                class: ActionClass::IpsAdmin,
+                risk: RiskClass::Critical,
+                side_effect: SideEffectClass::Persistent,
+                min_profile: Profile::Production,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -141,7 +197,9 @@ mod tests {
     #[test]
     fn ten_classes_present() {
         let t = ActionClassTaxonomy::canonical();
-        for c in REQUIRED { assert!(t.get(c).is_some(), "missing {c:?}"); }
+        for c in REQUIRED {
+            assert!(t.get(c).is_some(), "missing {c:?}");
+        }
     }
 
     #[test]
@@ -181,34 +239,55 @@ mod tests {
     #[test]
     fn secret_read_high_risk() {
         let t = ActionClassTaxonomy::canonical();
-        assert_eq!(t.get(ActionClass::SecretRead).unwrap().risk, RiskClass::High);
+        assert_eq!(
+            t.get(ActionClass::SecretRead).unwrap().risk,
+            RiskClass::High
+        );
     }
 
     #[test]
     fn config_change_persistent() {
         let t = ActionClassTaxonomy::canonical();
-        assert_eq!(t.get(ActionClass::ConfigChange).unwrap().side_effect, SideEffectClass::Persistent);
+        assert_eq!(
+            t.get(ActionClass::ConfigChange).unwrap().side_effect,
+            SideEffectClass::Persistent
+        );
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut t = ActionClassTaxonomy::canonical();
         t.defaults.pop();
-        assert!(matches!(t.validate().unwrap_err(), ActionClassError::CountInvalid(9)));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            ActionClassError::CountInvalid(9)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = ActionClassTaxonomy::canonical();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), ActionClassError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            ActionClassError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ActionClass::FsRead).unwrap(), "\"fs-read\"");
-        assert_eq!(serde_json::to_string(&ActionClass::ConfigChange).unwrap(), "\"config-change\"");
-        assert_eq!(serde_json::to_string(&ActionClass::IpsAdmin).unwrap(), "\"ips-admin\"");
+        assert_eq!(
+            serde_json::to_string(&ActionClass::FsRead).unwrap(),
+            "\"fs-read\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActionClass::ConfigChange).unwrap(),
+            "\"config-change\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActionClass::IpsAdmin).unwrap(),
+            "\"ips-admin\""
+        );
     }
 
     #[test]

@@ -89,7 +89,9 @@ impl GeoRegionPolicy {
     pub fn set_default_regions(&mut self, regions: &[&str]) -> Result<(), GeoError> {
         let mut set = BTreeSet::new();
         for r in regions {
-            if r.is_empty() { return Err(GeoError::EmptyRegion); }
+            if r.is_empty() {
+                return Err(GeoError::EmptyRegion);
+            }
             set.insert((*r).into());
         }
         self.default_regions = set;
@@ -98,13 +100,18 @@ impl GeoRegionPolicy {
 
     /// Configure actor.
     pub fn set_actor(&mut self, actor: &str, mode: Mode, regions: &[&str]) -> Result<(), GeoError> {
-        if actor.is_empty() { return Err(GeoError::EmptyActor); }
+        if actor.is_empty() {
+            return Err(GeoError::EmptyActor);
+        }
         let mut set = BTreeSet::new();
         for r in regions {
-            if r.is_empty() { return Err(GeoError::EmptyRegion); }
+            if r.is_empty() {
+                return Err(GeoError::EmptyRegion);
+            }
             set.insert((*r).into());
         }
-        self.actors.insert(actor.into(), ActorRegions { mode, regions: set });
+        self.actors
+            .insert(actor.into(), ActorRegions { mode, regions: set });
         Ok(())
     }
 
@@ -115,8 +122,12 @@ impl GeoRegionPolicy {
 
     /// Decide.
     pub fn decide(&self, actor: &str, region: &str) -> Result<GeoVerdict, GeoError> {
-        if actor.is_empty() { return Err(GeoError::EmptyActor); }
-        if region.is_empty() { return Err(GeoError::EmptyRegion); }
+        if actor.is_empty() {
+            return Err(GeoError::EmptyActor);
+        }
+        if region.is_empty() {
+            return Err(GeoError::EmptyRegion);
+        }
         let (mode, regions) = match self.actors.get(actor) {
             Some(a) => (a.mode, &a.regions),
             None => (self.default_mode, &self.default_regions),
@@ -133,14 +144,22 @@ impl GeoRegionPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GeoError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GeoError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GeoError::SchemaMismatch);
+        }
         for r in &self.default_regions {
-            if r.is_empty() { return Err(GeoError::EmptyRegion); }
+            if r.is_empty() {
+                return Err(GeoError::EmptyRegion);
+            }
         }
         for (a, ar) in &self.actors {
-            if a.is_empty() { return Err(GeoError::EmptyActor); }
+            if a.is_empty() {
+                return Err(GeoError::EmptyActor);
+            }
             for r in &ar.regions {
-                if r.is_empty() { return Err(GeoError::EmptyRegion); }
+                if r.is_empty() {
+                    return Err(GeoError::EmptyRegion);
+                }
             }
         }
         Ok(())
@@ -148,7 +167,9 @@ impl GeoRegionPolicy {
 }
 
 impl Default for GeoRegionPolicy {
-    fn default() -> Self { Self::new(Mode::AllowList) }
+    fn default() -> Self {
+        Self::new(Mode::AllowList)
+    }
 }
 
 #[cfg(test)]
@@ -194,17 +215,32 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut p = GeoRegionPolicy::new(Mode::AllowList);
-        assert!(matches!(p.set_actor("", Mode::AllowList, &[]).unwrap_err(), GeoError::EmptyActor));
-        assert!(matches!(p.set_actor("a", Mode::AllowList, &[""]).unwrap_err(), GeoError::EmptyRegion));
-        assert!(matches!(p.decide("", "X").unwrap_err(), GeoError::EmptyActor));
-        assert!(matches!(p.decide("a", "").unwrap_err(), GeoError::EmptyRegion));
+        assert!(matches!(
+            p.set_actor("", Mode::AllowList, &[]).unwrap_err(),
+            GeoError::EmptyActor
+        ));
+        assert!(matches!(
+            p.set_actor("a", Mode::AllowList, &[""]).unwrap_err(),
+            GeoError::EmptyRegion
+        ));
+        assert!(matches!(
+            p.decide("", "X").unwrap_err(),
+            GeoError::EmptyActor
+        ));
+        assert!(matches!(
+            p.decide("a", "").unwrap_err(),
+            GeoError::EmptyRegion
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = GeoRegionPolicy::new(Mode::AllowList);
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), GeoError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            GeoError::SchemaMismatch
+        ));
     }
 
     #[test]

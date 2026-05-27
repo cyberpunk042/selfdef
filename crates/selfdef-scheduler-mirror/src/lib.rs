@@ -340,8 +340,8 @@ impl Decision {
     /// # Errors
     /// Returns `SchedulerError::Serde` on parse failure or any validate() violation.
     pub fn from_json(bytes: &[u8]) -> Result<Self, SchedulerError> {
-        let d: Self = serde_json::from_slice(bytes)
-            .map_err(|e| SchedulerError::Serde(e.to_string()))?;
+        let d: Self =
+            serde_json::from_slice(bytes).map_err(|e| SchedulerError::Serde(e.to_string()))?;
         d.validate()?;
         Ok(d)
     }
@@ -386,35 +386,50 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = sample();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), SchedulerError::SchemaMismatch(_)));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SchedulerError::SchemaMismatch(_)
+        ));
     }
 
     #[test]
     fn empty_request_id_rejected() {
         let mut d = sample();
         d.request_id.clear();
-        assert!(matches!(d.validate().unwrap_err(), SchedulerError::EmptyRequestId));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SchedulerError::EmptyRequestId
+        ));
     }
 
     #[test]
     fn empty_signer_rejected() {
         let mut d = sample();
         d.signer_kid_policy.clear();
-        assert!(matches!(d.validate().unwrap_err(), SchedulerError::EmptyPolicySigner));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SchedulerError::EmptyPolicySigner
+        ));
     }
 
     #[test]
     fn empty_hostname_rejected() {
         let mut d = sample();
         d.hostname.clear();
-        assert!(matches!(d.validate().unwrap_err(), SchedulerError::EmptyHostname));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SchedulerError::EmptyHostname
+        ));
     }
 
     #[test]
     fn zero_timestamp_rejected() {
         let mut d = sample();
         d.ts_ms = 0;
-        assert!(matches!(d.validate().unwrap_err(), SchedulerError::BadTimestamp));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            SchedulerError::BadTimestamp
+        ));
     }
 
     #[test]
@@ -433,7 +448,10 @@ mod tests {
         d.axis_scores.latency = -0.1;
         assert!(matches!(
             d.validate().unwrap_err(),
-            SchedulerError::AxisScoreOutOfBounds { axis: "latency", .. }
+            SchedulerError::AxisScoreOutOfBounds {
+                axis: "latency",
+                ..
+            }
         ));
     }
 
@@ -453,7 +471,10 @@ mod tests {
         d.axis_scores.compound = 2.0;
         assert!(matches!(
             d.validate().unwrap_err(),
-            SchedulerError::AxisScoreOutOfBounds { axis: "compound", .. }
+            SchedulerError::AxisScoreOutOfBounds {
+                axis: "compound",
+                ..
+            }
         ));
     }
 

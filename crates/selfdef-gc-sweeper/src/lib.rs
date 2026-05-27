@@ -73,8 +73,12 @@ impl GcSweeper {
 
     /// Insert.
     pub fn insert(&mut self, id: &str, ts_ms: u64, size: u64) -> Result<(), GcError> {
-        if id.is_empty() { return Err(GcError::EmptyId); }
-        if self.items.contains_key(id) { return Err(GcError::DuplicateId(id.into())); }
+        if id.is_empty() {
+            return Err(GcError::EmptyId);
+        }
+        if self.items.contains_key(id) {
+            return Err(GcError::DuplicateId(id.into()));
+        }
         self.items.insert(id.into(), Item { ts_ms, size });
         Ok(())
     }
@@ -91,7 +95,9 @@ impl GcSweeper {
         // 1) Age sweep.
         if self.max_age_ms > 0 {
             let cutoff = now_ms.saturating_sub(self.max_age_ms);
-            let stale: Vec<String> = self.items.iter()
+            let stale: Vec<String> = self
+                .items
+                .iter()
                 .filter(|(_, i)| i.ts_ms < cutoff)
                 .map(|(k, _)| k.clone())
                 .collect();
@@ -104,10 +110,14 @@ impl GcSweeper {
         if self.size_cap_bytes > 0 {
             while self.total_size() > self.size_cap_bytes {
                 // Find oldest by ts_ms.
-                let oldest = self.items.iter()
+                let oldest = self
+                    .items
+                    .iter()
                     .min_by_key(|(_, i)| i.ts_ms)
                     .map(|(k, _)| k.clone());
-                let Some(k) = oldest else { break; };
+                let Some(k) = oldest else {
+                    break;
+                };
                 self.items.remove(&k);
                 removed_ids.push(k);
             }
@@ -118,9 +128,13 @@ impl GcSweeper {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GcError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GcError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GcError::SchemaMismatch);
+        }
         for k in self.items.keys() {
-            if k.is_empty() { return Err(GcError::EmptyId); }
+            if k.is_empty() {
+                return Err(GcError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -178,7 +192,10 @@ mod tests {
     fn duplicate_rejected() {
         let mut g = GcSweeper::new(0, 0);
         g.insert("a", 0, 10).unwrap();
-        assert!(matches!(g.insert("a", 0, 10).unwrap_err(), GcError::DuplicateId(_)));
+        assert!(matches!(
+            g.insert("a", 0, 10).unwrap_err(),
+            GcError::DuplicateId(_)
+        ));
     }
 
     #[test]

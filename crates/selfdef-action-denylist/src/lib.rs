@@ -110,18 +110,37 @@ impl ActionDenylist {
 
     /// Deny globally.
     pub fn deny_global(&mut self, action: &str, reason: &str) -> Result<bool, DenyError> {
-        if action.is_empty() { return Err(DenyError::EmptyAction); }
-        if reason.is_empty() { return Err(DenyError::EmptyReason); }
+        if action.is_empty() {
+            return Err(DenyError::EmptyAction);
+        }
+        if reason.is_empty() {
+            return Err(DenyError::EmptyReason);
+        }
         let prev = self.global.insert(action.into(), reason.into());
         Ok(prev.is_none())
     }
 
     /// Deny per actor.
-    pub fn deny_for_actor(&mut self, actor: &str, action: &str, reason: &str) -> Result<bool, DenyError> {
-        if actor.is_empty() { return Err(DenyError::EmptyActor); }
-        if action.is_empty() { return Err(DenyError::EmptyAction); }
-        if reason.is_empty() { return Err(DenyError::EmptyReason); }
-        let prev = self.per_actor.entry(actor.into()).or_default().insert(action.into(), reason.into());
+    pub fn deny_for_actor(
+        &mut self,
+        actor: &str,
+        action: &str,
+        reason: &str,
+    ) -> Result<bool, DenyError> {
+        if actor.is_empty() {
+            return Err(DenyError::EmptyActor);
+        }
+        if action.is_empty() {
+            return Err(DenyError::EmptyAction);
+        }
+        if reason.is_empty() {
+            return Err(DenyError::EmptyReason);
+        }
+        let prev = self
+            .per_actor
+            .entry(actor.into())
+            .or_default()
+            .insert(action.into(), reason.into());
         Ok(prev.is_none())
     }
 
@@ -132,22 +151,36 @@ impl ActionDenylist {
 
     /// Remove per-actor deny.
     pub fn allow_for_actor(&mut self, actor: &str, action: &str) -> bool {
-        let Some(m) = self.per_actor.get_mut(actor) else { return false; };
+        let Some(m) = self.per_actor.get_mut(actor) else {
+            return false;
+        };
         let removed = m.remove(action).is_some();
-        if m.is_empty() { self.per_actor.remove(actor); }
+        if m.is_empty() {
+            self.per_actor.remove(actor);
+        }
         removed
     }
 
     /// Decide.
     pub fn decide(&self, action: &str, actor: &str) -> Result<DenyVerdict, DenyError> {
-        if action.is_empty() { return Err(DenyError::EmptyAction); }
-        if actor.is_empty() { return Err(DenyError::EmptyActor); }
+        if action.is_empty() {
+            return Err(DenyError::EmptyAction);
+        }
+        if actor.is_empty() {
+            return Err(DenyError::EmptyActor);
+        }
         if let Some(reason) = self.global.get(action) {
-            return Ok(DenyVerdict::Deny { reason: reason.clone(), scope: ScopeKind::Global });
+            return Ok(DenyVerdict::Deny {
+                reason: reason.clone(),
+                scope: ScopeKind::Global,
+            });
         }
         if let Some(m) = self.per_actor.get(actor) {
             if let Some(reason) = m.get(action) {
-                return Ok(DenyVerdict::Deny { reason: reason.clone(), scope: ScopeKind::Actor });
+                return Ok(DenyVerdict::Deny {
+                    reason: reason.clone(),
+                    scope: ScopeKind::Actor,
+                });
             }
         }
         Ok(DenyVerdict::Allow)
@@ -155,16 +188,28 @@ impl ActionDenylist {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DenyError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DenyError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DenyError::SchemaMismatch);
+        }
         for (a, r) in &self.global {
-            if a.is_empty() { return Err(DenyError::EmptyAction); }
-            if r.is_empty() { return Err(DenyError::EmptyReason); }
+            if a.is_empty() {
+                return Err(DenyError::EmptyAction);
+            }
+            if r.is_empty() {
+                return Err(DenyError::EmptyReason);
+            }
         }
         for (actor, m) in &self.per_actor {
-            if actor.is_empty() { return Err(DenyError::EmptyActor); }
+            if actor.is_empty() {
+                return Err(DenyError::EmptyActor);
+            }
             for (a, r) in m {
-                if a.is_empty() { return Err(DenyError::EmptyAction); }
-                if r.is_empty() { return Err(DenyError::EmptyReason); }
+                if a.is_empty() {
+                    return Err(DenyError::EmptyAction);
+                }
+                if r.is_empty() {
+                    return Err(DenyError::EmptyReason);
+                }
             }
         }
         Ok(())
@@ -172,7 +217,9 @@ impl ActionDenylist {
 }
 
 impl Default for ActionDenylist {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -184,7 +231,13 @@ mod tests {
         let mut d = ActionDenylist::new();
         d.deny_global("delete-all", "destructive").unwrap();
         let v = d.decide("delete-all", "alice").unwrap();
-        assert_eq!(v, DenyVerdict::Deny { reason: "destructive".into(), scope: ScopeKind::Global });
+        assert_eq!(
+            v,
+            DenyVerdict::Deny {
+                reason: "destructive".into(),
+                scope: ScopeKind::Global
+            }
+        );
         let v = d.decide("delete-all", "bob").unwrap();
         assert!(matches!(v, DenyVerdict::Deny { .. }));
     }
@@ -192,8 +245,15 @@ mod tests {
     #[test]
     fn per_actor_deny_isolated() {
         let mut d = ActionDenylist::new();
-        d.deny_for_actor("alice", "send-email", "no email this week").unwrap();
-        assert!(matches!(d.decide("send-email", "alice").unwrap(), DenyVerdict::Deny { scope: ScopeKind::Actor, .. }));
+        d.deny_for_actor("alice", "send-email", "no email this week")
+            .unwrap();
+        assert!(matches!(
+            d.decide("send-email", "alice").unwrap(),
+            DenyVerdict::Deny {
+                scope: ScopeKind::Actor,
+                ..
+            }
+        ));
         assert_eq!(d.decide("send-email", "bob").unwrap(), DenyVerdict::Allow);
     }
 
@@ -201,7 +261,8 @@ mod tests {
     fn global_beats_actor() {
         let mut d = ActionDenylist::new();
         d.deny_global("delete-all", "global").unwrap();
-        d.deny_for_actor("alice", "delete-all", "actor-only").unwrap();
+        d.deny_for_actor("alice", "delete-all", "actor-only")
+            .unwrap();
         match d.decide("delete-all", "alice").unwrap() {
             DenyVerdict::Deny { reason, scope } => {
                 assert_eq!(reason, "global");
@@ -230,18 +291,36 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut d = ActionDenylist::new();
-        assert!(matches!(d.deny_global("", "r").unwrap_err(), DenyError::EmptyAction));
-        assert!(matches!(d.deny_global("a", "").unwrap_err(), DenyError::EmptyReason));
-        assert!(matches!(d.deny_for_actor("", "a", "r").unwrap_err(), DenyError::EmptyActor));
-        assert!(matches!(d.decide("", "alice").unwrap_err(), DenyError::EmptyAction));
-        assert!(matches!(d.decide("a", "").unwrap_err(), DenyError::EmptyActor));
+        assert!(matches!(
+            d.deny_global("", "r").unwrap_err(),
+            DenyError::EmptyAction
+        ));
+        assert!(matches!(
+            d.deny_global("a", "").unwrap_err(),
+            DenyError::EmptyReason
+        ));
+        assert!(matches!(
+            d.deny_for_actor("", "a", "r").unwrap_err(),
+            DenyError::EmptyActor
+        ));
+        assert!(matches!(
+            d.decide("", "alice").unwrap_err(),
+            DenyError::EmptyAction
+        ));
+        assert!(matches!(
+            d.decide("a", "").unwrap_err(),
+            DenyError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = ActionDenylist::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DenyError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DenyError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -70,8 +70,12 @@ impl FairShareScheduler {
 
     /// Register or update tenant.
     pub fn set_weight(&mut self, tenant: &str, weight: u32) -> Result<(), FairShareError> {
-        if tenant.is_empty() { return Err(FairShareError::EmptyTenant); }
-        if weight == 0 { return Err(FairShareError::ZeroWeight); }
+        if tenant.is_empty() {
+            return Err(FairShareError::EmptyTenant);
+        }
+        if weight == 0 {
+            return Err(FairShareError::ZeroWeight);
+        }
         let entry = self.tenants.entry(tenant.into()).or_insert(TenantState {
             weight,
             cumulative_service: 0,
@@ -85,7 +89,9 @@ impl FairShareScheduler {
     pub fn pick_next(&mut self, eligible: &[&str]) -> Option<String> {
         let mut best: Option<(u64, String)> = None;
         for &id in eligible {
-            let Some(s) = self.tenants.get(id) else { continue; };
+            let Some(s) = self.tenants.get(id) else {
+                continue;
+            };
             // Score: cumulative * 1000 / weight (higher weight = lower score).
             let score = s.cumulative_service.saturating_mul(1000) / (s.weight as u64);
             let is_better = match &best {
@@ -106,7 +112,10 @@ impl FairShareScheduler {
 
     /// Charge service (divided by weight).
     pub fn charge(&mut self, tenant: &str, units: u64) -> Result<(), FairShareError> {
-        let s = self.tenants.get_mut(tenant).ok_or_else(|| FairShareError::UnknownTenant(tenant.into()))?;
+        let s = self
+            .tenants
+            .get_mut(tenant)
+            .ok_or_else(|| FairShareError::UnknownTenant(tenant.into()))?;
         let adjusted = units.saturating_mul(1000) / (s.weight as u64);
         s.cumulative_service = s.cumulative_service.saturating_add(adjusted);
         Ok(())
@@ -121,17 +130,25 @@ impl FairShareScheduler {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FairShareError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FairShareError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FairShareError::SchemaMismatch);
+        }
         for (t, s) in &self.tenants {
-            if t.is_empty() { return Err(FairShareError::EmptyTenant); }
-            if s.weight == 0 { return Err(FairShareError::ZeroWeight); }
+            if t.is_empty() {
+                return Err(FairShareError::EmptyTenant);
+            }
+            if s.weight == 0 {
+                return Err(FairShareError::ZeroWeight);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for FairShareScheduler {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -200,21 +217,33 @@ mod tests {
     #[test]
     fn charge_unknown_rejected() {
         let mut s = FairShareScheduler::new();
-        assert!(matches!(s.charge("nope", 1).unwrap_err(), FairShareError::UnknownTenant(_)));
+        assert!(matches!(
+            s.charge("nope", 1).unwrap_err(),
+            FairShareError::UnknownTenant(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut s = FairShareScheduler::new();
-        assert!(matches!(s.set_weight("", 1).unwrap_err(), FairShareError::EmptyTenant));
-        assert!(matches!(s.set_weight("a", 0).unwrap_err(), FairShareError::ZeroWeight));
+        assert!(matches!(
+            s.set_weight("", 1).unwrap_err(),
+            FairShareError::EmptyTenant
+        ));
+        assert!(matches!(
+            s.set_weight("a", 0).unwrap_err(),
+            FairShareError::ZeroWeight
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = FairShareScheduler::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), FairShareError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            FairShareError::SchemaMismatch
+        ));
     }
 
     #[test]

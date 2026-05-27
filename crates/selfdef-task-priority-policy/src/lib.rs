@@ -90,7 +90,9 @@ impl TaskPriorityPolicy {
 
     /// Enqueue a task.
     pub fn enqueue(&mut self, t: Task) -> Result<(), PriorityError> {
-        if t.id.is_empty() { return Err(PriorityError::EmptyId); }
+        if t.id.is_empty() {
+            return Err(PriorityError::EmptyId);
+        }
         if self.tasks.iter().any(|x| x.id == t.id) {
             return Err(PriorityError::DuplicateId(t.id));
         }
@@ -103,11 +105,16 @@ impl TaskPriorityPolicy {
         let mut indexed: Vec<(usize, &Task)> = self.tasks.iter().enumerate().collect();
         indexed.sort_by(|(ia, a), (ib, b)| {
             // 1. pinned first.
-            b.operator_pinned.cmp(&a.operator_pinned)
+            b.operator_pinned
+                .cmp(&a.operator_pinned)
                 // 2. class priority desc.
                 .then(b.class.priority().cmp(&a.class.priority()))
                 // 3. earliest deadline (None = max u64).
-                .then(a.deadline_unix.unwrap_or(u64::MAX).cmp(&b.deadline_unix.unwrap_or(u64::MAX)))
+                .then(
+                    a.deadline_unix
+                        .unwrap_or(u64::MAX)
+                        .cmp(&b.deadline_unix.unwrap_or(u64::MAX)),
+                )
                 // 4. insertion order.
                 .then(ia.cmp(ib))
         });
@@ -122,7 +129,9 @@ impl TaskPriorityPolicy {
         use std::collections::HashSet;
         let mut seen: HashSet<&str> = HashSet::new();
         for t in &self.tasks {
-            if t.id.is_empty() { return Err(PriorityError::EmptyId); }
+            if t.id.is_empty() {
+                return Err(PriorityError::EmptyId);
+            }
             if !seen.insert(t.id.as_str()) {
                 return Err(PriorityError::DuplicateId(t.id.clone()));
             }
@@ -132,7 +141,9 @@ impl TaskPriorityPolicy {
 }
 
 impl Default for TaskPriorityPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +151,12 @@ mod tests {
     use super::*;
 
     fn t(id: &str, class: TaskClass, deadline: Option<u64>, pinned: bool) -> Task {
-        Task { id: id.into(), class, deadline_unix: deadline, operator_pinned: pinned }
+        Task {
+            id: id.into(),
+            class,
+            deadline_unix: deadline,
+            operator_pinned: pinned,
+        }
     }
 
     #[test]
@@ -153,9 +169,12 @@ mod tests {
     #[test]
     fn class_orders_dispatch() {
         let mut p = TaskPriorityPolicy::new();
-        p.enqueue(t("maint", TaskClass::Maintenance, None, false)).unwrap();
-        p.enqueue(t("emerg", TaskClass::Emergency, None, false)).unwrap();
-        p.enqueue(t("op", TaskClass::Operator, None, false)).unwrap();
+        p.enqueue(t("maint", TaskClass::Maintenance, None, false))
+            .unwrap();
+        p.enqueue(t("emerg", TaskClass::Emergency, None, false))
+            .unwrap();
+        p.enqueue(t("op", TaskClass::Operator, None, false))
+            .unwrap();
         let order: Vec<&str> = p.resolve_order().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(order, vec!["emerg", "op", "maint"]);
     }
@@ -163,8 +182,10 @@ mod tests {
     #[test]
     fn pinned_jumps_front() {
         let mut p = TaskPriorityPolicy::new();
-        p.enqueue(t("emerg", TaskClass::Emergency, None, false)).unwrap();
-        p.enqueue(t("pinned-bg", TaskClass::Background, None, true)).unwrap();
+        p.enqueue(t("emerg", TaskClass::Emergency, None, false))
+            .unwrap();
+        p.enqueue(t("pinned-bg", TaskClass::Background, None, true))
+            .unwrap();
         let order: Vec<&str> = p.resolve_order().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(order[0], "pinned-bg");
     }
@@ -172,8 +193,10 @@ mod tests {
     #[test]
     fn earliest_deadline_wins_ties() {
         let mut p = TaskPriorityPolicy::new();
-        p.enqueue(t("late", TaskClass::Operator, Some(2000), false)).unwrap();
-        p.enqueue(t("early", TaskClass::Operator, Some(1000), false)).unwrap();
+        p.enqueue(t("late", TaskClass::Operator, Some(2000), false))
+            .unwrap();
+        p.enqueue(t("early", TaskClass::Operator, Some(1000), false))
+            .unwrap();
         let order: Vec<&str> = p.resolve_order().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(order, vec!["early", "late"]);
     }
@@ -181,8 +204,10 @@ mod tests {
     #[test]
     fn none_deadline_after_some() {
         let mut p = TaskPriorityPolicy::new();
-        p.enqueue(t("no-deadline", TaskClass::Operator, None, false)).unwrap();
-        p.enqueue(t("urgent", TaskClass::Operator, Some(1000), false)).unwrap();
+        p.enqueue(t("no-deadline", TaskClass::Operator, None, false))
+            .unwrap();
+        p.enqueue(t("urgent", TaskClass::Operator, Some(1000), false))
+            .unwrap();
         let order: Vec<&str> = p.resolve_order().iter().map(|t| t.id.as_str()).collect();
         assert_eq!(order, vec!["urgent", "no-deadline"]);
     }
@@ -200,31 +225,46 @@ mod tests {
     fn duplicate_id_rejected() {
         let mut p = TaskPriorityPolicy::new();
         p.enqueue(t("a", TaskClass::Operator, None, false)).unwrap();
-        assert!(matches!(p.enqueue(t("a", TaskClass::Background, None, false)).unwrap_err(), PriorityError::DuplicateId(_)));
+        assert!(matches!(
+            p.enqueue(t("a", TaskClass::Background, None, false))
+                .unwrap_err(),
+            PriorityError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = TaskPriorityPolicy::new();
-        assert!(matches!(p.enqueue(t("", TaskClass::Operator, None, false)).unwrap_err(), PriorityError::EmptyId));
+        assert!(matches!(
+            p.enqueue(t("", TaskClass::Operator, None, false))
+                .unwrap_err(),
+            PriorityError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TaskPriorityPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PriorityError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PriorityError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TaskClass::Emergency).unwrap(), "\"emergency\"");
+        assert_eq!(
+            serde_json::to_string(&TaskClass::Emergency).unwrap(),
+            "\"emergency\""
+        );
     }
 
     #[test]
     fn policy_serde_roundtrip() {
         let mut p = TaskPriorityPolicy::new();
-        p.enqueue(t("a", TaskClass::Operator, Some(100), false)).unwrap();
+        p.enqueue(t("a", TaskClass::Operator, Some(100), false))
+            .unwrap();
         let j = serde_json::to_string(&p).unwrap();
         let back: TaskPriorityPolicy = serde_json::from_str(&j).unwrap();
         assert_eq!(p, back);

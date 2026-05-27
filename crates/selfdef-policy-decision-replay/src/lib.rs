@@ -90,16 +90,36 @@ pub fn compare(
     }
 
     let mut drifted = Vec::new();
-    if captured.risk != live.risk { drifted.push("risk".into()); }
-    if captured.side_effect_class != live.side_effect_class { drifted.push("side_effect_class".into()); }
-    if captured.context_sensitivity != live.context_sensitivity { drifted.push("context_sensitivity".into()); }
-    if captured.user_approval != live.user_approval { drifted.push("user_approval".into()); }
-    if captured.profile != live.profile { drifted.push("profile".into()); }
-    if captured.model_provider != live.model_provider { drifted.push("model_provider".into()); }
-    if captured.reason != live.reason { drifted.push("reason".into()); }
-    if captured.signature != live.signature { drifted.push("signature".into()); }
+    if captured.risk != live.risk {
+        drifted.push("risk".into());
+    }
+    if captured.side_effect_class != live.side_effect_class {
+        drifted.push("side_effect_class".into());
+    }
+    if captured.context_sensitivity != live.context_sensitivity {
+        drifted.push("context_sensitivity".into());
+    }
+    if captured.user_approval != live.user_approval {
+        drifted.push("user_approval".into());
+    }
+    if captured.profile != live.profile {
+        drifted.push("profile".into());
+    }
+    if captured.model_provider != live.model_provider {
+        drifted.push("model_provider".into());
+    }
+    if captured.reason != live.reason {
+        drifted.push("reason".into());
+    }
+    if captured.signature != live.signature {
+        drifted.push("signature".into());
+    }
 
-    let result = if drifted.is_empty() { ReplayResult::Identical } else { ReplayResult::Drift };
+    let result = if drifted.is_empty() {
+        ReplayResult::Identical
+    } else {
+        ReplayResult::Drift
+    };
     Ok(ReplayReport {
         schema_version: SCHEMA_VERSION.into(),
         trace_id: captured.trace_id.clone(),
@@ -123,7 +143,9 @@ impl ReplayReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_policy_decision::{ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState};
+    use selfdef_policy_decision::{
+        ContextSensitivity, RiskClass, SideEffectClass, UserApprovalState,
+    };
 
     fn d(outcome: Outcome, risk: RiskClass) -> PolicyDecision {
         PolicyDecision {
@@ -189,14 +211,26 @@ mod tests {
         let a = d(Outcome::Allow, RiskClass::Low);
         let mut b = d(Outcome::Allow, RiskClass::Low);
         b.trace_id = "tr-2".into();
-        assert!(matches!(compare(&a, &b).unwrap_err(), ReplayError::TraceIdMismatch { .. }));
+        assert!(matches!(
+            compare(&a, &b).unwrap_err(),
+            ReplayError::TraceIdMismatch { .. }
+        ));
     }
 
     #[test]
     fn result_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ReplayResult::Identical).unwrap(), "\"identical\"");
-        assert_eq!(serde_json::to_string(&ReplayResult::Drift).unwrap(), "\"drift\"");
-        assert_eq!(serde_json::to_string(&ReplayResult::Refused).unwrap(), "\"refused\"");
+        assert_eq!(
+            serde_json::to_string(&ReplayResult::Identical).unwrap(),
+            "\"identical\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ReplayResult::Drift).unwrap(),
+            "\"drift\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ReplayResult::Refused).unwrap(),
+            "\"refused\""
+        );
     }
 
     #[test]

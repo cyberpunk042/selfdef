@@ -21,7 +21,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use selfdef_commit_authority::{is_high_risk, validate, CommitEnvelope};
+use selfdef_commit_authority::{CommitEnvelope, is_high_risk, validate};
 
 fn print_types() {
     println!("MS041 / SDD-043 commit-authority schema");
@@ -76,7 +76,10 @@ fn load_envelope(path: &Path) -> Result<CommitEnvelope> {
 
 fn print_classify(env: &CommitEnvelope) {
     let high_risk = is_high_risk(env);
-    println!("classification: {}", if high_risk { "HIGH-RISK" } else { "low-risk" });
+    println!(
+        "classification: {}",
+        if high_risk { "HIGH-RISK" } else { "low-risk" }
+    );
     println!("  commit_type:       {:?}", env.commit_type);
     println!("  profile:           {:?}", env.profile);
     println!("  authority_level:   {:?}", env.authority_level);
@@ -84,10 +87,16 @@ fn print_classify(env: &CommitEnvelope) {
     if high_risk {
         println!();
         println!("Reasons (per F04871..F04875 classifier):");
-        if matches!(env.commit_type, selfdef_commit_authority::CommitType::AdapterPromotion) {
+        if matches!(
+            env.commit_type,
+            selfdef_commit_authority::CommitType::AdapterPromotion
+        ) {
             println!("  - commit_type=AdapterPromotion (F04871)");
         }
-        if matches!(env.commit_type, selfdef_commit_authority::CommitType::CloudExposureLog) {
+        if matches!(
+            env.commit_type,
+            selfdef_commit_authority::CommitType::CloudExposureLog
+        ) {
             println!("  - commit_type=CloudExposureLog (F04873)");
         }
         // The remaining classifier triggers depend on AuthorityLevel /
@@ -105,8 +114,14 @@ pub(crate) fn run_validate(path: &Path) -> Result<i32> {
     let env = load_envelope(path)?;
     match validate(&env) {
         Ok(()) => {
-            println!("VALID — {} commit envelope passes all mandatory + high-risk gates",
-                if is_high_risk(&env) { "HIGH-RISK" } else { "low-risk" });
+            println!(
+                "VALID — {} commit envelope passes all mandatory + high-risk gates",
+                if is_high_risk(&env) {
+                    "HIGH-RISK"
+                } else {
+                    "low-risk"
+                }
+            );
             Ok(0)
         }
         Err(e) => {

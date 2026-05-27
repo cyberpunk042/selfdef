@@ -601,7 +601,8 @@ pub fn emit_audit_entry(audit_log: &Path, decision: &Decision) -> Result<(), Sch
         .open(audit_log)
         .map_err(|e| SchedulerError::Io(e.to_string()))?;
     writeln!(f, "{line}").map_err(|e| SchedulerError::Io(e.to_string()))?;
-    f.sync_all().map_err(|e| SchedulerError::Io(e.to_string()))?;
+    f.sync_all()
+        .map_err(|e| SchedulerError::Io(e.to_string()))?;
     Ok(())
 }
 
@@ -637,12 +638,11 @@ pub fn audit_chain_check(audit_log: &Path) -> Result<usize, SchedulerError> {
         if line.trim().is_empty() {
             continue;
         }
-        let parsed: serde_json::Value = serde_json::from_str(line).map_err(|e| {
-            SchedulerError::AuditChainBreak {
+        let parsed: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| SchedulerError::AuditChainBreak {
                 line: idx + 1,
                 detail: format!("malformed JSON: {e}"),
-            }
-        })?;
+            })?;
         let claimed_prev = parsed
             .get("prev_event_sha256")
             .and_then(|v| v.as_str())
@@ -724,7 +724,10 @@ pub fn replay(original: &Decision, replay_profile: Profile) -> ReplayResult {
         hostname: original.hostname.clone(),
         signer_kid_policy: original.signer_kid_policy.clone(),
         override_signer_kid: original.override_signer_kid.clone(),
-        rationale: format!("REPLAY against {:?}: {}", replay_profile, original.rationale),
+        rationale: format!(
+            "REPLAY against {:?}: {}",
+            replay_profile, original.rationale
+        ),
     };
     let route_differs = counterfactual.route != original.route;
     let compound_differs =
@@ -896,7 +899,12 @@ mod tests {
     fn all_one_signals_compound_to_1() {
         for p in Profile::all() {
             let scores = evaluate_objective(all_one_signals(), *p);
-            assert!((scores.compound - 1.0).abs() < 0.001, "{:?} compound was {}", p, scores.compound);
+            assert!(
+                (scores.compound - 1.0).abs() < 0.001,
+                "{:?} compound was {}",
+                p,
+                scores.compound
+            );
         }
     }
 
@@ -912,7 +920,12 @@ mod tests {
         };
         for p in Profile::all() {
             let scores = evaluate_objective(signals, *p);
-            assert!(scores.compound.abs() < 0.001, "{:?} compound was {}", p, scores.compound);
+            assert!(
+                scores.compound.abs() < 0.001,
+                "{:?} compound was {}",
+                p,
+                scores.compound
+            );
         }
     }
 
@@ -930,7 +943,10 @@ mod tests {
         };
         let fast_score = evaluate_objective(bad_latency, Profile::Fast).compound;
         let careful_score = evaluate_objective(bad_latency, Profile::Careful).compound;
-        assert!(fast_score < careful_score, "fast={fast_score} careful={careful_score}");
+        assert!(
+            fast_score < careful_score,
+            "fast={fast_score} careful={careful_score}"
+        );
     }
 
     #[test]
@@ -946,7 +962,10 @@ mod tests {
         };
         let careful_score = evaluate_objective(bad_risk, Profile::Careful).compound;
         let fast_score = evaluate_objective(bad_risk, Profile::Fast).compound;
-        assert!(careful_score < fast_score, "careful={careful_score} fast={fast_score}");
+        assert!(
+            careful_score < fast_score,
+            "careful={careful_score} fast={fast_score}"
+        );
     }
 
     #[test]
@@ -1070,7 +1089,10 @@ mod tests {
         let l2 = r#"{"schema_version":"1.0.0","prev_event_sha256":"bogus"}"#;
         fs::write(&log, format!("{l1}\n{l2}\n")).unwrap();
         let err = audit_chain_check(&log).unwrap_err();
-        assert!(matches!(err, SchedulerError::AuditChainBreak { line: 2, .. }));
+        assert!(matches!(
+            err,
+            SchedulerError::AuditChainBreak { line: 2, .. }
+        ));
     }
 
     #[test]

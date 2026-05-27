@@ -100,13 +100,22 @@ impl AuditLogRotation {
     /// Decide. Order: Size > Age > Lines for the reason reported.
     pub fn decide(&self, s: LogStats) -> Option<RotateReason> {
         if s.size_bytes > self.policy.max_size_bytes {
-            return Some(RotateReason::Size { observed: s.size_bytes, max: self.policy.max_size_bytes });
+            return Some(RotateReason::Size {
+                observed: s.size_bytes,
+                max: self.policy.max_size_bytes,
+            });
         }
         if s.age_seconds > self.policy.max_age_seconds {
-            return Some(RotateReason::Age { observed: s.age_seconds, max: self.policy.max_age_seconds });
+            return Some(RotateReason::Age {
+                observed: s.age_seconds,
+                max: self.policy.max_age_seconds,
+            });
         }
         if s.line_count > self.policy.max_lines {
-            return Some(RotateReason::Lines { observed: s.line_count, max: self.policy.max_lines });
+            return Some(RotateReason::Lines {
+                observed: s.line_count,
+                max: self.policy.max_lines,
+            });
         }
         None
     }
@@ -116,9 +125,15 @@ impl AuditLogRotation {
         if self.schema_version != SCHEMA_VERSION {
             return Err(RotationError::SchemaMismatch);
         }
-        if self.policy.max_size_bytes == 0 { return Err(RotationError::ThresholdZero("max_size_bytes")); }
-        if self.policy.max_age_seconds == 0 { return Err(RotationError::ThresholdZero("max_age_seconds")); }
-        if self.policy.max_lines == 0 { return Err(RotationError::ThresholdZero("max_lines")); }
+        if self.policy.max_size_bytes == 0 {
+            return Err(RotationError::ThresholdZero("max_size_bytes"));
+        }
+        if self.policy.max_age_seconds == 0 {
+            return Err(RotationError::ThresholdZero("max_age_seconds"));
+        }
+        if self.policy.max_lines == 0 {
+            return Err(RotationError::ThresholdZero("max_lines"));
+        }
         Ok(())
     }
 }
@@ -128,7 +143,11 @@ mod tests {
     use super::*;
 
     fn stats(s: u64, a: u64, l: u64) -> LogStats {
-        LogStats { size_bytes: s, age_seconds: a, line_count: l }
+        LogStats {
+            size_bytes: s,
+            age_seconds: a,
+            line_count: l,
+        }
     }
 
     #[test]
@@ -140,7 +159,11 @@ mod tests {
     #[test]
     fn size_triggers_first() {
         let p = AuditLogRotation::canonical();
-        let s = stats(p.policy.max_size_bytes + 1, p.policy.max_age_seconds + 1, p.policy.max_lines + 1);
+        let s = stats(
+            p.policy.max_size_bytes + 1,
+            p.policy.max_age_seconds + 1,
+            p.policy.max_lines + 1,
+        );
         match p.decide(s).unwrap() {
             RotateReason::Size { .. } => {}
             _ => panic!("Size should win"),
@@ -170,7 +193,11 @@ mod tests {
     #[test]
     fn equal_to_threshold_no_rotate() {
         let p = AuditLogRotation::canonical();
-        let s = stats(p.policy.max_size_bytes, p.policy.max_age_seconds, p.policy.max_lines);
+        let s = stats(
+            p.policy.max_size_bytes,
+            p.policy.max_age_seconds,
+            p.policy.max_lines,
+        );
         assert!(p.decide(s).is_none());
     }
 
@@ -178,19 +205,28 @@ mod tests {
     fn threshold_zero_rejected() {
         let mut p = AuditLogRotation::canonical();
         p.policy.max_size_bytes = 0;
-        assert!(matches!(p.validate().unwrap_err(), RotationError::ThresholdZero("max_size_bytes")));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RotationError::ThresholdZero("max_size_bytes")
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = AuditLogRotation::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RotationError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RotationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn reason_serde_kebab() {
-        let r = RotateReason::Size { observed: 1, max: 0 };
+        let r = RotateReason::Size {
+            observed: 1,
+            max: 0,
+        };
         let j = serde_json::to_string(&r).unwrap();
         assert!(j.contains("\"kind\":\"size\""));
     }

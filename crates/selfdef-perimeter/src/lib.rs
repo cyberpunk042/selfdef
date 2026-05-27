@@ -32,7 +32,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 pub use selfdef_perimeter_mirror::{
-    Outcome, PerimeterError as MirrorError, SCHEMA_VERSION, Verdict, DEFAULT_ALLOWLIST,
+    DEFAULT_ALLOWLIST, Outcome, PerimeterError as MirrorError, SCHEMA_VERSION, Verdict,
 };
 
 /// Default allowlist-extension manifest directory.
@@ -45,8 +45,7 @@ pub const DEFAULT_RING_DIR: &str = "/var/cache/selfdef/perimeter/ring";
 pub const DEFAULT_OCSF_PATH: &str = "/var/log/selfdef/perimeter.ocsf.jsonl";
 
 /// Default TracingPolicy YAML install path (host filesystem).
-pub const DEFAULT_POLICY_PATH: &str =
-    "/etc/tetragon/tracing-policies/sovereign-perimeter.yaml";
+pub const DEFAULT_POLICY_PATH: &str = "/etc/tetragon/tracing-policies/sovereign-perimeter.yaml";
 
 /// Default MS003 trust-roots directory.
 pub const DEFAULT_TRUST_ROOTS_DIR: &str = "/etc/selfdef/trust-roots";
@@ -138,7 +137,9 @@ impl ExtensionManifest {
             return Err(PerimeterError::SchemaMismatch(self.schema_version.clone()));
         }
         if self.extension_id.is_empty() {
-            return Err(PerimeterError::ExtensionInvalid("extension_id is empty".into()));
+            return Err(PerimeterError::ExtensionInvalid(
+                "extension_id is empty".into(),
+            ));
         }
         if !self
             .extension_id
@@ -165,7 +166,8 @@ impl ExtensionManifest {
             // string-equality, but a path with shell metas in an extension
             // is almost certainly a typo or an attempted bypass.
             if bp.chars().any(|c| {
-                c.is_whitespace() || matches!(c, '$' | '`' | '"' | '\'' | '*' | '?' | ';' | '|' | '&')
+                c.is_whitespace()
+                    || matches!(c, '$' | '`' | '"' | '\'' | '*' | '?' | ';' | '|' | '&')
             }) {
                 return Err(PerimeterError::ExtensionInvalid(format!(
                     "binary_paths entry {bp:?} contains whitespace or shell metacharacters"
@@ -186,7 +188,9 @@ impl ExtensionManifest {
             ));
         }
         if self.signer_kid.is_empty() {
-            return Err(PerimeterError::ExtensionInvalid("signer_kid is empty".into()));
+            return Err(PerimeterError::ExtensionInvalid(
+                "signer_kid is empty".into(),
+            ));
         }
         if self.auditor_kid.is_empty() {
             return Err(PerimeterError::ExtensionInvalid(
@@ -299,8 +303,8 @@ impl ExtensionStore {
         now_ms: u64,
     ) -> Result<ExtensionManifest, PerimeterError> {
         let bytes = fs::read(manifest_path).map_err(|e| PerimeterError::Io(e.to_string()))?;
-        let manifest: ExtensionManifest = serde_json::from_slice(&bytes)
-            .map_err(|e| PerimeterError::Serde(e.to_string()))?;
+        let manifest: ExtensionManifest =
+            serde_json::from_slice(&bytes).map_err(|e| PerimeterError::Serde(e.to_string()))?;
         manifest.validate(now_ms)?;
         let sig_path = manifest_path.with_extension("json.minisig");
         if !sig_path.exists() {
@@ -352,7 +356,10 @@ impl ExtensionStore {
     /// All currently-active (non-expired) extension manifests.
     #[must_use]
     pub fn active(&self, now_ms: u64) -> Vec<&ExtensionManifest> {
-        self.all.iter().filter(|m| m.expires_at_ms > now_ms).collect()
+        self.all
+            .iter()
+            .filter(|m| m.expires_at_ms > now_ms)
+            .collect()
     }
 
     /// All currently-allowlisted binary paths from active extensions.
@@ -376,11 +383,7 @@ impl ExtensionStore {
 /// # Errors
 /// Returns an error if no public key in `trust_roots_dir` validates
 /// the signature, OR if the signature/public-key files are malformed.
-fn verify_minisign(
-    payload: &[u8],
-    sig_path: &Path,
-    trust_roots_dir: &Path,
-) -> Result<(), String> {
+fn verify_minisign(payload: &[u8], sig_path: &Path, trust_roots_dir: &Path) -> Result<(), String> {
     use minisign_verify::{PublicKey, Signature};
 
     let sig_bytes = fs::read(sig_path).map_err(|e| format!("read sig: {e}"))?;
@@ -535,7 +538,8 @@ pub fn emit_ocsf_detection_2004(
         .open(ocsf_jsonl)
         .map_err(|e| PerimeterError::Io(e.to_string()))?;
     writeln!(f, "{line}").map_err(|e| PerimeterError::Io(e.to_string()))?;
-    f.sync_all().map_err(|e| PerimeterError::Io(e.to_string()))?;
+    f.sync_all()
+        .map_err(|e| PerimeterError::Io(e.to_string()))?;
     Ok(())
 }
 
@@ -577,12 +581,11 @@ pub fn audit_chain_check(ocsf_jsonl: &Path) -> Result<usize, PerimeterError> {
         if line.trim().is_empty() {
             continue;
         }
-        let parsed: serde_json::Value = serde_json::from_str(line).map_err(|e| {
-            PerimeterError::AuditChainBreak {
+        let parsed: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| PerimeterError::AuditChainBreak {
                 line: idx + 1,
                 detail: format!("malformed JSON: {e}"),
-            }
-        })?;
+            })?;
         let claimed_prev = parsed
             .get("prev_event_sha256")
             .and_then(|v| v.as_str())
@@ -679,40 +682,43 @@ mod tests {
     fn empty_extension_id_rejected() {
         let mut m = sample_manifest();
         m.extension_id.clear();
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("extension_id is empty"));
+        assert!(
+            format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
+                .contains("extension_id is empty")
+        );
     }
 
     #[test]
     fn non_kebab_extension_id_rejected() {
         let mut m = sample_manifest();
         m.extension_id = "BadID".into();
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("kebab-case"));
+        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err()).contains("kebab-case"));
     }
 
     #[test]
     fn empty_binary_paths_rejected() {
         let mut m = sample_manifest();
         m.binary_paths.clear();
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("at least one entry"));
+        assert!(
+            format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
+                .contains("at least one entry")
+        );
     }
 
     #[test]
     fn relative_binary_path_rejected() {
         let mut m = sample_manifest();
         m.binary_paths = vec!["bin/foo".into()];
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("absolute"));
+        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err()).contains("absolute"));
     }
 
     #[test]
     fn shell_metachar_in_binary_path_rejected() {
         let mut m = sample_manifest();
         m.binary_paths = vec!["/usr/bin/evil; rm".into()];
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("metacharacters"));
+        assert!(
+            format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err()).contains("metacharacters")
+        );
     }
 
     #[test]
@@ -737,39 +743,40 @@ mod tests {
     fn reason_over_512_chars_rejected() {
         let mut m = sample_manifest();
         m.reason = "x".repeat(513);
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("exceeds 512"));
+        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err()).contains("exceeds 512"));
     }
 
     #[test]
     fn signer_equals_auditor_rejected() {
         let mut m = sample_manifest();
         m.auditor_kid = m.signer_kid.clone();
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("distinct"));
+        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err()).contains("distinct"));
     }
 
     #[test]
     fn ttl_over_30_days_rejected() {
         let mut m = sample_manifest();
         m.expires_at_ms = m.issued_at_ms + MAX_EXTENSION_TTL_MS + 1;
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("exceeds MAX_EXTENSION_TTL_MS"));
+        assert!(
+            format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
+                .contains("exceeds MAX_EXTENSION_TTL_MS")
+        );
     }
 
     #[test]
     fn expired_manifest_rejected() {
         let m = sample_manifest();
-        assert!(format!("{}", m.validate(m.expires_at_ms).unwrap_err())
-            .contains("expired"));
+        assert!(format!("{}", m.validate(m.expires_at_ms).unwrap_err()).contains("expired"));
     }
 
     #[test]
     fn expires_before_issue_rejected() {
         let mut m = sample_manifest();
         m.expires_at_ms = m.issued_at_ms - 1;
-        assert!(format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
-            .contains("expires_at_ms must be >"));
+        assert!(
+            format!("{}", m.validate(m.issued_at_ms + 1).unwrap_err())
+                .contains("expires_at_ms must be >")
+        );
     }
 
     #[test]
@@ -797,7 +804,10 @@ mod tests {
         let mut store = ExtensionStore::new();
         store.insert(m.clone());
         let paths = store.active_paths(m.issued_at_ms + 1);
-        assert_eq!(paths, vec!["/opt/llm/bar".to_string(), "/usr/local/bin/foo".to_string()]);
+        assert_eq!(
+            paths,
+            vec!["/opt/llm/bar".to_string(), "/usr/local/bin/foo".to_string()]
+        );
     }
 
     #[test]
@@ -822,10 +832,15 @@ mod tests {
     fn load_signed_missing_signature_errors() {
         let dir = TempDir::new().unwrap();
         let manifest_path = dir.path().join("e.json");
-        fs::write(&manifest_path, serde_json::to_vec(&sample_manifest()).unwrap()).unwrap();
+        fs::write(
+            &manifest_path,
+            serde_json::to_vec(&sample_manifest()).unwrap(),
+        )
+        .unwrap();
         let trust = dir.path().join("trust");
         fs::create_dir_all(&trust).unwrap();
-        let err = ExtensionStore::load_signed(&manifest_path, &trust, 1_700_000_000_001).unwrap_err();
+        let err =
+            ExtensionStore::load_signed(&manifest_path, &trust, 1_700_000_000_001).unwrap_err();
         assert!(matches!(err, PerimeterError::Signature(_)));
     }
 
@@ -875,7 +890,11 @@ mod tests {
             "host-A",
             "kid-policy-1",
         );
-        fs::write(dir.path().join("good.json"), serde_json::to_vec(&v).unwrap()).unwrap();
+        fs::write(
+            dir.path().join("good.json"),
+            serde_json::to_vec(&v).unwrap(),
+        )
+        .unwrap();
         let out = read_ring_buffer(dir.path()).unwrap();
         assert_eq!(out.len(), 1);
     }
@@ -884,18 +903,7 @@ mod tests {
     fn ring_buffer_sorted_newest_first() {
         let dir = TempDir::new().unwrap();
         for (i, ts) in [("a", 100_u64), ("b", 300), ("c", 200)] {
-            let v = Verdict::new(
-                Outcome::Sigkill,
-                "/x",
-                42,
-                41,
-                "/",
-                "",
-                "x",
-                ts,
-                "h",
-                "k",
-            );
+            let v = Verdict::new(Outcome::Sigkill, "/x", 42, 41, "/", "", "x", ts, "h", "k");
             fs::write(
                 dir.path().join(format!("{i}.json")),
                 serde_json::to_vec(&v).unwrap(),
@@ -1001,7 +1009,10 @@ mod tests {
         let l2 = r#"{"class_uid":2004,"activity_id":3,"prev_event_sha256":"bogus-hex"}"#;
         fs::write(&path, format!("{l1}\n{l2}\n")).unwrap();
         let err = audit_chain_check(&path).unwrap_err();
-        assert!(matches!(err, PerimeterError::AuditChainBreak { line: 2, .. }));
+        assert!(matches!(
+            err,
+            PerimeterError::AuditChainBreak { line: 2, .. }
+        ));
     }
 
     #[test]

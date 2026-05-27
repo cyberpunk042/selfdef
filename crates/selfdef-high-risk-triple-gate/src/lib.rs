@@ -15,7 +15,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use selfdef_eval_gate_policy::{EvalGatePolicy, EvalGateError};
+use selfdef_eval_gate_policy::{EvalGateError, EvalGatePolicy};
 use selfdef_policy_decision::{RiskClass, SideEffectClass};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -77,7 +77,9 @@ pub fn run_triple_gate(
     // 2. Eval gate
     if let Err(e) = eval_policy.admit(input.side_effect, input.eval_last_pass_seconds_ago) {
         let msg = match e {
-            EvalGateError::Stale { gate, age, limit, .. } => {
+            EvalGateError::Stale {
+                gate, age, limit, ..
+            } => {
                 format!("{gate:?} stale: {age}s > {limit}s")
             }
             EvalGateError::NeverPassed { gate, .. } => format!("{gate:?} never passed"),
@@ -98,7 +100,8 @@ mod tests {
 
     fn input(sec: SideEffectClass, risk: RiskClass) -> TripleGateInput {
         TripleGateInput {
-            side_effect: sec, risk,
+            side_effect: sec,
+            risk,
             snapshot_taken: false,
             eval_last_pass_seconds_ago: None,
             oracle_approved: false,
@@ -158,10 +161,12 @@ mod tests {
     #[test]
     fn oracle_alone_satisfies_third_gate() {
         let i = TripleGateInput {
-            side_effect: SideEffectClass::Persistent, risk: RiskClass::High,
+            side_effect: SideEffectClass::Persistent,
+            risk: RiskClass::High,
             snapshot_taken: true,
             eval_last_pass_seconds_ago: Some(100),
-            oracle_approved: true, human_approved: false,
+            oracle_approved: true,
+            human_approved: false,
         };
         run_triple_gate(&i, &EvalGatePolicy::canonical()).unwrap();
     }
@@ -169,10 +174,12 @@ mod tests {
     #[test]
     fn stale_eval_caught() {
         let i = TripleGateInput {
-            side_effect: SideEffectClass::Persistent, risk: RiskClass::High,
+            side_effect: SideEffectClass::Persistent,
+            risk: RiskClass::High,
             snapshot_taken: true,
             eval_last_pass_seconds_ago: Some(10_000),
-            oracle_approved: true, human_approved: false,
+            oracle_approved: true,
+            human_approved: false,
         };
         assert!(matches!(
             run_triple_gate(&i, &EvalGatePolicy::canonical()).unwrap_err(),
@@ -182,10 +189,22 @@ mod tests {
 
     #[test]
     fn requires_triple_gate_pure_function() {
-        assert!(requires_triple_gate(SideEffectClass::Persistent, RiskClass::Low));
-        assert!(requires_triple_gate(SideEffectClass::ReadOnly, RiskClass::Critical));
-        assert!(!requires_triple_gate(SideEffectClass::FsWrite, RiskClass::Low));
-        assert!(!requires_triple_gate(SideEffectClass::ReadOnly, RiskClass::Medium));
+        assert!(requires_triple_gate(
+            SideEffectClass::Persistent,
+            RiskClass::Low
+        ));
+        assert!(requires_triple_gate(
+            SideEffectClass::ReadOnly,
+            RiskClass::Critical
+        ));
+        assert!(!requires_triple_gate(
+            SideEffectClass::FsWrite,
+            RiskClass::Low
+        ));
+        assert!(!requires_triple_gate(
+            SideEffectClass::ReadOnly,
+            RiskClass::Medium
+        ));
     }
 
     #[test]

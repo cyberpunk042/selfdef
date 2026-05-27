@@ -94,11 +94,12 @@ pub enum IncidentError {
 
 fn forward_ok(from: Stage, to: Stage) -> bool {
     use Stage::*;
-    matches!((from, to),
+    matches!(
+        (from, to),
         (Open, Triaged)
-        | (Triaged, Mitigated)
-        | (Mitigated, Resolved)
-        | (Resolved, PostmortemPending)
+            | (Triaged, Mitigated)
+            | (Mitigated, Resolved)
+            | (Resolved, PostmortemPending)
     )
 }
 
@@ -113,28 +114,41 @@ impl IncidentRecord {
 
     /// Open new incident.
     pub fn open(&mut self, id: &str, title: &str, ts_ms: u64) -> Result<(), IncidentError> {
-        if id.is_empty() { return Err(IncidentError::EmptyId); }
-        if title.is_empty() { return Err(IncidentError::EmptyTitle); }
+        if id.is_empty() {
+            return Err(IncidentError::EmptyId);
+        }
+        if title.is_empty() {
+            return Err(IncidentError::EmptyTitle);
+        }
         if self.incidents.contains_key(id) {
             return Err(IncidentError::DuplicateId(id.into()));
         }
-        self.incidents.insert(id.into(), Incident {
-            id: id.into(),
-            title: title.into(),
-            opened_at_ms: ts_ms,
-            stage: Stage::Open,
-            stage_log: vec![(Stage::Open, ts_ms)],
-            resolved_at_ms: None,
-            postmortem_id: None,
-        });
+        self.incidents.insert(
+            id.into(),
+            Incident {
+                id: id.into(),
+                title: title.into(),
+                opened_at_ms: ts_ms,
+                stage: Stage::Open,
+                stage_log: vec![(Stage::Open, ts_ms)],
+                resolved_at_ms: None,
+                postmortem_id: None,
+            },
+        );
         Ok(())
     }
 
     /// Transition forward.
     pub fn transition(&mut self, id: &str, to: Stage, ts_ms: u64) -> Result<(), IncidentError> {
-        let inc = self.incidents.get_mut(id).ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
+        let inc = self
+            .incidents
+            .get_mut(id)
+            .ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
         if !forward_ok(inc.stage, to) {
-            return Err(IncidentError::InvalidTransition { from: inc.stage, to });
+            return Err(IncidentError::InvalidTransition {
+                from: inc.stage,
+                to,
+            });
         }
         inc.stage = to;
         inc.stage_log.push((to, ts_ms));
@@ -146,9 +160,15 @@ impl IncidentRecord {
 
     /// Reopen back to Triaged from Resolved or PostmortemPending.
     pub fn reopen(&mut self, id: &str, ts_ms: u64) -> Result<(), IncidentError> {
-        let inc = self.incidents.get_mut(id).ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
+        let inc = self
+            .incidents
+            .get_mut(id)
+            .ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
         if !matches!(inc.stage, Stage::Resolved | Stage::PostmortemPending) {
-            return Err(IncidentError::InvalidTransition { from: inc.stage, to: Stage::Triaged });
+            return Err(IncidentError::InvalidTransition {
+                from: inc.stage,
+                to: Stage::Triaged,
+            });
         }
         inc.stage = Stage::Triaged;
         inc.stage_log.push((Stage::Triaged, ts_ms));
@@ -159,10 +179,18 @@ impl IncidentRecord {
 
     /// File postmortem (must be in PostmortemPending).
     pub fn file_postmortem(&mut self, id: &str, postmortem_id: &str) -> Result<(), IncidentError> {
-        if postmortem_id.is_empty() { return Err(IncidentError::EmptyPostmortem); }
-        let inc = self.incidents.get_mut(id).ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
+        if postmortem_id.is_empty() {
+            return Err(IncidentError::EmptyPostmortem);
+        }
+        let inc = self
+            .incidents
+            .get_mut(id)
+            .ok_or_else(|| IncidentError::UnknownIncident(id.into()))?;
         if inc.stage != Stage::PostmortemPending {
-            return Err(IncidentError::InvalidTransition { from: inc.stage, to: Stage::PostmortemPending });
+            return Err(IncidentError::InvalidTransition {
+                from: inc.stage,
+                to: Stage::PostmortemPending,
+            });
         }
         inc.postmortem_id = Some(postmortem_id.into());
         Ok(())
@@ -177,12 +205,20 @@ impl IncidentRecord {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IncidentError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IncidentError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IncidentError::SchemaMismatch);
+        }
         for (id, inc) in &self.incidents {
-            if id.is_empty() { return Err(IncidentError::EmptyId); }
-            if inc.title.is_empty() { return Err(IncidentError::EmptyTitle); }
+            if id.is_empty() {
+                return Err(IncidentError::EmptyId);
+            }
+            if inc.title.is_empty() {
+                return Err(IncidentError::EmptyTitle);
+            }
             if let Some(p) = &inc.postmortem_id {
-                if p.is_empty() { return Err(IncidentError::EmptyPostmortem); }
+                if p.is_empty() {
+                    return Err(IncidentError::EmptyPostmortem);
+                }
             }
         }
         Ok(())
@@ -190,7 +226,9 @@ impl IncidentRecord {
 }
 
 impl Default for IncidentRecord {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -223,7 +261,10 @@ mod tests {
         let mut r = IncidentRecord::new();
         r.open("i1", "x", 0).unwrap();
         // Skip from Open straight to Mitigated.
-        assert!(matches!(r.transition("i1", Stage::Mitigated, 100).unwrap_err(), IncidentError::InvalidTransition { .. }));
+        assert!(matches!(
+            r.transition("i1", Stage::Mitigated, 100).unwrap_err(),
+            IncidentError::InvalidTransition { .. }
+        ));
     }
 
     #[test]
@@ -242,14 +283,20 @@ mod tests {
     fn reopen_from_open_rejected() {
         let mut r = IncidentRecord::new();
         r.open("i1", "x", 0).unwrap();
-        assert!(matches!(r.reopen("i1", 100).unwrap_err(), IncidentError::InvalidTransition { .. }));
+        assert!(matches!(
+            r.reopen("i1", 100).unwrap_err(),
+            IncidentError::InvalidTransition { .. }
+        ));
     }
 
     #[test]
     fn postmortem_only_in_pending() {
         let mut r = IncidentRecord::new();
         r.open("i1", "x", 0).unwrap();
-        assert!(matches!(r.file_postmortem("i1", "pm-1").unwrap_err(), IncidentError::InvalidTransition { .. }));
+        assert!(matches!(
+            r.file_postmortem("i1", "pm-1").unwrap_err(),
+            IncidentError::InvalidTransition { .. }
+        ));
         r.transition("i1", Stage::Triaged, 1).unwrap();
         r.transition("i1", Stage::Mitigated, 2).unwrap();
         r.transition("i1", Stage::Resolved, 3).unwrap();
@@ -270,23 +317,38 @@ mod tests {
     fn duplicate_open_rejected() {
         let mut r = IncidentRecord::new();
         r.open("i1", "x", 0).unwrap();
-        assert!(matches!(r.open("i1", "x", 0).unwrap_err(), IncidentError::DuplicateId(_)));
+        assert!(matches!(
+            r.open("i1", "x", 0).unwrap_err(),
+            IncidentError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut r = IncidentRecord::new();
-        assert!(matches!(r.open("", "x", 0).unwrap_err(), IncidentError::EmptyId));
-        assert!(matches!(r.open("i", "", 0).unwrap_err(), IncidentError::EmptyTitle));
+        assert!(matches!(
+            r.open("", "x", 0).unwrap_err(),
+            IncidentError::EmptyId
+        ));
+        assert!(matches!(
+            r.open("i", "", 0).unwrap_err(),
+            IncidentError::EmptyTitle
+        ));
         r.open("i", "x", 0).unwrap();
-        assert!(matches!(r.file_postmortem("i", "").unwrap_err(), IncidentError::EmptyPostmortem));
+        assert!(matches!(
+            r.file_postmortem("i", "").unwrap_err(),
+            IncidentError::EmptyPostmortem
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = IncidentRecord::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), IncidentError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            IncidentError::SchemaMismatch
+        ));
     }
 
     #[test]

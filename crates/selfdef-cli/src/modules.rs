@@ -191,7 +191,6 @@ pub(crate) struct Requirement {
 /// `super::` / `crate::modules::` paths).
 pub(crate) use selfdef_hardware_requirements::HardwareRequirements;
 
-
 /// SD-R55: optional `[signing]` block in module.toml. When present,
 /// apply (or any lifecycle action) verifies module.toml's detached
 /// minisig signature against the operator's trust-root pubkey

@@ -80,18 +80,30 @@ impl RouteTable {
 
     /// Add exact route.
     pub fn add_exact(&mut self, key: &str, handler_id: &str) -> Result<(), RouteError> {
-        if key.is_empty() { return Err(RouteError::EmptyKey); }
-        if handler_id.is_empty() { return Err(RouteError::EmptyHandler); }
-        if self.exact.contains_key(key) { return Err(RouteError::DuplicateExact(key.into())); }
+        if key.is_empty() {
+            return Err(RouteError::EmptyKey);
+        }
+        if handler_id.is_empty() {
+            return Err(RouteError::EmptyHandler);
+        }
+        if self.exact.contains_key(key) {
+            return Err(RouteError::DuplicateExact(key.into()));
+        }
         self.exact.insert(key.into(), handler_id.into());
         Ok(())
     }
 
     /// Add prefix route.
     pub fn add_prefix(&mut self, prefix: &str, handler_id: &str) -> Result<(), RouteError> {
-        if prefix.is_empty() { return Err(RouteError::EmptyKey); }
-        if handler_id.is_empty() { return Err(RouteError::EmptyHandler); }
-        if self.prefix.contains_key(prefix) { return Err(RouteError::DuplicatePrefix(prefix.into())); }
+        if prefix.is_empty() {
+            return Err(RouteError::EmptyKey);
+        }
+        if handler_id.is_empty() {
+            return Err(RouteError::EmptyHandler);
+        }
+        if self.prefix.contains_key(prefix) {
+            return Err(RouteError::DuplicatePrefix(prefix.into()));
+        }
         self.prefix.insert(prefix.into(), handler_id.into());
         Ok(())
     }
@@ -99,7 +111,11 @@ impl RouteTable {
     /// Resolve a key.
     pub fn resolve(&self, key: &str) -> Option<Resolution<'_>> {
         if let Some(h) = self.exact.get(key) {
-            return Some(Resolution { handler_id: h.as_str(), kind: MatchKind::Exact, matched_len: key.len() });
+            return Some(Resolution {
+                handler_id: h.as_str(),
+                kind: MatchKind::Exact,
+                matched_len: key.len(),
+            });
         }
         let mut best: Option<(&str, &str)> = None; // (prefix, handler)
         for (p, h) in &self.prefix {
@@ -109,22 +125,34 @@ impl RouteTable {
                 }
             }
         }
-        best.map(|(p, h)| Resolution { handler_id: h, kind: MatchKind::Prefix, matched_len: p.len() })
+        best.map(|(p, h)| Resolution {
+            handler_id: h,
+            kind: MatchKind::Prefix,
+            matched_len: p.len(),
+        })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RouteError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RouteError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RouteError::SchemaMismatch);
+        }
         for (k, v) in self.exact.iter().chain(self.prefix.iter()) {
-            if k.is_empty() { return Err(RouteError::EmptyKey); }
-            if v.is_empty() { return Err(RouteError::EmptyHandler); }
+            if k.is_empty() {
+                return Err(RouteError::EmptyKey);
+            }
+            if v.is_empty() {
+                return Err(RouteError::EmptyHandler);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for RouteTable {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -160,30 +188,48 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut t = RouteTable::new();
-        assert!(matches!(t.add_exact("", "h").unwrap_err(), RouteError::EmptyKey));
-        assert!(matches!(t.add_exact("/k", "").unwrap_err(), RouteError::EmptyHandler));
-        assert!(matches!(t.add_prefix("", "h").unwrap_err(), RouteError::EmptyKey));
+        assert!(matches!(
+            t.add_exact("", "h").unwrap_err(),
+            RouteError::EmptyKey
+        ));
+        assert!(matches!(
+            t.add_exact("/k", "").unwrap_err(),
+            RouteError::EmptyHandler
+        ));
+        assert!(matches!(
+            t.add_prefix("", "h").unwrap_err(),
+            RouteError::EmptyKey
+        ));
     }
 
     #[test]
     fn duplicate_exact_rejected() {
         let mut t = RouteTable::new();
         t.add_exact("/a", "h1").unwrap();
-        assert!(matches!(t.add_exact("/a", "h2").unwrap_err(), RouteError::DuplicateExact(_)));
+        assert!(matches!(
+            t.add_exact("/a", "h2").unwrap_err(),
+            RouteError::DuplicateExact(_)
+        ));
     }
 
     #[test]
     fn duplicate_prefix_rejected() {
         let mut t = RouteTable::new();
         t.add_prefix("/a/", "h1").unwrap();
-        assert!(matches!(t.add_prefix("/a/", "h2").unwrap_err(), RouteError::DuplicatePrefix(_)));
+        assert!(matches!(
+            t.add_prefix("/a/", "h2").unwrap_err(),
+            RouteError::DuplicatePrefix(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = RouteTable::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), RouteError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            RouteError::SchemaMismatch
+        ));
     }
 
     #[test]

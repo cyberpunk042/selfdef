@@ -56,7 +56,9 @@ pub enum GuardError {
 impl RecursionGuard {
     /// New.
     pub fn new(max_depth: u32) -> Result<Self, GuardError> {
-        if max_depth == 0 { return Err(GuardError::ZeroDepth); }
+        if max_depth == 0 {
+            return Err(GuardError::ZeroDepth);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             max_depth,
@@ -66,7 +68,9 @@ impl RecursionGuard {
 
     /// Enter a frame.
     pub fn enter(&mut self, frame_id: &str) -> Result<(), GuardError> {
-        if frame_id.is_empty() { return Err(GuardError::EmptyFrame); }
+        if frame_id.is_empty() {
+            return Err(GuardError::EmptyFrame);
+        }
         if self.stack.len() + 1 > self.max_depth as usize {
             return Err(GuardError::DepthExceeded(self.max_depth));
         }
@@ -79,12 +83,16 @@ impl RecursionGuard {
 
     /// Leave a frame.
     pub fn leave(&mut self) -> Result<(), GuardError> {
-        if self.stack.pop().is_none() { return Err(GuardError::Underflow); }
+        if self.stack.pop().is_none() {
+            return Err(GuardError::Underflow);
+        }
         Ok(())
     }
 
     /// Depth.
-    pub fn depth(&self) -> u32 { self.stack.len() as u32 }
+    pub fn depth(&self) -> u32 {
+        self.stack.len() as u32
+    }
 
     /// Contains.
     pub fn contains(&self, frame_id: &str) -> bool {
@@ -93,13 +101,19 @@ impl RecursionGuard {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GuardError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GuardError::SchemaMismatch); }
-        if self.max_depth == 0 { return Err(GuardError::ZeroDepth); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GuardError::SchemaMismatch);
+        }
+        if self.max_depth == 0 {
+            return Err(GuardError::ZeroDepth);
+        }
         if self.stack.len() > self.max_depth as usize {
             return Err(GuardError::DepthExceeded(self.max_depth));
         }
         for f in &self.stack {
-            if f.is_empty() { return Err(GuardError::EmptyFrame); }
+            if f.is_empty() {
+                return Err(GuardError::EmptyFrame);
+            }
         }
         Ok(())
     }
@@ -124,7 +138,10 @@ mod tests {
         let mut g = RecursionGuard::new(2).unwrap();
         g.enter("a").unwrap();
         g.enter("b").unwrap();
-        assert!(matches!(g.enter("c").unwrap_err(), GuardError::DepthExceeded(2)));
+        assert!(matches!(
+            g.enter("c").unwrap_err(),
+            GuardError::DepthExceeded(2)
+        ));
         // State unchanged.
         assert_eq!(g.depth(), 2);
     }
@@ -134,7 +151,10 @@ mod tests {
         let mut g = RecursionGuard::new(5).unwrap();
         g.enter("a").unwrap();
         g.enter("b").unwrap();
-        assert!(matches!(g.enter("a").unwrap_err(), GuardError::CycleDetected(_)));
+        assert!(matches!(
+            g.enter("a").unwrap_err(),
+            GuardError::CycleDetected(_)
+        ));
         assert_eq!(g.depth(), 2);
     }
 
@@ -152,14 +172,20 @@ mod tests {
 
     #[test]
     fn zero_depth_rejected() {
-        assert!(matches!(RecursionGuard::new(0).unwrap_err(), GuardError::ZeroDepth));
+        assert!(matches!(
+            RecursionGuard::new(0).unwrap_err(),
+            GuardError::ZeroDepth
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = RecursionGuard::new(5).unwrap();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GuardError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GuardError::SchemaMismatch
+        ));
     }
 
     #[test]

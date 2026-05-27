@@ -121,17 +121,27 @@ impl SubstrateThreadQuota {
         };
         let live = self.live.iter().filter(|t| t.profile == profile).count() as u32;
         if live >= cfg.max_threads {
-            return SpawnVerdict::Exhausted { live, cap: cfg.max_threads };
+            return SpawnVerdict::Exhausted {
+                live,
+                cap: cfg.max_threads,
+            };
         }
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.live.push(LiveThread { thread_id: id, profile, label: label.into() });
+        self.live.push(LiveThread {
+            thread_id: id,
+            profile,
+            label: label.into(),
+        });
         SpawnVerdict::Granted { thread_id: id }
     }
 
     /// Finish.
     pub fn finish(&mut self, thread_id: u64) -> Result<(), ThreadError> {
-        let pos = self.live.iter().position(|t| t.thread_id == thread_id)
+        let pos = self
+            .live
+            .iter()
+            .position(|t| t.thread_id == thread_id)
             .ok_or(ThreadError::UnknownThread(thread_id))?;
         self.live.remove(pos);
         Ok(())
@@ -158,56 +168,83 @@ mod tests {
     #[test]
     fn spawn_grants() {
         let mut q = SubstrateThreadQuota::canonical();
-        assert!(matches!(q.spawn(Profile::Fast, "w1"), SpawnVerdict::Granted { .. }));
+        assert!(matches!(
+            q.spawn(Profile::Fast, "w1"),
+            SpawnVerdict::Granted { .. }
+        ));
     }
 
     #[test]
     fn exhausted_when_full() {
         let mut q = SubstrateThreadQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileThreads { max_threads: 1 });
+        q.profiles
+            .insert(Profile::Fast, ProfileThreads { max_threads: 1 });
         q.spawn(Profile::Fast, "a");
-        assert!(matches!(q.spawn(Profile::Fast, "b"), SpawnVerdict::Exhausted { .. }));
+        assert!(matches!(
+            q.spawn(Profile::Fast, "b"),
+            SpawnVerdict::Exhausted { .. }
+        ));
     }
 
     #[test]
     fn finish_frees() {
         let mut q = SubstrateThreadQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileThreads { max_threads: 1 });
+        q.profiles
+            .insert(Profile::Fast, ProfileThreads { max_threads: 1 });
         let id = match q.spawn(Profile::Fast, "a") {
             SpawnVerdict::Granted { thread_id } => thread_id,
             _ => unreachable!(),
         };
         q.finish(id).unwrap();
-        assert!(matches!(q.spawn(Profile::Fast, "b"), SpawnVerdict::Granted { .. }));
+        assert!(matches!(
+            q.spawn(Profile::Fast, "b"),
+            SpawnVerdict::Granted { .. }
+        ));
     }
 
     #[test]
     fn finish_unknown_rejected() {
         let mut q = SubstrateThreadQuota::canonical();
-        assert!(matches!(q.finish(999).unwrap_err(), ThreadError::UnknownThread(_)));
+        assert!(matches!(
+            q.finish(999).unwrap_err(),
+            ThreadError::UnknownThread(_)
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut q = SubstrateThreadQuota::canonical();
         q.profiles.clear();
-        assert!(matches!(q.spawn(Profile::Fast, "a"), SpawnVerdict::Unconfigured));
+        assert!(matches!(
+            q.spawn(Profile::Fast, "a"),
+            SpawnVerdict::Unconfigured
+        ));
     }
 
     #[test]
     fn per_profile_isolation() {
         let mut q = SubstrateThreadQuota::canonical();
-        q.profiles.insert(Profile::Fast, ProfileThreads { max_threads: 1 });
+        q.profiles
+            .insert(Profile::Fast, ProfileThreads { max_threads: 1 });
         q.spawn(Profile::Fast, "a");
-        assert!(matches!(q.spawn(Profile::Production, "p"), SpawnVerdict::Granted { .. }));
-        assert!(matches!(q.spawn(Profile::Fast, "b"), SpawnVerdict::Exhausted { .. }));
+        assert!(matches!(
+            q.spawn(Profile::Production, "p"),
+            SpawnVerdict::Granted { .. }
+        ));
+        assert!(matches!(
+            q.spawn(Profile::Fast, "b"),
+            SpawnVerdict::Exhausted { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = SubstrateThreadQuota::canonical();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), ThreadError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            ThreadError::SchemaMismatch
+        ));
     }
 
     #[test]

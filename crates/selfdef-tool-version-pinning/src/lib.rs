@@ -161,7 +161,9 @@ impl ToolVersionPinning {
 }
 
 fn check_pin(p: &ToolPin) -> Result<(), PinError> {
-    if p.tool_id.is_empty() { return Err(PinError::EmptyToolId); }
+    if p.tool_id.is_empty() {
+        return Err(PinError::EmptyToolId);
+    }
     match &p.req {
         PinReq::Semver { version } => {
             if !valid_semver(version) {
@@ -179,8 +181,12 @@ fn check_pin(p: &ToolPin) -> Result<(), PinError> {
 
 fn valid_semver(s: &str) -> bool {
     let parts: Vec<&str> = s.split('.').collect();
-    if parts.len() != 3 { return false; }
-    parts.iter().all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
+    if parts.len() != 3 {
+        return false;
+    }
+    parts
+        .iter()
+        .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
 }
 
 fn valid_sha256(s: &str) -> bool {
@@ -188,7 +194,9 @@ fn valid_sha256(s: &str) -> bool {
 }
 
 impl Default for ToolVersionPinning {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -196,11 +204,17 @@ mod tests {
     use super::*;
 
     fn pin_semver(id: &str, v: &str) -> ToolPin {
-        ToolPin { tool_id: id.into(), req: PinReq::Semver { version: v.into() } }
+        ToolPin {
+            tool_id: id.into(),
+            req: PinReq::Semver { version: v.into() },
+        }
     }
 
     fn pin_sha(id: &str, d: &str) -> ToolPin {
-        ToolPin { tool_id: id.into(), req: PinReq::Sha256 { digest: d.into() } }
+        ToolPin {
+            tool_id: id.into(),
+            req: PinReq::Sha256 { digest: d.into() },
+        }
     }
 
     fn digest(repeat: u8) -> String {
@@ -210,7 +224,10 @@ mod tests {
     #[test]
     fn unknown_tool_returns_unknown() {
         let v = ToolVersionPinning::new();
-        assert!(matches!(v.admit("none", "1.0.0", ""), AdmitDecision::Unknown));
+        assert!(matches!(
+            v.admit("none", "1.0.0", ""),
+            AdmitDecision::Unknown
+        ));
     }
 
     #[test]
@@ -239,14 +256,20 @@ mod tests {
         let mut v = ToolVersionPinning::new();
         let d = digest(0xa);
         v.add(pin_sha("tool", &d)).unwrap();
-        assert!(matches!(v.admit("tool", "", &d.to_uppercase()), AdmitDecision::Allow));
+        assert!(matches!(
+            v.admit("tool", "", &d.to_uppercase()),
+            AdmitDecision::Allow
+        ));
     }
 
     #[test]
     fn sha256_mismatch() {
         let mut v = ToolVersionPinning::new();
         v.add(pin_sha("tool", &digest(0xa))).unwrap();
-        assert!(matches!(v.admit("tool", "", &digest(0xb)), AdmitDecision::DigestMismatch { .. }));
+        assert!(matches!(
+            v.admit("tool", "", &digest(0xb)),
+            AdmitDecision::DigestMismatch { .. }
+        ));
     }
 
     #[test]
@@ -262,33 +285,53 @@ mod tests {
     #[test]
     fn empty_tool_id_rejected() {
         let mut v = ToolVersionPinning::new();
-        assert!(matches!(v.add(pin_semver("", "1.0.0")).unwrap_err(), PinError::EmptyToolId));
+        assert!(matches!(
+            v.add(pin_semver("", "1.0.0")).unwrap_err(),
+            PinError::EmptyToolId
+        ));
     }
 
     #[test]
     fn bad_semver_rejected() {
         let mut v = ToolVersionPinning::new();
-        assert!(matches!(v.add(pin_semver("git", "1.0")).unwrap_err(), PinError::BadSemver(_)));
-        assert!(matches!(v.add(pin_semver("git", "1.0.x")).unwrap_err(), PinError::BadSemver(_)));
+        assert!(matches!(
+            v.add(pin_semver("git", "1.0")).unwrap_err(),
+            PinError::BadSemver(_)
+        ));
+        assert!(matches!(
+            v.add(pin_semver("git", "1.0.x")).unwrap_err(),
+            PinError::BadSemver(_)
+        ));
     }
 
     #[test]
     fn bad_sha256_rejected() {
         let mut v = ToolVersionPinning::new();
-        assert!(matches!(v.add(pin_sha("tool", "tooshort")).unwrap_err(), PinError::BadSha256(_)));
-        assert!(matches!(v.add(pin_sha("tool", &"x".repeat(64))).unwrap_err(), PinError::BadSha256(_)));
+        assert!(matches!(
+            v.add(pin_sha("tool", "tooshort")).unwrap_err(),
+            PinError::BadSha256(_)
+        ));
+        assert!(matches!(
+            v.add(pin_sha("tool", &"x".repeat(64))).unwrap_err(),
+            PinError::BadSha256(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut v = ToolVersionPinning::new();
         v.schema_version = "9.9.9".into();
-        assert!(matches!(v.validate().unwrap_err(), PinError::SchemaMismatch));
+        assert!(matches!(
+            v.validate().unwrap_err(),
+            PinError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn req_serde_kebab() {
-        let r = PinReq::Semver { version: "1.0.0".into() };
+        let r = PinReq::Semver {
+            version: "1.0.0".into(),
+        };
         let j = serde_json::to_string(&r).unwrap();
         assert!(j.contains("\"kind\":\"semver\""));
     }

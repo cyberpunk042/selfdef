@@ -4,9 +4,9 @@
 
 use std::path::{Path, PathBuf};
 
-use axum::http::StatusCode;
 use axum::Json;
-use selfdef_flex_profile::{Delta, FlexProfile, FlexProfileError, DEFAULT_STATE_PATH};
+use axum::http::StatusCode;
+use selfdef_flex_profile::{DEFAULT_STATE_PATH, Delta, FlexProfile, FlexProfileError};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize)]
@@ -60,8 +60,7 @@ const REFUSAL_RULES: &[&str] = &[
     "MandatoryFieldMissing  — actor or reason empty",
 ];
 
-const DOCTRINE_PHRASE: &str =
-    "live delta over baseline YAMLs with full revert history";
+const DOCTRINE_PHRASE: &str = "live delta over baseline YAMLs with full revert history";
 
 fn read_state(path: &Path) -> Option<FlexProfile> {
     let text = std::fs::read_to_string(path).ok()?;
@@ -73,7 +72,11 @@ pub(crate) async fn show() -> Json<FlexProfileResponse> {
         .unwrap_or_else(|_| DEFAULT_STATE_PATH.to_string());
     let path = std::path::PathBuf::from(&path_str);
     let state_present = path.exists();
-    let state = if state_present { read_state(&path) } else { None };
+    let state = if state_present {
+        read_state(&path)
+    } else {
+        None
+    };
     Json(FlexProfileResponse {
         schema: FlexProfileSchema {
             delta_fields: DELTA_FIELDS,
@@ -178,10 +181,9 @@ fn atomic_write(path: &Path, body: &str) -> Result<(), (StatusCode, String)> {
 
 fn map_flex_error(e: FlexProfileError) -> (StatusCode, String) {
     match e {
-        FlexProfileError::SchemaMismatch => (
-            StatusCode::CONFLICT,
-            "schema version mismatch".to_string(),
-        ),
+        FlexProfileError::SchemaMismatch => {
+            (StatusCode::CONFLICT, "schema version mismatch".to_string())
+        }
         FlexProfileError::NothingToRevert => (
             StatusCode::CONFLICT,
             "no delta on the stack to revert".to_string(),
@@ -202,12 +204,8 @@ pub(crate) async fn apply(
     let path = current_state_path();
     let mut profile = read_or_create(&path, req.baseline.as_deref())?;
     profile.apply(req.delta).map_err(map_flex_error)?;
-    let body = serde_json::to_string_pretty(&profile).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("serialize: {e}"),
-        )
-    })?;
+    let body = serde_json::to_string_pretty(&profile)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
     atomic_write(&path, &body)?;
     Ok(Json(profile))
 }
@@ -228,12 +226,8 @@ pub(crate) async fn revert(
     profile
         .revert(&req.actor, &req.reason, now_ms)
         .map_err(map_flex_error)?;
-    let body = serde_json::to_string_pretty(&profile).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("serialize: {e}"),
-        )
-    })?;
+    let body = serde_json::to_string_pretty(&profile)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("serialize: {e}")))?;
     atomic_write(&path, &body)?;
     Ok(Json(profile))
 }

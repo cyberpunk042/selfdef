@@ -82,24 +82,48 @@ impl PolicyCasStore {
     }
 
     /// CAS put. New keys require expected_version = 0.
-    pub fn put_cas(&mut self, key: &str, value: Vec<u8>, expected_version: u64) -> Result<CasVerdict, CasError> {
-        if key.is_empty() { return Err(CasError::EmptyKey); }
+    pub fn put_cas(
+        &mut self,
+        key: &str,
+        value: Vec<u8>,
+        expected_version: u64,
+    ) -> Result<CasVerdict, CasError> {
+        if key.is_empty() {
+            return Err(CasError::EmptyKey);
+        }
         let current = self.keys.get(key);
         let observed = current.map(|v| v.version).unwrap_or(0);
         if observed != expected_version {
-            return Ok(CasVerdict::Conflict { observed_version: observed, expected_version });
+            return Ok(CasVerdict::Conflict {
+                observed_version: observed,
+                expected_version,
+            });
         }
         let new_version = observed.saturating_add(1);
-        self.keys.insert(key.into(), Versioned { value, version: new_version });
+        self.keys.insert(
+            key.into(),
+            Versioned {
+                value,
+                version: new_version,
+            },
+        );
         Ok(CasVerdict::Wrote { new_version })
     }
 
     /// Forced write (non-CAS); bumps version.
     pub fn force(&mut self, key: &str, value: Vec<u8>) -> Result<u64, CasError> {
-        if key.is_empty() { return Err(CasError::EmptyKey); }
+        if key.is_empty() {
+            return Err(CasError::EmptyKey);
+        }
         let current = self.keys.get(key);
         let new_version = current.map(|v| v.version).unwrap_or(0).saturating_add(1);
-        self.keys.insert(key.into(), Versioned { value, version: new_version });
+        self.keys.insert(
+            key.into(),
+            Versioned {
+                value,
+                version: new_version,
+            },
+        );
         Ok(new_version)
     }
 
@@ -110,16 +134,22 @@ impl PolicyCasStore {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CasError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CasError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CasError::SchemaMismatch);
+        }
         for k in self.keys.keys() {
-            if k.is_empty() { return Err(CasError::EmptyKey); }
+            if k.is_empty() {
+                return Err(CasError::EmptyKey);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyCasStore {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -151,7 +181,10 @@ mod tests {
         let mut s = PolicyCasStore::new();
         s.put_cas("k", b"v1".to_vec(), 0).unwrap();
         match s.put_cas("k", b"v2".to_vec(), 0).unwrap() {
-            CasVerdict::Conflict { observed_version, expected_version } => {
+            CasVerdict::Conflict {
+                observed_version,
+                expected_version,
+            } => {
                 assert_eq!(observed_version, 1);
                 assert_eq!(expected_version, 0);
             }
@@ -164,7 +197,10 @@ mod tests {
         let mut s = PolicyCasStore::new();
         s.put_cas("k", b"v1".to_vec(), 0).unwrap();
         // Try to create again (expected=0, observed=1).
-        assert!(matches!(s.put_cas("k", b"v2".to_vec(), 0).unwrap(), CasVerdict::Conflict { .. }));
+        assert!(matches!(
+            s.put_cas("k", b"v2".to_vec(), 0).unwrap(),
+            CasVerdict::Conflict { .. }
+        ));
     }
 
     #[test]
@@ -183,21 +219,33 @@ mod tests {
         assert!(s.delete("k"));
         assert!(s.get("k").is_none());
         // Now creating fresh requires expected=0 again.
-        assert!(matches!(s.put_cas("k", b"v".to_vec(), 0).unwrap(), CasVerdict::Wrote { new_version: 1 }));
+        assert!(matches!(
+            s.put_cas("k", b"v".to_vec(), 0).unwrap(),
+            CasVerdict::Wrote { new_version: 1 }
+        ));
     }
 
     #[test]
     fn empty_key_rejected() {
         let mut s = PolicyCasStore::new();
-        assert!(matches!(s.put_cas("", b"v".to_vec(), 0).unwrap_err(), CasError::EmptyKey));
-        assert!(matches!(s.force("", b"v".to_vec()).unwrap_err(), CasError::EmptyKey));
+        assert!(matches!(
+            s.put_cas("", b"v".to_vec(), 0).unwrap_err(),
+            CasError::EmptyKey
+        ));
+        assert!(matches!(
+            s.force("", b"v".to_vec()).unwrap_err(),
+            CasError::EmptyKey
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = PolicyCasStore::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), CasError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            CasError::SchemaMismatch
+        ));
     }
 
     #[test]

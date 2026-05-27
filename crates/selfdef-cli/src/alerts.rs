@@ -20,7 +20,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::Serialize;
 
 /// One alert row — matches the dashboard panel's row shape so any
@@ -344,7 +344,8 @@ fn fetch_metrics() -> Result<String> {
     // ships at `/run/selfdef.sock` by default. Operators may override
     // via `SELFDEF_SOCKET` env (matches the dashboard's local-only
     // dev-loop).
-    let socket = std::env::var("SELFDEF_SOCKET").unwrap_or_else(|_| "/run/selfdef.sock".to_string());
+    let socket =
+        std::env::var("SELFDEF_SOCKET").unwrap_or_else(|_| "/run/selfdef.sock".to_string());
     let socket_path = std::path::Path::new(&socket);
     if socket_path.exists() {
         let out = Command::new("curl")
@@ -482,10 +483,7 @@ mod tests {
     #[test]
     fn classify_critical_on_chain_broken() {
         let mut series = std::collections::HashMap::new();
-        series.insert(
-            "selfdef_perimeter_audit_chain_events".to_string(),
-            -1.0,
-        );
+        series.insert("selfdef_perimeter_audit_chain_events".to_string(), -1.0);
         let rows = classify(&series);
         let row = rows
             .iter()
@@ -510,10 +508,7 @@ mod tests {
     #[test]
     fn classify_warn_on_sigkill_count() {
         let mut series = std::collections::HashMap::new();
-        series.insert(
-            "selfdef_perimeter_sigkills_total".to_string(),
-            42.0,
-        );
+        series.insert("selfdef_perimeter_sigkills_total".to_string(), 42.0);
         let rows = classify(&series);
         let row = rows
             .iter()

@@ -74,28 +74,50 @@ impl PolicyVersionEvent {
     }
 
     /// Observe.
-    pub fn observe(&mut self, actor: &str, policy_id: &str, version: &str) -> Result<VersionVerdict, EventError> {
-        if actor.is_empty() { return Err(EventError::EmptyActor); }
-        if policy_id.is_empty() { return Err(EventError::EmptyPolicy); }
-        if version.is_empty() { return Err(EventError::EmptyVersion); }
+    pub fn observe(
+        &mut self,
+        actor: &str,
+        policy_id: &str,
+        version: &str,
+    ) -> Result<VersionVerdict, EventError> {
+        if actor.is_empty() {
+            return Err(EventError::EmptyActor);
+        }
+        if policy_id.is_empty() {
+            return Err(EventError::EmptyPolicy);
+        }
+        if version.is_empty() {
+            return Err(EventError::EmptyVersion);
+        }
         let by_policy = self.last.entry(actor.into()).or_default();
         let prev = by_policy.get(policy_id).cloned();
         by_policy.insert(policy_id.into(), version.into());
         Ok(match prev {
             None => VersionVerdict::FirstSeen,
             Some(p) if p == version => VersionVerdict::UnchangedVersion,
-            Some(p) => VersionVerdict::NewVersion { old: p, new: version.into() },
+            Some(p) => VersionVerdict::NewVersion {
+                old: p,
+                new: version.into(),
+            },
         })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EventError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EventError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EventError::SchemaMismatch);
+        }
         for (a, m) in &self.last {
-            if a.is_empty() { return Err(EventError::EmptyActor); }
+            if a.is_empty() {
+                return Err(EventError::EmptyActor);
+            }
             for (p, v) in m {
-                if p.is_empty() { return Err(EventError::EmptyPolicy); }
-                if v.is_empty() { return Err(EventError::EmptyVersion); }
+                if p.is_empty() {
+                    return Err(EventError::EmptyPolicy);
+                }
+                if v.is_empty() {
+                    return Err(EventError::EmptyVersion);
+                }
             }
         }
         Ok(())
@@ -103,7 +125,9 @@ impl PolicyVersionEvent {
 }
 
 impl Default for PolicyVersionEvent {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -113,8 +137,14 @@ mod tests {
     #[test]
     fn first_seen_then_unchanged() {
         let mut e = PolicyVersionEvent::new();
-        assert_eq!(e.observe("a", "p", "1.0.0").unwrap(), VersionVerdict::FirstSeen);
-        assert_eq!(e.observe("a", "p", "1.0.0").unwrap(), VersionVerdict::UnchangedVersion);
+        assert_eq!(
+            e.observe("a", "p", "1.0.0").unwrap(),
+            VersionVerdict::FirstSeen
+        );
+        assert_eq!(
+            e.observe("a", "p", "1.0.0").unwrap(),
+            VersionVerdict::UnchangedVersion
+        );
     }
 
     #[test]
@@ -129,36 +159,57 @@ mod tests {
             _ => panic!(),
         }
         // Second observe at the same new version → Unchanged.
-        assert_eq!(e.observe("a", "p", "2.0.0").unwrap(), VersionVerdict::UnchangedVersion);
+        assert_eq!(
+            e.observe("a", "p", "2.0.0").unwrap(),
+            VersionVerdict::UnchangedVersion
+        );
     }
 
     #[test]
     fn distinct_actors_distinct_state() {
         let mut e = PolicyVersionEvent::new();
         e.observe("a", "p", "1.0.0").unwrap();
-        assert_eq!(e.observe("b", "p", "1.0.0").unwrap(), VersionVerdict::FirstSeen);
+        assert_eq!(
+            e.observe("b", "p", "1.0.0").unwrap(),
+            VersionVerdict::FirstSeen
+        );
     }
 
     #[test]
     fn distinct_policies_distinct_state() {
         let mut e = PolicyVersionEvent::new();
         e.observe("a", "p1", "1.0.0").unwrap();
-        assert_eq!(e.observe("a", "p2", "1.0.0").unwrap(), VersionVerdict::FirstSeen);
+        assert_eq!(
+            e.observe("a", "p2", "1.0.0").unwrap(),
+            VersionVerdict::FirstSeen
+        );
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut e = PolicyVersionEvent::new();
-        assert!(matches!(e.observe("", "p", "v").unwrap_err(), EventError::EmptyActor));
-        assert!(matches!(e.observe("a", "", "v").unwrap_err(), EventError::EmptyPolicy));
-        assert!(matches!(e.observe("a", "p", "").unwrap_err(), EventError::EmptyVersion));
+        assert!(matches!(
+            e.observe("", "p", "v").unwrap_err(),
+            EventError::EmptyActor
+        ));
+        assert!(matches!(
+            e.observe("a", "", "v").unwrap_err(),
+            EventError::EmptyPolicy
+        ));
+        assert!(matches!(
+            e.observe("a", "p", "").unwrap_err(),
+            EventError::EmptyVersion
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = PolicyVersionEvent::new();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), EventError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            EventError::SchemaMismatch
+        ));
     }
 
     #[test]

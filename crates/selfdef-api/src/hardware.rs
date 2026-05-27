@@ -18,10 +18,10 @@
 
 use std::sync::OnceLock;
 
-use axum::http::StatusCode;
 use axum::Json;
+use axum::http::StatusCode;
 use selfdef_hardware::{
-    derive_capabilities, matches_sain01, probe, HardwareCapabilities, HardwareSnapshot, Sain01Match,
+    HardwareCapabilities, HardwareSnapshot, Sain01Match, derive_capabilities, matches_sain01, probe,
 };
 use serde::Serialize;
 

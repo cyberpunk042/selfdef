@@ -27,8 +27,7 @@ use thiserror::Error;
 pub const SCHEMA_VERSION: &str = "1.0.0";
 
 /// Doctrine surface verbatim per F03842 dump 16216.
-pub const DOCTRINE_EVERY_ACTION_OBSERVABLE: &str =
-    "Every action becomes observable and governed";
+pub const DOCTRINE_EVERY_ACTION_OBSERVABLE: &str = "Every action becomes observable and governed";
 
 /// Doctrine surface verbatim per F03942 dump 16221.
 pub const DOCTRINE_TRACE_AT_DECISION: &str =
@@ -190,13 +189,27 @@ impl PolicyDecision {
             return Err(PolicyError::DecisionUnsigned);
         }
         // 10 fields — strings non-empty (enums always set, so skip).
-        if self.subject.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("subject")); }
-        if self.action.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("action")); }
-        if self.resource.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("resource")); }
-        if self.intent.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("intent")); }
-        if self.profile.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("profile")); }
-        if self.model_provider.is_empty() { return Err(PolicyError::MandatoryFieldEmpty("model_provider")); }
-        if self.trace_id.is_empty() { return Err(PolicyError::AskWithoutTrace); }
+        if self.subject.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("subject"));
+        }
+        if self.action.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("action"));
+        }
+        if self.resource.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("resource"));
+        }
+        if self.intent.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("intent"));
+        }
+        if self.profile.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("profile"));
+        }
+        if self.model_provider.is_empty() {
+            return Err(PolicyError::MandatoryFieldEmpty("model_provider"));
+        }
+        if self.trace_id.is_empty() {
+            return Err(PolicyError::AskWithoutTrace);
+        }
 
         // Critical-risk Allow rule.
         if self.outcome == Outcome::Allow
@@ -256,56 +269,80 @@ mod tests {
     fn empty_subject_rejected() {
         let mut d = ok_decision();
         d.subject = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("subject")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("subject")
+        ));
     }
 
     #[test]
     fn empty_action_rejected() {
         let mut d = ok_decision();
         d.action = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("action")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("action")
+        ));
     }
 
     #[test]
     fn empty_resource_rejected() {
         let mut d = ok_decision();
         d.resource = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("resource")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("resource")
+        ));
     }
 
     #[test]
     fn empty_intent_rejected() {
         let mut d = ok_decision();
         d.intent = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("intent")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("intent")
+        ));
     }
 
     #[test]
     fn empty_profile_rejected() {
         let mut d = ok_decision();
         d.profile = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("profile")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("profile")
+        ));
     }
 
     #[test]
     fn empty_model_provider_rejected() {
         let mut d = ok_decision();
         d.model_provider = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::MandatoryFieldEmpty("model_provider")));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::MandatoryFieldEmpty("model_provider")
+        ));
     }
 
     #[test]
     fn empty_trace_id_rejected() {
         let mut d = ok_decision();
         d.trace_id = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::AskWithoutTrace));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::AskWithoutTrace
+        ));
     }
 
     #[test]
     fn empty_signature_rejected() {
         let mut d = ok_decision();
         d.signature = String::new();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::DecisionUnsigned));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::DecisionUnsigned
+        ));
     }
 
     // --- Critical-risk + Persistent rules ---
@@ -316,7 +353,10 @@ mod tests {
         d.risk = RiskClass::Critical;
         d.user_approval = UserApprovalState::NotRequired;
         d.outcome = Outcome::Allow;
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::CriticalAllowWithoutApproval));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::CriticalAllowWithoutApproval
+        ));
     }
 
     #[test]
@@ -343,7 +383,10 @@ mod tests {
         d.side_effect_class = SideEffectClass::Persistent;
         d.outcome = Outcome::Allow;
         d.user_approval = UserApprovalState::NotRequired;
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::PersistentAllowWithoutApproval));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::PersistentAllowWithoutApproval
+        ));
     }
 
     #[test]
@@ -361,7 +404,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = ok_decision();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), PolicyError::SchemaMismatch { .. }));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            PolicyError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -380,12 +426,18 @@ mod tests {
 
     #[test]
     fn doctrine_every_action_verbatim() {
-        assert_eq!(DOCTRINE_EVERY_ACTION_OBSERVABLE, "Every action becomes observable and governed");
+        assert_eq!(
+            DOCTRINE_EVERY_ACTION_OBSERVABLE,
+            "Every action becomes observable and governed"
+        );
     }
 
     #[test]
     fn doctrine_trace_at_decision_verbatim() {
-        assert_eq!(DOCTRINE_TRACE_AT_DECISION, "Trace is emitted when the action is decided, not after");
+        assert_eq!(
+            DOCTRINE_TRACE_AT_DECISION,
+            "Trace is emitted when the action is decided, not after"
+        );
     }
 
     // --- Serde ---
@@ -393,8 +445,10 @@ mod tests {
     #[test]
     fn outcome_serde_kebab() {
         for (o, s) in [
-            (Outcome::Allow, "\"allow\""), (Outcome::Deny, "\"deny\""),
-            (Outcome::Ask, "\"ask\""), (Outcome::Sandbox, "\"sandbox\""),
+            (Outcome::Allow, "\"allow\""),
+            (Outcome::Deny, "\"deny\""),
+            (Outcome::Ask, "\"ask\""),
+            (Outcome::Sandbox, "\"sandbox\""),
         ] {
             assert_eq!(serde_json::to_string(&o).unwrap(), s);
         }
@@ -402,14 +456,26 @@ mod tests {
 
     #[test]
     fn risk_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&RiskClass::Critical).unwrap(), "\"critical\"");
-        assert_eq!(serde_json::to_string(&RiskClass::Negligible).unwrap(), "\"negligible\"");
+        assert_eq!(
+            serde_json::to_string(&RiskClass::Critical).unwrap(),
+            "\"critical\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RiskClass::Negligible).unwrap(),
+            "\"negligible\""
+        );
     }
 
     #[test]
     fn side_effect_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SideEffectClass::Persistent).unwrap(), "\"persistent\"");
-        assert_eq!(serde_json::to_string(&SideEffectClass::NetworkEgress).unwrap(), "\"network-egress\"");
+        assert_eq!(
+            serde_json::to_string(&SideEffectClass::Persistent).unwrap(),
+            "\"persistent\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SideEffectClass::NetworkEgress).unwrap(),
+            "\"network-egress\""
+        );
     }
 
     #[test]

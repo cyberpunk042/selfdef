@@ -95,13 +95,17 @@ pub enum DetectorError {
 }
 
 fn count_substring(payload: &str, needle: &str) -> u64 {
-    if needle.is_empty() { return 0; }
+    if needle.is_empty() {
+        return 0;
+    }
     let mut count: u64 = 0;
     let mut start = 0usize;
     while let Some(idx) = payload[start..].find(needle) {
         count = count.saturating_add(1);
         start = start.saturating_add(idx).saturating_add(needle.len());
-        if start >= payload.len() { break; }
+        if start >= payload.len() {
+            break;
+        }
     }
     count
 }
@@ -117,20 +121,35 @@ impl DataExfilDetector {
     }
 
     /// Register.
-    pub fn register(&mut self, id: &str, name: &str, needle: &str, severity: Severity) -> Result<(), DetectorError> {
-        if id.is_empty() { return Err(DetectorError::EmptyId); }
-        if name.is_empty() { return Err(DetectorError::EmptyName); }
-        if needle.is_empty() { return Err(DetectorError::EmptyNeedle); }
+    pub fn register(
+        &mut self,
+        id: &str,
+        name: &str,
+        needle: &str,
+        severity: Severity,
+    ) -> Result<(), DetectorError> {
+        if id.is_empty() {
+            return Err(DetectorError::EmptyId);
+        }
+        if name.is_empty() {
+            return Err(DetectorError::EmptyName);
+        }
+        if needle.is_empty() {
+            return Err(DetectorError::EmptyNeedle);
+        }
         if self.patterns.contains_key(id) {
             return Err(DetectorError::DuplicateId(id.into()));
         }
-        self.patterns.insert(id.into(), Pattern {
-            id: id.into(),
-            name: name.into(),
-            needle: needle.into(),
-            severity,
-            total_hits: 0,
-        });
+        self.patterns.insert(
+            id.into(),
+            Pattern {
+                id: id.into(),
+                name: name.into(),
+                needle: needle.into(),
+                severity,
+                total_hits: 0,
+            },
+        );
         Ok(())
     }
 
@@ -140,11 +159,19 @@ impl DataExfilDetector {
         for p in self.patterns.values() {
             let count = count_substring(payload, &p.needle);
             if count > 0 {
-                out.push(Hit { pattern_id: p.id.clone(), severity: p.severity, count });
+                out.push(Hit {
+                    pattern_id: p.id.clone(),
+                    severity: p.severity,
+                    count,
+                });
             }
         }
         // Critical first, then alphabetical id.
-        out.sort_by(|a, b| b.severity.cmp(&a.severity).then(a.pattern_id.cmp(&b.pattern_id)));
+        out.sort_by(|a, b| {
+            b.severity
+                .cmp(&a.severity)
+                .then(a.pattern_id.cmp(&b.pattern_id))
+        });
         out
     }
 
@@ -167,18 +194,28 @@ impl DataExfilDetector {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DetectorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DetectorError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DetectorError::SchemaMismatch);
+        }
         for (id, p) in &self.patterns {
-            if id.is_empty() { return Err(DetectorError::EmptyId); }
-            if p.name.is_empty() { return Err(DetectorError::EmptyName); }
-            if p.needle.is_empty() { return Err(DetectorError::EmptyNeedle); }
+            if id.is_empty() {
+                return Err(DetectorError::EmptyId);
+            }
+            if p.name.is_empty() {
+                return Err(DetectorError::EmptyName);
+            }
+            if p.needle.is_empty() {
+                return Err(DetectorError::EmptyNeedle);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DataExfilDetector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -188,7 +225,8 @@ mod tests {
     #[test]
     fn scan_finds_single_hit() {
         let mut d = DataExfilDetector::new();
-        d.register("ssn", "SSN prefix", "SSN:", Severity::Critical).unwrap();
+        d.register("ssn", "SSN prefix", "SSN:", Severity::Critical)
+            .unwrap();
         let h = d.scan("Hello SSN: 123-45-6789");
         assert_eq!(h.len(), 1);
         assert_eq!(h[0].count, 1);
@@ -242,22 +280,37 @@ mod tests {
     fn duplicate_pattern_rejected() {
         let mut d = DataExfilDetector::new();
         d.register("p", "P", "x", Severity::Info).unwrap();
-        assert!(matches!(d.register("p", "P", "x", Severity::Info).unwrap_err(), DetectorError::DuplicateId(_)));
+        assert!(matches!(
+            d.register("p", "P", "x", Severity::Info).unwrap_err(),
+            DetectorError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut d = DataExfilDetector::new();
-        assert!(matches!(d.register("", "n", "x", Severity::Info).unwrap_err(), DetectorError::EmptyId));
-        assert!(matches!(d.register("p", "", "x", Severity::Info).unwrap_err(), DetectorError::EmptyName));
-        assert!(matches!(d.register("p", "n", "", Severity::Info).unwrap_err(), DetectorError::EmptyNeedle));
+        assert!(matches!(
+            d.register("", "n", "x", Severity::Info).unwrap_err(),
+            DetectorError::EmptyId
+        ));
+        assert!(matches!(
+            d.register("p", "", "x", Severity::Info).unwrap_err(),
+            DetectorError::EmptyName
+        ));
+        assert!(matches!(
+            d.register("p", "n", "", Severity::Info).unwrap_err(),
+            DetectorError::EmptyNeedle
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = DataExfilDetector::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DetectorError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DetectorError::SchemaMismatch
+        ));
     }
 
     #[test]

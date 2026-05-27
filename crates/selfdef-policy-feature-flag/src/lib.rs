@@ -77,7 +77,9 @@ pub enum FlagError {
 impl PolicyFeatureFlag {
     /// New.
     pub fn new(max_history: u32) -> Result<Self, FlagError> {
-        if max_history == 0 { return Err(FlagError::MaxHistoryZero); }
+        if max_history == 0 {
+            return Err(FlagError::MaxHistoryZero);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             modes: BTreeMap::new(),
@@ -87,11 +89,23 @@ impl PolicyFeatureFlag {
     }
 
     /// Set mode for a policy.
-    pub fn set_mode(&mut self, policy_id: &str, mode: Mode, at_unix: u64, rationale: &str) -> Result<(), FlagError> {
-        if policy_id.is_empty() { return Err(FlagError::EmptyPolicyId); }
-        if rationale.is_empty() { return Err(FlagError::EmptyRationale); }
+    pub fn set_mode(
+        &mut self,
+        policy_id: &str,
+        mode: Mode,
+        at_unix: u64,
+        rationale: &str,
+    ) -> Result<(), FlagError> {
+        if policy_id.is_empty() {
+            return Err(FlagError::EmptyPolicyId);
+        }
+        if rationale.is_empty() {
+            return Err(FlagError::EmptyRationale);
+        }
         let n = rationale.chars().count();
-        if n > 200 { return Err(FlagError::RationaleTooLong(n)); }
+        if n > 200 {
+            return Err(FlagError::RationaleTooLong(n));
+        }
         self.modes.insert(policy_id.into(), mode);
         self.history.push(ToggleEvent {
             policy_id: policy_id.into(),
@@ -115,12 +129,20 @@ impl PolicyFeatureFlag {
         if self.schema_version != SCHEMA_VERSION {
             return Err(FlagError::SchemaMismatch);
         }
-        if self.max_history == 0 { return Err(FlagError::MaxHistoryZero); }
+        if self.max_history == 0 {
+            return Err(FlagError::MaxHistoryZero);
+        }
         for e in &self.history {
-            if e.policy_id.is_empty() { return Err(FlagError::EmptyPolicyId); }
-            if e.rationale.is_empty() { return Err(FlagError::EmptyRationale); }
+            if e.policy_id.is_empty() {
+                return Err(FlagError::EmptyPolicyId);
+            }
+            if e.rationale.is_empty() {
+                return Err(FlagError::EmptyRationale);
+            }
             let n = e.rationale.chars().count();
-            if n > 200 { return Err(FlagError::RationaleTooLong(n)); }
+            if n > 200 {
+                return Err(FlagError::RationaleTooLong(n));
+            }
         }
         Ok(())
     }
@@ -139,7 +161,8 @@ mod tests {
     #[test]
     fn set_mode_sticks() {
         let mut f = PolicyFeatureFlag::new(10).unwrap();
-        f.set_mode("net-egress", Mode::DryRun, 100, "tuning").unwrap();
+        f.set_mode("net-egress", Mode::DryRun, 100, "tuning")
+            .unwrap();
         assert_eq!(f.evaluate("net-egress"), Mode::DryRun);
     }
 
@@ -155,7 +178,8 @@ mod tests {
     fn history_caps() {
         let mut f = PolicyFeatureFlag::new(2).unwrap();
         for i in 0..5 {
-            f.set_mode("a", Mode::Enabled, i, &format!("r-{i}")).unwrap();
+            f.set_mode("a", Mode::Enabled, i, &format!("r-{i}"))
+                .unwrap();
         }
         assert_eq!(f.history.len(), 2);
     }
@@ -163,32 +187,47 @@ mod tests {
     #[test]
     fn empty_policy_rejected() {
         let mut f = PolicyFeatureFlag::new(10).unwrap();
-        assert!(matches!(f.set_mode("", Mode::Enabled, 0, "r").unwrap_err(), FlagError::EmptyPolicyId));
+        assert!(matches!(
+            f.set_mode("", Mode::Enabled, 0, "r").unwrap_err(),
+            FlagError::EmptyPolicyId
+        ));
     }
 
     #[test]
     fn empty_rationale_rejected() {
         let mut f = PolicyFeatureFlag::new(10).unwrap();
-        assert!(matches!(f.set_mode("p", Mode::Enabled, 0, "").unwrap_err(), FlagError::EmptyRationale));
+        assert!(matches!(
+            f.set_mode("p", Mode::Enabled, 0, "").unwrap_err(),
+            FlagError::EmptyRationale
+        ));
     }
 
     #[test]
     fn long_rationale_rejected() {
         let mut f = PolicyFeatureFlag::new(10).unwrap();
         let r = "x".repeat(201);
-        assert!(matches!(f.set_mode("p", Mode::Enabled, 0, &r).unwrap_err(), FlagError::RationaleTooLong(201)));
+        assert!(matches!(
+            f.set_mode("p", Mode::Enabled, 0, &r).unwrap_err(),
+            FlagError::RationaleTooLong(201)
+        ));
     }
 
     #[test]
     fn max_history_zero_rejected() {
-        assert!(matches!(PolicyFeatureFlag::new(0).unwrap_err(), FlagError::MaxHistoryZero));
+        assert!(matches!(
+            PolicyFeatureFlag::new(0).unwrap_err(),
+            FlagError::MaxHistoryZero
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = PolicyFeatureFlag::new(10).unwrap();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FlagError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FlagError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -57,8 +57,12 @@ fn xorshift64s(state: &mut u64) -> u64 {
 impl ReservoirSampler {
     /// New (capacity k, PRNG seed != 0).
     pub fn new(k: u32, seed: u64) -> Result<Self, SamplerError> {
-        if k == 0 { return Err(SamplerError::ZeroCapacity); }
-        if seed == 0 { return Err(SamplerError::ZeroSeed); }
+        if k == 0 {
+            return Err(SamplerError::ZeroCapacity);
+        }
+        if seed == 0 {
+            return Err(SamplerError::ZeroSeed);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             k,
@@ -84,7 +88,9 @@ impl ReservoirSampler {
     }
 
     /// Current sample.
-    pub fn sample(&self) -> &[String] { &self.reservoir }
+    pub fn sample(&self) -> &[String] {
+        &self.reservoir
+    }
 
     /// Reset (preserve seed).
     pub fn reset(&mut self) {
@@ -94,9 +100,15 @@ impl ReservoirSampler {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SamplerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SamplerError::SchemaMismatch); }
-        if self.k == 0 { return Err(SamplerError::ZeroCapacity); }
-        if self.prng_state == 0 { return Err(SamplerError::ZeroSeed); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SamplerError::SchemaMismatch);
+        }
+        if self.k == 0 {
+            return Err(SamplerError::ZeroCapacity);
+        }
+        if self.prng_state == 0 {
+            return Err(SamplerError::ZeroSeed);
+        }
         Ok(())
     }
 }
@@ -127,7 +139,10 @@ mod tests {
     fn deterministic_with_seed() {
         let mut s1 = ReservoirSampler::new(3, 7).unwrap();
         let mut s2 = ReservoirSampler::new(3, 7).unwrap();
-        for i in 0..100 { s1.observe(&i.to_string()); s2.observe(&i.to_string()); }
+        for i in 0..100 {
+            s1.observe(&i.to_string());
+            s2.observe(&i.to_string());
+        }
         assert_eq!(s1.sample(), s2.sample());
     }
 
@@ -135,14 +150,19 @@ mod tests {
     fn different_seeds_diverge() {
         let mut s1 = ReservoirSampler::new(3, 7).unwrap();
         let mut s2 = ReservoirSampler::new(3, 1234567).unwrap();
-        for i in 0..100 { s1.observe(&i.to_string()); s2.observe(&i.to_string()); }
+        for i in 0..100 {
+            s1.observe(&i.to_string());
+            s2.observe(&i.to_string());
+        }
         assert_ne!(s1.sample(), s2.sample());
     }
 
     #[test]
     fn reservoir_size_caps_at_k() {
         let mut s = ReservoirSampler::new(3, 42).unwrap();
-        for i in 0..1000 { s.observe(&i.to_string()); }
+        for i in 0..1000 {
+            s.observe(&i.to_string());
+        }
         assert_eq!(s.sample().len(), 3);
         assert_eq!(s.seen, 1000);
     }
@@ -156,7 +176,9 @@ mod tests {
         let trials = 200;
         for seed in 1..=trials {
             let mut s = ReservoirSampler::new(1, seed).unwrap();
-            for i in 0..1000u32 { s.observe(&i.to_string()); }
+            for i in 0..1000u32 {
+                s.observe(&i.to_string());
+            }
             total += s.sample()[0].parse::<u64>().unwrap();
         }
         let mean = total / trials;
@@ -175,21 +197,31 @@ mod tests {
 
     #[test]
     fn bad_inputs_rejected() {
-        assert!(matches!(ReservoirSampler::new(0, 1).unwrap_err(), SamplerError::ZeroCapacity));
-        assert!(matches!(ReservoirSampler::new(3, 0).unwrap_err(), SamplerError::ZeroSeed));
+        assert!(matches!(
+            ReservoirSampler::new(0, 1).unwrap_err(),
+            SamplerError::ZeroCapacity
+        ));
+        assert!(matches!(
+            ReservoirSampler::new(3, 0).unwrap_err(),
+            SamplerError::ZeroSeed
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = ReservoirSampler::new(3, 42).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SamplerError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SamplerError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn sampler_serde_roundtrip() {
         let mut s = ReservoirSampler::new(3, 42).unwrap();
-        s.observe("a"); s.observe("b");
+        s.observe("a");
+        s.observe("b");
         let j = serde_json::to_string(&s).unwrap();
         let back: ReservoirSampler = serde_json::from_str(&j).unwrap();
         assert_eq!(s, back);

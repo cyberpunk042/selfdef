@@ -29,7 +29,9 @@ pub enum JumpError {
 
 /// Jump Consistent Hash. Returns bucket in [0, num_buckets).
 pub fn bucket(mut key: u64, num_buckets: u32) -> Result<u32, JumpError> {
-    if num_buckets == 0 { return Err(JumpError::ZeroBuckets); }
+    if num_buckets == 0 {
+        return Err(JumpError::ZeroBuckets);
+    }
     let mut b: i64 = -1;
     let mut j: i64 = 0;
     while j < num_buckets as i64 {
@@ -56,7 +58,9 @@ pub fn fnv1a_64(bytes: &[u8]) -> u64 {
 
 /// Validate.
 pub fn validate_schema_version(s: &str) -> Result<(), JumpError> {
-    if s != SCHEMA_VERSION { return Err(JumpError::SchemaMismatch); }
+    if s != SCHEMA_VERSION {
+        return Err(JumpError::SchemaMismatch);
+    }
     Ok(())
 }
 

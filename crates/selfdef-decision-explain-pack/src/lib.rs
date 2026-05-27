@@ -71,14 +71,21 @@ impl DecisionExplainPack {
         rules_skipped: Vec<(String, String)>,
         ts_ms: u64,
     ) -> Result<(), ExplainError> {
-        if decision_id.is_empty() { return Err(ExplainError::EmptyDecisionId); }
-        if outcome.is_empty() { return Err(ExplainError::EmptyOutcome); }
-        self.packs.insert(decision_id.into(), ExplainPack {
-            outcome: outcome.into(),
-            rules_fired,
-            rules_skipped,
-            ts_ms,
-        });
+        if decision_id.is_empty() {
+            return Err(ExplainError::EmptyDecisionId);
+        }
+        if outcome.is_empty() {
+            return Err(ExplainError::EmptyOutcome);
+        }
+        self.packs.insert(
+            decision_id.into(),
+            ExplainPack {
+                outcome: outcome.into(),
+                rules_fired,
+                rules_skipped,
+                ts_ms,
+            },
+        );
         Ok(())
     }
 
@@ -95,17 +102,25 @@ impl DecisionExplainPack {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ExplainError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ExplainError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ExplainError::SchemaMismatch);
+        }
         for (id, p) in &self.packs {
-            if id.is_empty() { return Err(ExplainError::EmptyDecisionId); }
-            if p.outcome.is_empty() { return Err(ExplainError::EmptyOutcome); }
+            if id.is_empty() {
+                return Err(ExplainError::EmptyDecisionId);
+            }
+            if p.outcome.is_empty() {
+                return Err(ExplainError::EmptyOutcome);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for DecisionExplainPack {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -115,8 +130,14 @@ mod tests {
     #[test]
     fn record_and_fetch() {
         let mut e = DecisionExplainPack::new();
-        e.record("dec-1", "Allow", vec!["rule-A".into(), "rule-B".into()],
-            vec![("rule-C".into(), "out-of-scope".into())], 1000).unwrap();
+        e.record(
+            "dec-1",
+            "Allow",
+            vec!["rule-A".into(), "rule-B".into()],
+            vec![("rule-C".into(), "out-of-scope".into())],
+            1000,
+        )
+        .unwrap();
         let p = e.fetch("dec-1").unwrap();
         assert_eq!(p.outcome, "Allow");
         assert_eq!(p.rules_fired.len(), 2);
@@ -148,21 +169,37 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut e = DecisionExplainPack::new();
-        assert!(matches!(e.record("", "x", vec![], vec![], 0).unwrap_err(), ExplainError::EmptyDecisionId));
-        assert!(matches!(e.record("d", "", vec![], vec![], 0).unwrap_err(), ExplainError::EmptyOutcome));
+        assert!(matches!(
+            e.record("", "x", vec![], vec![], 0).unwrap_err(),
+            ExplainError::EmptyDecisionId
+        ));
+        assert!(matches!(
+            e.record("d", "", vec![], vec![], 0).unwrap_err(),
+            ExplainError::EmptyOutcome
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = DecisionExplainPack::new();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), ExplainError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            ExplainError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn pack_serde_roundtrip() {
         let mut e = DecisionExplainPack::new();
-        e.record("dec-1", "Allow", vec!["r1".into()], vec![("r2".into(), "skip".into())], 1000).unwrap();
+        e.record(
+            "dec-1",
+            "Allow",
+            vec!["r1".into()],
+            vec![("r2".into(), "skip".into())],
+            1000,
+        )
+        .unwrap();
         let j = serde_json::to_string(&e).unwrap();
         let back: DecisionExplainPack = serde_json::from_str(&j).unwrap();
         assert_eq!(e, back);

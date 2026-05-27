@@ -86,9 +86,13 @@ impl PolicyRolloutStage {
 
     /// Set stage.
     pub fn set(&mut self, policy_id: &str, stage: Stage) -> Result<(), StageError> {
-        if policy_id.is_empty() { return Err(StageError::EmptyId); }
+        if policy_id.is_empty() {
+            return Err(StageError::EmptyId);
+        }
         if let Stage::Canary { percent_ppm } | Stage::Beta { percent_ppm } = &stage {
-            if *percent_ppm > 1_000_000 { return Err(StageError::PpmOver(*percent_ppm)); }
+            if *percent_ppm > 1_000_000 {
+                return Err(StageError::PpmOver(*percent_ppm));
+            }
         }
         self.stages.insert(policy_id.into(), stage);
         Ok(())
@@ -105,18 +109,28 @@ impl PolicyRolloutStage {
             Stage::Disabled => ScopeVerdict::OutOfScope,
             Stage::Stable => ScopeVerdict::InScope,
             Stage::Canary { percent_ppm } | Stage::Beta { percent_ppm } => {
-                if bucket < percent_ppm { ScopeVerdict::InScope } else { ScopeVerdict::OutOfScope }
+                if bucket < percent_ppm {
+                    ScopeVerdict::InScope
+                } else {
+                    ScopeVerdict::OutOfScope
+                }
             }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StageError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StageError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StageError::SchemaMismatch);
+        }
         for (id, s) in &self.stages {
-            if id.is_empty() { return Err(StageError::EmptyId); }
+            if id.is_empty() {
+                return Err(StageError::EmptyId);
+            }
             if let Stage::Canary { percent_ppm } | Stage::Beta { percent_ppm } = s {
-                if *percent_ppm > 1_000_000 { return Err(StageError::PpmOver(*percent_ppm)); }
+                if *percent_ppm > 1_000_000 {
+                    return Err(StageError::PpmOver(*percent_ppm));
+                }
             }
         }
         Ok(())
@@ -124,7 +138,9 @@ impl PolicyRolloutStage {
 }
 
 impl Default for PolicyRolloutStage {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +172,13 @@ mod tests {
     #[test]
     fn canary_band_includes_lower_bucket() {
         let mut p = PolicyRolloutStage::new();
-        p.set("x", Stage::Canary { percent_ppm: 10_000 }).unwrap(); // 1.0%.
+        p.set(
+            "x",
+            Stage::Canary {
+                percent_ppm: 10_000,
+            },
+        )
+        .unwrap(); // 1.0%.
         assert_eq!(p.classify("x", 5_000), ScopeVerdict::InScope);
         assert_eq!(p.classify("x", 50_000), ScopeVerdict::OutOfScope);
     }
@@ -164,7 +186,13 @@ mod tests {
     #[test]
     fn beta_wider() {
         let mut p = PolicyRolloutStage::new();
-        p.set("x", Stage::Beta { percent_ppm: 500_000 }).unwrap(); // 50%.
+        p.set(
+            "x",
+            Stage::Beta {
+                percent_ppm: 500_000,
+            },
+        )
+        .unwrap(); // 50%.
         assert_eq!(p.classify("x", 100_000), ScopeVerdict::InScope);
         assert_eq!(p.classify("x", 700_000), ScopeVerdict::OutOfScope);
     }
@@ -172,26 +200,47 @@ mod tests {
     #[test]
     fn ppm_over_rejected() {
         let mut p = PolicyRolloutStage::new();
-        assert!(matches!(p.set("x", Stage::Canary { percent_ppm: 2_000_000 }).unwrap_err(), StageError::PpmOver(_)));
+        assert!(matches!(
+            p.set(
+                "x",
+                Stage::Canary {
+                    percent_ppm: 2_000_000
+                }
+            )
+            .unwrap_err(),
+            StageError::PpmOver(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = PolicyRolloutStage::new();
-        assert!(matches!(p.set("", Stage::Stable).unwrap_err(), StageError::EmptyId));
+        assert!(matches!(
+            p.set("", Stage::Stable).unwrap_err(),
+            StageError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PolicyRolloutStage::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), StageError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            StageError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn stage_serde_roundtrip() {
         let mut p = PolicyRolloutStage::new();
-        p.set("x", Stage::Canary { percent_ppm: 50_000 }).unwrap();
+        p.set(
+            "x",
+            Stage::Canary {
+                percent_ppm: 50_000,
+            },
+        )
+        .unwrap();
         let j = serde_json::to_string(&p).unwrap();
         let back: PolicyRolloutStage = serde_json::from_str(&j).unwrap();
         assert_eq!(p, back);

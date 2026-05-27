@@ -265,11 +265,11 @@ mod tests {
         let line = r#"type=AVC msg=audit(1736944700.000:1234580): avc:  denied  { read } for  pid=4242 comm="sshd" name="shadow" dev="sda1" ino=12345 scontext=system_u:system_r:sshd_t:s0 tcontext=system_u:object_r:shadow_t:s0 tclass=file permissive=0"#;
         let r = parse_line(line).unwrap();
         assert_eq!(r.kind, "AVC");
-        assert_eq!(r.get("pid"),       Some("4242"));
-        assert_eq!(r.get("comm"),      Some("sshd"));
-        assert_eq!(r.get("name"),      Some("shadow"));
-        assert_eq!(r.get("tclass"),    Some("file"));
-        assert_eq!(r.get("permissive"),Some("0"));
+        assert_eq!(r.get("pid"), Some("4242"));
+        assert_eq!(r.get("comm"), Some("sshd"));
+        assert_eq!(r.get("name"), Some("shadow"));
+        assert_eq!(r.get("tclass"), Some("file"));
+        assert_eq!(r.get("permissive"), Some("0"));
         assert_eq!(parse_avc_decision(line), Some("denied"));
     }
 
@@ -300,13 +300,13 @@ mod tests {
         let line = r#"type=SECCOMP msg=audit(1736944800.000:1234582): auid=1000 uid=1000 gid=1000 ses=1 pid=4242 comm="badapp" exe="/usr/bin/badapp" sig=31 arch=c000003e syscall=42 compat=0 ip=0x7fffffff code=0x0"#;
         let r = parse_line(line).unwrap();
         assert_eq!(r.kind, "SECCOMP");
-        assert_eq!(r.get("pid"),     Some("4242"));
-        assert_eq!(r.get("comm"),    Some("badapp"));
-        assert_eq!(r.get("exe"),     Some("/usr/bin/badapp"));
+        assert_eq!(r.get("pid"), Some("4242"));
+        assert_eq!(r.get("comm"), Some("badapp"));
+        assert_eq!(r.get("exe"), Some("/usr/bin/badapp"));
         assert_eq!(r.get("syscall"), Some("42"));
-        assert_eq!(r.get("arch"),    Some("c000003e"));
-        assert_eq!(r.get("sig"),     Some("31"));
-        assert_eq!(r.get("code"),    Some("0x0"));
+        assert_eq!(r.get("arch"), Some("c000003e"));
+        assert_eq!(r.get("sig"), Some("31"));
+        assert_eq!(r.get("code"), Some("0x0"));
     }
 
     #[test]
@@ -316,9 +316,9 @@ mod tests {
         let line = r#"type=ANOM_ABEND msg=audit(1736944900.000:1234583): auid=1000 uid=1000 gid=1000 ses=1 pid=4244 comm="crashy" exe="/usr/bin/crashy" sig=11"#;
         let r = parse_line(line).unwrap();
         assert_eq!(r.kind, "ANOM_ABEND");
-        assert_eq!(r.get("pid"),  Some("4244"));
+        assert_eq!(r.get("pid"), Some("4244"));
         assert_eq!(r.get("comm"), Some("crashy"));
-        assert_eq!(r.get("sig"),  Some("11"));
+        assert_eq!(r.get("sig"), Some("11"));
     }
 
     #[test]
@@ -326,7 +326,8 @@ mod tests {
         // SDD-059 C-5: EXECVE records carry argv as a0="ls" a1="-la" ...
         // parse_execve_argv must return the values in numeric-index
         // order regardless of HashMap iteration order.
-        let line = r#"type=EXECVE msg=audit(1736944800.000:1234582): argc=3 a0="ls" a1="-la" a2="/tmp""#;
+        let line =
+            r#"type=EXECVE msg=audit(1736944800.000:1234582): argc=3 a0="ls" a1="-la" a2="/tmp""#;
         let r = parse_line(line).unwrap();
         let argv = parse_execve_argv(&r);
         assert_eq!(argv, vec!["ls", "-la", "/tmp"]);
@@ -369,8 +370,8 @@ mod tests {
         let line = r#"type=ANOM_PROMISCUOUS msg=audit(1736945000.000:1234584): dev=eth0 prom=256 old_prom=0 auid=0 uid=0 gid=0 ses=1"#;
         let r = parse_line(line).unwrap();
         assert_eq!(r.kind, "ANOM_PROMISCUOUS");
-        assert_eq!(r.get("dev"),      Some("eth0"));
-        assert_eq!(r.get("prom"),     Some("256"));
+        assert_eq!(r.get("dev"), Some("eth0"));
+        assert_eq!(r.get("prom"), Some("256"));
         assert_eq!(r.get("old_prom"), Some("0"));
     }
 }

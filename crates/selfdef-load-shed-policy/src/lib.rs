@@ -124,7 +124,9 @@ impl LoadShedPolicy {
 
     /// Set current load.
     pub fn set_load(&mut self, load_ratio_bp: u32) -> Result<(), ShedError> {
-        if load_ratio_bp > 10000 { return Err(ShedError::BadBp(load_ratio_bp)); }
+        if load_ratio_bp > 10000 {
+            return Err(ShedError::BadBp(load_ratio_bp));
+        }
         self.load_ratio_bp = load_ratio_bp;
         Ok(())
     }
@@ -132,7 +134,9 @@ impl LoadShedPolicy {
     /// Replace thresholds.
     pub fn set_thresholds(&mut self, t: Thresholds) -> Result<(), ShedError> {
         for v in [t.bulk_bp, t.low_bp, t.normal_bp, t.high_bp, t.critical_bp] {
-            if v > 10000 { return Err(ShedError::BadBp(v)); }
+            if v > 10000 {
+                return Err(ShedError::BadBp(v));
+            }
         }
         self.thresholds = t;
         Ok(())
@@ -147,7 +151,11 @@ impl LoadShedPolicy {
             Priority::High => self.thresholds.high_bp,
             Priority::Critical => self.thresholds.critical_bp,
         };
-        if self.load_ratio_bp >= threshold { ShedVerdict::Shed } else { ShedVerdict::Admit }
+        if self.load_ratio_bp >= threshold {
+            ShedVerdict::Shed
+        } else {
+            ShedVerdict::Admit
+        }
     }
 
     /// Observe (records counters).
@@ -170,8 +178,12 @@ impl LoadShedPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ShedError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ShedError::SchemaMismatch); }
-        if self.load_ratio_bp > 10000 { return Err(ShedError::BadBp(self.load_ratio_bp)); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ShedError::SchemaMismatch);
+        }
+        if self.load_ratio_bp > 10000 {
+            return Err(ShedError::BadBp(self.load_ratio_bp));
+        }
         for v in [
             self.thresholds.bulk_bp,
             self.thresholds.low_bp,
@@ -179,14 +191,18 @@ impl LoadShedPolicy {
             self.thresholds.high_bp,
             self.thresholds.critical_bp,
         ] {
-            if v > 10000 { return Err(ShedError::BadBp(v)); }
+            if v > 10000 {
+                return Err(ShedError::BadBp(v));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for LoadShedPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -197,7 +213,13 @@ mod tests {
     fn no_load_admits_all() {
         let mut p = LoadShedPolicy::new();
         p.set_load(0).unwrap();
-        for &pr in &[Priority::Bulk, Priority::Low, Priority::Normal, Priority::High, Priority::Critical] {
+        for &pr in &[
+            Priority::Bulk,
+            Priority::Low,
+            Priority::Normal,
+            Priority::High,
+            Priority::Critical,
+        ] {
             assert_eq!(p.decide(pr), ShedVerdict::Admit);
         }
     }
@@ -251,7 +273,14 @@ mod tests {
     #[test]
     fn custom_thresholds() {
         let mut p = LoadShedPolicy::new();
-        p.set_thresholds(Thresholds { bulk_bp: 1000, low_bp: 2000, normal_bp: 3000, high_bp: 4000, critical_bp: 5000 }).unwrap();
+        p.set_thresholds(Thresholds {
+            bulk_bp: 1000,
+            low_bp: 2000,
+            normal_bp: 3000,
+            high_bp: 4000,
+            critical_bp: 5000,
+        })
+        .unwrap();
         p.set_load(1500).unwrap();
         assert_eq!(p.decide(Priority::Bulk), ShedVerdict::Shed);
         assert_eq!(p.decide(Priority::Low), ShedVerdict::Admit);
@@ -260,14 +289,20 @@ mod tests {
     #[test]
     fn bad_bp_rejected() {
         let mut p = LoadShedPolicy::new();
-        assert!(matches!(p.set_load(10001).unwrap_err(), ShedError::BadBp(_)));
+        assert!(matches!(
+            p.set_load(10001).unwrap_err(),
+            ShedError::BadBp(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = LoadShedPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ShedError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ShedError::SchemaMismatch
+        ));
     }
 
     #[test]

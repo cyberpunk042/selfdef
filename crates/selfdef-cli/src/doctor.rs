@@ -117,10 +117,7 @@ fn check_alerts(_cfg: &Config) -> Vec<CheckResult> {
             category: "alerts".to_string(),
             name: format!("{} ({})", r.name, r.ms),
             status,
-            detail: format!(
-                "{} threshold={} current={}",
-                r.series, r.threshold, val
-            ),
+            detail: format!("{} threshold={} current={}", r.series, r.threshold, val),
         });
     }
     out
@@ -131,8 +128,8 @@ fn check_alerts(_cfg: &Config) -> Vec<CheckResult> {
 fn try_fetch_metrics_silently() -> Option<String> {
     use std::process::Command;
     // UNIX socket first.
-    let socket = std::env::var("SELFDEF_SOCKET")
-        .unwrap_or_else(|_| "/run/selfdef.sock".to_string());
+    let socket =
+        std::env::var("SELFDEF_SOCKET").unwrap_or_else(|_| "/run/selfdef.sock".to_string());
     if std::path::Path::new(&socket).exists() {
         if let Ok(out) = Command::new("curl")
             .args(["-s", "--unix-socket", &socket, "http://localhost/metrics"])
@@ -1627,10 +1624,8 @@ mod sdd_013_tests {
     fn alerts_category_surfaces_in_doctor_run() {
         let cfg = cfg_with_target(DeploymentTarget::Generic);
         let results = run(&cfg);
-        let cat_rows: Vec<&CheckResult> = results
-            .iter()
-            .filter(|r| r.category == "alerts")
-            .collect();
+        let cat_rows: Vec<&CheckResult> =
+            results.iter().filter(|r| r.category == "alerts").collect();
         assert!(
             !cat_rows.is_empty(),
             "doctor::run() must surface alerts category (even when /metrics is unreachable; the row goes Skipped instead of being absent)"

@@ -75,8 +75,12 @@ impl WeightedRoundRobin {
 
     /// Register lane.
     pub fn register(&mut self, id: &str, weight: u32) -> Result<(), WrrError> {
-        if id.is_empty() { return Err(WrrError::EmptyId); }
-        if weight == 0 { return Err(WrrError::ZeroWeight); }
+        if id.is_empty() {
+            return Err(WrrError::EmptyId);
+        }
+        if weight == 0 {
+            return Err(WrrError::ZeroWeight);
+        }
         if self.lanes.iter().any(|l| l.id == id) {
             return Err(WrrError::DuplicateLane(id.into()));
         }
@@ -93,38 +97,53 @@ impl WeightedRoundRobin {
 
     /// Pick next lane id.
     pub fn pick(&mut self) -> Result<String, WrrError> {
-        if self.lanes.is_empty() { return Err(WrrError::NoLanes); }
+        if self.lanes.is_empty() {
+            return Err(WrrError::NoLanes);
+        }
         // Increment every lane's current_weight by its configured weight.
         for l in self.lanes.iter_mut() {
             l.current_weight = l.current_weight.saturating_add(l.weight);
         }
         // Find lane with max current_weight (ties: first by registration order).
-        let (idx, _) = self.lanes
+        let (idx, _) = self
+            .lanes
             .iter()
             .enumerate()
             .max_by_key(|(i, l)| (l.current_weight, std::cmp::Reverse(*i)))
             .unwrap();
-        self.lanes[idx].current_weight = self.lanes[idx].current_weight.saturating_sub(self.total_weight);
+        self.lanes[idx].current_weight = self.lanes[idx]
+            .current_weight
+            .saturating_sub(self.total_weight);
         self.lanes[idx].picks = self.lanes[idx].picks.saturating_add(1);
         Ok(self.lanes[idx].id.clone())
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), WrrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(WrrError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(WrrError::SchemaMismatch);
+        }
         let mut sum: i64 = 0;
         for l in &self.lanes {
-            if l.id.is_empty() { return Err(WrrError::EmptyId); }
-            if l.weight < 1 { return Err(WrrError::ZeroWeight); }
+            if l.id.is_empty() {
+                return Err(WrrError::EmptyId);
+            }
+            if l.weight < 1 {
+                return Err(WrrError::ZeroWeight);
+            }
             sum = sum.saturating_add(l.weight);
         }
-        if sum != self.total_weight { return Err(WrrError::ZeroWeight); }
+        if sum != self.total_weight {
+            return Err(WrrError::ZeroWeight);
+        }
         Ok(())
     }
 }
 
 impl Default for WeightedRoundRobin {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +174,9 @@ mod tests {
         w.register("c", 1).unwrap();
         let picks: Vec<String> = (0..9).map(|_| w.pick().unwrap()).collect();
         let mut counts = BTreeMap::new();
-        for p in &picks { *counts.entry(p.clone()).or_insert(0) += 1; }
+        for p in &picks {
+            *counts.entry(p.clone()).or_insert(0) += 1;
+        }
         assert_eq!(counts["a"], 3);
         assert_eq!(counts["b"], 3);
         assert_eq!(counts["c"], 3);
@@ -190,21 +211,30 @@ mod tests {
     fn duplicate_lane_rejected() {
         let mut w = WeightedRoundRobin::new();
         w.register("a", 1).unwrap();
-        assert!(matches!(w.register("a", 1).unwrap_err(), WrrError::DuplicateLane(_)));
+        assert!(matches!(
+            w.register("a", 1).unwrap_err(),
+            WrrError::DuplicateLane(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut w = WeightedRoundRobin::new();
         assert!(matches!(w.register("", 1).unwrap_err(), WrrError::EmptyId));
-        assert!(matches!(w.register("a", 0).unwrap_err(), WrrError::ZeroWeight));
+        assert!(matches!(
+            w.register("a", 0).unwrap_err(),
+            WrrError::ZeroWeight
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut w = WeightedRoundRobin::new();
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), WrrError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WrrError::SchemaMismatch
+        ));
     }
 
     #[test]

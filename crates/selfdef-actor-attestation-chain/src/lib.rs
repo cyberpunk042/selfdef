@@ -105,7 +105,9 @@ impl AttestationChain {
     /// Append a link.
     pub fn append(&mut self, link: AttestationLink) -> Result<(), ChainError> {
         let idx = self.links.len();
-        if link.actor_id.is_empty() { return Err(ChainError::EmptyActorId { idx }); }
+        if link.actor_id.is_empty() {
+            return Err(ChainError::EmptyActorId { idx });
+        }
         if self.links.is_empty() {
             if link.tier != ActorTier::Operator {
                 return Err(ChainError::FirstNotOperator(link.tier));
@@ -116,7 +118,10 @@ impl AttestationChain {
         } else {
             let prev_tier = self.links.last().unwrap().tier;
             if !next_allowed(prev_tier).contains(&link.tier) {
-                return Err(ChainError::OutOfOrder { prev: prev_tier, tier: link.tier });
+                return Err(ChainError::OutOfOrder {
+                    prev: prev_tier,
+                    tier: link.tier,
+                });
             }
             if link.parent_signature.is_empty() {
                 return Err(ChainError::EmptySignature { idx });
@@ -136,7 +141,9 @@ impl AttestationChain {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ChainError::SchemaMismatch);
         }
-        if self.links.is_empty() { return Err(ChainError::Empty); }
+        if self.links.is_empty() {
+            return Err(ChainError::Empty);
+        }
         if self.links[0].tier != ActorTier::Operator {
             return Err(ChainError::FirstNotOperator(self.links[0].tier));
         }
@@ -144,8 +151,12 @@ impl AttestationChain {
             return Err(ChainError::OperatorSelfAnchorMismatch);
         }
         for (i, l) in self.links.iter().enumerate() {
-            if l.actor_id.is_empty() { return Err(ChainError::EmptyActorId { idx: i }); }
-            if i == 0 { continue; }
+            if l.actor_id.is_empty() {
+                return Err(ChainError::EmptyActorId { idx: i });
+            }
+            if i == 0 {
+                continue;
+            }
             let prev = self.links[i - 1].tier;
             if !next_allowed(prev).contains(&l.tier) {
                 return Err(ChainError::OutOfOrder { prev, tier: l.tier });
@@ -159,7 +170,9 @@ impl AttestationChain {
 }
 
 impl Default for AttestationChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -183,9 +196,12 @@ mod tests {
     #[test]
     fn full_chain_validates() {
         let mut c = AttestationChain::new();
-        c.append(link(ActorTier::Operator, "op-fp", "op-fp")).unwrap();
-        c.append(link(ActorTier::Agent, "agent-007", "op-sig-over-agent")).unwrap();
-        c.append(link(ActorTier::Service, "svc-build", "agent-sig-over-svc")).unwrap();
+        c.append(link(ActorTier::Operator, "op-fp", "op-fp"))
+            .unwrap();
+        c.append(link(ActorTier::Agent, "agent-007", "op-sig-over-agent"))
+            .unwrap();
+        c.append(link(ActorTier::Service, "svc-build", "agent-sig-over-svc"))
+            .unwrap();
         c.validate().unwrap();
         assert_eq!(c.leaf_actor(), Some("svc-build"));
     }
@@ -193,7 +209,9 @@ mod tests {
     #[test]
     fn first_not_operator_rejected() {
         let mut c = AttestationChain::new();
-        let err = c.append(link(ActorTier::Agent, "agent", "sig")).unwrap_err();
+        let err = c
+            .append(link(ActorTier::Agent, "agent", "sig"))
+            .unwrap_err();
         assert!(matches!(err, ChainError::FirstNotOperator(_)));
     }
 
@@ -203,7 +221,9 @@ mod tests {
         c.append(link(ActorTier::Operator, "op", "op")).unwrap();
         c.append(link(ActorTier::Service, "svc", "sig")).unwrap();
         // Can't append Agent after Service.
-        let err = c.append(link(ActorTier::Agent, "agent", "sig")).unwrap_err();
+        let err = c
+            .append(link(ActorTier::Agent, "agent", "sig"))
+            .unwrap_err();
         assert!(matches!(err, ChainError::OutOfOrder { .. }));
     }
 
@@ -218,14 +238,17 @@ mod tests {
     #[test]
     fn operator_self_anchor_mismatch_rejected() {
         let mut c = AttestationChain::new();
-        let err = c.append(link(ActorTier::Operator, "op", "other-sig")).unwrap_err();
+        let err = c
+            .append(link(ActorTier::Operator, "op", "other-sig"))
+            .unwrap_err();
         assert!(matches!(err, ChainError::OperatorSelfAnchorMismatch));
     }
 
     #[test]
     fn operator_only_chain_ok() {
         let mut c = AttestationChain::new();
-        c.append(link(ActorTier::Operator, "op-fp", "op-fp")).unwrap();
+        c.append(link(ActorTier::Operator, "op-fp", "op-fp"))
+            .unwrap();
         c.validate().unwrap();
     }
 
@@ -233,7 +256,8 @@ mod tests {
     fn operator_then_service_ok_skip_agent() {
         let mut c = AttestationChain::new();
         c.append(link(ActorTier::Operator, "op", "op")).unwrap();
-        c.append(link(ActorTier::Service, "svc", "op-sig-over-svc")).unwrap();
+        c.append(link(ActorTier::Service, "svc", "op-sig-over-svc"))
+            .unwrap();
         c.validate().unwrap();
     }
 
@@ -246,9 +270,18 @@ mod tests {
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ActorTier::Operator).unwrap(), "\"operator\"");
-        assert_eq!(serde_json::to_string(&ActorTier::Agent).unwrap(), "\"agent\"");
-        assert_eq!(serde_json::to_string(&ActorTier::Service).unwrap(), "\"service\"");
+        assert_eq!(
+            serde_json::to_string(&ActorTier::Operator).unwrap(),
+            "\"operator\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActorTier::Agent).unwrap(),
+            "\"agent\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ActorTier::Service).unwrap(),
+            "\"service\""
+        );
     }
 
     #[test]

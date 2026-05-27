@@ -131,24 +131,32 @@ impl SourceAttributionPolicy {
     pub fn check(&self, class: ArtifactClass, claims: &[Claim]) -> AttributionResult {
         match self.rule(class) {
             AttributionRule::Required => {
-                let missing: Vec<usize> = claims.iter().enumerate()
+                let missing: Vec<usize> = claims
+                    .iter()
+                    .enumerate()
                     .filter_map(|(i, c)| if c.sources.is_empty() { Some(i) } else { None })
                     .collect();
                 if missing.is_empty() {
                     AttributionResult::Pass
                 } else {
-                    AttributionResult::MissingSources { claim_indices: missing }
+                    AttributionResult::MissingSources {
+                        claim_indices: missing,
+                    }
                 }
             }
             AttributionRule::Optional => AttributionResult::Pass,
             AttributionRule::Forbidden => {
-                let unwanted: Vec<usize> = claims.iter().enumerate()
+                let unwanted: Vec<usize> = claims
+                    .iter()
+                    .enumerate()
                     .filter_map(|(i, c)| if !c.sources.is_empty() { Some(i) } else { None })
                     .collect();
                 if unwanted.is_empty() {
                     AttributionResult::Pass
                 } else {
-                    AttributionResult::UnwantedSources { claim_indices: unwanted }
+                    AttributionResult::UnwantedSources {
+                        claim_indices: unwanted,
+                    }
                 }
             }
         }
@@ -189,7 +197,10 @@ mod tests {
     #[test]
     fn research_missing_sources_reported() {
         let p = SourceAttributionPolicy::canonical();
-        let r = p.check(ArtifactClass::Research, &[c("claim", &[]), c("other", &["https://b"])]);
+        let r = p.check(
+            ArtifactClass::Research,
+            &[c("claim", &[]), c("other", &["https://b"])],
+        );
         match r {
             AttributionResult::MissingSources { claim_indices } => {
                 assert_eq!(claim_indices, vec![0]);
@@ -222,7 +233,11 @@ mod tests {
     #[test]
     fn empty_claims_pass_everywhere() {
         let p = SourceAttributionPolicy::canonical();
-        for c in [ArtifactClass::Research, ArtifactClass::SourceCode, ArtifactClass::ChatReply] {
+        for c in [
+            ArtifactClass::Research,
+            ArtifactClass::SourceCode,
+            ArtifactClass::ChatReply,
+        ] {
             assert!(matches!(p.check(c, &[]), AttributionResult::Pass));
         }
     }
@@ -231,19 +246,34 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = SourceAttributionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AttributionError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AttributionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ArtifactClass::CommitMessage).unwrap(), "\"commit-message\"");
-        assert_eq!(serde_json::to_string(&ArtifactClass::ChatReply).unwrap(), "\"chat-reply\"");
+        assert_eq!(
+            serde_json::to_string(&ArtifactClass::CommitMessage).unwrap(),
+            "\"commit-message\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ArtifactClass::ChatReply).unwrap(),
+            "\"chat-reply\""
+        );
     }
 
     #[test]
     fn rule_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AttributionRule::Required).unwrap(), "\"required\"");
-        assert_eq!(serde_json::to_string(&AttributionRule::Forbidden).unwrap(), "\"forbidden\"");
+        assert_eq!(
+            serde_json::to_string(&AttributionRule::Required).unwrap(),
+            "\"required\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AttributionRule::Forbidden).unwrap(),
+            "\"forbidden\""
+        );
     }
 
     #[test]

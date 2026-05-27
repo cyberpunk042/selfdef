@@ -83,56 +83,101 @@ impl HandlerRegistry {
 
     /// Register.
     pub fn register(&mut self, kind: &str, id: &str, priority: u32) -> Result<(), RegistryError> {
-        if kind.is_empty() { return Err(RegistryError::EmptyKind); }
-        if id.is_empty() { return Err(RegistryError::EmptyId); }
+        if kind.is_empty() {
+            return Err(RegistryError::EmptyKind);
+        }
+        if id.is_empty() {
+            return Err(RegistryError::EmptyId);
+        }
         let entry = self.kinds.entry(kind.into()).or_default();
         if entry.handlers.iter().any(|h| h.id == id) {
-            return Err(RegistryError::DuplicateHandler { kind: kind.into(), id: id.into() });
+            return Err(RegistryError::DuplicateHandler {
+                kind: kind.into(),
+                id: id.into(),
+            });
         }
-        entry.handlers.push(Handler { id: id.into(), priority, enabled: true });
-        entry.handlers.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.cmp(&b.id)));
+        entry.handlers.push(Handler {
+            id: id.into(),
+            priority,
+            enabled: true,
+        });
+        entry
+            .handlers
+            .sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.cmp(&b.id)));
         Ok(())
     }
 
     /// Set enabled.
-    pub fn set_enabled(&mut self, kind: &str, id: &str, enabled: bool) -> Result<(), RegistryError> {
-        let entry = self.kinds.get_mut(kind).ok_or_else(|| RegistryError::UnknownHandler {
-            kind: kind.into(), id: id.into(),
-        })?;
-        let h = entry.handlers.iter_mut().find(|h| h.id == id).ok_or_else(|| RegistryError::UnknownHandler {
-            kind: kind.into(), id: id.into(),
-        })?;
+    pub fn set_enabled(
+        &mut self,
+        kind: &str,
+        id: &str,
+        enabled: bool,
+    ) -> Result<(), RegistryError> {
+        let entry = self
+            .kinds
+            .get_mut(kind)
+            .ok_or_else(|| RegistryError::UnknownHandler {
+                kind: kind.into(),
+                id: id.into(),
+            })?;
+        let h = entry
+            .handlers
+            .iter_mut()
+            .find(|h| h.id == id)
+            .ok_or_else(|| RegistryError::UnknownHandler {
+                kind: kind.into(),
+                id: id.into(),
+            })?;
         h.enabled = enabled;
         Ok(())
     }
 
     /// Resolve top handler for kind.
     pub fn resolve(&self, kind: &str) -> Option<String> {
-        self.kinds.get(kind)?.handlers.iter().find(|h| h.enabled).map(|h| h.id.clone())
+        self.kinds
+            .get(kind)?
+            .handlers
+            .iter()
+            .find(|h| h.enabled)
+            .map(|h| h.id.clone())
     }
 
     /// All enabled handlers for kind in priority order.
     pub fn handlers_for(&self, kind: &str) -> Vec<Handler> {
-        self.kinds.get(kind).map(|e| e.handlers.iter().filter(|h| h.enabled).cloned().collect()).unwrap_or_default()
+        self.kinds
+            .get(kind)
+            .map(|e| e.handlers.iter().filter(|h| h.enabled).cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Remove handler.
     pub fn unregister(&mut self, kind: &str, id: &str) -> bool {
-        let Some(entry) = self.kinds.get_mut(kind) else { return false; };
+        let Some(entry) = self.kinds.get_mut(kind) else {
+            return false;
+        };
         let before = entry.handlers.len();
         entry.handlers.retain(|h| h.id != id);
         let removed = entry.handlers.len() != before;
-        if entry.handlers.is_empty() { self.kinds.remove(kind); }
+        if entry.handlers.is_empty() {
+            self.kinds.remove(kind);
+        }
         removed
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RegistryError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RegistryError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RegistryError::SchemaMismatch);
+        }
         for (k, entry) in &self.kinds {
-            if k.is_empty() { return Err(RegistryError::EmptyKind); }
+            if k.is_empty() {
+                return Err(RegistryError::EmptyKind);
+            }
             for h in &entry.handlers {
-                if h.id.is_empty() { return Err(RegistryError::EmptyId); }
+                if h.id.is_empty() {
+                    return Err(RegistryError::EmptyId);
+                }
             }
         }
         Ok(())
@@ -140,7 +185,9 @@ impl HandlerRegistry {
 }
 
 impl Default for HandlerRegistry {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -168,13 +215,19 @@ mod tests {
     fn duplicate_rejected() {
         let mut r = HandlerRegistry::new();
         r.register("k", "a", 1).unwrap();
-        assert!(matches!(r.register("k", "a", 1).unwrap_err(), RegistryError::DuplicateHandler { .. }));
+        assert!(matches!(
+            r.register("k", "a", 1).unwrap_err(),
+            RegistryError::DuplicateHandler { .. }
+        ));
     }
 
     #[test]
     fn unknown_handler_rejected() {
         let mut r = HandlerRegistry::new();
-        assert!(matches!(r.set_enabled("k", "nope", false).unwrap_err(), RegistryError::UnknownHandler { .. }));
+        assert!(matches!(
+            r.set_enabled("k", "nope", false).unwrap_err(),
+            RegistryError::UnknownHandler { .. }
+        ));
     }
 
     #[test]
@@ -198,15 +251,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut r = HandlerRegistry::new();
-        assert!(matches!(r.register("", "x", 1).unwrap_err(), RegistryError::EmptyKind));
-        assert!(matches!(r.register("k", "", 1).unwrap_err(), RegistryError::EmptyId));
+        assert!(matches!(
+            r.register("", "x", 1).unwrap_err(),
+            RegistryError::EmptyKind
+        ));
+        assert!(matches!(
+            r.register("k", "", 1).unwrap_err(),
+            RegistryError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = HandlerRegistry::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RegistryError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RegistryError::SchemaMismatch
+        ));
     }
 
     #[test]

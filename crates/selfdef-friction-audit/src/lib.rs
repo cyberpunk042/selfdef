@@ -125,7 +125,9 @@ impl OverrideManifest {
     /// schema_version is wrong.
     pub fn validate(&self, now_ms: u64) -> Result<(), FrictionAuditError> {
         if self.schema_version != SCHEMA_VERSION {
-            return Err(FrictionAuditError::SchemaMismatch(self.schema_version.clone()));
+            return Err(FrictionAuditError::SchemaMismatch(
+                self.schema_version.clone(),
+            ));
         }
         if self.reason.is_empty() {
             return Err(FrictionAuditError::OverrideInvalid(
@@ -257,8 +259,8 @@ impl OverrideStore {
         now_ms: u64,
     ) -> Result<OverrideManifest, FrictionAuditError> {
         let bytes = fs::read(manifest_path).map_err(|e| FrictionAuditError::Io(e.to_string()))?;
-        let manifest: OverrideManifest = serde_json::from_slice(&bytes)
-            .map_err(|e| FrictionAuditError::Serde(e.to_string()))?;
+        let manifest: OverrideManifest =
+            serde_json::from_slice(&bytes).map_err(|e| FrictionAuditError::Serde(e.to_string()))?;
         manifest.validate(now_ms)?;
         let sig_path = manifest_path.with_extension("json.minisig");
         if !sig_path.exists() {
@@ -327,11 +329,7 @@ impl OverrideStore {
 /// # Errors
 /// Returns an error if no public key in `trust_roots_dir` validates
 /// the signature, OR if the signature/public-key files are malformed.
-fn verify_minisign(
-    payload: &[u8],
-    sig_path: &Path,
-    trust_roots_dir: &Path,
-) -> Result<(), String> {
+fn verify_minisign(payload: &[u8], sig_path: &Path, trust_roots_dir: &Path) -> Result<(), String> {
     use minisign_verify::{PublicKey, Signature};
 
     let sig_bytes = fs::read(sig_path).map_err(|e| format!("read sig: {e}"))?;
@@ -489,20 +487,18 @@ pub fn audit_chain_check(ocsf_jsonl: &Path) -> Result<usize, FrictionAuditError>
     if !ocsf_jsonl.exists() {
         return Ok(0);
     }
-    let text = fs::read_to_string(ocsf_jsonl)
-        .map_err(|e| FrictionAuditError::Io(e.to_string()))?;
+    let text = fs::read_to_string(ocsf_jsonl).map_err(|e| FrictionAuditError::Io(e.to_string()))?;
     let mut last_sha = None::<String>;
     let mut events_seen = 0usize;
     for (idx, line) in text.lines().enumerate() {
         if line.trim().is_empty() {
             continue;
         }
-        let parsed: serde_json::Value = serde_json::from_str(line).map_err(|e| {
-            FrictionAuditError::AuditChainBreak {
+        let parsed: serde_json::Value =
+            serde_json::from_str(line).map_err(|e| FrictionAuditError::AuditChainBreak {
                 line: idx + 1,
                 detail: format!("malformed JSON: {e}"),
-            }
-        })?;
+            })?;
         // Forward-compat: if a future event carries prev_event_sha256,
         // validate the chain.
         if let Some(prev) = parsed.get("prev_event_sha256").and_then(|v| v.as_str()) {
@@ -760,9 +756,7 @@ mod tests {
             let p = dir.path().join(format!("{ts}-{gate}.json"));
             fs::write(
                 &p,
-                format!(
-                    r#"{{"gate":"{gate}","status":"pass","ts_ms":{ts},"hostname":"h"}}"#
-                ),
+                format!(r#"{{"gate":"{gate}","status":"pass","ts_ms":{ts},"hostname":"h"}}"#),
             )
             .unwrap();
         }
@@ -775,12 +769,16 @@ mod tests {
 
     #[test]
     fn default_override_path_per_gate() {
-        assert!(default_override_path(Gate::Pcie)
-            .to_string_lossy()
-            .ends_with("friction-audit-pcie.json"));
-        assert!(default_override_path(Gate::Memory)
-            .to_string_lossy()
-            .ends_with("friction-audit-memory.json"));
+        assert!(
+            default_override_path(Gate::Pcie)
+                .to_string_lossy()
+                .ends_with("friction-audit-pcie.json")
+        );
+        assert!(
+            default_override_path(Gate::Memory)
+                .to_string_lossy()
+                .ends_with("friction-audit-memory.json")
+        );
     }
 
     #[test]

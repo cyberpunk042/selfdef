@@ -142,7 +142,10 @@ mod tests {
     fn within_window_allow() {
         let w = BundleReplayWindow::canonical();
         // 1 day within 30 day window.
-        assert!(matches!(w.decide(1000, 1000 + 86400), ReplayDecision::Allow));
+        assert!(matches!(
+            w.decide(1000, 1000 + 86400),
+            ReplayDecision::Allow
+        ));
     }
 
     #[test]
@@ -151,7 +154,9 @@ mod tests {
         let recorded = 1_000;
         let current = recorded + 100 * 86400;
         match w.decide(recorded, current) {
-            ReplayDecision::OutOfWindow { delta_seconds, .. } => assert!(delta_seconds > 30 * 86400),
+            ReplayDecision::OutOfWindow { delta_seconds, .. } => {
+                assert!(delta_seconds > 30 * 86400)
+            }
             _ => panic!(),
         }
     }
@@ -177,27 +182,40 @@ mod tests {
         // recorded > current by huge delta.
         let recorded = 100 * 86400;
         let current = 0;
-        assert!(matches!(w.decide(recorded, current), ReplayDecision::OutOfWindow { .. }));
+        assert!(matches!(
+            w.decide(recorded, current),
+            ReplayDecision::OutOfWindow { .. }
+        ));
     }
 
     #[test]
     fn max_age_zero_without_exact_rejected() {
         let mut w = BundleReplayWindow::canonical();
         w.max_age_seconds = 0;
-        assert!(matches!(w.validate().unwrap_err(), WindowError::MaxAgeZeroNotExact));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WindowError::MaxAgeZeroNotExact
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut w = BundleReplayWindow::canonical();
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), WindowError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            WindowError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
         let d = ReplayDecision::Allow;
-        assert!(serde_json::to_string(&d).unwrap().contains("\"kind\":\"allow\""));
+        assert!(
+            serde_json::to_string(&d)
+                .unwrap()
+                .contains("\"kind\":\"allow\"")
+        );
     }
 
     #[test]

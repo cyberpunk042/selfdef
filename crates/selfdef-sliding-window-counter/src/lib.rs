@@ -46,9 +46,13 @@ pub enum CounterError {
 impl SlidingWindowCounter {
     /// New.
     pub fn new(bucket_ms: u64, bucket_count: usize, start_ms: u64) -> Result<Self, CounterError> {
-        if bucket_ms == 0 || bucket_count == 0 { return Err(CounterError::ZeroSize); }
+        if bucket_ms == 0 || bucket_count == 0 {
+            return Err(CounterError::ZeroSize);
+        }
         let mut buckets = VecDeque::with_capacity(bucket_count);
-        for _ in 0..bucket_count { buckets.push_back(0); }
+        for _ in 0..bucket_count {
+            buckets.push_back(0);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             bucket_ms,
@@ -65,7 +69,9 @@ impl SlidingWindowCounter {
 
     /// Rotate buckets if time has advanced past the window.
     fn rotate(&mut self, now_ms: u64) {
-        let last_bucket_end = self.window_start_ms.saturating_add(self.bucket_ms.saturating_mul(self.bucket_count as u64));
+        let last_bucket_end = self
+            .window_start_ms
+            .saturating_add(self.bucket_ms.saturating_mul(self.bucket_count as u64));
         if now_ms < last_bucket_end {
             // Within current window — no rotation needed.
             return;
@@ -75,17 +81,24 @@ impl SlidingWindowCounter {
         let to_rotate = (elapsed_past_window_end / self.bucket_ms).saturating_add(1) as usize;
         if to_rotate >= self.bucket_count {
             // Whole window is stale — clear all.
-            for b in self.buckets.iter_mut() { *b = 0; }
+            for b in self.buckets.iter_mut() {
+                *b = 0;
+            }
             // Snap start to current bucket.
-            let buckets_since_start = (now_ms.saturating_sub(self.window_start_ms)) / self.bucket_ms;
+            let buckets_since_start =
+                (now_ms.saturating_sub(self.window_start_ms)) / self.bucket_ms;
             let advance = buckets_since_start.saturating_sub(self.bucket_count as u64 - 1);
-            self.window_start_ms = self.window_start_ms.saturating_add(advance.saturating_mul(self.bucket_ms));
+            self.window_start_ms = self
+                .window_start_ms
+                .saturating_add(advance.saturating_mul(self.bucket_ms));
         } else {
             for _ in 0..to_rotate {
                 self.buckets.pop_front();
                 self.buckets.push_back(0);
             }
-            self.window_start_ms = self.window_start_ms.saturating_add((to_rotate as u64).saturating_mul(self.bucket_ms));
+            self.window_start_ms = self
+                .window_start_ms
+                .saturating_add((to_rotate as u64).saturating_mul(self.bucket_ms));
         }
     }
 
@@ -106,14 +119,20 @@ impl SlidingWindowCounter {
 
     /// Reset all buckets.
     pub fn reset(&mut self, now_ms: u64) {
-        for b in self.buckets.iter_mut() { *b = 0; }
+        for b in self.buckets.iter_mut() {
+            *b = 0;
+        }
         self.window_start_ms = now_ms;
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CounterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CounterError::SchemaMismatch); }
-        if self.bucket_ms == 0 || self.bucket_count == 0 { return Err(CounterError::ZeroSize); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CounterError::SchemaMismatch);
+        }
+        if self.bucket_ms == 0 || self.bucket_count == 0 {
+            return Err(CounterError::ZeroSize);
+        }
         Ok(())
     }
 }
@@ -167,15 +186,24 @@ mod tests {
 
     #[test]
     fn zero_sizes_rejected() {
-        assert!(matches!(SlidingWindowCounter::new(0, 5, 0).unwrap_err(), CounterError::ZeroSize));
-        assert!(matches!(SlidingWindowCounter::new(1000, 0, 0).unwrap_err(), CounterError::ZeroSize));
+        assert!(matches!(
+            SlidingWindowCounter::new(0, 5, 0).unwrap_err(),
+            CounterError::ZeroSize
+        ));
+        assert!(matches!(
+            SlidingWindowCounter::new(1000, 0, 0).unwrap_err(),
+            CounterError::ZeroSize
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = SlidingWindowCounter::new(1000, 3, 0).unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

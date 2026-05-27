@@ -222,7 +222,9 @@ fn validate_cidr(c: &str) -> Result<(), NetworkError> {
     if parts.len() != 2 {
         return Err(NetworkError::InvalidCidr(c.into()));
     }
-    let prefix_len: u32 = parts[1].parse().map_err(|_| NetworkError::InvalidCidr(c.into()))?;
+    let prefix_len: u32 = parts[1]
+        .parse()
+        .map_err(|_| NetworkError::InvalidCidr(c.into()))?;
     if prefix_len > 32 {
         return Err(NetworkError::InvalidCidr(c.into()));
     }
@@ -231,7 +233,9 @@ fn validate_cidr(c: &str) -> Result<(), NetworkError> {
         return Err(NetworkError::InvalidCidr(c.into()));
     }
     for part in &ip_parts {
-        let _: u8 = part.parse().map_err(|_| NetworkError::InvalidCidr(c.into()))?;
+        let _: u8 = part
+            .parse()
+            .map_err(|_| NetworkError::InvalidCidr(c.into()))?;
     }
     Ok(())
 }
@@ -283,14 +287,19 @@ mod tests {
         assert_eq!(NetworkProfile::PackageRegistries.policy_bits(), 0b00000001);
         assert_eq!(NetworkProfile::DocsOnly.policy_bits(), 0b00000011);
         assert_eq!(NetworkProfile::ArbitraryWeb.policy_bits(), 0b00000111);
-        assert_eq!(NetworkProfile::AuthenticatedBrowser.policy_bits(), 0b00001111);
+        assert_eq!(
+            NetworkProfile::AuthenticatedBrowser.policy_bits(),
+            0b00001111
+        );
     }
 
     #[test]
     fn from_policy_bits_roundtrip() {
         for p in [
-            NetworkProfile::Offline, NetworkProfile::PackageRegistries,
-            NetworkProfile::DocsOnly, NetworkProfile::ArbitraryWeb,
+            NetworkProfile::Offline,
+            NetworkProfile::PackageRegistries,
+            NetworkProfile::DocsOnly,
+            NetworkProfile::ArbitraryWeb,
             NetworkProfile::AuthenticatedBrowser,
         ] {
             assert_eq!(NetworkProfile::from_policy_bits(p.policy_bits()), Some(p));
@@ -307,8 +316,10 @@ mod tests {
     fn offline_allows_no_egress() {
         assert!(!NetworkProfile::Offline.allows_egress());
         for p in [
-            NetworkProfile::PackageRegistries, NetworkProfile::DocsOnly,
-            NetworkProfile::ArbitraryWeb, NetworkProfile::AuthenticatedBrowser,
+            NetworkProfile::PackageRegistries,
+            NetworkProfile::DocsOnly,
+            NetworkProfile::ArbitraryWeb,
+            NetworkProfile::AuthenticatedBrowser,
         ] {
             assert!(p.allows_egress());
         }
@@ -318,50 +329,105 @@ mod tests {
 
     #[test]
     fn unsigned_grant_rejected() {
-        let mut g = ok_grant(NetworkProfile::PackageRegistries, vec![AllowEntry::Fqdn { host: "registry.npmjs.org".into() }]);
+        let mut g = ok_grant(
+            NetworkProfile::PackageRegistries,
+            vec![AllowEntry::Fqdn {
+                host: "registry.npmjs.org".into(),
+            }],
+        );
         g.signature = String::new();
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::GrantUnsigned));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::GrantUnsigned
+        ));
     }
 
     #[test]
     fn ttl_over_ceiling_rejected() {
-        let mut g = ok_grant(NetworkProfile::PackageRegistries, vec![AllowEntry::Fqdn { host: "a.b.c".into() }]);
+        let mut g = ok_grant(
+            NetworkProfile::PackageRegistries,
+            vec![AllowEntry::Fqdn {
+                host: "a.b.c".into(),
+            }],
+        );
         g.ttl_seconds = 100_000;
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::TtlExceedsCeiling(100_000)));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::TtlExceedsCeiling(100_000)
+        ));
     }
 
     #[test]
     fn offline_with_allowlist_rejected() {
-        let g = ok_grant(NetworkProfile::Offline, vec![AllowEntry::Fqdn { host: "x.com".into() }]);
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::OfflineGrantWithAllowlist));
+        let g = ok_grant(
+            NetworkProfile::Offline,
+            vec![AllowEntry::Fqdn {
+                host: "x.com".into(),
+            }],
+        );
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::OfflineGrantWithAllowlist
+        ));
     }
 
     #[test]
     fn invalid_suffix_rejected() {
-        let g = ok_grant(NetworkProfile::PackageRegistries, vec![AllowEntry::FqdnSuffix { suffix: "no-dot".into() }]);
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::InvalidSuffix(_)));
+        let g = ok_grant(
+            NetworkProfile::PackageRegistries,
+            vec![AllowEntry::FqdnSuffix {
+                suffix: "no-dot".into(),
+            }],
+        );
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::InvalidSuffix(_)
+        ));
     }
 
     #[test]
     fn invalid_cidr_rejected() {
-        let g = ok_grant(NetworkProfile::ArbitraryWeb, vec![AllowEntry::Cidr { cidr: "not-a-cidr".into() }]);
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::InvalidCidr(_)));
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::Cidr {
+                cidr: "not-a-cidr".into(),
+            }],
+        );
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::InvalidCidr(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
-        let mut g = ok_grant(NetworkProfile::PackageRegistries, vec![AllowEntry::Fqdn { host: "x.y".into() }]);
+        let mut g = ok_grant(
+            NetworkProfile::PackageRegistries,
+            vec![AllowEntry::Fqdn { host: "x.y".into() }],
+        );
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), NetworkError::SchemaMismatch { .. }));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            NetworkError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
     fn valid_grant_passes_with_mixed_allowlist() {
-        let g = ok_grant(NetworkProfile::AuthenticatedBrowser, vec![
-            AllowEntry::Fqdn { host: "api.github.com".into() },
-            AllowEntry::FqdnSuffix { suffix: ".npmjs.org".into() },
-            AllowEntry::Cidr { cidr: "10.0.0.0/8".into() },
-        ]);
+        let g = ok_grant(
+            NetworkProfile::AuthenticatedBrowser,
+            vec![
+                AllowEntry::Fqdn {
+                    host: "api.github.com".into(),
+                },
+                AllowEntry::FqdnSuffix {
+                    suffix: ".npmjs.org".into(),
+                },
+                AllowEntry::Cidr {
+                    cidr: "10.0.0.0/8".into(),
+                },
+            ],
+        );
         g.validate().unwrap();
     }
 
@@ -375,18 +441,28 @@ mod tests {
 
     #[test]
     fn exact_fqdn_match_permitted() {
-        let g = ok_grant(NetworkProfile::PackageRegistries, vec![AllowEntry::Fqdn { host: "registry.npmjs.org".into() }]);
+        let g = ok_grant(
+            NetworkProfile::PackageRegistries,
+            vec![AllowEntry::Fqdn {
+                host: "registry.npmjs.org".into(),
+            }],
+        );
         assert!(g.permits_host("registry.npmjs.org"));
-        assert!(g.permits_host("Registry.NPMJS.ORG"));  // case-insensitive
+        assert!(g.permits_host("Registry.NPMJS.ORG")); // case-insensitive
         assert!(!g.permits_host("evil.example.com"));
     }
 
     #[test]
     fn suffix_fqdn_match_permitted() {
-        let g = ok_grant(NetworkProfile::ArbitraryWeb, vec![AllowEntry::FqdnSuffix { suffix: ".npmjs.org".into() }]);
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::FqdnSuffix {
+                suffix: ".npmjs.org".into(),
+            }],
+        );
         assert!(g.permits_host("registry.npmjs.org"));
         assert!(g.permits_host("downloads.npmjs.org"));
-        assert!(!g.permits_host("evilnpmjs.org"));  // suffix needs preceding dot
+        assert!(!g.permits_host("evilnpmjs.org")); // suffix needs preceding dot
         assert!(!g.permits_host("evil.example.com"));
     }
 
@@ -402,7 +478,12 @@ mod tests {
 
     #[test]
     fn cidr_match_permitted() {
-        let g = ok_grant(NetworkProfile::ArbitraryWeb, vec![AllowEntry::Cidr { cidr: "10.0.0.0/8".into() }]);
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::Cidr {
+                cidr: "10.0.0.0/8".into(),
+            }],
+        );
         assert!(g.permits_ipv4([10, 1, 2, 3]));
         assert!(g.permits_ipv4([10, 255, 255, 255]));
         assert!(!g.permits_ipv4([192, 168, 1, 1]));
@@ -410,14 +491,24 @@ mod tests {
 
     #[test]
     fn cidr_exact_32_match() {
-        let g = ok_grant(NetworkProfile::ArbitraryWeb, vec![AllowEntry::Cidr { cidr: "127.0.0.1/32".into() }]);
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::Cidr {
+                cidr: "127.0.0.1/32".into(),
+            }],
+        );
         assert!(g.permits_ipv4([127, 0, 0, 1]));
         assert!(!g.permits_ipv4([127, 0, 0, 2]));
     }
 
     #[test]
     fn cidr_zero_prefix_matches_all() {
-        let g = ok_grant(NetworkProfile::ArbitraryWeb, vec![AllowEntry::Cidr { cidr: "0.0.0.0/0".into() }]);
+        let g = ok_grant(
+            NetworkProfile::ArbitraryWeb,
+            vec![AllowEntry::Cidr {
+                cidr: "0.0.0.0/0".into(),
+            }],
+        );
         assert!(g.permits_ipv4([1, 2, 3, 4]));
         assert!(g.permits_ipv4([255, 255, 255, 255]));
     }
@@ -432,8 +523,14 @@ mod tests {
 
     #[test]
     fn network_profile_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&NetworkProfile::PackageRegistries).unwrap(), "\"package-registries\"");
-        assert_eq!(serde_json::to_string(&NetworkProfile::AuthenticatedBrowser).unwrap(), "\"authenticated-browser\"");
+        assert_eq!(
+            serde_json::to_string(&NetworkProfile::PackageRegistries).unwrap(),
+            "\"package-registries\""
+        );
+        assert_eq!(
+            serde_json::to_string(&NetworkProfile::AuthenticatedBrowser).unwrap(),
+            "\"authenticated-browser\""
+        );
     }
 
     #[test]
@@ -448,10 +545,17 @@ mod tests {
 
     #[test]
     fn full_grant_serde_roundtrip() {
-        let g = ok_grant(NetworkProfile::DocsOnly, vec![
-            AllowEntry::Fqdn { host: "docs.rs".into() },
-            AllowEntry::FqdnSuffix { suffix: ".readthedocs.io".into() },
-        ]);
+        let g = ok_grant(
+            NetworkProfile::DocsOnly,
+            vec![
+                AllowEntry::Fqdn {
+                    host: "docs.rs".into(),
+                },
+                AllowEntry::FqdnSuffix {
+                    suffix: ".readthedocs.io".into(),
+                },
+            ],
+        );
         let j = serde_json::to_string(&g).unwrap();
         let back: NetworkGrant = serde_json::from_str(&j).unwrap();
         assert_eq!(g, back);

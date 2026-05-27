@@ -234,13 +234,18 @@ impl TrustScoreMirrorSnapshot {
             e.0 += t.current_score as u64;
             e.1 += 1;
         }
-        let mut out: Vec<BandSummary> = by_band.into_iter().map(|(band, (total, count))| {
-            BandSummary {
+        let mut out: Vec<BandSummary> = by_band
+            .into_iter()
+            .map(|(band, (total, count))| BandSummary {
                 band,
                 count,
-                mean_score: if count == 0 { 0 } else { (total / count as u64) as u16 },
-            }
-        }).collect();
+                mean_score: if count == 0 {
+                    0
+                } else {
+                    (total / count as u64) as u16
+                },
+            })
+            .collect();
         out.sort_by_key(|s| match s.band {
             TrustBand::Trusted => 0,
             TrustBand::Watched => 1,
@@ -252,17 +257,24 @@ impl TrustScoreMirrorSnapshot {
 
     /// Find tools with downward trends (last 5 deltas summing negative).
     pub fn tools_trending_down(&self) -> Vec<&ToolScoreEntry> {
-        self.tools.iter().filter(|t| {
-            let tail: Vec<&DeltaEntry> = t.history.iter().rev().take(5).collect();
-            if tail.is_empty() { return false; }
-            let net: i32 = tail.iter().map(|d| d.delta).sum();
-            net < 0
-        }).collect()
+        self.tools
+            .iter()
+            .filter(|t| {
+                let tail: Vec<&DeltaEntry> = t.history.iter().rev().take(5).collect();
+                if tail.is_empty() {
+                    return false;
+                }
+                let net: i32 = tail.iter().map(|d| d.delta).sum();
+                net < 0
+            })
+            .collect()
     }
 
     /// Mean score across all tools.
     pub fn mean_score(&self) -> u16 {
-        if self.tools.is_empty() { return 0; }
+        if self.tools.is_empty() {
+            return 0;
+        }
         let total: u64 = self.tools.iter().map(|t| t.current_score as u64).sum();
         (total / self.tools.len() as u64) as u16
     }
@@ -270,7 +282,9 @@ impl TrustScoreMirrorSnapshot {
     /// Reliability ratio = successful executions / (executions + mismatches), per tool.
     pub fn reliability(t: &ToolScoreEntry) -> f64 {
         let total = t.executions_total + t.mismatches_total;
-        if total == 0 { return 1.0; }
+        if total == 0 {
+            return 1.0;
+        }
         t.executions_total as f64 / total as f64
     }
 }
@@ -342,7 +356,10 @@ mod tests {
             }],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_scores().unwrap_err(), MirrorError::ScoreOutOfRange(1500)));
+        assert!(matches!(
+            snap.validate_scores().unwrap_err(),
+            MirrorError::ScoreOutOfRange(1500)
+        ));
     }
 
     #[test]
@@ -359,7 +376,11 @@ mod tests {
             signature: String::new(),
         };
         match snap.validate_scores().unwrap_err() {
-            MirrorError::BandMismatch { score, declared, expected } => {
+            MirrorError::BandMismatch {
+                score,
+                declared,
+                expected,
+            } => {
                 assert_eq!(score, 900);
                 assert_eq!(declared, TrustBand::Untrusted);
                 assert_eq!(expected, TrustBand::Trusted);
@@ -375,11 +396,11 @@ mod tests {
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
             tools: vec![
-                mk_tool("rg",      980, vec![]),
-                mk_tool("rustc",   920, vec![]),
-                mk_tool("cargo",   600, vec![]),
+                mk_tool("rg", 980, vec![]),
+                mk_tool("rustc", 920, vec![]),
+                mk_tool("cargo", 600, vec![]),
                 mk_tool("browser", 350, vec![]),
-                mk_tool("untrust", 50,  vec![]),
+                mk_tool("untrust", 50, vec![]),
             ],
             signature: String::new(),
         };
@@ -394,18 +415,26 @@ mod tests {
 
     #[test]
     fn tools_trending_down_detects_net_negative_tail() {
-        let downward = mk_tool("flaky", 600, vec![
-            mk_delta("t0", DeltaReason::SuccessfulExecution, 5, 600),
-            mk_delta("t1", DeltaReason::MismatchMinor, -10, 590),
-            mk_delta("t2", DeltaReason::MismatchMinor, -10, 580),
-            mk_delta("t3", DeltaReason::MismatchMajor, -50, 530),
-            mk_delta("t4", DeltaReason::MismatchMinor, -10, 520),
-        ]);
-        let stable = mk_tool("steady", 900, vec![
-            mk_delta("t0", DeltaReason::SuccessfulExecution, 1, 900),
-            mk_delta("t1", DeltaReason::SuccessfulExecution, 1, 901),
-            mk_delta("t2", DeltaReason::SuccessfulExecution, 1, 902),
-        ]);
+        let downward = mk_tool(
+            "flaky",
+            600,
+            vec![
+                mk_delta("t0", DeltaReason::SuccessfulExecution, 5, 600),
+                mk_delta("t1", DeltaReason::MismatchMinor, -10, 590),
+                mk_delta("t2", DeltaReason::MismatchMinor, -10, 580),
+                mk_delta("t3", DeltaReason::MismatchMajor, -50, 530),
+                mk_delta("t4", DeltaReason::MismatchMinor, -10, 520),
+            ],
+        );
+        let stable = mk_tool(
+            "steady",
+            900,
+            vec![
+                mk_delta("t0", DeltaReason::SuccessfulExecution, 1, 900),
+                mk_delta("t1", DeltaReason::SuccessfulExecution, 1, 901),
+                mk_delta("t2", DeltaReason::SuccessfulExecution, 1, 902),
+            ],
+        );
         let snap = TrustScoreMirrorSnapshot {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: "2026-05-19T03:30:00Z".into(),
@@ -433,10 +462,7 @@ mod tests {
             schema_version: SCHEMA_VERSION.into(),
             captured_at: "2026-05-19T03:30:00Z".into(),
             summaries: vec![],
-            tools: vec![
-                mk_tool("a", 800, vec![]),
-                mk_tool("b", 400, vec![]),
-            ],
+            tools: vec![mk_tool("a", 800, vec![]), mk_tool("b", 400, vec![])],
             signature: String::new(),
         };
         assert_eq!(snap.mean_score(), 600);
@@ -460,10 +486,14 @@ mod tests {
 
     #[test]
     fn tool_serde_roundtrip() {
-        let original = mk_tool("rg", 950, vec![
-            mk_delta("t0", DeltaReason::Baseline, 1000, 1000),
-            mk_delta("t1", DeltaReason::MismatchMinor, -50, 950),
-        ]);
+        let original = mk_tool(
+            "rg",
+            950,
+            vec![
+                mk_delta("t0", DeltaReason::Baseline, 1000, 1000),
+                mk_delta("t1", DeltaReason::MismatchMinor, -50, 950),
+            ],
+        );
         let j = serde_json::to_string(&original).unwrap();
         let back: ToolScoreEntry = serde_json::from_str(&j).unwrap();
         assert_eq!(original, back);

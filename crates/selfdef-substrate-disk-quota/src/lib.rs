@@ -112,12 +112,54 @@ impl SubstrateDiskQuota {
     pub fn canonical() -> Self {
         let mut profiles = BTreeMap::new();
         let day_ms: u64 = 24 * 60 * 60 * 1000;
-        profiles.insert(Profile::Private, ProfileDisk { window_ms: day_ms, window_budget_bytes: 256 << 20, max_file_bytes: 32 << 20 });
-        profiles.insert(Profile::Fast, ProfileDisk { window_ms: day_ms, window_budget_bytes: 1 << 30, max_file_bytes: 128 << 20 });
-        profiles.insert(Profile::Careful, ProfileDisk { window_ms: day_ms, window_budget_bytes: 512 << 20, max_file_bytes: 64 << 20 });
-        profiles.insert(Profile::Autonomous, ProfileDisk { window_ms: day_ms, window_budget_bytes: 2 << 30, max_file_bytes: 256 << 20 });
-        profiles.insert(Profile::Experimental, ProfileDisk { window_ms: day_ms, window_budget_bytes: 4u64 << 30, max_file_bytes: 512 << 20 });
-        profiles.insert(Profile::Production, ProfileDisk { window_ms: day_ms, window_budget_bytes: 512 << 20, max_file_bytes: 64 << 20 });
+        profiles.insert(
+            Profile::Private,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 256 << 20,
+                max_file_bytes: 32 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Fast,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 1 << 30,
+                max_file_bytes: 128 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Careful,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 512 << 20,
+                max_file_bytes: 64 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Autonomous,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 2 << 30,
+                max_file_bytes: 256 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Experimental,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 4u64 << 30,
+                max_file_bytes: 512 << 20,
+            },
+        );
+        profiles.insert(
+            Profile::Production,
+            ProfileDisk {
+                window_ms: day_ms,
+                window_budget_bytes: 512 << 20,
+                max_file_bytes: 64 << 20,
+            },
+        );
         Self {
             schema_version: SCHEMA_VERSION.into(),
             profiles,
@@ -127,7 +169,12 @@ impl SubstrateDiskQuota {
 
     /// Trim records older than the largest configured window prior to `now_ms`.
     pub fn rotate(&mut self, now_ms: u64) {
-        let max_window = self.profiles.values().map(|p| p.window_ms).max().unwrap_or(0);
+        let max_window = self
+            .profiles
+            .values()
+            .map(|p| p.window_ms)
+            .max()
+            .unwrap_or(0);
         let cutoff = now_ms.saturating_sub(max_window);
         self.records.retain(|r| r.ts_ms >= cutoff);
     }
@@ -135,17 +182,26 @@ impl SubstrateDiskQuota {
     /// Sum bytes for a profile within its window ending at now_ms.
     fn in_window_bytes(&self, profile: Profile, cfg: &ProfileDisk, now_ms: u64) -> u64 {
         let cutoff = now_ms.saturating_sub(cfg.window_ms);
-        self.records.iter()
+        self.records
+            .iter()
             .filter(|r| r.profile == profile && r.ts_ms >= cutoff && r.ts_ms <= now_ms)
             .map(|r| r.bytes)
             .sum()
     }
 
     /// Account for a candidate write of `bytes` at `now_ms`.
-    pub fn account(&mut self, profile: Profile, bytes: u64, now_ms: u64) -> Result<AccountVerdict, DiskQuotaError> {
+    pub fn account(
+        &mut self,
+        profile: Profile,
+        bytes: u64,
+        now_ms: u64,
+    ) -> Result<AccountVerdict, DiskQuotaError> {
         if let Some(last) = self.records.last() {
             if now_ms < last.ts_ms {
-                return Err(DiskQuotaError::NonMonotonic { prev: last.ts_ms, new: now_ms });
+                return Err(DiskQuotaError::NonMonotonic {
+                    prev: last.ts_ms,
+                    new: now_ms,
+                });
             }
         }
         let cfg = match self.profiles.get(&profile) {
@@ -153,14 +209,24 @@ impl SubstrateDiskQuota {
             None => return Ok(AccountVerdict::Unconfigured),
         };
         if bytes > cfg.max_file_bytes {
-            return Ok(AccountVerdict::FileTooLarge { requested: bytes, cap: cfg.max_file_bytes });
+            return Ok(AccountVerdict::FileTooLarge {
+                requested: bytes,
+                cap: cfg.max_file_bytes,
+            });
         }
         let used = self.in_window_bytes(profile, &cfg, now_ms);
         let would = used.saturating_add(bytes);
         if would > cfg.window_budget_bytes {
-            return Ok(AccountVerdict::BudgetExhausted { would_total: would, budget: cfg.window_budget_bytes });
+            return Ok(AccountVerdict::BudgetExhausted {
+                would_total: would,
+                budget: cfg.window_budget_bytes,
+            });
         }
-        self.records.push(WriteRecord { ts_ms: now_ms, bytes, profile });
+        self.records.push(WriteRecord {
+            ts_ms: now_ms,
+            bytes,
+            profile,
+        });
         Ok(AccountVerdict::Accepted)
     }
 
@@ -172,7 +238,10 @@ impl SubstrateDiskQuota {
         let mut last = 0u64;
         for r in &self.records {
             if r.ts_ms < last {
-                return Err(DiskQuotaError::NonMonotonic { prev: last, new: r.ts_ms });
+                return Err(DiskQuotaError::NonMonotonic {
+                    prev: last,
+                    new: r.ts_ms,
+                });
             }
             last = r.ts_ms;
         }
@@ -192,7 +261,10 @@ mod tests {
     #[test]
     fn accept_under_caps() {
         let mut q = SubstrateDiskQuota::canonical();
-        assert!(matches!(q.account(Profile::Fast, 1 << 20, 100).unwrap(), AccountVerdict::Accepted));
+        assert!(matches!(
+            q.account(Profile::Fast, 1 << 20, 100).unwrap(),
+            AccountVerdict::Accepted
+        ));
     }
 
     #[test]
@@ -210,7 +282,10 @@ mod tests {
         let mut q = SubstrateDiskQuota::canonical();
         // Production budget 512 MB. Write 64 MB nine times: ninth exceeds.
         for _ in 0..8 {
-            assert!(matches!(q.account(Profile::Production, 64 << 20, 100).unwrap(), AccountVerdict::Accepted));
+            assert!(matches!(
+                q.account(Profile::Production, 64 << 20, 100).unwrap(),
+                AccountVerdict::Accepted
+            ));
         }
         let v = q.account(Profile::Production, 64 << 20, 100).unwrap();
         assert!(matches!(v, AccountVerdict::BudgetExhausted { .. }));
@@ -220,7 +295,10 @@ mod tests {
     fn unconfigured_profile() {
         let mut q = SubstrateDiskQuota::canonical();
         q.profiles.clear();
-        assert!(matches!(q.account(Profile::Fast, 100, 100).unwrap(), AccountVerdict::Unconfigured));
+        assert!(matches!(
+            q.account(Profile::Fast, 100, 100).unwrap(),
+            AccountVerdict::Unconfigured
+        ));
     }
 
     #[test]
@@ -249,10 +327,15 @@ mod tests {
             q.account(Profile::Production, 64 << 20, i * 1000).unwrap();
         }
         // Without rotate, ninth at same instant fails.
-        assert!(matches!(q.account(Profile::Production, 64 << 20, 8000).unwrap(), AccountVerdict::BudgetExhausted { .. }));
+        assert!(matches!(
+            q.account(Profile::Production, 64 << 20, 8000).unwrap(),
+            AccountVerdict::BudgetExhausted { .. }
+        ));
         // After a day, oldest records are out of window. account() respects window directly.
         let day_ms: u64 = 24 * 60 * 60 * 1000;
-        let v = q.account(Profile::Production, 64 << 20, day_ms + 10_000).unwrap();
+        let v = q
+            .account(Profile::Production, 64 << 20, day_ms + 10_000)
+            .unwrap();
         assert!(matches!(v, AccountVerdict::Accepted));
     }
 
@@ -260,7 +343,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut q = SubstrateDiskQuota::canonical();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), DiskQuotaError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            DiskQuotaError::SchemaMismatch
+        ));
     }
 
     #[test]

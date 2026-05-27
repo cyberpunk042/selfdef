@@ -287,10 +287,7 @@ mod tests {
     fn worst_state_critical_dominates_warn_and_unknown() {
         let mut series = HashMap::new();
         series.insert("selfdef_perimeter_sigkills_total".to_string(), 42.0); // warn
-        series.insert(
-            "selfdef_scheduler_audit_chain_events".to_string(),
-            -1.0,
-        ); // critical
+        series.insert("selfdef_scheduler_audit_chain_events".to_string(), -1.0); // critical
         let rows = classify(&series);
         assert_eq!(worst_state(&rows), "critical");
     }

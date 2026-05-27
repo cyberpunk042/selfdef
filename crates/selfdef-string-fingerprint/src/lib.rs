@@ -47,7 +47,9 @@ pub fn fingerprint(s: &str) -> String {
 
 /// Shortened to leading `len` chars (1..=16).
 pub fn short(s: &str, len: usize) -> Result<String, FpError> {
-    if len == 0 || len > 16 { return Err(FpError::BadLen); }
+    if len == 0 || len > 16 {
+        return Err(FpError::BadLen);
+    }
     Ok(fingerprint(s)[..len].to_string())
 }
 
@@ -69,13 +71,17 @@ impl FingerprintState {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FpError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FpError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FpError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for FingerprintState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

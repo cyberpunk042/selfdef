@@ -51,34 +51,80 @@ pub enum RedactionPolicyError {
 }
 
 const REQUIRED: [Channel; 11] = [
-    Channel::Loki, Channel::OpenSearch, Channel::Ntfy,
-    Channel::Discord, Channel::Signal, Channel::Slack,
-    Channel::Smtp, Channel::PagerDuty, Channel::Twilio,
-    Channel::TheHive, Channel::Wall,
+    Channel::Loki,
+    Channel::OpenSearch,
+    Channel::Ntfy,
+    Channel::Discord,
+    Channel::Signal,
+    Channel::Slack,
+    Channel::Smtp,
+    Channel::PagerDuty,
+    Channel::Twilio,
+    Channel::TheHive,
+    Channel::Wall,
 ];
 
 impl EvidenceRedactionPolicy {
     /// Canonical defaults — public channels get all, private get fewer.
     pub fn canonical() -> Self {
         let all = vec![
-            RedactorClass::Email, RedactorClass::Ipv4, RedactorClass::Ipv6,
-            RedactorClass::SshKey, RedactorClass::BearerToken, RedactorClass::PathHome,
+            RedactorClass::Email,
+            RedactorClass::Ipv4,
+            RedactorClass::Ipv6,
+            RedactorClass::SshKey,
+            RedactorClass::BearerToken,
+            RedactorClass::PathHome,
         ];
         let private_set = vec![
-            RedactorClass::SshKey, RedactorClass::BearerToken, RedactorClass::PathHome,
+            RedactorClass::SshKey,
+            RedactorClass::BearerToken,
+            RedactorClass::PathHome,
         ];
         let per_channel = vec![
-            ChannelRedactors { channel: Channel::Loki,       redactors: private_set.clone() },
-            ChannelRedactors { channel: Channel::OpenSearch, redactors: private_set.clone() },
-            ChannelRedactors { channel: Channel::Ntfy,       redactors: all.clone() },
-            ChannelRedactors { channel: Channel::Discord,    redactors: all.clone() },
-            ChannelRedactors { channel: Channel::Signal,     redactors: all.clone() },
-            ChannelRedactors { channel: Channel::Slack,      redactors: all.clone() },
-            ChannelRedactors { channel: Channel::Smtp,       redactors: all.clone() },
-            ChannelRedactors { channel: Channel::PagerDuty,  redactors: all.clone() },
-            ChannelRedactors { channel: Channel::Twilio,     redactors: all.clone() },
-            ChannelRedactors { channel: Channel::TheHive,    redactors: private_set.clone() },
-            ChannelRedactors { channel: Channel::Wall,       redactors: all },
+            ChannelRedactors {
+                channel: Channel::Loki,
+                redactors: private_set.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::OpenSearch,
+                redactors: private_set.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Ntfy,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Discord,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Signal,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Slack,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Smtp,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::PagerDuty,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Twilio,
+                redactors: all.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::TheHive,
+                redactors: private_set.clone(),
+            },
+            ChannelRedactors {
+                channel: Channel::Wall,
+                redactors: all,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -104,8 +150,11 @@ impl EvidenceRedactionPolicy {
 
     /// Lookup.
     pub fn redactors_for(&self, channel: Channel) -> &[RedactorClass] {
-        self.per_channel.iter().find(|x| x.channel == channel)
-            .map(|x| x.redactors.as_slice()).unwrap_or(&[])
+        self.per_channel
+            .iter()
+            .find(|x| x.channel == channel)
+            .map(|x| x.redactors.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Apply the channel's redactor set to a text.
@@ -130,13 +179,18 @@ mod tests {
     #[test]
     fn eleven_channels_present() {
         let p = EvidenceRedactionPolicy::canonical();
-        for c in REQUIRED { assert!(!p.redactors_for(c).is_empty(), "missing {c:?}"); }
+        for c in REQUIRED {
+            assert!(!p.redactors_for(c).is_empty(), "missing {c:?}");
+        }
     }
 
     #[test]
     fn discord_redacts_everything() {
         let p = EvidenceRedactionPolicy::canonical();
-        let out = p.apply(Channel::Discord, "alice@ex.com from 10.0.0.1 with apikey=AAAAAAAAAAAAAAAAAAAAAAAA at /home/alice/x");
+        let out = p.apply(
+            Channel::Discord,
+            "alice@ex.com from 10.0.0.1 with apikey=AAAAAAAAAAAAAAAAAAAAAAAA at /home/alice/x",
+        );
         assert!(out.contains("[email]"));
         assert!(out.contains("[ipv4]"));
         assert!(out.contains("[bearer]") || out.contains("[~]") || out.contains("[ssh-key]"));
@@ -145,7 +199,10 @@ mod tests {
     #[test]
     fn loki_skips_email_and_ipv4() {
         let p = EvidenceRedactionPolicy::canonical();
-        let out = p.apply(Channel::Loki, "alice@ex.com from 10.0.0.1 path /home/alice/x");
+        let out = p.apply(
+            Channel::Loki,
+            "alice@ex.com from 10.0.0.1 path /home/alice/x",
+        );
         // Loki keeps email + ipv4 visible; redacts path.
         assert!(out.contains("alice@ex.com"));
         assert!(out.contains("10.0.0.1"));
@@ -156,14 +213,20 @@ mod tests {
     fn count_invalid_caught() {
         let mut p = EvidenceRedactionPolicy::canonical();
         p.per_channel.pop();
-        assert!(matches!(p.validate().unwrap_err(), RedactionPolicyError::CountInvalid(10)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RedactionPolicyError::CountInvalid(10)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = EvidenceRedactionPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), RedactionPolicyError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            RedactionPolicyError::SchemaMismatch
+        ));
     }
 
     #[test]

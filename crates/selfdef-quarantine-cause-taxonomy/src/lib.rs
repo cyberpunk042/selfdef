@@ -88,14 +88,46 @@ impl CauseTaxonomy {
     /// Canonical taxonomy.
     pub fn canonical() -> Self {
         let policies = vec![
-            CausePolicy { cause: QuarantineCause::PolicyViolation,    severity_floor: Severity::Critical,  requires_operator_clear: true  },
-            CausePolicy { cause: QuarantineCause::SchemaInvalid,      severity_floor: Severity::Warn,      requires_operator_clear: false },
-            CausePolicy { cause: QuarantineCause::HardEpsBreach,      severity_floor: Severity::Warn,      requires_operator_clear: false },
-            CausePolicy { cause: QuarantineCause::AnomalyTriggered,   severity_floor: Severity::Warn,      requires_operator_clear: true  },
-            CausePolicy { cause: QuarantineCause::DriftDetected,      severity_floor: Severity::Critical,  requires_operator_clear: true  },
-            CausePolicy { cause: QuarantineCause::UnsignedRequest,    severity_floor: Severity::Critical,  requires_operator_clear: true  },
-            CausePolicy { cause: QuarantineCause::UntrustedSubject,   severity_floor: Severity::Warn,      requires_operator_clear: false },
-            CausePolicy { cause: QuarantineCause::ManualOperator,     severity_floor: Severity::Notice,    requires_operator_clear: true  },
+            CausePolicy {
+                cause: QuarantineCause::PolicyViolation,
+                severity_floor: Severity::Critical,
+                requires_operator_clear: true,
+            },
+            CausePolicy {
+                cause: QuarantineCause::SchemaInvalid,
+                severity_floor: Severity::Warn,
+                requires_operator_clear: false,
+            },
+            CausePolicy {
+                cause: QuarantineCause::HardEpsBreach,
+                severity_floor: Severity::Warn,
+                requires_operator_clear: false,
+            },
+            CausePolicy {
+                cause: QuarantineCause::AnomalyTriggered,
+                severity_floor: Severity::Warn,
+                requires_operator_clear: true,
+            },
+            CausePolicy {
+                cause: QuarantineCause::DriftDetected,
+                severity_floor: Severity::Critical,
+                requires_operator_clear: true,
+            },
+            CausePolicy {
+                cause: QuarantineCause::UnsignedRequest,
+                severity_floor: Severity::Critical,
+                requires_operator_clear: true,
+            },
+            CausePolicy {
+                cause: QuarantineCause::UntrustedSubject,
+                severity_floor: Severity::Warn,
+                requires_operator_clear: false,
+            },
+            CausePolicy {
+                cause: QuarantineCause::ManualOperator,
+                severity_floor: Severity::Notice,
+                requires_operator_clear: true,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -131,7 +163,9 @@ impl CauseTaxonomy {
 
     /// Severity floor for this cause.
     pub fn severity_floor(&self, c: QuarantineCause) -> Severity {
-        self.get(c).map(|p| p.severity_floor).unwrap_or(Severity::Info)
+        self.get(c)
+            .map(|p| p.severity_floor)
+            .unwrap_or(Severity::Info)
     }
 }
 
@@ -155,7 +189,10 @@ mod tests {
     #[test]
     fn policy_violation_critical_operator_clear() {
         let t = CauseTaxonomy::canonical();
-        assert_eq!(t.severity_floor(QuarantineCause::PolicyViolation), Severity::Critical);
+        assert_eq!(
+            t.severity_floor(QuarantineCause::PolicyViolation),
+            Severity::Critical
+        );
         assert!(t.requires_operator_clear(QuarantineCause::PolicyViolation));
     }
 
@@ -168,35 +205,56 @@ mod tests {
     #[test]
     fn manual_operator_is_notice() {
         let t = CauseTaxonomy::canonical();
-        assert_eq!(t.severity_floor(QuarantineCause::ManualOperator), Severity::Notice);
+        assert_eq!(
+            t.severity_floor(QuarantineCause::ManualOperator),
+            Severity::Notice
+        );
         assert!(t.requires_operator_clear(QuarantineCause::ManualOperator));
     }
 
     #[test]
     fn unsigned_critical() {
         let t = CauseTaxonomy::canonical();
-        assert_eq!(t.severity_floor(QuarantineCause::UnsignedRequest), Severity::Critical);
+        assert_eq!(
+            t.severity_floor(QuarantineCause::UnsignedRequest),
+            Severity::Critical
+        );
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut t = CauseTaxonomy::canonical();
         t.policies.pop();
-        assert!(matches!(t.validate().unwrap_err(), CauseError::CountInvalid(7)));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CauseError::CountInvalid(7)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = CauseTaxonomy::canonical();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), CauseError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            CauseError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn cause_serde_kebab() {
-        assert_eq!(serde_json::to_string(&QuarantineCause::PolicyViolation).unwrap(), "\"policy-violation\"");
-        assert_eq!(serde_json::to_string(&QuarantineCause::HardEpsBreach).unwrap(), "\"hard-eps-breach\"");
-        assert_eq!(serde_json::to_string(&QuarantineCause::UnsignedRequest).unwrap(), "\"unsigned-request\"");
+        assert_eq!(
+            serde_json::to_string(&QuarantineCause::PolicyViolation).unwrap(),
+            "\"policy-violation\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineCause::HardEpsBreach).unwrap(),
+            "\"hard-eps-breach\""
+        );
+        assert_eq!(
+            serde_json::to_string(&QuarantineCause::UnsignedRequest).unwrap(),
+            "\"unsigned-request\""
+        );
     }
 
     #[test]

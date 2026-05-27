@@ -104,8 +104,12 @@ pub enum AuditRotationError {
 }
 
 const REQUIRED: [AuditClass; 7] = [
-    AuditClass::Audit, AuditClass::Decision, AuditClass::Span,
-    AuditClass::Quarantine, AuditClass::Evidence, AuditClass::TrustScore,
+    AuditClass::Audit,
+    AuditClass::Decision,
+    AuditClass::Span,
+    AuditClass::Quarantine,
+    AuditClass::Evidence,
+    AuditClass::TrustScore,
     AuditClass::Boundary,
 ];
 
@@ -113,13 +117,48 @@ impl AuditRotationPolicy {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let rules = vec![
-            RotationRule { class: AuditClass::Audit,      trigger: RotationTrigger::Daily,             compression: Compression::Zstd, retention_days: 3650 },
-            RotationRule { class: AuditClass::Decision,   trigger: RotationTrigger::Daily,             compression: Compression::Zstd, retention_days: 365 },
-            RotationRule { class: AuditClass::Span,       trigger: RotationTrigger::BySize(100 * 1024 * 1024), compression: Compression::Zstd, retention_days: 90 },
-            RotationRule { class: AuditClass::Quarantine, trigger: RotationTrigger::Weekly,            compression: Compression::Gzip, retention_days: 1825 },
-            RotationRule { class: AuditClass::Evidence,   trigger: RotationTrigger::Daily,             compression: Compression::Zstd, retention_days: 3650 },
-            RotationRule { class: AuditClass::TrustScore, trigger: RotationTrigger::Weekly,            compression: Compression::Gzip, retention_days: 365 },
-            RotationRule { class: AuditClass::Boundary,   trigger: RotationTrigger::OnEvent,           compression: Compression::None, retention_days: 1825 },
+            RotationRule {
+                class: AuditClass::Audit,
+                trigger: RotationTrigger::Daily,
+                compression: Compression::Zstd,
+                retention_days: 3650,
+            },
+            RotationRule {
+                class: AuditClass::Decision,
+                trigger: RotationTrigger::Daily,
+                compression: Compression::Zstd,
+                retention_days: 365,
+            },
+            RotationRule {
+                class: AuditClass::Span,
+                trigger: RotationTrigger::BySize(100 * 1024 * 1024),
+                compression: Compression::Zstd,
+                retention_days: 90,
+            },
+            RotationRule {
+                class: AuditClass::Quarantine,
+                trigger: RotationTrigger::Weekly,
+                compression: Compression::Gzip,
+                retention_days: 1825,
+            },
+            RotationRule {
+                class: AuditClass::Evidence,
+                trigger: RotationTrigger::Daily,
+                compression: Compression::Zstd,
+                retention_days: 3650,
+            },
+            RotationRule {
+                class: AuditClass::TrustScore,
+                trigger: RotationTrigger::Weekly,
+                compression: Compression::Gzip,
+                retention_days: 365,
+            },
+            RotationRule {
+                class: AuditClass::Boundary,
+                trigger: RotationTrigger::OnEvent,
+                compression: Compression::None,
+                retention_days: 1825,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -169,7 +208,9 @@ mod tests {
     #[test]
     fn seven_classes_present() {
         let p = AuditRotationPolicy::canonical();
-        for c in REQUIRED { assert!(p.get(c).is_some(), "missing {c:?}"); }
+        for c in REQUIRED {
+            assert!(p.get(c).is_some(), "missing {c:?}");
+        }
     }
 
     #[test]
@@ -202,36 +243,56 @@ mod tests {
     fn zero_retention_rejected() {
         let mut p = AuditRotationPolicy::canonical();
         p.rules[0].retention_days = 0;
-        assert!(matches!(p.validate().unwrap_err(), AuditRotationError::ZeroRetention(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AuditRotationError::ZeroRetention(_)
+        ));
     }
 
     #[test]
     fn zero_by_size_rejected() {
         let mut p = AuditRotationPolicy::canonical();
         for r in p.rules.iter_mut() {
-            if r.class == AuditClass::Span { r.trigger = RotationTrigger::BySize(0); }
+            if r.class == AuditClass::Span {
+                r.trigger = RotationTrigger::BySize(0);
+            }
         }
-        assert!(matches!(p.validate().unwrap_err(), AuditRotationError::ZeroBySize(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AuditRotationError::ZeroBySize(_)
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut p = AuditRotationPolicy::canonical();
         p.rules.pop();
-        assert!(matches!(p.validate().unwrap_err(), AuditRotationError::CountInvalid(6)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AuditRotationError::CountInvalid(6)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = AuditRotationPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AuditRotationError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AuditRotationError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AuditClass::Audit).unwrap(), "\"audit\"");
-        assert_eq!(serde_json::to_string(&AuditClass::TrustScore).unwrap(), "\"trust-score\"");
+        assert_eq!(
+            serde_json::to_string(&AuditClass::Audit).unwrap(),
+            "\"audit\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AuditClass::TrustScore).unwrap(),
+            "\"trust-score\""
+        );
     }
 
     #[test]

@@ -63,8 +63,15 @@ pub enum MeterError {
 
 impl SaturationMeter {
     /// New.
-    pub fn new(capacity: u32, medium_bp: u32, high_bp: u32, saturated_bp: u32) -> Result<Self, MeterError> {
-        if capacity == 0 { return Err(MeterError::ZeroCapacity); }
+    pub fn new(
+        capacity: u32,
+        medium_bp: u32,
+        high_bp: u32,
+        saturated_bp: u32,
+    ) -> Result<Self, MeterError> {
+        if capacity == 0 {
+            return Err(MeterError::ZeroCapacity);
+        }
         if !(medium_bp < high_bp && high_bp < saturated_bp) {
             return Err(MeterError::BadThresholds);
         }
@@ -79,7 +86,9 @@ impl SaturationMeter {
     }
 
     /// Set held.
-    pub fn set_held(&mut self, held: u32) { self.held = held; }
+    pub fn set_held(&mut self, held: u32) {
+        self.held = held;
+    }
 
     /// Utilization in basis points (may exceed 10000 if held > capacity).
     pub fn utilization_bp(&self) -> u32 {
@@ -90,16 +99,25 @@ impl SaturationMeter {
     /// Classify current level.
     pub fn classify(&self) -> Level {
         let u = self.utilization_bp();
-        if u <= self.medium_bp { Level::Low }
-        else if u <= self.high_bp { Level::Medium }
-        else if u <= self.saturated_bp { Level::High }
-        else { Level::Saturated }
+        if u <= self.medium_bp {
+            Level::Low
+        } else if u <= self.high_bp {
+            Level::Medium
+        } else if u <= self.saturated_bp {
+            Level::High
+        } else {
+            Level::Saturated
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MeterError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MeterError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(MeterError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MeterError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(MeterError::ZeroCapacity);
+        }
         if !(self.medium_bp < self.high_bp && self.high_bp < self.saturated_bp) {
             return Err(MeterError::BadThresholds);
         }
@@ -161,15 +179,24 @@ mod tests {
 
     #[test]
     fn bad_inputs_rejected() {
-        assert!(matches!(SaturationMeter::new(0, 10, 20, 30).unwrap_err(), MeterError::ZeroCapacity));
-        assert!(matches!(SaturationMeter::new(10, 50, 30, 40).unwrap_err(), MeterError::BadThresholds));
+        assert!(matches!(
+            SaturationMeter::new(0, 10, 20, 30).unwrap_err(),
+            MeterError::ZeroCapacity
+        ));
+        assert!(matches!(
+            SaturationMeter::new(10, 50, 30, 40).unwrap_err(),
+            MeterError::BadThresholds
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = meter();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), MeterError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            MeterError::SchemaMismatch
+        ));
     }
 
     #[test]

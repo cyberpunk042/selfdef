@@ -51,7 +51,9 @@ impl StepCurve {
     /// New from steps.
     pub fn new(steps: Vec<Step>, default_y: i64) -> Result<Self, CurveError> {
         for w in steps.windows(2) {
-            if w[0].x >= w[1].x { return Err(CurveError::NotStrictlyIncreasing); }
+            if w[0].x >= w[1].x {
+                return Err(CurveError::NotStrictlyIncreasing);
+            }
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -70,17 +72,24 @@ impl StepCurve {
         let mut hi = self.steps.len();
         while lo < hi {
             let m = (lo + hi) / 2;
-            if self.steps[m].x <= x { lo = m + 1; }
-            else { hi = m; }
+            if self.steps[m].x <= x {
+                lo = m + 1;
+            } else {
+                hi = m;
+            }
         }
         self.steps[lo - 1].y
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CurveError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CurveError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CurveError::SchemaMismatch);
+        }
         for w in self.steps.windows(2) {
-            if w[0].x >= w[1].x { return Err(CurveError::NotStrictlyIncreasing); }
+            if w[0].x >= w[1].x {
+                return Err(CurveError::NotStrictlyIncreasing);
+            }
         }
         Ok(())
     }
@@ -98,7 +107,8 @@ mod tests {
                 Step { x: 100, y: 10 },
             ],
             0,
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]
@@ -132,10 +142,7 @@ mod tests {
 
     #[test]
     fn non_strict_x_rejected() {
-        let r = StepCurve::new(
-            vec![Step { x: 10, y: 1 }, Step { x: 10, y: 2 }],
-            0,
-        );
+        let r = StepCurve::new(vec![Step { x: 10, y: 1 }, Step { x: 10, y: 2 }], 0);
         assert!(matches!(r.unwrap_err(), CurveError::NotStrictlyIncreasing));
     }
 
@@ -143,7 +150,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = curve();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CurveError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CurveError::SchemaMismatch
+        ));
     }
 
     #[test]

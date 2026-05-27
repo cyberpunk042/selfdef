@@ -76,9 +76,12 @@ pub enum SnapshotPolicyError {
 }
 
 const REQUIRED: [SnapshotTrigger; 7] = [
-    SnapshotTrigger::PreCommit, SnapshotTrigger::PreExecuteMode,
-    SnapshotTrigger::PreRulePackUpdate, SnapshotTrigger::PreDoctrineChange,
-    SnapshotTrigger::OperatorRequested, SnapshotTrigger::Periodic,
+    SnapshotTrigger::PreCommit,
+    SnapshotTrigger::PreExecuteMode,
+    SnapshotTrigger::PreRulePackUpdate,
+    SnapshotTrigger::PreDoctrineChange,
+    SnapshotTrigger::OperatorRequested,
+    SnapshotTrigger::Periodic,
     SnapshotTrigger::PreSandboxTier4,
 ];
 
@@ -86,13 +89,41 @@ impl SnapshotPolicy {
     /// Canonical defaults.
     pub fn canonical() -> Self {
         let rules = vec![
-            RetentionRule { trigger: SnapshotTrigger::PreCommit,           retain_count: 50,  age_days: 30  },
-            RetentionRule { trigger: SnapshotTrigger::PreExecuteMode,      retain_count: 20,  age_days: 14  },
-            RetentionRule { trigger: SnapshotTrigger::PreRulePackUpdate,   retain_count: 10,  age_days: 365 },
-            RetentionRule { trigger: SnapshotTrigger::PreDoctrineChange,   retain_count: 10,  age_days: 365 },
-            RetentionRule { trigger: SnapshotTrigger::OperatorRequested,   retain_count: 100, age_days: 90  },
-            RetentionRule { trigger: SnapshotTrigger::Periodic,            retain_count: 24,  age_days: 7   },
-            RetentionRule { trigger: SnapshotTrigger::PreSandboxTier4,     retain_count: 5,   age_days: 90  },
+            RetentionRule {
+                trigger: SnapshotTrigger::PreCommit,
+                retain_count: 50,
+                age_days: 30,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::PreExecuteMode,
+                retain_count: 20,
+                age_days: 14,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::PreRulePackUpdate,
+                retain_count: 10,
+                age_days: 365,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::PreDoctrineChange,
+                retain_count: 10,
+                age_days: 365,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::OperatorRequested,
+                retain_count: 100,
+                age_days: 90,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::Periodic,
+                retain_count: 24,
+                age_days: 7,
+            },
+            RetentionRule {
+                trigger: SnapshotTrigger::PreSandboxTier4,
+                retain_count: 5,
+                age_days: 90,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -130,7 +161,9 @@ impl SnapshotPolicy {
     /// `position_in_recent_N` among same-trigger snapshots (0 = most recent),
     /// be retained?
     pub fn retain(&self, trigger: SnapshotTrigger, age_days_ago: u32, position: u32) -> bool {
-        let Some(rule) = self.get(trigger) else { return false; };
+        let Some(rule) = self.get(trigger) else {
+            return false;
+        };
         position < rule.retain_count && age_days_ago < rule.age_days
     }
 }
@@ -147,7 +180,9 @@ mod tests {
     #[test]
     fn seven_triggers_present() {
         let p = SnapshotPolicy::canonical();
-        for t in REQUIRED { assert!(p.get(t).is_some(), "missing {t:?}"); }
+        for t in REQUIRED {
+            assert!(p.get(t).is_some(), "missing {t:?}");
+        }
     }
 
     #[test]
@@ -170,41 +205,65 @@ mod tests {
     #[test]
     fn rule_pack_update_long_age() {
         let p = SnapshotPolicy::canonical();
-        assert_eq!(p.get(SnapshotTrigger::PreRulePackUpdate).unwrap().age_days, 365);
+        assert_eq!(
+            p.get(SnapshotTrigger::PreRulePackUpdate).unwrap().age_days,
+            365
+        );
     }
 
     #[test]
     fn doctrine_change_long_age() {
         let p = SnapshotPolicy::canonical();
-        assert_eq!(p.get(SnapshotTrigger::PreDoctrineChange).unwrap().age_days, 365);
+        assert_eq!(
+            p.get(SnapshotTrigger::PreDoctrineChange).unwrap().age_days,
+            365
+        );
     }
 
     #[test]
     fn zero_valued_rejected() {
         let mut p = SnapshotPolicy::canonical();
         p.rules[0].retain_count = 0;
-        assert!(matches!(p.validate().unwrap_err(), SnapshotPolicyError::ZeroValued { .. }));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SnapshotPolicyError::ZeroValued { .. }
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut p = SnapshotPolicy::canonical();
         p.rules.pop();
-        assert!(matches!(p.validate().unwrap_err(), SnapshotPolicyError::CountInvalid(6)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SnapshotPolicyError::CountInvalid(6)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SnapshotPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SnapshotPolicyError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SnapshotPolicyError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn trigger_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SnapshotTrigger::PreCommit).unwrap(), "\"pre-commit\"");
-        assert_eq!(serde_json::to_string(&SnapshotTrigger::PreExecuteMode).unwrap(), "\"pre-execute-mode\"");
-        assert_eq!(serde_json::to_string(&SnapshotTrigger::OperatorRequested).unwrap(), "\"operator-requested\"");
+        assert_eq!(
+            serde_json::to_string(&SnapshotTrigger::PreCommit).unwrap(),
+            "\"pre-commit\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SnapshotTrigger::PreExecuteMode).unwrap(),
+            "\"pre-execute-mode\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SnapshotTrigger::OperatorRequested).unwrap(),
+            "\"operator-requested\""
+        );
     }
 
     #[test]

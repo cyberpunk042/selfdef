@@ -59,10 +59,17 @@ pub enum CheckerError {
 
 impl PolicyShapeChecker {
     /// New.
-    pub fn new(required_fields: BTreeSet<String>, max_field_len: u32) -> Result<Self, CheckerError> {
-        if max_field_len == 0 { return Err(CheckerError::MaxFieldLenZero); }
+    pub fn new(
+        required_fields: BTreeSet<String>,
+        max_field_len: u32,
+    ) -> Result<Self, CheckerError> {
+        if max_field_len == 0 {
+            return Err(CheckerError::MaxFieldLenZero);
+        }
         for r in &required_fields {
-            if r.is_empty() { return Err(CheckerError::EmptyRequiredField); }
+            if r.is_empty() {
+                return Err(CheckerError::EmptyRequiredField);
+            }
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -89,16 +96,25 @@ impl PolicyShapeChecker {
         if missing.is_empty() && oversized.is_empty() {
             ShapeVerdict::Ok
         } else {
-            ShapeVerdict::Issues { missing_fields: missing, oversized_fields: oversized }
+            ShapeVerdict::Issues {
+                missing_fields: missing,
+                oversized_fields: oversized,
+            }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CheckerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CheckerError::SchemaMismatch); }
-        if self.max_field_len == 0 { return Err(CheckerError::MaxFieldLenZero); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CheckerError::SchemaMismatch);
+        }
+        if self.max_field_len == 0 {
+            return Err(CheckerError::MaxFieldLenZero);
+        }
         for r in &self.required_fields {
-            if r.is_empty() { return Err(CheckerError::EmptyRequiredField); }
+            if r.is_empty() {
+                return Err(CheckerError::EmptyRequiredField);
+            }
         }
         Ok(())
     }
@@ -120,12 +136,18 @@ mod tests {
     fn empty_required_field_rejected() {
         let mut req = BTreeSet::new();
         req.insert("".into());
-        assert!(matches!(PolicyShapeChecker::new(req, 256).unwrap_err(), CheckerError::EmptyRequiredField));
+        assert!(matches!(
+            PolicyShapeChecker::new(req, 256).unwrap_err(),
+            CheckerError::EmptyRequiredField
+        ));
     }
 
     #[test]
     fn max_field_zero_rejected() {
-        assert!(matches!(PolicyShapeChecker::new(BTreeSet::new(), 0).unwrap_err(), CheckerError::MaxFieldLenZero));
+        assert!(matches!(
+            PolicyShapeChecker::new(BTreeSet::new(), 0).unwrap_err(),
+            CheckerError::MaxFieldLenZero
+        ));
     }
 
     #[test]
@@ -144,7 +166,10 @@ mod tests {
         let mut meta = BTreeMap::new();
         meta.insert("policy_id".into(), "p1".into());
         match c.check(&meta) {
-            ShapeVerdict::Issues { missing_fields, oversized_fields } => {
+            ShapeVerdict::Issues {
+                missing_fields,
+                oversized_fields,
+            } => {
                 assert!(missing_fields.contains(&"version".into()));
                 assert!(missing_fields.contains(&"signature".into()));
                 assert!(oversized_fields.is_empty());
@@ -161,7 +186,9 @@ mod tests {
         meta.insert("version".into(), "1.0.0".into());
         meta.insert("signature".into(), "A".repeat(500));
         match c.check(&meta) {
-            ShapeVerdict::Issues { oversized_fields, .. } => {
+            ShapeVerdict::Issues {
+                oversized_fields, ..
+            } => {
                 assert_eq!(oversized_fields[0].0, "signature");
                 assert_eq!(oversized_fields[0].1, 500);
             }
@@ -173,7 +200,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = checker();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CheckerError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CheckerError::SchemaMismatch
+        ));
     }
 
     #[test]

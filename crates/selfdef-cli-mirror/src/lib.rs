@@ -223,7 +223,8 @@ impl CliMirrorSnapshot {
         for s in &self.subcommands {
             *m.entry(s.effect_class).or_insert(0) += 1;
         }
-        let mut out: Vec<EffectSummary> = m.into_iter()
+        let mut out: Vec<EffectSummary> = m
+            .into_iter()
             .map(|(effect, count)| EffectSummary { effect, count })
             .collect();
         out.sort_by_key(|s| match s.effect {
@@ -241,7 +242,8 @@ impl CliMirrorSnapshot {
 
     /// Find subcommands that require an MS003 signature.
     pub fn signature_required_paths(&self) -> Vec<&str> {
-        self.subcommands.iter()
+        self.subcommands
+            .iter()
             .filter(|s| s.requires_signature)
             .map(|s| s.path.as_str())
             .collect()
@@ -249,7 +251,8 @@ impl CliMirrorSnapshot {
 
     /// Find subcommands targeting a given mirror crate.
     pub fn for_mirror<'a>(&'a self, mirror_name: &str) -> Vec<&'a SubcommandEntry> {
-        self.subcommands.iter()
+        self.subcommands
+            .iter()
             .filter(|s| s.mirror == mirror_name)
             .collect()
     }
@@ -259,7 +262,12 @@ impl CliMirrorSnapshot {
 mod tests {
     use super::*;
 
-    fn mk_sub(path: &str, effect: EffectClass, requires_sig: bool, mirror: &str) -> SubcommandEntry {
+    fn mk_sub(
+        path: &str,
+        effect: EffectClass,
+        requires_sig: bool,
+        mirror: &str,
+    ) -> SubcommandEntry {
         SubcommandEntry {
             path: path.into(),
             help_summary: format!("test help for {path}"),
@@ -274,7 +282,8 @@ mod tests {
                 EffectClass::Commit => "l5_commit",
                 EffectClass::Persist => "l6_persist",
                 EffectClass::Destructive => "l5_commit",
-            }.into(),
+            }
+            .into(),
             args: vec![],
             mirror: mirror.into(),
             requires_signature: requires_sig,
@@ -304,7 +313,10 @@ mod tests {
     fn schema_rejects_major_drift() {
         let mut s = mk_snap_with(vec![]);
         s.schema_version = "2.0.0".into();
-        assert!(matches!(s.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            s.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -328,18 +340,38 @@ mod tests {
 
     #[test]
     fn surface_size_threshold_at_50() {
-        let small = mk_snap_with(vec![mk_sub("grant.list", EffectClass::ReadOnly, false, "selfdef-grants-mirror")]);
-        assert!(matches!(small.validate_surface_size().unwrap_err(), MirrorError::SubcommandCountLow(1)));
+        let small = mk_snap_with(vec![mk_sub(
+            "grant.list",
+            EffectClass::ReadOnly,
+            false,
+            "selfdef-grants-mirror",
+        )]);
+        assert!(matches!(
+            small.validate_surface_size().unwrap_err(),
+            MirrorError::SubcommandCountLow(1)
+        ));
 
-        let big: Vec<SubcommandEntry> = (0..50).map(|i| mk_sub(&format!("ns.cmd{i}"), EffectClass::ReadOnly, false, "")).collect();
+        let big: Vec<SubcommandEntry> = (0..50)
+            .map(|i| mk_sub(&format!("ns.cmd{i}"), EffectClass::ReadOnly, false, ""))
+            .collect();
         mk_snap_with(big).validate_surface_size().unwrap();
     }
 
     #[test]
     fn find_by_path() {
         let snap = mk_snap_with(vec![
-            mk_sub("grant.list", EffectClass::ReadOnly, false, "selfdef-grants-mirror"),
-            mk_sub("token.mint", EffectClass::Commit, true, "selfdef-capability-mirror"),
+            mk_sub(
+                "grant.list",
+                EffectClass::ReadOnly,
+                false,
+                "selfdef-grants-mirror",
+            ),
+            mk_sub(
+                "token.mint",
+                EffectClass::Commit,
+                true,
+                "selfdef-capability-mirror",
+            ),
         ]);
         assert_eq!(snap.find("token.mint").unwrap().requires_signature, true);
         assert!(snap.find("nonexistent").is_none());
@@ -354,9 +386,15 @@ mod tests {
             mk_sub("d", EffectClass::Destructive, true, ""),
         ]);
         let s = snap.recompute_summaries();
-        let ro = s.iter().find(|x| x.effect == EffectClass::ReadOnly).unwrap();
+        let ro = s
+            .iter()
+            .find(|x| x.effect == EffectClass::ReadOnly)
+            .unwrap();
         assert_eq!(ro.count, 2);
-        let dst = s.iter().find(|x| x.effect == EffectClass::Destructive).unwrap();
+        let dst = s
+            .iter()
+            .find(|x| x.effect == EffectClass::Destructive)
+            .unwrap();
         assert_eq!(dst.count, 1);
     }
 
@@ -376,9 +414,24 @@ mod tests {
     #[test]
     fn for_mirror_filters_by_mirror_target() {
         let snap = mk_snap_with(vec![
-            mk_sub("grant.list", EffectClass::ReadOnly, false, "selfdef-grants-mirror"),
-            mk_sub("grant.approve", EffectClass::Commit, true, "selfdef-grants-mirror"),
-            mk_sub("token.list", EffectClass::ReadOnly, false, "selfdef-capability-mirror"),
+            mk_sub(
+                "grant.list",
+                EffectClass::ReadOnly,
+                false,
+                "selfdef-grants-mirror",
+            ),
+            mk_sub(
+                "grant.approve",
+                EffectClass::Commit,
+                true,
+                "selfdef-grants-mirror",
+            ),
+            mk_sub(
+                "token.list",
+                EffectClass::ReadOnly,
+                false,
+                "selfdef-capability-mirror",
+            ),
         ]);
         let grant_subs = snap.for_mirror("selfdef-grants-mirror");
         assert_eq!(grant_subs.len(), 2);

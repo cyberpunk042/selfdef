@@ -103,7 +103,10 @@ impl GracefulDrain {
             None => return DrainVerdict::NotDraining,
         };
         if in_flight_count == 0 {
-            return DrainVerdict::DrainReadyToSwap { reason: ReadyReason::Idle, leftover_count: 0 };
+            return DrainVerdict::DrainReadyToSwap {
+                reason: ReadyReason::Idle,
+                leftover_count: 0,
+            };
         }
         if now_ms >= deadline {
             return DrainVerdict::DrainReadyToSwap {
@@ -119,13 +122,17 @@ impl GracefulDrain {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DrainError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DrainError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DrainError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for GracefulDrain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -143,9 +150,13 @@ mod tests {
         let mut d = GracefulDrain::new();
         d.begin_drain(0, 1000);
         let v = d.observe(0, 100);
-        assert_eq!(v, DrainVerdict::DrainReadyToSwap {
-            reason: ReadyReason::Idle, leftover_count: 0,
-        });
+        assert_eq!(
+            v,
+            DrainVerdict::DrainReadyToSwap {
+                reason: ReadyReason::Idle,
+                leftover_count: 0,
+            }
+        );
     }
 
     #[test]
@@ -153,10 +164,13 @@ mod tests {
         let mut d = GracefulDrain::new();
         d.begin_drain(0, 1000);
         let v = d.observe(3, 200);
-        assert_eq!(v, DrainVerdict::DrainContinue {
-            in_flight: 3,
-            remaining_ms: 800,
-        });
+        assert_eq!(
+            v,
+            DrainVerdict::DrainContinue {
+                in_flight: 3,
+                remaining_ms: 800,
+            }
+        );
     }
 
     #[test]
@@ -164,10 +178,13 @@ mod tests {
         let mut d = GracefulDrain::new();
         d.begin_drain(0, 1000);
         let v = d.observe(3, 5000);
-        assert_eq!(v, DrainVerdict::DrainReadyToSwap {
-            reason: ReadyReason::TimedOut,
-            leftover_count: 3,
-        });
+        assert_eq!(
+            v,
+            DrainVerdict::DrainReadyToSwap {
+                reason: ReadyReason::TimedOut,
+                leftover_count: 3,
+            }
+        );
     }
 
     #[test]
@@ -182,7 +199,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut d = GracefulDrain::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DrainError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DrainError::SchemaMismatch
+        ));
     }
 
     #[test]

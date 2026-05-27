@@ -70,9 +70,16 @@ fn scan_aws(input: &str) -> Vec<Hit> {
     while i + 20 <= bytes.len() {
         if &bytes[i..i + 4] == b"AKIA" {
             let tail = &bytes[i + 4..i + 20];
-            let ok = tail.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+            let ok = tail
+                .iter()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
             if ok {
-                hits.push(Hit { class: DetectorClass::AwsAccessKey, offset: i, length: 20, score: 95 });
+                hits.push(Hit {
+                    class: DetectorClass::AwsAccessKey,
+                    offset: i,
+                    length: 20,
+                    score: 95,
+                });
                 i += 20;
                 continue;
             }
@@ -92,7 +99,12 @@ fn scan_github(input: &str) -> Vec<Hit> {
             let tail = &bytes[i + 4..i + 40];
             let ok = tail.iter().all(|b| b.is_ascii_alphanumeric());
             if ok {
-                hits.push(Hit { class: DetectorClass::GitHubToken, offset: i, length: 40, score: 95 });
+                hits.push(Hit {
+                    class: DetectorClass::GitHubToken,
+                    offset: i,
+                    length: 40,
+                    score: 95,
+                });
                 i += 40;
                 continue;
             }
@@ -106,7 +118,11 @@ fn scan_generic(input: &str) -> Vec<Hit> {
     let mut hits = Vec::new();
     let lower = input.to_ascii_lowercase();
     let lbytes = lower.as_bytes();
-    for needle in [b"apikey=".as_slice(), b"api_key=".as_slice(), b"token=".as_slice()] {
+    for needle in [
+        b"apikey=".as_slice(),
+        b"api_key=".as_slice(),
+        b"token=".as_slice(),
+    ] {
         let mut start = 0;
         while let Some(pos) = find_substring(&lbytes[start..], needle) {
             let off = start + pos;
@@ -149,7 +165,9 @@ fn scan_gcp(input: &str) -> Vec<Hit> {
 }
 
 fn find_substring(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || needle.len() > haystack.len() { return None; }
+    if needle.is_empty() || needle.len() > haystack.len() {
+        return None;
+    }
     for i in 0..=haystack.len() - needle.len() {
         if &haystack[i..i + needle.len()] == needle {
             return Some(i);
@@ -170,7 +188,10 @@ mod tests {
     #[test]
     fn aws_access_key_detected() {
         let hits = scan("aws=AKIAIOSFODNN7EXAMPLE here");
-        assert!(hits.iter().any(|h| h.class == DetectorClass::AwsAccessKey && h.score >= 90));
+        assert!(
+            hits.iter()
+                .any(|h| h.class == DetectorClass::AwsAccessKey && h.score >= 90)
+        );
     }
 
     #[test]
@@ -201,7 +222,10 @@ mod tests {
     fn gcp_service_account_detected() {
         let json = r#"{"type": "service_account", "project_id": "x"}"#;
         let hits = scan(json);
-        assert!(hits.iter().any(|h| h.class == DetectorClass::GcpServiceAccount));
+        assert!(
+            hits.iter()
+                .any(|h| h.class == DetectorClass::GcpServiceAccount)
+        );
     }
 
     #[test]
@@ -218,24 +242,46 @@ mod tests {
 
     #[test]
     fn token_var_variants() {
-        for variant in ["api_key=ABCDEFGHIJKLMNOPQRSTUVWXYZ", "token=ABCDEFGHIJKLMNOPQRSTUVWXYZ"] {
+        for variant in [
+            "api_key=ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+            "token=ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        ] {
             let hits = scan(variant);
-            assert!(hits.iter().any(|h| h.class == DetectorClass::GenericApiKey),
-                "variant didn't match: {variant}");
+            assert!(
+                hits.iter().any(|h| h.class == DetectorClass::GenericApiKey),
+                "variant didn't match: {variant}"
+            );
         }
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DetectorClass::AwsAccessKey).unwrap(), "\"aws-access-key\"");
-        assert_eq!(serde_json::to_string(&DetectorClass::GitHubToken).unwrap(), "\"git-hub-token\"");
-        assert_eq!(serde_json::to_string(&DetectorClass::GenericApiKey).unwrap(), "\"generic-api-key\"");
-        assert_eq!(serde_json::to_string(&DetectorClass::GcpServiceAccount).unwrap(), "\"gcp-service-account\"");
+        assert_eq!(
+            serde_json::to_string(&DetectorClass::AwsAccessKey).unwrap(),
+            "\"aws-access-key\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DetectorClass::GitHubToken).unwrap(),
+            "\"git-hub-token\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DetectorClass::GenericApiKey).unwrap(),
+            "\"generic-api-key\""
+        );
+        assert_eq!(
+            serde_json::to_string(&DetectorClass::GcpServiceAccount).unwrap(),
+            "\"gcp-service-account\""
+        );
     }
 
     #[test]
     fn hit_serde_roundtrip() {
-        let h = Hit { class: DetectorClass::AwsAccessKey, offset: 5, length: 20, score: 95 };
+        let h = Hit {
+            class: DetectorClass::AwsAccessKey,
+            offset: 5,
+            length: 20,
+            score: 95,
+        };
         let j = serde_json::to_string(&h).unwrap();
         let back: Hit = serde_json::from_str(&j).unwrap();
         assert_eq!(h, back);

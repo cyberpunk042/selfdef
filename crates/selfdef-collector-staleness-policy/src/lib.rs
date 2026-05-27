@@ -89,16 +89,29 @@ impl CollectorStalenessPolicy {
 
     /// Set budget for a source.
     pub fn set_budget(&mut self, source: &str, max_age_ms: u64) -> Result<(), StalenessError> {
-        if source.is_empty() { return Err(StalenessError::EmptySource); }
+        if source.is_empty() {
+            return Err(StalenessError::EmptySource);
+        }
         let prev_last = self.sources.get(source).and_then(|e| e.last_ts_ms);
-        self.sources.insert(source.into(), Entry { max_age_ms, last_ts_ms: prev_last });
+        self.sources.insert(
+            source.into(),
+            Entry {
+                max_age_ms,
+                last_ts_ms: prev_last,
+            },
+        );
         Ok(())
     }
 
     /// Record a fresh sample.
     pub fn record(&mut self, source: &str, ts_ms: u64) -> Result<(), StalenessError> {
-        if source.is_empty() { return Err(StalenessError::EmptySource); }
-        let e = self.sources.entry(source.into()).or_insert(Entry { max_age_ms: u64::MAX, last_ts_ms: None });
+        if source.is_empty() {
+            return Err(StalenessError::EmptySource);
+        }
+        let e = self.sources.entry(source.into()).or_insert(Entry {
+            max_age_ms: u64::MAX,
+            last_ts_ms: None,
+        });
         if let Some(prev) = e.last_ts_ms {
             if ts_ms < prev {
                 return Err(StalenessError::NonMonotonic { prev, new: ts_ms });
@@ -121,7 +134,10 @@ impl CollectorStalenessPolicy {
                 if age <= e.max_age_ms {
                     StalenessVerdict::Fresh { age_ms: age }
                 } else {
-                    StalenessVerdict::Stale { age_ms: age, budget_ms: e.max_age_ms }
+                    StalenessVerdict::Stale {
+                        age_ms: age,
+                        budget_ms: e.max_age_ms,
+                    }
                 }
             }
         }
@@ -129,16 +145,22 @@ impl CollectorStalenessPolicy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StalenessError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StalenessError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StalenessError::SchemaMismatch);
+        }
         for k in self.sources.keys() {
-            if k.is_empty() { return Err(StalenessError::EmptySource); }
+            if k.is_empty() {
+                return Err(StalenessError::EmptySource);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for CollectorStalenessPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -163,7 +185,10 @@ mod tests {
         let mut p = CollectorStalenessPolicy::new();
         p.set_budget("s", 1000).unwrap();
         p.record("s", 100).unwrap();
-        assert_eq!(p.classify("s", 500), StalenessVerdict::Fresh { age_ms: 400 });
+        assert_eq!(
+            p.classify("s", 500),
+            StalenessVerdict::Fresh { age_ms: 400 }
+        );
     }
 
     #[test]
@@ -172,20 +197,32 @@ mod tests {
         p.set_budget("s", 1000).unwrap();
         p.record("s", 100).unwrap();
         let v = p.classify("s", 5000);
-        assert_eq!(v, StalenessVerdict::Stale { age_ms: 4900, budget_ms: 1000 });
+        assert_eq!(
+            v,
+            StalenessVerdict::Stale {
+                age_ms: 4900,
+                budget_ms: 1000
+            }
+        );
     }
 
     #[test]
     fn nonmonotonic_record_rejected() {
         let mut p = CollectorStalenessPolicy::new();
         p.record("s", 200).unwrap();
-        assert!(matches!(p.record("s", 100).unwrap_err(), StalenessError::NonMonotonic { .. }));
+        assert!(matches!(
+            p.record("s", 100).unwrap_err(),
+            StalenessError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
     fn empty_source_rejected() {
         let mut p = CollectorStalenessPolicy::new();
-        assert!(matches!(p.record("", 0).unwrap_err(), StalenessError::EmptySource));
+        assert!(matches!(
+            p.record("", 0).unwrap_err(),
+            StalenessError::EmptySource
+        ));
     }
 
     #[test]
@@ -194,14 +231,20 @@ mod tests {
         p.set_budget("s", 1000).unwrap();
         p.record("s", 100).unwrap();
         p.set_budget("s", 500).unwrap();
-        assert_eq!(p.classify("s", 300), StalenessVerdict::Fresh { age_ms: 200 });
+        assert_eq!(
+            p.classify("s", 300),
+            StalenessVerdict::Fresh { age_ms: 200 }
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = CollectorStalenessPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), StalenessError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            StalenessError::SchemaMismatch
+        ));
     }
 
     #[test]

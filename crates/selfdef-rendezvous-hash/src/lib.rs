@@ -64,12 +64,17 @@ fn weight(key: &str, node: &str) -> u64 {
 impl RendezvousHash {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), nodes: BTreeSet::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            nodes: BTreeSet::new(),
+        }
     }
 
     /// Add a node.
     pub fn add_node(&mut self, node: &str) -> Result<(), HrwError> {
-        if node.is_empty() { return Err(HrwError::EmptyNode); }
+        if node.is_empty() {
+            return Err(HrwError::EmptyNode);
+        }
         self.nodes.insert(node.into());
         Ok(())
     }
@@ -81,33 +86,48 @@ impl RendezvousHash {
 
     /// Highest-weight node for key.
     pub fn assign(&self, key: &str) -> Result<&str, HrwError> {
-        if self.nodes.is_empty() { return Err(HrwError::NoNodes); }
+        if self.nodes.is_empty() {
+            return Err(HrwError::NoNodes);
+        }
         let best = self.nodes.iter().max_by_key(|n| weight(key, n)).unwrap();
         Ok(best)
     }
 
     /// Top-k nodes for key in descending-weight order.
     pub fn top_k(&self, key: &str, k: usize) -> Result<Vec<&str>, HrwError> {
-        if self.nodes.is_empty() { return Err(HrwError::NoNodes); }
-        if k == 0 || k > self.nodes.len() { return Err(HrwError::BadK); }
-        let mut by_weight: Vec<(u64, &str)> = self.nodes.iter()
-            .map(|n| (weight(key, n), n.as_str())).collect();
+        if self.nodes.is_empty() {
+            return Err(HrwError::NoNodes);
+        }
+        if k == 0 || k > self.nodes.len() {
+            return Err(HrwError::BadK);
+        }
+        let mut by_weight: Vec<(u64, &str)> = self
+            .nodes
+            .iter()
+            .map(|n| (weight(key, n), n.as_str()))
+            .collect();
         by_weight.sort_by(|a, b| b.0.cmp(&a.0));
         Ok(by_weight.into_iter().take(k).map(|(_, n)| n).collect())
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), HrwError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(HrwError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(HrwError::SchemaMismatch);
+        }
         for n in &self.nodes {
-            if n.is_empty() { return Err(HrwError::EmptyNode); }
+            if n.is_empty() {
+                return Err(HrwError::EmptyNode);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for RendezvousHash {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -117,7 +137,9 @@ mod tests {
 
     fn h() -> RendezvousHash {
         let mut h = RendezvousHash::new();
-        for n in &["a", "b", "c", "d", "e"] { h.add_node(n).unwrap(); }
+        for n in &["a", "b", "c", "d", "e"] {
+            h.add_node(n).unwrap();
+        }
         h
     }
 
@@ -140,7 +162,9 @@ mod tests {
         let top = h.top_k("k", 3).unwrap();
         assert_eq!(top.len(), 3);
         let mut set: BTreeSet<&str> = BTreeSet::new();
-        for n in &top { set.insert(n); }
+        for n in &top {
+            set.insert(n);
+        }
         assert_eq!(set.len(), 3);
     }
 
@@ -169,7 +193,9 @@ mod tests {
             if h.assign(&k).unwrap() == "c" {
                 victims.push(Box::leak(k.into_boxed_str()));
             }
-            if victims.len() > 10 { break; }
+            if victims.len() > 10 {
+                break;
+            }
         }
         h.remove_node("c");
         for v in &victims {
@@ -188,7 +214,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut h = RendezvousHash::new();
         h.schema_version = "9.9.9".into();
-        assert!(matches!(h.validate().unwrap_err(), HrwError::SchemaMismatch));
+        assert!(matches!(
+            h.validate().unwrap_err(),
+            HrwError::SchemaMismatch
+        ));
     }
 
     #[test]

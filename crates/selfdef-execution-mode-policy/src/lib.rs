@@ -86,32 +86,46 @@ impl ExecutionMode {
     pub fn capabilities(self) -> ModeCapabilities {
         match self {
             ExecutionMode::Plan => ModeCapabilities {
-                writes_allowed: false, network_allowed: false,
-                snapshot_required: false, replay_source_required: false,
+                writes_allowed: false,
+                network_allowed: false,
+                snapshot_required: false,
+                replay_source_required: false,
             },
             ExecutionMode::DryRun => ModeCapabilities {
-                writes_allowed: false, network_allowed: true,
-                snapshot_required: false, replay_source_required: false,
+                writes_allowed: false,
+                network_allowed: true,
+                snapshot_required: false,
+                replay_source_required: false,
             },
             ExecutionMode::Shadow => ModeCapabilities {
-                writes_allowed: false, network_allowed: true,
-                snapshot_required: false, replay_source_required: false,
+                writes_allowed: false,
+                network_allowed: true,
+                snapshot_required: false,
+                replay_source_required: false,
             },
             ExecutionMode::Sandbox => ModeCapabilities {
-                writes_allowed: true, network_allowed: false,
-                snapshot_required: false, replay_source_required: false,
+                writes_allowed: true,
+                network_allowed: false,
+                snapshot_required: false,
+                replay_source_required: false,
             },
             ExecutionMode::Execute => ModeCapabilities {
-                writes_allowed: true, network_allowed: true,
-                snapshot_required: true, replay_source_required: false,
+                writes_allowed: true,
+                network_allowed: true,
+                snapshot_required: true,
+                replay_source_required: false,
             },
             ExecutionMode::Replay => ModeCapabilities {
-                writes_allowed: false, network_allowed: false,
-                snapshot_required: false, replay_source_required: true,
+                writes_allowed: false,
+                network_allowed: false,
+                snapshot_required: false,
+                replay_source_required: true,
             },
             ExecutionMode::Debug => ModeCapabilities {
-                writes_allowed: true, network_allowed: true,
-                snapshot_required: false, replay_source_required: false,
+                writes_allowed: true,
+                network_allowed: true,
+                snapshot_required: false,
+                replay_source_required: false,
             },
         }
     }
@@ -139,7 +153,10 @@ impl ExecutionMode {
 
 /// IPS authority assertion: runtime's declared tuple must equal IPS's.
 /// The selfdef daemon calls this when validating a sovereign-os mirror.
-pub fn assert_runtime_matches(mode: ExecutionMode, runtime: ModeCapabilities) -> Result<(), PolicyError> {
+pub fn assert_runtime_matches(
+    mode: ExecutionMode,
+    runtime: ModeCapabilities,
+) -> Result<(), PolicyError> {
     let ips = mode.capabilities();
     if runtime != ips {
         return Err(PolicyError::PolicyDrift { mode, runtime, ips });
@@ -181,16 +198,22 @@ mod tests {
     #[test]
     fn replay_only_mode_requiring_source() {
         for m in ExecutionMode::ALL {
-            assert_eq!(m.requires_replay_source(), m == ExecutionMode::Replay,
-                "{m:?} replay-source mismatch");
+            assert_eq!(
+                m.requires_replay_source(),
+                m == ExecutionMode::Replay,
+                "{m:?} replay-source mismatch"
+            );
         }
     }
 
     #[test]
     fn execute_only_mode_requiring_snapshot() {
         for m in ExecutionMode::ALL {
-            assert_eq!(m.requires_snapshot(), m == ExecutionMode::Execute,
-                "{m:?} snapshot mismatch");
+            assert_eq!(
+                m.requires_snapshot(),
+                m == ExecutionMode::Execute,
+                "{m:?} snapshot mismatch"
+            );
         }
     }
 
@@ -203,7 +226,10 @@ mod tests {
 
     #[test]
     fn dry_run_and_shadow_same_tuple() {
-        assert_eq!(ExecutionMode::DryRun.capabilities(), ExecutionMode::Shadow.capabilities());
+        assert_eq!(
+            ExecutionMode::DryRun.capabilities(),
+            ExecutionMode::Shadow.capabilities()
+        );
     }
 
     #[test]
@@ -216,8 +242,10 @@ mod tests {
     #[test]
     fn assert_runtime_matches_catches_drift() {
         let bad = ModeCapabilities {
-            writes_allowed: true, network_allowed: true,
-            snapshot_required: false, replay_source_required: false,
+            writes_allowed: true,
+            network_allowed: true,
+            snapshot_required: false,
+            replay_source_required: false,
         };
         match assert_runtime_matches(ExecutionMode::Plan, bad).unwrap_err() {
             PolicyError::PolicyDrift { mode, .. } => assert_eq!(mode, ExecutionMode::Plan),
@@ -227,9 +255,18 @@ mod tests {
 
     #[test]
     fn mode_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExecutionMode::Plan).unwrap(), "\"plan\"");
-        assert_eq!(serde_json::to_string(&ExecutionMode::DryRun).unwrap(), "\"dry-run\"");
-        assert_eq!(serde_json::to_string(&ExecutionMode::Sandbox).unwrap(), "\"sandbox\"");
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::Plan).unwrap(),
+            "\"plan\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::DryRun).unwrap(),
+            "\"dry-run\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExecutionMode::Sandbox).unwrap(),
+            "\"sandbox\""
+        );
     }
 
     #[test]

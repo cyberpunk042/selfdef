@@ -176,7 +176,8 @@ pub const PANEL_ROUTES: [PanelRoute; 4] = [
 
 /// Find the route for a given panel kind.
 pub fn route_for(kind: PanelKind) -> Result<PanelRoute, WebError> {
-    PANEL_ROUTES.iter()
+    PANEL_ROUTES
+        .iter()
         .find(|r| r.kind == kind)
         .copied()
         .ok_or(WebError::UnknownPanel(kind))
@@ -208,9 +209,15 @@ mod tests {
     fn non_loopback_host_refused() {
         let mut c = WebConfig::default();
         c.host = "0.0.0.0".into();
-        assert!(matches!(c.validate().unwrap_err(), WebError::NonLoopbackHost(_)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WebError::NonLoopbackHost(_)
+        ));
         c.host = "192.168.1.1".into();
-        assert!(matches!(c.validate().unwrap_err(), WebError::NonLoopbackHost(_)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WebError::NonLoopbackHost(_)
+        ));
     }
 
     #[test]
@@ -224,7 +231,10 @@ mod tests {
     fn refresh_floor_enforced() {
         let mut c = WebConfig::default();
         c.sse_refresh_ms = 50;
-        assert!(matches!(c.validate().unwrap_err(), WebError::RefreshFloor(50)));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WebError::RefreshFloor(50)
+        ));
     }
 
     #[test]
@@ -232,7 +242,10 @@ mod tests {
         let c = WebConfig::default();
         assert!(c.read_only_default);
         assert!(!c.has_operator_key());
-        assert!(matches!(c.assert_mutation_allowed().unwrap_err(), WebError::OperatorKeyMissing));
+        assert!(matches!(
+            c.assert_mutation_allowed().unwrap_err(),
+            WebError::OperatorKeyMissing
+        ));
     }
 
     #[test]
@@ -247,13 +260,21 @@ mod tests {
     fn schema_drift_caught() {
         let mut c = WebConfig::default();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), WebError::SchemaMismatch { .. }));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            WebError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
     fn four_canonical_routes_present() {
         assert_eq!(PANEL_ROUTES.len(), 4);
-        for kind in [PanelKind::Rules, PanelKind::Grants, PanelKind::Quarantine, PanelKind::Authority] {
+        for kind in [
+            PanelKind::Rules,
+            PanelKind::Grants,
+            PanelKind::Quarantine,
+            PanelKind::Authority,
+        ] {
             assert!(route_for(kind).is_ok());
         }
     }

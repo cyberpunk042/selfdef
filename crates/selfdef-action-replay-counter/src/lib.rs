@@ -48,7 +48,9 @@ fn key(subject: &str, action: &str, resource: &str) -> String {
 impl ActionReplayCounter {
     /// New with window length.
     pub fn new(window_ms: u64) -> Result<Self, CounterError> {
-        if window_ms == 0 { return Err(CounterError::ZeroWindow); }
+        if window_ms == 0 {
+            return Err(CounterError::ZeroWindow);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_ms,
@@ -57,7 +59,13 @@ impl ActionReplayCounter {
     }
 
     /// Record a request.
-    pub fn record(&mut self, subject: &str, action: &str, resource: &str, now_ms: u64) -> Result<(), CounterError> {
+    pub fn record(
+        &mut self,
+        subject: &str,
+        action: &str,
+        resource: &str,
+        now_ms: u64,
+    ) -> Result<(), CounterError> {
         if subject.is_empty() || action.is_empty() || resource.is_empty() {
             return Err(CounterError::MissingKeyField);
         }
@@ -79,12 +87,21 @@ impl ActionReplayCounter {
         };
         entry.retain(|t| *t >= cutoff);
         let n = entry.len() as u32;
-        if n == 0 { self.timestamps.remove(&k); }
+        if n == 0 {
+            self.timestamps.remove(&k);
+        }
         n
     }
 
     /// True if repeats ≥ threshold.
-    pub fn is_repeating(&mut self, subject: &str, action: &str, resource: &str, now_ms: u64, threshold: u32) -> bool {
+    pub fn is_repeating(
+        &mut self,
+        subject: &str,
+        action: &str,
+        resource: &str,
+        now_ms: u64,
+        threshold: u32,
+    ) -> bool {
         self.count(subject, action, resource, now_ms) >= threshold
     }
 
@@ -93,7 +110,9 @@ impl ActionReplayCounter {
         if self.schema_version != SCHEMA_VERSION {
             return Err(CounterError::SchemaMismatch);
         }
-        if self.window_ms == 0 { return Err(CounterError::ZeroWindow); }
+        if self.window_ms == 0 {
+            return Err(CounterError::ZeroWindow);
+        }
         Ok(())
     }
 }
@@ -104,7 +123,10 @@ mod tests {
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(ActionReplayCounter::new(0).unwrap_err(), CounterError::ZeroWindow));
+        assert!(matches!(
+            ActionReplayCounter::new(0).unwrap_err(),
+            CounterError::ZeroWindow
+        ));
     }
 
     #[test]
@@ -136,7 +158,9 @@ mod tests {
     #[test]
     fn is_repeating_at_threshold() {
         let mut c = ActionReplayCounter::new(60_000).unwrap();
-        for i in 0..5 { c.record("a", "x", "/r", 1000 + i * 100).unwrap(); }
+        for i in 0..5 {
+            c.record("a", "x", "/r", 1000 + i * 100).unwrap();
+        }
         assert!(c.is_repeating("a", "x", "/r", 5000, 5));
         assert!(!c.is_repeating("a", "x", "/r", 5000, 6));
     }
@@ -144,16 +168,28 @@ mod tests {
     #[test]
     fn missing_key_field_rejected() {
         let mut c = ActionReplayCounter::new(1000).unwrap();
-        assert!(matches!(c.record("", "x", "/r", 0).unwrap_err(), CounterError::MissingKeyField));
-        assert!(matches!(c.record("a", "", "/r", 0).unwrap_err(), CounterError::MissingKeyField));
-        assert!(matches!(c.record("a", "x", "", 0).unwrap_err(), CounterError::MissingKeyField));
+        assert!(matches!(
+            c.record("", "x", "/r", 0).unwrap_err(),
+            CounterError::MissingKeyField
+        ));
+        assert!(matches!(
+            c.record("a", "", "/r", 0).unwrap_err(),
+            CounterError::MissingKeyField
+        ));
+        assert!(matches!(
+            c.record("a", "x", "", 0).unwrap_err(),
+            CounterError::MissingKeyField
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = ActionReplayCounter::new(1000).unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CounterError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CounterError::SchemaMismatch
+        ));
     }
 
     #[test]

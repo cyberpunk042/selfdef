@@ -85,24 +85,52 @@ pub enum PriorityError {
 }
 
 const REQUIRED: [EventClass; 8] = [
-    EventClass::Quarantine, EventClass::SecurityIncident,
-    EventClass::PolicyDecision, EventClass::TraceSpan,
-    EventClass::AuditChainLink, EventClass::TelemetryTick,
-    EventClass::AnomalyHint, EventClass::CockpitToast,
+    EventClass::Quarantine,
+    EventClass::SecurityIncident,
+    EventClass::PolicyDecision,
+    EventClass::TraceSpan,
+    EventClass::AuditChainLink,
+    EventClass::TelemetryTick,
+    EventClass::AnomalyHint,
+    EventClass::CockpitToast,
 ];
 
 impl BusPriorityPolicy {
     /// Canonical assignment.
     pub fn canonical() -> Self {
         let assignments = vec![
-            ClassPriority { class: EventClass::Quarantine,       priority: Priority::Critical },
-            ClassPriority { class: EventClass::SecurityIncident, priority: Priority::Critical },
-            ClassPriority { class: EventClass::PolicyDecision,   priority: Priority::High },
-            ClassPriority { class: EventClass::AuditChainLink,   priority: Priority::High },
-            ClassPriority { class: EventClass::TraceSpan,        priority: Priority::Normal },
-            ClassPriority { class: EventClass::AnomalyHint,      priority: Priority::Normal },
-            ClassPriority { class: EventClass::TelemetryTick,    priority: Priority::Low },
-            ClassPriority { class: EventClass::CockpitToast,     priority: Priority::Low },
+            ClassPriority {
+                class: EventClass::Quarantine,
+                priority: Priority::Critical,
+            },
+            ClassPriority {
+                class: EventClass::SecurityIncident,
+                priority: Priority::Critical,
+            },
+            ClassPriority {
+                class: EventClass::PolicyDecision,
+                priority: Priority::High,
+            },
+            ClassPriority {
+                class: EventClass::AuditChainLink,
+                priority: Priority::High,
+            },
+            ClassPriority {
+                class: EventClass::TraceSpan,
+                priority: Priority::Normal,
+            },
+            ClassPriority {
+                class: EventClass::AnomalyHint,
+                priority: Priority::Normal,
+            },
+            ClassPriority {
+                class: EventClass::TelemetryTick,
+                priority: Priority::Low,
+            },
+            ClassPriority {
+                class: EventClass::CockpitToast,
+                priority: Priority::Low,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -128,7 +156,11 @@ impl BusPriorityPolicy {
 
     /// Lookup.
     pub fn priority_of(&self, class: EventClass) -> Priority {
-        self.assignments.iter().find(|a| a.class == class).map(|a| a.priority).unwrap_or(Priority::Normal)
+        self.assignments
+            .iter()
+            .find(|a| a.class == class)
+            .map(|a| a.priority)
+            .unwrap_or(Priority::Normal)
     }
 }
 
@@ -151,12 +183,18 @@ mod tests {
 
     #[test]
     fn quarantine_is_critical() {
-        assert_eq!(BusPriorityPolicy::canonical().priority_of(EventClass::Quarantine), Priority::Critical);
+        assert_eq!(
+            BusPriorityPolicy::canonical().priority_of(EventClass::Quarantine),
+            Priority::Critical
+        );
     }
 
     #[test]
     fn telemetry_is_low() {
-        assert_eq!(BusPriorityPolicy::canonical().priority_of(EventClass::TelemetryTick), Priority::Low);
+        assert_eq!(
+            BusPriorityPolicy::canonical().priority_of(EventClass::TelemetryTick),
+            Priority::Low
+        );
     }
 
     #[test]
@@ -170,20 +208,32 @@ mod tests {
     fn count_invalid_caught() {
         let mut p = BusPriorityPolicy::canonical();
         p.assignments.pop();
-        assert!(matches!(p.validate().unwrap_err(), PriorityError::CountInvalid(7)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PriorityError::CountInvalid(7)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = BusPriorityPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PriorityError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PriorityError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&EventClass::SecurityIncident).unwrap(), "\"security-incident\"");
-        assert_eq!(serde_json::to_string(&EventClass::AuditChainLink).unwrap(), "\"audit-chain-link\"");
+        assert_eq!(
+            serde_json::to_string(&EventClass::SecurityIncident).unwrap(),
+            "\"security-incident\""
+        );
+        assert_eq!(
+            serde_json::to_string(&EventClass::AuditChainLink).unwrap(),
+            "\"audit-chain-link\""
+        );
     }
 
     #[test]

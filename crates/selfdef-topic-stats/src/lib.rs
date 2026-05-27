@@ -56,7 +56,9 @@ pub enum StatError {
 impl TopicStats {
     /// New.
     pub fn new(window_ms: u64) -> Result<Self, StatError> {
-        if window_ms == 0 { return Err(StatError::ZeroWindow); }
+        if window_ms == 0 {
+            return Err(StatError::ZeroWindow);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             window_ms,
@@ -66,7 +68,9 @@ impl TopicStats {
 
     /// Record n events at now.
     pub fn record(&mut self, topic: &str, n: u64, now_ms: u64) -> Result<(), StatError> {
-        if topic.is_empty() { return Err(StatError::EmptyTopic); }
+        if topic.is_empty() {
+            return Err(StatError::EmptyTopic);
+        }
         let s = self.stats.entry(topic.into()).or_insert(TopicStat {
             total: 0,
             window_count: 0,
@@ -83,7 +87,9 @@ impl TopicStats {
 
     /// Rate per second for current window at now_ms.
     pub fn rate_per_sec(&mut self, topic: &str, now_ms: u64) -> u64 {
-        let Some(s) = self.stats.get_mut(topic) else { return 0; };
+        let Some(s) = self.stats.get_mut(topic) else {
+            return 0;
+        };
         if now_ms.saturating_sub(s.window_start_ms) >= self.window_ms {
             s.window_count = 0;
             s.window_start_ms = now_ms;
@@ -99,10 +105,16 @@ impl TopicStats {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StatError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StatError::SchemaMismatch); }
-        if self.window_ms == 0 { return Err(StatError::ZeroWindow); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StatError::SchemaMismatch);
+        }
+        if self.window_ms == 0 {
+            return Err(StatError::ZeroWindow);
+        }
         for k in self.stats.keys() {
-            if k.is_empty() { return Err(StatError::EmptyTopic); }
+            if k.is_empty() {
+                return Err(StatError::EmptyTopic);
+            }
         }
         Ok(())
     }
@@ -148,15 +160,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = TopicStats::new(1000).unwrap();
-        assert!(matches!(s.record("", 1, 0).unwrap_err(), StatError::EmptyTopic));
-        assert!(matches!(TopicStats::new(0).unwrap_err(), StatError::ZeroWindow));
+        assert!(matches!(
+            s.record("", 1, 0).unwrap_err(),
+            StatError::EmptyTopic
+        ));
+        assert!(matches!(
+            TopicStats::new(0).unwrap_err(),
+            StatError::ZeroWindow
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = TopicStats::new(1000).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), StatError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            StatError::SchemaMismatch
+        ));
     }
 
     #[test]

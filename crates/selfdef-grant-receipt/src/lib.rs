@@ -83,11 +83,21 @@ impl GrantReceipt {
         if self.schema_version != SCHEMA_VERSION {
             return Err(ReceiptError::SchemaMismatch);
         }
-        if self.grant_id.is_empty() { return Err(ReceiptError::MissingField("grant_id")); }
-        if self.scope_hash.is_empty() { return Err(ReceiptError::MissingField("scope_hash")); }
-        if self.issued_at.is_empty() { return Err(ReceiptError::MissingField("issued_at")); }
-        if self.expires_at.is_empty() { return Err(ReceiptError::MissingField("expires_at")); }
-        if self.signature.is_empty() { return Err(ReceiptError::MissingField("signature")); }
+        if self.grant_id.is_empty() {
+            return Err(ReceiptError::MissingField("grant_id"));
+        }
+        if self.scope_hash.is_empty() {
+            return Err(ReceiptError::MissingField("scope_hash"));
+        }
+        if self.issued_at.is_empty() {
+            return Err(ReceiptError::MissingField("issued_at"));
+        }
+        if self.expires_at.is_empty() {
+            return Err(ReceiptError::MissingField("expires_at"));
+        }
+        if self.signature.is_empty() {
+            return Err(ReceiptError::MissingField("signature"));
+        }
         if self.expires_at <= self.issued_at {
             return Err(ReceiptError::BadWindow {
                 issued_at: self.issued_at.clone(),
@@ -147,14 +157,20 @@ mod tests {
     fn missing_grant_id_caught() {
         let mut x = r("/x");
         x.grant_id = String::new();
-        assert!(matches!(x.validate().unwrap_err(), ReceiptError::MissingField("grant_id")));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            ReceiptError::MissingField("grant_id")
+        ));
     }
 
     #[test]
     fn bad_window_caught() {
         let mut x = r("/x");
         x.expires_at = "2026-05-19T02:00:00Z".into();
-        assert!(matches!(x.validate().unwrap_err(), ReceiptError::BadWindow { .. }));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            ReceiptError::BadWindow { .. }
+        ));
     }
 
     #[test]
@@ -165,15 +181,20 @@ mod tests {
     #[test]
     fn verify_scope_fails_on_mismatch() {
         let receipt = r("/workspace/x");
-        assert!(matches!(receipt.verify_scope("/workspace/y").unwrap_err(),
-            ReceiptError::ScopeHashMismatch { .. }));
+        assert!(matches!(
+            receipt.verify_scope("/workspace/y").unwrap_err(),
+            ReceiptError::ScopeHashMismatch { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut x = r("/x");
         x.schema_version = "9.9.9".into();
-        assert!(matches!(x.validate().unwrap_err(), ReceiptError::SchemaMismatch));
+        assert!(matches!(
+            x.validate().unwrap_err(),
+            ReceiptError::SchemaMismatch
+        ));
     }
 
     #[test]

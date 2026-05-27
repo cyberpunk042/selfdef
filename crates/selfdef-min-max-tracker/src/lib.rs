@@ -53,13 +53,21 @@ impl MinMaxTracker {
     pub fn observe(&mut self, value: i64) {
         self.count = self.count.saturating_add(1);
         self.sum += value as i128;
-        self.min = Some(match self.min { Some(m) => m.min(value), None => value });
-        self.max = Some(match self.max { Some(m) => m.max(value), None => value });
+        self.min = Some(match self.min {
+            Some(m) => m.min(value),
+            None => value,
+        });
+        self.max = Some(match self.max {
+            Some(m) => m.max(value),
+            None => value,
+        });
     }
 
     /// Mean (sum/count); None when empty.
     pub fn mean(&self) -> Option<i64> {
-        if self.count == 0 { return None; }
+        if self.count == 0 {
+            return None;
+        }
         Some((self.sum / self.count as i128) as i64)
     }
 
@@ -73,13 +81,17 @@ impl MinMaxTracker {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TrackerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TrackerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TrackerError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for MinMaxTracker {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -97,7 +109,9 @@ mod tests {
     #[test]
     fn observe_updates_min_max_mean() {
         let mut t = MinMaxTracker::new();
-        for v in [3, 1, 4, 1, 5, 9, 2, 6] { t.observe(v); }
+        for v in [3, 1, 4, 1, 5, 9, 2, 6] {
+            t.observe(v);
+        }
         assert_eq!(t.min, Some(1));
         assert_eq!(t.max, Some(9));
         assert_eq!(t.count, 8);
@@ -128,7 +142,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = MinMaxTracker::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), TrackerError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            TrackerError::SchemaMismatch
+        ));
     }
 
     #[test]

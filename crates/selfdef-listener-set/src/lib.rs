@@ -50,8 +50,12 @@ impl ListenerSet {
 
     /// Subscribe.
     pub fn subscribe(&mut self, topic: &str, listener_id: &str) -> Result<bool, ListenerError> {
-        if topic.is_empty() { return Err(ListenerError::EmptyTopic); }
-        if listener_id.is_empty() { return Err(ListenerError::EmptyListener); }
+        if topic.is_empty() {
+            return Err(ListenerError::EmptyTopic);
+        }
+        if listener_id.is_empty() {
+            return Err(ListenerError::EmptyListener);
+        }
         let s = self.by_topic.entry(topic.into()).or_default();
         Ok(s.insert(listener_id.into()))
     }
@@ -63,20 +67,24 @@ impl ListenerSet {
             None => return false,
         };
         let removed = s.remove(listener_id);
-        if s.is_empty() { self.by_topic.remove(topic); }
+        if s.is_empty() {
+            self.by_topic.remove(topic);
+        }
         removed
     }
 
     /// Listeners for topic.
     pub fn listeners_for(&self, topic: &str) -> Vec<&str> {
-        self.by_topic.get(topic)
+        self.by_topic
+            .get(topic)
             .map(|s| s.iter().map(|k| k.as_str()).collect())
             .unwrap_or_default()
     }
 
     /// Topics for a listener.
     pub fn topics_for(&self, listener_id: &str) -> Vec<&str> {
-        self.by_topic.iter()
+        self.by_topic
+            .iter()
             .filter(|(_, s)| s.contains(listener_id))
             .map(|(t, _)| t.as_str())
             .collect()
@@ -84,11 +92,17 @@ impl ListenerSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ListenerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ListenerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ListenerError::SchemaMismatch);
+        }
         for (t, s) in &self.by_topic {
-            if t.is_empty() { return Err(ListenerError::EmptyTopic); }
+            if t.is_empty() {
+                return Err(ListenerError::EmptyTopic);
+            }
             for id in s {
-                if id.is_empty() { return Err(ListenerError::EmptyListener); }
+                if id.is_empty() {
+                    return Err(ListenerError::EmptyListener);
+                }
             }
         }
         Ok(())
@@ -96,7 +110,9 @@ impl ListenerSet {
 }
 
 impl Default for ListenerSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -148,15 +164,24 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut s = ListenerSet::new();
-        assert!(matches!(s.subscribe("", "a").unwrap_err(), ListenerError::EmptyTopic));
-        assert!(matches!(s.subscribe("t", "").unwrap_err(), ListenerError::EmptyListener));
+        assert!(matches!(
+            s.subscribe("", "a").unwrap_err(),
+            ListenerError::EmptyTopic
+        ));
+        assert!(matches!(
+            s.subscribe("t", "").unwrap_err(),
+            ListenerError::EmptyListener
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = ListenerSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), ListenerError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            ListenerError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -188,7 +188,9 @@ fn in_hour_range(start: u8, end: u8, h: u8) -> bool {
 }
 
 impl Default for TimeWindowPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -198,7 +200,9 @@ mod tests {
     use TimeWindowDecision::*;
     use Weekday::*;
 
-    fn weekdays() -> Vec<Weekday> { vec![Mon, Tue, Wed, Thu, Fri] }
+    fn weekdays() -> Vec<Weekday> {
+        vec![Mon, Tue, Wed, Thu, Fri]
+    }
 
     #[test]
     fn empty_policy_allows_all() {
@@ -209,14 +213,26 @@ mod tests {
     #[test]
     fn within_window_allows() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 9, end_hour: 18 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 9,
+            end_hour: 18,
+        })
+        .unwrap();
         assert_eq!(p.decide(AutonomousChange, Tue, 10), Allow);
     }
 
     #[test]
     fn outside_hours_denies() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 9, end_hour: 18 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 9,
+            end_hour: 18,
+        })
+        .unwrap();
         assert_eq!(p.decide(AutonomousChange, Tue, 22), Deny);
         assert_eq!(p.decide(AutonomousChange, Tue, 5), Deny);
     }
@@ -224,7 +240,13 @@ mod tests {
     #[test]
     fn wrong_day_denies() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 0, end_hour: 24 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 0,
+            end_hour: 24,
+        })
+        .unwrap();
         assert_eq!(p.decide(AutonomousChange, Sat, 10), Deny);
         assert_eq!(p.decide(AutonomousChange, Sun, 10), Deny);
     }
@@ -232,7 +254,13 @@ mod tests {
     #[test]
     fn wrap_past_midnight_window() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: ProductionDeploy, days: vec![Sat], start_hour: 22, end_hour: 5 }).unwrap();
+        p.add(Window {
+            op: ProductionDeploy,
+            days: vec![Sat],
+            start_hour: 22,
+            end_hour: 5,
+        })
+        .unwrap();
         assert_eq!(p.decide(ProductionDeploy, Sat, 23), Allow);
         assert_eq!(p.decide(ProductionDeploy, Sat, 3), Allow);
         assert_eq!(p.decide(ProductionDeploy, Sat, 10), Deny);
@@ -242,11 +270,23 @@ mod tests {
     fn bad_hours_rejected() {
         let mut p = TimeWindowPolicy::new();
         assert!(matches!(
-            p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 30, end_hour: 5 }).unwrap_err(),
+            p.add(Window {
+                op: AutonomousChange,
+                days: weekdays(),
+                start_hour: 30,
+                end_hour: 5
+            })
+            .unwrap_err(),
             TimeWindowError::BadHours { .. }
         ));
         assert!(matches!(
-            p.add(Window { op: BulkOp, days: weekdays(), start_hour: 9, end_hour: 9 }).unwrap_err(),
+            p.add(Window {
+                op: BulkOp,
+                days: weekdays(),
+                start_hour: 9,
+                end_hour: 9
+            })
+            .unwrap_err(),
             TimeWindowError::BadHours { .. }
         ));
     }
@@ -255,7 +295,13 @@ mod tests {
     fn empty_days_rejected() {
         let mut p = TimeWindowPolicy::new();
         assert!(matches!(
-            p.add(Window { op: AutonomousChange, days: vec![], start_hour: 9, end_hour: 18 }).unwrap_err(),
+            p.add(Window {
+                op: AutonomousChange,
+                days: vec![],
+                start_hour: 9,
+                end_hour: 18
+            })
+            .unwrap_err(),
             TimeWindowError::EmptyDays(_)
         ));
     }
@@ -263,9 +309,21 @@ mod tests {
     #[test]
     fn duplicate_op_rejected() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 9, end_hour: 18 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 9,
+            end_hour: 18,
+        })
+        .unwrap();
         assert!(matches!(
-            p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 0, end_hour: 24 }).unwrap_err(),
+            p.add(Window {
+                op: AutonomousChange,
+                days: weekdays(),
+                start_hour: 0,
+                end_hour: 24
+            })
+            .unwrap_err(),
             TimeWindowError::DuplicateOp(_)
         ));
     }
@@ -273,7 +331,13 @@ mod tests {
     #[test]
     fn unconfigured_op_allows() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 9, end_hour: 18 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 9,
+            end_hour: 18,
+        })
+        .unwrap();
         // BulkOp not configured → Allow.
         assert_eq!(p.decide(BulkOp, Sun, 3), Allow);
     }
@@ -282,7 +346,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = TimeWindowPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TimeWindowError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TimeWindowError::SchemaMismatch
+        ));
     }
 
     #[test]
@@ -293,14 +360,26 @@ mod tests {
 
     #[test]
     fn op_serde_kebab() {
-        assert_eq!(serde_json::to_string(&AutonomousChange).unwrap(), "\"autonomous-change\"");
-        assert_eq!(serde_json::to_string(&LongTaskLaunch).unwrap(), "\"long-task-launch\"");
+        assert_eq!(
+            serde_json::to_string(&AutonomousChange).unwrap(),
+            "\"autonomous-change\""
+        );
+        assert_eq!(
+            serde_json::to_string(&LongTaskLaunch).unwrap(),
+            "\"long-task-launch\""
+        );
     }
 
     #[test]
     fn policy_serde_roundtrip() {
         let mut p = TimeWindowPolicy::new();
-        p.add(Window { op: AutonomousChange, days: weekdays(), start_hour: 9, end_hour: 18 }).unwrap();
+        p.add(Window {
+            op: AutonomousChange,
+            days: weekdays(),
+            start_hour: 9,
+            end_hour: 18,
+        })
+        .unwrap();
         let j = serde_json::to_string(&p).unwrap();
         let back: TimeWindowPolicy = serde_json::from_str(&j).unwrap();
         assert_eq!(p, back);

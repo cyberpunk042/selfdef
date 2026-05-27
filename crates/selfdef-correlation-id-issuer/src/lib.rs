@@ -68,7 +68,14 @@ impl CorrelationIdIssuer {
         }
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.nodes.insert(id, Node { id, parent, created_at_ms: ts_ms });
+        self.nodes.insert(
+            id,
+            Node {
+                id,
+                parent,
+                created_at_ms: ts_ms,
+            },
+        );
         Ok(id)
     }
 
@@ -83,7 +90,9 @@ impl CorrelationIdIssuer {
         let mut cur = Some(id);
         let mut seen = std::collections::BTreeSet::new();
         while let Some(c) = cur {
-            if !seen.insert(c) { break; }
+            if !seen.insert(c) {
+                break;
+            }
             chain.push(c);
             cur = self.nodes.get(&c).and_then(|n| n.parent);
         }
@@ -93,10 +102,14 @@ impl CorrelationIdIssuer {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CorrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CorrError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CorrError::SchemaMismatch);
+        }
         for n in self.nodes.values() {
             if let Some(p) = n.parent {
-                if !self.nodes.contains_key(&p) { return Err(CorrError::UnknownParent(p)); }
+                if !self.nodes.contains_key(&p) {
+                    return Err(CorrError::UnknownParent(p));
+                }
             }
         }
         Ok(())
@@ -104,7 +117,9 @@ impl CorrelationIdIssuer {
 }
 
 impl Default for CorrelationIdIssuer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -138,7 +153,10 @@ mod tests {
     #[test]
     fn unknown_parent_rejected() {
         let mut c = CorrelationIdIssuer::new();
-        assert!(matches!(c.issue(Some(999), 0).unwrap_err(), CorrError::UnknownParent(_)));
+        assert!(matches!(
+            c.issue(Some(999), 0).unwrap_err(),
+            CorrError::UnknownParent(_)
+        ));
     }
 
     #[test]
@@ -153,7 +171,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = CorrelationIdIssuer::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CorrError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CorrError::SchemaMismatch
+        ));
     }
 
     #[test]

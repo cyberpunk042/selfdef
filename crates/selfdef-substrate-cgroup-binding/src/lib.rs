@@ -70,12 +70,12 @@ impl SubstrateCgroupBinding {
     /// Canonical.
     pub fn canonical() -> Self {
         let mut b = BTreeMap::new();
-        b.insert(Profile::Private,      "selfdef/private".into());
-        b.insert(Profile::Fast,         "selfdef/fast".into());
-        b.insert(Profile::Careful,      "selfdef/careful".into());
-        b.insert(Profile::Autonomous,   "selfdef/autonomous".into());
+        b.insert(Profile::Private, "selfdef/private".into());
+        b.insert(Profile::Fast, "selfdef/fast".into());
+        b.insert(Profile::Careful, "selfdef/careful".into());
+        b.insert(Profile::Autonomous, "selfdef/autonomous".into());
         b.insert(Profile::Experimental, "selfdef/experimental".into());
-        b.insert(Profile::Production,   "selfdef/production".into());
+        b.insert(Profile::Production, "selfdef/production".into());
         Self {
             schema_version: SCHEMA_VERSION.into(),
             bindings: b,
@@ -84,7 +84,9 @@ impl SubstrateCgroupBinding {
 
     /// Set.
     pub fn set(&mut self, profile: Profile, cgroup_name: &str) -> Result<(), BindingError> {
-        if cgroup_name.is_empty() { return Err(BindingError::EmptyName); }
+        if cgroup_name.is_empty() {
+            return Err(BindingError::EmptyName);
+        }
         self.bindings.insert(profile, cgroup_name.into());
         Ok(())
     }
@@ -92,16 +94,22 @@ impl SubstrateCgroupBinding {
     /// Classify.
     pub fn classify(&self, profile: Profile) -> CgroupVerdict {
         match self.bindings.get(&profile) {
-            Some(s) => CgroupVerdict::Bound { cgroup_name: s.clone() },
+            Some(s) => CgroupVerdict::Bound {
+                cgroup_name: s.clone(),
+            },
             None => CgroupVerdict::Unconfigured,
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BindingError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BindingError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BindingError::SchemaMismatch);
+        }
         for s in self.bindings.values() {
-            if s.is_empty() { return Err(BindingError::EmptyName); }
+            if s.is_empty() {
+                return Err(BindingError::EmptyName);
+            }
         }
         Ok(())
     }
@@ -119,7 +127,14 @@ mod tests {
     #[test]
     fn canonical_each_profile_bound() {
         let b = SubstrateCgroupBinding::canonical();
-        for &p in &[Profile::Private, Profile::Fast, Profile::Careful, Profile::Autonomous, Profile::Experimental, Profile::Production] {
+        for &p in &[
+            Profile::Private,
+            Profile::Fast,
+            Profile::Careful,
+            Profile::Autonomous,
+            Profile::Experimental,
+            Profile::Production,
+        ] {
             assert!(matches!(b.classify(p), CgroupVerdict::Bound { .. }));
         }
     }
@@ -144,14 +159,20 @@ mod tests {
     #[test]
     fn empty_name_rejected() {
         let mut b = SubstrateCgroupBinding::canonical();
-        assert!(matches!(b.set(Profile::Fast, "").unwrap_err(), BindingError::EmptyName));
+        assert!(matches!(
+            b.set(Profile::Fast, "").unwrap_err(),
+            BindingError::EmptyName
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = SubstrateCgroupBinding::canonical();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BindingError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BindingError::SchemaMismatch
+        ));
     }
 
     #[test]

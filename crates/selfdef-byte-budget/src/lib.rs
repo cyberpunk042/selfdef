@@ -51,10 +51,14 @@ pub enum BudgetError {
 impl ByteBudget {
     /// New.
     pub fn new(capacity: u64) -> Result<Self, BudgetError> {
-        if capacity == 0 { return Err(BudgetError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(BudgetError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            capacity, in_use: 0, high_watermark: 0,
+            capacity,
+            in_use: 0,
+            high_watermark: 0,
         })
     }
 
@@ -62,10 +66,15 @@ impl ByteBudget {
     pub fn reserve(&mut self, n: u64) -> Result<(), BudgetError> {
         let avail = self.capacity - self.in_use;
         if n > avail {
-            return Err(BudgetError::Exceeded { requested: n, available: avail });
+            return Err(BudgetError::Exceeded {
+                requested: n,
+                available: avail,
+            });
         }
         self.in_use += n;
-        if self.in_use > self.high_watermark { self.high_watermark = self.in_use; }
+        if self.in_use > self.high_watermark {
+            self.high_watermark = self.in_use;
+        }
         Ok(())
     }
 
@@ -75,7 +84,9 @@ impl ByteBudget {
     }
 
     /// Bytes available.
-    pub fn available(&self) -> u64 { self.capacity - self.in_use }
+    pub fn available(&self) -> u64 {
+        self.capacity - self.in_use
+    }
 
     /// Fraction in use, in basis points.
     pub fn used_bp(&self) -> u32 {
@@ -89,11 +100,16 @@ impl ByteBudget {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(BudgetError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(BudgetError::ZeroCapacity);
+        }
         if self.in_use > self.capacity {
             return Err(BudgetError::Exceeded {
-                requested: self.in_use, available: self.capacity,
+                requested: self.in_use,
+                available: self.capacity,
             });
         }
         Ok(())
@@ -128,7 +144,13 @@ mod tests {
         let mut b = ByteBudget::new(100).unwrap();
         b.reserve(80).unwrap();
         let e = b.reserve(30).unwrap_err();
-        assert!(matches!(e, BudgetError::Exceeded { requested: 30, available: 20 }));
+        assert!(matches!(
+            e,
+            BudgetError::Exceeded {
+                requested: 30,
+                available: 20
+            }
+        ));
         // State unchanged.
         assert_eq!(b.in_use, 80);
     }
@@ -159,14 +181,20 @@ mod tests {
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(ByteBudget::new(0).unwrap_err(), BudgetError::ZeroCapacity));
+        assert!(matches!(
+            ByteBudget::new(0).unwrap_err(),
+            BudgetError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ByteBudget::new(100).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

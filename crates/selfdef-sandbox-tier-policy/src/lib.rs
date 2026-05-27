@@ -93,32 +93,45 @@ pub enum SandboxTierError {
 impl SandboxTier {
     /// All 5.
     pub const ALL: [SandboxTier; 5] = [
-        SandboxTier::Tier0, SandboxTier::Tier1, SandboxTier::Tier2,
-        SandboxTier::Tier3, SandboxTier::Tier4,
+        SandboxTier::Tier0,
+        SandboxTier::Tier1,
+        SandboxTier::Tier2,
+        SandboxTier::Tier3,
+        SandboxTier::Tier4,
     ];
 
     /// Capabilities at this tier.
     pub fn capabilities(self) -> TierCapabilities {
         match self {
             SandboxTier::Tier0 => TierCapabilities {
-                subprocess_allowed: false, network_allowed: false,
-                persistent_allowed: false, host_fs_readable: false,
+                subprocess_allowed: false,
+                network_allowed: false,
+                persistent_allowed: false,
+                host_fs_readable: false,
             },
             SandboxTier::Tier1 => TierCapabilities {
-                subprocess_allowed: false, network_allowed: false,
-                persistent_allowed: false, host_fs_readable: true,
+                subprocess_allowed: false,
+                network_allowed: false,
+                persistent_allowed: false,
+                host_fs_readable: true,
             },
             SandboxTier::Tier2 => TierCapabilities {
-                subprocess_allowed: true, network_allowed: false,
-                persistent_allowed: false, host_fs_readable: true,
+                subprocess_allowed: true,
+                network_allowed: false,
+                persistent_allowed: false,
+                host_fs_readable: true,
             },
             SandboxTier::Tier3 => TierCapabilities {
-                subprocess_allowed: true, network_allowed: true,
-                persistent_allowed: false, host_fs_readable: true,
+                subprocess_allowed: true,
+                network_allowed: true,
+                persistent_allowed: false,
+                host_fs_readable: true,
             },
             SandboxTier::Tier4 => TierCapabilities {
-                subprocess_allowed: true, network_allowed: true,
-                persistent_allowed: true, host_fs_readable: true,
+                subprocess_allowed: true,
+                network_allowed: true,
+                persistent_allowed: true,
+                host_fs_readable: true,
             },
         }
     }
@@ -126,12 +139,18 @@ impl SandboxTier {
 
 /// IPS-authoritative gate for a (from, to) tier transition.
 pub fn promotion_gate(from: SandboxTier, to: SandboxTier) -> PromotionGate {
-    if from == to { return PromotionGate::Routine; }
+    if from == to {
+        return PromotionGate::Routine;
+    }
     // Demotion always routine.
-    if (to as u8) < (from as u8) { return PromotionGate::Routine; }
+    if (to as u8) < (from as u8) {
+        return PromotionGate::Routine;
+    }
     // Promotion: tier0→1 single, 1→2 single, 2→3 single, 3→4 double.
     let delta = (to as u8).wrapping_sub(from as u8);
-    if delta > 1 { return PromotionGate::Forbidden; } // no skipping
+    if delta > 1 {
+        return PromotionGate::Forbidden;
+    } // no skipping
     match to {
         SandboxTier::Tier4 => PromotionGate::DoubleOperator,
         _ => PromotionGate::SingleOperator,
@@ -152,14 +171,24 @@ pub fn authorize_promotion(
         PromotionGate::Forbidden => Err(SandboxTierError::Forbidden { from, to }),
         PromotionGate::SingleOperator => {
             if operator_signatures < 1 {
-                Err(SandboxTierError::MissingApproval { from, to, required: PromotionGate::SingleOperator, got: operator_signatures })
+                Err(SandboxTierError::MissingApproval {
+                    from,
+                    to,
+                    required: PromotionGate::SingleOperator,
+                    got: operator_signatures,
+                })
             } else {
                 Ok(())
             }
         }
         PromotionGate::DoubleOperator => {
             if operator_signatures < 2 {
-                Err(SandboxTierError::MissingApproval { from, to, required: PromotionGate::DoubleOperator, got: operator_signatures })
+                Err(SandboxTierError::MissingApproval {
+                    from,
+                    to,
+                    required: PromotionGate::DoubleOperator,
+                    got: operator_signatures,
+                })
             } else {
                 Ok(())
             }
@@ -199,26 +228,50 @@ mod tests {
 
     #[test]
     fn promotion_one_step_single_operator() {
-        assert_eq!(promotion_gate(SandboxTier::Tier0, SandboxTier::Tier1), PromotionGate::SingleOperator);
-        assert_eq!(promotion_gate(SandboxTier::Tier1, SandboxTier::Tier2), PromotionGate::SingleOperator);
-        assert_eq!(promotion_gate(SandboxTier::Tier2, SandboxTier::Tier3), PromotionGate::SingleOperator);
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier0, SandboxTier::Tier1),
+            PromotionGate::SingleOperator
+        );
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier1, SandboxTier::Tier2),
+            PromotionGate::SingleOperator
+        );
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier2, SandboxTier::Tier3),
+            PromotionGate::SingleOperator
+        );
     }
 
     #[test]
     fn tier3_to_tier4_double_operator() {
-        assert_eq!(promotion_gate(SandboxTier::Tier3, SandboxTier::Tier4), PromotionGate::DoubleOperator);
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier3, SandboxTier::Tier4),
+            PromotionGate::DoubleOperator
+        );
     }
 
     #[test]
     fn skipping_tiers_forbidden() {
-        assert_eq!(promotion_gate(SandboxTier::Tier0, SandboxTier::Tier2), PromotionGate::Forbidden);
-        assert_eq!(promotion_gate(SandboxTier::Tier1, SandboxTier::Tier4), PromotionGate::Forbidden);
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier0, SandboxTier::Tier2),
+            PromotionGate::Forbidden
+        );
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier1, SandboxTier::Tier4),
+            PromotionGate::Forbidden
+        );
     }
 
     #[test]
     fn demotion_routine() {
-        assert_eq!(promotion_gate(SandboxTier::Tier4, SandboxTier::Tier0), PromotionGate::Routine);
-        assert_eq!(promotion_gate(SandboxTier::Tier2, SandboxTier::Tier1), PromotionGate::Routine);
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier4, SandboxTier::Tier0),
+            PromotionGate::Routine
+        );
+        assert_eq!(
+            promotion_gate(SandboxTier::Tier2, SandboxTier::Tier1),
+            PromotionGate::Routine
+        );
     }
 
     #[test]
@@ -266,7 +319,13 @@ mod tests {
 
     #[test]
     fn tier_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SandboxTier::Tier0).unwrap(), "\"tier0\"");
-        assert_eq!(serde_json::to_string(&SandboxTier::Tier4).unwrap(), "\"tier4\"");
+        assert_eq!(
+            serde_json::to_string(&SandboxTier::Tier0).unwrap(),
+            "\"tier0\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SandboxTier::Tier4).unwrap(),
+            "\"tier4\""
+        );
     }
 }

@@ -56,7 +56,9 @@ impl TagSet {
 
     /// Add tag; returns true if newly inserted.
     pub fn add(&mut self, tag: &str) -> Result<bool, TagError> {
-        if tag.is_empty() { return Err(TagError::EmptyTag); }
+        if tag.is_empty() {
+            return Err(TagError::EmptyTag);
+        }
         Ok(self.tags.insert(tag.into()))
     }
 
@@ -73,19 +75,28 @@ impl TagSet {
     /// Intersection.
     pub fn intersection(&self, other: &TagSet) -> TagSet {
         let tags: BTreeSet<String> = self.tags.intersection(&other.tags).cloned().collect();
-        TagSet { schema_version: SCHEMA_VERSION.into(), tags }
+        TagSet {
+            schema_version: SCHEMA_VERSION.into(),
+            tags,
+        }
     }
 
     /// Union.
     pub fn union(&self, other: &TagSet) -> TagSet {
         let tags: BTreeSet<String> = self.tags.union(&other.tags).cloned().collect();
-        TagSet { schema_version: SCHEMA_VERSION.into(), tags }
+        TagSet {
+            schema_version: SCHEMA_VERSION.into(),
+            tags,
+        }
     }
 
     /// Difference (self - other).
     pub fn difference(&self, other: &TagSet) -> TagSet {
         let tags: BTreeSet<String> = self.tags.difference(&other.tags).cloned().collect();
-        TagSet { schema_version: SCHEMA_VERSION.into(), tags }
+        TagSet {
+            schema_version: SCHEMA_VERSION.into(),
+            tags,
+        }
     }
 
     /// True iff every tag of self is in other.
@@ -99,23 +110,33 @@ impl TagSet {
     }
 
     /// Size.
-    pub fn len(&self) -> usize { self.tags.len() }
+    pub fn len(&self) -> usize {
+        self.tags.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.tags.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.tags.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), TagError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(TagError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(TagError::SchemaMismatch);
+        }
         for t in &self.tags {
-            if t.is_empty() { return Err(TagError::EmptyTag); }
+            if t.is_empty() {
+                return Err(TagError::EmptyTag);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TagSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -193,7 +214,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = TagSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), TagError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            TagError::SchemaMismatch
+        ));
     }
 
     #[test]

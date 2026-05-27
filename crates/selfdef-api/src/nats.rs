@@ -17,8 +17,7 @@ const SUBJECT_SCHEMA: &[&str] = &[
     "Inbound subscribe: <subject_prefix>.>  (wildcard subtopic)",
 ];
 
-const ECHO_DEFENSE: &str =
-    "Drop inbound events whose Event::host_tag matches the local host_tag";
+const ECHO_DEFENSE: &str = "Drop inbound events whose Event::host_tag matches the local host_tag";
 
 const MODES: &[&str] = &[
     "passive — mirror inbound to local bus only (read-only fleet view)",

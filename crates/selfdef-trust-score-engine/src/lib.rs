@@ -144,21 +144,42 @@ mod tests {
 
     #[test]
     fn next_entry_uses_canonical_delta() {
-        let e = next_entry(900, DeltaReason::MismatchMajor, "2026-05-19T03:00:00Z", None, "trace-1", "sig");
+        let e = next_entry(
+            900,
+            DeltaReason::MismatchMajor,
+            "2026-05-19T03:00:00Z",
+            None,
+            "trace-1",
+            "sig",
+        );
         assert_eq!(e.delta, -50);
         assert_eq!(e.score_after, 850);
     }
 
     #[test]
     fn next_entry_uses_operator_override_for_adjustment() {
-        let e = next_entry(500, DeltaReason::OperatorAdjustment, "ts", Some(-200), "trace-1", "sig");
+        let e = next_entry(
+            500,
+            DeltaReason::OperatorAdjustment,
+            "ts",
+            Some(-200),
+            "trace-1",
+            "sig",
+        );
         assert_eq!(e.delta, -200);
         assert_eq!(e.score_after, 300);
     }
 
     #[test]
     fn next_entry_ignores_override_for_non_adjustment_reason() {
-        let e = next_entry(800, DeltaReason::Forfeiture, "ts", Some(-50), "trace-1", "sig");
+        let e = next_entry(
+            800,
+            DeltaReason::Forfeiture,
+            "ts",
+            Some(-50),
+            "trace-1",
+            "sig",
+        );
         // Override ignored; canonical Forfeiture delta = -1000 applies (clamps to 0).
         assert_eq!(e.delta, -1000);
         assert_eq!(e.score_after, 0);

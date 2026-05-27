@@ -93,16 +93,24 @@ impl ReasonCode {
     pub fn default_message(self) -> &'static str {
         match self {
             ReasonCode::TopSecretEgress => "Top-Secret content may not leave the engine.",
-            ReasonCode::ConfidentialExternalEgress => "Confidential content cannot reach external destinations.",
+            ReasonCode::ConfidentialExternalEgress => {
+                "Confidential content cannot reach external destinations."
+            }
             ReasonCode::OperatorDeclined => "The operator declined this action.",
             ReasonCode::ApprovalRequired => "Operator approval is required for this action.",
             ReasonCode::QuotaExhausted => "Per-class quota exhausted; try again later.",
-            ReasonCode::NotWithinTimeWindow => "Outside the configured time window for this operation.",
+            ReasonCode::NotWithinTimeWindow => {
+                "Outside the configured time window for this operation."
+            }
             ReasonCode::CrossClassViolation => "Action violates a cross-class boundary.",
             ReasonCode::SandboxTierInsufficient => "Sandbox tier insufficient for this operation.",
-            ReasonCode::TrustTierInsufficient => "LLM output's trust tier is insufficient for autonomous execution.",
+            ReasonCode::TrustTierInsufficient => {
+                "LLM output's trust tier is insufficient for autonomous execution."
+            }
             ReasonCode::PromptInjectionDetected => "Prompt-injection pattern detected in input.",
-            ReasonCode::EmergencyStopEngaged => "Emergency stop is engaged; only rescue-class operations are permitted.",
+            ReasonCode::EmergencyStopEngaged => {
+                "Emergency stop is engaged; only rescue-class operations are permitted."
+            }
             ReasonCode::SchemaDrift => "A schema-version mismatch was detected.",
             ReasonCode::AttestationBroken => "Substrate attestation chain is broken.",
             ReasonCode::ToolVersionMismatch => "Tool version does not match the configured pin.",
@@ -243,18 +251,28 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = ReasonAttribution::new(ReasonCode::SchemaDrift, "").unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), ReasonError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            ReasonError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn code_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ReasonCode::EmergencyStopEngaged).unwrap(), "\"emergency-stop-engaged\"");
-        assert_eq!(serde_json::to_string(&ReasonCode::TrustTierInsufficient).unwrap(), "\"trust-tier-insufficient\"");
+        assert_eq!(
+            serde_json::to_string(&ReasonCode::EmergencyStopEngaged).unwrap(),
+            "\"emergency-stop-engaged\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ReasonCode::TrustTierInsufficient).unwrap(),
+            "\"trust-tier-insufficient\""
+        );
     }
 
     #[test]
     fn attribution_serde_roundtrip() {
-        let r = ReasonAttribution::new(ReasonCode::OperatorDeclined, "user clicked cancel").unwrap();
+        let r =
+            ReasonAttribution::new(ReasonCode::OperatorDeclined, "user clicked cancel").unwrap();
         let j = serde_json::to_string(&r).unwrap();
         let back: ReasonAttribution = serde_json::from_str(&j).unwrap();
         assert_eq!(r, back);

@@ -52,7 +52,9 @@ impl WeightedMean {
 
     /// Observe.
     pub fn observe(&mut self, value: i64, weight: u32) -> Result<(), MeanError> {
-        if weight == 0 { return Err(MeanError::ZeroWeight); }
+        if weight == 0 {
+            return Err(MeanError::ZeroWeight);
+        }
         self.weighted_sum += value as i128 * weight as i128;
         self.total_weight = self.total_weight.saturating_add(weight as u128);
         self.observations = self.observations.saturating_add(1);
@@ -61,7 +63,9 @@ impl WeightedMean {
 
     /// Weighted mean (None if total_weight == 0).
     pub fn mean(&self) -> Option<i64> {
-        if self.total_weight == 0 { return None; }
+        if self.total_weight == 0 {
+            return None;
+        }
         Some((self.weighted_sum / self.total_weight as i128) as i64)
     }
 
@@ -74,13 +78,17 @@ impl WeightedMean {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), MeanError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(MeanError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(MeanError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for WeightedMean {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -122,7 +130,10 @@ mod tests {
     #[test]
     fn zero_weight_rejected() {
         let mut m = WeightedMean::new();
-        assert!(matches!(m.observe(1, 0).unwrap_err(), MeanError::ZeroWeight));
+        assert!(matches!(
+            m.observe(1, 0).unwrap_err(),
+            MeanError::ZeroWeight
+        ));
     }
 
     #[test]
@@ -137,7 +148,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = WeightedMean::new();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), MeanError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            MeanError::SchemaMismatch
+        ));
     }
 
     #[test]

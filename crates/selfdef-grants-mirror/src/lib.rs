@@ -193,12 +193,16 @@ impl GrantsMirrorSnapshot {
 
     /// Count of grants currently active (post-issuance, pre-expiry).
     pub fn active_count(&self) -> usize {
-        self.grants.iter().filter(|g| g.state == GrantState::Active).count()
+        self.grants
+            .iter()
+            .filter(|g| g.state == GrantState::Active)
+            .count()
     }
 
     /// Count of grants needing operator attention (pending or quarantined).
     pub fn attention_count(&self) -> usize {
-        self.grants.iter()
+        self.grants
+            .iter()
             .filter(|g| matches!(g.state, GrantState::Pending | GrantState::Quarantined))
             .count()
     }
@@ -246,7 +250,10 @@ mod tests {
             grants: vec![],
             signature: String::new(),
         };
-        assert!(matches!(snap.validate_schema().unwrap_err(), MirrorError::SchemaMismatch { .. }));
+        assert!(matches!(
+            snap.validate_schema().unwrap_err(),
+            MirrorError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
@@ -279,10 +286,16 @@ mod tests {
         };
         let summaries = snap.recompute_summaries();
         assert_eq!(summaries.len(), 3);
-        let fs = summaries.iter().find(|s| s.kind == GrantKind::Filesystem).unwrap();
+        let fs = summaries
+            .iter()
+            .find(|s| s.kind == GrantKind::Filesystem)
+            .unwrap();
         assert_eq!(fs.active, 2);
         assert_eq!(fs.pending, 1);
-        let net = summaries.iter().find(|s| s.kind == GrantKind::Network).unwrap();
+        let net = summaries
+            .iter()
+            .find(|s| s.kind == GrantKind::Network)
+            .unwrap();
         assert_eq!(net.active, 1);
         assert_eq!(net.quarantined, 1);
     }

@@ -26,11 +26,7 @@
 
 use std::path::{Path, PathBuf};
 
-use axum::{
-    Json,
-    extract::Json as ExtractJson,
-    http::StatusCode,
-};
+use axum::{Json, extract::Json as ExtractJson, http::StatusCode};
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_PREFS_PATH: &str = "/etc/selfdef/dashboard-prefs.toml";
@@ -65,9 +61,15 @@ pub(crate) struct DashboardPrefs {
     pub updated_at_ms: u64,
 }
 
-fn default_schema_version() -> String { SCHEMA_VERSION.to_string() }
-fn default_refresh_rate()    -> String { "normal".to_string() }
-fn default_active_preset()   -> String { "default".to_string() }
+fn default_schema_version() -> String {
+    SCHEMA_VERSION.to_string()
+}
+fn default_refresh_rate() -> String {
+    "normal".to_string()
+}
+fn default_active_preset() -> String {
+    "default".to_string()
+}
 
 /// PUT request body — same shape as `DashboardPrefs` but the
 /// `updated_at_ms` field (if present) is ignored: the server sets
@@ -87,13 +89,15 @@ pub(crate) struct DashboardPrefsPut {
 fn read_prefs_from_disk(path: &Path) -> DashboardPrefs {
     let text = match std::fs::read_to_string(path) {
         Ok(t) => t,
-        Err(_) => return DashboardPrefs {
-            schema_version: SCHEMA_VERSION.to_string(),
-            hidden_panels: Vec::new(),
-            refresh_rate: default_refresh_rate(),
-            active_preset: default_active_preset(),
-            updated_at_ms: 0,
-        },
+        Err(_) => {
+            return DashboardPrefs {
+                schema_version: SCHEMA_VERSION.to_string(),
+                hidden_panels: Vec::new(),
+                refresh_rate: default_refresh_rate(),
+                active_preset: default_active_preset(),
+                updated_at_ms: 0,
+            };
+        }
     };
     toml::from_str(&text).unwrap_or_else(|_| DashboardPrefs::default())
 }
@@ -102,20 +106,26 @@ fn atomic_write(path: &Path, body: &str) -> Result<(), (StatusCode, String)> {
     let tmp = path.with_extension("toml.tmp");
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent).map_err(|e| (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("create_dir_all {}: {e}", parent.display()),
-            ))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("create_dir_all {}: {e}", parent.display()),
+                )
+            })?;
         }
     }
-    std::fs::write(&tmp, body).map_err(|e| (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("write {}: {e}", tmp.display()),
-    ))?;
-    std::fs::rename(&tmp, path).map_err(|e| (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("rename {} → {}: {e}", tmp.display(), path.display()),
-    ))?;
+    std::fs::write(&tmp, body).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("write {}: {e}", tmp.display()),
+        )
+    })?;
+    std::fs::rename(&tmp, path).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("rename {} → {}: {e}", tmp.display(), path.display()),
+        )
+    })?;
     Ok(())
 }
 
@@ -200,10 +210,12 @@ pub(crate) async fn put(
         active_preset: req.active_preset,
         updated_at_ms: now_ms(),
     };
-    let body = toml::to_string_pretty(&prefs).map_err(|e| (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("toml serialize: {e}"),
-    ))?;
+    let body = toml::to_string_pretty(&prefs).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("toml serialize: {e}"),
+        )
+    })?;
     let path = prefs_path();
     atomic_write(&path, &body)?;
     Ok(Json(prefs))
@@ -216,7 +228,7 @@ mod tests {
     #[test]
     fn default_prefs_have_sensible_defaults() {
         let p = DashboardPrefs::default();
-        assert_eq!(p.schema_version, "");        // serde Default = empty
+        assert_eq!(p.schema_version, ""); // serde Default = empty
         assert!(p.hidden_panels.is_empty());
         // Note: Default impl gives "" not "normal" — read_prefs_from_disk
         // hand-substitutes when the file is missing. The defaults

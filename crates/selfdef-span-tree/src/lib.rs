@@ -77,29 +77,49 @@ impl SpanTree {
     }
 
     /// Insert.
-    pub fn insert(&mut self, id: &str, parent: Option<&str>, name: &str, start_ms: u64, end_ms: u64) -> Result<(), SpanError> {
-        if id.is_empty() { return Err(SpanError::EmptyId); }
-        if name.is_empty() { return Err(SpanError::EmptyName); }
-        if start_ms > end_ms { return Err(SpanError::BadTimes); }
-        if self.spans.contains_key(id) { return Err(SpanError::DuplicateSpan(id.into())); }
+    pub fn insert(
+        &mut self,
+        id: &str,
+        parent: Option<&str>,
+        name: &str,
+        start_ms: u64,
+        end_ms: u64,
+    ) -> Result<(), SpanError> {
+        if id.is_empty() {
+            return Err(SpanError::EmptyId);
+        }
+        if name.is_empty() {
+            return Err(SpanError::EmptyName);
+        }
+        if start_ms > end_ms {
+            return Err(SpanError::BadTimes);
+        }
+        if self.spans.contains_key(id) {
+            return Err(SpanError::DuplicateSpan(id.into()));
+        }
         if let Some(p) = parent {
             if !self.spans.contains_key(p) {
                 return Err(SpanError::UnknownParent(p.into()));
             }
         }
-        self.spans.insert(id.into(), Span {
-            id: id.into(),
-            parent: parent.map(|s| s.to_string()),
-            name: name.into(),
-            start_ms,
-            end_ms,
-        });
+        self.spans.insert(
+            id.into(),
+            Span {
+                id: id.into(),
+                parent: parent.map(|s| s.to_string()),
+                name: name.into(),
+                start_ms,
+                end_ms,
+            },
+        );
         Ok(())
     }
 
     /// Find root (exactly one expected).
     pub fn root(&self) -> Result<Option<&str>, SpanError> {
-        let roots: Vec<&str> = self.spans.values()
+        let roots: Vec<&str> = self
+            .spans
+            .values()
             .filter(|s| s.parent.is_none())
             .map(|s| s.id.as_str())
             .collect();
@@ -112,7 +132,8 @@ impl SpanTree {
 
     /// Direct children of a span.
     pub fn children(&self, id: &str) -> Vec<&Span> {
-        self.spans.values()
+        self.spans
+            .values()
             .filter(|s| s.parent.as_deref() == Some(id))
             .collect()
     }
@@ -134,20 +155,31 @@ impl SpanTree {
 
     /// Total duration ms across all spans (sum of end-start).
     pub fn total_duration_ms(&self) -> u128 {
-        self.spans.values()
+        self.spans
+            .values()
             .map(|s| (s.end_ms - s.start_ms) as u128)
             .sum()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SpanError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SpanError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SpanError::SchemaMismatch);
+        }
         for s in self.spans.values() {
-            if s.id.is_empty() { return Err(SpanError::EmptyId); }
-            if s.name.is_empty() { return Err(SpanError::EmptyName); }
-            if s.start_ms > s.end_ms { return Err(SpanError::BadTimes); }
+            if s.id.is_empty() {
+                return Err(SpanError::EmptyId);
+            }
+            if s.name.is_empty() {
+                return Err(SpanError::EmptyName);
+            }
+            if s.start_ms > s.end_ms {
+                return Err(SpanError::BadTimes);
+            }
             if let Some(p) = &s.parent {
-                if !self.spans.contains_key(p) { return Err(SpanError::UnknownParent(p.clone())); }
+                if !self.spans.contains_key(p) {
+                    return Err(SpanError::UnknownParent(p.clone()));
+                }
             }
         }
         Ok(())
@@ -155,7 +187,9 @@ impl SpanTree {
 }
 
 impl Default for SpanTree {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -197,20 +231,29 @@ mod tests {
     #[test]
     fn unknown_parent_rejected() {
         let mut t = SpanTree::new();
-        assert!(matches!(t.insert("a", Some("nope"), "x", 0, 1).unwrap_err(), SpanError::UnknownParent(_)));
+        assert!(matches!(
+            t.insert("a", Some("nope"), "x", 0, 1).unwrap_err(),
+            SpanError::UnknownParent(_)
+        ));
     }
 
     #[test]
     fn duplicate_id_rejected() {
         let mut t = SpanTree::new();
         t.insert("a", None, "x", 0, 1).unwrap();
-        assert!(matches!(t.insert("a", None, "y", 0, 1).unwrap_err(), SpanError::DuplicateSpan(_)));
+        assert!(matches!(
+            t.insert("a", None, "y", 0, 1).unwrap_err(),
+            SpanError::DuplicateSpan(_)
+        ));
     }
 
     #[test]
     fn bad_times_rejected() {
         let mut t = SpanTree::new();
-        assert!(matches!(t.insert("a", None, "x", 100, 50).unwrap_err(), SpanError::BadTimes));
+        assert!(matches!(
+            t.insert("a", None, "x", 100, 50).unwrap_err(),
+            SpanError::BadTimes
+        ));
     }
 
     #[test]
@@ -225,7 +268,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = SpanTree::new();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), SpanError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            SpanError::SchemaMismatch
+        ));
     }
 
     #[test]

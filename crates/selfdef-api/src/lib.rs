@@ -39,10 +39,6 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
-mod mcp;
-mod nats;
-mod oracle_triage;
-mod policy;
 mod commit_authority;
 mod communication_boundary;
 mod control;
@@ -53,25 +49,29 @@ mod filesystem_boundary;
 mod flex_profile;
 mod friction_audit;
 mod gpu;
+mod guardian;
+mod handlers;
 mod hardware;
 mod health;
 mod inference_backends;
+mod mcp;
+pub mod metrics;
+mod modules;
+mod nats;
 mod network;
 mod network_boundary;
+mod oracle_triage;
+mod perimeter;
+mod policy;
 mod raid;
 mod repl;
 mod sandbox_tiers;
+mod scheduler;
+mod state;
 mod storage;
 mod tool_authority;
-mod guardian;
-mod handlers;
-mod modules;
-mod perimeter;
-mod scheduler;
-pub mod watchdog_metrics;
-pub mod metrics;
-mod state;
 mod transport;
+pub mod watchdog_metrics;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
 pub use state::{ApiState, ControlHandles, SseCaps};
@@ -284,7 +284,10 @@ pub fn router(state: ApiState) -> Router {
         // MS034 / SDD-048 D-2 — communication-boundary discovery.
         // 4 transports + 8 message types + 2 doctrines +
         // proposal→commit mapping.
-        .route("/v1/communication-boundary", get(communication_boundary::show))
+        .route(
+            "/v1/communication-boundary",
+            get(communication_boundary::show),
+        )
         // MS039 + MS040 / SDD-049 D-2 — authority discovery. 7-level
         // ladder + 5 trust rings + 6 profile envelopes + 4
         // TransitionGate variants + 5 authority crates.
@@ -316,7 +319,10 @@ pub fn router(state: ApiState) -> Router {
         // returns the current TOML (missing file → blank-valid body),
         // PUT validates enums + atomically writes. localStorage on
         // the PWA side is just a cache; the daemon is source of truth.
-        .route("/v1/dashboard-prefs", get(dashboard_prefs::show).put(dashboard_prefs::put))
+        .route(
+            "/v1/dashboard-prefs",
+            get(dashboard_prefs::show).put(dashboard_prefs::put),
+        )
         // MS043 UX — operator-pull discovery of the 5 named view
         // presets (compact / default / inference / performance /
         // security). Lets CLI + MCP + future per-path dashboards

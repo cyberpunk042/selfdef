@@ -105,10 +105,26 @@ impl SubstrateAllocatorPolicy {
         let gb = 1024 * mb;
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            heap: ClassQuota { per_alloc_max: 64 * mb, total_max: 4 * gb, total_used: 0 },
-            stack: ClassQuota { per_alloc_max: 8 * mb, total_max: 64 * mb, total_used: 0 },
-            mmap: ClassQuota { per_alloc_max: gb, total_max: 8 * gb, total_used: 0 },
-            tmpfile: ClassQuota { per_alloc_max: 4 * gb, total_max: 32 * gb, total_used: 0 },
+            heap: ClassQuota {
+                per_alloc_max: 64 * mb,
+                total_max: 4 * gb,
+                total_used: 0,
+            },
+            stack: ClassQuota {
+                per_alloc_max: 8 * mb,
+                total_max: 64 * mb,
+                total_used: 0,
+            },
+            mmap: ClassQuota {
+                per_alloc_max: gb,
+                total_max: 8 * gb,
+                total_used: 0,
+            },
+            tmpfile: ClassQuota {
+                per_alloc_max: 4 * gb,
+                total_max: 32 * gb,
+                total_used: 0,
+            },
         }
     }
 
@@ -136,11 +152,17 @@ impl SubstrateAllocatorPolicy {
     pub fn admit(&mut self, c: ResourceClass, bytes: u64) -> AllocVerdict {
         let q = self.quota(c);
         if bytes > q.per_alloc_max {
-            return AllocVerdict::DeniedPerAlloc { observed: bytes, cap: q.per_alloc_max };
+            return AllocVerdict::DeniedPerAlloc {
+                observed: bytes,
+                cap: q.per_alloc_max,
+            };
         }
         let would_total = q.total_used.saturating_add(bytes);
         if would_total > q.total_max {
-            return AllocVerdict::DeniedTotal { would_total, cap: q.total_max };
+            return AllocVerdict::DeniedTotal {
+                would_total,
+                cap: q.total_max,
+            };
         }
         self.quota_mut(c).total_used = would_total;
         AllocVerdict::Allow
@@ -163,9 +185,15 @@ impl SubstrateAllocatorPolicy {
             (ResourceClass::Mmap, self.mmap),
             (ResourceClass::Tmpfile, self.tmpfile),
         ] {
-            if q.per_alloc_max == 0 { return Err(AllocError::PerAllocZero(c)); }
-            if q.total_max == 0 { return Err(AllocError::TotalZero(c)); }
-            if q.total_used > q.total_max { return Err(AllocError::UsedExceedsTotal(c)); }
+            if q.per_alloc_max == 0 {
+                return Err(AllocError::PerAllocZero(c));
+            }
+            if q.total_max == 0 {
+                return Err(AllocError::TotalZero(c));
+            }
+            if q.total_used > q.total_max {
+                return Err(AllocError::UsedExceedsTotal(c));
+            }
         }
         Ok(())
     }
@@ -183,14 +211,20 @@ mod tests {
     #[test]
     fn small_alloc_allows() {
         let mut p = SubstrateAllocatorPolicy::canonical();
-        assert!(matches!(p.admit(ResourceClass::Heap, 1024), AllocVerdict::Allow));
+        assert!(matches!(
+            p.admit(ResourceClass::Heap, 1024),
+            AllocVerdict::Allow
+        ));
     }
 
     #[test]
     fn per_alloc_cap_hit() {
         let mut p = SubstrateAllocatorPolicy::canonical();
         // Stack per_alloc_max = 8 MiB.
-        assert!(matches!(p.admit(ResourceClass::Stack, 1024 * 1024 * 100), AllocVerdict::DeniedPerAlloc { .. }));
+        assert!(matches!(
+            p.admit(ResourceClass::Stack, 1024 * 1024 * 100),
+            AllocVerdict::DeniedPerAlloc { .. }
+        ));
     }
 
     #[test]
@@ -198,9 +232,15 @@ mod tests {
         let mut p = SubstrateAllocatorPolicy::canonical();
         // Stack total = 64MiB. Allocate 7MiB 10 times: first 9 admit, 10th denied.
         for _ in 0..9 {
-            assert!(matches!(p.admit(ResourceClass::Stack, 7 * 1024 * 1024), AllocVerdict::Allow));
+            assert!(matches!(
+                p.admit(ResourceClass::Stack, 7 * 1024 * 1024),
+                AllocVerdict::Allow
+            ));
         }
-        assert!(matches!(p.admit(ResourceClass::Stack, 7 * 1024 * 1024), AllocVerdict::DeniedTotal { .. }));
+        assert!(matches!(
+            p.admit(ResourceClass::Stack, 7 * 1024 * 1024),
+            AllocVerdict::DeniedTotal { .. }
+        ));
     }
 
     #[test]
@@ -217,25 +257,38 @@ mod tests {
     fn per_alloc_zero_rejected() {
         let mut p = SubstrateAllocatorPolicy::canonical();
         p.heap.per_alloc_max = 0;
-        assert!(matches!(p.validate().unwrap_err(), AllocError::PerAllocZero(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AllocError::PerAllocZero(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = SubstrateAllocatorPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AllocError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AllocError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ResourceClass::Tmpfile).unwrap(), "\"tmpfile\"");
+        assert_eq!(
+            serde_json::to_string(&ResourceClass::Tmpfile).unwrap(),
+            "\"tmpfile\""
+        );
     }
 
     #[test]
     fn verdict_serde_kebab() {
         let v = AllocVerdict::Allow;
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"allow\""));
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"allow\"")
+        );
     }
 
     #[test]

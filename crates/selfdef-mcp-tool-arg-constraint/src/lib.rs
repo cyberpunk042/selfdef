@@ -119,10 +119,18 @@ impl McpToolArgConstraint {
     }
 
     /// Register declarations.
-    pub fn set(&mut self, tool_id: &str, declarations: Vec<Declaration>) -> Result<(), ConstraintError> {
-        if tool_id.is_empty() { return Err(ConstraintError::EmptyId); }
+    pub fn set(
+        &mut self,
+        tool_id: &str,
+        declarations: Vec<Declaration>,
+    ) -> Result<(), ConstraintError> {
+        if tool_id.is_empty() {
+            return Err(ConstraintError::EmptyId);
+        }
         for d in &declarations {
-            if d.arg.is_empty() { return Err(ConstraintError::EmptyArg); }
+            if d.arg.is_empty() {
+                return Err(ConstraintError::EmptyArg);
+            }
         }
         self.map.insert(tool_id.into(), declarations);
         Ok(())
@@ -134,9 +142,8 @@ impl McpToolArgConstraint {
             Some(d) => d,
             None => return CheckOutcome::UnknownTool,
         };
-        let lookup: BTreeMap<&str, &str> = args.iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
+        let lookup: BTreeMap<&str, &str> =
+            args.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
         let mut items = Vec::new();
         for d in decls {
             let observed = lookup.get(d.arg.as_str()).map(|s| s.to_string());
@@ -148,7 +155,11 @@ impl McpToolArgConstraint {
                 });
             }
         }
-        if items.is_empty() { CheckOutcome::Ok } else { CheckOutcome::Violations { items } }
+        if items.is_empty() {
+            CheckOutcome::Ok
+        } else {
+            CheckOutcome::Violations { items }
+        }
     }
 
     fn passes(c: &Constraint, observed: Option<&str>) -> bool {
@@ -158,24 +169,26 @@ impl McpToolArgConstraint {
             Constraint::StrLenAtMost { max } => {
                 observed.is_none_or(|s| (s.chars().count() as u32) <= *max)
             }
-            Constraint::StrEnum { allowed } => {
-                observed.is_none_or(|s| allowed.contains(s))
-            }
+            Constraint::StrEnum { allowed } => observed.is_none_or(|s| allowed.contains(s)),
             Constraint::IntRange { min, max } => {
-                observed.is_none_or(|s| {
-                    matches!(s.parse::<i64>(), Ok(n) if n >= *min && n <= *max)
-                })
+                observed.is_none_or(|s| matches!(s.parse::<i64>(), Ok(n) if n >= *min && n <= *max))
             }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ConstraintError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ConstraintError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ConstraintError::SchemaMismatch);
+        }
         for (id, decls) in &self.map {
-            if id.is_empty() { return Err(ConstraintError::EmptyId); }
+            if id.is_empty() {
+                return Err(ConstraintError::EmptyId);
+            }
             for d in decls {
-                if d.arg.is_empty() { return Err(ConstraintError::EmptyArg); }
+                if d.arg.is_empty() {
+                    return Err(ConstraintError::EmptyArg);
+                }
             }
         }
         Ok(())
@@ -183,26 +196,44 @@ impl McpToolArgConstraint {
 }
 
 impl Default for McpToolArgConstraint {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn arg(n: &str, v: &str) -> (String, String) { (n.into(), v.into()) }
+    fn arg(n: &str, v: &str) -> (String, String) {
+        (n.into(), v.into())
+    }
 
     #[test]
     fn required_present_pass() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "x".into(), constraint: Constraint::RequiredPresent }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "x".into(),
+                constraint: Constraint::RequiredPresent,
+            }],
+        )
+        .unwrap();
         assert_eq!(c.check("t", &[arg("x", "v")]), CheckOutcome::Ok);
     }
 
     #[test]
     fn required_present_missing_violates() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "x".into(), constraint: Constraint::RequiredPresent }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "x".into(),
+                constraint: Constraint::RequiredPresent,
+            }],
+        )
+        .unwrap();
         match c.check("t", &[]) {
             CheckOutcome::Violations { items } => {
                 assert_eq!(items.len(), 1);
@@ -216,17 +247,37 @@ mod tests {
     #[test]
     fn forbid_empty_pass() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "x".into(), constraint: Constraint::ForbidEmpty }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "x".into(),
+                constraint: Constraint::ForbidEmpty,
+            }],
+        )
+        .unwrap();
         assert_eq!(c.check("t", &[arg("x", "v")]), CheckOutcome::Ok);
-        assert!(matches!(c.check("t", &[arg("x", "")]), CheckOutcome::Violations { .. }));
+        assert!(matches!(
+            c.check("t", &[arg("x", "")]),
+            CheckOutcome::Violations { .. }
+        ));
     }
 
     #[test]
     fn str_len_at_most() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "x".into(), constraint: Constraint::StrLenAtMost { max: 3 } }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "x".into(),
+                constraint: Constraint::StrLenAtMost { max: 3 },
+            }],
+        )
+        .unwrap();
         assert_eq!(c.check("t", &[arg("x", "ab")]), CheckOutcome::Ok);
-        assert!(matches!(c.check("t", &[arg("x", "abcd")]), CheckOutcome::Violations { .. }));
+        assert!(matches!(
+            c.check("t", &[arg("x", "abcd")]),
+            CheckOutcome::Violations { .. }
+        ));
     }
 
     #[test]
@@ -235,27 +286,60 @@ mod tests {
         let mut allowed = BTreeSet::new();
         allowed.insert("on".into());
         allowed.insert("off".into());
-        c.set("t", vec![Declaration { arg: "mode".into(), constraint: Constraint::StrEnum { allowed } }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "mode".into(),
+                constraint: Constraint::StrEnum { allowed },
+            }],
+        )
+        .unwrap();
         assert_eq!(c.check("t", &[arg("mode", "on")]), CheckOutcome::Ok);
-        assert!(matches!(c.check("t", &[arg("mode", "wat")]), CheckOutcome::Violations { .. }));
+        assert!(matches!(
+            c.check("t", &[arg("mode", "wat")]),
+            CheckOutcome::Violations { .. }
+        ));
     }
 
     #[test]
     fn int_range() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "n".into(), constraint: Constraint::IntRange { min: 1, max: 10 } }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "n".into(),
+                constraint: Constraint::IntRange { min: 1, max: 10 },
+            }],
+        )
+        .unwrap();
         assert_eq!(c.check("t", &[arg("n", "5")]), CheckOutcome::Ok);
-        assert!(matches!(c.check("t", &[arg("n", "20")]), CheckOutcome::Violations { .. }));
-        assert!(matches!(c.check("t", &[arg("n", "nope")]), CheckOutcome::Violations { .. }));
+        assert!(matches!(
+            c.check("t", &[arg("n", "20")]),
+            CheckOutcome::Violations { .. }
+        ));
+        assert!(matches!(
+            c.check("t", &[arg("n", "nope")]),
+            CheckOutcome::Violations { .. }
+        ));
     }
 
     #[test]
     fn multiple_violations_reported() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![
-            Declaration { arg: "x".into(), constraint: Constraint::RequiredPresent },
-            Declaration { arg: "y".into(), constraint: Constraint::StrLenAtMost { max: 3 } },
-        ]).unwrap();
+        c.set(
+            "t",
+            vec![
+                Declaration {
+                    arg: "x".into(),
+                    constraint: Constraint::RequiredPresent,
+                },
+                Declaration {
+                    arg: "y".into(),
+                    constraint: Constraint::StrLenAtMost { max: 3 },
+                },
+            ],
+        )
+        .unwrap();
         match c.check("t", &[arg("y", "abcd")]) {
             CheckOutcome::Violations { items } => assert_eq!(items.len(), 2),
             _ => panic!(),
@@ -272,7 +356,14 @@ mod tests {
     fn empty_arg_rejected() {
         let mut c = McpToolArgConstraint::new();
         assert!(matches!(
-            c.set("t", vec![Declaration { arg: "".into(), constraint: Constraint::RequiredPresent }]).unwrap_err(),
+            c.set(
+                "t",
+                vec![Declaration {
+                    arg: "".into(),
+                    constraint: Constraint::RequiredPresent
+                }]
+            )
+            .unwrap_err(),
             ConstraintError::EmptyArg
         ));
     }
@@ -281,13 +372,23 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = McpToolArgConstraint::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ConstraintError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ConstraintError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn constraint_serde_roundtrip() {
         let mut c = McpToolArgConstraint::new();
-        c.set("t", vec![Declaration { arg: "x".into(), constraint: Constraint::ForbidEmpty }]).unwrap();
+        c.set(
+            "t",
+            vec![Declaration {
+                arg: "x".into(),
+                constraint: Constraint::ForbidEmpty,
+            }],
+        )
+        .unwrap();
         let j = serde_json::to_string(&c).unwrap();
         let back: McpToolArgConstraint = serde_json::from_str(&j).unwrap();
         assert_eq!(c, back);

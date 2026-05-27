@@ -32,7 +32,10 @@ pub enum Slot {
 impl Slot {
     /// The other slot.
     pub fn other(self) -> Slot {
-        match self { Slot::Blue => Slot::Green, Slot::Green => Slot::Blue }
+        match self {
+            Slot::Blue => Slot::Green,
+            Slot::Green => Slot::Blue,
+        }
     }
 }
 
@@ -107,7 +110,9 @@ impl BlueGreenDeploy {
 
     /// Register service (defaults to Blue active, both slots empty).
     pub fn register(&mut self, svc: &str) -> Result<(), DeployError> {
-        if svc.is_empty() { return Err(DeployError::EmptyId); }
+        if svc.is_empty() {
+            return Err(DeployError::EmptyId);
+        }
         self.services.entry(svc.into()).or_insert(ServiceState {
             active: Slot::Blue,
             blue: SlotState::default(),
@@ -117,19 +122,33 @@ impl BlueGreenDeploy {
     }
 
     fn slot_mut<'a>(state: &'a mut ServiceState, slot: Slot) -> &'a mut SlotState {
-        match slot { Slot::Blue => &mut state.blue, Slot::Green => &mut state.green }
+        match slot {
+            Slot::Blue => &mut state.blue,
+            Slot::Green => &mut state.green,
+        }
     }
 
     fn slot<'a>(state: &'a ServiceState, slot: Slot) -> &'a SlotState {
-        match slot { Slot::Blue => &state.blue, Slot::Green => &state.green }
+        match slot {
+            Slot::Blue => &state.blue,
+            Slot::Green => &state.green,
+        }
     }
 
     /// Stage a version to a (must-be-inactive) slot.
     pub fn stage(&mut self, svc: &str, slot: Slot, version: &str) -> Result<(), DeployError> {
-        if version.is_empty() { return Err(DeployError::EmptyVersion); }
-        let s = self.services.get_mut(svc).ok_or_else(|| DeployError::UnknownService(svc.into()))?;
+        if version.is_empty() {
+            return Err(DeployError::EmptyVersion);
+        }
+        let s = self
+            .services
+            .get_mut(svc)
+            .ok_or_else(|| DeployError::UnknownService(svc.into()))?;
         if s.active == slot {
-            return Err(DeployError::StageToActive { svc: svc.into(), inactive: s.active.other() });
+            return Err(DeployError::StageToActive {
+                svc: svc.into(),
+                inactive: s.active.other(),
+            });
         }
         let slot_state = Self::slot_mut(s, slot);
         slot_state.version = Some(version.into());
@@ -139,14 +158,20 @@ impl BlueGreenDeploy {
 
     /// Mark a staged slot warm.
     pub fn mark_warm(&mut self, svc: &str, slot: Slot) -> Result<(), DeployError> {
-        let s = self.services.get_mut(svc).ok_or_else(|| DeployError::UnknownService(svc.into()))?;
+        let s = self
+            .services
+            .get_mut(svc)
+            .ok_or_else(|| DeployError::UnknownService(svc.into()))?;
         Self::slot_mut(s, slot).warmed = true;
         Ok(())
     }
 
     /// Swap active ↔ inactive (requires inactive to be warmed + have a version).
     pub fn swap(&mut self, svc: &str) -> Result<(), DeployError> {
-        let s = self.services.get_mut(svc).ok_or_else(|| DeployError::UnknownService(svc.into()))?;
+        let s = self
+            .services
+            .get_mut(svc)
+            .ok_or_else(|| DeployError::UnknownService(svc.into()))?;
         let inactive = s.active.other();
         let inactive_state = Self::slot(s, inactive);
         if inactive_state.version.is_none() {
@@ -167,16 +192,22 @@ impl BlueGreenDeploy {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DeployError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DeployError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DeployError::SchemaMismatch);
+        }
         for (id, _) in &self.services {
-            if id.is_empty() { return Err(DeployError::EmptyId); }
+            if id.is_empty() {
+                return Err(DeployError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for BlueGreenDeploy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -206,7 +237,10 @@ mod tests {
     fn cannot_stage_to_active() {
         let mut d = BlueGreenDeploy::new();
         d.register("api").unwrap();
-        assert!(matches!(d.stage("api", Slot::Blue, "v1").unwrap_err(), DeployError::StageToActive { .. }));
+        assert!(matches!(
+            d.stage("api", Slot::Blue, "v1").unwrap_err(),
+            DeployError::StageToActive { .. }
+        ));
     }
 
     #[test]
@@ -214,14 +248,20 @@ mod tests {
         let mut d = BlueGreenDeploy::new();
         d.register("api").unwrap();
         d.stage("api", Slot::Green, "v2").unwrap();
-        assert!(matches!(d.swap("api").unwrap_err(), DeployError::NotWarm(_)));
+        assert!(matches!(
+            d.swap("api").unwrap_err(),
+            DeployError::NotWarm(_)
+        ));
     }
 
     #[test]
     fn cannot_swap_to_empty_slot() {
         let mut d = BlueGreenDeploy::new();
         d.register("api").unwrap();
-        assert!(matches!(d.swap("api").unwrap_err(), DeployError::NoVersionInInactive(_)));
+        assert!(matches!(
+            d.swap("api").unwrap_err(),
+            DeployError::NoVersionInInactive(_)
+        ));
     }
 
     #[test]
@@ -256,20 +296,29 @@ mod tests {
         let mut d = BlueGreenDeploy::new();
         assert!(matches!(d.register("").unwrap_err(), DeployError::EmptyId));
         d.register("a").unwrap();
-        assert!(matches!(d.stage("a", Slot::Green, "").unwrap_err(), DeployError::EmptyVersion));
+        assert!(matches!(
+            d.stage("a", Slot::Green, "").unwrap_err(),
+            DeployError::EmptyVersion
+        ));
     }
 
     #[test]
     fn unknown_service_rejected() {
         let mut d = BlueGreenDeploy::new();
-        assert!(matches!(d.stage("nope", Slot::Green, "v").unwrap_err(), DeployError::UnknownService(_)));
+        assert!(matches!(
+            d.stage("nope", Slot::Green, "v").unwrap_err(),
+            DeployError::UnknownService(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = BlueGreenDeploy::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DeployError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DeployError::SchemaMismatch
+        ));
     }
 
     #[test]

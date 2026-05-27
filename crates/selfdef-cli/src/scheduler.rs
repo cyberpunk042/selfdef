@@ -17,10 +17,10 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use selfdef_scheduler::{
-    audit_chain_check, read_ring_buffer, replay as scheduler_replay, AxisWeights, Decision,
-    Profile, Route, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR,
+    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, Route,
+    audit_chain_check, read_ring_buffer, replay as scheduler_replay,
 };
 
 fn ring_dir() -> PathBuf {
@@ -104,7 +104,10 @@ pub(crate) fn run_history(limit: u32, json: bool) -> Result<i32> {
         println!("{}", serde_json::to_string_pretty(&limited)?);
     } else {
         if limited.is_empty() {
-            println!("(no scheduler decisions in ring buffer at {})", ring_dir().display());
+            println!(
+                "(no scheduler decisions in ring buffer at {})",
+                ring_dir().display()
+            );
         }
         for d in &limited {
             print_decision_row(d);
@@ -203,8 +206,8 @@ pub(crate) fn run_replay(request_id: &str, profile: Option<&str>, json: bool) ->
         println!("  route differs:    {}", result.route_differs);
         println!("  compound differs: {}", result.compound_differs);
         if result.compound_differs {
-            let delta = result.counterfactual.axis_scores.compound
-                - result.original.axis_scores.compound;
+            let delta =
+                result.counterfactual.axis_scores.compound - result.original.axis_scores.compound;
             println!("  delta: {delta:+.3}");
         }
     }
@@ -274,9 +277,7 @@ pub(crate) fn run_force(request_id: &str, route_str: &str, json: bool) -> Result
     } else {
         println!("scheduler force: request_id={request_id} route={route:?}");
         println!("  Stage-1 surface — operator intent recorded.");
-        println!(
-            "  Full Ring 0 + MS003 multi-sig dispatch wires through selfdefd's"
-        );
+        println!("  Full Ring 0 + MS003 multi-sig dispatch wires through selfdefd's");
         println!("  authority surface in a future round (per SDD-031 D3 implementation note).");
     }
     Ok(0)

@@ -174,24 +174,24 @@ impl Profile {
     /// Profile's maximum authority level per MS040 envelope.
     pub fn max_authority(self) -> AuthorityLevel {
         match self {
-            Profile::Private => AuthorityLevel::L1Suggest,        // R09366
-            Profile::Fast => AuthorityLevel::L4Execute,           // R09380 (dump 17473)
-            Profile::Careful => AuthorityLevel::L6Persist,        // R09401 L6 allowed with double-gate
-            Profile::Autonomous => AuthorityLevel::L5Commit,      // R09411 + R09415
-            Profile::Experimental => AuthorityLevel::L4Execute,   // F04722 zero host commit
-            Profile::Production => AuthorityLevel::L6Persist,     // F04736 quadruple-gate L6
+            Profile::Private => AuthorityLevel::L1Suggest, // R09366
+            Profile::Fast => AuthorityLevel::L4Execute,    // R09380 (dump 17473)
+            Profile::Careful => AuthorityLevel::L6Persist, // R09401 L6 allowed with double-gate
+            Profile::Autonomous => AuthorityLevel::L5Commit, // R09411 + R09415
+            Profile::Experimental => AuthorityLevel::L4Execute, // F04722 zero host commit
+            Profile::Production => AuthorityLevel::L6Persist, // F04736 quadruple-gate L6
         }
     }
 
     /// Maximum trust ring this profile allows tokens to carry.
     pub fn max_trust_ring(self) -> TrustRing {
         match self {
-            Profile::Private => TrustRing::Ring2,           // F04687 never >= 3
-            Profile::Fast => TrustRing::Ring2,              // F04696 up to 2
+            Profile::Private => TrustRing::Ring2, // F04687 never >= 3
+            Profile::Fast => TrustRing::Ring2,    // F04696 up to 2
             Profile::Careful => TrustRing::Ring2,
             Profile::Autonomous => TrustRing::Ring2,
-            Profile::Experimental => TrustRing::Ring3,      // F04726 Ring 3 default
-            Profile::Production => TrustRing::Ring2,        // F04737 never >= 4
+            Profile::Experimental => TrustRing::Ring3, // F04726 Ring 3 default
+            Profile::Production => TrustRing::Ring2,   // F04737 never >= 4
         }
     }
 
@@ -199,27 +199,36 @@ impl Profile {
     pub fn ttl_ceiling_seconds(self) -> u32 {
         match self {
             Profile::Private => 60,
-            Profile::Fast => 3600,           // R09390 max 3600s
-            Profile::Careful => 86_400,      // R09407 default 24h gate timeout
+            Profile::Fast => 3600,      // R09390 max 3600s
+            Profile::Careful => 86_400, // R09407 default 24h gate timeout
             Profile::Autonomous => 86_400,
             Profile::Experimental => 1800,
-            Profile::Production => 600,      // R09449 / F04734 max 600s
+            Profile::Production => 600, // R09449 / F04734 max 600s
         }
     }
 
     /// Whether this profile requires sandbox simulation as evidence.
     pub fn requires_sandbox(self) -> bool {
-        matches!(self, Profile::Careful | Profile::Autonomous | Profile::Experimental)
+        matches!(
+            self,
+            Profile::Careful | Profile::Autonomous | Profile::Experimental
+        )
     }
 
     /// Whether this profile requires the oracle gate for L5 Commit.
     pub fn requires_oracle(self) -> bool {
-        matches!(self, Profile::Careful | Profile::Autonomous | Profile::Production)
+        matches!(
+            self,
+            Profile::Careful | Profile::Autonomous | Profile::Production
+        )
     }
 
     /// Whether this profile requires snapshot for L5/L6 (R09401 + R09736).
     pub fn requires_snapshot_for_persist(self) -> bool {
-        matches!(self, Profile::Careful | Profile::Autonomous | Profile::Production)
+        matches!(
+            self,
+            Profile::Careful | Profile::Autonomous | Profile::Production
+        )
     }
 }
 
@@ -287,11 +296,12 @@ pub fn decide(profile: Profile, req: &AuthorityRequest) -> AuthorityDecision {
                     missing.push("oracle_agrees".into());
                 }
                 if req.evidence.evidence_digest.is_empty() {
-                    missing.push("evidence_digest".into());  // R09402
+                    missing.push("evidence_digest".into()); // R09402
                 }
             }
             // R09400 — L4 requires sandbox simulation pass first.
-            if req.target_authority >= AuthorityLevel::L4Execute && !req.evidence.successful_sandbox {
+            if req.target_authority >= AuthorityLevel::L4Execute && !req.evidence.successful_sandbox
+            {
                 missing.push("successful_sandbox".into());
             }
             // R09401 — L6 double-gate adds snapshot.
@@ -401,7 +411,12 @@ mod tests {
         }
     }
 
-    fn req(target: AuthorityLevel, ring: TrustRing, tier: SandboxTier, ev: Evidence) -> AuthorityRequest {
+    fn req(
+        target: AuthorityLevel,
+        ring: TrustRing,
+        tier: SandboxTier,
+        ev: Evidence,
+    ) -> AuthorityRequest {
         AuthorityRequest {
             target_authority: target,
             trust_ring: ring,
@@ -415,17 +430,31 @@ mod tests {
 
     #[test]
     fn private_observe_allowed_without_evidence() {
-        let r = req(AuthorityLevel::L0Observe, TrustRing::Ring2, SandboxTier::TierA, Evidence {
-            valid_schema: true, safe_policy: true, ..Default::default()
-        });
+        let r = req(
+            AuthorityLevel::L0Observe,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            Evidence {
+                valid_schema: true,
+                safe_policy: true,
+                ..Default::default()
+            },
+        );
         assert!(decide(Profile::Private, &r).allowed);
     }
 
     #[test]
     fn private_l4_refused_without_user_approves() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring2, SandboxTier::TierA, Evidence {
-            valid_schema: true, safe_policy: true, ..Default::default()
-        });
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            Evidence {
+                valid_schema: true,
+                safe_policy: true,
+                ..Default::default()
+            },
+        );
         let d = decide(Profile::Private, &r);
         assert!(!d.allowed);
         assert_eq!(d.missing_evidence, vec!["operator_promotion"]);
@@ -440,25 +469,48 @@ mod tests {
 
     #[test]
     fn fast_l4_allowed_on_tier_a_with_universal_evidence() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring2, SandboxTier::TierA, Evidence {
-            valid_schema: true, safe_policy: true, ..Default::default()
-        });
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            Evidence {
+                valid_schema: true,
+                safe_policy: true,
+                ..Default::default()
+            },
+        );
         assert!(decide(Profile::Fast, &r).allowed);
     }
 
     #[test]
     fn fast_l4_refused_off_tier_a() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring2, SandboxTier::TierB, Evidence {
-            valid_schema: true, safe_policy: true, ..Default::default()
-        });
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring2,
+            SandboxTier::TierB,
+            Evidence {
+                valid_schema: true,
+                safe_policy: true,
+                ..Default::default()
+            },
+        );
         let d = decide(Profile::Fast, &r);
         assert!(!d.allowed);
-        assert!(d.missing_evidence.iter().any(|x| x == "sandbox_tier_a_for_fast_l4"));
+        assert!(
+            d.missing_evidence
+                .iter()
+                .any(|x| x == "sandbox_tier_a_for_fast_l4")
+        );
     }
 
     #[test]
     fn fast_l5_refused_above_ceiling() {
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, full_evidence());
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            full_evidence(),
+        );
         let d = decide(Profile::Fast, &r);
         assert!(!d.allowed);
         assert!(d.reason.contains("exceeds Fast ceiling"));
@@ -471,14 +523,24 @@ mod tests {
         // Tests missing
         let mut ev = full_evidence();
         ev.tests_pass = false;
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         let d = decide(Profile::Careful, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "tests_pass"));
         // Oracle missing
         let mut ev2 = full_evidence();
         ev2.oracle_agrees = false;
-        let r2 = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, ev2);
+        let r2 = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev2,
+        );
         let d2 = decide(Profile::Careful, &r2);
         assert!(!d2.allowed);
         assert!(d2.missing_evidence.iter().any(|x| x == "oracle_agrees"));
@@ -488,7 +550,12 @@ mod tests {
     fn careful_l5_requires_evidence_digest() {
         let mut ev = full_evidence();
         ev.evidence_digest = String::new();
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         let d = decide(Profile::Careful, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "evidence_digest"));
@@ -498,7 +565,12 @@ mod tests {
     fn careful_l6_double_gate_adds_snapshot() {
         let mut ev = full_evidence();
         ev.snapshot_present = false;
-        let r = req(AuthorityLevel::L6Persist, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L6Persist,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         let d = decide(Profile::Careful, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "snapshot_present"));
@@ -506,7 +578,12 @@ mod tests {
 
     #[test]
     fn careful_l5_fully_evidenced_allowed() {
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, full_evidence());
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            full_evidence(),
+        );
         assert!(decide(Profile::Careful, &r).allowed);
     }
 
@@ -514,7 +591,12 @@ mod tests {
 
     #[test]
     fn autonomous_l5_within_predeclared_gates() {
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, full_evidence());
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            full_evidence(),
+        );
         assert!(decide(Profile::Autonomous, &r).allowed);
     }
 
@@ -522,7 +604,12 @@ mod tests {
     fn autonomous_l6_still_needs_oracle_and_operator() {
         let mut ev = full_evidence();
         ev.user_approves = false;
-        let r = req(AuthorityLevel::L6Persist, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L6Persist,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         // L6 exceeds Autonomous max (L5)
         let d = decide(Profile::Autonomous, &r);
         assert!(!d.allowed);
@@ -532,30 +619,59 @@ mod tests {
 
     #[test]
     fn experimental_refuses_l5_zero_host_commit() {
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring3, SandboxTier::TierC, full_evidence());
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring3,
+            SandboxTier::TierC,
+            full_evidence(),
+        );
         let d = decide(Profile::Experimental, &r);
         assert!(!d.allowed);
         // Either over ceiling or experimental_no_host_commit; we check the message.
-        assert!(d.reason.to_lowercase().contains("ceiling") || d.missing_evidence.iter().any(|x| x == "experimental_no_host_commit"));
+        assert!(
+            d.reason.to_lowercase().contains("ceiling")
+                || d.missing_evidence
+                    .iter()
+                    .any(|x| x == "experimental_no_host_commit")
+        );
     }
 
     #[test]
     fn experimental_requires_tier_c_or_d() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring3, SandboxTier::TierA, full_evidence());
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring3,
+            SandboxTier::TierA,
+            full_evidence(),
+        );
         let d = decide(Profile::Experimental, &r);
         assert!(!d.allowed);
-        assert!(d.missing_evidence.iter().any(|x| x == "sandbox_tier_c_or_d"));
+        assert!(
+            d.missing_evidence
+                .iter()
+                .any(|x| x == "sandbox_tier_c_or_d")
+        );
     }
 
     #[test]
     fn experimental_ring_3_allowed() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring3, SandboxTier::TierC, full_evidence());
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring3,
+            SandboxTier::TierC,
+            full_evidence(),
+        );
         assert!(decide(Profile::Experimental, &r).allowed);
     }
 
     #[test]
     fn experimental_ring_4_refused() {
-        let r = req(AuthorityLevel::L4Execute, TrustRing::Ring4, SandboxTier::TierD, full_evidence());
+        let r = req(
+            AuthorityLevel::L4Execute,
+            TrustRing::Ring4,
+            SandboxTier::TierD,
+            full_evidence(),
+        );
         let d = decide(Profile::Experimental, &r);
         assert!(!d.allowed);
     }
@@ -566,7 +682,12 @@ mod tests {
     fn production_l5_requires_triple_gate() {
         let mut ev = full_evidence();
         ev.user_approves = false;
-        let r = req(AuthorityLevel::L5Commit, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L5Commit,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         let d = decide(Profile::Production, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "user_approves"));
@@ -576,7 +697,12 @@ mod tests {
     fn production_l6_requires_quadruple_gate_with_snapshot() {
         let mut ev = full_evidence();
         ev.snapshot_present = false;
-        let r = req(AuthorityLevel::L6Persist, TrustRing::Ring2, SandboxTier::TierA, ev);
+        let r = req(
+            AuthorityLevel::L6Persist,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            ev,
+        );
         let d = decide(Profile::Production, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "snapshot_present"));
@@ -584,7 +710,12 @@ mod tests {
 
     #[test]
     fn production_l6_full_evidence_allowed() {
-        let r = req(AuthorityLevel::L6Persist, TrustRing::Ring2, SandboxTier::TierA, full_evidence());
+        let r = req(
+            AuthorityLevel::L6Persist,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            full_evidence(),
+        );
         assert!(decide(Profile::Production, &r).allowed);
     }
 
@@ -597,7 +728,11 @@ mod tests {
         validate_ttl(Profile::Fast, 3600).unwrap();
         let err = validate_ttl(Profile::Production, 1000).unwrap_err();
         match err {
-            GateError::TtlExceedsCeiling { profile, ttl_seconds, ceiling_seconds } => {
+            GateError::TtlExceedsCeiling {
+                profile,
+                ttl_seconds,
+                ceiling_seconds,
+            } => {
                 assert_eq!(profile, Profile::Production);
                 assert_eq!(ttl_seconds, 1000);
                 assert_eq!(ceiling_seconds, 600);
@@ -622,7 +757,10 @@ mod tests {
 
     #[test]
     fn doctrine_verbatim_constant() {
-        assert_eq!(DOCTRINE_AUTHORITY_FOLLOWS_EVIDENCE, "Authority follows evidence");
+        assert_eq!(
+            DOCTRINE_AUTHORITY_FOLLOWS_EVIDENCE,
+            "Authority follows evidence"
+        );
         assert_doctrine_intact("Authority follows evidence").unwrap();
     }
 
@@ -636,7 +774,12 @@ mod tests {
 
     #[test]
     fn universal_evidence_required_even_for_l0() {
-        let r = req(AuthorityLevel::L0Observe, TrustRing::Ring2, SandboxTier::TierA, Evidence::default());
+        let r = req(
+            AuthorityLevel::L0Observe,
+            TrustRing::Ring2,
+            SandboxTier::TierA,
+            Evidence::default(),
+        );
         let d = decide(Profile::Production, &r);
         assert!(!d.allowed);
         assert!(d.missing_evidence.iter().any(|x| x == "valid_schema"));
@@ -647,8 +790,14 @@ mod tests {
 
     #[test]
     fn profile_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&Profile::Experimental).unwrap(), "\"experimental\"");
-        assert_eq!(serde_json::to_string(&Profile::Production).unwrap(), "\"production\"");
+        assert_eq!(
+            serde_json::to_string(&Profile::Experimental).unwrap(),
+            "\"experimental\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Profile::Production).unwrap(),
+            "\"production\""
+        );
     }
 
     #[test]

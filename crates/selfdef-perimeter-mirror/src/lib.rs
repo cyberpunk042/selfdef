@@ -192,11 +192,19 @@ impl Verdict {
         if self.attempted_binary_path.is_empty() {
             return Err(PerimeterError::EmptyBinaryPath);
         }
-        if let Outcome::ExtensionAllowed { manifest_sha256, .. } = &self.outcome {
+        if let Outcome::ExtensionAllowed {
+            manifest_sha256, ..
+        } = &self.outcome
+        {
             if manifest_sha256.is_empty() {
                 return Err(PerimeterError::EmptyExtensionManifest);
             }
-            if self.signer_kid_extension.as_deref().unwrap_or("").is_empty() {
+            if self
+                .signer_kid_extension
+                .as_deref()
+                .unwrap_or("")
+                .is_empty()
+            {
                 return Err(PerimeterError::MissingExtensionSigner);
             }
         }
@@ -227,8 +235,8 @@ impl Verdict {
     /// Returns `PerimeterError::Serde` on parse failure or any
     /// validation error from `validate()`.
     pub fn from_json(bytes: &[u8]) -> Result<Self, PerimeterError> {
-        let v: Self = serde_json::from_slice(bytes)
-            .map_err(|e| PerimeterError::Serde(e.to_string()))?;
+        let v: Self =
+            serde_json::from_slice(bytes).map_err(|e| PerimeterError::Serde(e.to_string()))?;
         v.validate()?;
         Ok(v)
     }

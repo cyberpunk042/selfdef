@@ -127,9 +127,7 @@ fn probe_dns() -> NetworkComponent {
 }
 
 fn probe_systemd_unit(unit: &'static str, component_name: &'static str) -> NetworkComponent {
-    let out = Command::new("systemctl")
-        .args(["is-active", unit])
-        .output();
+    let out = Command::new("systemctl").args(["is-active", unit]).output();
     match out {
         Ok(o) => {
             let stdout = String::from_utf8_lossy(&o.stdout);
@@ -152,7 +150,9 @@ fn probe_systemd_unit(unit: &'static str, component_name: &'static str) -> Netwo
                 },
                 _ => NetworkComponent {
                     name: component_name,
-                    detail: format!("systemd unit {unit} not installed (is-active returned {text:?})"),
+                    detail: format!(
+                        "systemd unit {unit} not installed (is-active returned {text:?})"
+                    ),
                     state: "unknown",
                 },
             }

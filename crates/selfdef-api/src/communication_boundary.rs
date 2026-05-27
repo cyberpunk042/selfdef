@@ -26,21 +26,73 @@ pub(crate) struct MessageDescriptor {
 }
 
 const TRANSPORTS: &[TransportDescriptor] = &[
-    TransportDescriptor { name: "VirtioVsock",     scope: "AF_VSOCK virtio socket (host↔VM kernel-level)" },
-    TransportDescriptor { name: "GrpcOverVsock",   scope: "gRPC framed over AF_VSOCK" },
-    TransportDescriptor { name: "UnixSocketProxy", scope: "Unix-socket forwarded over shared mount" },
-    TransportDescriptor { name: "SharedFolder",    scope: "explicit-exchange dirs per SDD-045 (slowest; large payloads)" },
+    TransportDescriptor {
+        name: "VirtioVsock",
+        scope: "AF_VSOCK virtio socket (host↔VM kernel-level)",
+    },
+    TransportDescriptor {
+        name: "GrpcOverVsock",
+        scope: "gRPC framed over AF_VSOCK",
+    },
+    TransportDescriptor {
+        name: "UnixSocketProxy",
+        scope: "Unix-socket forwarded over shared mount",
+    },
+    TransportDescriptor {
+        name: "SharedFolder",
+        scope: "explicit-exchange dirs per SDD-045 (slowest; large payloads)",
+    },
 ];
 
 const MESSAGE_TYPES: &[MessageDescriptor] = &[
-    MessageDescriptor { kind: "DraftRequest",     direction: "host→VM", content: "ask for generation",                    is_proposal: false },
-    MessageDescriptor { kind: "DraftResult",      direction: "VM→host", content: "drafts response",                        is_proposal: false },
-    MessageDescriptor { kind: "EmbeddingRequest", direction: "host→VM", content: "ask for embeddings",                     is_proposal: false },
-    MessageDescriptor { kind: "RerankResult",     direction: "VM→host", content: "reranked candidates",                    is_proposal: false },
-    MessageDescriptor { kind: "VisionResult",     direction: "VM→host", content: "vision / GUI / perception output",        is_proposal: false },
-    MessageDescriptor { kind: "ToolPlan",         direction: "VM→host", content: "proposed tool calls (PROPOSAL)",          is_proposal: true },
-    MessageDescriptor { kind: "RiskAssessment",   direction: "VM→host", content: "scored risk (PROPOSAL)",                  is_proposal: true },
-    MessageDescriptor { kind: "PatchProposal",    direction: "VM→host", content: "file patches (PROPOSAL — SDD-045 flow)",  is_proposal: true },
+    MessageDescriptor {
+        kind: "DraftRequest",
+        direction: "host→VM",
+        content: "ask for generation",
+        is_proposal: false,
+    },
+    MessageDescriptor {
+        kind: "DraftResult",
+        direction: "VM→host",
+        content: "drafts response",
+        is_proposal: false,
+    },
+    MessageDescriptor {
+        kind: "EmbeddingRequest",
+        direction: "host→VM",
+        content: "ask for embeddings",
+        is_proposal: false,
+    },
+    MessageDescriptor {
+        kind: "RerankResult",
+        direction: "VM→host",
+        content: "reranked candidates",
+        is_proposal: false,
+    },
+    MessageDescriptor {
+        kind: "VisionResult",
+        direction: "VM→host",
+        content: "vision / GUI / perception output",
+        is_proposal: false,
+    },
+    MessageDescriptor {
+        kind: "ToolPlan",
+        direction: "VM→host",
+        content: "proposed tool calls (PROPOSAL)",
+        is_proposal: true,
+    },
+    MessageDescriptor {
+        kind: "RiskAssessment",
+        direction: "VM→host",
+        content: "scored risk (PROPOSAL)",
+        is_proposal: true,
+    },
+    MessageDescriptor {
+        kind: "PatchProposal",
+        direction: "VM→host",
+        content: "file patches (PROPOSAL — SDD-045 flow)",
+        is_proposal: true,
+    },
 ];
 
 const DOCTRINES: &[&str] = &[

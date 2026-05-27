@@ -20,8 +20,8 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use selfdef_guardian::{
-    audit_chain_check, now_ms, read_ring_buffer, GuardianError, Verdict, DEFAULT_OCSF_PATH,
-    DEFAULT_RING_DIR, DEFAULT_SOCKET_PATH,
+    DEFAULT_OCSF_PATH, DEFAULT_RING_DIR, DEFAULT_SOCKET_PATH, GuardianError, Verdict,
+    audit_chain_check, now_ms, read_ring_buffer,
 };
 
 /// Response body for `GET /v1/guardian`.
@@ -73,9 +73,7 @@ pub(crate) async fn show() -> Result<Json<GuardianBody>, ApiError> {
 }
 
 /// `GET /v1/guardian/history?limit=N` — verdicts newest-first.
-pub(crate) async fn history(
-    Query(q): Query<HistoryQuery>,
-) -> Result<Json<HistoryBody>, ApiError> {
+pub(crate) async fn history(Query(q): Query<HistoryQuery>) -> Result<Json<HistoryBody>, ApiError> {
     let limit = q.limit.unwrap_or(32).min(256) as usize;
     let all = read_ring_buffer(Path::new(DEFAULT_RING_DIR))
         .map_err(|e| ApiError::Internal(format!("ring buffer read: {e}")))?;
@@ -130,9 +128,18 @@ mod tests {
 
     fn three_step_ok() -> Vec<StepResult> {
         vec![
-            StepResult { step: ResponseStep::Sigkill, outcome: StepOutcome::Ok },
-            StepResult { step: ResponseStep::AuditAppend, outcome: StepOutcome::Ok },
-            StepResult { step: ResponseStep::ConsoleAlert, outcome: StepOutcome::Ok },
+            StepResult {
+                step: ResponseStep::Sigkill,
+                outcome: StepOutcome::Ok,
+            },
+            StepResult {
+                step: ResponseStep::AuditAppend,
+                outcome: StepOutcome::Ok,
+            },
+            StepResult {
+                step: ResponseStep::ConsoleAlert,
+                outcome: StepOutcome::Ok,
+            },
         ]
     }
 

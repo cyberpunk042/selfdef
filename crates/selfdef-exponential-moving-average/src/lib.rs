@@ -43,7 +43,9 @@ pub enum EmaError {
 impl ExponentialMovingAverage {
     /// New.
     pub fn new(alpha_bp: u32) -> Result<Self, EmaError> {
-        if alpha_bp == 0 || alpha_bp > 10000 { return Err(EmaError::BadAlpha); }
+        if alpha_bp == 0 || alpha_bp > 10000 {
+            return Err(EmaError::BadAlpha);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             alpha_bp,
@@ -86,8 +88,12 @@ impl ExponentialMovingAverage {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), EmaError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(EmaError::SchemaMismatch); }
-        if self.alpha_bp == 0 || self.alpha_bp > 10000 { return Err(EmaError::BadAlpha); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(EmaError::SchemaMismatch);
+        }
+        if self.alpha_bp == 0 || self.alpha_bp > 10000 {
+            return Err(EmaError::BadAlpha);
+        }
         Ok(())
     }
 }
@@ -161,15 +167,24 @@ mod tests {
 
     #[test]
     fn bad_alpha_rejected() {
-        assert!(matches!(ExponentialMovingAverage::new(0).unwrap_err(), EmaError::BadAlpha));
-        assert!(matches!(ExponentialMovingAverage::new(10001).unwrap_err(), EmaError::BadAlpha));
+        assert!(matches!(
+            ExponentialMovingAverage::new(0).unwrap_err(),
+            EmaError::BadAlpha
+        ));
+        assert!(matches!(
+            ExponentialMovingAverage::new(10001).unwrap_err(),
+            EmaError::BadAlpha
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = ExponentialMovingAverage::new(5000).unwrap();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), EmaError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            EmaError::SchemaMismatch
+        ));
     }
 
     #[test]

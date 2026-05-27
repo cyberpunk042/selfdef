@@ -66,10 +66,17 @@ pub enum SimilarityError {
 impl PromptOutputSimilarity {
     /// New.
     pub fn new(window_size: u32, collision_threshold: u32) -> Result<Self, SimilarityError> {
-        if window_size == 0 { return Err(SimilarityError::WindowZero); }
-        if collision_threshold == 0 { return Err(SimilarityError::ThresholdZero); }
+        if window_size == 0 {
+            return Err(SimilarityError::WindowZero);
+        }
+        if collision_threshold == 0 {
+            return Err(SimilarityError::ThresholdZero);
+        }
         if collision_threshold > window_size {
-            return Err(SimilarityError::ThresholdExceedsWindow(collision_threshold, window_size));
+            return Err(SimilarityError::ThresholdExceedsWindow(
+                collision_threshold,
+                window_size,
+            ));
         }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -105,10 +112,17 @@ impl PromptOutputSimilarity {
         if self.schema_version != SCHEMA_VERSION {
             return Err(SimilarityError::SchemaMismatch);
         }
-        if self.window_size == 0 { return Err(SimilarityError::WindowZero); }
-        if self.collision_threshold == 0 { return Err(SimilarityError::ThresholdZero); }
+        if self.window_size == 0 {
+            return Err(SimilarityError::WindowZero);
+        }
+        if self.collision_threshold == 0 {
+            return Err(SimilarityError::ThresholdZero);
+        }
         if self.collision_threshold > self.window_size {
-            return Err(SimilarityError::ThresholdExceedsWindow(self.collision_threshold, self.window_size));
+            return Err(SimilarityError::ThresholdExceedsWindow(
+                self.collision_threshold,
+                self.window_size,
+            ));
         }
         Ok(())
     }
@@ -129,12 +143,18 @@ mod tests {
 
     #[test]
     fn zero_window_rejected() {
-        assert!(matches!(PromptOutputSimilarity::new(0, 1).unwrap_err(), SimilarityError::WindowZero));
+        assert!(matches!(
+            PromptOutputSimilarity::new(0, 1).unwrap_err(),
+            SimilarityError::WindowZero
+        ));
     }
 
     #[test]
     fn zero_threshold_rejected() {
-        assert!(matches!(PromptOutputSimilarity::new(5, 0).unwrap_err(), SimilarityError::ThresholdZero));
+        assert!(matches!(
+            PromptOutputSimilarity::new(5, 0).unwrap_err(),
+            SimilarityError::ThresholdZero
+        ));
     }
 
     #[test]
@@ -199,12 +219,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = PromptOutputSimilarity::new(5, 2).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SimilarityError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SimilarityError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn observation_serde_kebab() {
-        let o = Observation::CollisionDetected { digest: 1, count: 2 };
+        let o = Observation::CollisionDetected {
+            digest: 1,
+            count: 2,
+        };
         let j = serde_json::to_string(&o).unwrap();
         assert!(j.contains("\"kind\":\"collision-detected\""));
     }

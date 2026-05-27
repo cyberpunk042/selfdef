@@ -102,23 +102,34 @@ impl DecisionBudget {
         action: ActionClass,
         observed: ObservedCounts,
     ) -> Result<(), BudgetError> {
-        let Some(c) = self.get_caps(profile, action) else { return Ok(()); };
+        let Some(c) = self.get_caps(profile, action) else {
+            return Ok(());
+        };
         if c.daily > 0 && observed.daily >= c.daily {
             return Err(BudgetError::Exceeded {
-                profile, action, window: "daily",
-                observed: observed.daily, cap: c.daily,
+                profile,
+                action,
+                window: "daily",
+                observed: observed.daily,
+                cap: c.daily,
             });
         }
         if c.weekly > 0 && observed.weekly >= c.weekly {
             return Err(BudgetError::Exceeded {
-                profile, action, window: "weekly",
-                observed: observed.weekly, cap: c.weekly,
+                profile,
+                action,
+                window: "weekly",
+                observed: observed.weekly,
+                cap: c.weekly,
             });
         }
         if c.monthly > 0 && observed.monthly >= c.monthly {
             return Err(BudgetError::Exceeded {
-                profile, action, window: "monthly",
-                observed: observed.monthly, cap: c.monthly,
+                profile,
+                action,
+                window: "monthly",
+                observed: observed.monthly,
+                cap: c.monthly,
             });
         }
         Ok(())
@@ -134,7 +145,9 @@ impl DecisionBudget {
 }
 
 impl Default for DecisionBudget {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -142,29 +155,62 @@ mod tests {
     use super::*;
 
     fn ob(d: u32, w: u32, m: u32) -> ObservedCounts {
-        ObservedCounts { daily: d, weekly: w, monthly: m }
+        ObservedCounts {
+            daily: d,
+            weekly: w,
+            monthly: m,
+        }
     }
 
     #[test]
     fn no_caps_admits() {
         let b = DecisionBudget::new();
-        b.admit(Profile::Careful, ActionClass::FsWrite, ob(1000, 5000, 20000)).unwrap();
+        b.admit(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            ob(1000, 5000, 20000),
+        )
+        .unwrap();
     }
 
     #[test]
     fn within_caps_ok() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 100, weekly: 500, monthly: 2000 });
-        b.admit(Profile::Careful, ActionClass::FsWrite, ob(50, 200, 1000)).unwrap();
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 100,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
+        b.admit(Profile::Careful, ActionClass::FsWrite, ob(50, 200, 1000))
+            .unwrap();
     }
 
     #[test]
     fn daily_exceeded_rejected() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 100, weekly: 500, monthly: 2000 });
-        let err = b.admit(Profile::Careful, ActionClass::FsWrite, ob(100, 200, 1000)).unwrap_err();
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 100,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
+        let err = b
+            .admit(Profile::Careful, ActionClass::FsWrite, ob(100, 200, 1000))
+            .unwrap_err();
         match err {
-            BudgetError::Exceeded { window, observed, cap, .. } => {
+            BudgetError::Exceeded {
+                window,
+                observed,
+                cap,
+                ..
+            } => {
                 assert_eq!(window, "daily");
                 assert_eq!(observed, 100);
                 assert_eq!(cap, 100);
@@ -176,8 +222,18 @@ mod tests {
     #[test]
     fn weekly_exceeded_rejected() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 100, weekly: 500, monthly: 2000 });
-        let err = b.admit(Profile::Careful, ActionClass::FsWrite, ob(50, 600, 1000)).unwrap_err();
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 100,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
+        let err = b
+            .admit(Profile::Careful, ActionClass::FsWrite, ob(50, 600, 1000))
+            .unwrap_err();
         match err {
             BudgetError::Exceeded { window, .. } => assert_eq!(window, "weekly"),
             other => panic!("unexpected: {other:?}"),
@@ -187,8 +243,18 @@ mod tests {
     #[test]
     fn monthly_exceeded_rejected() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 100, weekly: 500, monthly: 2000 });
-        let err = b.admit(Profile::Careful, ActionClass::FsWrite, ob(50, 200, 3000)).unwrap_err();
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 100,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
+        let err = b
+            .admit(Profile::Careful, ActionClass::FsWrite, ob(50, 200, 3000))
+            .unwrap_err();
         match err {
             BudgetError::Exceeded { window, .. } => assert_eq!(window, "monthly"),
             other => panic!("unexpected: {other:?}"),
@@ -198,22 +264,46 @@ mod tests {
     #[test]
     fn zero_cap_disables_that_window() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 0, weekly: 500, monthly: 2000 });
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 0,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
         // Daily 0 → disabled, so 10_000 daily is fine.
-        b.admit(Profile::Careful, ActionClass::FsWrite, ob(10_000, 200, 1000)).unwrap();
+        b.admit(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            ob(10_000, 200, 1000),
+        )
+        .unwrap();
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = DecisionBudget::new();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn budget_serde_roundtrip() {
         let mut b = DecisionBudget::new();
-        b.set_caps(Profile::Careful, ActionClass::FsWrite, Caps { daily: 100, weekly: 500, monthly: 2000 });
+        b.set_caps(
+            Profile::Careful,
+            ActionClass::FsWrite,
+            Caps {
+                daily: 100,
+                weekly: 500,
+                monthly: 2000,
+            },
+        );
         let j = serde_json::to_string(&b).unwrap();
         let back: DecisionBudget = serde_json::from_str(&j).unwrap();
         assert_eq!(b, back);

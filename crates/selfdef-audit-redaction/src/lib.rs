@@ -87,8 +87,14 @@ impl RedactorManifest {
         if self.redactors.len() != 6 {
             return Err(RedactionError::CountInvalid(self.redactors.len()));
         }
-        for r in [RedactorClass::Email, RedactorClass::Ipv4, RedactorClass::Ipv6,
-                  RedactorClass::SshKey, RedactorClass::BearerToken, RedactorClass::PathHome] {
+        for r in [
+            RedactorClass::Email,
+            RedactorClass::Ipv4,
+            RedactorClass::Ipv6,
+            RedactorClass::SshKey,
+            RedactorClass::BearerToken,
+            RedactorClass::PathHome,
+        ] {
             if !self.redactors.contains(&r) {
                 return Err(RedactionError::Missing(r));
             }
@@ -114,8 +120,14 @@ pub fn redact_one(text: &str, class: RedactorClass) -> String {
 /// Apply all redactors in canonical order.
 pub fn redact_all(text: &str) -> String {
     let mut s = text.to_string();
-    for c in [RedactorClass::Email, RedactorClass::Ipv4, RedactorClass::Ipv6,
-              RedactorClass::SshKey, RedactorClass::BearerToken, RedactorClass::PathHome] {
+    for c in [
+        RedactorClass::Email,
+        RedactorClass::Ipv4,
+        RedactorClass::Ipv6,
+        RedactorClass::SshKey,
+        RedactorClass::BearerToken,
+        RedactorClass::PathHome,
+    ] {
         s = redact_one(&s, c);
     }
     s
@@ -144,7 +156,9 @@ fn redact_email(text: &str) -> String {
             while right < bytes.len() {
                 let b = bytes[right];
                 if b.is_ascii_alphanumeric() || b == b'-' || b == b'.' {
-                    if b == b'.' { saw_dot = true; }
+                    if b == b'.' {
+                        saw_dot = true;
+                    }
                     right += 1;
                 } else {
                     break;
@@ -153,7 +167,9 @@ fn redact_email(text: &str) -> String {
             if left < i && right > i + 1 && saw_dot {
                 // Trim trailing dot from domain.
                 let mut end = right;
-                while end > i + 1 && bytes[end - 1] == b'.' { end -= 1; }
+                while end > i + 1 && bytes[end - 1] == b'.' {
+                    end -= 1;
+                }
                 // Drop everything we'd already written for the local-part chars in `out`.
                 let drop = i - left;
                 for _ in 0..drop {
@@ -171,7 +187,9 @@ fn redact_email(text: &str) -> String {
 }
 
 fn is_ipv4_octet(s: &str) -> bool {
-    !s.is_empty() && s.len() <= 3 && s.bytes().all(|b| b.is_ascii_digit())
+    !s.is_empty()
+        && s.len() <= 3
+        && s.bytes().all(|b| b.is_ascii_digit())
         && s.parse::<u32>().map(|n| n <= 255).unwrap_or(false)
 }
 
@@ -219,7 +237,9 @@ fn redact_ipv6(text: &str) -> String {
             let span = &text[start..i];
             let colon_count = span.bytes().filter(|b| *b == b':').count();
             let groups: Vec<&str> = span.split(':').collect();
-            let valid_groups = groups.iter().all(|g| g.is_empty() || (g.len() <= 4 && g.bytes().all(|b| b.is_ascii_hexdigit())));
+            let valid_groups = groups.iter().all(|g| {
+                g.is_empty() || (g.len() <= 4 && g.bytes().all(|b| b.is_ascii_hexdigit()))
+            });
             if colon_count >= 2 && valid_groups && groups.len() >= 3 {
                 out.push_str("[ipv6]");
             } else {
@@ -268,7 +288,14 @@ fn redact_bearer(text: &str) -> String {
         let mut end = after;
         while end < bytes.len() {
             let b = bytes[end];
-            if b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_' || b == b'+' || b == b'/' || b == b'=' {
+            if b.is_ascii_alphanumeric()
+                || b == b'.'
+                || b == b'-'
+                || b == b'_'
+                || b == b'+'
+                || b == b'/'
+                || b == b'='
+            {
                 end += 1;
             } else {
                 break;
@@ -292,7 +319,9 @@ fn redact_path_home(text: &str) -> String {
         let mut end = after;
         while end < bytes.len() {
             let b = bytes[end];
-            if b == b'/' || b == b' ' || b == b'"' || b == b'\n' || b == b',' { break; }
+            if b == b'/' || b == b' ' || b == b'"' || b == b'\n' || b == b',' {
+                break;
+            }
             end += 1;
         }
         if end > after {
@@ -321,7 +350,10 @@ mod tests {
 
     #[test]
     fn email_redacted() {
-        let out = redact_one("contact alice.smith+test@example.com here", RedactorClass::Email);
+        let out = redact_one(
+            "contact alice.smith+test@example.com here",
+            RedactorClass::Email,
+        );
         assert_eq!(out, "contact [email] here");
     }
 
@@ -339,16 +371,25 @@ mod tests {
 
     #[test]
     fn ssh_key_redacted_rsa_and_ed25519() {
-        let out = redact_one("authorized: ssh-rsa AAAAB3NzaC1yc2E= user@host", RedactorClass::SshKey);
+        let out = redact_one(
+            "authorized: ssh-rsa AAAAB3NzaC1yc2E= user@host",
+            RedactorClass::SshKey,
+        );
         assert!(out.contains("[ssh-key]"));
         assert!(!out.contains("AAAAB3NzaC1yc2E="));
-        let out2 = redact_one("authorized: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5", RedactorClass::SshKey);
+        let out2 = redact_one(
+            "authorized: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5",
+            RedactorClass::SshKey,
+        );
         assert!(out2.contains("[ssh-key]"));
     }
 
     #[test]
     fn bearer_token_redacted() {
-        let out = redact_one("Authorization: Bearer abc.DEF-123_xyz== more", RedactorClass::BearerToken);
+        let out = redact_one(
+            "Authorization: Bearer abc.DEF-123_xyz== more",
+            RedactorClass::BearerToken,
+        );
         assert_eq!(out, "Authorization: [bearer] more");
     }
 
@@ -380,22 +421,40 @@ mod tests {
     fn count_invalid_caught() {
         let mut m = RedactorManifest::canonical();
         m.redactors.pop();
-        assert!(matches!(m.validate().unwrap_err(), RedactionError::CountInvalid(5)));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            RedactionError::CountInvalid(5)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut m = RedactorManifest::canonical();
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), RedactionError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            RedactionError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&RedactorClass::Email).unwrap(), "\"email\"");
-        assert_eq!(serde_json::to_string(&RedactorClass::SshKey).unwrap(), "\"ssh-key\"");
-        assert_eq!(serde_json::to_string(&RedactorClass::BearerToken).unwrap(), "\"bearer-token\"");
-        assert_eq!(serde_json::to_string(&RedactorClass::PathHome).unwrap(), "\"path-home\"");
+        assert_eq!(
+            serde_json::to_string(&RedactorClass::Email).unwrap(),
+            "\"email\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RedactorClass::SshKey).unwrap(),
+            "\"ssh-key\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RedactorClass::BearerToken).unwrap(),
+            "\"bearer-token\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RedactorClass::PathHome).unwrap(),
+            "\"path-home\""
+        );
     }
 
     #[test]

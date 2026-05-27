@@ -50,7 +50,10 @@ fn match_class(class: &[char], c: char) -> bool {
     let mut i = 0;
     while i < body.len() {
         let ch = body[i];
-        if ch == c { hit = true; break; }
+        if ch == c {
+            hit = true;
+            break;
+        }
         i += 1;
     }
     hit ^ negate
@@ -128,7 +131,9 @@ fn glob_match(pat: &[char], path: &[char]) -> bool {
 impl GlobMatcher {
     /// New.
     pub fn new(pattern: &str) -> Result<Self, GlobError> {
-        if pattern.is_empty() { return Err(GlobError::EmptyPattern); }
+        if pattern.is_empty() {
+            return Err(GlobError::EmptyPattern);
+        }
         // Validate balanced character classes.
         let chars: Vec<char> = pattern.chars().collect();
         let mut i = 0;
@@ -160,8 +165,12 @@ impl GlobMatcher {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GlobError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GlobError::SchemaMismatch); }
-        if self.pattern.is_empty() { return Err(GlobError::EmptyPattern); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GlobError::SchemaMismatch);
+        }
+        if self.pattern.is_empty() {
+            return Err(GlobError::EmptyPattern);
+        }
         Ok(())
     }
 }
@@ -231,19 +240,28 @@ mod tests {
 
     #[test]
     fn unterminated_class_rejected() {
-        assert!(matches!(GlobMatcher::new("[abc").unwrap_err(), GlobError::UnterminatedClass));
+        assert!(matches!(
+            GlobMatcher::new("[abc").unwrap_err(),
+            GlobError::UnterminatedClass
+        ));
     }
 
     #[test]
     fn empty_pattern_rejected() {
-        assert!(matches!(GlobMatcher::new("").unwrap_err(), GlobError::EmptyPattern));
+        assert!(matches!(
+            GlobMatcher::new("").unwrap_err(),
+            GlobError::EmptyPattern
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut g = GlobMatcher::new("*").unwrap();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GlobError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GlobError::SchemaMismatch
+        ));
     }
 
     #[test]

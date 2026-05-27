@@ -74,7 +74,9 @@ impl TenantQuotaPool {
 
     /// Set pool (replaces existing; in-use preserved).
     pub fn set_pool(&mut self, tenant: &str, capacity: u64) -> Result<(), PoolError> {
-        if tenant.is_empty() { return Err(PoolError::EmptyTenant); }
+        if tenant.is_empty() {
+            return Err(PoolError::EmptyTenant);
+        }
         let in_use = self.pools.get(tenant).map(|p| p.in_use).unwrap_or(0);
         self.pools.insert(tenant.into(), Pool { capacity, in_use });
         Ok(())
@@ -88,10 +90,14 @@ impl TenantQuotaPool {
         };
         let would = p.in_use.saturating_add(units);
         if would > p.capacity {
-            return RequestVerdict::Exhausted { capacity: p.capacity };
+            return RequestVerdict::Exhausted {
+                capacity: p.capacity,
+            };
         }
         p.in_use = would;
-        RequestVerdict::Granted { remaining: p.capacity - p.in_use }
+        RequestVerdict::Granted {
+            remaining: p.capacity - p.in_use,
+        }
     }
 
     /// Release units (saturating at 0).
@@ -110,16 +116,22 @@ impl TenantQuotaPool {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PoolError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PoolError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PoolError::SchemaMismatch);
+        }
         for t in self.pools.keys() {
-            if t.is_empty() { return Err(PoolError::EmptyTenant); }
+            if t.is_empty() {
+                return Err(PoolError::EmptyTenant);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for TenantQuotaPool {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -136,7 +148,10 @@ mod tests {
     fn grant_under_capacity() {
         let mut p = TenantQuotaPool::new();
         p.set_pool("t", 100).unwrap();
-        assert_eq!(p.request("t", 30), RequestVerdict::Granted { remaining: 70 });
+        assert_eq!(
+            p.request("t", 30),
+            RequestVerdict::Granted { remaining: 70 }
+        );
     }
 
     #[test]
@@ -144,7 +159,10 @@ mod tests {
         let mut p = TenantQuotaPool::new();
         p.set_pool("t", 100).unwrap();
         p.request("t", 80);
-        assert_eq!(p.request("t", 50), RequestVerdict::Exhausted { capacity: 100 });
+        assert_eq!(
+            p.request("t", 50),
+            RequestVerdict::Exhausted { capacity: 100 }
+        );
         assert_eq!(p.in_use("t"), Some(80));
     }
 
@@ -178,14 +196,20 @@ mod tests {
     #[test]
     fn empty_tenant_rejected() {
         let mut p = TenantQuotaPool::new();
-        assert!(matches!(p.set_pool("", 1).unwrap_err(), PoolError::EmptyTenant));
+        assert!(matches!(
+            p.set_pool("", 1).unwrap_err(),
+            PoolError::EmptyTenant
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TenantQuotaPool::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), PoolError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            PoolError::SchemaMismatch
+        ));
     }
 
     #[test]

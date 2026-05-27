@@ -39,7 +39,9 @@ pub fn normalize(path: &str) -> Result<String, PathError> {
     let absolute = path.starts_with('/');
     let mut segs: Vec<&str> = Vec::new();
     for s in path.split('/') {
-        if s.is_empty() || s == "." { continue; }
+        if s.is_empty() || s == "." {
+            continue;
+        }
         if s == ".." {
             if segs.last().map(|&t| t == "..").unwrap_or(false) || segs.is_empty() {
                 if absolute {
@@ -55,27 +57,41 @@ pub fn normalize(path: &str) -> Result<String, PathError> {
     }
     let joined = segs.join("/");
     if absolute {
-        if joined.is_empty() { Ok("/".into()) } else { Ok(format!("/{}", joined)) }
+        if joined.is_empty() {
+            Ok("/".into())
+        } else {
+            Ok(format!("/{}", joined))
+        }
     } else {
-        if joined.is_empty() { Ok(".".into()) } else { Ok(joined) }
+        if joined.is_empty() {
+            Ok(".".into())
+        } else {
+            Ok(joined)
+        }
     }
 }
 
 impl PathNormalizeState {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), PathError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(PathError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(PathError::SchemaMismatch);
+        }
         Ok(())
     }
 }
 
 impl Default for PathNormalizeState {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -99,7 +115,10 @@ mod tests {
 
     #[test]
     fn dotdot_escape_absolute_rejected() {
-        assert!(matches!(normalize("/a/../../b").unwrap_err(), PathError::EscapesRoot));
+        assert!(matches!(
+            normalize("/a/../../b").unwrap_err(),
+            PathError::EscapesRoot
+        ));
     }
 
     #[test]
@@ -122,7 +141,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = PathNormalizeState::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), PathError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            PathError::SchemaMismatch
+        ));
     }
 
     #[test]

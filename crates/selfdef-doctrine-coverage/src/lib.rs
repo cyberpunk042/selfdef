@@ -135,13 +135,19 @@ impl IntegrityReport {
 
     /// Categories that failed.
     pub fn failures(&self) -> Vec<CoverageCategory> {
-        self.categories.iter().filter(|r| !r.valid).map(|r| r.category).collect()
+        self.categories
+            .iter()
+            .filter(|r| !r.valid)
+            .map(|r| r.category)
+            .collect()
     }
 
     /// Assert clean — refuses daemon bring-up if any composite invalid.
     pub fn assert_clean(&self) -> Result<(), CoverageError> {
         if !self.all_clean() {
-            return Err(CoverageError::IntegrityFailed { failures: self.failures() });
+            return Err(CoverageError::IntegrityFailed {
+                failures: self.failures(),
+            });
         }
         Ok(())
     }
@@ -152,9 +158,15 @@ mod tests {
     use super::*;
     use selfdef_functional_modules::IpsModule;
 
-    fn modules() -> IpsModuleCatalog { IpsModuleCatalog::empty_canonical() }
-    fn boundaries() -> BoundarySummary { BoundarySummary::empty_canonical() }
-    fn doctrines() -> DoctrineRegistry { DoctrineRegistry::canonical() }
+    fn modules() -> IpsModuleCatalog {
+        IpsModuleCatalog::empty_canonical()
+    }
+    fn boundaries() -> BoundarySummary {
+        BoundarySummary::empty_canonical()
+    }
+    fn doctrines() -> DoctrineRegistry {
+        DoctrineRegistry::canonical()
+    }
 
     #[test]
     fn ok_report_all_clean() {
@@ -167,9 +179,21 @@ mod tests {
     fn three_categories_present() {
         let r = IntegrityReport::run(&modules(), &boundaries(), &doctrines());
         assert_eq!(r.categories.len(), 3);
-        assert!(r.categories.iter().any(|c| c.category == CoverageCategory::FunctionalModules));
-        assert!(r.categories.iter().any(|c| c.category == CoverageCategory::FiveBoundaries));
-        assert!(r.categories.iter().any(|c| c.category == CoverageCategory::DoctrineRegistry));
+        assert!(
+            r.categories
+                .iter()
+                .any(|c| c.category == CoverageCategory::FunctionalModules)
+        );
+        assert!(
+            r.categories
+                .iter()
+                .any(|c| c.category == CoverageCategory::FiveBoundaries)
+        );
+        assert!(
+            r.categories
+                .iter()
+                .any(|c| c.category == CoverageCategory::DoctrineRegistry)
+        );
     }
 
     #[test]
@@ -177,7 +201,9 @@ mod tests {
         let mut bad = modules();
         // Make detect-host Absent → substrate-not-active per IpsModuleCatalog::validate.
         for e in bad.entries.iter_mut() {
-            if e.module == IpsModule::DetectHost { e.state = selfdef_functional_modules::ModuleState::Absent; }
+            if e.module == IpsModule::DetectHost {
+                e.state = selfdef_functional_modules::ModuleState::Absent;
+            }
         }
         let r = IntegrityReport::run(&bad, &boundaries(), &doctrines());
         assert!(!r.all_clean());
@@ -207,25 +233,49 @@ mod tests {
         let mut bad = doctrines();
         bad.records[0].text = "tampered".into();
         let r = IntegrityReport::run(&modules(), &boundaries(), &bad);
-        assert!(matches!(r.assert_clean().unwrap_err(), CoverageError::IntegrityFailed { .. }));
+        assert!(matches!(
+            r.assert_clean().unwrap_err(),
+            CoverageError::IntegrityFailed { .. }
+        ));
     }
 
     #[test]
     fn item_counts_match_compositions() {
         let r = IntegrityReport::run(&modules(), &boundaries(), &doctrines());
-        let m = r.categories.iter().find(|c| c.category == CoverageCategory::FunctionalModules).unwrap();
+        let m = r
+            .categories
+            .iter()
+            .find(|c| c.category == CoverageCategory::FunctionalModules)
+            .unwrap();
         assert_eq!(m.item_count, 14);
-        let b = r.categories.iter().find(|c| c.category == CoverageCategory::FiveBoundaries).unwrap();
+        let b = r
+            .categories
+            .iter()
+            .find(|c| c.category == CoverageCategory::FiveBoundaries)
+            .unwrap();
         assert_eq!(b.item_count, 5);
-        let d = r.categories.iter().find(|c| c.category == CoverageCategory::DoctrineRegistry).unwrap();
+        let d = r
+            .categories
+            .iter()
+            .find(|c| c.category == CoverageCategory::DoctrineRegistry)
+            .unwrap();
         assert_eq!(d.item_count, 10);
     }
 
     #[test]
     fn coverage_category_serde_kebab() {
-        assert_eq!(serde_json::to_string(&CoverageCategory::FunctionalModules).unwrap(), "\"functional-modules\"");
-        assert_eq!(serde_json::to_string(&CoverageCategory::FiveBoundaries).unwrap(), "\"five-boundaries\"");
-        assert_eq!(serde_json::to_string(&CoverageCategory::DoctrineRegistry).unwrap(), "\"doctrine-registry\"");
+        assert_eq!(
+            serde_json::to_string(&CoverageCategory::FunctionalModules).unwrap(),
+            "\"functional-modules\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CoverageCategory::FiveBoundaries).unwrap(),
+            "\"five-boundaries\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CoverageCategory::DoctrineRegistry).unwrap(),
+            "\"doctrine-registry\""
+        );
     }
 
     #[test]

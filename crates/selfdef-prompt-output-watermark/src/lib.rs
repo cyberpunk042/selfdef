@@ -76,7 +76,9 @@ impl OutputWatermark {
     pub fn embed(decision_id: &str, text: &str) -> Result<EmbedResult, WatermarkError> {
         let mark = Self::mark_for(decision_id);
         let chars: Vec<char> = text.chars().collect();
-        if chars.len() < 8 { return Err(WatermarkError::TextTooShort(chars.len())); }
+        if chars.len() < 8 {
+            return Err(WatermarkError::TextTooShort(chars.len()));
+        }
         // Interleave a ZW char after each of the first 8 chars.
         let mut out = String::with_capacity(text.len() + 24);
         for (i, c) in chars.iter().enumerate() {
@@ -102,9 +104,13 @@ impl OutputWatermark {
                 ZWNJ => bits.push(1),
                 _ => {}
             }
-            if bits.len() == 8 { break; }
+            if bits.len() == 8 {
+                break;
+            }
         }
-        if bits.len() < 8 { return VerifyResult::NotFound; }
+        if bits.len() < 8 {
+            return VerifyResult::NotFound;
+        }
         let mut mark = 0u8;
         for (i, &b) in bits.iter().enumerate() {
             mark |= b << (7 - i);
@@ -154,7 +160,10 @@ mod tests {
 
     #[test]
     fn empty_text_rejected() {
-        assert!(matches!(OutputWatermark::embed("d", "hi").unwrap_err(), WatermarkError::TextTooShort(2)));
+        assert!(matches!(
+            OutputWatermark::embed("d", "hi").unwrap_err(),
+            WatermarkError::TextTooShort(2)
+        ));
     }
 
     #[test]
@@ -169,7 +178,9 @@ mod tests {
         // for the prefix where bits were embedded.
         let original = "this is a test sentence with enough room";
         let r = OutputWatermark::embed("d", original).unwrap();
-        let stripped: String = r.watermarked.chars()
+        let stripped: String = r
+            .watermarked
+            .chars()
             .filter(|c| !matches!(c, '\u{200B}' | '\u{200C}'))
             .collect();
         assert_eq!(stripped, original);
@@ -179,13 +190,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut r = OutputWatermark::embed("d", "hello world").unwrap();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), WatermarkError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            WatermarkError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn result_serde_kebab() {
         let v = VerifyResult::NotFound;
-        assert!(serde_json::to_string(&v).unwrap().contains("\"kind\":\"not-found\""));
+        assert!(
+            serde_json::to_string(&v)
+                .unwrap()
+                .contains("\"kind\":\"not-found\"")
+        );
     }
 
     #[test]

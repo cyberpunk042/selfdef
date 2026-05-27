@@ -36,8 +36,8 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use selfdef_guardian::{
-    classify, emit_ocsf_detection_2004, now_ms, should_respond, CircuitBreaker, RealEffector,
-    Responder, TetragonEvent,
+    CircuitBreaker, RealEffector, Responder, TetragonEvent, classify, emit_ocsf_detection_2004,
+    now_ms, should_respond,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -191,12 +191,8 @@ fn main() -> ExitCode {
     }
 }
 
-fn write_ring_entry(
-    path: &Path,
-    verdict: &selfdef_guardian::Verdict,
-) -> std::io::Result<()> {
-    let bytes = serde_json::to_vec(verdict)
-        .map_err(|e| std::io::Error::other(e.to_string()))?;
+fn write_ring_entry(path: &Path, verdict: &selfdef_guardian::Verdict) -> std::io::Result<()> {
+    let bytes = serde_json::to_vec(verdict).map_err(|e| std::io::Error::other(e.to_string()))?;
     std::fs::write(path, bytes)
 }
 

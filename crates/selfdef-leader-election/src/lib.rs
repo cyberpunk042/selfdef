@@ -111,58 +111,109 @@ impl LeaderElection {
     }
 
     /// Try to acquire.
-    pub fn try_acquire(&mut self, group: &str, candidate: &str, now_ms: u64, lease_ms: u64) -> Result<AcquireVerdict, ElectionError> {
-        if group.is_empty() { return Err(ElectionError::EmptyGroup); }
-        if candidate.is_empty() { return Err(ElectionError::EmptyCandidate); }
-        if lease_ms == 0 { return Err(ElectionError::ZeroLease); }
+    pub fn try_acquire(
+        &mut self,
+        group: &str,
+        candidate: &str,
+        now_ms: u64,
+        lease_ms: u64,
+    ) -> Result<AcquireVerdict, ElectionError> {
+        if group.is_empty() {
+            return Err(ElectionError::EmptyGroup);
+        }
+        if candidate.is_empty() {
+            return Err(ElectionError::EmptyCandidate);
+        }
+        if lease_ms == 0 {
+            return Err(ElectionError::ZeroLease);
+        }
         let entry = self.groups.get(group).cloned();
         match entry {
             None => {
-                let g = Group { leader: candidate.into(), epoch: 1, lease_expires_ms: now_ms.saturating_add(lease_ms) };
+                let g = Group {
+                    leader: candidate.into(),
+                    epoch: 1,
+                    lease_expires_ms: now_ms.saturating_add(lease_ms),
+                };
                 let epoch = g.epoch;
                 self.groups.insert(group.into(), g);
                 Ok(AcquireVerdict::Acquired { epoch })
             }
             Some(g) => {
                 if g.leader == candidate {
-                    let new_g = Group { leader: g.leader, epoch: g.epoch, lease_expires_ms: now_ms.saturating_add(lease_ms) };
+                    let new_g = Group {
+                        leader: g.leader,
+                        epoch: g.epoch,
+                        lease_expires_ms: now_ms.saturating_add(lease_ms),
+                    };
                     let epoch = new_g.epoch;
                     self.groups.insert(group.into(), new_g);
                     Ok(AcquireVerdict::SelfRenew { epoch })
                 } else if now_ms >= g.lease_expires_ms {
                     // Other leader's lease expired — take over.
-                    let new_g = Group { leader: candidate.into(), epoch: g.epoch.saturating_add(1), lease_expires_ms: now_ms.saturating_add(lease_ms) };
+                    let new_g = Group {
+                        leader: candidate.into(),
+                        epoch: g.epoch.saturating_add(1),
+                        lease_expires_ms: now_ms.saturating_add(lease_ms),
+                    };
                     let epoch = new_g.epoch;
                     self.groups.insert(group.into(), new_g);
                     Ok(AcquireVerdict::Acquired { epoch })
                 } else {
-                    Ok(AcquireVerdict::HeldByOther { leader: g.leader, until_ms: g.lease_expires_ms })
+                    Ok(AcquireVerdict::HeldByOther {
+                        leader: g.leader,
+                        until_ms: g.lease_expires_ms,
+                    })
                 }
             }
         }
     }
 
     /// Heartbeat.
-    pub fn heartbeat(&mut self, group: &str, leader: &str, now_ms: u64, lease_ms: u64) -> Result<HeartbeatVerdict, ElectionError> {
-        if group.is_empty() { return Err(ElectionError::EmptyGroup); }
-        if leader.is_empty() { return Err(ElectionError::EmptyCandidate); }
-        if lease_ms == 0 { return Err(ElectionError::ZeroLease); }
+    pub fn heartbeat(
+        &mut self,
+        group: &str,
+        leader: &str,
+        now_ms: u64,
+        lease_ms: u64,
+    ) -> Result<HeartbeatVerdict, ElectionError> {
+        if group.is_empty() {
+            return Err(ElectionError::EmptyGroup);
+        }
+        if leader.is_empty() {
+            return Err(ElectionError::EmptyCandidate);
+        }
+        if lease_ms == 0 {
+            return Err(ElectionError::ZeroLease);
+        }
         let Some(g) = self.groups.get_mut(group) else {
-            return Ok(HeartbeatVerdict::NotLeader { current_leader: None });
+            return Ok(HeartbeatVerdict::NotLeader {
+                current_leader: None,
+            });
         };
         if g.leader != leader || now_ms >= g.lease_expires_ms {
             return Ok(HeartbeatVerdict::NotLeader {
-                current_leader: if now_ms >= g.lease_expires_ms { None } else { Some(g.leader.clone()) },
+                current_leader: if now_ms >= g.lease_expires_ms {
+                    None
+                } else {
+                    Some(g.leader.clone())
+                },
             });
         }
         g.lease_expires_ms = now_ms.saturating_add(lease_ms);
-        Ok(HeartbeatVerdict::Renewed { lease_expires_ms: g.lease_expires_ms })
+        Ok(HeartbeatVerdict::Renewed {
+            lease_expires_ms: g.lease_expires_ms,
+        })
     }
 
     /// Voluntary step down.
     pub fn step_down(&mut self, group: &str, leader: &str) -> bool {
-        let Some(g) = self.groups.get(group) else { return false; };
-        if g.leader != leader { return false; }
+        let Some(g) = self.groups.get(group) else {
+            return false;
+        };
+        if g.leader != leader {
+            return false;
+        }
         self.groups.remove(group);
         true
     }
@@ -170,23 +221,33 @@ impl LeaderElection {
     /// Current leader if any (None if expired).
     pub fn current(&self, group: &str, now_ms: u64) -> Option<(String, u64)> {
         let g = self.groups.get(group)?;
-        if now_ms >= g.lease_expires_ms { return None; }
+        if now_ms >= g.lease_expires_ms {
+            return None;
+        }
         Some((g.leader.clone(), g.lease_expires_ms))
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ElectionError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ElectionError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ElectionError::SchemaMismatch);
+        }
         for (id, g) in &self.groups {
-            if id.is_empty() { return Err(ElectionError::EmptyGroup); }
-            if g.leader.is_empty() { return Err(ElectionError::EmptyCandidate); }
+            if id.is_empty() {
+                return Err(ElectionError::EmptyGroup);
+            }
+            if g.leader.is_empty() {
+                return Err(ElectionError::EmptyCandidate);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for LeaderElection {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -250,7 +311,9 @@ mod tests {
         let mut e = LeaderElection::new();
         e.try_acquire("g", "alice", 0, 1000).unwrap();
         match e.heartbeat("g", "bob", 500, 1000).unwrap() {
-            HeartbeatVerdict::NotLeader { current_leader } => assert_eq!(current_leader.as_deref(), Some("alice")),
+            HeartbeatVerdict::NotLeader { current_leader } => {
+                assert_eq!(current_leader.as_deref(), Some("alice"))
+            }
             _ => panic!(),
         }
     }
@@ -279,16 +342,28 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut e = LeaderElection::new();
-        assert!(matches!(e.try_acquire("", "a", 0, 1).unwrap_err(), ElectionError::EmptyGroup));
-        assert!(matches!(e.try_acquire("g", "", 0, 1).unwrap_err(), ElectionError::EmptyCandidate));
-        assert!(matches!(e.try_acquire("g", "a", 0, 0).unwrap_err(), ElectionError::ZeroLease));
+        assert!(matches!(
+            e.try_acquire("", "a", 0, 1).unwrap_err(),
+            ElectionError::EmptyGroup
+        ));
+        assert!(matches!(
+            e.try_acquire("g", "", 0, 1).unwrap_err(),
+            ElectionError::EmptyCandidate
+        ));
+        assert!(matches!(
+            e.try_acquire("g", "a", 0, 0).unwrap_err(),
+            ElectionError::ZeroLease
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut e = LeaderElection::new();
         e.schema_version = "9.9.9".into();
-        assert!(matches!(e.validate().unwrap_err(), ElectionError::SchemaMismatch));
+        assert!(matches!(
+            e.validate().unwrap_err(),
+            ElectionError::SchemaMismatch
+        ));
     }
 
     #[test]

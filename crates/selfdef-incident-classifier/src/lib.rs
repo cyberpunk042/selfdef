@@ -124,13 +124,18 @@ impl IncidentTaxonomy {
             },
             DispatchProfile {
                 severity: Severity::Critical,
-                channels: vec![Loki, OpenSearch, Ntfy, Discord, Slack, Smtp, PagerDuty, TheHive],
+                channels: vec![
+                    Loki, OpenSearch, Ntfy, Discord, Slack, Smtp, PagerDuty, TheHive,
+                ],
                 pages_on_call: true,
                 locks_cockpit: false,
             },
             DispatchProfile {
                 severity: Severity::Emergency,
-                channels: vec![Loki, OpenSearch, Ntfy, Discord, Slack, Smtp, PagerDuty, Twilio, Signal, TheHive, Wall],
+                channels: vec![
+                    Loki, OpenSearch, Ntfy, Discord, Slack, Smtp, PagerDuty, Twilio, Signal,
+                    TheHive, Wall,
+                ],
                 pages_on_call: true,
                 locks_cockpit: true,
             },
@@ -149,7 +154,13 @@ impl IncidentTaxonomy {
         if self.profiles.len() != 5 {
             return Err(IncidentError::CountInvalid(self.profiles.len()));
         }
-        for s in [Severity::Info, Severity::Notice, Severity::Warn, Severity::Critical, Severity::Emergency] {
+        for s in [
+            Severity::Info,
+            Severity::Notice,
+            Severity::Warn,
+            Severity::Critical,
+            Severity::Emergency,
+        ] {
             if !self.profiles.iter().any(|p| p.severity == s) {
                 return Err(IncidentError::Missing(s));
             }
@@ -195,7 +206,13 @@ mod tests {
     #[test]
     fn five_severities_present() {
         let t = IncidentTaxonomy::canonical();
-        for s in [Severity::Info, Severity::Notice, Severity::Warn, Severity::Critical, Severity::Emergency] {
+        for s in [
+            Severity::Info,
+            Severity::Notice,
+            Severity::Warn,
+            Severity::Critical,
+            Severity::Emergency,
+        ] {
             assert!(t.get(s).is_some(), "missing {s:?}");
         }
     }
@@ -251,35 +268,59 @@ mod tests {
     fn schema_drift_rejected() {
         let mut t = IncidentTaxonomy::canonical();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), IncidentError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            IncidentError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut t = IncidentTaxonomy::canonical();
         t.profiles.pop();
-        assert!(matches!(t.validate().unwrap_err(), IncidentError::CountInvalid(4)));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            IncidentError::CountInvalid(4)
+        ));
     }
 
     #[test]
     fn empty_channels_caught() {
         let mut t = IncidentTaxonomy::canonical();
         t.profiles[0].channels.clear();
-        assert!(matches!(t.validate().unwrap_err(), IncidentError::EmptyChannels(Severity::Info)));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            IncidentError::EmptyChannels(Severity::Info)
+        ));
     }
 
     #[test]
     fn severity_serde_kebab() {
         assert_eq!(serde_json::to_string(&Severity::Info).unwrap(), "\"info\"");
-        assert_eq!(serde_json::to_string(&Severity::Critical).unwrap(), "\"critical\"");
-        assert_eq!(serde_json::to_string(&Severity::Emergency).unwrap(), "\"emergency\"");
+        assert_eq!(
+            serde_json::to_string(&Severity::Critical).unwrap(),
+            "\"critical\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Severity::Emergency).unwrap(),
+            "\"emergency\""
+        );
     }
 
     #[test]
     fn channel_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Channel::PagerDuty).unwrap(), "\"pager-duty\"");
-        assert_eq!(serde_json::to_string(&Channel::TheHive).unwrap(), "\"the-hive\"");
-        assert_eq!(serde_json::to_string(&Channel::OpenSearch).unwrap(), "\"open-search\"");
+        assert_eq!(
+            serde_json::to_string(&Channel::PagerDuty).unwrap(),
+            "\"pager-duty\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Channel::TheHive).unwrap(),
+            "\"the-hive\""
+        );
+        assert_eq!(
+            serde_json::to_string(&Channel::OpenSearch).unwrap(),
+            "\"open-search\""
+        );
     }
 
     #[test]

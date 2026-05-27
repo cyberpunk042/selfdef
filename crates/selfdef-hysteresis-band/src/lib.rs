@@ -55,7 +55,9 @@ pub enum BandError {
 impl HysteresisBand {
     /// New.
     pub fn new(lower: i64, upper: i64, initial: State) -> Result<Self, BandError> {
-        if lower >= upper { return Err(BandError::BadThresholds); }
+        if lower >= upper {
+            return Err(BandError::BadThresholds);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             lower,
@@ -83,8 +85,12 @@ impl HysteresisBand {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BandError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BandError::SchemaMismatch); }
-        if self.lower >= self.upper { return Err(BandError::BadThresholds); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BandError::SchemaMismatch);
+        }
+        if self.lower >= self.upper {
+            return Err(BandError::BadThresholds);
+        }
         Ok(())
     }
 }
@@ -134,15 +140,24 @@ mod tests {
 
     #[test]
     fn bad_thresholds_rejected() {
-        assert!(matches!(HysteresisBand::new(10, 10, State::Low).unwrap_err(), BandError::BadThresholds));
-        assert!(matches!(HysteresisBand::new(20, 10, State::Low).unwrap_err(), BandError::BadThresholds));
+        assert!(matches!(
+            HysteresisBand::new(10, 10, State::Low).unwrap_err(),
+            BandError::BadThresholds
+        ));
+        assert!(matches!(
+            HysteresisBand::new(20, 10, State::Low).unwrap_err(),
+            BandError::BadThresholds
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = HysteresisBand::new(10, 20, State::Low).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BandError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BandError::SchemaMismatch
+        ));
     }
 
     #[test]

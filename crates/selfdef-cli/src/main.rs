@@ -16,31 +16,31 @@ mod communication_boundary;
 mod dashboard_prefs;
 mod dashboards;
 mod doctor;
+mod emit;
 mod filesystem_boundary;
 mod flex_profile;
-mod inference_backends;
-mod nats;
-mod network_boundary;
-mod policy;
-mod sandbox_tiers;
-mod ssh_wrap;
-mod tool_authority;
-mod emit;
 mod follow;
 mod friction_audit;
 mod guardian;
-mod scheduler;
-mod trio;
 mod hardware;
 mod health;
+mod inference_backends;
 mod init;
 mod mcp;
 mod models;
 mod modules;
+mod nats;
+mod network_boundary;
 mod notify;
 mod paths;
 mod perimeter;
+mod policy;
 mod repl;
+mod sandbox_tiers;
+mod scheduler;
+mod ssh_wrap;
+mod tool_authority;
+mod trio;
 mod wizard;
 
 use std::path::PathBuf;
@@ -1910,7 +1910,8 @@ async fn main() -> Result<()> {
                 std::process::exit(exit);
             }
             PerimeterAction::Revoke { extension_id, json } => {
-                let exit = perimeter::run_revoke(&extension_id, json).context("perimeter revoke")?;
+                let exit =
+                    perimeter::run_revoke(&extension_id, json).context("perimeter revoke")?;
                 std::process::exit(exit);
             }
             PerimeterAction::AuditCycle { action } => match action {
@@ -1950,21 +1951,23 @@ async fn main() -> Result<()> {
         Command::Scheduler { action } => {
             let exit = match action {
                 SchedulerAction::Show { json } => scheduler::run_show(json)?,
-                SchedulerAction::History { limit, json } => {
-                    scheduler::run_history(limit, json)?
-                }
+                SchedulerAction::History { limit, json } => scheduler::run_history(limit, json)?,
                 SchedulerAction::Explain { request_id, json } => {
                     scheduler::run_explain(&request_id, json)?
                 }
-                SchedulerAction::Replay { request_id, profile, json } => {
-                    scheduler::run_replay(&request_id, profile.as_deref(), json)?
-                }
+                SchedulerAction::Replay {
+                    request_id,
+                    profile,
+                    json,
+                } => scheduler::run_replay(&request_id, profile.as_deref(), json)?,
                 SchedulerAction::Weights { profile, json } => {
                     scheduler::run_weights(profile.as_deref(), json)?
                 }
-                SchedulerAction::Force { request_id, route, json } => {
-                    scheduler::run_force(&request_id, &route, json)?
-                }
+                SchedulerAction::Force {
+                    request_id,
+                    route,
+                    json,
+                } => scheduler::run_force(&request_id, &route, json)?,
                 SchedulerAction::AuditCycle { action } => match action {
                     SchedulerAuditCycleAction::Replay { json } => {
                         scheduler::run_audit_cycle_replay(json)?
@@ -2008,9 +2011,11 @@ async fn main() -> Result<()> {
         Command::ToolAuthority { action } => {
             let exit = match action {
                 ToolAuthorityAction::Tools => tool_authority::run_tools()?,
-                ToolAuthorityAction::Permits { tool, mode, profile } => {
-                    tool_authority::run_permits_cli(&tool, &mode, &profile)?
-                }
+                ToolAuthorityAction::Permits {
+                    tool,
+                    mode,
+                    profile,
+                } => tool_authority::run_permits_cli(&tool, &mode, &profile)?,
             };
             std::process::exit(exit);
         }
@@ -2068,8 +2073,9 @@ async fn main() -> Result<()> {
         Command::FlexProfile { action } => {
             let exit = match action {
                 FlexProfileAction::Schema => flex_profile::run_schema()?,
-                FlexProfileAction::Show { json } => flex_profile::run_show(json)
-                    .context("flex-profile show")?,
+                FlexProfileAction::Show { json } => {
+                    flex_profile::run_show(json).context("flex-profile show")?
+                }
             };
             std::process::exit(exit);
         }
@@ -2104,9 +2110,7 @@ async fn main() -> Result<()> {
             let exit = match action {
                 Some(GuardianAction::Show) | None => guardian::run_show(json)?,
                 Some(GuardianAction::History { limit }) => guardian::run_history(limit, json)?,
-                Some(GuardianAction::Replay { event_id }) => {
-                    guardian::run_replay(&event_id, json)?
-                }
+                Some(GuardianAction::Replay { event_id }) => guardian::run_replay(&event_id, json)?,
                 Some(GuardianAction::Rollback { event_id }) => {
                     guardian::run_rollback(&event_id, json)?
                 }
@@ -2115,9 +2119,7 @@ async fn main() -> Result<()> {
         }
         Command::FrictionAudit { action, json } => {
             let exit = match action {
-                Some(FrictionAuditAction::Show) | None => {
-                    friction_audit::run_show(json)?
-                }
+                Some(FrictionAuditAction::Show) | None => friction_audit::run_show(json)?,
                 Some(FrictionAuditAction::History { limit }) => {
                     friction_audit::run_history(limit, json)?
                 }

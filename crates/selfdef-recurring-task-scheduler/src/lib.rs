@@ -68,28 +68,45 @@ impl RecurringTaskScheduler {
     }
 
     /// Register a task with first due time.
-    pub fn register(&mut self, task_id: &str, interval_ms: u64, first_due_ms: u64) -> Result<(), SchedulerError> {
-        if task_id.is_empty() { return Err(SchedulerError::EmptyTask); }
-        if interval_ms == 0 { return Err(SchedulerError::ZeroInterval); }
-        self.tasks.insert(task_id.into(), RecurringTask {
-            interval_ms,
-            next_due_ms: first_due_ms,
-            enabled: true,
-            runs: 0,
-        });
+    pub fn register(
+        &mut self,
+        task_id: &str,
+        interval_ms: u64,
+        first_due_ms: u64,
+    ) -> Result<(), SchedulerError> {
+        if task_id.is_empty() {
+            return Err(SchedulerError::EmptyTask);
+        }
+        if interval_ms == 0 {
+            return Err(SchedulerError::ZeroInterval);
+        }
+        self.tasks.insert(
+            task_id.into(),
+            RecurringTask {
+                interval_ms,
+                next_due_ms: first_due_ms,
+                enabled: true,
+                runs: 0,
+            },
+        );
         Ok(())
     }
 
     /// Enable / disable.
     pub fn set_enabled(&mut self, task_id: &str, enabled: bool) -> Result<(), SchedulerError> {
-        let t = self.tasks.get_mut(task_id).ok_or_else(|| SchedulerError::UnknownTask(task_id.into()))?;
+        let t = self
+            .tasks
+            .get_mut(task_id)
+            .ok_or_else(|| SchedulerError::UnknownTask(task_id.into()))?;
         t.enabled = enabled;
         Ok(())
     }
 
     /// All currently-due tasks (enabled, ordered by next_due then id).
     pub fn due_at(&self, now_ms: u64) -> Vec<String> {
-        let mut due: Vec<(&String, &RecurringTask)> = self.tasks.iter()
+        let mut due: Vec<(&String, &RecurringTask)> = self
+            .tasks
+            .iter()
             .filter(|(_, t)| t.enabled && now_ms >= t.next_due_ms)
             .collect();
         due.sort_by(|a, b| a.1.next_due_ms.cmp(&b.1.next_due_ms).then(a.0.cmp(b.0)));
@@ -100,13 +117,18 @@ impl RecurringTaskScheduler {
     /// — drift-resistant: if many ticks were missed we don't replay,
     /// we land on the first future tick.
     pub fn mark_run(&mut self, task_id: &str, now_ms: u64) -> Result<u64, SchedulerError> {
-        let t = self.tasks.get_mut(task_id).ok_or_else(|| SchedulerError::UnknownTask(task_id.into()))?;
+        let t = self
+            .tasks
+            .get_mut(task_id)
+            .ok_or_else(|| SchedulerError::UnknownTask(task_id.into()))?;
         t.runs = t.runs.saturating_add(1);
         // Advance by interval until strictly > now.
         if t.next_due_ms <= now_ms {
             let elapsed = now_ms - t.next_due_ms;
             let ticks = elapsed / t.interval_ms + 1;
-            t.next_due_ms = t.next_due_ms.saturating_add(ticks.saturating_mul(t.interval_ms));
+            t.next_due_ms = t
+                .next_due_ms
+                .saturating_add(ticks.saturating_mul(t.interval_ms));
         } else {
             t.next_due_ms = t.next_due_ms.saturating_add(t.interval_ms);
         }
@@ -125,17 +147,25 @@ impl RecurringTaskScheduler {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SchedulerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SchedulerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SchedulerError::SchemaMismatch);
+        }
         for (id, t) in &self.tasks {
-            if id.is_empty() { return Err(SchedulerError::EmptyTask); }
-            if t.interval_ms == 0 { return Err(SchedulerError::ZeroInterval); }
+            if id.is_empty() {
+                return Err(SchedulerError::EmptyTask);
+            }
+            if t.interval_ms == 0 {
+                return Err(SchedulerError::ZeroInterval);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for RecurringTaskScheduler {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -206,19 +236,28 @@ mod tests {
     #[test]
     fn zero_interval_rejected() {
         let mut s = RecurringTaskScheduler::new();
-        assert!(matches!(s.register("a", 0, 0).unwrap_err(), SchedulerError::ZeroInterval));
+        assert!(matches!(
+            s.register("a", 0, 0).unwrap_err(),
+            SchedulerError::ZeroInterval
+        ));
     }
 
     #[test]
     fn empty_task_rejected() {
         let mut s = RecurringTaskScheduler::new();
-        assert!(matches!(s.register("", 1000, 0).unwrap_err(), SchedulerError::EmptyTask));
+        assert!(matches!(
+            s.register("", 1000, 0).unwrap_err(),
+            SchedulerError::EmptyTask
+        ));
     }
 
     #[test]
     fn unknown_task_rejected() {
         let mut s = RecurringTaskScheduler::new();
-        assert!(matches!(s.mark_run("nope", 0).unwrap_err(), SchedulerError::UnknownTask(_)));
+        assert!(matches!(
+            s.mark_run("nope", 0).unwrap_err(),
+            SchedulerError::UnknownTask(_)
+        ));
     }
 
     #[test]
@@ -234,7 +273,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = RecurringTaskScheduler::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SchedulerError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SchedulerError::SchemaMismatch
+        ));
     }
 
     #[test]

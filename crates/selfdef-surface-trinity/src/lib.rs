@@ -70,36 +70,58 @@ pub enum TrinityError {
 
 impl TrinityReport {
     /// Run all 4 checks against the supplied snapshots.
-    pub fn run(
-        cli: &CliMirrorSnapshot,
-        tui: &TuiMirrorSnapshot,
-        web: &WebConfig,
-    ) -> Self {
+    pub fn run(cli: &CliMirrorSnapshot, tui: &TuiMirrorSnapshot, web: &WebConfig) -> Self {
         let mut results = Vec::with_capacity(4);
 
         // 1. CLI surface (schema valid + 50+ subcommands).
-        let cli_check = match cli.validate_schema()
+        let cli_check = match cli
+            .validate_schema()
             .and_then(|_| cli.validate_surface_size())
         {
-            Ok(()) => CheckResult { check: SurfaceCheck::CliSurface, passed: true, reason: String::new() },
-            Err(e) => CheckResult { check: SurfaceCheck::CliSurface, passed: false, reason: e.to_string() },
+            Ok(()) => CheckResult {
+                check: SurfaceCheck::CliSurface,
+                passed: true,
+                reason: String::new(),
+            },
+            Err(e) => CheckResult {
+                check: SurfaceCheck::CliSurface,
+                passed: false,
+                reason: e.to_string(),
+            },
         };
         results.push(cli_check);
 
         // 2. TUI surface (4-panel layout + doctrine verbatim).
-        let tui_check = match tui.validate_schema()
+        let tui_check = match tui
+            .validate_schema()
             .and_then(|_| tui.validate_doctrine())
             .and_then(|_| tui.validate_layout())
         {
-            Ok(()) => CheckResult { check: SurfaceCheck::TuiSurface, passed: true, reason: String::new() },
-            Err(e) => CheckResult { check: SurfaceCheck::TuiSurface, passed: false, reason: e.to_string() },
+            Ok(()) => CheckResult {
+                check: SurfaceCheck::TuiSurface,
+                passed: true,
+                reason: String::new(),
+            },
+            Err(e) => CheckResult {
+                check: SurfaceCheck::TuiSurface,
+                passed: false,
+                reason: e.to_string(),
+            },
         };
         results.push(tui_check);
 
         // 3. Web surface config validates.
         let web_check = match web.validate() {
-            Ok(()) => CheckResult { check: SurfaceCheck::WebSurface, passed: true, reason: String::new() },
-            Err(e) => CheckResult { check: SurfaceCheck::WebSurface, passed: false, reason: e.to_string() },
+            Ok(()) => CheckResult {
+                check: SurfaceCheck::WebSurface,
+                passed: true,
+                reason: String::new(),
+            },
+            Err(e) => CheckResult {
+                check: SurfaceCheck::WebSurface,
+                passed: false,
+                reason: e.to_string(),
+            },
         };
         results.push(web_check);
 
@@ -111,7 +133,11 @@ impl TrinityReport {
             }
         }
         let cross_check = if missing.is_empty() {
-            CheckResult { check: SurfaceCheck::CrossSurfaceConsistency, passed: true, reason: String::new() }
+            CheckResult {
+                check: SurfaceCheck::CrossSurfaceConsistency,
+                passed: true,
+                reason: String::new(),
+            }
         } else {
             CheckResult {
                 check: SurfaceCheck::CrossSurfaceConsistency,
@@ -135,7 +161,11 @@ impl TrinityReport {
 
     /// Failed checks.
     pub fn failed(&self) -> Vec<SurfaceCheck> {
-        self.results.iter().filter(|r| !r.passed).map(|r| r.check).collect()
+        self.results
+            .iter()
+            .filter(|r| !r.passed)
+            .map(|r| r.check)
+            .collect()
     }
 
     /// Assert all 4 checks passed (daemon-boot gate).
@@ -150,22 +180,28 @@ impl TrinityReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_cli_mirror::{CliMirrorSnapshot, DOCTRINE_FULLSTACK_AT_THE_EDGES, EffectClass, SubcommandEntry};
-    use selfdef_tui_mirror::{ColumnSpec, DOCTRINE_NO_VANITY_GRAPHS, KeyBinding, PanelEntry, Quadrant};
+    use selfdef_cli_mirror::{
+        CliMirrorSnapshot, DOCTRINE_FULLSTACK_AT_THE_EDGES, EffectClass, SubcommandEntry,
+    };
+    use selfdef_tui_mirror::{
+        ColumnSpec, DOCTRINE_NO_VANITY_GRAPHS, KeyBinding, PanelEntry, Quadrant,
+    };
 
     fn ok_cli() -> CliMirrorSnapshot {
-        let subs: Vec<SubcommandEntry> = (0..50).map(|i| SubcommandEntry {
-            path: format!("ns.cmd{i}"),
-            help_summary: format!("cmd {i}"),
-            help_long: format!("Long {i}"),
-            effect_class: EffectClass::ReadOnly,
-            min_authority: "l0_observe".into(),
-            args: vec![],
-            mirror: String::new(),
-            requires_signature: false,
-            p95_target_ms: 100,
-            signature: format!("sig-{i}"),
-        }).collect();
+        let subs: Vec<SubcommandEntry> = (0..50)
+            .map(|i| SubcommandEntry {
+                path: format!("ns.cmd{i}"),
+                help_summary: format!("cmd {i}"),
+                help_long: format!("Long {i}"),
+                effect_class: EffectClass::ReadOnly,
+                min_authority: "l0_observe".into(),
+                args: vec![],
+                mirror: String::new(),
+                requires_signature: false,
+                p95_target_ms: 100,
+                signature: format!("sig-{i}"),
+            })
+            .collect();
         CliMirrorSnapshot {
             schema_version: "1.0.0".into(),
             cli_build_version: "0.42.1".into(),
@@ -183,8 +219,17 @@ mod tests {
             quadrant: q,
             title: format!("{kind:?}"),
             source_mirror: format!("selfdef-{kind:?}-mirror"),
-            columns: vec![ColumnSpec { header: "id".into(), field: "id".into(), width: 12, right_align: false }],
-            key_bindings: vec![KeyBinding { key: "j".into(), action: "next".into(), mutating: false }],
+            columns: vec![ColumnSpec {
+                header: "id".into(),
+                field: "id".into(),
+                width: 12,
+                right_align: false,
+            }],
+            key_bindings: vec![KeyBinding {
+                key: "j".into(),
+                action: "next".into(),
+                mutating: false,
+            }],
             min_authority: "l0_observe".into(),
             refresh_ms: 5000,
             signature: format!("sig-{kind:?}"),
@@ -208,7 +253,9 @@ mod tests {
         }
     }
 
-    fn ok_web() -> WebConfig { WebConfig::default() }
+    fn ok_web() -> WebConfig {
+        WebConfig::default()
+    }
 
     #[test]
     fn all_passed_when_canonical() {
@@ -220,7 +267,7 @@ mod tests {
     #[test]
     fn cli_failure_caught() {
         let mut bad = ok_cli();
-        bad.subcommands.truncate(10);  // below 50
+        bad.subcommands.truncate(10); // below 50
         let r = TrinityReport::run(&bad, &ok_tui(), &ok_web());
         assert!(!r.all_passed());
         assert!(r.failed().contains(&SurfaceCheck::CliSurface));
@@ -249,7 +296,8 @@ mod tests {
         let mut bad = ok_tui();
         // Remove Rules panel — web PANEL_ROUTES still requires it
         bad.panels.retain(|p| p.kind != PanelKind::Rules);
-        bad.panels.push(ok_tui_panel(PanelKind::Grants, Quadrant::TopLeft));
+        bad.panels
+            .push(ok_tui_panel(PanelKind::Grants, Quadrant::TopLeft));
         let r = TrinityReport::run(&ok_cli(), &bad, &ok_web());
         // Either TuiSurface (layout invariant violated) or CrossSurfaceConsistency fires
         assert!(!r.all_passed());
@@ -260,7 +308,10 @@ mod tests {
         let mut bad = ok_web();
         bad.host = "0.0.0.0".into();
         let r = TrinityReport::run(&ok_cli(), &ok_tui(), &bad);
-        assert!(matches!(r.assert_all_passed().unwrap_err(), TrinityError::ChecksFailed(_)));
+        assert!(matches!(
+            r.assert_all_passed().unwrap_err(),
+            TrinityError::ChecksFailed(_)
+        ));
     }
 
     #[test]
@@ -273,7 +324,13 @@ mod tests {
 
     #[test]
     fn surface_check_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SurfaceCheck::CliSurface).unwrap(), "\"cli-surface\"");
-        assert_eq!(serde_json::to_string(&SurfaceCheck::CrossSurfaceConsistency).unwrap(), "\"cross-surface-consistency\"");
+        assert_eq!(
+            serde_json::to_string(&SurfaceCheck::CliSurface).unwrap(),
+            "\"cli-surface\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SurfaceCheck::CrossSurfaceConsistency).unwrap(),
+            "\"cross-surface-consistency\""
+        );
     }
 }

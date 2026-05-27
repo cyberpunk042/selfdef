@@ -75,7 +75,9 @@ pub enum QueueError {
 impl BoundedPriorityQueue {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, QueueError> {
-        if capacity == 0 { return Err(QueueError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(QueueError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -87,18 +89,25 @@ impl BoundedPriorityQueue {
 
     /// Push item with given priority.
     pub fn push(&mut self, id: &str, priority: i32) -> Result<PushOutcome, QueueError> {
-        if id.is_empty() { return Err(QueueError::EmptyId); }
+        if id.is_empty() {
+            return Err(QueueError::EmptyId);
+        }
         if self.items.iter().any(|i| i.id == id) {
             return Err(QueueError::DuplicateId(id.into()));
         }
         let seq = self.next_seq;
         self.next_seq = self.next_seq.saturating_add(1);
         if (self.items.len() as u32) < self.capacity {
-            self.items.push(Item { id: id.into(), priority, seq });
+            self.items.push(Item {
+                id: id.into(),
+                priority,
+                seq,
+            });
             return Ok(PushOutcome::Accepted);
         }
         // Full — find min priority (later seq breaks tie: keep older).
-        let (min_idx, min_item) = self.items
+        let (min_idx, min_item) = self
+            .items
             .iter()
             .enumerate()
             .min_by(|(_, a), (_, b)| a.priority.cmp(&b.priority).then(b.seq.cmp(&a.seq)))
@@ -106,7 +115,11 @@ impl BoundedPriorityQueue {
         if priority > min_item.priority {
             let evicted_id = min_item.id.clone();
             self.items.swap_remove(min_idx);
-            self.items.push(Item { id: id.into(), priority, seq });
+            self.items.push(Item {
+                id: id.into(),
+                priority,
+                seq,
+            });
             self.drops = self.drops.saturating_add(1);
             return Ok(PushOutcome::Evicted(evicted_id));
         }
@@ -116,8 +129,11 @@ impl BoundedPriorityQueue {
 
     /// Pop highest priority (ties: lower seq first).
     pub fn pop(&mut self) -> Option<Item> {
-        if self.items.is_empty() { return None; }
-        let (idx, _) = self.items
+        if self.items.is_empty() {
+            return None;
+        }
+        let (idx, _) = self
+            .items
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.priority.cmp(&b.priority).then(b.seq.cmp(&a.seq)))
@@ -133,17 +149,27 @@ impl BoundedPriorityQueue {
     }
 
     /// Size.
-    pub fn len(&self) -> usize { self.items.len() }
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.items.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), QueueError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(QueueError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(QueueError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(QueueError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(QueueError::ZeroCapacity);
+        }
         for i in &self.items {
-            if i.id.is_empty() { return Err(QueueError::EmptyId); }
+            if i.id.is_empty() {
+                return Err(QueueError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -217,21 +243,30 @@ mod tests {
     fn duplicate_id_rejected() {
         let mut q = BoundedPriorityQueue::new(3).unwrap();
         q.push("a", 1).unwrap();
-        assert!(matches!(q.push("a", 2).unwrap_err(), QueueError::DuplicateId(_)));
+        assert!(matches!(
+            q.push("a", 2).unwrap_err(),
+            QueueError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut q = BoundedPriorityQueue::new(3).unwrap();
         assert!(matches!(q.push("", 1).unwrap_err(), QueueError::EmptyId));
-        assert!(matches!(BoundedPriorityQueue::new(0).unwrap_err(), QueueError::ZeroCapacity));
+        assert!(matches!(
+            BoundedPriorityQueue::new(0).unwrap_err(),
+            QueueError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = BoundedPriorityQueue::new(3).unwrap();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QueueError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QueueError::SchemaMismatch
+        ));
     }
 
     #[test]

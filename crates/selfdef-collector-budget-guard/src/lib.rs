@@ -93,13 +93,41 @@ impl BudgetRegistry {
     /// suricata are network-facing.
     pub fn canonical() -> Self {
         let budgets = vec![
-            CollectorBudget { kind: CollectorKind::Auditd,       warn_eps:  8_000, hard_eps: 20_000 },
-            CollectorBudget { kind: CollectorKind::Canary,       warn_eps:    100, hard_eps:    500 },
-            CollectorBudget { kind: CollectorKind::Ebpf,         warn_eps: 12_000, hard_eps: 40_000 },
-            CollectorBudget { kind: CollectorKind::EventStream,  warn_eps:  4_000, hard_eps: 10_000 },
-            CollectorBudget { kind: CollectorKind::Journald,     warn_eps:  6_000, hard_eps: 15_000 },
-            CollectorBudget { kind: CollectorKind::Suricata,     warn_eps:  3_000, hard_eps:  8_000 },
-            CollectorBudget { kind: CollectorKind::Tetragon,     warn_eps: 10_000, hard_eps: 30_000 },
+            CollectorBudget {
+                kind: CollectorKind::Auditd,
+                warn_eps: 8_000,
+                hard_eps: 20_000,
+            },
+            CollectorBudget {
+                kind: CollectorKind::Canary,
+                warn_eps: 100,
+                hard_eps: 500,
+            },
+            CollectorBudget {
+                kind: CollectorKind::Ebpf,
+                warn_eps: 12_000,
+                hard_eps: 40_000,
+            },
+            CollectorBudget {
+                kind: CollectorKind::EventStream,
+                warn_eps: 4_000,
+                hard_eps: 10_000,
+            },
+            CollectorBudget {
+                kind: CollectorKind::Journald,
+                warn_eps: 6_000,
+                hard_eps: 15_000,
+            },
+            CollectorBudget {
+                kind: CollectorKind::Suricata,
+                warn_eps: 3_000,
+                hard_eps: 8_000,
+            },
+            CollectorBudget {
+                kind: CollectorKind::Tetragon,
+                warn_eps: 10_000,
+                hard_eps: 30_000,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -116,9 +144,13 @@ impl BudgetRegistry {
             return Err(BudgetError::CountInvalid(self.budgets.len()));
         }
         let required = [
-            CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-            CollectorKind::EventStream, CollectorKind::Journald,
-            CollectorKind::Suricata, CollectorKind::Tetragon,
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
         ];
         for k in required {
             if !self.budgets.iter().any(|b| b.kind == k) {
@@ -164,9 +196,15 @@ mod tests {
     fn seven_budgets_present() {
         let r = BudgetRegistry::canonical();
         assert_eq!(r.budgets.len(), 7);
-        for k in [CollectorKind::Auditd, CollectorKind::Canary, CollectorKind::Ebpf,
-                  CollectorKind::EventStream, CollectorKind::Journald,
-                  CollectorKind::Suricata, CollectorKind::Tetragon] {
+        for k in [
+            CollectorKind::Auditd,
+            CollectorKind::Canary,
+            CollectorKind::Ebpf,
+            CollectorKind::EventStream,
+            CollectorKind::Journald,
+            CollectorKind::Suricata,
+            CollectorKind::Tetragon,
+        ] {
             assert!(r.get(k).is_some(), "missing budget for {k:?}");
         }
     }
@@ -174,20 +212,29 @@ mod tests {
     #[test]
     fn within_below_warn() {
         let r = BudgetRegistry::canonical();
-        assert_eq!(r.evaluate(CollectorKind::Auditd, 1_000), BudgetVerdict::Within);
+        assert_eq!(
+            r.evaluate(CollectorKind::Auditd, 1_000),
+            BudgetVerdict::Within
+        );
     }
 
     #[test]
     fn warn_between_thresholds() {
         let r = BudgetRegistry::canonical();
         // auditd: warn 8_000, hard 20_000
-        assert_eq!(r.evaluate(CollectorKind::Auditd, 10_000), BudgetVerdict::Warn);
+        assert_eq!(
+            r.evaluate(CollectorKind::Auditd, 10_000),
+            BudgetVerdict::Warn
+        );
     }
 
     #[test]
     fn quarantine_above_hard() {
         let r = BudgetRegistry::canonical();
-        assert_eq!(r.evaluate(CollectorKind::Auditd, 25_000), BudgetVerdict::Quarantine);
+        assert_eq!(
+            r.evaluate(CollectorKind::Auditd, 25_000),
+            BudgetVerdict::Quarantine
+        );
     }
 
     #[test]
@@ -196,21 +243,30 @@ mod tests {
         // exactly at warn → Warn (>=)
         assert_eq!(r.evaluate(CollectorKind::Canary, 100), BudgetVerdict::Warn);
         // exactly at hard → Quarantine
-        assert_eq!(r.evaluate(CollectorKind::Canary, 500), BudgetVerdict::Quarantine);
+        assert_eq!(
+            r.evaluate(CollectorKind::Canary, 500),
+            BudgetVerdict::Quarantine
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = BudgetRegistry::canonical();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn count_invalid_caught() {
         let mut r = BudgetRegistry::canonical();
         r.budgets.pop();
-        assert!(matches!(r.validate().unwrap_err(), BudgetError::CountInvalid(6)));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            BudgetError::CountInvalid(6)
+        ));
     }
 
     #[test]
@@ -218,7 +274,11 @@ mod tests {
         let mut r = BudgetRegistry::canonical();
         r.budgets[0].warn_eps = 30_000; // > hard_eps 20_000
         match r.validate().unwrap_err() {
-            BudgetError::ThresholdsInverted { kind, warn_eps, hard_eps } => {
+            BudgetError::ThresholdsInverted {
+                kind,
+                warn_eps,
+                hard_eps,
+            } => {
                 assert_eq!(kind, CollectorKind::Auditd);
                 assert_eq!(warn_eps, 30_000);
                 assert_eq!(hard_eps, 20_000);
@@ -229,8 +289,14 @@ mod tests {
 
     #[test]
     fn verdict_serde_kebab() {
-        assert_eq!(serde_json::to_string(&BudgetVerdict::Within).unwrap(), "\"within\"");
-        assert_eq!(serde_json::to_string(&BudgetVerdict::Quarantine).unwrap(), "\"quarantine\"");
+        assert_eq!(
+            serde_json::to_string(&BudgetVerdict::Within).unwrap(),
+            "\"within\""
+        );
+        assert_eq!(
+            serde_json::to_string(&BudgetVerdict::Quarantine).unwrap(),
+            "\"quarantine\""
+        );
     }
 
     #[test]

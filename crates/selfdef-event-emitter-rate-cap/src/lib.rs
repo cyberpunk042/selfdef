@@ -85,11 +85,16 @@ impl EventEmitterRateCap {
 
     /// Set cap.
     pub fn set_cap(&mut self, emitter_id: &str, events_per_min: u32) -> Result<(), CapError> {
-        if emitter_id.is_empty() { return Err(CapError::EmptyId); }
-        let e = self.emitters.entry(emitter_id.into()).or_insert(EmitterEntry {
-            events_per_min,
-            recent: Vec::new(),
-        });
+        if emitter_id.is_empty() {
+            return Err(CapError::EmptyId);
+        }
+        let e = self
+            .emitters
+            .entry(emitter_id.into())
+            .or_insert(EmitterEntry {
+                events_per_min,
+                recent: Vec::new(),
+            });
         e.events_per_min = events_per_min;
         Ok(())
     }
@@ -106,31 +111,47 @@ impl EventEmitterRateCap {
 
         if let Some(&last) = e.recent.last() {
             if ts_ms < last {
-                return Err(CapError::NonMonotonic { prev: last, new: ts_ms });
+                return Err(CapError::NonMonotonic {
+                    prev: last,
+                    new: ts_ms,
+                });
             }
         }
         if (e.recent.len() as u32) >= e.events_per_min {
             // retry_after_ms = (60_000 - (ts - oldest)) + 1
             let oldest = *e.recent.first().expect("len ≥ 1");
-            let retry = 60_000u64.saturating_sub(ts_ms.saturating_sub(oldest)).saturating_add(1);
-            return Ok(RateVerdict::Throttled { cap: e.events_per_min, retry_after_ms: retry });
+            let retry = 60_000u64
+                .saturating_sub(ts_ms.saturating_sub(oldest))
+                .saturating_add(1);
+            return Ok(RateVerdict::Throttled {
+                cap: e.events_per_min,
+                retry_after_ms: retry,
+            });
         }
         e.recent.push(ts_ms);
-        Ok(RateVerdict::Accepted { remaining: e.events_per_min - e.recent.len() as u32 })
+        Ok(RateVerdict::Accepted {
+            remaining: e.events_per_min - e.recent.len() as u32,
+        })
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CapError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CapError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CapError::SchemaMismatch);
+        }
         for k in self.emitters.keys() {
-            if k.is_empty() { return Err(CapError::EmptyId); }
+            if k.is_empty() {
+                return Err(CapError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for EventEmitterRateCap {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -147,8 +168,14 @@ mod tests {
     fn accepts_under_cap() {
         let mut c = EventEmitterRateCap::new();
         c.set_cap("x", 2).unwrap();
-        assert_eq!(c.record("x", 0).unwrap(), RateVerdict::Accepted { remaining: 1 });
-        assert_eq!(c.record("x", 1).unwrap(), RateVerdict::Accepted { remaining: 0 });
+        assert_eq!(
+            c.record("x", 0).unwrap(),
+            RateVerdict::Accepted { remaining: 1 }
+        );
+        assert_eq!(
+            c.record("x", 1).unwrap(),
+            RateVerdict::Accepted { remaining: 0 }
+        );
     }
 
     #[test]
@@ -159,7 +186,10 @@ mod tests {
         c.record("x", 1).unwrap();
         let v = c.record("x", 2).unwrap();
         match v {
-            RateVerdict::Throttled { cap, retry_after_ms } => {
+            RateVerdict::Throttled {
+                cap,
+                retry_after_ms,
+            } => {
                 assert_eq!(cap, 2);
                 assert!(retry_after_ms > 59_000);
             }
@@ -173,7 +203,10 @@ mod tests {
         c.set_cap("x", 1).unwrap();
         c.record("x", 0).unwrap();
         // Past 60s — old record falls out.
-        assert_eq!(c.record("x", 61_000).unwrap(), RateVerdict::Accepted { remaining: 0 });
+        assert_eq!(
+            c.record("x", 61_000).unwrap(),
+            RateVerdict::Accepted { remaining: 0 }
+        );
     }
 
     #[test]
@@ -181,7 +214,10 @@ mod tests {
         let mut c = EventEmitterRateCap::new();
         c.set_cap("x", 5).unwrap();
         c.record("x", 200).unwrap();
-        assert!(matches!(c.record("x", 100).unwrap_err(), CapError::NonMonotonic { .. }));
+        assert!(matches!(
+            c.record("x", 100).unwrap_err(),
+            CapError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -194,7 +230,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = EventEmitterRateCap::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CapError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CapError::SchemaMismatch
+        ));
     }
 
     #[test]

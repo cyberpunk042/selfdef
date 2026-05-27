@@ -62,12 +62,22 @@ impl CancelSet {
 
     /// Cancel.
     pub fn cancel(&mut self, id: &str, now_ms: u64, reason: &str) -> Result<(), CancelError> {
-        if id.is_empty() { return Err(CancelError::EmptyId); }
-        if reason.is_empty() { return Err(CancelError::EmptyReason); }
+        if id.is_empty() {
+            return Err(CancelError::EmptyId);
+        }
+        if reason.is_empty() {
+            return Err(CancelError::EmptyReason);
+        }
         if self.cancelled.contains_key(id) {
             return Err(CancelError::AlreadyCancelled(id.into()));
         }
-        self.cancelled.insert(id.into(), CancelRecord { ts_ms: now_ms, reason: reason.into() });
+        self.cancelled.insert(
+            id.into(),
+            CancelRecord {
+                ts_ms: now_ms,
+                reason: reason.into(),
+            },
+        );
         Ok(())
     }
 
@@ -88,17 +98,25 @@ impl CancelSet {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CancelError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CancelError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CancelError::SchemaMismatch);
+        }
         for (k, v) in &self.cancelled {
-            if k.is_empty() { return Err(CancelError::EmptyId); }
-            if v.reason.is_empty() { return Err(CancelError::EmptyReason); }
+            if k.is_empty() {
+                return Err(CancelError::EmptyId);
+            }
+            if v.reason.is_empty() {
+                return Err(CancelError::EmptyReason);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for CancelSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -124,14 +142,23 @@ mod tests {
     fn duplicate_cancel_rejected() {
         let mut c = CancelSet::new();
         c.cancel("a", 100, "x").unwrap();
-        assert!(matches!(c.cancel("a", 200, "y").unwrap_err(), CancelError::AlreadyCancelled(_)));
+        assert!(matches!(
+            c.cancel("a", 200, "y").unwrap_err(),
+            CancelError::AlreadyCancelled(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut c = CancelSet::new();
-        assert!(matches!(c.cancel("", 0, "x").unwrap_err(), CancelError::EmptyId));
-        assert!(matches!(c.cancel("a", 0, "").unwrap_err(), CancelError::EmptyReason));
+        assert!(matches!(
+            c.cancel("", 0, "x").unwrap_err(),
+            CancelError::EmptyId
+        ));
+        assert!(matches!(
+            c.cancel("a", 0, "").unwrap_err(),
+            CancelError::EmptyReason
+        ));
     }
 
     #[test]
@@ -148,7 +175,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = CancelSet::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CancelError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CancelError::SchemaMismatch
+        ));
     }
 
     #[test]

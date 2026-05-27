@@ -77,7 +77,9 @@ impl StallDetector {
 
     /// Observe.
     pub fn observe(&mut self, subject_id: &str, ts_ms: u64) -> Result<(), StallError> {
-        if subject_id.is_empty() { return Err(StallError::EmptySubject); }
+        if subject_id.is_empty() {
+            return Err(StallError::EmptySubject);
+        }
         if let Some(&prev) = self.last.get(subject_id) {
             if ts_ms < prev {
                 return Err(StallError::NonMonotonic { prev, new: ts_ms });
@@ -99,7 +101,10 @@ impl StallDetector {
             Some(prev) => {
                 let age = now_ms.saturating_sub(prev);
                 if age > stall_ms {
-                    StallVerdict::Stalled { age_ms: age, threshold_ms: stall_ms }
+                    StallVerdict::Stalled {
+                        age_ms: age,
+                        threshold_ms: stall_ms,
+                    }
                 } else {
                     StallVerdict::Active { age_ms: age }
                 }
@@ -109,7 +114,8 @@ impl StallDetector {
 
     /// All stalled subjects at now.
     pub fn stalled_subjects(&self, now_ms: u64, stall_ms: u64) -> Vec<String> {
-        self.last.iter()
+        self.last
+            .iter()
             .filter(|&(_, &t)| now_ms.saturating_sub(t) > stall_ms)
             .map(|(k, _)| k.clone())
             .collect()
@@ -117,16 +123,22 @@ impl StallDetector {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), StallError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(StallError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(StallError::SchemaMismatch);
+        }
         for k in self.last.keys() {
-            if k.is_empty() { return Err(StallError::EmptySubject); }
+            if k.is_empty() {
+                return Err(StallError::EmptySubject);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for StallDetector {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -143,7 +155,10 @@ mod tests {
     fn active_under_threshold() {
         let mut s = StallDetector::new();
         s.observe("x", 100).unwrap();
-        assert!(matches!(s.check("x", 500, 1000), StallVerdict::Active { age_ms: 400 }));
+        assert!(matches!(
+            s.check("x", 500, 1000),
+            StallVerdict::Active { age_ms: 400 }
+        ));
     }
 
     #[test]
@@ -151,7 +166,10 @@ mod tests {
         let mut s = StallDetector::new();
         s.observe("x", 100).unwrap();
         match s.check("x", 5000, 1000) {
-            StallVerdict::Stalled { age_ms, threshold_ms } => {
+            StallVerdict::Stalled {
+                age_ms,
+                threshold_ms,
+            } => {
                 assert_eq!(age_ms, 4900);
                 assert_eq!(threshold_ms, 1000);
             }
@@ -163,7 +181,10 @@ mod tests {
     fn nonmonotonic_rejected() {
         let mut s = StallDetector::new();
         s.observe("x", 200).unwrap();
-        assert!(matches!(s.observe("x", 100).unwrap_err(), StallError::NonMonotonic { .. }));
+        assert!(matches!(
+            s.observe("x", 100).unwrap_err(),
+            StallError::NonMonotonic { .. }
+        ));
     }
 
     #[test]
@@ -187,14 +208,20 @@ mod tests {
     #[test]
     fn empty_subject_rejected() {
         let mut s = StallDetector::new();
-        assert!(matches!(s.observe("", 0).unwrap_err(), StallError::EmptySubject));
+        assert!(matches!(
+            s.observe("", 0).unwrap_err(),
+            StallError::EmptySubject
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = StallDetector::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), StallError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            StallError::SchemaMismatch
+        ));
     }
 
     #[test]

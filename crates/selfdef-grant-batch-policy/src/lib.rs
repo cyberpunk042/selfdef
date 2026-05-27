@@ -105,7 +105,9 @@ impl GrantBatchPolicy {
 
     /// Decide.
     pub fn decide(&self, batch: &[GrantEntry]) -> BatchDecision {
-        if batch.is_empty() { return BatchDecision::EmptyBatch; }
+        if batch.is_empty() {
+            return BatchDecision::EmptyBatch;
+        }
         if (batch.len() as u32) > self.max_per_batch {
             return BatchDecision::TooMany {
                 observed: batch.len() as u32,
@@ -134,7 +136,9 @@ impl GrantBatchPolicy {
         if self.schema_version != SCHEMA_VERSION {
             return Err(BatchError::SchemaMismatch);
         }
-        if self.max_per_batch == 0 { return Err(BatchError::MaxZero); }
+        if self.max_per_batch == 0 {
+            return Err(BatchError::MaxZero);
+        }
         Ok(())
     }
 }
@@ -144,7 +148,10 @@ mod tests {
     use super::*;
 
     fn g(id: &str, r: BlastRadius) -> GrantEntry {
-        GrantEntry { id: id.into(), radius: r }
+        GrantEntry {
+            id: id.into(),
+            radius: r,
+        }
     }
 
     #[test]
@@ -168,14 +175,19 @@ mod tests {
     #[test]
     fn too_many_rejected() {
         let p = GrantBatchPolicy::canonical();
-        let entries: Vec<GrantEntry> = (0..10).map(|i| g(&format!("g{i}"), BlastRadius::LocalEphemeral)).collect();
+        let entries: Vec<GrantEntry> = (0..10)
+            .map(|i| g(&format!("g{i}"), BlastRadius::LocalEphemeral))
+            .collect();
         assert!(matches!(p.decide(&entries), BatchDecision::TooMany { .. }));
     }
 
     #[test]
     fn radius_exceeded_rejected() {
         let p = GrantBatchPolicy::canonical();
-        let r = p.decide(&[g("safe", BlastRadius::LocalPersistent), g("public", BlastRadius::Public)]);
+        let r = p.decide(&[
+            g("safe", BlastRadius::LocalPersistent),
+            g("public", BlastRadius::Public),
+        ]);
         match r {
             BatchDecision::RadiusExceeded { id, .. } => assert_eq!(id, "public"),
             _ => panic!(),
@@ -192,7 +204,10 @@ mod tests {
     #[test]
     fn duplicate_id_rejected() {
         let p = GrantBatchPolicy::canonical();
-        let r = p.decide(&[g("dup", BlastRadius::LocalEphemeral), g("dup", BlastRadius::LocalEphemeral)]);
+        let r = p.decide(&[
+            g("dup", BlastRadius::LocalEphemeral),
+            g("dup", BlastRadius::LocalEphemeral),
+        ]);
         assert!(matches!(r, BatchDecision::DuplicateId { .. }));
     }
 
@@ -207,13 +222,20 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = GrantBatchPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), BatchError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BatchError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn decision_serde_kebab() {
         let d = BatchDecision::EmptyBatch;
-        assert!(serde_json::to_string(&d).unwrap().contains("\"kind\":\"empty-batch\""));
+        assert!(
+            serde_json::to_string(&d)
+                .unwrap()
+                .contains("\"kind\":\"empty-batch\"")
+        );
     }
 
     #[test]

@@ -59,12 +59,17 @@ pub enum QuotaError {
 impl PolicyNamespaceQuota {
     /// New.
     pub fn new() -> Self {
-        Self { schema_version: SCHEMA_VERSION.into(), caps: BTreeMap::new() }
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+            caps: BTreeMap::new(),
+        }
     }
 
     /// Set cap.
     pub fn set_cap(&mut self, ns: &str, max_policies: u32) -> Result<(), QuotaError> {
-        if ns.is_empty() { return Err(QuotaError::EmptyNs); }
+        if ns.is_empty() {
+            return Err(QuotaError::EmptyNs);
+        }
         self.caps.insert(ns.into(), max_policies);
         Ok(())
     }
@@ -78,22 +83,30 @@ impl PolicyNamespaceQuota {
         if current_count >= cap {
             InstallVerdict::CapReached { cap }
         } else {
-            InstallVerdict::Accepted { remaining: cap - current_count - 1 }
+            InstallVerdict::Accepted {
+                remaining: cap - current_count - 1,
+            }
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), QuotaError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(QuotaError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(QuotaError::SchemaMismatch);
+        }
         for k in self.caps.keys() {
-            if k.is_empty() { return Err(QuotaError::EmptyNs); }
+            if k.is_empty() {
+                return Err(QuotaError::EmptyNs);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyNamespaceQuota {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -112,14 +125,20 @@ mod tests {
     fn cap_reached_when_at_cap() {
         let mut q = PolicyNamespaceQuota::new();
         q.set_cap("ns/a", 10).unwrap();
-        assert_eq!(q.plan_install("ns/a", 10), InstallVerdict::CapReached { cap: 10 });
+        assert_eq!(
+            q.plan_install("ns/a", 10),
+            InstallVerdict::CapReached { cap: 10 }
+        );
     }
 
     #[test]
     fn cap_reached_when_over_cap() {
         let mut q = PolicyNamespaceQuota::new();
         q.set_cap("ns/a", 10).unwrap();
-        assert_eq!(q.plan_install("ns/a", 15), InstallVerdict::CapReached { cap: 10 });
+        assert_eq!(
+            q.plan_install("ns/a", 15),
+            InstallVerdict::CapReached { cap: 10 }
+        );
     }
 
     #[test]
@@ -138,14 +157,20 @@ mod tests {
     fn cap_zero_always_rejects() {
         let mut q = PolicyNamespaceQuota::new();
         q.set_cap("ns/x", 0).unwrap();
-        assert_eq!(q.plan_install("ns/x", 0), InstallVerdict::CapReached { cap: 0 });
+        assert_eq!(
+            q.plan_install("ns/x", 0),
+            InstallVerdict::CapReached { cap: 0 }
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut q = PolicyNamespaceQuota::new();
         q.schema_version = "9.9.9".into();
-        assert!(matches!(q.validate().unwrap_err(), QuotaError::SchemaMismatch));
+        assert!(matches!(
+            q.validate().unwrap_err(),
+            QuotaError::SchemaMismatch
+        ));
     }
 
     #[test]

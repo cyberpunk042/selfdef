@@ -66,7 +66,9 @@ impl GrantIssuanceCooldown {
 
     /// Record an issuance.
     pub fn record_issued(&mut self, template_id: &str, ts_ms: u64) -> Result<(), CooldownError> {
-        if template_id.is_empty() { return Err(CooldownError::EmptyId); }
+        if template_id.is_empty() {
+            return Err(CooldownError::EmptyId);
+        }
         self.last.insert(template_id.into(), ts_ms);
         Ok(())
     }
@@ -94,9 +96,13 @@ impl GrantIssuanceCooldown {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CooldownError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CooldownError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CooldownError::SchemaMismatch);
+        }
         for k in self.last.keys() {
-            if k.is_empty() { return Err(CooldownError::EmptyId); }
+            if k.is_empty() {
+                return Err(CooldownError::EmptyId);
+            }
         }
         Ok(())
     }
@@ -116,7 +122,12 @@ mod tests {
     fn record_then_in_cooldown() {
         let mut c = GrantIssuanceCooldown::new(60_000);
         c.record_issued("t1", 1_000).unwrap();
-        assert_eq!(c.classify("t1", 30_000), CooldownVerdict::Cooldown { ready_at_ms: 61_000 });
+        assert_eq!(
+            c.classify("t1", 30_000),
+            CooldownVerdict::Cooldown {
+                ready_at_ms: 61_000
+            }
+        );
     }
 
     #[test]
@@ -136,7 +147,10 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut c = GrantIssuanceCooldown::new(60_000);
-        assert!(matches!(c.record_issued("", 0).unwrap_err(), CooldownError::EmptyId));
+        assert!(matches!(
+            c.record_issued("", 0).unwrap_err(),
+            CooldownError::EmptyId
+        ));
     }
 
     #[test]
@@ -151,7 +165,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = GrantIssuanceCooldown::new(1);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CooldownError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CooldownError::SchemaMismatch
+        ));
     }
 
     #[test]

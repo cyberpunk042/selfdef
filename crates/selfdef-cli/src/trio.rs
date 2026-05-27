@@ -22,23 +22,21 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use selfdef_friction_audit::{
-    read_ring_buffer as fa_read, DEFAULT_RING_DIR as FA_RING,
-};
+use selfdef_friction_audit::{DEFAULT_RING_DIR as FA_RING, read_ring_buffer as fa_read};
 use selfdef_friction_audit_mirror::Status;
 use selfdef_guardian::{
-    audit_chain_check as guard_chain, read_ring_buffer as guard_read,
     DEFAULT_OCSF_PATH as GUARD_OCSF, DEFAULT_RING_DIR as GUARD_RING,
-    DEFAULT_SOCKET_PATH as GUARD_SOCK,
+    DEFAULT_SOCKET_PATH as GUARD_SOCK, audit_chain_check as guard_chain,
+    read_ring_buffer as guard_read,
 };
 use selfdef_perimeter::{
+    DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH as PERIM_OCSF, DEFAULT_POLICY_PATH,
+    DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR, ExtensionStore, Outcome,
     audit_chain_check as perim_chain, now_ms, read_ring_buffer as perim_read,
-    ExtensionStore, Outcome, DEFAULT_EXTENSION_DIR, DEFAULT_OCSF_PATH as PERIM_OCSF,
-    DEFAULT_POLICY_PATH, DEFAULT_RING_DIR as PERIM_RING, DEFAULT_TRUST_ROOTS_DIR,
 };
 use selfdef_scheduler::{
-    audit_chain_check as sched_chain, read_ring_buffer as sched_read,
     DEFAULT_AUDIT_LOG_PATH as SCHED_AUDIT, DEFAULT_RING_DIR as SCHED_RING,
+    audit_chain_check as sched_chain, read_ring_buffer as sched_read,
 };
 
 pub(crate) fn run(json: bool, watch_secs: u32, quiet: bool) -> Result<i32> {
@@ -85,7 +83,6 @@ pub(crate) fn run(json: bool, watch_secs: u32, quiet: bool) -> Result<i32> {
         std::thread::sleep(std::time::Duration::from_secs(u64::from(watch_secs)));
     }
 }
-
 
 fn chrono_now_iso() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -219,8 +216,14 @@ fn render_once_with(json: bool, compact: bool) -> Result<i32> {
 
     // friction-audit snapshot
     let fa_verdicts = fa_read(Path::new(FA_RING)).context("friction-audit ring read")?;
-    let fa_failing = fa_verdicts.iter().filter(|v| matches!(v.status, Status::Fail(_))).count();
-    let fa_overrides = fa_verdicts.iter().filter(|v| matches!(v.status, Status::OverrideActive { .. })).count();
+    let fa_failing = fa_verdicts
+        .iter()
+        .filter(|v| matches!(v.status, Status::Fail(_)))
+        .count();
+    let fa_overrides = fa_verdicts
+        .iter()
+        .filter(|v| matches!(v.status, Status::OverrideActive { .. }))
+        .count();
     let fa_aggregate = if !fa_verdicts.is_empty() && fa_failing > 0 {
         "fail"
     } else if fa_overrides > 0 {
@@ -348,7 +351,11 @@ fn render_once_with(json: bool, compact: bool) -> Result<i32> {
         count = perim_verdicts.len(),
         sk = perim_sigkills,
         ext = perim_extensions,
-        p = if perim_policy_present { "PRESENT" } else { "MISSING" },
+        p = if perim_policy_present {
+            "PRESENT"
+        } else {
+            "MISSING"
+        },
         c = perim_chain_events
             .map(|n| n.to_string())
             .unwrap_or_else(|| "—".to_string()),
@@ -362,7 +369,11 @@ fn render_once_with(json: bool, compact: bool) -> Result<i32> {
         "             verdicts={count} · failed={failed} · tetragon-socket={s} · chain={c}",
         count = guard_verdicts.len(),
         failed = guard_failed,
-        s = if guard_socket_present { "PRESENT" } else { "MISSING" },
+        s = if guard_socket_present {
+            "PRESENT"
+        } else {
+            "MISSING"
+        },
         c = guard_chain_events
             .map(|n| n.to_string())
             .unwrap_or_else(|| "—".to_string()),
@@ -404,7 +415,9 @@ pub(crate) fn run_tail(interval_ms: u64, json: bool) -> Result<i32> {
             "friction-audit",
             std::env::var("SELFDEF_FRICTION_AUDIT_OCSF_PATH")
                 .map(std::path::PathBuf::from)
-                .unwrap_or_else(|_| std::path::PathBuf::from(selfdef_friction_audit::DEFAULT_OCSF_PATH)),
+                .unwrap_or_else(|_| {
+                    std::path::PathBuf::from(selfdef_friction_audit::DEFAULT_OCSF_PATH)
+                }),
         ),
         (
             "perimeter",
@@ -484,14 +497,21 @@ pub(crate) fn run_tail(interval_ms: u64, json: bool) -> Result<i32> {
                 }
                 if json {
                     // Prefix the source tag for the consumer.
-                    let parsed: serde_json::Value =
-                        serde_json::from_str(trimmed).unwrap_or(serde_json::json!({"raw": trimmed}));
+                    let parsed: serde_json::Value = serde_json::from_str(trimmed)
+                        .unwrap_or(serde_json::json!({"raw": trimmed}));
                     let tagged = serde_json::json!({"source": tag, "event": parsed});
-                    println!("{}", serde_json::to_string(&tagged).unwrap_or_else(|_| String::new()));
+                    println!(
+                        "{}",
+                        serde_json::to_string(&tagged).unwrap_or_else(|_| String::new())
+                    );
                 } else {
                     let parsed: serde_json::Value =
                         serde_json::from_str(trimmed).unwrap_or(serde_json::json!({}));
-                    let ts = parsed.get("ts_ms").or_else(|| parsed.get("time")).and_then(|v| v.as_u64()).unwrap_or(0);
+                    let ts = parsed
+                        .get("ts_ms")
+                        .or_else(|| parsed.get("time"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
                     let sev = parsed
                         .get("severity_id")
                         .and_then(|v| v.as_u64())
@@ -501,9 +521,7 @@ pub(crate) fn run_tail(interval_ms: u64, json: bool) -> Result<i32> {
                         .and_then(|v| v.as_u64())
                         .unwrap_or(0);
                     let detail = render_detail(tag, &parsed);
-                    println!(
-                        "  {tag:>14}  {ts:<14}  sev={sev}     {class}   {detail}"
-                    );
+                    println!("  {tag:>14}  {ts:<14}  sev={sev}     {class}   {detail}");
                 }
             }
             offsets.insert((*tag).to_string(), new_off);
@@ -524,7 +542,9 @@ fn render_detail(tag: &str, ev: &serde_json::Value) -> String {
                 .pointer("/outcome/outcome")
                 .and_then(|v| v.as_str())
                 .unwrap_or(
-                    ev.pointer("/outcome").and_then(|v| v.as_str()).unwrap_or("?"),
+                    ev.pointer("/outcome")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("?"),
                 );
             let path = ev
                 .pointer("/process/file/path")
@@ -533,7 +553,10 @@ fn render_detail(tag: &str, ev: &serde_json::Value) -> String {
             format!("outcome={outcome} path={path}")
         }
         "guardian" => {
-            let evt = ev.get("guardian_event_id").and_then(|v| v.as_str()).unwrap_or("?");
+            let evt = ev
+                .get("guardian_event_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?");
             let act = ev
                 .pointer("/guardian_action")
                 .and_then(|v| v.as_str())
@@ -546,10 +569,7 @@ fn render_detail(tag: &str, ev: &serde_json::Value) -> String {
                 .pointer("/profile")
                 .and_then(|v| v.as_str())
                 .unwrap_or("?");
-            let route = ev
-                .pointer("/route")
-                .and_then(|v| v.as_str())
-                .unwrap_or("?");
+            let route = ev.pointer("/route").and_then(|v| v.as_str()).unwrap_or("?");
             format!("req={req} profile={prof} route={route}")
         }
         _ => String::new(),

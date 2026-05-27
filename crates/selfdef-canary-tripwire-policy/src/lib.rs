@@ -112,8 +112,16 @@ impl CanaryTripwirePolicy {
     }
 
     /// Check an observed hash against the tripwire. Returns Trip if mismatch.
-    pub fn check(&self, tripwire_id: &str, observed_hash: &str, at: &str) -> Result<Option<Trip>, CanaryError> {
-        let t = self.tripwires.iter().find(|x| x.id == tripwire_id)
+    pub fn check(
+        &self,
+        tripwire_id: &str,
+        observed_hash: &str,
+        at: &str,
+    ) -> Result<Option<Trip>, CanaryError> {
+        let t = self
+            .tripwires
+            .iter()
+            .find(|x| x.id == tripwire_id)
             .ok_or_else(|| CanaryError::Unknown(tripwire_id.into()))?;
         if t.expected_hash.eq_ignore_ascii_case(observed_hash) {
             return Ok(None);
@@ -147,8 +155,12 @@ impl CanaryTripwirePolicy {
 }
 
 fn check_tripwire(t: &Tripwire) -> Result<(), CanaryError> {
-    if t.id.is_empty() { return Err(CanaryError::EmptyId); }
-    if t.watch_path.is_empty() { return Err(CanaryError::EmptyPath(t.id.clone())); }
+    if t.id.is_empty() {
+        return Err(CanaryError::EmptyId);
+    }
+    if t.watch_path.is_empty() {
+        return Err(CanaryError::EmptyPath(t.id.clone()));
+    }
     if t.expected_hash.is_empty() || !t.expected_hash.chars().all(|c| c.is_ascii_hexdigit()) {
         return Err(CanaryError::BadHash(t.id.clone()));
     }
@@ -156,7 +168,9 @@ fn check_tripwire(t: &Tripwire) -> Result<(), CanaryError> {
 }
 
 impl Default for CanaryTripwirePolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -199,13 +213,19 @@ mod tests {
     #[test]
     fn unknown_tripwire_rejected() {
         let p = CanaryTripwirePolicy::new();
-        assert!(matches!(p.check("ghost", "x", "now").unwrap_err(), CanaryError::Unknown(_)));
+        assert!(matches!(
+            p.check("ghost", "x", "now").unwrap_err(),
+            CanaryError::Unknown(_)
+        ));
     }
 
     #[test]
     fn empty_id_rejected() {
         let mut p = CanaryTripwirePolicy::new();
-        assert!(matches!(p.add(t("", "abc", Severity::Info)).unwrap_err(), CanaryError::EmptyId));
+        assert!(matches!(
+            p.add(t("", "abc", Severity::Info)).unwrap_err(),
+            CanaryError::EmptyId
+        ));
     }
 
     #[test]
@@ -219,27 +239,42 @@ mod tests {
     #[test]
     fn bad_hash_rejected() {
         let mut p = CanaryTripwirePolicy::new();
-        assert!(matches!(p.add(t("a", "", Severity::Info)).unwrap_err(), CanaryError::BadHash(_)));
-        assert!(matches!(p.add(t("a", "not-hex!", Severity::Info)).unwrap_err(), CanaryError::BadHash(_)));
+        assert!(matches!(
+            p.add(t("a", "", Severity::Info)).unwrap_err(),
+            CanaryError::BadHash(_)
+        ));
+        assert!(matches!(
+            p.add(t("a", "not-hex!", Severity::Info)).unwrap_err(),
+            CanaryError::BadHash(_)
+        ));
     }
 
     #[test]
     fn duplicate_rejected() {
         let mut p = CanaryTripwirePolicy::new();
         p.add(t("a", "abc", Severity::Info)).unwrap();
-        assert!(matches!(p.add(t("a", "def", Severity::Info)).unwrap_err(), CanaryError::DuplicateId(_)));
+        assert!(matches!(
+            p.add(t("a", "def", Severity::Info)).unwrap_err(),
+            CanaryError::DuplicateId(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = CanaryTripwirePolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CanaryError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CanaryError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn severity_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Severity::Critical).unwrap(), "\"critical\"");
+        assert_eq!(
+            serde_json::to_string(&Severity::Critical).unwrap(),
+            "\"critical\""
+        );
         assert_eq!(serde_json::to_string(&Severity::Info).unwrap(), "\"info\"");
     }
 

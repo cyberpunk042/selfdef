@@ -18,11 +18,31 @@ pub(crate) struct ProfileDescriptor {
 }
 
 const PROFILES: &[ProfileDescriptor] = &[
-    ProfileDescriptor { name: "Offline",              bits: 0b0000_0000, scope: "no egress" },
-    ProfileDescriptor { name: "PackageRegistries",    bits: 0b0000_0001, scope: "npm / PyPI / crates.io / …" },
-    ProfileDescriptor { name: "DocsOnly",             bits: 0b0000_0011, scope: "+ read-only documentation hosts" },
-    ProfileDescriptor { name: "ArbitraryWeb",         bits: 0b0000_0111, scope: "+ general egress" },
-    ProfileDescriptor { name: "AuthenticatedBrowser", bits: 0b0000_1111, scope: "+ logged-in session websites" },
+    ProfileDescriptor {
+        name: "Offline",
+        bits: 0b0000_0000,
+        scope: "no egress",
+    },
+    ProfileDescriptor {
+        name: "PackageRegistries",
+        bits: 0b0000_0001,
+        scope: "npm / PyPI / crates.io / …",
+    },
+    ProfileDescriptor {
+        name: "DocsOnly",
+        bits: 0b0000_0011,
+        scope: "+ read-only documentation hosts",
+    },
+    ProfileDescriptor {
+        name: "ArbitraryWeb",
+        bits: 0b0000_0111,
+        scope: "+ general egress",
+    },
+    ProfileDescriptor {
+        name: "AuthenticatedBrowser",
+        bits: 0b0000_1111,
+        scope: "+ logged-in session websites",
+    },
 ];
 
 const CROSS_CYCLE_BINDINGS: &[&str] = &[

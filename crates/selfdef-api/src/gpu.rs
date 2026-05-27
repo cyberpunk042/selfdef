@@ -119,7 +119,9 @@ fn classify(
     } else {
         (
             "red",
-            format!("draw {d} W drifts {drift} W from expected {e} W (>2x tolerance ±{tolerance} W)"),
+            format!(
+                "draw {d} W drifts {drift} W from expected {e} W (>2x tolerance ±{tolerance} W)"
+            ),
         )
     }
 }
@@ -156,9 +158,7 @@ fn run_nvidia_smi() -> String {
 pub(crate) fn probe() -> GpuResponse {
     let policy_path = policy_path();
     let (policy, policy_present) = load_policy(&policy_path);
-    let tolerance = policy
-        .tolerance_watts
-        .unwrap_or(DEFAULT_TOLERANCE_WATTS);
+    let tolerance = policy.tolerance_watts.unwrap_or(DEFAULT_TOLERANCE_WATTS);
     let body = run_nvidia_smi();
     let snapshots = selfdef_hardware::parse_nvidia_smi_power_csv(&body);
     let mut gpus: Vec<GpuRow> = Vec::with_capacity(snapshots.len());

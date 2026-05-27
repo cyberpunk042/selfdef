@@ -70,7 +70,11 @@ pub enum ExportError {
 
 impl DecisionTraceExportPolicy {
     /// New.
-    pub fn new() -> Self { Self { schema_version: SCHEMA_VERSION.into() } }
+    pub fn new() -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION.into(),
+        }
+    }
 
     /// Decide.
     pub fn decide(&self, sens: Sensitivity, dest: ExportClass) -> ExportDecision {
@@ -102,7 +106,9 @@ impl DecisionTraceExportPolicy {
 }
 
 impl Default for DecisionTraceExportPolicy {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -147,17 +153,26 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = DecisionTraceExportPolicy::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), ExportError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            ExportError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn sensitivity_serde_kebab() {
-        assert_eq!(serde_json::to_string(&Sensitivity::TopSecret).unwrap(), "\"top-secret\"");
+        assert_eq!(
+            serde_json::to_string(&Sensitivity::TopSecret).unwrap(),
+            "\"top-secret\""
+        );
     }
 
     #[test]
     fn export_class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExportClass::FleetPeer).unwrap(), "\"fleet-peer\"");
+        assert_eq!(
+            serde_json::to_string(&ExportClass::FleetPeer).unwrap(),
+            "\"fleet-peer\""
+        );
     }
 
     #[test]

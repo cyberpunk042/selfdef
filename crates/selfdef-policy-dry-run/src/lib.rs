@@ -77,22 +77,36 @@ impl PolicyDryRun {
 
     /// Set mode.
     pub fn set_mode(&mut self, policy: &str, mode: Mode) -> Result<(), DryRunError> {
-        if policy.is_empty() { return Err(DryRunError::EmptyPolicy); }
+        if policy.is_empty() {
+            return Err(DryRunError::EmptyPolicy);
+        }
         self.stats.entry(policy.into()).or_default().mode = Some(mode);
         Ok(())
     }
 
     /// Mode of a policy (default = DryRun until set).
     pub fn mode_of(&self, policy: &str) -> Mode {
-        self.stats.get(policy).and_then(|s| s.mode).unwrap_or(Mode::DryRun)
+        self.stats
+            .get(policy)
+            .and_then(|s| s.mode)
+            .unwrap_or(Mode::DryRun)
     }
 
     /// Observe a decision the policy would have produced.
-    pub fn observe(&mut self, policy: &str, would_deny: bool, reason: &str) -> Result<(), DryRunError> {
-        if policy.is_empty() { return Err(DryRunError::EmptyPolicy); }
+    pub fn observe(
+        &mut self,
+        policy: &str,
+        would_deny: bool,
+        reason: &str,
+    ) -> Result<(), DryRunError> {
+        if policy.is_empty() {
+            return Err(DryRunError::EmptyPolicy);
+        }
         let s = self.stats.entry(policy.into()).or_default();
         if would_deny {
-            if reason.is_empty() { return Err(DryRunError::EmptyReason); }
+            if reason.is_empty() {
+                return Err(DryRunError::EmptyReason);
+            }
             s.would_deny = s.would_deny.saturating_add(1);
             *s.reasons.entry(reason.into()).or_insert(0) += 1;
         } else {
@@ -103,7 +117,9 @@ impl PolicyDryRun {
 
     /// Top-K reasons by count.
     pub fn top_reasons(&self, policy: &str, n: usize) -> Vec<(String, u64)> {
-        let Some(s) = self.stats.get(policy) else { return Vec::new(); };
+        let Some(s) = self.stats.get(policy) else {
+            return Vec::new();
+        };
         let mut v: Vec<(String, u64)> = s.reasons.iter().map(|(k, c)| (k.clone(), *c)).collect();
         v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         v.truncate(n);
@@ -112,7 +128,10 @@ impl PolicyDryRun {
 
     /// Counts.
     pub fn counts(&self, policy: &str) -> (u64, u64) {
-        self.stats.get(policy).map(|s| (s.would_allow, s.would_deny)).unwrap_or((0, 0))
+        self.stats
+            .get(policy)
+            .map(|s| (s.would_allow, s.would_deny))
+            .unwrap_or((0, 0))
     }
 
     /// Reset.
@@ -122,16 +141,22 @@ impl PolicyDryRun {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DryRunError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DryRunError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DryRunError::SchemaMismatch);
+        }
         for k in self.stats.keys() {
-            if k.is_empty() { return Err(DryRunError::EmptyPolicy); }
+            if k.is_empty() {
+                return Err(DryRunError::EmptyPolicy);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyDryRun {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -187,20 +212,29 @@ mod tests {
     #[test]
     fn deny_requires_reason() {
         let mut d = PolicyDryRun::new();
-        assert!(matches!(d.observe("p", true, "").unwrap_err(), DryRunError::EmptyReason));
+        assert!(matches!(
+            d.observe("p", true, "").unwrap_err(),
+            DryRunError::EmptyReason
+        ));
     }
 
     #[test]
     fn empty_policy_rejected() {
         let mut d = PolicyDryRun::new();
-        assert!(matches!(d.observe("", false, "").unwrap_err(), DryRunError::EmptyPolicy));
+        assert!(matches!(
+            d.observe("", false, "").unwrap_err(),
+            DryRunError::EmptyPolicy
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = PolicyDryRun::new();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DryRunError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DryRunError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -105,10 +105,12 @@ impl StateSnapshot {
             return Err(SnapshotError::EnvelopeUnsigned);
         }
         // Capability word parse.
-        CapabilityWord::from_hex(&self.active_capability_word_hex)
-            .ok_or_else(|| SnapshotError::CapabilityWordInvalid(self.active_capability_word_hex.clone()))?;
+        CapabilityWord::from_hex(&self.active_capability_word_hex).ok_or_else(|| {
+            SnapshotError::CapabilityWordInvalid(self.active_capability_word_hex.clone())
+        })?;
         // Actor registry sub-validation.
-        self.actor_registry.validate()
+        self.actor_registry
+            .validate()
             .map_err(|e| SnapshotError::ActorRegistryInvalid(e.to_string()))?;
         // Each span sub-validation.
         for span in &self.recent_spans {
@@ -124,7 +126,9 @@ impl StateSnapshot {
     }
 
     /// Canonical path constant.
-    pub fn canonical_path() -> &'static str { SNAPSHOT_PATH }
+    pub fn canonical_path() -> &'static str {
+        SNAPSHOT_PATH
+    }
 }
 
 #[cfg(test)]
@@ -136,7 +140,9 @@ mod tests {
     };
     use selfdef_trace_span::{HardwareTarget, PolicyResult};
 
-    fn fp32() -> String { "A".repeat(32) }
+    fn fp32() -> String {
+        "A".repeat(32)
+    }
 
     fn ok_registry() -> ActorRegistry {
         let mut r = ActorRegistry::default();
@@ -148,7 +154,8 @@ mod tests {
             registered_at: "2026-05-19T00:00:00Z".into(),
             revoked_at: String::new(),
             notes: String::new(),
-        }).unwrap();
+        })
+        .unwrap();
         r
     }
 
@@ -160,9 +167,13 @@ mod tests {
             model: "claude-opus".into(),
             provider: "cloud-anthropic".into(),
             hardware: HardwareTarget::BlackwellOracle,
-            tokens_prompt: 100, tokens_completion: 50,
-            latency_ms: 800, cost_millicents: 100, risk_score: 10,
-            memory_refs: vec![], tool_refs: vec![],
+            tokens_prompt: 100,
+            tokens_completion: 50,
+            latency_ms: 800,
+            cost_millicents: 100,
+            risk_score: 10,
+            memory_refs: vec![],
+            tool_refs: vec![],
             policy_result: PolicyResult::Allow,
             branch_id: "branch-main".into(),
             signature: "ms003".into(),
@@ -173,15 +184,19 @@ mod tests {
     fn ok_policy() -> PolicyDecision {
         PolicyDecision {
             schema_version: "1.0.0".into(),
-            subject: "op".into(), action: "fs.write".into(),
-            resource: "/workspace/x".into(), intent: "ship".into(),
-            profile: "careful".into(), risk: RiskClass::Low,
+            subject: "op".into(),
+            action: "fs.write".into(),
+            resource: "/workspace/x".into(),
+            intent: "ship".into(),
+            profile: "careful".into(),
+            risk: RiskClass::Low,
             model_provider: "local:rocm-3090".into(),
             context_sensitivity: ContextSensitivity::Internal,
             side_effect_class: SideEffectClass::FsWrite,
             user_approval: UserApprovalState::NotRequired,
             outcome: Outcome::Allow,
-            reason: "ok".into(), trace_id: "trace-1".into(),
+            reason: "ok".into(),
+            trace_id: "trace-1".into(),
             signature: "ms003".into(),
         }
     }
@@ -209,42 +224,60 @@ mod tests {
     fn schema_drift_rejected() {
         let mut s = ok_snap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::SchemaMismatch { .. }));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::SchemaMismatch { .. }
+        ));
     }
 
     #[test]
     fn missing_captured_at_rejected() {
         let mut s = ok_snap();
         s.captured_at = String::new();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::CapturedAtMissing));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::CapturedAtMissing
+        ));
     }
 
     #[test]
     fn missing_envelope_signature_rejected() {
         let mut s = ok_snap();
         s.envelope_signature = String::new();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::EnvelopeUnsigned));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::EnvelopeUnsigned
+        ));
     }
 
     #[test]
     fn invalid_capability_word_rejected() {
         let mut s = ok_snap();
         s.active_capability_word_hex = "not-hex".into();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::CapabilityWordInvalid(_)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::CapabilityWordInvalid(_)
+        ));
     }
 
     #[test]
     fn bad_embedded_actor_registry_caught() {
         let mut s = ok_snap();
         s.actor_registry.signature = String::new();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::ActorRegistryInvalid(_)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::ActorRegistryInvalid(_)
+        ));
     }
 
     #[test]
     fn bad_embedded_span_caught() {
         let mut s = ok_snap();
         s.recent_spans[0].trace_id = String::new();
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::SpansInvalid(_)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::SpansInvalid(_)
+        ));
     }
 
     #[test]
@@ -253,7 +286,10 @@ mod tests {
         if let Some(p) = s.last_policy_decision.as_mut() {
             p.subject = String::new();
         }
-        assert!(matches!(s.validate().unwrap_err(), SnapshotError::PolicyDecisionInvalid(_)));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SnapshotError::PolicyDecisionInvalid(_)
+        ));
     }
 
     #[test]
@@ -265,7 +301,10 @@ mod tests {
 
     #[test]
     fn canonical_path_const() {
-        assert_eq!(StateSnapshot::canonical_path(), "/var/lib/selfdef/state-snapshot.json");
+        assert_eq!(
+            StateSnapshot::canonical_path(),
+            "/var/lib/selfdef/state-snapshot.json"
+        );
         assert_eq!(SNAPSHOT_PATH, "/var/lib/selfdef/state-snapshot.json");
     }
 

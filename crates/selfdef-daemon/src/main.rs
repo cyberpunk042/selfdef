@@ -335,13 +335,11 @@ async fn main() -> Result<()> {
     // + routing layer (scheduler). selfdefd does NOT run the scheduler
     // itself — selfdef-scheduler.service is a separate systemd unit.
     // selfdefd surfaces boot-time state for operator visibility.
-    let scheduler_audit_log =
-        std::path::Path::new(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH);
+    let scheduler_audit_log = std::path::Path::new(selfdef_scheduler::DEFAULT_AUDIT_LOG_PATH);
     match selfdef_scheduler::audit_chain_check(scheduler_audit_log) {
         Ok(n) => info!(
             "scheduler.audit_chain_events" = n,
-            "scheduler: audit chain intact, {} event(s)",
-            n
+            "scheduler: audit chain intact, {} event(s)", n
         ),
         Err(e) => warn!(error = %e, "scheduler: audit chain check failed; daemon continues"),
     }

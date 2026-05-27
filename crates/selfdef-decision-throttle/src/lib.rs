@@ -76,18 +76,24 @@ impl DecisionThrottle {
 
     /// Try to consume one token.
     pub fn try_consume(&mut self, subject: &str, now_ms: u64) -> Result<(), ThrottleError> {
-        if subject.is_empty() { return Err(ThrottleError::EmptySubject); }
+        if subject.is_empty() {
+            return Err(ThrottleError::EmptySubject);
+        }
         let cap = self.bucket_capacity;
         let refill_per_ms = self.refill_per_second / 1000.0;
         let b = self.buckets.entry(subject.into()).or_insert(Bucket {
-            tokens: cap, last_refill_ms: now_ms,
+            tokens: cap,
+            last_refill_ms: now_ms,
         });
         // Refill.
         let delta_ms = now_ms.saturating_sub(b.last_refill_ms);
         b.tokens = (b.tokens + delta_ms as f32 * refill_per_ms).min(cap);
         b.last_refill_ms = now_ms;
         if b.tokens < 1.0 {
-            return Err(ThrottleError::Throttled { subject: subject.into(), tokens: b.tokens });
+            return Err(ThrottleError::Throttled {
+                subject: subject.into(),
+                tokens: b.tokens,
+            });
         }
         b.tokens -= 1.0;
         Ok(())
@@ -116,8 +122,14 @@ mod tests {
 
     #[test]
     fn zero_params_rejected() {
-        assert!(matches!(DecisionThrottle::new(0.0, 1.0).unwrap_err(), ThrottleError::ZeroParams));
-        assert!(matches!(DecisionThrottle::new(1.0, 0.0).unwrap_err(), ThrottleError::ZeroParams));
+        assert!(matches!(
+            DecisionThrottle::new(0.0, 1.0).unwrap_err(),
+            ThrottleError::ZeroParams
+        ));
+        assert!(matches!(
+            DecisionThrottle::new(1.0, 0.0).unwrap_err(),
+            ThrottleError::ZeroParams
+        ));
     }
 
     #[test]
@@ -133,7 +145,10 @@ mod tests {
         t.try_consume("alice", 100).unwrap();
         t.try_consume("alice", 100).unwrap();
         t.try_consume("alice", 100).unwrap();
-        assert!(matches!(t.try_consume("alice", 100).unwrap_err(), ThrottleError::Throttled { .. }));
+        assert!(matches!(
+            t.try_consume("alice", 100).unwrap_err(),
+            ThrottleError::Throttled { .. }
+        ));
     }
 
     #[test]
@@ -157,14 +172,20 @@ mod tests {
     #[test]
     fn empty_subject_rejected() {
         let mut t = DecisionThrottle::new(1.0, 1.0).unwrap();
-        assert!(matches!(t.try_consume("", 0).unwrap_err(), ThrottleError::EmptySubject));
+        assert!(matches!(
+            t.try_consume("", 0).unwrap_err(),
+            ThrottleError::EmptySubject
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut t = DecisionThrottle::new(1.0, 1.0).unwrap();
         t.schema_version = "9.9.9".into();
-        assert!(matches!(t.validate().unwrap_err(), ThrottleError::SchemaMismatch));
+        assert!(matches!(
+            t.validate().unwrap_err(),
+            ThrottleError::SchemaMismatch
+        ));
     }
 
     #[test]

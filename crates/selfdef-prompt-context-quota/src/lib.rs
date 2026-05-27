@@ -152,7 +152,13 @@ impl PromptContextQuota {
 
     /// Sum per class.
     pub fn sum(&self, segments: &[Segment]) -> ClassActuals {
-        let mut a = ClassActuals { system: 0, operator: 0, persistent: 0, tool: 0, untrusted: 0 };
+        let mut a = ClassActuals {
+            system: 0,
+            operator: 0,
+            persistent: 0,
+            tool: 0,
+            untrusted: 0,
+        };
         for s in segments {
             match s.class {
                 SegmentClass::System => a.system += s.tokens,
@@ -169,23 +175,47 @@ impl PromptContextQuota {
     pub fn assemble(&self, segments: &[Segment]) -> QuotaDecision {
         let a = self.sum(segments);
         if a.system > self.caps.system {
-            return QuotaDecision::ExceedClass { class: SegmentClass::System, actual: a.system, cap: self.caps.system };
+            return QuotaDecision::ExceedClass {
+                class: SegmentClass::System,
+                actual: a.system,
+                cap: self.caps.system,
+            };
         }
         if a.operator > self.caps.operator {
-            return QuotaDecision::ExceedClass { class: SegmentClass::Operator, actual: a.operator, cap: self.caps.operator };
+            return QuotaDecision::ExceedClass {
+                class: SegmentClass::Operator,
+                actual: a.operator,
+                cap: self.caps.operator,
+            };
         }
         if a.persistent > self.caps.persistent {
-            return QuotaDecision::ExceedClass { class: SegmentClass::Persistent, actual: a.persistent, cap: self.caps.persistent };
+            return QuotaDecision::ExceedClass {
+                class: SegmentClass::Persistent,
+                actual: a.persistent,
+                cap: self.caps.persistent,
+            };
         }
         if a.tool > self.caps.tool {
-            return QuotaDecision::ExceedClass { class: SegmentClass::Tool, actual: a.tool, cap: self.caps.tool };
+            return QuotaDecision::ExceedClass {
+                class: SegmentClass::Tool,
+                actual: a.tool,
+                cap: self.caps.tool,
+            };
         }
         if a.untrusted > self.caps.untrusted {
-            return QuotaDecision::ExceedClass { class: SegmentClass::Untrusted, actual: a.untrusted, cap: self.caps.untrusted };
+            return QuotaDecision::ExceedClass {
+                class: SegmentClass::Untrusted,
+                actual: a.untrusted,
+                cap: self.caps.untrusted,
+            };
         }
         let total = a.total();
         if total > self.global_cap {
-            return QuotaDecision::ExceedTotal { actual: total, cap: self.global_cap, actuals: a };
+            return QuotaDecision::ExceedTotal {
+                actual: total,
+                cap: self.global_cap,
+                actuals: a,
+            };
         }
         QuotaDecision::Allow { actuals: a }
     }
@@ -195,12 +225,24 @@ impl PromptContextQuota {
         if self.schema_version != SCHEMA_VERSION {
             return Err(QuotaError::SchemaMismatch);
         }
-        if self.global_cap == 0 { return Err(QuotaError::GlobalZero); }
-        if self.caps.system == 0 { return Err(QuotaError::ClassZero(SegmentClass::System)); }
-        if self.caps.operator == 0 { return Err(QuotaError::ClassZero(SegmentClass::Operator)); }
-        if self.caps.persistent == 0 { return Err(QuotaError::ClassZero(SegmentClass::Persistent)); }
-        if self.caps.tool == 0 { return Err(QuotaError::ClassZero(SegmentClass::Tool)); }
-        if self.caps.untrusted == 0 { return Err(QuotaError::ClassZero(SegmentClass::Untrusted)); }
+        if self.global_cap == 0 {
+            return Err(QuotaError::GlobalZero);
+        }
+        if self.caps.system == 0 {
+            return Err(QuotaError::ClassZero(SegmentClass::System));
+        }
+        if self.caps.operator == 0 {
+            return Err(QuotaError::ClassZero(SegmentClass::Operator));
+        }
+        if self.caps.persistent == 0 {
+            return Err(QuotaError::ClassZero(SegmentClass::Persistent));
+        }
+        if self.caps.tool == 0 {
+            return Err(QuotaError::ClassZero(SegmentClass::Tool));
+        }
+        if self.caps.untrusted == 0 {
+            return Err(QuotaError::ClassZero(SegmentClass::Untrusted));
+        }
         Ok(())
     }
 }
@@ -210,7 +252,11 @@ mod tests {
     use super::*;
 
     fn seg(id: &str, class: SegmentClass, tokens: u32) -> Segment {
-        Segment { id: id.into(), class, tokens }
+        Segment {
+            id: id.into(),
+            class,
+            tokens,
+        }
     }
 
     #[test]
@@ -232,14 +278,23 @@ mod tests {
     fn exceed_class_reported() {
         let p = PromptContextQuota::canonical();
         let d = p.assemble(&[seg("u", SegmentClass::Untrusted, 99_999)]);
-        assert!(matches!(d, QuotaDecision::ExceedClass { class: SegmentClass::Untrusted, .. }));
+        assert!(matches!(
+            d,
+            QuotaDecision::ExceedClass {
+                class: SegmentClass::Untrusted,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn exceed_total_reported() {
         let mut p = PromptContextQuota::canonical();
         p.caps.tool = 50_000;
-        let d = p.assemble(&[seg("t", SegmentClass::Tool, 40_000), seg("u", SegmentClass::Untrusted, 1_000)]);
+        let d = p.assemble(&[
+            seg("t", SegmentClass::Tool, 40_000),
+            seg("u", SegmentClass::Untrusted, 1_000),
+        ]);
         // 41k > 32k global.
         assert!(matches!(d, QuotaDecision::ExceedTotal { .. }));
     }
@@ -268,7 +323,10 @@ mod tests {
     fn class_cap_zero_rejected() {
         let mut p = PromptContextQuota::canonical();
         p.caps.system = 0;
-        assert!(matches!(p.validate().unwrap_err(), QuotaError::ClassZero(SegmentClass::System)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            QuotaError::ClassZero(SegmentClass::System)
+        ));
     }
 
     #[test]
@@ -282,17 +340,27 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = PromptContextQuota::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), QuotaError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            QuotaError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&SegmentClass::Persistent).unwrap(), "\"persistent\"");
+        assert_eq!(
+            serde_json::to_string(&SegmentClass::Persistent).unwrap(),
+            "\"persistent\""
+        );
     }
 
     #[test]
     fn decision_serde_kebab() {
-        let d = QuotaDecision::ExceedClass { class: SegmentClass::Tool, actual: 100, cap: 50 };
+        let d = QuotaDecision::ExceedClass {
+            class: SegmentClass::Tool,
+            actual: 100,
+            cap: 50,
+        };
         let j = serde_json::to_string(&d).unwrap();
         assert!(j.contains("\"kind\":\"exceed-class\""));
     }

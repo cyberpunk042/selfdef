@@ -78,8 +78,12 @@ impl PolicyTrafficRamp {
 
     /// Set ramp.
     pub fn set_ramp(&mut self, policy: &str, ramp_bp: u32) -> Result<(), RampError> {
-        if policy.is_empty() { return Err(RampError::EmptyPolicy); }
-        if ramp_bp > 10000 { return Err(RampError::BadBp(ramp_bp)); }
+        if policy.is_empty() {
+            return Err(RampError::EmptyPolicy);
+        }
+        if ramp_bp > 10000 {
+            return Err(RampError::BadBp(ramp_bp));
+        }
         self.ramps.insert(policy.into(), ramp_bp);
         Ok(())
     }
@@ -91,30 +95,49 @@ impl PolicyTrafficRamp {
 
     /// Decide for a given actor.
     pub fn decide(&self, policy: &str, actor: &str) -> Result<RampVerdict, RampError> {
-        if policy.is_empty() { return Err(RampError::EmptyPolicy); }
-        if actor.is_empty() { return Err(RampError::EmptyActor); }
+        if policy.is_empty() {
+            return Err(RampError::EmptyPolicy);
+        }
+        if actor.is_empty() {
+            return Err(RampError::EmptyActor);
+        }
         let bp = self.current(policy);
-        if bp == 0 { return Ok(RampVerdict::Excluded); }
-        if bp >= 10000 { return Ok(RampVerdict::Included); }
+        if bp == 0 {
+            return Ok(RampVerdict::Excluded);
+        }
+        if bp >= 10000 {
+            return Ok(RampVerdict::Included);
+        }
         let key = format!("{policy}:{actor}");
         let bucket = (fnv1a_64(key.as_bytes()) % 10000) as u32;
-        if bucket < bp { Ok(RampVerdict::Included) }
-        else { Ok(RampVerdict::Excluded) }
+        if bucket < bp {
+            Ok(RampVerdict::Included)
+        } else {
+            Ok(RampVerdict::Excluded)
+        }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), RampError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(RampError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(RampError::SchemaMismatch);
+        }
         for (id, bp) in &self.ramps {
-            if id.is_empty() { return Err(RampError::EmptyPolicy); }
-            if *bp > 10000 { return Err(RampError::BadBp(*bp)); }
+            if id.is_empty() {
+                return Err(RampError::EmptyPolicy);
+            }
+            if *bp > 10000 {
+                return Err(RampError::BadBp(*bp));
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyTrafficRamp {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -152,12 +175,22 @@ mod tests {
         // Test 100 actors at 50% → check that all stay included when raised to 100%.
         r.set_ramp("p", 5000).unwrap();
         let included_before: Vec<bool> = (0..100)
-            .map(|i| matches!(r.decide("p", &format!("actor-{i}")).unwrap(), RampVerdict::Included))
+            .map(|i| {
+                matches!(
+                    r.decide("p", &format!("actor-{i}")).unwrap(),
+                    RampVerdict::Included
+                )
+            })
             .collect();
         r.set_ramp("p", 10000).unwrap();
         for (i, was) in included_before.iter().enumerate() {
-            let now = matches!(r.decide("p", &format!("actor-{i}")).unwrap(), RampVerdict::Included);
-            if *was { assert!(now, "actor-{i} dropped on ramp increase"); }
+            let now = matches!(
+                r.decide("p", &format!("actor-{i}")).unwrap(),
+                RampVerdict::Included
+            );
+            if *was {
+                assert!(now, "actor-{i} dropped on ramp increase");
+            }
         }
     }
 
@@ -166,7 +199,12 @@ mod tests {
         let mut r = PolicyTrafficRamp::new();
         r.set_ramp("p", 5000).unwrap();
         let included = (0..10_000)
-            .filter(|i| matches!(r.decide("p", &format!("actor-{i}")).unwrap(), RampVerdict::Included))
+            .filter(|i| {
+                matches!(
+                    r.decide("p", &format!("actor-{i}")).unwrap(),
+                    RampVerdict::Included
+                )
+            })
             .count();
         // Allow ±10% on a 10k sample (should land near 50%).
         assert!((4500..=5500).contains(&included), "got {included}");
@@ -193,23 +231,38 @@ mod tests {
     #[test]
     fn bad_bp_rejected() {
         let mut r = PolicyTrafficRamp::new();
-        assert!(matches!(r.set_ramp("p", 10001).unwrap_err(), RampError::BadBp(_)));
+        assert!(matches!(
+            r.set_ramp("p", 10001).unwrap_err(),
+            RampError::BadBp(_)
+        ));
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut r = PolicyTrafficRamp::new();
-        assert!(matches!(r.set_ramp("", 5000).unwrap_err(), RampError::EmptyPolicy));
-        assert!(matches!(r.decide("", "x").unwrap_err(), RampError::EmptyPolicy));
+        assert!(matches!(
+            r.set_ramp("", 5000).unwrap_err(),
+            RampError::EmptyPolicy
+        ));
+        assert!(matches!(
+            r.decide("", "x").unwrap_err(),
+            RampError::EmptyPolicy
+        ));
         r.set_ramp("p", 5000).unwrap();
-        assert!(matches!(r.decide("p", "").unwrap_err(), RampError::EmptyActor));
+        assert!(matches!(
+            r.decide("p", "").unwrap_err(),
+            RampError::EmptyActor
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut r = PolicyTrafficRamp::new();
         r.schema_version = "9.9.9".into();
-        assert!(matches!(r.validate().unwrap_err(), RampError::SchemaMismatch));
+        assert!(matches!(
+            r.validate().unwrap_err(),
+            RampError::SchemaMismatch
+        ));
     }
 
     #[test]

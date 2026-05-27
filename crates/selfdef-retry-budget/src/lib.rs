@@ -64,8 +64,12 @@ pub enum BudgetError {
 impl RetryBudget {
     /// New.
     pub fn new(budget: u32, window_ms: u64) -> Result<Self, BudgetError> {
-        if budget == 0 { return Err(BudgetError::ZeroBudget); }
-        if window_ms == 0 { return Err(BudgetError::ZeroWindow); }
+        if budget == 0 {
+            return Err(BudgetError::ZeroBudget);
+        }
+        if window_ms == 0 {
+            return Err(BudgetError::ZeroWindow);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             budget,
@@ -77,8 +81,13 @@ impl RetryBudget {
 
     /// Try to consume one retry for key.
     pub fn try_consume(&mut self, key: &str, now_ms: u64) -> Result<(), BudgetError> {
-        if key.is_empty() { return Err(BudgetError::EmptyKey); }
-        let entry = self.keys.entry(key.into()).or_insert(KeyState { used: 0, window_start_ms: now_ms });
+        if key.is_empty() {
+            return Err(BudgetError::EmptyKey);
+        }
+        let entry = self.keys.entry(key.into()).or_insert(KeyState {
+            used: 0,
+            window_start_ms: now_ms,
+        });
         if now_ms.saturating_sub(entry.window_start_ms) >= self.window_ms {
             entry.used = 0;
             entry.window_start_ms = now_ms;
@@ -101,19 +110,30 @@ impl RetryBudget {
 
     /// Keys currently exhausted.
     pub fn exhausted(&self, now_ms: u64) -> Vec<&str> {
-        self.keys.iter()
-            .filter(|(_, s)| now_ms.saturating_sub(s.window_start_ms) < self.window_ms && s.used >= self.budget)
+        self.keys
+            .iter()
+            .filter(|(_, s)| {
+                now_ms.saturating_sub(s.window_start_ms) < self.window_ms && s.used >= self.budget
+            })
             .map(|(k, _)| k.as_str())
             .collect()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), BudgetError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(BudgetError::SchemaMismatch); }
-        if self.budget == 0 { return Err(BudgetError::ZeroBudget); }
-        if self.window_ms == 0 { return Err(BudgetError::ZeroWindow); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(BudgetError::SchemaMismatch);
+        }
+        if self.budget == 0 {
+            return Err(BudgetError::ZeroBudget);
+        }
+        if self.window_ms == 0 {
+            return Err(BudgetError::ZeroWindow);
+        }
         for k in self.keys.keys() {
-            if k.is_empty() { return Err(BudgetError::EmptyKey); }
+            if k.is_empty() {
+                return Err(BudgetError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -129,7 +149,10 @@ mod tests {
         b.try_consume("a", 0).unwrap();
         b.try_consume("a", 100).unwrap();
         b.try_consume("a", 200).unwrap();
-        assert!(matches!(b.try_consume("a", 300).unwrap_err(), BudgetError::Exhausted));
+        assert!(matches!(
+            b.try_consume("a", 300).unwrap_err(),
+            BudgetError::Exhausted
+        ));
         assert_eq!(b.denials, 1);
     }
 
@@ -168,16 +191,28 @@ mod tests {
     #[test]
     fn bad_inputs_rejected() {
         let mut b = RetryBudget::new(2, 1000).unwrap();
-        assert!(matches!(b.try_consume("", 0).unwrap_err(), BudgetError::EmptyKey));
-        assert!(matches!(RetryBudget::new(0, 1000).unwrap_err(), BudgetError::ZeroBudget));
-        assert!(matches!(RetryBudget::new(2, 0).unwrap_err(), BudgetError::ZeroWindow));
+        assert!(matches!(
+            b.try_consume("", 0).unwrap_err(),
+            BudgetError::EmptyKey
+        ));
+        assert!(matches!(
+            RetryBudget::new(0, 1000).unwrap_err(),
+            BudgetError::ZeroBudget
+        ));
+        assert!(matches!(
+            RetryBudget::new(2, 0).unwrap_err(),
+            BudgetError::ZeroWindow
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = RetryBudget::new(2, 1000).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]

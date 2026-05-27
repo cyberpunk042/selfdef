@@ -86,13 +86,26 @@ pub fn issue(
     if req.signature.is_empty() {
         return Err(IssueError::Unsigned);
     }
-    if req.scope.is_empty() { return Err(IssueError::EmptyScope); }
-    if req.reason.is_empty() { return Err(IssueError::EmptyReason); }
-    if req.actor.is_empty() { return Err(IssueError::EmptyActor); }
-    if req.profile.is_empty() { return Err(IssueError::EmptyProfile); }
-    if req.ttl_seconds == 0 { return Err(IssueError::TtlZero); }
+    if req.scope.is_empty() {
+        return Err(IssueError::EmptyScope);
+    }
+    if req.reason.is_empty() {
+        return Err(IssueError::EmptyReason);
+    }
+    if req.actor.is_empty() {
+        return Err(IssueError::EmptyActor);
+    }
+    if req.profile.is_empty() {
+        return Err(IssueError::EmptyProfile);
+    }
+    if req.ttl_seconds == 0 {
+        return Err(IssueError::TtlZero);
+    }
     if req.ttl_seconds > MAX_TTL_SECONDS {
-        return Err(IssueError::TtlAboveCeiling(req.ttl_seconds, MAX_TTL_SECONDS));
+        return Err(IssueError::TtlAboveCeiling(
+            req.ttl_seconds,
+            MAX_TTL_SECONDS,
+        ));
     }
     Ok(GrantEntry {
         grant_id: grant_id.into(),
@@ -128,7 +141,14 @@ mod tests {
 
     #[test]
     fn ok_request_issues_pending() {
-        let g = issue(&ok_req(), "gr-001", "2026-05-19T03:00:00Z", "2026-05-19T04:00:00Z", "trace-001").unwrap();
+        let g = issue(
+            &ok_req(),
+            "gr-001",
+            "2026-05-19T03:00:00Z",
+            "2026-05-19T04:00:00Z",
+            "trace-001",
+        )
+        .unwrap();
         assert_eq!(g.grant_id, "gr-001");
         assert_eq!(g.state, GrantState::Pending);
         assert_eq!(g.ttl_seconds, 3600);
@@ -138,62 +158,86 @@ mod tests {
     fn unsigned_rejected() {
         let mut r = ok_req();
         r.signature = String::new();
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::Unsigned));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::Unsigned
+        ));
     }
 
     #[test]
     fn empty_scope_rejected() {
         let mut r = ok_req();
         r.scope = String::new();
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::EmptyScope));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::EmptyScope
+        ));
     }
 
     #[test]
     fn empty_reason_rejected() {
         let mut r = ok_req();
         r.reason = String::new();
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::EmptyReason));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::EmptyReason
+        ));
     }
 
     #[test]
     fn empty_actor_rejected() {
         let mut r = ok_req();
         r.actor = String::new();
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::EmptyActor));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::EmptyActor
+        ));
     }
 
     #[test]
     fn empty_profile_rejected() {
         let mut r = ok_req();
         r.profile = String::new();
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::EmptyProfile));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::EmptyProfile
+        ));
     }
 
     #[test]
     fn zero_ttl_rejected() {
         let mut r = ok_req();
         r.ttl_seconds = 0;
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::TtlZero));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::TtlZero
+        ));
     }
 
     #[test]
     fn ttl_above_ceiling_rejected() {
         let mut r = ok_req();
         r.ttl_seconds = 100_000;
-        assert!(matches!(issue(&r, "g", "t", "t", "tr").unwrap_err(), IssueError::TtlAboveCeiling(100_000, 86_400)));
+        assert!(matches!(
+            issue(&r, "g", "t", "t", "tr").unwrap_err(),
+            IssueError::TtlAboveCeiling(100_000, 86_400)
+        ));
     }
 
     #[test]
     fn ceiling_constants_per_doctrine() {
-        assert_eq!(DEFAULT_TTL_SECONDS, 60);  // R09175
-        assert_eq!(MAX_TTL_SECONDS, 86_400);  // R09407 / MS038
+        assert_eq!(DEFAULT_TTL_SECONDS, 60); // R09175
+        assert_eq!(MAX_TTL_SECONDS, 86_400); // R09407 / MS038
     }
 
     #[test]
     fn all_5_grant_kinds_can_issue() {
         for k in [
-            GrantKind::Filesystem, GrantKind::Network, GrantKind::Capability,
-            GrantKind::Communication, GrantKind::Sandbox,
+            GrantKind::Filesystem,
+            GrantKind::Network,
+            GrantKind::Capability,
+            GrantKind::Communication,
+            GrantKind::Sandbox,
         ] {
             let mut r = ok_req();
             r.kind = k;

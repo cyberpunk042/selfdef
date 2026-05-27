@@ -80,9 +80,16 @@ impl ActorAttributePack {
 
     /// Set.
     pub fn set(&mut self, actor: &str, key: &str, value: &str) -> Result<(), AttrError> {
-        if actor.is_empty() { return Err(AttrError::EmptyActor); }
-        if key.is_empty() { return Err(AttrError::EmptyKey); }
-        self.attrs.entry(actor.into()).or_default().insert(key.into(), value.into());
+        if actor.is_empty() {
+            return Err(AttrError::EmptyActor);
+        }
+        if key.is_empty() {
+            return Err(AttrError::EmptyKey);
+        }
+        self.attrs
+            .entry(actor.into())
+            .or_default()
+            .insert(key.into(), value.into());
         Ok(())
     }
 
@@ -93,7 +100,9 @@ impl ActorAttributePack {
 
     /// Delete a key.
     pub fn delete(&mut self, actor: &str, key: &str) -> bool {
-        self.attrs.get_mut(actor).is_some_and(|m| m.remove(key).is_some())
+        self.attrs
+            .get_mut(actor)
+            .is_some_and(|m| m.remove(key).is_some())
     }
 
     /// Match.
@@ -124,11 +133,17 @@ impl ActorAttributePack {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AttrError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AttrError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AttrError::SchemaMismatch);
+        }
         for (a, m) in &self.attrs {
-            if a.is_empty() { return Err(AttrError::EmptyActor); }
+            if a.is_empty() {
+                return Err(AttrError::EmptyActor);
+            }
             for k in m.keys() {
-                if k.is_empty() { return Err(AttrError::EmptyKey); }
+                if k.is_empty() {
+                    return Err(AttrError::EmptyKey);
+                }
             }
         }
         Ok(())
@@ -136,7 +151,9 @@ impl ActorAttributePack {
 }
 
 impl Default for ActorAttributePack {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -200,21 +217,33 @@ mod tests {
     #[test]
     fn unknown_actor() {
         let p = ActorAttributePack::new();
-        assert_eq!(p.match_all("nope", &[("k", "v")]), MatchVerdict::UnknownActor);
+        assert_eq!(
+            p.match_all("nope", &[("k", "v")]),
+            MatchVerdict::UnknownActor
+        );
     }
 
     #[test]
     fn empty_inputs_rejected() {
         let mut p = ActorAttributePack::new();
-        assert!(matches!(p.set("", "k", "v").unwrap_err(), AttrError::EmptyActor));
-        assert!(matches!(p.set("a", "", "v").unwrap_err(), AttrError::EmptyKey));
+        assert!(matches!(
+            p.set("", "k", "v").unwrap_err(),
+            AttrError::EmptyActor
+        ));
+        assert!(matches!(
+            p.set("a", "", "v").unwrap_err(),
+            AttrError::EmptyKey
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ActorAttributePack::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), AttrError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            AttrError::SchemaMismatch
+        ));
     }
 
     #[test]

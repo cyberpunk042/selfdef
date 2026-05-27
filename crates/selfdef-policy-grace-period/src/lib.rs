@@ -77,9 +77,22 @@ impl PolicyGracePeriod {
     }
 
     /// Install.
-    pub fn install(&mut self, policy_id: &str, installed_at_ms: u64, grace_ms: u64) -> Result<(), GraceError> {
-        if policy_id.is_empty() { return Err(GraceError::EmptyId); }
-        self.installs.insert(policy_id.into(), Install { installed_at_ms, grace_ms });
+    pub fn install(
+        &mut self,
+        policy_id: &str,
+        installed_at_ms: u64,
+        grace_ms: u64,
+    ) -> Result<(), GraceError> {
+        if policy_id.is_empty() {
+            return Err(GraceError::EmptyId);
+        }
+        self.installs.insert(
+            policy_id.into(),
+            Install {
+                installed_at_ms,
+                grace_ms,
+            },
+        );
         Ok(())
     }
 
@@ -103,16 +116,22 @@ impl PolicyGracePeriod {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GraceError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GraceError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GraceError::SchemaMismatch);
+        }
         for k in self.installs.keys() {
-            if k.is_empty() { return Err(GraceError::EmptyId); }
+            if k.is_empty() {
+                return Err(GraceError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for PolicyGracePeriod {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -147,14 +166,20 @@ mod tests {
     #[test]
     fn empty_id_rejected() {
         let mut p = PolicyGracePeriod::new();
-        assert!(matches!(p.install("", 0, 0).unwrap_err(), GraceError::EmptyId));
+        assert!(matches!(
+            p.install("", 0, 0).unwrap_err(),
+            GraceError::EmptyId
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PolicyGracePeriod::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), GraceError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            GraceError::SchemaMismatch
+        ));
     }
 
     #[test]

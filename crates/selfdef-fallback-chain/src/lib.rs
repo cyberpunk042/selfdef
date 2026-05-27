@@ -66,19 +66,29 @@ impl FallbackChain {
 
     /// Append provider.
     pub fn append(&mut self, id: &str) -> Result<(), FallbackError> {
-        if id.is_empty() { return Err(FallbackError::EmptyId); }
+        if id.is_empty() {
+            return Err(FallbackError::EmptyId);
+        }
         if self.index.contains_key(id) {
             return Err(FallbackError::Duplicate(id.into()));
         }
         let idx = self.providers.len();
-        self.providers.push(Provider { id: id.into(), healthy: true, failures: 0 });
+        self.providers.push(Provider {
+            id: id.into(),
+            healthy: true,
+            failures: 0,
+        });
         self.index.insert(id.into(), idx);
         Ok(())
     }
 
     /// Mark unhealthy.
     pub fn mark_unhealthy(&mut self, id: &str) -> Result<(), FallbackError> {
-        let idx = self.index.get(id).copied().ok_or_else(|| FallbackError::Unknown(id.into()))?;
+        let idx = self
+            .index
+            .get(id)
+            .copied()
+            .ok_or_else(|| FallbackError::Unknown(id.into()))?;
         let p = &mut self.providers[idx];
         p.healthy = false;
         p.failures = p.failures.saturating_add(1);
@@ -87,33 +97,50 @@ impl FallbackChain {
 
     /// Mark healthy.
     pub fn mark_healthy(&mut self, id: &str) -> Result<(), FallbackError> {
-        let idx = self.index.get(id).copied().ok_or_else(|| FallbackError::Unknown(id.into()))?;
+        let idx = self
+            .index
+            .get(id)
+            .copied()
+            .ok_or_else(|| FallbackError::Unknown(id.into()))?;
         self.providers[idx].healthy = true;
         Ok(())
     }
 
     /// Pick first healthy.
     pub fn pick(&self) -> Option<String> {
-        self.providers.iter().find(|p| p.healthy).map(|p| p.id.clone())
+        self.providers
+            .iter()
+            .find(|p| p.healthy)
+            .map(|p| p.id.clone())
     }
 
     /// All healthy.
     pub fn all_healthy(&self) -> Vec<String> {
-        self.providers.iter().filter(|p| p.healthy).map(|p| p.id.clone()).collect()
+        self.providers
+            .iter()
+            .filter(|p| p.healthy)
+            .map(|p| p.id.clone())
+            .collect()
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FallbackError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FallbackError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FallbackError::SchemaMismatch);
+        }
         for p in &self.providers {
-            if p.id.is_empty() { return Err(FallbackError::EmptyId); }
+            if p.id.is_empty() {
+                return Err(FallbackError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for FallbackChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -169,7 +196,10 @@ mod tests {
     fn duplicate_rejected() {
         let mut c = FallbackChain::new();
         c.append("a").unwrap();
-        assert!(matches!(c.append("a").unwrap_err(), FallbackError::Duplicate(_)));
+        assert!(matches!(
+            c.append("a").unwrap_err(),
+            FallbackError::Duplicate(_)
+        ));
     }
 
     #[test]
@@ -181,14 +211,20 @@ mod tests {
     #[test]
     fn unknown_mark_rejected() {
         let mut c = FallbackChain::new();
-        assert!(matches!(c.mark_unhealthy("nope").unwrap_err(), FallbackError::Unknown(_)));
+        assert!(matches!(
+            c.mark_unhealthy("nope").unwrap_err(),
+            FallbackError::Unknown(_)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = FallbackChain::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), FallbackError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            FallbackError::SchemaMismatch
+        ));
     }
 
     #[test]

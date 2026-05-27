@@ -115,10 +115,22 @@ impl TokenLifetimePolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            session: ClassLifetime { max_lifetime_seconds: 8 * 3600, idle_timeout_seconds: 30 * 60 },
-            api: ClassLifetime { max_lifetime_seconds: 30 * 86_400, idle_timeout_seconds: 24 * 3600 },
-            refresh: ClassLifetime { max_lifetime_seconds: 90 * 86_400, idle_timeout_seconds: 14 * 86_400 },
-            one_time: ClassLifetime { max_lifetime_seconds: 5 * 60, idle_timeout_seconds: 5 * 60 },
+            session: ClassLifetime {
+                max_lifetime_seconds: 8 * 3600,
+                idle_timeout_seconds: 30 * 60,
+            },
+            api: ClassLifetime {
+                max_lifetime_seconds: 30 * 86_400,
+                idle_timeout_seconds: 24 * 3600,
+            },
+            refresh: ClassLifetime {
+                max_lifetime_seconds: 90 * 86_400,
+                idle_timeout_seconds: 14 * 86_400,
+            },
+            one_time: ClassLifetime {
+                max_lifetime_seconds: 5 * 60,
+                idle_timeout_seconds: 5 * 60,
+            },
         }
     }
 
@@ -155,13 +167,15 @@ impl TokenLifetimePolicy {
     /// Seconds until lifetime expiry (0 if already expired).
     pub fn seconds_to_lifetime_expiry(&self, token: &TokenState, now: u64) -> u64 {
         let cl = self.class(token.class);
-        cl.max_lifetime_seconds.saturating_sub(now.saturating_sub(token.issued_at))
+        cl.max_lifetime_seconds
+            .saturating_sub(now.saturating_sub(token.issued_at))
     }
 
     /// Seconds until idle expiry (0 if already expired).
     pub fn seconds_to_idle_expiry(&self, token: &TokenState, now: u64) -> u64 {
         let cl = self.class(token.class);
-        cl.idle_timeout_seconds.saturating_sub(now.saturating_sub(token.last_used))
+        cl.idle_timeout_seconds
+            .saturating_sub(now.saturating_sub(token.last_used))
     }
 
     /// Validate.
@@ -182,7 +196,11 @@ impl TokenLifetimePolicy {
                 return Err(TokenLifetimeError::IdleTimeoutZero(cls));
             }
             if c.idle_timeout_seconds > c.max_lifetime_seconds {
-                return Err(TokenLifetimeError::IdleExceedsMax(cls, c.idle_timeout_seconds, c.max_lifetime_seconds));
+                return Err(TokenLifetimeError::IdleExceedsMax(
+                    cls,
+                    c.idle_timeout_seconds,
+                    c.max_lifetime_seconds,
+                ));
             }
         }
         Ok(())
@@ -272,39 +290,60 @@ mod tests {
     fn validate_rejects_zero_max() {
         let mut p = TokenLifetimePolicy::canonical();
         p.session.max_lifetime_seconds = 0;
-        assert!(matches!(p.validate().unwrap_err(), TokenLifetimeError::MaxLifetimeZero(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TokenLifetimeError::MaxLifetimeZero(_)
+        ));
     }
 
     #[test]
     fn validate_rejects_zero_idle() {
         let mut p = TokenLifetimePolicy::canonical();
         p.api.idle_timeout_seconds = 0;
-        assert!(matches!(p.validate().unwrap_err(), TokenLifetimeError::IdleTimeoutZero(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TokenLifetimeError::IdleTimeoutZero(_)
+        ));
     }
 
     #[test]
     fn validate_rejects_idle_gt_max() {
         let mut p = TokenLifetimePolicy::canonical();
         p.session.idle_timeout_seconds = p.session.max_lifetime_seconds + 1;
-        assert!(matches!(p.validate().unwrap_err(), TokenLifetimeError::IdleExceedsMax(_, _, _)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TokenLifetimeError::IdleExceedsMax(_, _, _)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = TokenLifetimePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), TokenLifetimeError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            TokenLifetimeError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&TokenClass::OneTime).unwrap(), "\"one-time\"");
+        assert_eq!(
+            serde_json::to_string(&TokenClass::OneTime).unwrap(),
+            "\"one-time\""
+        );
     }
 
     #[test]
     fn decision_serde_kebab() {
-        assert_eq!(serde_json::to_string(&LifetimeDecision::ExpiredLifetime).unwrap(), "\"expired-lifetime\"");
-        assert_eq!(serde_json::to_string(&LifetimeDecision::FutureIssued).unwrap(), "\"future-issued\"");
+        assert_eq!(
+            serde_json::to_string(&LifetimeDecision::ExpiredLifetime).unwrap(),
+            "\"expired-lifetime\""
+        );
+        assert_eq!(
+            serde_json::to_string(&LifetimeDecision::FutureIssued).unwrap(),
+            "\"future-issued\""
+        );
     }
 
     #[test]

@@ -48,7 +48,9 @@ impl VectorClock {
 
     /// Increment a node's counter.
     pub fn tick(&mut self, node: &str) -> Result<u64, VcError> {
-        if node.is_empty() { return Err(VcError::EmptyNode); }
+        if node.is_empty() {
+            return Err(VcError::EmptyNode);
+        }
         let c = self.counters.entry(node.into()).or_insert(0);
         *c = c.saturating_add(1);
         Ok(*c)
@@ -63,7 +65,9 @@ impl VectorClock {
     pub fn merge(&mut self, other: &VectorClock) {
         for (k, &v) in &other.counters {
             let entry = self.counters.entry(k.clone()).or_insert(0);
-            if v > *entry { *entry = v; }
+            if v > *entry {
+                *entry = v;
+            }
         }
     }
 
@@ -83,8 +87,11 @@ impl VectorClock {
         for n in nodes {
             let a = self.get(n);
             let b = other.get(n);
-            if a < b { less = true; }
-            else if a > b { greater = true; }
+            if a < b {
+                less = true;
+            } else if a > b {
+                greater = true;
+            }
         }
         match (less, greater) {
             (false, false) => Some(std::cmp::Ordering::Equal),
@@ -96,16 +103,22 @@ impl VectorClock {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), VcError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(VcError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(VcError::SchemaMismatch);
+        }
         for k in self.counters.keys() {
-            if k.is_empty() { return Err(VcError::EmptyNode); }
+            if k.is_empty() {
+                return Err(VcError::EmptyNode);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for VectorClock {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -128,9 +141,11 @@ mod tests {
     fn merge_takes_max() {
         let mut a = VectorClock::new();
         a.tick("n1").unwrap();
-        a.tick("n2").unwrap(); a.tick("n2").unwrap();
+        a.tick("n2").unwrap();
+        a.tick("n2").unwrap();
         let mut b = VectorClock::new();
-        b.tick("n1").unwrap(); b.tick("n1").unwrap();
+        b.tick("n1").unwrap();
+        b.tick("n1").unwrap();
         a.merge(&b);
         assert_eq!(a.get("n1"), 2);
         assert_eq!(a.get("n2"), 2);

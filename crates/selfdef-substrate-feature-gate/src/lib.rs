@@ -108,7 +108,9 @@ impl SubstrateFeatureGate {
 
     /// Set requirements for a feature.
     pub fn set(&mut self, feature_id: &str, reqs: Vec<Requirement>) -> Result<(), GateError> {
-        if feature_id.is_empty() { return Err(GateError::EmptyId); }
+        if feature_id.is_empty() {
+            return Err(GateError::EmptyId);
+        }
         self.features.insert(feature_id.into(), reqs);
         Ok(())
     }
@@ -121,7 +123,9 @@ impl SubstrateFeatureGate {
         };
         let mut missing = Vec::new();
         for r in reqs {
-            if !Self::passes(r, snap) { missing.push(r.clone()); }
+            if !Self::passes(r, snap) {
+                missing.push(r.clone());
+            }
         }
         if missing.is_empty() {
             FeatureVerdict::Enabled
@@ -136,27 +140,29 @@ impl SubstrateFeatureGate {
             Requirement::Avx512 => s.avx512,
             Requirement::Neon => s.neon,
             Requirement::NvidiaGpu => s.nvidia_gpu,
-            Requirement::RamAtLeastGB { gb } => {
-                s.ram_mib.is_some_and(|m| m >= (*gb as u64) * 1024)
-            }
-            Requirement::CoresAtLeast { cores } => {
-                s.cores.is_some_and(|c| c >= *cores)
-            }
+            Requirement::RamAtLeastGB { gb } => s.ram_mib.is_some_and(|m| m >= (*gb as u64) * 1024),
+            Requirement::CoresAtLeast { cores } => s.cores.is_some_and(|c| c >= *cores),
         }
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), GateError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(GateError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(GateError::SchemaMismatch);
+        }
         for k in self.features.keys() {
-            if k.is_empty() { return Err(GateError::EmptyId); }
+            if k.is_empty() {
+                return Err(GateError::EmptyId);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for SubstrateFeatureGate {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -177,14 +183,21 @@ mod tests {
     #[test]
     fn unknown_feature() {
         let g = SubstrateFeatureGate::new();
-        assert_eq!(g.classify("f", &full_snapshot()), FeatureVerdict::UnknownFeature);
+        assert_eq!(
+            g.classify("f", &full_snapshot()),
+            FeatureVerdict::UnknownFeature
+        );
     }
 
     #[test]
     fn all_passing() {
         let mut g = SubstrateFeatureGate::new();
-        g.set("simd-path", vec![Requirement::Avx2, Requirement::Avx512]).unwrap();
-        assert_eq!(g.classify("simd-path", &full_snapshot()), FeatureVerdict::Enabled);
+        g.set("simd-path", vec![Requirement::Avx2, Requirement::Avx512])
+            .unwrap();
+        assert_eq!(
+            g.classify("simd-path", &full_snapshot()),
+            FeatureVerdict::Enabled
+        );
     }
 
     #[test]
@@ -204,18 +217,29 @@ mod tests {
     #[test]
     fn ram_at_least() {
         let mut g = SubstrateFeatureGate::new();
-        g.set("big-model", vec![Requirement::RamAtLeastGB { gb: 128 }]).unwrap();
-        assert_eq!(g.classify("big-model", &full_snapshot()), FeatureVerdict::Enabled);
+        g.set("big-model", vec![Requirement::RamAtLeastGB { gb: 128 }])
+            .unwrap();
+        assert_eq!(
+            g.classify("big-model", &full_snapshot()),
+            FeatureVerdict::Enabled
+        );
         let mut s = full_snapshot();
         s.ram_mib = Some(64 * 1024);
-        assert!(matches!(g.classify("big-model", &s), FeatureVerdict::Disabled { .. }));
+        assert!(matches!(
+            g.classify("big-model", &s),
+            FeatureVerdict::Disabled { .. }
+        ));
     }
 
     #[test]
     fn cores_at_least() {
         let mut g = SubstrateFeatureGate::new();
-        g.set("parallel", vec![Requirement::CoresAtLeast { cores: 16 }]).unwrap();
-        assert_eq!(g.classify("parallel", &full_snapshot()), FeatureVerdict::Enabled);
+        g.set("parallel", vec![Requirement::CoresAtLeast { cores: 16 }])
+            .unwrap();
+        assert_eq!(
+            g.classify("parallel", &full_snapshot()),
+            FeatureVerdict::Enabled
+        );
     }
 
     #[test]
@@ -224,16 +248,23 @@ mod tests {
         g.set("gpu-path", vec![Requirement::NvidiaGpu]).unwrap();
         let mut s = full_snapshot();
         s.nvidia_gpu = false;
-        assert!(matches!(g.classify("gpu-path", &s), FeatureVerdict::Disabled { .. }));
+        assert!(matches!(
+            g.classify("gpu-path", &s),
+            FeatureVerdict::Disabled { .. }
+        ));
     }
 
     #[test]
     fn unknown_metric_treated_as_missing() {
         let mut g = SubstrateFeatureGate::new();
-        g.set("big-model", vec![Requirement::RamAtLeastGB { gb: 128 }]).unwrap();
+        g.set("big-model", vec![Requirement::RamAtLeastGB { gb: 128 }])
+            .unwrap();
         let mut s = full_snapshot();
         s.ram_mib = None;
-        assert!(matches!(g.classify("big-model", &s), FeatureVerdict::Disabled { .. }));
+        assert!(matches!(
+            g.classify("big-model", &s),
+            FeatureVerdict::Disabled { .. }
+        ));
     }
 
     #[test]
@@ -246,13 +277,17 @@ mod tests {
     fn schema_drift_rejected() {
         let mut g = SubstrateFeatureGate::new();
         g.schema_version = "9.9.9".into();
-        assert!(matches!(g.validate().unwrap_err(), GateError::SchemaMismatch));
+        assert!(matches!(
+            g.validate().unwrap_err(),
+            GateError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn gate_serde_roundtrip() {
         let mut g = SubstrateFeatureGate::new();
-        g.set("simd-path", vec![Requirement::Avx2, Requirement::Avx512]).unwrap();
+        g.set("simd-path", vec![Requirement::Avx2, Requirement::Avx512])
+            .unwrap();
         let j = serde_json::to_string(&g).unwrap();
         let back: SubstrateFeatureGate = serde_json::from_str(&j).unwrap();
         assert_eq!(g, back);

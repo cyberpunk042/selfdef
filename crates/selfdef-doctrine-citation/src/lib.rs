@@ -62,7 +62,10 @@ pub enum CitationError {
 ///   `VmProposesHostCommits` + `VmNeverMutates` (MS034).
 /// - `Outcome::Sandbox` cites `ExplicitExchange` (MS037 E0371).
 pub fn cite(decision: &PolicyDecision) -> CitationSet {
-    let mut tags = vec![DoctrineTag::EveryActionObservable, DoctrineTag::TraceAtDecision];
+    let mut tags = vec![
+        DoctrineTag::EveryActionObservable,
+        DoctrineTag::TraceAtDecision,
+    ];
 
     if decision.outcome == Outcome::Ask {
         tags.push(DoctrineTag::AuthorityFollowsEvidence);
@@ -94,7 +97,11 @@ pub fn cite(decision: &PolicyDecision) -> CitationSet {
 
 impl CitationSet {
     /// Validate against the decision + registry.
-    pub fn validate(&self, decision: &PolicyDecision, registry: &DoctrineRegistry) -> Result<(), CitationError> {
+    pub fn validate(
+        &self,
+        decision: &PolicyDecision,
+        registry: &DoctrineRegistry,
+    ) -> Result<(), CitationError> {
         if self.schema_version != SCHEMA_VERSION {
             return Err(CitationError::SchemaMismatch);
         }
@@ -146,7 +153,9 @@ mod tests {
         }
     }
 
-    fn reg() -> DoctrineRegistry { DoctrineRegistry::canonical() }
+    fn reg() -> DoctrineRegistry {
+        DoctrineRegistry::canonical()
+    }
 
     #[test]
     fn baseline_two_doctrines_always_cited() {
@@ -217,7 +226,10 @@ mod tests {
         let d = d_base(Outcome::Allow, SideEffectClass::ReadOnly);
         let mut c = cite(&d);
         c.tags.clear();
-        assert!(matches!(c.validate(&d, &reg()).unwrap_err(), CitationError::Empty(_)));
+        assert!(matches!(
+            c.validate(&d, &reg()).unwrap_err(),
+            CitationError::Empty(_)
+        ));
     }
 
     #[test]
@@ -225,7 +237,10 @@ mod tests {
         let d = d_base(Outcome::Allow, SideEffectClass::ReadOnly);
         let mut c = cite(&d);
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate(&d, &reg()).unwrap_err(), CitationError::SchemaMismatch));
+        assert!(matches!(
+            c.validate(&d, &reg()).unwrap_err(),
+            CitationError::SchemaMismatch
+        ));
     }
 
     #[test]

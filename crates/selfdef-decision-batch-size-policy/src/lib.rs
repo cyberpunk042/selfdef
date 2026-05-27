@@ -69,9 +69,18 @@ impl DecisionBatchSizePolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            interactive: ClassBatch { batch_size: 4, max_wait_ms: 50 },
-            background: ClassBatch { batch_size: 16, max_wait_ms: 1_000 },
-            bulk: ClassBatch { batch_size: 128, max_wait_ms: 5_000 },
+            interactive: ClassBatch {
+                batch_size: 4,
+                max_wait_ms: 50,
+            },
+            background: ClassBatch {
+                batch_size: 16,
+                max_wait_ms: 1_000,
+            },
+            bulk: ClassBatch {
+                batch_size: 128,
+                max_wait_ms: 5_000,
+            },
         }
     }
 
@@ -86,7 +95,9 @@ impl DecisionBatchSizePolicy {
 
     /// Should flush?
     pub fn should_flush(&self, class: DecisionClass, pending: u32, oldest_age_ms: u32) -> bool {
-        if pending == 0 { return false; }
+        if pending == 0 {
+            return false;
+        }
         let cfg = self.class(class);
         pending >= cfg.batch_size || oldest_age_ms >= cfg.max_wait_ms
     }
@@ -101,8 +112,12 @@ impl DecisionBatchSizePolicy {
             (DecisionClass::Background, self.background),
             (DecisionClass::Bulk, self.bulk),
         ] {
-            if cfg.batch_size == 0 { return Err(BatchError::BatchZero(c)); }
-            if cfg.max_wait_ms == 0 { return Err(BatchError::WaitZero(c)); }
+            if cfg.batch_size == 0 {
+                return Err(BatchError::BatchZero(c));
+            }
+            if cfg.max_wait_ms == 0 {
+                return Err(BatchError::WaitZero(c));
+            }
         }
         Ok(())
     }
@@ -153,7 +168,10 @@ mod tests {
     fn zero_batch_rejected() {
         let mut p = DecisionBatchSizePolicy::canonical();
         p.interactive.batch_size = 0;
-        assert!(matches!(p.validate().unwrap_err(), BatchError::BatchZero(_)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BatchError::BatchZero(_)
+        ));
     }
 
     #[test]
@@ -167,12 +185,18 @@ mod tests {
     fn schema_drift_rejected() {
         let mut p = DecisionBatchSizePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), BatchError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            BatchError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&DecisionClass::Bulk).unwrap(), "\"bulk\"");
+        assert_eq!(
+            serde_json::to_string(&DecisionClass::Bulk).unwrap(),
+            "\"bulk\""
+        );
     }
 
     #[test]

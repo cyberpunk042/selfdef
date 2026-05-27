@@ -78,7 +78,9 @@ fn fnv1a_64(bytes: &[u8]) -> u64 {
 impl FaultInjector {
     /// New with seed.
     pub fn new(seed: u64) -> Result<Self, InjectorError> {
-        if seed == 0 { return Err(InjectorError::ZeroSeed); }
+        if seed == 0 {
+            return Err(InjectorError::ZeroSeed);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             rules: BTreeMap::new(),
@@ -88,16 +90,26 @@ impl FaultInjector {
 
     /// Set rate for a tag.
     pub fn set_rate(&mut self, tag: &str, rate_bp: u32) -> Result<(), InjectorError> {
-        if tag.is_empty() { return Err(InjectorError::EmptyTag); }
-        if rate_bp > 10000 { return Err(InjectorError::BadRate); }
-        let entry = self.rules.entry(tag.into()).or_insert(Rule { rate_bp, injects: 0, skips: 0 });
+        if tag.is_empty() {
+            return Err(InjectorError::EmptyTag);
+        }
+        if rate_bp > 10000 {
+            return Err(InjectorError::BadRate);
+        }
+        let entry = self.rules.entry(tag.into()).or_insert(Rule {
+            rate_bp,
+            injects: 0,
+            skips: 0,
+        });
         entry.rate_bp = rate_bp;
         Ok(())
     }
 
     /// Decide whether to inject for (tag, attempt_id).
     pub fn decide(&mut self, tag: &str, attempt_id: &str) -> Result<Decision, InjectorError> {
-        if tag.is_empty() { return Err(InjectorError::EmptyTag); }
+        if tag.is_empty() {
+            return Err(InjectorError::EmptyTag);
+        }
         // If no rule, treat as 0 bp (no inject).
         let rule = match self.rules.get_mut(tag) {
             Some(r) => r,
@@ -119,7 +131,11 @@ impl FaultInjector {
         buf.extend_from_slice(&self.seed.to_be_bytes());
         let h = fnv1a_64(&buf);
         let n = (h % 10_000) as u32;
-        let decision = if n < rule.rate_bp { Decision::Inject } else { Decision::Skip };
+        let decision = if n < rule.rate_bp {
+            Decision::Inject
+        } else {
+            Decision::Skip
+        };
         match decision {
             Decision::Inject => rule.injects = rule.injects.saturating_add(1),
             Decision::Skip => rule.skips = rule.skips.saturating_add(1),
@@ -129,11 +145,19 @@ impl FaultInjector {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), InjectorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(InjectorError::SchemaMismatch); }
-        if self.seed == 0 { return Err(InjectorError::ZeroSeed); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(InjectorError::SchemaMismatch);
+        }
+        if self.seed == 0 {
+            return Err(InjectorError::ZeroSeed);
+        }
         for (k, r) in &self.rules {
-            if k.is_empty() { return Err(InjectorError::EmptyTag); }
-            if r.rate_bp > 10000 { return Err(InjectorError::BadRate); }
+            if k.is_empty() {
+                return Err(InjectorError::EmptyTag);
+            }
+            if r.rate_bp > 10000 {
+                return Err(InjectorError::BadRate);
+            }
         }
         Ok(())
     }
@@ -203,9 +227,7 @@ mod tests {
         f2.set_rate("t", 5000).unwrap();
         let mut diff = 0;
         for i in 0..100 {
-            if f1.decide("t", &i.to_string()).unwrap()
-                != f2.decide("t", &i.to_string()).unwrap()
-            {
+            if f1.decide("t", &i.to_string()).unwrap() != f2.decide("t", &i.to_string()).unwrap() {
                 diff += 1;
             }
         }
@@ -215,16 +237,28 @@ mod tests {
     #[test]
     fn bad_inputs_rejected() {
         let mut f = FaultInjector::new(7).unwrap();
-        assert!(matches!(f.set_rate("", 100).unwrap_err(), InjectorError::EmptyTag));
-        assert!(matches!(f.set_rate("t", 10001).unwrap_err(), InjectorError::BadRate));
-        assert!(matches!(FaultInjector::new(0).unwrap_err(), InjectorError::ZeroSeed));
+        assert!(matches!(
+            f.set_rate("", 100).unwrap_err(),
+            InjectorError::EmptyTag
+        ));
+        assert!(matches!(
+            f.set_rate("t", 10001).unwrap_err(),
+            InjectorError::BadRate
+        ));
+        assert!(matches!(
+            FaultInjector::new(0).unwrap_err(),
+            InjectorError::ZeroSeed
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = FaultInjector::new(7).unwrap();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), InjectorError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            InjectorError::SchemaMismatch
+        ));
     }
 
     #[test]

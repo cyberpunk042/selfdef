@@ -60,7 +60,9 @@ pub enum ChainError {
     #[error("schema version mismatch")]
     SchemaMismatch,
     /// Continuity break.
-    #[error("continuity broken at index {index}: prev_chain_hash {prev_in_link} != computed {computed}")]
+    #[error(
+        "continuity broken at index {index}: prev_chain_hash {prev_in_link} != computed {computed}"
+    )]
     ContinuityBreak {
         /// index.
         index: usize,
@@ -104,7 +106,13 @@ impl EvidenceMerkleChain {
         let payload_hash = fnv1a_64(payload);
         let prev_chain_hash = self.links.last().map(|l| l.chain_hash).unwrap_or(0);
         let chain_hash = compute_chain_hash(seq, ts_ms, payload_hash, prev_chain_hash);
-        let link = Link { seq, payload_hash, prev_chain_hash, chain_hash, ts_ms };
+        let link = Link {
+            seq,
+            payload_hash,
+            prev_chain_hash,
+            chain_hash,
+            ts_ms,
+        };
         self.links.push(link.clone());
         link
     }
@@ -150,13 +158,17 @@ impl EvidenceMerkleChain {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), ChainError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(ChainError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(ChainError::SchemaMismatch);
+        }
         self.verify_continuity()
     }
 }
 
 impl Default for EvidenceMerkleChain {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -195,7 +207,10 @@ mod tests {
         c.append(b"b", 1);
         // Tamper the payload_hash of first link.
         c.links[0].payload_hash = 0xDEADBEEF;
-        assert!(matches!(c.verify_continuity().unwrap_err(), ChainError::SelfHashMismatch(0)));
+        assert!(matches!(
+            c.verify_continuity().unwrap_err(),
+            ChainError::SelfHashMismatch(0)
+        ));
     }
 
     #[test]
@@ -216,7 +231,10 @@ mod tests {
         c.append(b"a", 0);
         c.append(b"b", 1);
         c.links[1].seq = 99;
-        assert!(matches!(c.verify_continuity().unwrap_err(), ChainError::SeqBreak(_, _, _)));
+        assert!(matches!(
+            c.verify_continuity().unwrap_err(),
+            ChainError::SeqBreak(_, _, _)
+        ));
     }
 
     #[test]
@@ -233,7 +251,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut c = EvidenceMerkleChain::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), ChainError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            ChainError::SchemaMismatch
+        ));
     }
 
     #[test]

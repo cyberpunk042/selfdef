@@ -82,12 +82,12 @@ impl PolicyBlastRadiusCap {
     /// Canonical.
     pub fn canonical() -> Self {
         let mut c = BTreeMap::new();
-        c.insert(Profile::Private,      BlastRadius::LocalPersistent);
-        c.insert(Profile::Fast,         BlastRadius::CrossSession);
-        c.insert(Profile::Careful,      BlastRadius::LocalPersistent);
-        c.insert(Profile::Autonomous,   BlastRadius::CrossMachine);
+        c.insert(Profile::Private, BlastRadius::LocalPersistent);
+        c.insert(Profile::Fast, BlastRadius::CrossSession);
+        c.insert(Profile::Careful, BlastRadius::LocalPersistent);
+        c.insert(Profile::Autonomous, BlastRadius::CrossMachine);
         c.insert(Profile::Experimental, BlastRadius::Public);
-        c.insert(Profile::Production,   BlastRadius::CrossSession);
+        c.insert(Profile::Production, BlastRadius::CrossSession);
         Self {
             schema_version: SCHEMA_VERSION.into(),
             caps: c,
@@ -114,7 +114,9 @@ impl PolicyBlastRadiusCap {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CapError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CapError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CapError::SchemaMismatch);
+        }
         Ok(())
     }
 }
@@ -131,8 +133,14 @@ mod tests {
     #[test]
     fn under_cap_allowed() {
         let c = PolicyBlastRadiusCap::canonical();
-        assert_eq!(c.classify(Profile::Production, BlastRadius::LocalEphemeral), CapVerdict::Allowed);
-        assert_eq!(c.classify(Profile::Production, BlastRadius::CrossSession), CapVerdict::Allowed);
+        assert_eq!(
+            c.classify(Profile::Production, BlastRadius::LocalEphemeral),
+            CapVerdict::Allowed
+        );
+        assert_eq!(
+            c.classify(Profile::Production, BlastRadius::CrossSession),
+            CapVerdict::Allowed
+        );
     }
 
     #[test]
@@ -151,27 +159,39 @@ mod tests {
     #[test]
     fn experimental_admits_public() {
         let c = PolicyBlastRadiusCap::canonical();
-        assert_eq!(c.classify(Profile::Experimental, BlastRadius::Public), CapVerdict::Allowed);
+        assert_eq!(
+            c.classify(Profile::Experimental, BlastRadius::Public),
+            CapVerdict::Allowed
+        );
     }
 
     #[test]
     fn private_is_strictest() {
         let c = PolicyBlastRadiusCap::canonical();
-        assert!(matches!(c.classify(Profile::Private, BlastRadius::CrossMachine), CapVerdict::OverCap { .. }));
+        assert!(matches!(
+            c.classify(Profile::Private, BlastRadius::CrossMachine),
+            CapVerdict::OverCap { .. }
+        ));
     }
 
     #[test]
     fn unconfigured_profile() {
         let mut c = PolicyBlastRadiusCap::canonical();
         c.caps.clear();
-        assert_eq!(c.classify(Profile::Fast, BlastRadius::LocalEphemeral), CapVerdict::Unconfigured);
+        assert_eq!(
+            c.classify(Profile::Fast, BlastRadius::LocalEphemeral),
+            CapVerdict::Unconfigured
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = PolicyBlastRadiusCap::canonical();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CapError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CapError::SchemaMismatch
+        ));
     }
 
     #[test]

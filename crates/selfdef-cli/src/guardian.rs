@@ -16,10 +16,10 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use selfdef_guardian::{
-    audit_chain_check, read_ring_buffer, Verdict, DEFAULT_OCSF_PATH, DEFAULT_RING_DIR,
-    DEFAULT_SOCKET_PATH,
+    DEFAULT_OCSF_PATH, DEFAULT_RING_DIR, DEFAULT_SOCKET_PATH, Verdict, audit_chain_check,
+    read_ring_buffer,
 };
 
 fn ring_dir() -> PathBuf {
@@ -87,7 +87,10 @@ pub(crate) fn run_history(limit: u32, json: bool) -> Result<i32> {
         println!("{}", serde_json::to_string_pretty(&limited)?);
     } else {
         if limited.is_empty() {
-            println!("(no guardian verdicts in ring buffer at {})", ring_dir().display());
+            println!(
+                "(no guardian verdicts in ring buffer at {})",
+                ring_dir().display()
+            );
         }
         for v in &limited {
             print_verdict_row(v);
@@ -182,15 +185,9 @@ pub(crate) fn run_rollback(event_id: &str, json: bool) -> Result<i32> {
                 );
             } else {
                 println!("guardian rollback: event_id={event_id}");
-                println!(
-                    "  original verdict preserved (append-only audit invariant)."
-                );
-                println!(
-                    "  Ring 0 + MS003 multi-sig gating wires through selfdefd's authority"
-                );
-                println!(
-                    "  dispatcher in a future round; today's surface records the operator"
-                );
+                println!("  original verdict preserved (append-only audit invariant).");
+                println!("  Ring 0 + MS003 multi-sig gating wires through selfdefd's authority");
+                println!("  dispatcher in a future round; today's surface records the operator");
                 println!("  intent for downstream consumers.");
             }
             Ok(0)

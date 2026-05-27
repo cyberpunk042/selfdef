@@ -64,7 +64,11 @@ impl PrefixSum {
     /// sum of values[lo..hi].
     pub fn sum_range(&self, lo: usize, hi: usize) -> Result<i128, SumError> {
         if lo > hi || hi > self.values.len() {
-            return Err(SumError::BadRange { lo, hi, len: self.values.len() });
+            return Err(SumError::BadRange {
+                lo,
+                hi,
+                len: self.values.len(),
+            });
         }
         Ok(self.cum[hi] - self.cum[lo])
     }
@@ -75,23 +79,35 @@ impl PrefixSum {
     }
 
     /// Length.
-    pub fn len(&self) -> usize { self.values.len() }
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.values.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SumError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SumError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SumError::SchemaMismatch);
+        }
         if self.cum.len() != self.values.len() + 1 {
-            return Err(SumError::BadRange { lo: 0, hi: 0, len: self.values.len() });
+            return Err(SumError::BadRange {
+                lo: 0,
+                hi: 0,
+                len: self.values.len(),
+            });
         }
         Ok(())
     }
 }
 
 impl Default for PrefixSum {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -107,7 +123,9 @@ mod tests {
     #[test]
     fn push_and_sum_range() {
         let mut p = PrefixSum::new();
-        for v in [1, 2, 3, 4, 5] { p.push(v); }
+        for v in [1, 2, 3, 4, 5] {
+            p.push(v);
+        }
         assert_eq!(p.total(), 15);
         assert_eq!(p.sum_range(0, 5).unwrap(), 15);
         assert_eq!(p.sum_range(1, 4).unwrap(), 9); // 2+3+4
@@ -117,7 +135,9 @@ mod tests {
     #[test]
     fn negative_values() {
         let mut p = PrefixSum::new();
-        for v in [-5, 10, -3] { p.push(v); }
+        for v in [-5, 10, -3] {
+            p.push(v);
+        }
         assert_eq!(p.total(), 2);
         assert_eq!(p.sum_range(0, 2).unwrap(), 5);
     }
@@ -126,21 +146,31 @@ mod tests {
     fn bad_range_rejected() {
         let mut p = PrefixSum::new();
         p.push(1);
-        assert!(matches!(p.sum_range(2, 5).unwrap_err(), SumError::BadRange { .. }));
-        assert!(matches!(p.sum_range(1, 0).unwrap_err(), SumError::BadRange { .. }));
+        assert!(matches!(
+            p.sum_range(2, 5).unwrap_err(),
+            SumError::BadRange { .. }
+        ));
+        assert!(matches!(
+            p.sum_range(1, 0).unwrap_err(),
+            SumError::BadRange { .. }
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = PrefixSum::new();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), SumError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            SumError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn prefix_serde_roundtrip() {
         let mut p = PrefixSum::new();
-        p.push(1); p.push(2);
+        p.push(1);
+        p.push(2);
         let j = serde_json::to_string(&p).unwrap();
         let back: PrefixSum = serde_json::from_str(&j).unwrap();
         assert_eq!(p, back);

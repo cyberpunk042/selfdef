@@ -89,28 +89,43 @@ impl EvidenceSearchIndex {
 
     /// Run query.
     pub fn search(&self, q: &Query) -> Result<Vec<&EvidenceRow>, SearchError> {
-        if q.max_hits == 0 { return Err(SearchError::ZeroMaxHits); }
+        if q.max_hits == 0 {
+            return Err(SearchError::ZeroMaxHits);
+        }
         if let (Some(f), Some(t)) = (&q.from, &q.to) {
             if t < f {
-                return Err(SearchError::BadRange { from: f.clone(), to: t.clone() });
+                return Err(SearchError::BadRange {
+                    from: f.clone(),
+                    to: t.clone(),
+                });
             }
         }
         let mut hits = Vec::new();
         for r in &self.rows {
             if let Some(tag) = q.tag {
-                if r.tag != tag { continue; }
+                if r.tag != tag {
+                    continue;
+                }
             }
             if let Some(subject) = &q.subject {
-                if &r.subject != subject { continue; }
+                if &r.subject != subject {
+                    continue;
+                }
             }
             if let Some(f) = &q.from {
-                if &r.at < f { continue; }
+                if &r.at < f {
+                    continue;
+                }
             }
             if let Some(t) = &q.to {
-                if &r.at >= t { continue; }
+                if &r.at >= t {
+                    continue;
+                }
             }
             hits.push(r);
-            if hits.len() as u32 >= q.max_hits { break; }
+            if hits.len() as u32 >= q.max_hits {
+                break;
+            }
         }
         Ok(hits)
     }
@@ -125,7 +140,9 @@ impl EvidenceSearchIndex {
 }
 
 impl Default for EvidenceSearchIndex {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -133,7 +150,12 @@ mod tests {
     use super::*;
 
     fn row(tag: EvidenceTag, subject: &str, at: &str) -> EvidenceRow {
-        EvidenceRow { tag, subject: subject.into(), summary: String::new(), at: at.into() }
+        EvidenceRow {
+            tag,
+            subject: subject.into(),
+            summary: String::new(),
+            at: at.into(),
+        }
     }
 
     fn ix() -> EvidenceSearchIndex {
@@ -141,7 +163,11 @@ mod tests {
         i.push(row(EvidenceTag::Decision, "alice", "2026-05-19T01:00:00Z"));
         i.push(row(EvidenceTag::Grant, "bob", "2026-05-19T02:00:00Z"));
         i.push(row(EvidenceTag::Decision, "alice", "2026-05-19T03:00:00Z"));
-        i.push(row(EvidenceTag::Quarantine, "alice", "2026-05-19T04:00:00Z"));
+        i.push(row(
+            EvidenceTag::Quarantine,
+            "alice",
+            "2026-05-19T04:00:00Z",
+        ));
         i.push(row(EvidenceTag::Promotion, "bob", "2026-05-19T05:00:00Z"));
         i
     }
@@ -149,33 +175,60 @@ mod tests {
     #[test]
     fn no_filters_returns_all() {
         let i = ix();
-        let r = i.search(&Query { tag: None, subject: None, from: None, to: None, max_hits: 10 }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: None,
+                subject: None,
+                from: None,
+                to: None,
+                max_hits: 10,
+            })
+            .unwrap();
         assert_eq!(r.len(), 5);
     }
 
     #[test]
     fn tag_filter() {
         let i = ix();
-        let r = i.search(&Query { tag: Some(EvidenceTag::Decision), subject: None, from: None, to: None, max_hits: 10 }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: Some(EvidenceTag::Decision),
+                subject: None,
+                from: None,
+                to: None,
+                max_hits: 10,
+            })
+            .unwrap();
         assert_eq!(r.len(), 2);
     }
 
     #[test]
     fn subject_filter() {
         let i = ix();
-        let r = i.search(&Query { tag: None, subject: Some("alice".into()), from: None, to: None, max_hits: 10 }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: None,
+                subject: Some("alice".into()),
+                from: None,
+                to: None,
+                max_hits: 10,
+            })
+            .unwrap();
         assert_eq!(r.len(), 3);
     }
 
     #[test]
     fn time_range_filter() {
         let i = ix();
-        let r = i.search(&Query {
-            tag: None, subject: None,
-            from: Some("2026-05-19T02:00:00Z".into()),
-            to: Some("2026-05-19T04:00:00Z".into()),
-            max_hits: 10,
-        }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: None,
+                subject: None,
+                from: Some("2026-05-19T02:00:00Z".into()),
+                to: Some("2026-05-19T04:00:00Z".into()),
+                max_hits: 10,
+            })
+            .unwrap();
         // 02:00 included, 03:00 included, 04:00 excluded
         assert_eq!(r.len(), 2);
     }
@@ -183,38 +236,60 @@ mod tests {
     #[test]
     fn combined_filter() {
         let i = ix();
-        let r = i.search(&Query {
-            tag: Some(EvidenceTag::Decision),
-            subject: Some("alice".into()),
-            from: None, to: None,
-            max_hits: 10,
-        }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: Some(EvidenceTag::Decision),
+                subject: Some("alice".into()),
+                from: None,
+                to: None,
+                max_hits: 10,
+            })
+            .unwrap();
         assert_eq!(r.len(), 2);
     }
 
     #[test]
     fn max_hits_caps() {
         let i = ix();
-        let r = i.search(&Query { tag: None, subject: None, from: None, to: None, max_hits: 2 }).unwrap();
+        let r = i
+            .search(&Query {
+                tag: None,
+                subject: None,
+                from: None,
+                to: None,
+                max_hits: 2,
+            })
+            .unwrap();
         assert_eq!(r.len(), 2);
     }
 
     #[test]
     fn zero_max_hits_rejected() {
         let i = ix();
-        let err = i.search(&Query { tag: None, subject: None, from: None, to: None, max_hits: 0 }).unwrap_err();
+        let err = i
+            .search(&Query {
+                tag: None,
+                subject: None,
+                from: None,
+                to: None,
+                max_hits: 0,
+            })
+            .unwrap_err();
         assert!(matches!(err, SearchError::ZeroMaxHits));
     }
 
     #[test]
     fn inverted_range_rejected() {
         let i = ix();
-        let err = i.search(&Query {
-            tag: None, subject: None,
-            from: Some("2026-05-19T05:00:00Z".into()),
-            to: Some("2026-05-19T01:00:00Z".into()),
-            max_hits: 10,
-        }).unwrap_err();
+        let err = i
+            .search(&Query {
+                tag: None,
+                subject: None,
+                from: Some("2026-05-19T05:00:00Z".into()),
+                to: Some("2026-05-19T01:00:00Z".into()),
+                max_hits: 10,
+            })
+            .unwrap_err();
         assert!(matches!(err, SearchError::BadRange { .. }));
     }
 
@@ -222,7 +297,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut i = EvidenceSearchIndex::new();
         i.schema_version = "9.9.9".into();
-        assert!(matches!(i.validate().unwrap_err(), SearchError::SchemaMismatch));
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            SearchError::SchemaMismatch
+        ));
     }
 
     #[test]

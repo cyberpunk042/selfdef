@@ -137,25 +137,47 @@ impl DenialAppealWindow {
     }
 
     /// Record a denial.
-    pub fn record_denial(&mut self, denial_id: &str, denied_at_ms: u64, actor: &str) -> Result<(), AppealError> {
-        if denial_id.is_empty() { return Err(AppealError::EmptyDenial); }
-        if actor.is_empty() { return Err(AppealError::EmptyActor); }
+    pub fn record_denial(
+        &mut self,
+        denial_id: &str,
+        denied_at_ms: u64,
+        actor: &str,
+    ) -> Result<(), AppealError> {
+        if denial_id.is_empty() {
+            return Err(AppealError::EmptyDenial);
+        }
+        if actor.is_empty() {
+            return Err(AppealError::EmptyActor);
+        }
         if self.denials.contains_key(denial_id) {
             return Err(AppealError::DuplicateDenial(denial_id.into()));
         }
-        self.denials.insert(denial_id.into(), Denial {
-            denied_at_ms,
-            actor: actor.into(),
-            appeal: None,
-        });
+        self.denials.insert(
+            denial_id.into(),
+            Denial {
+                denied_at_ms,
+                actor: actor.into(),
+                appeal: None,
+            },
+        );
         Ok(())
     }
 
     /// Submit an appeal.
-    pub fn submit_appeal(&mut self, denial_id: &str, ts_ms: u64, justification: &str) -> Result<(), AppealError> {
-        if justification.is_empty() { return Err(AppealError::EmptyJustification); }
+    pub fn submit_appeal(
+        &mut self,
+        denial_id: &str,
+        ts_ms: u64,
+        justification: &str,
+    ) -> Result<(), AppealError> {
+        if justification.is_empty() {
+            return Err(AppealError::EmptyJustification);
+        }
         let window = self.window_ms;
-        let d = self.denials.get_mut(denial_id).ok_or_else(|| AppealError::UnknownDenial(denial_id.into()))?;
+        let d = self
+            .denials
+            .get_mut(denial_id)
+            .ok_or_else(|| AppealError::UnknownDenial(denial_id.into()))?;
         if d.appeal.is_some() {
             return Err(AppealError::AlreadyAppealed(denial_id.into()));
         }
@@ -173,9 +195,20 @@ impl DenialAppealWindow {
     }
 
     /// Resolve.
-    pub fn resolve_appeal(&mut self, denial_id: &str, ts_ms: u64, resolution: Resolution) -> Result<(), AppealError> {
-        let d = self.denials.get_mut(denial_id).ok_or_else(|| AppealError::UnknownDenial(denial_id.into()))?;
-        let a = d.appeal.as_mut().ok_or_else(|| AppealError::NoAppeal(denial_id.into()))?;
+    pub fn resolve_appeal(
+        &mut self,
+        denial_id: &str,
+        ts_ms: u64,
+        resolution: Resolution,
+    ) -> Result<(), AppealError> {
+        let d = self
+            .denials
+            .get_mut(denial_id)
+            .ok_or_else(|| AppealError::UnknownDenial(denial_id.into()))?;
+        let a = d
+            .appeal
+            .as_mut()
+            .ok_or_else(|| AppealError::NoAppeal(denial_id.into()))?;
         if a.resolution.is_some() {
             return Err(AppealError::AlreadyResolved(denial_id.into()));
         }
@@ -186,18 +219,25 @@ impl DenialAppealWindow {
 
     /// State at given moment.
     pub fn state(&self, denial_id: &str, now_ms: u64) -> AppealState {
-        let Some(d) = self.denials.get(denial_id) else { return AppealState::NotFound; };
+        let Some(d) = self.denials.get(denial_id) else {
+            return AppealState::NotFound;
+        };
         let window_close = d.denied_at_ms.saturating_add(self.window_ms);
         match &d.appeal {
             None => {
-                if now_ms > window_close { AppealState::WindowClosed }
-                else { AppealState::Pending { window_close_ms: window_close } }
+                if now_ms > window_close {
+                    AppealState::WindowClosed
+                } else {
+                    AppealState::Pending {
+                        window_close_ms: window_close,
+                    }
+                }
             }
             Some(a) => match a.resolution {
                 None => AppealState::AppealPending,
                 Some(Resolution::Granted) => AppealState::Granted,
                 Some(Resolution::Sustained) => AppealState::Sustained,
-            }
+            },
         }
     }
 
@@ -208,12 +248,20 @@ impl DenialAppealWindow {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), AppealError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(AppealError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(AppealError::SchemaMismatch);
+        }
         for (id, d) in &self.denials {
-            if id.is_empty() { return Err(AppealError::EmptyDenial); }
-            if d.actor.is_empty() { return Err(AppealError::EmptyActor); }
+            if id.is_empty() {
+                return Err(AppealError::EmptyDenial);
+            }
+            if d.actor.is_empty() {
+                return Err(AppealError::EmptyActor);
+            }
             if let Some(a) = &d.appeal {
-                if a.justification.is_empty() { return Err(AppealError::EmptyJustification); }
+                if a.justification.is_empty() {
+                    return Err(AppealError::EmptyJustification);
+                }
             }
         }
         Ok(())
@@ -221,7 +269,9 @@ impl DenialAppealWindow {
 }
 
 impl Default for DenialAppealWindow {
-    fn default() -> Self { Self::new(86_400_000) }
+    fn default() -> Self {
+        Self::new(86_400_000)
+    }
 }
 
 #[cfg(test)]
@@ -249,7 +299,8 @@ mod tests {
     fn submit_within_window() {
         let mut w = DenialAppealWindow::new(1000);
         w.record_denial("d1", 0, "alice").unwrap();
-        w.submit_appeal("d1", 500, "I think this was wrong").unwrap();
+        w.submit_appeal("d1", 500, "I think this was wrong")
+            .unwrap();
         assert_eq!(w.state("d1", 600), AppealState::AppealPending);
     }
 
@@ -257,7 +308,10 @@ mod tests {
     fn submit_outside_window_rejected() {
         let mut w = DenialAppealWindow::new(1000);
         w.record_denial("d1", 0, "alice").unwrap();
-        assert!(matches!(w.submit_appeal("d1", 2000, "x").unwrap_err(), AppealError::WindowExpired(_)));
+        assert!(matches!(
+            w.submit_appeal("d1", 2000, "x").unwrap_err(),
+            AppealError::WindowExpired(_)
+        ));
     }
 
     #[test]
@@ -265,7 +319,10 @@ mod tests {
         let mut w = DenialAppealWindow::new(1000);
         w.record_denial("d1", 0, "alice").unwrap();
         w.submit_appeal("d1", 100, "first").unwrap();
-        assert!(matches!(w.submit_appeal("d1", 200, "second").unwrap_err(), AppealError::AlreadyAppealed(_)));
+        assert!(matches!(
+            w.submit_appeal("d1", 200, "second").unwrap_err(),
+            AppealError::AlreadyAppealed(_)
+        ));
     }
 
     #[test]
@@ -292,21 +349,32 @@ mod tests {
         w.record_denial("d1", 0, "alice").unwrap();
         w.submit_appeal("d1", 100, "x").unwrap();
         w.resolve_appeal("d1", 200, Resolution::Granted).unwrap();
-        assert!(matches!(w.resolve_appeal("d1", 300, Resolution::Sustained).unwrap_err(), AppealError::AlreadyResolved(_)));
+        assert!(matches!(
+            w.resolve_appeal("d1", 300, Resolution::Sustained)
+                .unwrap_err(),
+            AppealError::AlreadyResolved(_)
+        ));
     }
 
     #[test]
     fn resolve_without_appeal_rejected() {
         let mut w = DenialAppealWindow::new(1000);
         w.record_denial("d1", 0, "alice").unwrap();
-        assert!(matches!(w.resolve_appeal("d1", 200, Resolution::Granted).unwrap_err(), AppealError::NoAppeal(_)));
+        assert!(matches!(
+            w.resolve_appeal("d1", 200, Resolution::Granted)
+                .unwrap_err(),
+            AppealError::NoAppeal(_)
+        ));
     }
 
     #[test]
     fn duplicate_denial_rejected() {
         let mut w = DenialAppealWindow::new(1000);
         w.record_denial("d1", 0, "alice").unwrap();
-        assert!(matches!(w.record_denial("d1", 0, "alice").unwrap_err(), AppealError::DuplicateDenial(_)));
+        assert!(matches!(
+            w.record_denial("d1", 0, "alice").unwrap_err(),
+            AppealError::DuplicateDenial(_)
+        ));
     }
 
     #[test]
@@ -319,7 +387,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut w = DenialAppealWindow::new(1000);
         w.schema_version = "9.9.9".into();
-        assert!(matches!(w.validate().unwrap_err(), AppealError::SchemaMismatch));
+        assert!(matches!(
+            w.validate().unwrap_err(),
+            AppealError::SchemaMismatch
+        ));
     }
 
     #[test]

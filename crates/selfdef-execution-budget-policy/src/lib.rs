@@ -42,7 +42,11 @@ pub struct Spend {
 
 impl Spend {
     /// Zero.
-    pub const ZERO: Self = Self { wall_seconds: 0, tokens: 0, dollars_micro: 0 };
+    pub const ZERO: Self = Self {
+        wall_seconds: 0,
+        tokens: 0,
+        dollars_micro: 0,
+    };
 
     /// Saturating add.
     pub fn add(self, other: Spend) -> Spend {
@@ -125,13 +129,25 @@ impl ExecutionBudget {
     pub fn admit(&mut self, spend: Spend) -> AdmitDecision {
         let projected = self.consumed.add(spend);
         if projected.wall_seconds > self.cap.max_wall_seconds {
-            return AdmitDecision::Deny { axis: ExhaustionAxis::Time, projected, cap: self.cap };
+            return AdmitDecision::Deny {
+                axis: ExhaustionAxis::Time,
+                projected,
+                cap: self.cap,
+            };
         }
         if projected.tokens > self.cap.max_tokens {
-            return AdmitDecision::Deny { axis: ExhaustionAxis::Tokens, projected, cap: self.cap };
+            return AdmitDecision::Deny {
+                axis: ExhaustionAxis::Tokens,
+                projected,
+                cap: self.cap,
+            };
         }
         if projected.dollars_micro > self.cap.max_dollars_micro {
-            return AdmitDecision::Deny { axis: ExhaustionAxis::Cost, projected, cap: self.cap };
+            return AdmitDecision::Deny {
+                axis: ExhaustionAxis::Cost,
+                projected,
+                cap: self.cap,
+            };
         }
         self.consumed = projected;
         AdmitDecision::Admit { total: projected }
@@ -140,9 +156,15 @@ impl ExecutionBudget {
     /// Remaining headroom on each axis.
     pub fn remaining(&self) -> Spend {
         Spend {
-            wall_seconds: self.cap.max_wall_seconds.saturating_sub(self.consumed.wall_seconds),
+            wall_seconds: self
+                .cap
+                .max_wall_seconds
+                .saturating_sub(self.consumed.wall_seconds),
             tokens: self.cap.max_tokens.saturating_sub(self.consumed.tokens),
-            dollars_micro: self.cap.max_dollars_micro.saturating_sub(self.consumed.dollars_micro),
+            dollars_micro: self
+                .cap
+                .max_dollars_micro
+                .saturating_sub(self.consumed.dollars_micro),
         }
     }
 
@@ -171,9 +193,15 @@ impl ExecutionBudget {
 }
 
 fn check_cap(c: &BudgetCap) -> Result<(), BudgetError> {
-    if c.max_wall_seconds == 0 { return Err(BudgetError::CapZero(ExhaustionAxis::Time)); }
-    if c.max_tokens == 0 { return Err(BudgetError::CapZero(ExhaustionAxis::Tokens)); }
-    if c.max_dollars_micro == 0 { return Err(BudgetError::CapZero(ExhaustionAxis::Cost)); }
+    if c.max_wall_seconds == 0 {
+        return Err(BudgetError::CapZero(ExhaustionAxis::Time));
+    }
+    if c.max_tokens == 0 {
+        return Err(BudgetError::CapZero(ExhaustionAxis::Tokens));
+    }
+    if c.max_dollars_micro == 0 {
+        return Err(BudgetError::CapZero(ExhaustionAxis::Cost));
+    }
     Ok(())
 }
 
@@ -182,13 +210,22 @@ mod tests {
     use super::*;
 
     fn cap() -> BudgetCap {
-        BudgetCap { max_wall_seconds: 60, max_tokens: 10_000, max_dollars_micro: 1_000_000 }
+        BudgetCap {
+            max_wall_seconds: 60,
+            max_tokens: 10_000,
+            max_dollars_micro: 1_000_000,
+        }
     }
 
     #[test]
     fn zero_cap_rejected() {
         assert!(matches!(
-            ExecutionBudget::new(BudgetCap { max_wall_seconds: 0, max_tokens: 1, max_dollars_micro: 1 }).unwrap_err(),
+            ExecutionBudget::new(BudgetCap {
+                max_wall_seconds: 0,
+                max_tokens: 1,
+                max_dollars_micro: 1
+            })
+            .unwrap_err(),
             BudgetError::CapZero(ExhaustionAxis::Time)
         ));
     }
@@ -196,7 +233,11 @@ mod tests {
     #[test]
     fn admit_within_cap() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        let d = b.admit(Spend { wall_seconds: 10, tokens: 100, dollars_micro: 1000 });
+        let d = b.admit(Spend {
+            wall_seconds: 10,
+            tokens: 100,
+            dollars_micro: 1000,
+        });
         assert!(matches!(d, AdmitDecision::Admit { .. }));
         assert_eq!(b.consumed.wall_seconds, 10);
     }
@@ -204,36 +245,78 @@ mod tests {
     #[test]
     fn deny_on_time() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        b.admit(Spend { wall_seconds: 50, tokens: 0, dollars_micro: 0 });
-        let d = b.admit(Spend { wall_seconds: 20, tokens: 0, dollars_micro: 0 });
-        assert!(matches!(d, AdmitDecision::Deny { axis: ExhaustionAxis::Time, .. }));
+        b.admit(Spend {
+            wall_seconds: 50,
+            tokens: 0,
+            dollars_micro: 0,
+        });
+        let d = b.admit(Spend {
+            wall_seconds: 20,
+            tokens: 0,
+            dollars_micro: 0,
+        });
+        assert!(matches!(
+            d,
+            AdmitDecision::Deny {
+                axis: ExhaustionAxis::Time,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn deny_on_tokens() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        let d = b.admit(Spend { wall_seconds: 0, tokens: 20_000, dollars_micro: 0 });
-        assert!(matches!(d, AdmitDecision::Deny { axis: ExhaustionAxis::Tokens, .. }));
+        let d = b.admit(Spend {
+            wall_seconds: 0,
+            tokens: 20_000,
+            dollars_micro: 0,
+        });
+        assert!(matches!(
+            d,
+            AdmitDecision::Deny {
+                axis: ExhaustionAxis::Tokens,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn deny_on_cost() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        let d = b.admit(Spend { wall_seconds: 0, tokens: 0, dollars_micro: 2_000_000 });
-        assert!(matches!(d, AdmitDecision::Deny { axis: ExhaustionAxis::Cost, .. }));
+        let d = b.admit(Spend {
+            wall_seconds: 0,
+            tokens: 0,
+            dollars_micro: 2_000_000,
+        });
+        assert!(matches!(
+            d,
+            AdmitDecision::Deny {
+                axis: ExhaustionAxis::Cost,
+                ..
+            }
+        ));
     }
 
     #[test]
     fn denied_spend_doesnt_advance() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        b.admit(Spend { wall_seconds: 0, tokens: 20_000, dollars_micro: 0 });
+        b.admit(Spend {
+            wall_seconds: 0,
+            tokens: 20_000,
+            dollars_micro: 0,
+        });
         assert_eq!(b.consumed, Spend::ZERO);
     }
 
     #[test]
     fn remaining_decreases_after_admit() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        b.admit(Spend { wall_seconds: 20, tokens: 200, dollars_micro: 200_000 });
+        b.admit(Spend {
+            wall_seconds: 20,
+            tokens: 200,
+            dollars_micro: 200_000,
+        });
         let r = b.remaining();
         assert_eq!(r.wall_seconds, 40);
         assert_eq!(r.tokens, 9_800);
@@ -243,7 +326,11 @@ mod tests {
     #[test]
     fn reset_clears_consumed() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        b.admit(Spend { wall_seconds: 30, tokens: 0, dollars_micro: 0 });
+        b.admit(Spend {
+            wall_seconds: 30,
+            tokens: 0,
+            dollars_micro: 0,
+        });
         b.reset();
         assert_eq!(b.consumed, Spend::ZERO);
     }
@@ -252,27 +339,46 @@ mod tests {
     fn validate_rejects_consumed_over_cap() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
         b.consumed.wall_seconds = 999;
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::ConsumedExceedsCap(ExhaustionAxis::Time)));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::ConsumedExceedsCap(ExhaustionAxis::Time)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
         b.schema_version = "9.9.9".into();
-        assert!(matches!(b.validate().unwrap_err(), BudgetError::SchemaMismatch));
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BudgetError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn axis_serde_kebab() {
-        assert_eq!(serde_json::to_string(&ExhaustionAxis::Time).unwrap(), "\"time\"");
-        assert_eq!(serde_json::to_string(&ExhaustionAxis::Tokens).unwrap(), "\"tokens\"");
-        assert_eq!(serde_json::to_string(&ExhaustionAxis::Cost).unwrap(), "\"cost\"");
+        assert_eq!(
+            serde_json::to_string(&ExhaustionAxis::Time).unwrap(),
+            "\"time\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExhaustionAxis::Tokens).unwrap(),
+            "\"tokens\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ExhaustionAxis::Cost).unwrap(),
+            "\"cost\""
+        );
     }
 
     #[test]
     fn budget_serde_roundtrip() {
         let mut b = ExecutionBudget::new(cap()).unwrap();
-        b.admit(Spend { wall_seconds: 5, tokens: 50, dollars_micro: 500 });
+        b.admit(Spend {
+            wall_seconds: 5,
+            tokens: 50,
+            dollars_micro: 500,
+        });
         let j = serde_json::to_string(&b).unwrap();
         let back: ExecutionBudget = serde_json::from_str(&j).unwrap();
         assert_eq!(b, back);

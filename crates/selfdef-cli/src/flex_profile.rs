@@ -10,7 +10,7 @@
 
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 pub(crate) fn run_schema() -> Result<i32> {
     println!("MS011 Z-3 / `selfdef-flex-profile` schema");
@@ -21,7 +21,9 @@ pub(crate) fn run_schema() -> Result<i32> {
     println!("  applies. Persist to /var/lib/selfdef/flex-profile.json with");
     println!("  full revert history.");
     println!();
-    println!("FlexProfile {{schema_version, baseline, deltas: Vec<Delta>, history: Vec<RevertRecord>}}");
+    println!(
+        "FlexProfile {{schema_version, baseline, deltas: Vec<Delta>, history: Vec<RevertRecord>}}"
+    );
     println!();
     println!("Delta (5 mandatory fields mirroring SDD-043 commit envelope):");
     for f in &[
@@ -114,10 +116,13 @@ pub(crate) fn run_show(json: bool) -> Result<i32> {
         println!("{}", body);
         return Ok(0);
     }
-    let parsed: serde_json::Value = serde_json::from_str(&body).ok().ok_or_else(|| {
-        anyhow!("daemon returned non-JSON body for /v1/flex-profile")
-    })?;
-    let state_present = parsed.get("state_present").and_then(|v| v.as_bool()).unwrap_or(false);
+    let parsed: serde_json::Value = serde_json::from_str(&body)
+        .ok()
+        .ok_or_else(|| anyhow!("daemon returned non-JSON body for /v1/flex-profile"))?;
+    let state_present = parsed
+        .get("state_present")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
     let state_path = parsed
         .get("state_path")
         .and_then(|v| v.as_str())

@@ -42,7 +42,9 @@ pub enum DecayError {
 impl DecayCounter {
     /// New.
     pub fn new(decay_per_sec: u64, start_ms: u64) -> Result<Self, DecayError> {
-        if decay_per_sec == 0 { return Err(DecayError::ZeroRate); }
+        if decay_per_sec == 0 {
+            return Err(DecayError::ZeroRate);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             decay_per_sec,
@@ -77,8 +79,12 @@ impl DecayCounter {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DecayError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DecayError::SchemaMismatch); }
-        if self.decay_per_sec == 0 { return Err(DecayError::ZeroRate); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DecayError::SchemaMismatch);
+        }
+        if self.decay_per_sec == 0 {
+            return Err(DecayError::ZeroRate);
+        }
         Ok(())
     }
 }
@@ -127,14 +133,20 @@ mod tests {
 
     #[test]
     fn zero_rate_rejected() {
-        assert!(matches!(DecayCounter::new(0, 0).unwrap_err(), DecayError::ZeroRate));
+        assert!(matches!(
+            DecayCounter::new(0, 0).unwrap_err(),
+            DecayError::ZeroRate
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = DecayCounter::new(10, 0).unwrap();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), DecayError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            DecayError::SchemaMismatch
+        ));
     }
 
     #[test]

@@ -47,7 +47,9 @@ pub enum FreqError {
 impl FrequencyMap {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, FreqError> {
-        if capacity == 0 { return Err(FreqError::ZeroCapacity); }
+        if capacity == 0 {
+            return Err(FreqError::ZeroCapacity);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             capacity,
@@ -58,14 +60,18 @@ impl FrequencyMap {
 
     /// Observe.
     pub fn observe(&mut self, key: &str) -> Result<(), FreqError> {
-        if key.is_empty() { return Err(FreqError::EmptyKey); }
+        if key.is_empty() {
+            return Err(FreqError::EmptyKey);
+        }
         if let Some(c) = self.counts.get_mut(key) {
             *c = c.saturating_add(1);
             return Ok(());
         }
         if (self.counts.len() as u32) >= self.capacity {
             // Evict lowest-count (ties: lexicographic).
-            let (k_evict, _) = self.counts.iter()
+            let (k_evict, _) = self
+                .counts
+                .iter()
                 .min_by(|(ka, va), (kb, vb)| va.cmp(vb).then(ka.cmp(kb)))
                 .map(|(k, v)| (k.clone(), *v))
                 .unwrap();
@@ -78,9 +84,8 @@ impl FrequencyMap {
 
     /// Top n by count desc then key asc.
     pub fn top_n(&self, n: usize) -> Vec<(String, u64)> {
-        let mut all: Vec<(String, u64)> = self.counts.iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
+        let mut all: Vec<(String, u64)> =
+            self.counts.iter().map(|(k, v)| (k.clone(), *v)).collect();
         all.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         all.into_iter().take(n).collect()
     }
@@ -92,10 +97,16 @@ impl FrequencyMap {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), FreqError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(FreqError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(FreqError::ZeroCapacity); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(FreqError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(FreqError::ZeroCapacity);
+        }
         for k in self.counts.keys() {
-            if k.is_empty() { return Err(FreqError::EmptyKey); }
+            if k.is_empty() {
+                return Err(FreqError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -119,9 +130,15 @@ mod tests {
     #[test]
     fn top_n_orders() {
         let mut f = FrequencyMap::new(10).unwrap();
-        for _ in 0..5 { f.observe("a").unwrap(); }
-        for _ in 0..3 { f.observe("b").unwrap(); }
-        for _ in 0..7 { f.observe("c").unwrap(); }
+        for _ in 0..5 {
+            f.observe("a").unwrap();
+        }
+        for _ in 0..3 {
+            f.observe("b").unwrap();
+        }
+        for _ in 0..7 {
+            f.observe("c").unwrap();
+        }
         let top = f.top_n(2);
         assert_eq!(top, vec![("c".into(), 7), ("a".into(), 5)]);
     }
@@ -129,8 +146,12 @@ mod tests {
     #[test]
     fn eviction_low_count() {
         let mut f = FrequencyMap::new(2).unwrap();
-        for _ in 0..5 { f.observe("a").unwrap(); }
-        for _ in 0..2 { f.observe("b").unwrap(); }
+        for _ in 0..5 {
+            f.observe("a").unwrap();
+        }
+        for _ in 0..2 {
+            f.observe("b").unwrap();
+        }
         // "b" has lower count; new key "c" → evicts "b".
         f.observe("c").unwrap();
         assert_eq!(f.evictions, 1);
@@ -162,14 +183,20 @@ mod tests {
     fn bad_inputs_rejected() {
         let mut f = FrequencyMap::new(5).unwrap();
         assert!(matches!(f.observe("").unwrap_err(), FreqError::EmptyKey));
-        assert!(matches!(FrequencyMap::new(0).unwrap_err(), FreqError::ZeroCapacity));
+        assert!(matches!(
+            FrequencyMap::new(0).unwrap_err(),
+            FreqError::ZeroCapacity
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut f = FrequencyMap::new(5).unwrap();
         f.schema_version = "9.9.9".into();
-        assert!(matches!(f.validate().unwrap_err(), FreqError::SchemaMismatch));
+        assert!(matches!(
+            f.validate().unwrap_err(),
+            FreqError::SchemaMismatch
+        ));
     }
 
     #[test]

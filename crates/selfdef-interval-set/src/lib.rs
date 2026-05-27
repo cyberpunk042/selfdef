@@ -56,19 +56,25 @@ impl IntervalSet {
 
     /// Insert interval; merges with overlap/adjacent.
     pub fn insert(&mut self, lo: i64, hi: i64) -> Result<(), IntervalError> {
-        if lo > hi { return Err(IntervalError::BadInterval); }
+        if lo > hi {
+            return Err(IntervalError::BadInterval);
+        }
         let mut new_lo = lo;
         let mut new_hi = hi;
         let mut kept: Vec<Interval> = Vec::with_capacity(self.intervals.len() + 1);
         let mut inserted = false;
         for iv in self.intervals.drain(..) {
             // Adjacency: touching when iv.hi + 1 == new_lo or new_hi + 1 == iv.lo.
-            let overlap_or_adj = iv.hi.saturating_add(1) >= new_lo && new_hi.saturating_add(1) >= iv.lo;
+            let overlap_or_adj =
+                iv.hi.saturating_add(1) >= new_lo && new_hi.saturating_add(1) >= iv.lo;
             if overlap_or_adj {
                 new_lo = new_lo.min(iv.lo);
                 new_hi = new_hi.max(iv.hi);
             } else if !inserted && iv.lo > new_hi.saturating_add(1) {
-                kept.push(Interval { lo: new_lo, hi: new_hi });
+                kept.push(Interval {
+                    lo: new_lo,
+                    hi: new_hi,
+                });
                 inserted = true;
                 kept.push(iv);
             } else {
@@ -76,7 +82,10 @@ impl IntervalSet {
             }
         }
         if !inserted {
-            kept.push(Interval { lo: new_lo, hi: new_hi });
+            kept.push(Interval {
+                lo: new_lo,
+                hi: new_hi,
+            });
         }
         self.intervals = kept;
         Ok(())
@@ -86,34 +95,49 @@ impl IntervalSet {
     pub fn contains(&self, x: i64) -> bool {
         // Binary search for first interval whose hi >= x; check lo <= x.
         let r = self.intervals.binary_search_by(|iv| {
-            if iv.hi < x { std::cmp::Ordering::Less }
-            else if iv.lo > x { std::cmp::Ordering::Greater }
-            else { std::cmp::Ordering::Equal }
+            if iv.hi < x {
+                std::cmp::Ordering::Less
+            } else if iv.lo > x {
+                std::cmp::Ordering::Greater
+            } else {
+                std::cmp::Ordering::Equal
+            }
         });
         r.is_ok()
     }
 
     /// Cover (sum of widths).
     pub fn cover(&self) -> u128 {
-        self.intervals.iter()
+        self.intervals
+            .iter()
             .map(|iv| (iv.hi as i128 - iv.lo as i128 + 1) as u128)
             .sum()
     }
 
     /// Count of disjoint intervals.
-    pub fn len(&self) -> usize { self.intervals.len() }
+    pub fn len(&self) -> usize {
+        self.intervals.len()
+    }
 
     /// Empty.
-    pub fn is_empty(&self) -> bool { self.intervals.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.intervals.is_empty()
+    }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), IntervalError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(IntervalError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(IntervalError::SchemaMismatch);
+        }
         let mut last_hi: Option<i64> = None;
         for iv in &self.intervals {
-            if iv.lo > iv.hi { return Err(IntervalError::BadInterval); }
+            if iv.lo > iv.hi {
+                return Err(IntervalError::BadInterval);
+            }
             if let Some(prev) = last_hi {
-                if iv.lo <= prev.saturating_add(1) { return Err(IntervalError::BadInterval); }
+                if iv.lo <= prev.saturating_add(1) {
+                    return Err(IntervalError::BadInterval);
+                }
             }
             last_hi = Some(iv.hi);
         }
@@ -122,7 +146,9 @@ impl IntervalSet {
 }
 
 impl Default for IntervalSet {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -199,14 +225,20 @@ mod tests {
     #[test]
     fn bad_interval_rejected() {
         let mut s = IntervalSet::new();
-        assert!(matches!(s.insert(20, 10).unwrap_err(), IntervalError::BadInterval));
+        assert!(matches!(
+            s.insert(20, 10).unwrap_err(),
+            IntervalError::BadInterval
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = IntervalSet::new();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), IntervalError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            IntervalError::SchemaMismatch
+        ));
     }
 
     #[test]

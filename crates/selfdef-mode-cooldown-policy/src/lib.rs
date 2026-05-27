@@ -61,13 +61,34 @@ impl ModeCooldownPolicy {
     /// Canonical defaults — Execute longest cooldown, Plan shortest.
     pub fn canonical() -> Self {
         let cooldowns = vec![
-            ModeCooldown { mode: ExecutionMode::Plan,    dwell_seconds:  5 },
-            ModeCooldown { mode: ExecutionMode::DryRun,  dwell_seconds: 10 },
-            ModeCooldown { mode: ExecutionMode::Shadow,  dwell_seconds: 10 },
-            ModeCooldown { mode: ExecutionMode::Sandbox, dwell_seconds: 30 },
-            ModeCooldown { mode: ExecutionMode::Execute, dwell_seconds: 60 },
-            ModeCooldown { mode: ExecutionMode::Replay,  dwell_seconds:  0 }, // can exit anytime
-            ModeCooldown { mode: ExecutionMode::Debug,   dwell_seconds: 15 },
+            ModeCooldown {
+                mode: ExecutionMode::Plan,
+                dwell_seconds: 5,
+            },
+            ModeCooldown {
+                mode: ExecutionMode::DryRun,
+                dwell_seconds: 10,
+            },
+            ModeCooldown {
+                mode: ExecutionMode::Shadow,
+                dwell_seconds: 10,
+            },
+            ModeCooldown {
+                mode: ExecutionMode::Sandbox,
+                dwell_seconds: 30,
+            },
+            ModeCooldown {
+                mode: ExecutionMode::Execute,
+                dwell_seconds: 60,
+            },
+            ModeCooldown {
+                mode: ExecutionMode::Replay,
+                dwell_seconds: 0,
+            }, // can exit anytime
+            ModeCooldown {
+                mode: ExecutionMode::Debug,
+                dwell_seconds: 15,
+            },
         ];
         Self {
             schema_version: SCHEMA_VERSION.into(),
@@ -93,15 +114,25 @@ impl ModeCooldownPolicy {
 
     /// Lookup dwell seconds.
     pub fn dwell(&self, mode: ExecutionMode) -> u32 {
-        self.cooldowns.iter().find(|c| c.mode == mode).map(|c| c.dwell_seconds).unwrap_or(0)
+        self.cooldowns
+            .iter()
+            .find(|c| c.mode == mode)
+            .map(|c| c.dwell_seconds)
+            .unwrap_or(0)
     }
 
     /// Authorize exit from `mode` after `elapsed_seconds`.
-    pub fn permit_exit(&self, mode: ExecutionMode, elapsed_seconds: u32) -> Result<(), CooldownError> {
+    pub fn permit_exit(
+        &self,
+        mode: ExecutionMode,
+        elapsed_seconds: u32,
+    ) -> Result<(), CooldownError> {
         let required = self.dwell(mode);
         if elapsed_seconds < required {
             return Err(CooldownError::CooldownNotElapsed {
-                mode, elapsed_seconds, required_seconds: required,
+                mode,
+                elapsed_seconds,
+                required_seconds: required,
             });
         }
         Ok(())
@@ -120,7 +151,9 @@ mod tests {
     #[test]
     fn all_modes_present() {
         let p = ModeCooldownPolicy::canonical();
-        for m in ExecutionMode::ALL { assert!(p.cooldowns.iter().any(|c| c.mode == m)); }
+        for m in ExecutionMode::ALL {
+            assert!(p.cooldowns.iter().any(|c| c.mode == m));
+        }
     }
 
     #[test]
@@ -128,7 +161,12 @@ mod tests {
         let p = ModeCooldownPolicy::canonical();
         let exec = p.dwell(ExecutionMode::Execute);
         for m in ExecutionMode::ALL {
-            assert!(p.dwell(m) <= exec, "{m:?} dwell {} > execute {}", p.dwell(m), exec);
+            assert!(
+                p.dwell(m) <= exec,
+                "{m:?} dwell {} > execute {}",
+                p.dwell(m),
+                exec
+            );
         }
     }
 
@@ -155,14 +193,20 @@ mod tests {
     fn count_invalid_caught() {
         let mut p = ModeCooldownPolicy::canonical();
         p.cooldowns.pop();
-        assert!(matches!(p.validate().unwrap_err(), CooldownError::CountInvalid(6)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CooldownError::CountInvalid(6)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = ModeCooldownPolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CooldownError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CooldownError::SchemaMismatch
+        ));
     }
 
     #[test]

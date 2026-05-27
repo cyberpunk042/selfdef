@@ -1257,7 +1257,10 @@ mod tests {
     fn sdr102_bootstrap_script_includes_user_macro_autoload() {
         let s = bootstrap_script();
         assert!(s.contains("SD-R102"), "must reference SD-R102");
-        assert!(s.contains("_autoload_user_macros"), "must define autoload fn");
+        assert!(
+            s.contains("_autoload_user_macros"),
+            "must define autoload fn"
+        );
         assert!(s.contains("SELFDEF_REPL_MACROS"), "must check env var");
         assert!(s.contains("XDG_CONFIG_HOME"), "must check XDG_CONFIG_HOME");
         assert!(s.contains("repl-macros.py"), "must reference the filename");

@@ -67,17 +67,31 @@ pub enum DlqError {
 impl DeadLetterQueue {
     /// New.
     pub fn new(capacity: u32) -> Result<Self, DlqError> {
-        if capacity == 0 { return Err(DlqError::ZeroCap); }
+        if capacity == 0 {
+            return Err(DlqError::ZeroCap);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
-            capacity, entries: VecDeque::new(),
+            capacity,
+            entries: VecDeque::new(),
         })
     }
 
     /// Enqueue (or update if same msg_id already present).
-    pub fn enqueue(&mut self, msg_id: &str, error: &str, attempts: u32, now_ms: u64, payload_bytes: u64) -> Result<(), DlqError> {
-        if msg_id.is_empty() { return Err(DlqError::EmptyMsg); }
-        if error.is_empty() { return Err(DlqError::EmptyError); }
+    pub fn enqueue(
+        &mut self,
+        msg_id: &str,
+        error: &str,
+        attempts: u32,
+        now_ms: u64,
+        payload_bytes: u64,
+    ) -> Result<(), DlqError> {
+        if msg_id.is_empty() {
+            return Err(DlqError::EmptyMsg);
+        }
+        if error.is_empty() {
+            return Err(DlqError::EmptyError);
+        }
         // If id exists, remove its old entry (we re-insert at the back).
         if let Some(idx) = self.entries.iter().position(|e| e.msg_id == msg_id) {
             self.entries.remove(idx);
@@ -98,16 +112,23 @@ impl DeadLetterQueue {
 
     /// Replay (remove by id).
     pub fn replay(&mut self, msg_id: &str) -> Result<Entry, DlqError> {
-        let idx = self.entries.iter().position(|e| e.msg_id == msg_id)
+        let idx = self
+            .entries
+            .iter()
+            .position(|e| e.msg_id == msg_id)
             .ok_or_else(|| DlqError::NotFound(msg_id.into()))?;
         Ok(self.entries.remove(idx).unwrap())
     }
 
     /// Length.
-    pub fn len(&self) -> usize { self.entries.len() }
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
 
     /// Empty?
-    pub fn is_empty(&self) -> bool { self.entries.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
 
     /// Snapshot oldest-first.
     pub fn drain_snapshot(&self) -> Vec<Entry> {
@@ -116,11 +137,19 @@ impl DeadLetterQueue {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), DlqError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(DlqError::SchemaMismatch); }
-        if self.capacity == 0 { return Err(DlqError::ZeroCap); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(DlqError::SchemaMismatch);
+        }
+        if self.capacity == 0 {
+            return Err(DlqError::ZeroCap);
+        }
         for e in &self.entries {
-            if e.msg_id.is_empty() { return Err(DlqError::EmptyMsg); }
-            if e.last_error.is_empty() { return Err(DlqError::EmptyError); }
+            if e.msg_id.is_empty() {
+                return Err(DlqError::EmptyMsg);
+            }
+            if e.last_error.is_empty() {
+                return Err(DlqError::EmptyError);
+            }
         }
         Ok(())
     }
@@ -176,20 +205,32 @@ mod tests {
     #[test]
     fn empty_inputs_rejected() {
         let mut d = DeadLetterQueue::new(5).unwrap();
-        assert!(matches!(d.enqueue("", "x", 1, 0, 0).unwrap_err(), DlqError::EmptyMsg));
-        assert!(matches!(d.enqueue("a", "", 1, 0, 0).unwrap_err(), DlqError::EmptyError));
+        assert!(matches!(
+            d.enqueue("", "x", 1, 0, 0).unwrap_err(),
+            DlqError::EmptyMsg
+        ));
+        assert!(matches!(
+            d.enqueue("a", "", 1, 0, 0).unwrap_err(),
+            DlqError::EmptyError
+        ));
     }
 
     #[test]
     fn zero_capacity_rejected() {
-        assert!(matches!(DeadLetterQueue::new(0).unwrap_err(), DlqError::ZeroCap));
+        assert!(matches!(
+            DeadLetterQueue::new(0).unwrap_err(),
+            DlqError::ZeroCap
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut d = DeadLetterQueue::new(5).unwrap();
         d.schema_version = "9.9.9".into();
-        assert!(matches!(d.validate().unwrap_err(), DlqError::SchemaMismatch));
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DlqError::SchemaMismatch
+        ));
     }
 
     #[test]

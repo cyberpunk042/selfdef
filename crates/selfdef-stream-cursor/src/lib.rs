@@ -68,7 +68,10 @@ impl StreamCursor {
     /// Advance high-water (must be monotonic).
     pub fn advance_high_water(&mut self, value: u64) -> Result<(), CursorError> {
         if value < self.high_water {
-            return Err(CursorError::HighWaterRegression { value, current: self.high_water });
+            return Err(CursorError::HighWaterRegression {
+                value,
+                current: self.high_water,
+            });
         }
         self.high_water = value;
         Ok(())
@@ -76,10 +79,15 @@ impl StreamCursor {
 
     /// Commit a consumer offset (must be advance-only).
     pub fn commit(&mut self, consumer: &str, offset: u64) -> Result<(), CursorError> {
-        if consumer.is_empty() { return Err(CursorError::EmptyConsumer); }
+        if consumer.is_empty() {
+            return Err(CursorError::EmptyConsumer);
+        }
         let prev = *self.committed.get(consumer).unwrap_or(&0);
         if offset < prev {
-            return Err(CursorError::Rollback { value: offset, committed: prev });
+            return Err(CursorError::Rollback {
+                value: offset,
+                committed: prev,
+            });
         }
         self.committed.insert(consumer.into(), offset);
         Ok(())
@@ -87,7 +95,9 @@ impl StreamCursor {
 
     /// Reset a consumer offset (any direction).
     pub fn reset(&mut self, consumer: &str, offset: u64) -> Result<(), CursorError> {
-        if consumer.is_empty() { return Err(CursorError::EmptyConsumer); }
+        if consumer.is_empty() {
+            return Err(CursorError::EmptyConsumer);
+        }
         self.committed.insert(consumer.into(), offset);
         Ok(())
     }
@@ -100,16 +110,22 @@ impl StreamCursor {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), CursorError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(CursorError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(CursorError::SchemaMismatch);
+        }
         for k in self.committed.keys() {
-            if k.is_empty() { return Err(CursorError::EmptyConsumer); }
+            if k.is_empty() {
+                return Err(CursorError::EmptyConsumer);
+            }
         }
         Ok(())
     }
 }
 
 impl Default for StreamCursor {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -144,14 +160,20 @@ mod tests {
         let mut c = StreamCursor::new();
         c.commit("a", 10).unwrap();
         c.commit("a", 20).unwrap();
-        assert!(matches!(c.commit("a", 5).unwrap_err(), CursorError::Rollback { .. }));
+        assert!(matches!(
+            c.commit("a", 5).unwrap_err(),
+            CursorError::Rollback { .. }
+        ));
     }
 
     #[test]
     fn high_water_advance_only() {
         let mut c = StreamCursor::new();
         c.advance_high_water(50).unwrap();
-        assert!(matches!(c.advance_high_water(40).unwrap_err(), CursorError::HighWaterRegression { .. }));
+        assert!(matches!(
+            c.advance_high_water(40).unwrap_err(),
+            CursorError::HighWaterRegression { .. }
+        ));
     }
 
     #[test]
@@ -165,14 +187,20 @@ mod tests {
     #[test]
     fn empty_consumer_rejected() {
         let mut c = StreamCursor::new();
-        assert!(matches!(c.commit("", 10).unwrap_err(), CursorError::EmptyConsumer));
+        assert!(matches!(
+            c.commit("", 10).unwrap_err(),
+            CursorError::EmptyConsumer
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut c = StreamCursor::new();
         c.schema_version = "9.9.9".into();
-        assert!(matches!(c.validate().unwrap_err(), CursorError::SchemaMismatch));
+        assert!(matches!(
+            c.validate().unwrap_err(),
+            CursorError::SchemaMismatch
+        ));
     }
 
     #[test]

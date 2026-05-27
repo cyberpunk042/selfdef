@@ -90,23 +90,33 @@ impl ActionIdempotencyKey {
 
     /// Submit.
     pub fn submit(&mut self, key: &str, now_ms: u64) -> Result<SubmitVerdict, LedgerError> {
-        if key.is_empty() { return Err(LedgerError::EmptyKey); }
+        if key.is_empty() {
+            return Err(LedgerError::EmptyKey);
+        }
         if let Some(e) = self.ledger.get(key) {
             return Ok(SubmitVerdict::Replay {
                 first_seen_ts_ms: e.first_seen_ts_ms,
                 recorded_outcome: e.outcome.clone(),
             });
         }
-        self.ledger.insert(key.into(), Entry {
-            first_seen_ts_ms: now_ms,
-            outcome: None,
-        });
-        Ok(SubmitVerdict::Fresh { recorded_at_ms: now_ms })
+        self.ledger.insert(
+            key.into(),
+            Entry {
+                first_seen_ts_ms: now_ms,
+                outcome: None,
+            },
+        );
+        Ok(SubmitVerdict::Fresh {
+            recorded_at_ms: now_ms,
+        })
     }
 
     /// Attach outcome.
     pub fn complete(&mut self, key: &str, outcome: Outcome) -> Result<(), LedgerError> {
-        let e = self.ledger.get_mut(key).ok_or_else(|| LedgerError::UnknownKey(key.into()))?;
+        let e = self
+            .ledger
+            .get_mut(key)
+            .ok_or_else(|| LedgerError::UnknownKey(key.into()))?;
         e.outcome = Some(outcome);
         Ok(())
     }
@@ -114,14 +124,19 @@ impl ActionIdempotencyKey {
     /// Drop expired entries.
     pub fn rotate(&mut self, now_ms: u64) {
         let r = self.retention_ms;
-        self.ledger.retain(|_, e| now_ms.saturating_sub(e.first_seen_ts_ms) <= r);
+        self.ledger
+            .retain(|_, e| now_ms.saturating_sub(e.first_seen_ts_ms) <= r);
     }
 
     /// Validate.
     pub fn validate(&self) -> Result<(), LedgerError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(LedgerError::SchemaMismatch); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(LedgerError::SchemaMismatch);
+        }
         for k in self.ledger.keys() {
-            if k.is_empty() { return Err(LedgerError::EmptyKey); }
+            if k.is_empty() {
+                return Err(LedgerError::EmptyKey);
+            }
         }
         Ok(())
     }
@@ -135,7 +150,12 @@ mod tests {
     fn first_submit_is_fresh() {
         let mut l = ActionIdempotencyKey::new(60_000);
         let v = l.submit("k1", 1000).unwrap();
-        assert_eq!(v, SubmitVerdict::Fresh { recorded_at_ms: 1000 });
+        assert_eq!(
+            v,
+            SubmitVerdict::Fresh {
+                recorded_at_ms: 1000
+            }
+        );
     }
 
     #[test]
@@ -143,10 +163,13 @@ mod tests {
         let mut l = ActionIdempotencyKey::new(60_000);
         l.submit("k1", 1000).unwrap();
         let v = l.submit("k1", 2000).unwrap();
-        assert_eq!(v, SubmitVerdict::Replay {
-            first_seen_ts_ms: 1000,
-            recorded_outcome: None,
-        });
+        assert_eq!(
+            v,
+            SubmitVerdict::Replay {
+                first_seen_ts_ms: 1000,
+                recorded_outcome: None,
+            }
+        );
     }
 
     #[test]
@@ -156,7 +179,9 @@ mod tests {
         l.complete("k1", "ok".into()).unwrap();
         let v = l.submit("k1", 2000).unwrap();
         match v {
-            SubmitVerdict::Replay { recorded_outcome, .. } => {
+            SubmitVerdict::Replay {
+                recorded_outcome, ..
+            } => {
                 assert_eq!(recorded_outcome.as_deref(), Some("ok"));
             }
             _ => panic!("expected replay with outcome"),
@@ -166,13 +191,19 @@ mod tests {
     #[test]
     fn complete_unknown_rejected() {
         let mut l = ActionIdempotencyKey::new(60_000);
-        assert!(matches!(l.complete("missing", "ok".into()).unwrap_err(), LedgerError::UnknownKey(_)));
+        assert!(matches!(
+            l.complete("missing", "ok".into()).unwrap_err(),
+            LedgerError::UnknownKey(_)
+        ));
     }
 
     #[test]
     fn empty_key_rejected() {
         let mut l = ActionIdempotencyKey::new(60_000);
-        assert!(matches!(l.submit("", 0).unwrap_err(), LedgerError::EmptyKey));
+        assert!(matches!(
+            l.submit("", 0).unwrap_err(),
+            LedgerError::EmptyKey
+        ));
     }
 
     #[test]
@@ -187,14 +218,22 @@ mod tests {
     fn distinct_keys_independent() {
         let mut l = ActionIdempotencyKey::new(60_000);
         l.submit("k1", 1000).unwrap();
-        assert_eq!(l.submit("k2", 2000).unwrap(), SubmitVerdict::Fresh { recorded_at_ms: 2000 });
+        assert_eq!(
+            l.submit("k2", 2000).unwrap(),
+            SubmitVerdict::Fresh {
+                recorded_at_ms: 2000
+            }
+        );
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut l = ActionIdempotencyKey::new(60_000);
         l.schema_version = "9.9.9".into();
-        assert!(matches!(l.validate().unwrap_err(), LedgerError::SchemaMismatch));
+        assert!(matches!(
+            l.validate().unwrap_err(),
+            LedgerError::SchemaMismatch
+        ));
     }
 
     #[test]

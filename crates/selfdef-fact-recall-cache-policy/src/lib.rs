@@ -89,11 +89,26 @@ impl FactRecallCachePolicy {
     pub fn canonical() -> Self {
         Self {
             schema_version: SCHEMA_VERSION.into(),
-            stable: ClassConfig { ttl_seconds: 90 * 86400, may_serve_stale: true },
-            slow_evolving: ClassConfig { ttl_seconds: 7 * 86400, may_serve_stale: true },
-            volatile: ClassConfig { ttl_seconds: 30, may_serve_stale: false },
-            operator: ClassConfig { ttl_seconds: 365 * 86400, may_serve_stale: false },
-            computed: ClassConfig { ttl_seconds: 3600, may_serve_stale: true },
+            stable: ClassConfig {
+                ttl_seconds: 90 * 86400,
+                may_serve_stale: true,
+            },
+            slow_evolving: ClassConfig {
+                ttl_seconds: 7 * 86400,
+                may_serve_stale: true,
+            },
+            volatile: ClassConfig {
+                ttl_seconds: 30,
+                may_serve_stale: false,
+            },
+            operator: ClassConfig {
+                ttl_seconds: 365 * 86400,
+                may_serve_stale: false,
+            },
+            computed: ClassConfig {
+                ttl_seconds: 3600,
+                may_serve_stale: true,
+            },
         }
     }
 
@@ -132,7 +147,9 @@ impl FactRecallCachePolicy {
             (FactClass::Operator, self.operator),
             (FactClass::Computed, self.computed),
         ] {
-            if cfg.ttl_seconds == 0 { return Err(CacheError::TtlZero(c)); }
+            if cfg.ttl_seconds == 0 {
+                return Err(CacheError::TtlZero(c));
+            }
         }
         Ok(())
     }
@@ -163,39 +180,57 @@ mod tests {
     #[test]
     fn stable_serves_stale_when_allowed() {
         let p = FactRecallCachePolicy::canonical();
-        assert_eq!(p.decide(FactClass::Stable, 999 * 86400, true), CacheVerdict::Stale);
+        assert_eq!(
+            p.decide(FactClass::Stable, 999 * 86400, true),
+            CacheVerdict::Stale
+        );
     }
 
     #[test]
     fn stable_miss_when_stale_disallowed() {
         let p = FactRecallCachePolicy::canonical();
-        assert_eq!(p.decide(FactClass::Stable, 999 * 86400, false), CacheVerdict::Miss);
+        assert_eq!(
+            p.decide(FactClass::Stable, 999 * 86400, false),
+            CacheVerdict::Miss
+        );
     }
 
     #[test]
     fn operator_never_stale() {
         let p = FactRecallCachePolicy::canonical();
         // Operator may_serve_stale=false.
-        assert_eq!(p.decide(FactClass::Operator, 10_000 * 86400, true), CacheVerdict::Miss);
+        assert_eq!(
+            p.decide(FactClass::Operator, 10_000 * 86400, true),
+            CacheVerdict::Miss
+        );
     }
 
     #[test]
     fn ttl_zero_rejected() {
         let mut p = FactRecallCachePolicy::canonical();
         p.volatile.ttl_seconds = 0;
-        assert!(matches!(p.validate().unwrap_err(), CacheError::TtlZero(FactClass::Volatile)));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CacheError::TtlZero(FactClass::Volatile)
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut p = FactRecallCachePolicy::canonical();
         p.schema_version = "9.9.9".into();
-        assert!(matches!(p.validate().unwrap_err(), CacheError::SchemaMismatch));
+        assert!(matches!(
+            p.validate().unwrap_err(),
+            CacheError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn class_serde_kebab() {
-        assert_eq!(serde_json::to_string(&FactClass::SlowEvolving).unwrap(), "\"slow-evolving\"");
+        assert_eq!(
+            serde_json::to_string(&FactClass::SlowEvolving).unwrap(),
+            "\"slow-evolving\""
+        );
     }
 
     #[test]

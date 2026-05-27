@@ -53,7 +53,9 @@ pub enum SketchError {
 impl QuantileSketch {
     /// New with given bucket count.
     pub fn new(bucket_count: usize) -> Result<Self, SketchError> {
-        if bucket_count == 0 { return Err(SketchError::NoBuckets); }
+        if bucket_count == 0 {
+            return Err(SketchError::NoBuckets);
+        }
         Ok(Self {
             schema_version: SCHEMA_VERSION.into(),
             buckets: vec![0; bucket_count],
@@ -87,7 +89,9 @@ impl QuantileSketch {
         self.total = self.total.saturating_add(1);
         match self.bucket_for(v) {
             BucketSelection::Zero => self.zero_count = self.zero_count.saturating_add(1),
-            BucketSelection::Overflow => self.overflow_count = self.overflow_count.saturating_add(1),
+            BucketSelection::Overflow => {
+                self.overflow_count = self.overflow_count.saturating_add(1)
+            }
             BucketSelection::Bucket(i) => {
                 self.buckets[i] = self.buckets[i].saturating_add(1);
             }
@@ -99,11 +103,15 @@ impl QuantileSketch {
         if !(0.0..=1.0).contains(&q) {
             return Err(SketchError::BadQuantile(q));
         }
-        if self.total == 0 { return Ok(0); }
+        if self.total == 0 {
+            return Ok(0);
+        }
         let target = ((self.total as f64) * q).ceil() as u64;
         let target = target.max(1);
         let mut acc = self.zero_count;
-        if acc >= target { return Ok(0); }
+        if acc >= target {
+            return Ok(0);
+        }
         for (i, &n) in self.buckets.iter().enumerate() {
             acc = acc.saturating_add(n);
             if acc >= target {
@@ -117,7 +125,9 @@ impl QuantileSketch {
 
     /// Reset.
     pub fn reset(&mut self) {
-        for b in self.buckets.iter_mut() { *b = 0; }
+        for b in self.buckets.iter_mut() {
+            *b = 0;
+        }
         self.zero_count = 0;
         self.overflow_count = 0;
         self.total = 0;
@@ -125,8 +135,12 @@ impl QuantileSketch {
 
     /// Validate.
     pub fn validate(&self) -> Result<(), SketchError> {
-        if self.schema_version != SCHEMA_VERSION { return Err(SketchError::SchemaMismatch); }
-        if self.buckets.is_empty() { return Err(SketchError::NoBuckets); }
+        if self.schema_version != SCHEMA_VERSION {
+            return Err(SketchError::SchemaMismatch);
+        }
+        if self.buckets.is_empty() {
+            return Err(SketchError::NoBuckets);
+        }
         Ok(())
     }
 }
@@ -152,7 +166,9 @@ mod tests {
     #[test]
     fn record_and_p50() {
         let mut s = QuantileSketch::new(20).unwrap();
-        for v in 1..=100 { s.record(v); }
+        for v in 1..=100 {
+            s.record(v);
+        }
         let p50 = s.quantile(0.5).unwrap();
         // 50th value is 50; bucket containing 50 covers (32, 64].
         assert_eq!(p50, 64);
@@ -161,7 +177,9 @@ mod tests {
     #[test]
     fn p99_estimate() {
         let mut s = QuantileSketch::new(20).unwrap();
-        for v in 1..=100 { s.record(v); }
+        for v in 1..=100 {
+            s.record(v);
+        }
         let p99 = s.quantile(0.99).unwrap();
         // 99th value is 99; bucket covers (64, 128].
         assert_eq!(p99, 128);
@@ -170,7 +188,9 @@ mod tests {
     #[test]
     fn p100_returns_top_bucket() {
         let mut s = QuantileSketch::new(20).unwrap();
-        for _ in 0..10 { s.record(1000); }
+        for _ in 0..10 {
+            s.record(1000);
+        }
         let p100 = s.quantile(1.0).unwrap();
         // 1000 fits in bucket 10 (upper 1024).
         assert_eq!(p100, 1024);
@@ -179,7 +199,9 @@ mod tests {
     #[test]
     fn zero_observations() {
         let mut s = QuantileSketch::new(10).unwrap();
-        for _ in 0..5 { s.record(0); }
+        for _ in 0..5 {
+            s.record(0);
+        }
         assert_eq!(s.quantile(0.5).unwrap(), 0);
         assert_eq!(s.zero_count, 5);
     }
@@ -194,7 +216,9 @@ mod tests {
     #[test]
     fn reset_clears() {
         let mut s = QuantileSketch::new(10).unwrap();
-        for v in 1..=10 { s.record(v); }
+        for v in 1..=10 {
+            s.record(v);
+        }
         s.reset();
         assert_eq!(s.total, 0);
         assert_eq!(s.quantile(0.5).unwrap(), 0);
@@ -209,26 +233,40 @@ mod tests {
     #[test]
     fn bad_quantile_rejected() {
         let s = QuantileSketch::new(10).unwrap();
-        assert!(matches!(s.quantile(-0.1).unwrap_err(), SketchError::BadQuantile(_)));
-        assert!(matches!(s.quantile(1.5).unwrap_err(), SketchError::BadQuantile(_)));
+        assert!(matches!(
+            s.quantile(-0.1).unwrap_err(),
+            SketchError::BadQuantile(_)
+        ));
+        assert!(matches!(
+            s.quantile(1.5).unwrap_err(),
+            SketchError::BadQuantile(_)
+        ));
     }
 
     #[test]
     fn no_buckets_rejected() {
-        assert!(matches!(QuantileSketch::new(0).unwrap_err(), SketchError::NoBuckets));
+        assert!(matches!(
+            QuantileSketch::new(0).unwrap_err(),
+            SketchError::NoBuckets
+        ));
     }
 
     #[test]
     fn schema_drift_rejected() {
         let mut s = QuantileSketch::new(10).unwrap();
         s.schema_version = "9.9.9".into();
-        assert!(matches!(s.validate().unwrap_err(), SketchError::SchemaMismatch));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            SketchError::SchemaMismatch
+        ));
     }
 
     #[test]
     fn sketch_serde_roundtrip() {
         let mut s = QuantileSketch::new(10).unwrap();
-        for v in 1..=20 { s.record(v); }
+        for v in 1..=20 {
+            s.record(v);
+        }
         let j = serde_json::to_string(&s).unwrap();
         let back: QuantileSketch = serde_json::from_str(&j).unwrap();
         assert_eq!(s, back);

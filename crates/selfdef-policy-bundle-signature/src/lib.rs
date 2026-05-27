@@ -17,8 +17,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-use selfdef_substrate_fingerprint::SubstrateFingerprint;
 use selfdef_rule_pack_version::RulePackManifest;
+use selfdef_substrate_fingerprint::SubstrateFingerprint;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -107,12 +107,24 @@ impl BundleManifest {
         if self.schema_version != SCHEMA_VERSION {
             return Err(BundleSigError::SchemaMismatch);
         }
-        if self.signature.is_empty() { return Err(BundleSigError::Unsigned); }
-        if self.rule_pack_versions.is_empty() { return Err(BundleSigError::EmptyRulePackVersions); }
-        if self.doctrine_text_hash.is_empty() { return Err(BundleSigError::EmptyDoctrineHash); }
-        if self.collector_summary.is_empty() { return Err(BundleSigError::EmptyCollectorSummary); }
-        if self.host_fingerprint.is_empty() { return Err(BundleSigError::EmptyHostFingerprint); }
-        if self.created_at.is_empty() { return Err(BundleSigError::EmptyCreatedAt); }
+        if self.signature.is_empty() {
+            return Err(BundleSigError::Unsigned);
+        }
+        if self.rule_pack_versions.is_empty() {
+            return Err(BundleSigError::EmptyRulePackVersions);
+        }
+        if self.doctrine_text_hash.is_empty() {
+            return Err(BundleSigError::EmptyDoctrineHash);
+        }
+        if self.collector_summary.is_empty() {
+            return Err(BundleSigError::EmptyCollectorSummary);
+        }
+        if self.host_fingerprint.is_empty() {
+            return Err(BundleSigError::EmptyHostFingerprint);
+        }
+        if self.created_at.is_empty() {
+            return Err(BundleSigError::EmptyCreatedAt);
+        }
         Ok(())
     }
 
@@ -147,7 +159,7 @@ impl BundleManifest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use selfdef_rule_pack_version::{RulePack, PackKind};
+    use selfdef_rule_pack_version::{PackKind, RulePack};
 
     fn fp() -> SubstrateFingerprint {
         SubstrateFingerprint::compute(
@@ -161,18 +173,26 @@ mod tests {
 
     fn rp() -> RulePackManifest {
         let kinds = [
-            PackKind::Filesystem, PackKind::Network, PackKind::Capability,
-            PackKind::Sandbox, PackKind::Communication, PackKind::CollectorBudget,
-            PackKind::Quarantine, PackKind::CommitAuthority,
+            PackKind::Filesystem,
+            PackKind::Network,
+            PackKind::Capability,
+            PackKind::Sandbox,
+            PackKind::Communication,
+            PackKind::CollectorBudget,
+            PackKind::Quarantine,
+            PackKind::CommitAuthority,
         ];
         RulePackManifest {
             schema_version: "1.0.0".into(),
-            packs: kinds.iter().map(|k| RulePack {
-                kind: *k,
-                semver: "1.0.0".into(),
-                signature: "sig".into(),
-                loaded_at: "t".into(),
-            }).collect(),
+            packs: kinds
+                .iter()
+                .map(|k| RulePack {
+                    kind: *k,
+                    semver: "1.0.0".into(),
+                    signature: "sig".into(),
+                    loaded_at: "t".into(),
+                })
+                .collect(),
         }
     }
 
@@ -186,35 +206,50 @@ mod tests {
     fn unsigned_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.signature = String::new();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::Unsigned));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::Unsigned
+        ));
     }
 
     #[test]
     fn empty_doctrine_hash_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.doctrine_text_hash = String::new();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::EmptyDoctrineHash));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::EmptyDoctrineHash
+        ));
     }
 
     #[test]
     fn empty_collector_summary_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.collector_summary = String::new();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::EmptyCollectorSummary));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::EmptyCollectorSummary
+        ));
     }
 
     #[test]
     fn empty_host_fp_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.host_fingerprint = String::new();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::EmptyHostFingerprint));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::EmptyHostFingerprint
+        ));
     }
 
     #[test]
     fn empty_created_at_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.created_at = String::new();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::EmptyCreatedAt));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::EmptyCreatedAt
+        ));
     }
 
     #[test]
@@ -249,7 +284,10 @@ mod tests {
     fn schema_drift_rejected() {
         let mut m = BundleManifest::build(&fp(), &rp(), "host-fp", "t", "sig-bundle");
         m.schema_version = "9.9.9".into();
-        assert!(matches!(m.validate().unwrap_err(), BundleSigError::SchemaMismatch));
+        assert!(matches!(
+            m.validate().unwrap_err(),
+            BundleSigError::SchemaMismatch
+        ));
     }
 
     #[test]

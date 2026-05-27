@@ -98,7 +98,9 @@ pub struct HighRiskGate {
 impl HighRiskGate {
     /// True iff all three gate elements are present.
     pub fn complete(&self) -> bool {
-        !self.snapshot_id.is_empty() && !self.test_eval_id.is_empty() && !self.oracle_or_human.is_empty()
+        !self.snapshot_id.is_empty()
+            && !self.test_eval_id.is_empty()
+            && !self.oracle_or_human.is_empty()
     }
 }
 
@@ -281,16 +283,23 @@ mod tests {
     fn eight_commit_types_enumerated() {
         // Exhaust the 8 verbatim per R09610 dump 17391-17398.
         for t in [
-            CommitType::FileWrite, CommitType::MemoryWrite, CommitType::PolicyUpdate,
-            CommitType::ProfileUpdate, CommitType::AdapterPromotion, CommitType::CloudExposureLog,
-            CommitType::ToolSideEffect, CommitType::WorkflowCompletion,
+            CommitType::FileWrite,
+            CommitType::MemoryWrite,
+            CommitType::PolicyUpdate,
+            CommitType::ProfileUpdate,
+            CommitType::AdapterPromotion,
+            CommitType::CloudExposureLog,
+            CommitType::ToolSideEffect,
+            CommitType::WorkflowCompletion,
         ] {
             let mut e = ok_env();
             e.commit_type = t;
             // Make sure each type passes validate when not high-risk OR when gate set.
             if is_high_risk(&e) {
                 e.high_risk_gate = Some(HighRiskGate {
-                    snapshot_id: "s".into(), test_eval_id: "t".into(), oracle_or_human: "o".into(),
+                    snapshot_id: "s".into(),
+                    test_eval_id: "t".into(),
+                    oracle_or_human: "o".into(),
                 });
             }
             validate(&e).unwrap();
@@ -301,26 +310,42 @@ mod tests {
 
     #[test]
     fn missing_actor_rejected() {
-        let mut e = ok_env(); e.actor = String::new();
-        assert!(matches!(validate(&e).unwrap_err(), CommitError::MandatoryFieldMissing("actor")));
+        let mut e = ok_env();
+        e.actor = String::new();
+        assert!(matches!(
+            validate(&e).unwrap_err(),
+            CommitError::MandatoryFieldMissing("actor")
+        ));
     }
 
     #[test]
     fn missing_reason_rejected() {
-        let mut e = ok_env(); e.reason = String::new();
-        assert!(matches!(validate(&e).unwrap_err(), CommitError::MandatoryFieldMissing("reason")));
+        let mut e = ok_env();
+        e.reason = String::new();
+        assert!(matches!(
+            validate(&e).unwrap_err(),
+            CommitError::MandatoryFieldMissing("reason")
+        ));
     }
 
     #[test]
     fn missing_trace_ref_rejected() {
-        let mut e = ok_env(); e.trace_ref = String::new();
-        assert!(matches!(validate(&e).unwrap_err(), CommitError::MandatoryFieldMissing("trace_ref")));
+        let mut e = ok_env();
+        e.trace_ref = String::new();
+        assert!(matches!(
+            validate(&e).unwrap_err(),
+            CommitError::MandatoryFieldMissing("trace_ref")
+        ));
     }
 
     #[test]
     fn missing_signature_rejected() {
-        let mut e = ok_env(); e.signature = String::new();
-        assert!(matches!(validate(&e).unwrap_err(), CommitError::SignatureMissing));
+        let mut e = ok_env();
+        e.signature = String::new();
+        assert!(matches!(
+            validate(&e).unwrap_err(),
+            CommitError::SignatureMissing
+        ));
     }
 
     // --- High-risk classifier ---
@@ -415,7 +440,10 @@ mod tests {
     fn high_risk_rollback_unavailable_rejected() {
         let mut e = high_risk_env();
         e.rollback_status = RollbackStatus::Unavailable;
-        assert!(matches!(validate(&e).unwrap_err(), CommitError::HighRiskRollbackUnavailable));
+        assert!(matches!(
+            validate(&e).unwrap_err(),
+            CommitError::HighRiskRollbackUnavailable
+        ));
     }
 
     #[test]
@@ -432,7 +460,10 @@ mod tests {
         };
         assert!(g.complete());
 
-        let g2 = HighRiskGate { snapshot_id: "s".into(), ..Default::default() };
+        let g2 = HighRiskGate {
+            snapshot_id: "s".into(),
+            ..Default::default()
+        };
         assert!(!g2.complete());
     }
 
@@ -440,7 +471,10 @@ mod tests {
 
     #[test]
     fn doctrine_verbatim() {
-        assert_eq!(DOCTRINE_COMMIT_IS_DURABLE_CHANGE, "A commit is any durable change");
+        assert_eq!(
+            DOCTRINE_COMMIT_IS_DURABLE_CHANGE,
+            "A commit is any durable change"
+        );
         assert_doctrine_intact("A commit is any durable change").unwrap();
     }
 
@@ -452,9 +486,18 @@ mod tests {
 
     #[test]
     fn commit_type_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&CommitType::AdapterPromotion).unwrap(), "\"adapter-promotion\"");
-        assert_eq!(serde_json::to_string(&CommitType::CloudExposureLog).unwrap(), "\"cloud-exposure-log\"");
-        assert_eq!(serde_json::to_string(&CommitType::ToolSideEffect).unwrap(), "\"tool-side-effect\"");
+        assert_eq!(
+            serde_json::to_string(&CommitType::AdapterPromotion).unwrap(),
+            "\"adapter-promotion\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CommitType::CloudExposureLog).unwrap(),
+            "\"cloud-exposure-log\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CommitType::ToolSideEffect).unwrap(),
+            "\"tool-side-effect\""
+        );
     }
 
     #[test]
@@ -467,7 +510,13 @@ mod tests {
 
     #[test]
     fn rollback_status_serde_kebab_case() {
-        assert_eq!(serde_json::to_string(&RollbackStatus::Unavailable).unwrap(), "\"unavailable\"");
-        assert_eq!(serde_json::to_string(&RollbackStatus::Applied).unwrap(), "\"applied\"");
+        assert_eq!(
+            serde_json::to_string(&RollbackStatus::Unavailable).unwrap(),
+            "\"unavailable\""
+        );
+        assert_eq!(
+            serde_json::to_string(&RollbackStatus::Applied).unwrap(),
+            "\"applied\""
+        );
     }
 }

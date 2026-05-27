@@ -14,7 +14,7 @@
 //! Source: SDD-050 § Open questions D-1 + the
 //! `selfdef-tool-capability-policy` crate's public surface.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 
 fn print_tools() {
     println!("MS042 / SDD-050 tool-authority schema");
@@ -53,11 +53,15 @@ fn print_tools() {
     println!();
     println!("Post-pipeline:");
     println!("  - shape-check     (selfdef-tool-output-language-policy) — Pass / ShapeMismatch");
-    println!("  - veil-wrap       (selfdef-tool-output-trust-veil)      — Veil<Tier>; consumers unveil_with_tier(expected)");
+    println!(
+        "  - veil-wrap       (selfdef-tool-output-trust-veil)      — Veil<Tier>; consumers unveil_with_tier(expected)"
+    );
     println!();
     println!("Refusal rules:");
     println!("  - Any non-Allow gate verdict → REFUSE (operator-readable error citing gate)");
-    println!("  - VeilTierMismatch on unveil → REFUSE (typed cross-tier promotion blocked per SDD-050 D-4)");
+    println!(
+        "  - VeilTierMismatch on unveil → REFUSE (typed cross-tier promotion blocked per SDD-050 D-4)"
+    );
 }
 
 /// Parse + run the `permits <tool> <mode> <profile>` subverb.

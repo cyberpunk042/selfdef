@@ -23,12 +23,31 @@ pub(crate) struct DirDescriptor {
 }
 
 const EXCHANGE_DIRS: &[DirDescriptor] = &[
-    DirDescriptor { path: "/ai-exchange/inbox",    direction: "host → VM",  source_id: "M00942" },
-    DirDescriptor { path: "/ai-exchange/outbox",   direction: "VM → host",  source_id: "M00943" },
-    DirDescriptor { path: "/ai-exchange/artifacts", direction: "VM → host", source_id: "M00944" },
+    DirDescriptor {
+        path: "/ai-exchange/inbox",
+        direction: "host → VM",
+        source_id: "M00942",
+    },
+    DirDescriptor {
+        path: "/ai-exchange/outbox",
+        direction: "VM → host",
+        source_id: "M00943",
+    },
+    DirDescriptor {
+        path: "/ai-exchange/artifacts",
+        direction: "VM → host",
+        source_id: "M00944",
+    },
 ];
 
-const IMPORT_PIPELINE: &[&str] = &["Parse", "Scan", "Diff", "PolicyCheck", "OracleReview", "Commit"];
+const IMPORT_PIPELINE: &[&str] = &[
+    "Parse",
+    "Scan",
+    "Diff",
+    "PolicyCheck",
+    "OracleReview",
+    "Commit",
+];
 
 const PATCH_SCHEMA_FIELDS: &[&str] = &[
     "unified_diff",
