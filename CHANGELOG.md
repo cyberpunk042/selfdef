@@ -6,6 +6,23 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — L2 functional coverage for inittab-watchdog (2026-05-27)
+
+Locks the SysV-init / upstart boot-exec surface. /etc/inittab
+`id:runlevels:action:process` lines run `process` AS ROOT at boot; with
+`respawn` init even restarts it if killed — a resilient persistence vector
+(only the exec actions respawn/once/wait/boot/bootwait/sysinit/powerwait/
+powerfail carry a payload). Also scans upstart /etc/init/*.conf `exec`
+lines. A process under a writable root (or an injection pattern) is alert.
+
+- `packaging/test/L2-inittab-watchdog.bats` — 9 tests: ok (no_inittab /
+  baseline_initial / inittab_intact), alert (a respawn process under a
+  writable root → inittab_suspicious; a once action with a curl|sh
+  injection; an upstart exec under /dev/shm), warn (a benign process change
+  → inittab_changed), false-positive guard (standard getty respawn +
+  initdefault + ctrlaltdel), and enforce-profile exit. Uses the module's
+  existing `SELFDEF_INITTAB_FILE` / `_UPSTART` seams — no production change.
+
 ### Added — L2 functional coverage for crypttab-watchdog (2026-05-27)
 
 Locks the LUKS crypttab boot-exec surface. `/etc/crypttab`'s `keyscript=`
