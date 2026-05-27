@@ -904,6 +904,26 @@ mod tests {
         assert!(dispatcher.crosses_panic_floor(SeverityId::Fatal));
     }
 
+    // SDD-062 D-5 contract: the watchdog warn tier is routed as an
+    // Informational finding precisely so it stays NON-PAGING. This locks the
+    // mechanism it relies on — an Informational severity must NOT cross the
+    // Medium default panic floor (so the notifier suppresses it), while the
+    // alert tier (High) must. If the severity mapping or the floor ordering
+    // ever regresses, the warn tier would silently start paging; this fails.
+    #[test]
+    fn warn_tier_informational_stays_below_medium_floor() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("escalations.sqlite");
+        let engine = Arc::new(EscalationEngine::open(&path).unwrap());
+        let dispatcher =
+            PayloadDispatcher::new(engine, vec![]).with_panic_floor(SeverityId::Medium);
+        // warn tier (selfdef_watchdog_warn.yml level: informational) → no page.
+        assert!(!dispatcher.crosses_panic_floor(SeverityId::Informational));
+        assert!(!dispatcher.crosses_panic_floor(SeverityId::Low));
+        // alert tier (selfdef_watchdog_alert.yml level: high) → pages.
+        assert!(dispatcher.crosses_panic_floor(SeverityId::High));
+    }
+
     #[tokio::test]
     async fn audit_mode_suppresses_below_panic_floor() {
         let (eng, _dir) = fresh_engine().await;
