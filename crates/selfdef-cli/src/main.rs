@@ -187,6 +187,12 @@ enum Command {
         /// JSON output for CI / monitoring integration.
         #[arg(long)]
         json: bool,
+        /// Filter to a single artifact filename (e.g. `grants.json`,
+        /// `audit.json`). Useful during incident response to focus on
+        /// one wedged publisher. Returns exit 1 if the artifact is
+        /// not present in the daemon's counters (publisher never ran).
+        #[arg(long)]
+        artifact: Option<String>,
     },
     /// First-run bootstrap. Writes starter config files +
     /// prints the operator checklist. Non-destructive by
@@ -2259,8 +2265,8 @@ async fn main() -> Result<()> {
             let exit = m060_doctor::run(json, config.as_deref()).context("m060-doctor")?;
             std::process::exit(exit);
         }
-        Command::M060Metrics { json } => {
-            let exit = m060_metrics::run(json).context("m060-metrics")?;
+        Command::M060Metrics { json, artifact } => {
+            let exit = m060_metrics::run(json, artifact.as_deref()).context("m060-metrics")?;
             std::process::exit(exit);
         }
         Command::Init { action } => match action {

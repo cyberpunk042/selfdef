@@ -205,9 +205,38 @@ fn exit_code_for(worst: &str) -> i32 {
     }
 }
 
-pub(crate) fn run(json: bool) -> Result<i32> {
+pub(crate) fn run(json: bool, artifact: Option<&str>) -> Result<i32> {
     let body = fetch_metrics()?;
-    let stats = parse_m060_metrics(&body);
+    let mut stats = parse_m060_metrics(&body);
+    // Optional artifact filter — applied AFTER parse so the parser
+    // stays general-purpose. Missing artifact under a filter is exit 1
+    // with a clear message (vs silently returning empty).
+    if let Some(want) = artifact {
+        if !stats.contains_key(want) {
+            let available: Vec<String> = stats.keys().cloned().collect();
+            if json {
+                let payload = serde_json::json!({
+                    "schema_version": "1.0.0",
+                    "filter_artifact": want,
+                    "error": "artifact not found in daemon counters",
+                    "available_artifacts": available,
+                });
+                println!("{}", serde_json::to_string_pretty(&payload)?);
+            } else {
+                println!(
+                    "artifact `{want}` not found in daemon counters — publisher \
+                     may have never run, OR the artifact name is wrong"
+                );
+                if !available.is_empty() {
+                    println!("available artifacts: {}", available.join(", "));
+                }
+            }
+            return Ok(1);
+        }
+        let only = stats.remove(want).unwrap();
+        stats.clear();
+        stats.insert(want.to_string(), only);
+    }
     let worst = worst_state(&stats);
     if json {
         let payload = serde_json::json!({
@@ -215,6 +244,7 @@ pub(crate) fn run(json: bool) -> Result<i32> {
             "worst": worst,
             "artifacts": stats.values().collect::<Vec<_>>(),
             "stale_threshold_seconds": STALE_AGE_SECS,
+            "filter_artifact": artifact,
         });
         println!("{}", serde_json::to_string_pretty(&payload)?);
         return Ok(exit_code_for(worst));
@@ -238,8 +268,12 @@ pub(crate) fn run(json: bool) -> Result<i32> {
         );
     }
     println!("{}", "-".repeat(22 + 8 + 8 + 12 + 10 + 4));
+    let filter_note = artifact
+        .map(|a| format!(" (filter: {a})"))
+        .unwrap_or_default();
+    let plural = if stats.len() == 1 { "" } else { "s" };
     println!(
-        "worst: {worst} · stale threshold: {STALE_AGE_SECS}s ({} mirrors)",
+        "worst: {worst} · stale threshold: {STALE_AGE_SECS}s ({} mirror{plural}{filter_note})",
         stats.len()
     );
     Ok(exit_code_for(worst))
@@ -373,6 +407,38 @@ selfdef_m060_mirror_publish_total{artifact="audit.json",result="ok"} 17
         );
         let map = parse_m060_metrics(&body);
         assert_eq!(worst_state(&map), "ok");
+    }
+
+    #[test]
+    fn classify_handles_missing_artifact_signal() {
+        // When the filter targets a non-existent artifact, the
+        // classifier should never be called on it because we check
+        // contains_key first. This test asserts the BTreeMap contract:
+        // contains_key returns false on a key never inserted.
+        let body = "selfdef_m060_mirror_publish_total{artifact=\"grants.json\",result=\"ok\"} 1\n";
+        let map = parse_m060_metrics(body);
+        assert!(!map.contains_key("audit.json"));
+        assert!(map.contains_key("grants.json"));
+    }
+
+    #[test]
+    fn parse_preserves_btreemap_sort_order_for_deterministic_output() {
+        // Render output sorts by artifact name (BTreeMap). This test
+        // asserts the contract — operators eyeballing diffs across
+        // calls need stable ordering.
+        let body = "selfdef_m060_mirror_publish_total{artifact=\"trust-scores.json\",result=\"ok\"} 1\n\
+                    selfdef_m060_mirror_publish_total{artifact=\"audit.json\",result=\"ok\"} 1\n\
+                    selfdef_m060_mirror_publish_total{artifact=\"grants.json\",result=\"ok\"} 1\n";
+        let map = parse_m060_metrics(body);
+        let names: Vec<&String> = map.keys().collect();
+        assert_eq!(
+            names,
+            vec![
+                &"audit.json".to_string(),
+                &"grants.json".to_string(),
+                &"trust-scores.json".to_string(),
+            ]
+        );
     }
 
     #[test]
