@@ -299,7 +299,11 @@ Surfaces shared by all four watchdogs:
 - **HTTP API**: `/v1/<watchdog>{,/history,...}` (11 routes total)
 - **PWA dashboard**: 4 panels with auto-refresh + runbook links
 - **Grafana**: 9 panels + 15 Prometheus gauges (via selfdef-api/metrics)
-- **Sovereign-os cockpit**: 4 read-only typed-mirror crates
+- **Sovereign-os cockpit**: 11 read-only typed-mirror crates exported
+  by selfdefd's `mirror_export_loop` (D-02/D-12..D-18 + tui-layout +
+  cli-schema + m060-health) — see
+  [`docs/operator/m060-cockpit-mirror-producers.md`](docs/operator/m060-cockpit-mirror-producers.md)
+  for the operator wiring.
 - **Doctor**: `watchdog-set` category reports deployability
 - **Runbooks**: 20 total in the companion info-hub
   (`wiki/runbooks/{friction-audit,perimeter,guardian,scheduler}-*.md`)

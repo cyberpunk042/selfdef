@@ -164,6 +164,7 @@ One-page printable reference + per-feature deep dives:
 - [`rbac-posture.md`](docs/dev/rbac-posture.md) — k8s pod-label RBAC verification.
 - [`module-helpers.md`](docs/dev/module-helpers.md) — shared module-script library (`packaging/lib/module-lib.sh`).
 - [`test-contract.md`](docs/dev/test-contract.md) — what "integration-tested" means in this codebase.
+- [`m060-cockpit-mirror-producers.md`](docs/operator/m060-cockpit-mirror-producers.md) — selfdef-side **producer** wiring for the 11 cockpit mirrors consumed by sovereign-os (D-02/D-12..D-18 + tui-layout + cli-schema + m060-health). Resident-store paths, producer one-shots (cli-mirror-emit), per-artifact onboarding verbs, failure-mode crib sheet.
 
 For the 20 watchdog-failure-mode runbooks (5 per watchdog × 4 watchdogs)
 + the UX coherence failures runbook, see the companion info-hub repo's
