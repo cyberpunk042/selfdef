@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-grant-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Daemon-resident, persistent registry of issued grants — the live D-13 state the selfdef daemon projects into the selfdef-grants-mirror MS007 snapshot. Composes selfdef-grant-issuer (issuance) + selfdef-grants-mirror (wire schema). Per MS037/MS038/MS035 + R09175."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-grants-mirror = { path = "../selfdef-grants-mirror" }
+selfdef-grant-issuer = { path = "../selfdef-grant-issuer" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

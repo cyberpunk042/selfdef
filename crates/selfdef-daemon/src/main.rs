@@ -419,13 +419,15 @@ async fn main() -> Result<()> {
     } else {
         let mirror_dir = std::path::PathBuf::from(&cfg.deployment.selfdef_mirror_dir);
         let flex_path = std::path::PathBuf::from(selfdef_flex_profile::DEFAULT_STATE_PATH);
+        let grants_store = std::path::PathBuf::from(selfdef_grant_registry::DEFAULT_STATE_PATH);
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
-            "M060 D-02: mirror export enabled (active-profile, read-only)"
+            "M060: mirror export enabled (active-profile + grants, read-only)"
         );
         Some(tokio::spawn(async move {
-            mirror_export_loop::run_mirror_export_loop(mirror_dir, flex_path, sd).await
+            mirror_export_loop::run_mirror_export_loop(mirror_dir, flex_path, grants_store, sd)
+                .await
         }))
     };
 

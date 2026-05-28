@@ -3334,6 +3334,7 @@ dependencies = [
  "selfdef-ebpf-common",
  "selfdef-flex-profile",
  "selfdef-friction-audit",
+ "selfdef-grant-registry",
  "selfdef-guardian",
  "selfdef-hardware",
  "selfdef-integration-discord",
@@ -3361,8 +3362,10 @@ dependencies = [
  "selfdef-scheduler",
  "selfdef-signing",
  "selfdef-store",
+ "serde",
  "serde_json",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
@@ -4273,6 +4276,19 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-grant-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-grant-issuer",
+ "selfdef-grants-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]

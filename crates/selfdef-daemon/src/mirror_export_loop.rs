@@ -2,17 +2,23 @@
 //!
 //! When `[deployment].selfdef_mirror_dir` is set, the daemon publishes
 //! the MS007 typed-mirror artifacts READ-ONLY into that directory for
-//! the sovereign-os cockpit dashboards to render. This first increment
-//! publishes the active authority-profile snapshot
-//! (`active-profile.json`), projected from the live flex-profile state
-//! (MS011 Z-3 / SDD-026) + the MS040 authority envelope.
+//! the sovereign-os cockpit dashboards to render. Currently published:
+//!
+//! - **D-02 active-profile** (`active-profile.json`) — projected from
+//!   the live flex-profile state (MS011 Z-3 / SDD-026) + the MS040
+//!   authority envelope. Always published (the R09535 Private default
+//!   is the honest value when no flex-profile exists).
+//! - **D-13 grants** (`grants.json`) — the daemon-resident grant
+//!   registry (`selfdef-grant-registry`). Published ONLY when the
+//!   resident store exists, so the dashboard stays honestly offline
+//!   until a grant is provisioned rather than show empty-online state.
 //!
 //! Project boundary: this is IPS state published READ-ONLY. sovereign-os
-//! NEVER mutates it — profile switches are `selfdefctl` + MS003 verbs on
-//! this (IPS) side only (MS043 R10212). The other four mirror domains
-//! (grants/quarantine/capability/sandbox) are NOT published here: their
-//! registries are not yet daemon-resident, so their dashboards stay
-//! honestly offline rather than report fabricated empty-online state.
+//! NEVER mutates it — mutations are `selfdefctl` + MS003 verbs on this
+//! (IPS) side only (MS043 R10212). The remaining mirror domains
+//! (capability/sandbox/quarantine/trust) are NOT yet published: their
+//! registries are not daemon-resident yet, so those dashboards stay
+//! honestly offline (follow-on increments wire each one).
 //!
 //! The pure projection is in [`project_snapshot`] (no I/O, unit-tested
 //! in isolation). The loop does file I/O + tokio ticks + cooperates
@@ -22,8 +28,10 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use selfdef_flex_profile::FlexProfile;
+use selfdef_grant_registry::GrantRegistry;
 use selfdef_profile_authority_gate::Profile as GateProfile;
 use selfdef_profile_mirror::{Profile as MirrorProfile, ProfileMirrorSnapshot};
+use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
@@ -36,6 +44,10 @@ const MIRROR_EXPORT_INTERVAL_SECS: u64 = 30;
 /// with the sovereign-os consumer
 /// (`scripts/mirror/selfdef-profile-mirror.py`).
 const ACTIVE_PROFILE_FILE: &str = "active-profile.json";
+
+/// Published grants artifact filename, wire-stable with the sovereign-os
+/// D-13 consumer (`scripts/mirror/selfdef-grants-mirror.py`).
+const GRANTS_FILE: &str = "grants.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -95,25 +107,29 @@ fn read_flex_profile(path: &Path) -> Option<FlexProfile> {
     serde_json::from_str(&text).ok()
 }
 
-/// Atomically publish the snapshot to `dir/active-profile.json` via a
+/// Atomically publish a serializable value to `dir/filename` via a
 /// sibling tempfile + rename (same-dir rename is atomic on POSIX).
-fn write_snapshot_atomic(dir: &Path, snapshot: &ProfileMirrorSnapshot) -> std::io::Result<PathBuf> {
+fn write_json_atomic<T: serde::Serialize>(
+    dir: &Path,
+    filename: &str,
+    value: &T,
+) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let target = dir.join(ACTIVE_PROFILE_FILE);
-    let tmp = dir.join(".active-profile.json.tmp");
-    let body = serde_json::to_string_pretty(snapshot)
+    let target = dir.join(filename);
+    let tmp = dir.join(format!(".{filename}.tmp"));
+    let body = serde_json::to_string_pretty(value)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     std::fs::write(&tmp, body)?;
     std::fs::rename(&tmp, &target)?;
     Ok(target)
 }
 
-/// One publish pass: read live state, project, atomic-write. Best-effort
-/// — a write failure is logged + retried next tick, never fatal.
-fn publish_once(mirror_dir: &Path, flex_path: &Path) {
+/// Publish the active-profile mirror. Always published (the MS040 R09535
+/// default — Private — is the honest value when no flex-profile exists).
+fn publish_profile(mirror_dir: &Path, flex_path: &Path) {
     let flex = read_flex_profile(flex_path);
     let snapshot = project_snapshot(flex.as_ref());
-    match write_snapshot_atomic(mirror_dir, &snapshot) {
+    match write_json_atomic(mirror_dir, ACTIVE_PROFILE_FILE, &snapshot) {
         Ok(path) => debug!(
             path = %path.display(),
             active = snapshot.active.as_str(),
@@ -127,15 +143,64 @@ fn publish_once(mirror_dir: &Path, flex_path: &Path) {
     }
 }
 
-/// M060 D-02 mirror-export loop. Publishes once at startup, then every
-/// [`MIRROR_EXPORT_INTERVAL_SECS`], cooperating with the daemon shutdown
-/// signal (clean exit on cancel).
+/// Publish the D-13 grants mirror from the daemon-resident grant
+/// registry. Published ONLY when the resident store exists — an absent
+/// store means no grants registry has been provisioned, so the dashboard
+/// stays honestly offline rather than report a fabricated empty-online
+/// state. TTL expiry is applied at publish time (presentation-only; the
+/// resident store is read, never mutated, by the export).
+fn publish_grants(mirror_dir: &Path, grants_store: &Path, now: OffsetDateTime) {
+    if !grants_store.exists() {
+        return;
+    }
+    let mut registry = match GrantRegistry::load(grants_store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %grants_store.display(),
+                error = %e,
+                "mirror export: grants store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    // Presentation-time lifecycle hygiene so the mirror never shows a
+    // past-TTL grant as Active. In-memory only — selfdefctl owns the
+    // durable store.
+    let _ = registry.expire_due(now);
+    match write_json_atomic(mirror_dir, GRANTS_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            grants = registry.grants().len(),
+            active = registry.active_count(),
+            "mirror export: grants published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: grants write failed; will retry"
+        ),
+    }
+}
+
+/// One publish pass across every wired mirror domain. Best-effort —
+/// per-domain failures are logged + retried next tick, never fatal.
+fn publish_all(mirror_dir: &Path, flex_path: &Path, grants_store: &Path) {
+    let now = OffsetDateTime::now_utc();
+    publish_profile(mirror_dir, flex_path);
+    publish_grants(mirror_dir, grants_store, now);
+}
+
+/// M060 mirror-export loop (D-02 active-profile + D-13 grants). Publishes
+/// once at startup, then every [`MIRROR_EXPORT_INTERVAL_SECS`],
+/// cooperating with the daemon shutdown signal (clean exit on cancel).
 pub(crate) async fn run_mirror_export_loop(
     mirror_dir: PathBuf,
     flex_path: PathBuf,
+    grants_store: PathBuf,
     shutdown: CancellationToken,
 ) {
-    publish_once(&mirror_dir, &flex_path);
+    publish_all(&mirror_dir, &flex_path, &grants_store);
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Consume the immediate first tick — startup already published.
@@ -143,16 +208,17 @@ pub(crate) async fn run_mirror_export_loop(
     info!(
         mirror_dir = %mirror_dir.display(),
         flex_path = %flex_path.display(),
+        grants_store = %grants_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060 D-02: mirror-export loop running (active-profile, read-only)"
+        "M060: mirror-export loop running (active-profile + grants, read-only)"
     );
     loop {
         tokio::select! {
             () = shutdown.cancelled() => {
-                info!("M060 D-02: shutdown signalled; exiting mirror-export loop");
+                info!("M060: shutdown signalled; exiting mirror-export loop");
                 return;
             }
-            _ = tick.tick() => publish_once(&mirror_dir, &flex_path),
+            _ = tick.tick() => publish_all(&mirror_dir, &flex_path, &grants_store),
         }
     }
 }
@@ -222,13 +288,60 @@ mod tests {
     fn atomic_write_round_trips() {
         let dir = std::env::temp_dir().join(format!("selfdef-mirror-test-{}", std::process::id()));
         let snap = project_snapshot(Some(&flex_with_baseline("autonomous")));
-        let path = write_snapshot_atomic(&dir, &snap).unwrap();
+        let path = write_json_atomic(&dir, ACTIVE_PROFILE_FILE, &snap).unwrap();
         let body = std::fs::read_to_string(&path).unwrap();
         let back: ProfileMirrorSnapshot = serde_json::from_str(&body).unwrap();
         assert_eq!(back.active, MirrorProfile::Autonomous);
         back.validate_schema().unwrap();
         // No .tmp left behind.
         assert!(!dir.join(".active-profile.json.tmp").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_grants_skips_when_store_absent() {
+        let dir =
+            std::env::temp_dir().join(format!("selfdef-grants-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("grants.json");
+        publish_grants(&dir, &store, OffsetDateTime::now_utc());
+        // No resident store → no published mirror (honest offline).
+        assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_grants_writes_resident_registry() {
+        use selfdef_grant_registry::{
+            GrantKind, GrantRegistry, GrantRequest, GrantsMirrorSnapshot,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-grants-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("grants.json");
+        // Provision a resident registry with one active grant.
+        let mut reg = GrantRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let req = GrantRequest {
+            kind: GrantKind::Filesystem,
+            scope: "/workspace/**".into(),
+            reason: "author".into(),
+            profile: "careful".into(),
+            actor: "operator-fp".into(),
+            ttl_seconds: 3600,
+            signature: "sig".into(),
+        };
+        reg.issue(&req, "gr-1", "t1", now).unwrap();
+        reg.activate("gr-1", now).unwrap();
+        reg.save(&store).unwrap();
+
+        publish_grants(&dir, &store, now);
+        let published = dir.join(GRANTS_FILE);
+        assert!(published.exists(), "grants mirror must be published");
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: GrantsMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.grants.len(), 1);
+        assert_eq!(snap.grants[0].grant_id, "gr-1");
         std::fs::remove_dir_all(&dir).ok();
     }
 }
