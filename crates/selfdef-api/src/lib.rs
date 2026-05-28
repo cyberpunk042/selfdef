@@ -66,6 +66,7 @@ mod oracle_triage;
 mod perimeter;
 mod policy;
 mod quarantine;
+mod quarantine_registry;
 mod raid;
 mod repl;
 mod sandbox_registry;
@@ -75,6 +76,7 @@ mod state;
 mod storage;
 mod tool_authority;
 mod transport;
+mod trust_score_registry;
 mod trust_scores;
 pub mod watchdog_metrics;
 
@@ -361,6 +363,27 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/sandboxes/snapshot", get(sandbox_registry::snapshot))
         .route("/v1/sandboxes/allocate", post(sandbox_registry::allocate))
         .route("/v1/sandboxes/release", post(sandbox_registry::release))
+        // M060 D-17 — quarantine *live registry* surface. Sister to the
+        // existing schema-discovery GET /v1/quarantine. Daemon-populated
+        // by MS042 detection; operator surface is release/forfeit only.
+        .route(
+            "/v1/quarantine/snapshot",
+            get(quarantine_registry::snapshot),
+        )
+        .route("/v1/quarantine/release", post(quarantine_registry::release))
+        .route("/v1/quarantine/forfeit", post(quarantine_registry::forfeit))
+        // M060 D-18 — trust-scores *live registry* surface. Sister to
+        // the existing schema-discovery GET /v1/trust-scores. Operator
+        // surface is admit + signed manual-delta override.
+        .route(
+            "/v1/trust-scores/snapshot",
+            get(trust_score_registry::snapshot),
+        )
+        .route("/v1/trust-scores/admit", post(trust_score_registry::admit))
+        .route(
+            "/v1/trust-scores/operator-delta",
+            post(trust_score_registry::operator_delta),
+        )
         // MS043 UX — operator dashboard preferences persisted daemon-
         // side so view choices survive browser/host switches. GET
         // returns the current TOML (missing file → blank-valid body),
