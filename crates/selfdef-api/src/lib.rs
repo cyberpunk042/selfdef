@@ -69,6 +69,7 @@ mod quarantine;
 mod quarantine_registry;
 mod raid;
 mod repl;
+mod rules_registry;
 mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
@@ -372,6 +373,12 @@ pub fn router(state: ApiState) -> Router {
         )
         .route("/v1/quarantine/release", post(quarantine_registry::release))
         .route("/v1/quarantine/forfeit", post(quarantine_registry::forfeit))
+        // M060 D-12 — rules-mirror *live registry* surface. READ-ONLY:
+        // the daemon's rules_collector_loop populates the resident store
+        // from `nft -j list ruleset` every 30s; this handler projects
+        // the resident snapshot to the dashboard. Rule installation
+        // lives in `selfdefctl + nft` at the IPS layer (R10212).
+        .route("/v1/rules/snapshot", get(rules_registry::snapshot))
         // M060 D-18 — trust-scores *live registry* surface. Sister to
         // the existing schema-discovery GET /v1/trust-scores. Operator
         // surface is admit + signed manual-delta override.

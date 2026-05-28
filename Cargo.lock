@@ -2411,6 +2411,7 @@ dependencies = [
  "selfdef-perimeter-mirror",
  "selfdef-quarantine-registry",
  "selfdef-responder",
+ "selfdef-rules-registry",
  "selfdef-sandbox-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
