@@ -32,30 +32,57 @@ fi
 source "$_selfdef_lib"
 unset _selfdef_lib
 
-# Render the scrape config template by replacing the
-# __SELFDEF_SCRAPE_TARGETS__ marker line with one `- "host:port"`
-# entry per target in the CSV.
+# Render the scrape config template by partitioning the operator's
+# scrape_targets CSV into two job blocks based on PORT convention:
+#
+#   - port 2112 → __SELFDEF_TETRAGON_TARGETS__ block (no bearer)
+#   - port 8443 → __SELFDEF_DAEMON_TARGETS__ block (bearer-token)
+#   - any other port → emitted under the tetragon block by default
+#     (operator's call where to route; the tetragon job has no
+#     auth requirements so it's the safe fallback)
+#
+# The two-job split was introduced because the previous single-job
+# rendering put the daemon's authenticated endpoint into the no-
+# auth tetragon job, silently 401-ing every scrape of selfdefd
+# /metrics.
 #
 #   $1 — template path
 #   $2 — destination path
-#   $3 — CSV of scrape targets (e.g. "localhost:2112,otherhost:2112")
+#   $3 — CSV of scrape targets (e.g. "localhost:2112, localhost:8443")
 render_scrape_config() {
     local src="$1" dst="$2" csv="$3"
     [[ -z "$csv" ]] && die "scrape_targets is empty — refusing to render an empty scrape job"
-    local block="" t
+    local tetragon_block="" daemon_block="" t port
     IFS=',' read -ra targets <<<"$csv"
     for t in "${targets[@]}"; do
         t="${t## }"; t="${t%% }"
         [[ -z "$t" ]] && continue
-        block="${block}          - \"${t}\"\n"
+        port="${t##*:}"
+        case "$port" in
+            8443)
+                daemon_block="${daemon_block}          - \"${t}\"\n"
+                ;;
+            *)
+                # Tetragon-port (2112) AND any unconventional port land
+                # in the tetragon (no-auth) job by safe default. Operator
+                # routes auth-required endpoints to port 8443 explicitly.
+                tetragon_block="${tetragon_block}          - \"${t}\"\n"
+                ;;
+        esac
     done
-    # Drop the marker comment AND the literal default line beneath it,
-    # then splice the operator's targets in their place. Using `awk`
-    # so we can match multi-line context without sed flags varying
-    # across BSD/GNU.
-    awk -v block="${block%\\n}" '
-        /__SELFDEF_SCRAPE_TARGETS__/ { skip = 2; print block; next }
-        skip > 0                     { skip -= 1; next }
+    # Honesty: if the operator's CSV doesn't include a tetragon-shaped
+    # target, leave the block empty; Prometheus will skip the job. Same
+    # for the daemon block.
+    # awk: drop the marker line + ONE following line (the placeholder
+    # default target), then start printing again. The previous skip=2
+    # ate the `labels:` line too, breaking the YAML structure.
+    awk \
+        -v tetragon_block="${tetragon_block%\\n}" \
+        -v daemon_block="${daemon_block%\\n}" \
+        '
+        /__SELFDEF_TETRAGON_TARGETS__/ { skip = 1; if (tetragon_block != "") print tetragon_block; next }
+        /__SELFDEF_DAEMON_TARGETS__/   { skip = 1; if (daemon_block != "")   print daemon_block;   next }
+        skip > 0                       { skip -= 1; next }
         { print }
     ' "$src" > "$dst"
 }
