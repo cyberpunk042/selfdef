@@ -104,6 +104,16 @@ pub struct DeploymentConfig {
     /// agent-guard policies. Atomic tempfile+rename. Empty = disabled.
     /// Default: empty.
     pub hardware_capabilities_path: String,
+
+    /// M060 D-02 (R10063-R10068): when set, the daemon publishes the
+    /// MS007 cross-repo mirror artifacts READ-ONLY into this directory
+    /// for sovereign-os cockpit dashboards. The active authority-profile
+    /// snapshot (`active-profile.json`) is projected from the live
+    /// flex-profile state on a periodic timer + at startup. Atomic
+    /// tempfile+rename. Empty = disabled. Default: empty. Operators on a
+    /// co-located sovereign-os opt in by pointing at
+    /// `/run/sovereign-os/selfdef-mirror`.
+    pub selfdef_mirror_dir: String,
 }
 
 /// SD-R21: periodic hardware probe + thermal threshold config.
@@ -2468,6 +2478,32 @@ mod tests {
         assert_eq!(
             cfg.deployment.hardware_capabilities_path,
             "/var/lib/selfdef/hardware-capabilities.json"
+        );
+    }
+
+    /// M060 D-02: selfdef_mirror_dir defaults to empty (disabled).
+    #[test]
+    fn m060_selfdef_mirror_dir_defaults_empty() {
+        let cfg = Config::default();
+        assert!(cfg.deployment.selfdef_mirror_dir.is_empty());
+    }
+
+    /// M060 D-02: selfdef_mirror_dir TOML parse.
+    #[test]
+    fn m060_selfdef_mirror_dir_parses_from_toml() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            r#"
+            [deployment]
+            selfdef_mirror_dir = "/run/sovereign-os/selfdef-mirror"
+            "#,
+        )
+        .unwrap();
+        let cfg = Config::load(Some(tmp.path())).unwrap();
+        assert_eq!(
+            cfg.deployment.selfdef_mirror_dir,
+            "/run/sovereign-os/selfdef-mirror"
         );
     }
 

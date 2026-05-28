@@ -8,6 +8,7 @@
 
 mod dispatcher_adapter;
 mod hardware_probe_loop;
+mod mirror_export_loop;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -407,6 +408,25 @@ async fn main() -> Result<()> {
         }))
     } else {
         None
+    };
+
+    // M060 D-02 (R10063-R10068): cross-repo mirror export. Opt-in via
+    // [deployment].selfdef_mirror_dir. Publishes the active authority-
+    // profile snapshot READ-ONLY for the sovereign-os cockpit. Lives for
+    // the daemon's lifetime + observes the same shutdown signal.
+    let _mirror_export_task = if cfg.deployment.selfdef_mirror_dir.is_empty() {
+        None
+    } else {
+        let mirror_dir = std::path::PathBuf::from(&cfg.deployment.selfdef_mirror_dir);
+        let flex_path = std::path::PathBuf::from(selfdef_flex_profile::DEFAULT_STATE_PATH);
+        let sd = shutdown.clone();
+        info!(
+            mirror_dir = %mirror_dir.display(),
+            "M060 D-02: mirror export enabled (active-profile, read-only)"
+        );
+        Some(tokio::spawn(async move {
+            mirror_export_loop::run_mirror_export_loop(mirror_dir, flex_path, sd).await
+        }))
     };
 
     // ---- correlator ----

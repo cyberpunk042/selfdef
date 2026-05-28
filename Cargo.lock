@@ -3332,6 +3332,7 @@ dependencies = [
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-ebpf-common",
+ "selfdef-flex-profile",
  "selfdef-friction-audit",
  "selfdef-guardian",
  "selfdef-hardware",
@@ -3354,6 +3355,8 @@ dependencies = [
  "selfdef-notifier-engine",
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
+ "selfdef-profile-authority-gate",
+ "selfdef-profile-mirror",
  "selfdef-responder",
  "selfdef-scheduler",
  "selfdef-signing",
@@ -5802,6 +5805,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-profile-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
