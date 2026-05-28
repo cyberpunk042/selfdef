@@ -262,6 +262,348 @@ fn panel_name(k: PanelKind) -> &'static str {
     }
 }
 
+/// Canonical 4-panel layout per MS043 R10141 + F05081 + R10298. The
+/// `selfdef-cli` + `selfdef-daemon` crates both call this so the wire
+/// shape is one piece of code — no parallel hand-built layouts that
+/// could drift.
+///
+/// `tui_build_version` is the calling crate's CARGO_PKG_VERSION. The
+/// `captured_at` is the time the call is made (RFC-3339 UTC). The
+/// signature is left empty; daemon-side publishers fill it via the
+/// MS003 verify-only path (operators sign externally with minisign).
+#[must_use]
+pub fn canonical_snapshot(tui_build_version: &str, captured_at: &str) -> TuiMirrorSnapshot {
+    TuiMirrorSnapshot {
+        schema_version: SCHEMA_VERSION.into(),
+        tui_build_version: tui_build_version.to_string(),
+        doctrine: DOCTRINE_NO_VANITY_GRAPHS.into(),
+        captured_at: captured_at.to_string(),
+        panels: vec![
+            canonical_rules_panel(),
+            canonical_grants_panel(),
+            canonical_quarantine_panel(),
+            canonical_authority_panel(),
+        ],
+        global_keys: canonical_global_keys(),
+        signature: String::new(),
+    }
+}
+
+fn canonical_rules_panel() -> PanelEntry {
+    PanelEntry {
+        kind: PanelKind::Rules,
+        quadrant: Quadrant::TopLeft,
+        title: "Rules · Ring 0..4 · selfdef-rules-mirror".into(),
+        source_mirror: "selfdef-rules-mirror".into(),
+        columns: vec![
+            ColumnSpec {
+                header: "ring".into(),
+                field: "ring".into(),
+                width: 12,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "table".into(),
+                field: "table".into(),
+                width: 14,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "chain".into(),
+                field: "chain".into(),
+                width: 22,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "match".into(),
+                field: "match_expr".into(),
+                width: 0,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "dispo".into(),
+                field: "disposition".into(),
+                width: 8,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "packets".into(),
+                field: "packets".into(),
+                width: 10,
+                right_align: true,
+            },
+            ColumnSpec {
+                header: "bytes".into(),
+                field: "bytes".into(),
+                width: 12,
+                right_align: true,
+            },
+        ],
+        key_bindings: vec![
+            KeyBinding {
+                key: "j/k".into(),
+                action: "cursor down/up".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "Enter".into(),
+                action: "show full match_expr".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "/".into(),
+                action: "filter rules (search)".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "r".into(),
+                action: "filter by ring (0..4)".into(),
+                mutating: false,
+            },
+        ],
+        min_authority: "l0_observe".into(),
+        refresh_ms: 30_000,
+        signature: String::new(),
+    }
+}
+
+fn canonical_grants_panel() -> PanelEntry {
+    PanelEntry {
+        kind: PanelKind::Grants,
+        quadrant: Quadrant::TopRight,
+        title: "Grants · MS035 + MS037 + MS038 · selfdef-grants-mirror".into(),
+        source_mirror: "selfdef-grants-mirror".into(),
+        columns: vec![
+            ColumnSpec {
+                header: "grant_id".into(),
+                field: "grant_id".into(),
+                width: 14,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "kind".into(),
+                field: "kind".into(),
+                width: 12,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "scope".into(),
+                field: "scope".into(),
+                width: 0,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "actor".into(),
+                field: "actor".into(),
+                width: 14,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "state".into(),
+                field: "state".into(),
+                width: 10,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "expires".into(),
+                field: "expires_at".into(),
+                width: 20,
+                right_align: false,
+            },
+        ],
+        key_bindings: vec![
+            KeyBinding {
+                key: "j/k".into(),
+                action: "cursor down/up".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "i".into(),
+                action: "copy `selfdefctl grants issue ...`".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "r".into(),
+                action: "copy `selfdefctl grants revoke <id>`".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "Enter".into(),
+                action: "inspect grant detail".into(),
+                mutating: false,
+            },
+        ],
+        min_authority: "l0_observe".into(),
+        refresh_ms: 5_000,
+        signature: String::new(),
+    }
+}
+
+fn canonical_quarantine_panel() -> PanelEntry {
+    PanelEntry {
+        kind: PanelKind::Quarantine,
+        quadrant: Quadrant::BottomLeft,
+        title: "Quarantine · MS042 declaration-vs-observed · selfdef-quarantine-mirror".into(),
+        source_mirror: "selfdef-quarantine-mirror".into(),
+        columns: vec![
+            ColumnSpec {
+                header: "quarantine_id".into(),
+                field: "quarantine_id".into(),
+                width: 16,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "tool".into(),
+                field: "tool".into(),
+                width: 14,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "severity".into(),
+                field: "max_severity".into(),
+                width: 12,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "state".into(),
+                field: "state".into(),
+                width: 12,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "mismatches".into(),
+                field: "mismatches".into(),
+                width: 0,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "blocked".into(),
+                field: "blocked_at".into(),
+                width: 20,
+                right_align: false,
+            },
+        ],
+        key_bindings: vec![
+            KeyBinding {
+                key: "j/k".into(),
+                action: "cursor down/up".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "Enter".into(),
+                action: "show per-field mismatch detail".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "R".into(),
+                action: "copy `selfdefctl quarantine release <id> --confirm`".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "F".into(),
+                action: "copy `selfdefctl quarantine forfeit <id> --confirm`".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "T".into(),
+                action: "copy `selfdefctl quarantine trace <id>`".into(),
+                mutating: false,
+            },
+        ],
+        min_authority: "l0_observe".into(),
+        refresh_ms: 5_000,
+        signature: String::new(),
+    }
+}
+
+fn canonical_authority_panel() -> PanelEntry {
+    PanelEntry {
+        kind: PanelKind::Authority,
+        quadrant: Quadrant::BottomRight,
+        title: "Authority · MS039 L0..L6 + MS040 profile · selfdef-profile-mirror".into(),
+        source_mirror: "selfdef-profile-mirror".into(),
+        columns: vec![
+            ColumnSpec {
+                header: "field".into(),
+                field: "field".into(),
+                width: 20,
+                right_align: false,
+            },
+            ColumnSpec {
+                header: "value".into(),
+                field: "value".into(),
+                width: 0,
+                right_align: false,
+            },
+        ],
+        key_bindings: vec![
+            KeyBinding {
+                key: "j/k".into(),
+                action: "cursor down/up".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "p".into(),
+                action: "copy `selfdefctl flex-profile switch <name>`".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "h".into(),
+                action: "show transition history".into(),
+                mutating: false,
+            },
+            KeyBinding {
+                key: "Enter".into(),
+                action: "show full MS040 authority envelope (L0..L6)".into(),
+                mutating: false,
+            },
+        ],
+        min_authority: "l0_observe".into(),
+        refresh_ms: 30_000,
+        signature: String::new(),
+    }
+}
+
+fn canonical_global_keys() -> Vec<KeyBinding> {
+    vec![
+        KeyBinding {
+            key: "Tab".into(),
+            action: "focus next panel (clockwise)".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: "S-Tab".into(),
+            action: "focus prev panel (counter-CW)".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: "1..4".into(),
+            action: "focus panel by quadrant index".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: "?".into(),
+            action: "toggle help overlay".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: "q".into(),
+            action: "quit".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: "Ctrl-r".into(),
+            action: "force refresh all panels".into(),
+            mutating: false,
+        },
+        KeyBinding {
+            key: ":".into(),
+            action: "command palette (copies selfdefctl)".into(),
+            mutating: false,
+        },
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

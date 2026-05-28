@@ -61,6 +61,7 @@ use selfdef_quarantine_registry::QuarantineRegistry;
 use selfdef_rules_registry::RulesRegistry;
 use selfdef_sandbox_registry::SandboxRegistry;
 use selfdef_trust_score_registry::TrustScoreRegistry;
+use selfdef_tui_mirror::canonical_snapshot as canonical_tui_snapshot;
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -103,6 +104,11 @@ const AUDIT_FILE: &str = "audit.json";
 /// D-12 networking consumer (`scripts/mirror/selfdef-rules-mirror.py`
 /// when shipped).
 const RULES_FILE: &str = "rules.json";
+
+/// Published TUI-mirror artifact filename — the canonical 4-panel
+/// schema per MS043 R10141 + F05081, consumed by the sovereign-os
+/// minimal-web mirroring path (R10170 "same 4-panel layout as TUI").
+const TUI_FILE: &str = "tui.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -375,6 +381,30 @@ fn publish_audit(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
     }
 }
 
+/// Publish the canonical 4-panel TUI mirror per MS043 R10141 / F05081
+/// / R10298 ("a dashboard should not show vanity graphs"). This is a
+/// STATIC-SHAPE snapshot — the layout is fixed by doctrine. Always
+/// publish (no resident-store gate); the captured_at refreshes each
+/// tick so the consumer can detect a live mirror-export loop.
+fn publish_tui(mirror_dir: &Path, now: OffsetDateTime) {
+    let captured_at = now
+        .format(&time::format_description::well_known::Rfc3339)
+        .unwrap_or_else(|_| "1970-01-01T00:00:00Z".into());
+    let snap = canonical_tui_snapshot(env!("CARGO_PKG_VERSION"), &captured_at);
+    match write_json_atomic(mirror_dir, TUI_FILE, &snap) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            panels = snap.panels.len(),
+            "mirror export: tui published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: tui write failed; will retry"
+        ),
+    }
+}
+
 /// Publish the D-12 rules mirror from the daemon-resident nftables
 /// rule registry. Same honesty bar: only published when the resident
 /// store exists. Daemon-populated by the nft collector loop; the
@@ -463,6 +493,7 @@ fn publish_all(
     publish_trust_scores(mirror_dir, trust_scores_store, now);
     publish_audit(mirror_dir, audit_store, now);
     publish_rules(mirror_dir, rules_store, now);
+    publish_tui(mirror_dir, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
@@ -508,7 +539,7 @@ pub(crate) async fn run_mirror_export_loop(
         audit_store = %audit_store.display(),
         rules_store = %rules_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules, read-only) — 7/9 mirror domains wired (D-02/12/13/14/15/16/17/18)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules + tui, read-only) — 9/10 mirror domains wired (D-02/12/13/14/15/16/17/18 + tui-layout schema)"
     );
     loop {
         tokio::select! {
@@ -667,6 +698,30 @@ mod tests {
         snap.validate_schema().unwrap();
         assert_eq!(snap.spans.len(), 1);
         assert_eq!(snap.spans[0].trace_id, "t1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_tui_always_writes_canonical_4_panel_snapshot() {
+        use selfdef_tui_mirror::{PanelKind, TuiMirrorSnapshot};
+        let dir = std::env::temp_dir().join(format!("selfdef-tui-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        publish_tui(&dir, now);
+        let published = dir.join(TUI_FILE);
+        assert!(
+            published.exists(),
+            "tui mirror must always publish (static shape)"
+        );
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: TuiMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        snap.validate_doctrine().unwrap();
+        snap.validate_layout().unwrap();
+        assert_eq!(snap.panels.len(), 4);
+        let kinds: Vec<PanelKind> = snap.panels.iter().map(|p| p.kind).collect();
+        assert!(kinds.contains(&PanelKind::Rules));
+        assert!(kinds.contains(&PanelKind::Authority));
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -3403,6 +3403,7 @@ dependencies = [
  "selfdef-signing",
  "selfdef-store",
  "selfdef-trust-score-registry",
+ "selfdef-tui-mirror",
  "serde",
  "serde_json",
  "tempfile",
