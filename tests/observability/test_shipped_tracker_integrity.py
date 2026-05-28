@@ -103,3 +103,60 @@ def test_catalog_total_matches_index_md():
     # Both must reference 11,520 (selfdef catalogue total).
     assert "11,520" in index_text, "INDEX.md changed its catalogue total"
     assert "11,520" in text, "SHIPPED.md catalogue total drifted from INDEX.md"
+
+
+def test_referenced_crates_exist():
+    """Every `crates/<name>` path referenced in SHIPPED.md must
+    correspond to a real workspace member. Drift here means SHIPPED.md
+    is claiming production-shipped state that doesn't exist."""
+    text = _shipped_text()
+    # Match `crates/<name>` or `crates/<name>/`. Excludes Cargo.toml
+    # paths and src subpaths — only top-level crate-dir mentions.
+    crate_pattern = re.compile(r"`crates/(selfdef-[a-z0-9-]+)(?:/[^`]*)?`")
+    crates = {m.group(1) for m in crate_pattern.finditer(text)}
+    crates_dir = REPO_ROOT / "crates"
+    if not crates_dir.is_dir():
+        return  # test env
+    available = {p.name for p in crates_dir.iterdir() if p.is_dir()}
+    missing = sorted(crates - available)
+    assert not missing, (
+        f"SHIPPED.md references crates that don't exist: {missing}"
+    )
+
+
+def test_referenced_modules_exist():
+    """Every `modules/<name>` path referenced in SHIPPED.md must
+    correspond to a real module dir."""
+    text = _shipped_text()
+    mod_pattern = re.compile(r"`modules/([a-z0-9-]+)(?:/[^`]*)?`")
+    mods = {m.group(1) for m in mod_pattern.finditer(text)}
+    modules_dir = REPO_ROOT / "modules"
+    if not modules_dir.is_dir():
+        return
+    available = {p.name for p in modules_dir.iterdir() if p.is_dir()}
+    missing = sorted(mods - available)
+    assert not missing, (
+        f"SHIPPED.md references modules that don't exist: {missing}"
+    )
+
+
+def test_referenced_packaging_paths_exist():
+    """Every `packaging/<path>` referenced must exist on disk."""
+    text = _shipped_text()
+    pkg_pattern = re.compile(r"`(packaging/[\w/\-.]+)`")
+    paths = {m.group(1) for m in pkg_pattern.finditer(text)}
+    missing = sorted(p for p in paths if not (REPO_ROOT / p).exists())
+    assert not missing, (
+        f"SHIPPED.md references packaging paths that don't exist: {missing}"
+    )
+
+
+def test_referenced_sdd_docs_exist():
+    """Every `docs/sdd/<name>` path referenced must exist on disk."""
+    text = _shipped_text()
+    sdd_pattern = re.compile(r"`(docs/sdd/[\w\-]+\.md)`")
+    paths = {m.group(1) for m in sdd_pattern.finditer(text)}
+    missing = sorted(p for p in paths if not (REPO_ROOT / p).exists())
+    assert not missing, (
+        f"SHIPPED.md references SDD docs that don't exist: {missing}"
+    )

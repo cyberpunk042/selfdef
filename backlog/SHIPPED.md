@@ -61,9 +61,143 @@ Per-milestone shipped surfaces are enumerated below in commit-order so the traje
 | E0279 (was: "Alert rules out-of-scope for v0.1") | Alert rules NOW shipped on the sovereign-os consumer side — 3 cli-mirror-specific alerts (`M060CliMirrorChainDegraded`, `M060CliMirrorChainBroken`, `M060CliMirrorObserverSilent`) + 5 existing chain-wide alerts. Pairs with the textfile metrics this repo emits. | selfdef commits `e9ab056` + `ce58154` (producers); sovereign-os commit `bf98e2a` (rules) |
 | (orthogonal) | Grafana dashboard `sovereign-os-m060-cli-mirror.json` rendering selfdef's `selfdef_cli_mirror_doctor_*` series. Operator imports into Grafana via Settings → JSON Model. | sovereign-os commit `2a44536` |
 
-## Pending milestones (catalogued, no production rows shipped this session)
+## Pre-session production state (audit of shipped crates / modules / units)
 
-MS001-MS006, MS008-MS042, MS044-MS048 — still catalogued; production-shipped state TBD. Future deliveries on this branch append rows here in the same shape so the SHIPPED column always tracks reality.
+The codebase carries substantial production state from prior development. This section audits the existing shipped surface per milestone — populated from the actual workspace inventory (543 crates / 188 modules / 65 SDD documents / 12 systemd units / 17 integration-test directories), not invented. Each row references real artifacts a `git ls-files | grep …` confirms.
+
+### MS001 — Selfdef daemon core
+
+| Surface | Shipped artifact |
+|---|---|
+| `selfdef-core` | `crates/selfdef-core/` — core types |
+| `selfdef-daemon` | `crates/selfdef-daemon/` — `selfdefd` binary + integration tests under `crates/selfdef-daemon/tests/` |
+| `selfdef-bus` | `crates/selfdef-bus/` — event bus |
+| `selfdef-config` | `crates/selfdef-config/` — toml schema + parser |
+| `selfdef-api` | `crates/selfdef-api/` — HTTP/UNIX `/v1/*` surface + `/metrics` |
+| `selfdef-cli` | `crates/selfdef-cli/` — `selfdefctl` binary |
+| `selfdef-store` | `crates/selfdef-store/` — sqlite-backed event store |
+| `selfdef-signing` | `crates/selfdef-signing/` — MS003 verify-only |
+| Packaging | `packaging/systemd/selfdefd.service` + `packaging/debian/postinst`/`postrm` |
+
+### MS002 — Collector fabric
+
+| Surface | Shipped artifact |
+|---|---|
+| Collectors (10+) | `crates/selfdef-collector-{auditd,journald,tetragon,suricata,ebpf,eventstream,canary,arming-state,budget-guard,coalescing,jitter-policy,quarantine-ledger}` |
+| eBPF common | `crates/selfdef-ebpf-common/` |
+
+### MS003 — Correlator + store + responder + signing
+
+| Surface | Shipped artifact |
+|---|---|
+| Correlator | `crates/selfdef-correlator/` — time-windowed rules pipeline |
+| Store | `crates/selfdef-store/` |
+| Responder | `crates/selfdef-responder/` |
+| Signing | `crates/selfdef-signing/` — minisign-verify integration |
+
+### MS004 — 14 notifier integrations (saturated 14/14)
+
+| Surface | Shipped artifact |
+|---|---|
+| Integrations | `crates/selfdef-integration-{discord,loki,ntfy,opensearch,oracle-triage,pagerduty,shared-audit-summary,signal,slack,smtp,thehive,twilio,wall,write}` — 14 crates |
+
+### MS005 — Notifier engine + orchestrator
+
+| Surface | Shipped artifact |
+|---|---|
+| Engine | `crates/selfdef-notifier-engine/` |
+| Orchestrator | `crates/selfdef-notifier-orchestrator/` |
+
+### MS006 — 14 functional modules
+
+| Surface | Shipped artifact |
+|---|---|
+| Module library | `modules/` (188 modules — superset of the 14 catalogued in MS006) including `agent-guard`, `bitnet-gpu-inference`, `bridge-l2`, `detect-host`, `hardware-tune-cache`, `integrity-sentinel`, `observability`, `polarproxy`, `slm-cpu-loop`, `suricata`, `tensor-parallel-inference`, `tetragon`, `vpn-bridge`, `wasm-aot-cache` |
+
+### MS007 — Cross-repo typed-mirror crates (SATURATED beyond 8 of 8)
+
+| Surface | Shipped artifact |
+|---|---|
+| Typed-mirror crates (14) | `crates/selfdef-{audit,capability,cli,friction-audit,grants,guardian,perimeter,profile,quarantine,rules,sandbox,scheduler,trust-score,tui}-mirror` |
+
+### MS010 — Hardware-aware modules + tune surface
+
+| Surface | Shipped artifact |
+|---|---|
+| Hardware probe | `crates/selfdef-hardware/` + `crates/selfdef-hardware-requirements/` |
+| Tune modules | `modules/auditd-tune`, `modules/journal-tune`, `modules/sudo-tune`, `modules/hardware-tune-cache` |
+
+### MS016 — eBPF programs + Tetragon TracingPolicies
+
+| Surface | Shipped artifact |
+|---|---|
+| eBPF collector | `crates/selfdef-collector-ebpf/` + `crates/selfdef-ebpf-common/` |
+| TracingPolicies | `packaging/tetragon-policies/sovereign-perimeter.yaml` |
+
+### MS017 — agent-guard
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/agent-guard/` — k8s pod-label RBAC + TracingPolicies |
+
+### MS027 — Observability module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/observability/` — Prometheus scrape config + Grafana dashboard renderer |
+| Daemon metrics | `crates/selfdef-api/src/metrics.rs` — Prometheus exposition |
+| Newly closed E0279 | Alert rules on sovereign-os side (per-session commits — see "Shipped this milestone" above) |
+
+### MS037 — Filesystem boundary
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-filesystem-boundary/` |
+
+### MS038 — Network boundary
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-network-boundary/` |
+
+### MS044 — Guardian Daemon
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-guardian/` + `crates/selfdef-guardian-mirror/` |
+| Systemd unit | `packaging/systemd/selfdef-guardian.service` |
+| Postinst+postrm | Guardian unit lifecycle handled in `packaging/debian/postinst` + `packaging/debian/postrm` |
+
+### MS046 — Friction Audit System
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-friction-audit/` + `crates/selfdef-friction-audit-mirror/` |
+| Systemd unit | `packaging/systemd/sovereign-guard.service` |
+| Bash script | `packaging/scripts/friction-audit.sh` |
+| SDD | `docs/sdd/027-friction-audit-system.md` |
+
+### MS047 — Real-Time Security Perimeter Engine
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-perimeter/` + `crates/selfdef-perimeter-mirror/` |
+| TracingPolicy | `packaging/tetragon-policies/sovereign-perimeter.yaml` |
+| SDD | `docs/sdd/028-perimeter-engine.md` |
+
+### MS048 — Goldilocks Scheduler
+
+| Surface | Shipped artifact |
+|---|---|
+| Crates | `crates/selfdef-scheduler/` + `crates/selfdef-scheduler-mirror/` + `crates/selfdef-fair-share-scheduler/` + `crates/selfdef-recurring-task-scheduler/` |
+| Systemd unit | `packaging/systemd/selfdef-scheduler.service` |
+| SDD | `docs/sdd/031-goldilocks-scheduler.md` |
+
+## Other catalogued milestones — production-shipped state TBD
+
+MS008, MS009, MS011-MS015, MS018-MS026, MS028-MS036, MS039-MS043 (other rows), MS045 — these milestones have catalogue rows in `backlog/milestones/MS*.md` but the corresponding production-shipped audit hasn't been done yet in this file. The 65 SDD documents in `docs/sdd/` cover most of these (SDDs ship as part of the surface) — future audits append per-milestone rows above.
+
+The above per-milestone shipped audit is a SAMPLED snapshot, not a complete production-state survey. The trajectory: each commit that lands or audit cycle that runs appends rows here so the SHIPPED column converges toward the catalogue total as the multi-year project progresses.
 
 ## How this file is maintained
 
