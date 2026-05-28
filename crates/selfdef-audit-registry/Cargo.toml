@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-audit-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Daemon-resident, persistent registry of MS016 audit chain spans — the live D-16 state the selfdef daemon projects into the selfdef-audit-mirror MS007 snapshot. Composes selfdef-audit-mirror (wire schema) with daemon-populated append_span (SHA-256 chain) + integrity check + bounded-tail spans list."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-audit-mirror = { path = "../selfdef-audit-mirror" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
