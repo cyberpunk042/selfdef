@@ -27,6 +27,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod nft_parser;
+
 use std::path::Path;
 
 use thiserror::Error;

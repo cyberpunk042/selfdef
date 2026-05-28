@@ -9,6 +9,7 @@
 mod dispatcher_adapter;
 mod hardware_probe_loop;
 mod mirror_export_loop;
+mod rules_collector_loop;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -456,6 +457,19 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| {
                 std::path::PathBuf::from(selfdef_rules_registry::DEFAULT_STATE_PATH)
             });
+        let rules_collector_store = rules_store.clone();
+        let rules_collector_shutdown = shutdown.clone();
+        // M060 D-12: poll `nft -j list ruleset` on its own cadence and
+        // persist into the resident rules registry. Decoupled from the
+        // mirror-export loop so a slow nft call cannot stall the other
+        // 7 mirror domains. The export loop reads the registry file.
+        tokio::spawn(async move {
+            rules_collector_loop::run_rules_collector_loop(
+                rules_collector_store,
+                rules_collector_shutdown,
+            )
+            .await
+        });
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
