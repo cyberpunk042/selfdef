@@ -11,6 +11,7 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
+mod capability_tokens_registry;
 mod commit_authority;
 mod communication_boundary;
 mod dashboard_prefs;
@@ -837,6 +838,54 @@ enum CapabilityTokensAction {
     /// Print the full SDD-044 schema (Token shape + companion
     /// crates + caller contract + refusal rules).
     Schema,
+    /// Read the live daemon-resident token snapshot via
+    /// GET /v1/capability-tokens/snapshot.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Issue an operator-signed MS035 capability token via
+    /// POST /v1/capability-tokens/issue.
+    Issue {
+        /// Active profile at issuance time (MS040).
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Allowed tool tokens (repeat the flag; e.g.
+        /// `--tool tests --tool builds`).
+        #[arg(long = "tool", required = true)]
+        tools: Vec<String>,
+        /// MS039 trust ring: ring0|ring1|ring2|ring3|ring4.
+        #[arg(long)]
+        trust_ring: String,
+        /// MS039 authority level: l0_observe|l1_suggest|l2_simulate|
+        /// l3_prepare|l4_execute|l5_commit|l6_persist.
+        #[arg(long)]
+        authority_level: String,
+        /// MS036 sandbox tier: A|B|C|D.
+        #[arg(long)]
+        sandbox_tier: String,
+        /// Parent token id for F04146 inheritance (empty = root).
+        #[arg(long, default_value = "")]
+        parent_token_id: String,
+        /// TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature over the request (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revoke a capability token by id via POST /v1/capability-tokens/revoke.
+    Revoke {
+        /// Capability-token id to revoke.
+        token_id: String,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -2073,6 +2122,37 @@ async fn main() -> Result<()> {
             let exit = match action {
                 CapabilityTokensAction::Verdicts => capability_tokens::run_verdicts()?,
                 CapabilityTokensAction::Schema => capability_tokens::run_schema()?,
+                CapabilityTokensAction::Show { json } => {
+                    capability_tokens_registry::run_show(json).context("capability-tokens show")?
+                }
+                CapabilityTokensAction::Issue {
+                    profile,
+                    actor,
+                    tools,
+                    trust_ring,
+                    authority_level,
+                    sandbox_tier,
+                    parent_token_id,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => capability_tokens_registry::run_issue(
+                    &actor,
+                    &profile,
+                    &tools,
+                    &trust_ring,
+                    &authority_level,
+                    &sandbox_tier,
+                    &parent_token_id,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("capability-tokens issue")?,
+                CapabilityTokensAction::Revoke { token_id } => {
+                    capability_tokens_registry::run_revoke(&token_id)
+                        .context("capability-tokens revoke")?
+                }
             };
             std::process::exit(exit);
         }

@@ -38,6 +38,7 @@
 mod alerts;
 mod audit_chains;
 mod authority;
+mod capability_token_registry;
 mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
@@ -335,6 +336,23 @@ pub fn router(state: ApiState) -> Router {
         .route("/v1/grants", get(grants::show))
         .route("/v1/grants/issue", post(grants::issue))
         .route("/v1/grants/revoke", post(grants::revoke))
+        // M060 D-14 — capability-tokens *live registry* surface. Sister
+        // to the existing GET /v1/capability-tokens schema-discovery
+        // route (which stays as the static doctrine surface). These three
+        // serve + mutate the daemon-resident token registry the
+        // mirror-export loop republishes for sovereign-os.
+        .route(
+            "/v1/capability-tokens/snapshot",
+            get(capability_token_registry::snapshot),
+        )
+        .route(
+            "/v1/capability-tokens/issue",
+            post(capability_token_registry::issue),
+        )
+        .route(
+            "/v1/capability-tokens/revoke",
+            post(capability_token_registry::revoke),
+        )
         // MS043 UX — operator dashboard preferences persisted daemon-
         // side so view choices survive browser/host switches. GET
         // returns the current TOML (missing file → blank-valid body),

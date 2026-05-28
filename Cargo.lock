@@ -2393,6 +2393,7 @@ dependencies = [
  "rustls-pki-types",
  "selfdef-api",
  "selfdef-bus",
+ "selfdef-capability-registry",
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-flex-profile",
