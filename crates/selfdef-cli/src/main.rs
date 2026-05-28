@@ -49,6 +49,7 @@ mod ssh_wrap;
 mod tool_authority;
 mod trio;
 mod trust_score_registry;
+mod tui_mirror_builder;
 mod wizard;
 
 use std::path::PathBuf;
@@ -449,6 +450,16 @@ enum Command {
     CliMirror {
         #[command(subcommand)]
         action: CliMirrorAction,
+    },
+    /// MS007 typed-mirror crate `selfdef-tui-mirror` — canonical
+    /// 4-panel TUI layout per MS043 R10141 + F05081 + R10298 ("a
+    /// dashboard should not show vanity graphs"). Used by
+    /// sovereign-os minimal-web mirroring (R10170 "same 4-panel
+    /// layout as TUI"). Panels: rules / grants / quarantine /
+    /// authority — adding panels is forbidden by doctrine.
+    TuiMirror {
+        #[command(subcommand)]
+        action: TuiMirrorAction,
     },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
@@ -982,6 +993,22 @@ enum CliMirrorAction {
     /// Diagnostic / Simulate / Prepare / Execute / Commit / Persist /
     /// Destructive).
     Summaries {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum TuiMirrorAction {
+    /// Emit the canonical 4-panel TuiMirrorSnapshot 1.0.0 (JSON).
+    Snapshot {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-panel descriptors only (no global keys / no doctrine wrap).
+    Panels {
         /// Pass through JSON.
         #[arg(long)]
         json: bool,
@@ -2532,6 +2559,18 @@ async fn main() -> Result<()> {
                 }
                 CliMirrorAction::Summaries { json: _ } => {
                     println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
+                }
+            }
+        }
+        Command::TuiMirror { action } => {
+            // Canonical 4-panel layout — fixed shape per R10141.
+            let snap = tui_mirror_builder::build_snapshot();
+            match action {
+                TuiMirrorAction::Snapshot { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap)?);
+                }
+                TuiMirrorAction::Panels { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap.panels)?);
                 }
             }
         }

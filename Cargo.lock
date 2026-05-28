@@ -2872,6 +2872,7 @@ dependencies = [
  "selfdef-signing",
  "selfdef-store",
  "selfdef-tool-capability-policy",
+ "selfdef-tui-mirror",
  "serde",
  "serde_json",
  "serde_yaml_ng",

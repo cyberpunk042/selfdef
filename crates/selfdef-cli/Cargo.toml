@@ -45,6 +45,7 @@ selfdef-scheduler-mirror = { workspace = true }
 selfdef-scheduler = { workspace = true }
 selfdef-rules-registry = { workspace = true }
 selfdef-cli-mirror = { workspace = true }
+selfdef-tui-mirror = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
