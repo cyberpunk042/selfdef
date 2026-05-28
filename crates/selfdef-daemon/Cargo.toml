@@ -56,6 +56,7 @@ selfdef-trust-score-registry = { workspace = true }
 selfdef-audit-registry = { workspace = true }
 selfdef-rules-registry = { workspace = true }
 selfdef-tui-mirror = { workspace = true }
+selfdef-cli-mirror = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }

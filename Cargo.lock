@@ -3359,6 +3359,7 @@ dependencies = [
  "selfdef-audit-registry",
  "selfdef-bus",
  "selfdef-capability-registry",
+ "selfdef-cli-mirror",
  "selfdef-collector-auditd",
  "selfdef-collector-canary",
  "selfdef-collector-ebpf",

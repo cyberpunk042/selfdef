@@ -18,6 +18,8 @@
 //! subcommand registration. Consumers MUST NOT synthesize invocations
 //! beyond the published schema.
 
+use std::path::Path;
+
 use clap::{Arg, ArgAction, Command};
 use selfdef_cli_mirror::{
     ArgKind, ArgSpec, CliMirrorSnapshot, DOCTRINE_FULLSTACK_AT_THE_EDGES, EffectClass,
@@ -25,6 +27,25 @@ use selfdef_cli_mirror::{
 };
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
+
+/// Atomic write helper — same tempfile + rename pattern every other
+/// M060 producer registry uses. POSIX rename is atomic on the same
+/// filesystem; the temp filename includes the PID so concurrent
+/// emitters don't clobber each other.
+///
+/// # Errors
+/// Propagates I/O failures (parent missing+uncreatable, write failure,
+/// rename failure) and serde failures from canonical JSON encoding.
+pub(crate) fn write_atomic(snap: &CliMirrorSnapshot, path: &Path) -> std::io::Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(".cli-mirror.json.tmp.{}", std::process::id()));
+    let bytes = serde_json::to_vec_pretty(snap)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    std::fs::write(&tmp, &bytes)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
 
 /// Build the CliMirrorSnapshot from a live clap App. The caller is
 /// expected to pass the same `Command` the binary was built with so

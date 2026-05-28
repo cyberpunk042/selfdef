@@ -1003,11 +1003,22 @@ enum TrustScoresAction {
 
 #[derive(Debug, clap::Subcommand)]
 enum CliMirrorAction {
-    /// Emit the full CliMirrorSnapshot 1.0.0 to stdout (JSON).
+    /// Emit the full CliMirrorSnapshot 1.0.0 to stdout (JSON) — or to
+    /// `--output PATH` atomically. The optional output mode is the
+    /// producer hook for the M060 cockpit chain: a systemd one-shot
+    /// (or operator-driven post-upgrade hook) writes the snapshot to
+    /// the daemon-resident store at SELFDEF_CLI_MIRROR_PATH (default
+    /// `/var/lib/selfdef/cli-mirror.json`), and the daemon's M060
+    /// export loop republishes it READ-ONLY to the sovereign-os
+    /// mirror dir for D-19/D-XX CLI-introspection cockpits.
     Snapshot {
         /// Pass through JSON (default; here for parity with sister verbs).
         #[arg(long)]
         json: bool,
+        /// Optional destination path. When set, the file is written
+        /// atomically (tempfile + rename) instead of stdout.
+        #[arg(long, value_name = "PATH")]
+        output: Option<PathBuf>,
     },
     /// Per-effect-class summary tiles (count per ReadOnly /
     /// Diagnostic / Simulate / Prepare / Execute / Commit / Persist /
@@ -2576,11 +2587,21 @@ async fn main() -> Result<()> {
             use clap::CommandFactory;
             let app = Cli::command();
             let snap = cli_mirror_builder::build_snapshot(&app);
-            let _ = action; // both verbs emit JSON; differ only in payload shape
             match action {
-                CliMirrorAction::Snapshot { json: _ } => {
-                    println!("{}", serde_json::to_string_pretty(&snap)?);
-                }
+                CliMirrorAction::Snapshot { json: _, output } => match output {
+                    None => {
+                        println!("{}", serde_json::to_string_pretty(&snap)?);
+                    }
+                    Some(path) => {
+                        cli_mirror_builder::write_atomic(&snap, &path)
+                            .context("cli-mirror snapshot atomic write")?;
+                        eprintln!(
+                            "cli-mirror snapshot written atomically to {} ({} subcommands)",
+                            path.display(),
+                            snap.subcommands.len()
+                        );
+                    }
+                },
                 CliMirrorAction::Summaries { json: _ } => {
                     println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
                 }
