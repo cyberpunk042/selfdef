@@ -122,10 +122,13 @@ Extend the dashboard by editing
 the file is template-rendered each time so your edits to the
 checked-in template propagate.
 
-## Alert rules (MS027 four-watchdog set)
+## Alert rules
 
-`assets/alerts/selfdef.yml.template` ships 9 Prometheus alert rules
-covering the four-watchdog set (MS046 + MS047 + MS044 + MS048):
+`assets/alerts/selfdef.yml.template` ships 15 Prometheus alert rules
+across 3 groups: the MS027 four-watchdog set, the M060 cross-repo
+mirror-export loop, and the SDD-062 detection-watchdog finding stream.
+
+### MS027 four-watchdog set (MS046 + MS047 + MS044 + MS048)
 
 | Severity | Alert | Triggers when |
 |---|---|---|
@@ -138,13 +141,37 @@ covering the four-watchdog set (MS046 + MS047 + MS044 + MS048):
 | critical | SelfdefGuardianChainBroken | OCSF audit chain integrity broken |
 | warning | SelfdefSchedulerSustainedBackpressure | resource pressure sustained 10m |
 | critical | SelfdefSchedulerChainBroken | scheduler audit chain integrity broken |
+| warning | SelfdefStorageMountYellow | MS011 mount used 70-89% sustained 5m |
+| critical | SelfdefStorageMountRed | MS011 mount used >=90% sustained 1m |
+
+### M060 cross-repo mirror-export loop
+
+| Severity | Alert | Triggers when |
+|---|---|---|
+| warning | SelfdefM060PublishFailing | any artifact has a failed publish in last 5m |
+| warning | SelfdefM060PublishStale | per-artifact: last publish > 10 min ago |
+| critical | SelfdefM060PublishWedged | per-artifact: > 5 failures in 30m (persistent) |
+
+### SDD-062 detection-watchdog routed findings
+
+| Severity | Alert | Triggers when |
+|---|---|---|
+| warning | SelfdefWatchdogAlertFinding | a host watchdog emitted an alert-tier finding in 10m |
 
 Every alert carries `runbook_url` pointing at the matching
-remediation procedure in
-`~/devops-solutions-information-hub/wiki/runbooks/` (one of the
-20 operator runbooks shipped with the IPS spine). Operators using
-ntfy/pagerduty/signal as Alertmanager receivers get clickable links
-into the exact remediation.
+remediation procedure. The four-watchdog + detection-watchdog alerts
+link to `~/devops-solutions-information-hub/wiki/runbooks/` (one of
+the 20 operator runbooks shipped with the IPS spine). The M060
+alerts link to
+`https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting`
+where each M060 alert has a dedicated `####` runbook section
+(diagnosis + fix). Operators using ntfy/pagerduty/signal as
+Alertmanager receivers get clickable links into the exact remediation.
+
+The Grafana dashboard ships a matching "M060 cross-repo mirror export"
+row with 6 panels visualizing the per-artifact publish counters +
+last-publish-time gauges that back the M060 alerts. See
+`assets/dashboards/selfdef.json.template` panels 120-126.
 
 Deployment is automatic: `apply.sh` renders + installs the alert
 rules alongside the scrape config + Grafana dashboard. In the
