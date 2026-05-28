@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod cli_mirror_publisher;
 mod dispatcher_adapter;
 mod hardware_probe_loop;
 mod mirror_export_loop;

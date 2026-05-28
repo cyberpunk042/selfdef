@@ -524,6 +524,10 @@ pub(crate) async fn run_mirror_export_loop(
         &audit_store,
         &rules_store,
     );
+    // MS007 cli-mirror is async (shells out to selfdefctl) — published
+    // alongside the sync mirrors but on the async path. First call
+    // primes the cache; subsequent ticks write the cached buffer.
+    crate::cli_mirror_publisher::publish_cli(&mirror_dir).await;
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Consume the immediate first tick — startup already published.
@@ -539,7 +543,7 @@ pub(crate) async fn run_mirror_export_loop(
         audit_store = %audit_store.display(),
         rules_store = %rules_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules + tui, read-only) — 9/10 mirror domains wired (D-02/12/13/14/15/16/17/18 + tui-layout schema)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules + tui + cli, read-only) — 10/10 mirror domains wired (D-02/12/13/14/15/16/17/18 + tui-layout + cli-schema)"
     );
     loop {
         tokio::select! {
@@ -547,17 +551,20 @@ pub(crate) async fn run_mirror_export_loop(
                 info!("M060: shutdown signalled; exiting mirror-export loop");
                 return;
             }
-            _ = tick.tick() => publish_all(
-                &mirror_dir,
-                &flex_path,
-                &grants_store,
-                &capability_tokens_store,
-                &sandboxes_store,
-                &quarantine_store,
-                &trust_scores_store,
-                &audit_store,
-                &rules_store,
-            ),
+            _ = tick.tick() => {
+                publish_all(
+                    &mirror_dir,
+                    &flex_path,
+                    &grants_store,
+                    &capability_tokens_store,
+                    &sandboxes_store,
+                    &quarantine_store,
+                    &trust_scores_store,
+                    &audit_store,
+                    &rules_store,
+                );
+                crate::cli_mirror_publisher::publish_cli(&mirror_dir).await;
+            }
         }
     }
 }
