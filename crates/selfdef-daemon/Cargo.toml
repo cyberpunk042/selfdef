@@ -50,6 +50,7 @@ selfdef-profile-authority-gate = { workspace = true }
 selfdef-profile-mirror = { workspace = true }
 selfdef-grant-registry = { workspace = true }
 selfdef-capability-registry = { workspace = true }
+selfdef-sandbox-registry = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }

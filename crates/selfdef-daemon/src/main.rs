@@ -431,10 +431,15 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| {
                 std::path::PathBuf::from(selfdef_capability_registry::DEFAULT_STATE_PATH)
             });
+        let sandboxes_store = std::env::var("SELFDEF_SANDBOXES_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_sandbox_registry::DEFAULT_STATE_PATH)
+            });
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
-            "M060: mirror export enabled (active-profile + grants + capability-tokens, read-only)"
+            "M060: mirror export enabled (active-profile + grants + capability-tokens + sandboxes, read-only)"
         );
         Some(tokio::spawn(async move {
             mirror_export_loop::run_mirror_export_loop(
@@ -442,6 +447,7 @@ async fn main() -> Result<()> {
                 flex_path,
                 grants_store,
                 capability_tokens_store,
+                sandboxes_store,
                 sd,
             )
             .await

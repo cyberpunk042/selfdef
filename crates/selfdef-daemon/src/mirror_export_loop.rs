@@ -15,14 +15,17 @@
 //!   daemon-resident capability-token registry
 //!   (`selfdef-capability-registry`, composing the 64-bit
 //!   `capability_word`). Same honesty bar: published ONLY when the
-//!   resident store exists, so the dashboard stays honestly offline
-//!   until a token is issued.
+//!   resident store exists.
+//! - **D-15 sandboxes** (`sandboxes.json`) — the daemon-resident
+//!   sandbox-allocation registry (`selfdef-sandbox-registry`, MS036
+//!   A/B/C/D × MS032 9-tier indices). Same honesty bar.
 //!
 //! Project boundary: this is IPS state published READ-ONLY. sovereign-os
 //! NEVER mutates it — mutations are `selfdefctl` + MS003 verbs on this
 //! (IPS) side only (MS043 R10212). Remaining mirror domains
-//! (sandbox/quarantine/trust) stay honestly offline pending their own
-//! daemon-resident registries (follow-on increments).
+//! (quarantine/trust) stay honestly offline pending their own daemon-
+//! resident registries (they're daemon-populated by detection/scoring,
+//! not operator-issued — follow-on increments wire those differently).
 //!
 //! The pure projection is in [`project_snapshot`] (no I/O, unit-tested
 //! in isolation). The loop does file I/O + tokio ticks + cooperates
@@ -36,6 +39,7 @@ use selfdef_flex_profile::FlexProfile;
 use selfdef_grant_registry::GrantRegistry;
 use selfdef_profile_authority_gate::Profile as GateProfile;
 use selfdef_profile_mirror::{Profile as MirrorProfile, ProfileMirrorSnapshot};
+use selfdef_sandbox_registry::SandboxRegistry;
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -57,6 +61,10 @@ const GRANTS_FILE: &str = "grants.json";
 /// Published capability-tokens artifact filename, wire-stable with the
 /// sovereign-os D-14 consumer (`scripts/mirror/selfdef-capability-mirror.py`).
 const CAPABILITY_TOKENS_FILE: &str = "capability-tokens.json";
+
+/// Published sandboxes artifact filename, wire-stable with the
+/// sovereign-os D-15 consumer (`scripts/mirror/selfdef-sandbox-mirror.py`).
+const SANDBOXES_FILE: &str = "sandboxes.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -226,6 +234,40 @@ fn publish_capability_tokens(mirror_dir: &Path, store: &Path, now: OffsetDateTim
     }
 }
 
+/// Publish the D-15 sandboxes mirror from the daemon-resident sandbox
+/// registry. Same honesty bar: only published when the resident store
+/// exists. TTL expiry is presentation-only.
+fn publish_sandboxes(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let mut registry = match SandboxRegistry::load(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: sandboxes store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    let _ = registry.expire_due(now);
+    match write_json_atomic(mirror_dir, SANDBOXES_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            allocations = registry.allocations().len(),
+            running = registry.running_count(),
+            "mirror export: sandboxes published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: sandboxes write failed; will retry"
+        ),
+    }
+}
+
 /// One publish pass across every wired mirror domain. Best-effort —
 /// per-domain failures are logged + retried next tick, never fatal.
 fn publish_all(
@@ -233,11 +275,13 @@ fn publish_all(
     flex_path: &Path,
     grants_store: &Path,
     capability_tokens_store: &Path,
+    sandboxes_store: &Path,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
     publish_grants(mirror_dir, grants_store, now);
     publish_capability_tokens(mirror_dir, capability_tokens_store, now);
+    publish_sandboxes(mirror_dir, sandboxes_store, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
@@ -249,6 +293,7 @@ pub(crate) async fn run_mirror_export_loop(
     flex_path: PathBuf,
     grants_store: PathBuf,
     capability_tokens_store: PathBuf,
+    sandboxes_store: PathBuf,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -256,6 +301,7 @@ pub(crate) async fn run_mirror_export_loop(
         &flex_path,
         &grants_store,
         &capability_tokens_store,
+        &sandboxes_store,
     );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -266,8 +312,9 @@ pub(crate) async fn run_mirror_export_loop(
         flex_path = %flex_path.display(),
         grants_store = %grants_store.display(),
         capability_tokens_store = %capability_tokens_store.display(),
+        sandboxes_store = %sandboxes_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens, read-only)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes, read-only)"
     );
     loop {
         tokio::select! {
@@ -276,7 +323,11 @@ pub(crate) async fn run_mirror_export_loop(
                 return;
             }
             _ = tick.tick() => publish_all(
-                &mirror_dir, &flex_path, &grants_store, &capability_tokens_store
+                &mirror_dir,
+                &flex_path,
+                &grants_store,
+                &capability_tokens_store,
+                &sandboxes_store,
             ),
         }
     }
@@ -366,6 +417,54 @@ mod tests {
         publish_grants(&dir, &store, OffsetDateTime::now_utc());
         // No resident store → no published mirror (honest offline).
         assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_sandboxes_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-sbx-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("sandboxes.json");
+        publish_sandboxes(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(SANDBOXES_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_sandboxes_writes_resident_registry() {
+        use selfdef_sandbox_registry::{
+            AllocationRequest, IsolationPrimitive, SandboxMirrorSnapshot, SandboxRegistry,
+            SandboxTier, ms032_range_for,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-sbx-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("sandboxes.json");
+        let mut reg = SandboxRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let (lo, _) = ms032_range_for(SandboxTier::TierA);
+        let req = AllocationRequest {
+            actor: "operator-fp".into(),
+            profile: "careful".into(),
+            tier: SandboxTier::TierA,
+            ms032_tier: lo,
+            isolation: IsolationPrimitive::HostSeccomp,
+            tool: "rg".into(),
+            capability_token_id: "tok-1".into(),
+            ttl_seconds: 3600,
+            signature: "sig".into(),
+        };
+        reg.allocate(&req, "alloc-1", "t1", now).unwrap();
+        reg.start("alloc-1", now).unwrap();
+        reg.save(&store).unwrap();
+
+        publish_sandboxes(&dir, &store, now);
+        let published = dir.join(SANDBOXES_FILE);
+        assert!(published.exists(), "sandboxes mirror must be published");
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: SandboxMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.allocations.len(), 1);
+        assert_eq!(snap.allocations[0].allocation_id, "alloc-1");
         std::fs::remove_dir_all(&dir).ok();
     }
 
