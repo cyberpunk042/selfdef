@@ -1,0 +1,26 @@
+[Unit]
+Description=Selfdef — periodic cli-mirror doctor (every 60s, drives Prometheus)
+Documentation=https://example.org/you/selfdef/blob/main/docs/operator/m060-cockpit-mirror-producers.md
+# Pairs with selfdef-cli-mirror-doctor.service. 60s cadence matches
+# Prometheus's default 15-30s scrape interval — the textfile is
+# always recent enough that node_exporter picks up fresh data on
+# every scrape. Faster cadences are an option (e.g. 30s) but the
+# default keeps the cli-mirror checks below the cost floor of the
+# /metrics scrape they augment.
+
+[Timer]
+# Boot delay so the timer doesn't pile up against other one-shots
+# at the same moment.
+OnBootSec=60s
+OnUnitActiveSec=60s
+# Even if the system is busy, the doctor MUST fire — wedged-timer
+# detection lives in the metric itself (`last_run_unix` going stale
+# triggers M060ChainStale).
+AccuracySec=5s
+# Drift the timer fire by a small randomized amount so a fleet of
+# hosts doesn't synchronize their writes.
+RandomizedDelaySec=10s
+Unit=selfdef-cli-mirror-doctor.service
+
+[Install]
+WantedBy=timers.target

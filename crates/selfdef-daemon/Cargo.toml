@@ -138,6 +138,8 @@ assets = [
     ["../../packaging/systemd/selfdef-doctor.service",   "/lib/systemd/system/",                   "644"],
     ["../../packaging/systemd/selfdef-doctor.timer",     "/lib/systemd/system/",                   "644"],
     ["../../packaging/systemd/selfdef-cli-mirror-emit.service", "/lib/systemd/system/",             "644"],
+    ["../../packaging/systemd/selfdef-cli-mirror-doctor.service", "/lib/systemd/system/",           "644"],
+    ["../../packaging/systemd/selfdef-cli-mirror-doctor.timer", "/lib/systemd/system/",             "644"],
     ["../../packaging/apparmor/usr.bin.selfdefd",        "/etc/apparmor.d/",                       "644"],
     ["../../packaging/lib/module-lib.sh",                "/usr/share/selfdef/lib/module-lib.sh",   "644"],
     ["../../packaging/scripts/friction-audit.sh",        "/usr/share/selfdef/",                    "644"],

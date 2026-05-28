@@ -1055,6 +1055,15 @@ enum CliMirrorAction {
         /// `/etc/selfdef/selfdef.toml`.
         #[arg(long, value_name = "PATH")]
         config: Option<PathBuf>,
+        /// Additionally write a node_exporter-compatible textfile
+        /// with the per-check severity + worst-severity gauges at
+        /// PATH (atomic tempfile + rename). Lets a systemd timer
+        /// run the doctor on a cadence (e.g. every 60s) so the
+        /// existing M060Chain* Prometheus alert rules also fire on
+        /// cli-mirror-specific degradations. The textfile format
+        /// matches the node_exporter textfile_collector convention.
+        #[arg(long, value_name = "PATH")]
+        textfile: Option<PathBuf>,
     },
 }
 
@@ -2633,9 +2642,14 @@ async fn main() -> Result<()> {
                 CliMirrorAction::Summaries { json: _ } => {
                     println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
                 }
-                CliMirrorAction::Doctor { json, config } => {
-                    let exit_code = cli_mirror_doctor::run(json, config.as_deref())
-                        .context("cli-mirror doctor")?;
+                CliMirrorAction::Doctor {
+                    json,
+                    config,
+                    textfile,
+                } => {
+                    let exit_code =
+                        cli_mirror_doctor::run(json, config.as_deref(), textfile.as_deref())
+                            .context("cli-mirror doctor")?;
                     std::process::exit(exit_code);
                 }
             }

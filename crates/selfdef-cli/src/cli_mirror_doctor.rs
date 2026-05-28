@@ -408,8 +408,111 @@ pub(crate) fn check_schema_version_invariant() -> Check {
     )
 }
 
+/// Escape a Prometheus label value per the textfile_collector format:
+/// backslash, double-quote, and newline must be backslash-escaped.
+fn escape_label(v: &str) -> String {
+    let mut out = String::with_capacity(v.len());
+    for c in v.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
+/// Render the doctor checks as a node_exporter-compatible textfile
+/// payload. Lines emitted (one per check + one summary):
+///
+///   # HELP selfdef_cli_mirror_doctor_severity Per-check severity (0=pass 1=warn 2=fail).
+///   # TYPE selfdef_cli_mirror_doctor_severity gauge
+///   selfdef_cli_mirror_doctor_severity{check="<name>"} <0|1|2>
+///   selfdef_cli_mirror_doctor_check_info{check="<name>",detail="<...>",fix="<...>"} 1
+///   selfdef_cli_mirror_doctor_worst_severity <0|1|2>
+///   selfdef_cli_mirror_doctor_last_run_unix <seconds since epoch>
+///
+/// Atomic write via tempfile + rename in the same directory so a
+/// concurrent node_exporter scrape never sees a torn write.
+pub(crate) fn render_textfile(checks: &[Check], worst: Severity) -> String {
+    let mut body = String::new();
+    body.push_str(
+        "# HELP selfdef_cli_mirror_doctor_severity Per-check severity \
+         (0=pass 1=warn 2=fail). One series per check name.\n",
+    );
+    body.push_str("# TYPE selfdef_cli_mirror_doctor_severity gauge\n");
+    for c in checks {
+        body.push_str(&format!(
+            "selfdef_cli_mirror_doctor_severity{{check=\"{}\"}} {}\n",
+            escape_label(c.name),
+            c.severity as u8,
+        ));
+    }
+    body.push_str(
+        "# HELP selfdef_cli_mirror_doctor_check_info Per-check info \
+         (detail+fix as labels, always value=1). Used by Grafana to \
+         hover-render the operator-readable triage text.\n",
+    );
+    body.push_str("# TYPE selfdef_cli_mirror_doctor_check_info gauge\n");
+    for c in checks {
+        body.push_str(&format!(
+            "selfdef_cli_mirror_doctor_check_info{{check=\"{}\",detail=\"{}\",fix=\"{}\"}} 1\n",
+            escape_label(c.name),
+            escape_label(&c.detail),
+            escape_label(&c.fix),
+        ));
+    }
+    body.push_str(
+        "# HELP selfdef_cli_mirror_doctor_worst_severity Worst severity \
+         across all checks (0=pass 1=warn 2=fail). The M060Chain* \
+         alert rules fire on `worst_severity > 1`.\n",
+    );
+    body.push_str("# TYPE selfdef_cli_mirror_doctor_worst_severity gauge\n");
+    body.push_str(&format!(
+        "selfdef_cli_mirror_doctor_worst_severity {}\n",
+        worst as u8,
+    ));
+    body.push_str(
+        "# HELP selfdef_cli_mirror_doctor_last_run_unix Unix timestamp \
+         of the last doctor invocation. Lets the alert pipeline detect \
+         a wedged systemd timer (no recent writes).\n",
+    );
+    body.push_str("# TYPE selfdef_cli_mirror_doctor_last_run_unix gauge\n");
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    body.push_str(&format!("selfdef_cli_mirror_doctor_last_run_unix {now}\n"));
+    body
+}
+
+/// Atomically write the doctor's textfile to `path`. Tempfile in the
+/// same directory with `.tmp.<pid>` suffix, then `rename(2)` — the
+/// same pattern every other M060 producer uses (POSIX rename is
+/// atomic on the same filesystem; a concurrent node_exporter scrape
+/// either sees the OLD bytes or the NEW bytes, never a torn write).
+fn write_textfile(path: &Path, checks: &[Check], worst: Severity) -> Result<()> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+    let tmp = parent.join(format!(
+        ".{}.tmp.{}",
+        path.file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "cli-mirror.prom".to_string()),
+        std::process::id()
+    ));
+    let body = render_textfile(checks, worst);
+    std::fs::write(&tmp, body.as_bytes())?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
 /// Run the doctor. Returns the worst-severity exit code (0/1/2).
-pub(crate) fn run(json: bool, config_override: Option<&Path>) -> Result<i32> {
+pub(crate) fn run(
+    json: bool,
+    config_override: Option<&Path>,
+    textfile: Option<&Path>,
+) -> Result<i32> {
     let config_path = config_override.map_or_else(
         || PathBuf::from(DEFAULT_CONFIG_PATH),
         std::path::Path::to_path_buf,
@@ -420,6 +523,10 @@ pub(crate) fn run(json: bool, config_override: Option<&Path>) -> Result<i32> {
         .map(|c| c.severity)
         .max()
         .unwrap_or(Severity::Pass);
+
+    if let Some(p) = textfile {
+        write_textfile(p, &checks, worst)?;
+    }
 
     if json {
         let arr: Vec<_> = checks
@@ -655,5 +762,130 @@ mod tests {
         fs::write(&cfg, b"[deployment]\n# no knob here\n").unwrap();
         assert!(read_mirror_dir_from_config(&cfg).is_none());
         fs::remove_dir_all(&dir).ok();
+    }
+
+    fn sample_checks_warn() -> Vec<Check> {
+        vec![
+            Check::pass("schema-version", "expected 1.0.0"),
+            Check::warn(
+                "resident-store",
+                "/var/lib/selfdef/cli-mirror.json absent",
+                "systemctl start selfdef-cli-mirror-emit.service",
+            ),
+        ]
+    }
+
+    #[test]
+    fn escape_label_handles_quote_backslash_newline() {
+        assert_eq!(escape_label("plain"), "plain");
+        assert_eq!(escape_label("with \"quote\""), "with \\\"quote\\\"");
+        assert_eq!(escape_label("with\\backslash"), "with\\\\backslash");
+        assert_eq!(escape_label("with\nnewline"), "with\\nnewline");
+    }
+
+    #[test]
+    fn render_textfile_emits_one_severity_per_check() {
+        let body = render_textfile(&sample_checks_warn(), Severity::Warn);
+        assert!(body.contains("selfdef_cli_mirror_doctor_severity{check=\"schema-version\"} 0"));
+        assert!(body.contains("selfdef_cli_mirror_doctor_severity{check=\"resident-store\"} 1"));
+    }
+
+    #[test]
+    fn render_textfile_emits_worst_severity_summary() {
+        let body = render_textfile(&sample_checks_warn(), Severity::Warn);
+        assert!(body.contains("selfdef_cli_mirror_doctor_worst_severity 1"));
+        let body_fail = render_textfile(
+            &[Check::fail("resident-store", "bad", "fix me")],
+            Severity::Fail,
+        );
+        assert!(body_fail.contains("selfdef_cli_mirror_doctor_worst_severity 2"));
+        let body_pass = render_textfile(&[Check::pass("schema-version", "ok")], Severity::Pass);
+        assert!(body_pass.contains("selfdef_cli_mirror_doctor_worst_severity 0"));
+    }
+
+    #[test]
+    fn render_textfile_emits_help_and_type_lines() {
+        let body = render_textfile(&sample_checks_warn(), Severity::Warn);
+        for metric in [
+            "selfdef_cli_mirror_doctor_severity",
+            "selfdef_cli_mirror_doctor_check_info",
+            "selfdef_cli_mirror_doctor_worst_severity",
+            "selfdef_cli_mirror_doctor_last_run_unix",
+        ] {
+            assert!(
+                body.contains(&format!("# HELP {metric}")),
+                "missing HELP for {metric}; body:\n{body}"
+            );
+            assert!(
+                body.contains(&format!("# TYPE {metric} gauge")),
+                "missing TYPE for {metric}; body:\n{body}"
+            );
+        }
+    }
+
+    #[test]
+    fn render_textfile_check_info_carries_detail_and_fix() {
+        let body = render_textfile(&sample_checks_warn(), Severity::Warn);
+        // The warn row should embed detail + fix as escaped labels.
+        assert!(body.contains(
+            "selfdef_cli_mirror_doctor_check_info{check=\"resident-store\",\
+             detail=\"/var/lib/selfdef/cli-mirror.json absent\",\
+             fix=\"systemctl start selfdef-cli-mirror-emit.service\"} 1"
+        ));
+    }
+
+    #[test]
+    fn render_textfile_check_info_escapes_quotes_in_detail() {
+        let checks = vec![Check::warn(
+            "thing",
+            "detail with \"embedded quote\"",
+            "fix without quotes",
+        )];
+        let body = render_textfile(&checks, Severity::Warn);
+        assert!(
+            body.contains("detail=\"detail with \\\"embedded quote\\\"\""),
+            "embedded quotes must be backslash-escaped; body:\n{body}"
+        );
+    }
+
+    #[test]
+    fn render_textfile_last_run_unix_is_recent() {
+        let body = render_textfile(&sample_checks_warn(), Severity::Warn);
+        let line = body
+            .lines()
+            .find(|l| l.starts_with("selfdef_cli_mirror_doctor_last_run_unix "))
+            .expect("last_run_unix line");
+        let value: u64 = line.split_whitespace().nth(1).unwrap().parse().unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // Within 60s of "now" — generous tolerance for slow CI.
+        assert!(
+            now.saturating_sub(value) <= 60,
+            "last_run_unix={value} too far behind now={now}"
+        );
+    }
+
+    #[test]
+    fn write_textfile_is_atomic_no_leftover_tmp() {
+        let dir =
+            std::env::temp_dir().join(format!("cli-mirror-doctor-textfile-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("selfdef-cli-mirror.prom");
+        write_textfile(&path, &sample_checks_warn(), Severity::Warn).unwrap();
+        assert!(path.exists());
+        let leftovers: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains(".tmp."))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "tempfile must be renamed away; leftovers: {leftovers:?}"
+        );
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert!(body.contains("selfdef_cli_mirror_doctor_worst_severity 1"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

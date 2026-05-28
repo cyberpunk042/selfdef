@@ -128,6 +128,8 @@ fn purge_arm_matches_sibling_unit_template() {
         "selfdef-guardian.service",
         "selfdef-scheduler.service",
         "selfdef-cli-mirror-emit.service",
+        "selfdef-cli-mirror-doctor.timer",
+        "selfdef-cli-mirror-doctor.service",
     ] {
         assert!(
             arm.contains(&format!("systemctl disable {sibling_unit}")),
@@ -140,6 +142,35 @@ fn purge_arm_matches_sibling_unit_template() {
              missing in the same shape as its peers"
         );
     }
+}
+
+#[test]
+fn purge_removes_doctor_textfile_artifact() {
+    // The doctor systemd timer writes
+    // /var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom
+    // — on purge that file must go too (the dir itself is operator-
+    // controlled; we touch only the file we produced).
+    let arm = case_arm("purge").expect("purge arm");
+    assert!(
+        arm.contains("rm -f /var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom"),
+        "purge must remove the doctor's textfile artifact; arm:\n{arm}"
+    );
+}
+
+#[test]
+fn remove_stops_doctor_timer_without_disabling() {
+    // Same reinstall=upgrade contract as cli-mirror-emit: stop on
+    // bare remove (selfdefctl is going away), don't disable
+    // (preserve enabled state for reinstall).
+    let arm = case_arm("remove").expect("remove arm");
+    assert!(
+        arm.contains("systemctl stop selfdef-cli-mirror-doctor.timer"),
+        "remove must stop the doctor timer (selfdefctl is being removed); arm:\n{arm}"
+    );
+    assert!(
+        !arm.contains("systemctl disable selfdef-cli-mirror-doctor.timer"),
+        "remove must NOT disable the doctor timer (reinstall=upgrade contract); arm:\n{arm}"
+    );
 }
 
 #[test]

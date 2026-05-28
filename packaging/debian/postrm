@@ -64,6 +64,22 @@ case "$1" in
             systemctl stop selfdef-cli-mirror-emit.service 2>/dev/null || true
         fi
         rm -rf /etc/systemd/system/selfdef-cli-mirror-emit.service.d
+        # M060 cli-mirror-doctor timer+service: same shape — disable
+        # the timer first (so it stops scheduling), then stop both
+        # units. The textfile under /var/lib/node_exporter/ is
+        # operator-controlled (we did NOT create the dir; we just
+        # wrote into it), so we explicitly remove only the file we
+        # produced, not the dir.
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-cli-mirror-doctor.timer ]; then
+            systemctl disable selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+            systemctl stop selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+            systemctl disable selfdef-cli-mirror-doctor.service 2>/dev/null || true
+            systemctl stop selfdef-cli-mirror-doctor.service 2>/dev/null || true
+        fi
+        rm -rf /etc/systemd/system/selfdef-cli-mirror-doctor.service.d
+        rm -rf /etc/systemd/system/selfdef-cli-mirror-doctor.timer.d
+        rm -f /var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
@@ -101,6 +117,15 @@ case "$1" in
         if [ -d /run/systemd/system ] \
            && [ -f /lib/systemd/system/selfdef-cli-mirror-emit.service ]; then
             systemctl stop selfdef-cli-mirror-emit.service 2>/dev/null || true
+        fi
+        # M060 cli-mirror-doctor timer: stop on remove so the timer
+        # doesn't fire (ExecStart references the about-to-be-removed
+        # selfdefctl) — but leave enabled state alone so the
+        # reinstall=upgrade contract holds.
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-cli-mirror-doctor.timer ]; then
+            systemctl stop selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+            systemctl stop selfdef-cli-mirror-doctor.service 2>/dev/null || true
         fi
         ;;
     upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)

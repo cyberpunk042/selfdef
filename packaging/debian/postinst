@@ -160,6 +160,19 @@ case "$1" in
                 # fallback still works.
                 systemctl start selfdef-cli-mirror-emit.service 2>/dev/null || true
             fi
+            # M060 cli-mirror observer (D-CLI): timer + one-shot that
+            # writes a node_exporter textfile every 60s so the existing
+            # M060Chain* Prometheus alerts also fire on cli-mirror
+            # degradations. Enable + start only when the timer file
+            # is present AND the textfile_collector dir exists (it's
+            # operator-controlled — we don't create it). Operators
+            # without node_exporter installed silently no-op.
+            if [ -d /run/systemd/system ] \
+               && [ -f /lib/systemd/system/selfdef-cli-mirror-doctor.timer ] \
+               && [ -d /var/lib/node_exporter/textfile_collector ]; then
+                systemctl enable selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+                systemctl start selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+            fi
         fi
         ;;
 esac
