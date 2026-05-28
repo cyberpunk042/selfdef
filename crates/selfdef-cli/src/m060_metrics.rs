@@ -35,12 +35,12 @@ const STALE_AGE_SECS: u64 = 5 * 60;
 
 #[derive(Debug, Default, Clone, Serialize)]
 pub(crate) struct ArtifactStats {
-    artifact: String,
-    ok: u64,
-    failed: u64,
-    last_publish_unix: Option<u64>,
-    age_seconds: Option<u64>,
-    state: &'static str,
+    pub(crate) artifact: String,
+    pub(crate) ok: u64,
+    pub(crate) failed: u64,
+    pub(crate) last_publish_unix: Option<u64>,
+    pub(crate) age_seconds: Option<u64>,
+    pub(crate) state: &'static str,
 }
 
 fn fetch_metrics() -> Result<String> {
