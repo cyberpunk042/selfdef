@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-quarantine-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Daemon-resident, persistent registry of MS042 quarantine entries — the live D-17 state the selfdef daemon projects into the selfdef-quarantine-mirror MS007 snapshot. Composes selfdef-quarantine-mirror (wire schema) with the daemon-populated record + operator-signed release/forfeit lifecycle."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-quarantine-mirror = { path = "../selfdef-quarantine-mirror" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -103,6 +103,7 @@ selfdef-flex-profile = { path = "crates/selfdef-flex-profile" }
 selfdef-grant-registry = { path = "crates/selfdef-grant-registry" }
 selfdef-capability-registry = { path = "crates/selfdef-capability-registry" }
 selfdef-sandbox-registry = { path = "crates/selfdef-sandbox-registry" }
+selfdef-quarantine-registry = { path = "crates/selfdef-quarantine-registry" }
 selfdef-hardware-requirements = { path = "crates/selfdef-hardware-requirements" }
 selfdef-network-boundary = { path = "crates/selfdef-network-boundary" }
 selfdef-profile-authority-gate = { path = "crates/selfdef-profile-authority-gate" }

@@ -19,13 +19,17 @@
 //! - **D-15 sandboxes** (`sandboxes.json`) — the daemon-resident
 //!   sandbox-allocation registry (`selfdef-sandbox-registry`, MS036
 //!   A/B/C/D × MS032 9-tier indices). Same honesty bar.
+//! - **D-17 quarantine** (`quarantine.json`) — the daemon-resident
+//!   quarantine registry (`selfdef-quarantine-registry`). Entries are
+//!   daemon-populated by MS042 declaration-vs-observed detection;
+//!   operator mutations are release/forfeit overrides only. Same
+//!   honesty bar: published only when the resident store exists.
 //!
 //! Project boundary: this is IPS state published READ-ONLY. sovereign-os
 //! NEVER mutates it — mutations are `selfdefctl` + MS003 verbs on this
-//! (IPS) side only (MS043 R10212). Remaining mirror domains
-//! (quarantine/trust) stay honestly offline pending their own daemon-
-//! resident registries (they're daemon-populated by detection/scoring,
-//! not operator-issued — follow-on increments wire those differently).
+//! (IPS) side only (MS043 R10212). Remaining mirror domain (D-18 trust)
+//! stays honestly offline pending its daemon-resident registry (also
+//! daemon-populated, by trust scoring rather than detection).
 //!
 //! The pure projection is in [`project_snapshot`] (no I/O, unit-tested
 //! in isolation). The loop does file I/O + tokio ticks + cooperates
@@ -39,6 +43,7 @@ use selfdef_flex_profile::FlexProfile;
 use selfdef_grant_registry::GrantRegistry;
 use selfdef_profile_authority_gate::Profile as GateProfile;
 use selfdef_profile_mirror::{Profile as MirrorProfile, ProfileMirrorSnapshot};
+use selfdef_quarantine_registry::QuarantineRegistry;
 use selfdef_sandbox_registry::SandboxRegistry;
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
@@ -65,6 +70,10 @@ const CAPABILITY_TOKENS_FILE: &str = "capability-tokens.json";
 /// Published sandboxes artifact filename, wire-stable with the
 /// sovereign-os D-15 consumer (`scripts/mirror/selfdef-sandbox-mirror.py`).
 const SANDBOXES_FILE: &str = "sandboxes.json";
+
+/// Published quarantine artifact filename, wire-stable with the
+/// sovereign-os D-17 consumer (`scripts/mirror/selfdef-quarantine-mirror.py`).
+const QUARANTINE_FILE: &str = "quarantine.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -268,6 +277,42 @@ fn publish_sandboxes(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
     }
 }
 
+/// Publish the D-17 quarantine mirror from the daemon-resident
+/// quarantine registry. Same honesty bar: only published when the
+/// resident store exists. Unlike grants/capability/sandbox, quarantine
+/// entries are daemon-populated by MS042 detection (record_block);
+/// operator mutations are release/forfeit overrides only.
+fn publish_quarantine(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let registry = match QuarantineRegistry::load(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: quarantine store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    let _ = now; // quarantine has no presentation-time expiry yet
+    match write_json_atomic(mirror_dir, QUARANTINE_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            entries = registry.entries().len(),
+            quarantined = registry.quarantined_count(),
+            "mirror export: quarantine published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: quarantine write failed; will retry"
+        ),
+    }
+}
+
 /// One publish pass across every wired mirror domain. Best-effort —
 /// per-domain failures are logged + retried next tick, never fatal.
 fn publish_all(
@@ -276,12 +321,14 @@ fn publish_all(
     grants_store: &Path,
     capability_tokens_store: &Path,
     sandboxes_store: &Path,
+    quarantine_store: &Path,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
     publish_grants(mirror_dir, grants_store, now);
     publish_capability_tokens(mirror_dir, capability_tokens_store, now);
     publish_sandboxes(mirror_dir, sandboxes_store, now);
+    publish_quarantine(mirror_dir, quarantine_store, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
@@ -294,6 +341,7 @@ pub(crate) async fn run_mirror_export_loop(
     grants_store: PathBuf,
     capability_tokens_store: PathBuf,
     sandboxes_store: PathBuf,
+    quarantine_store: PathBuf,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -302,6 +350,7 @@ pub(crate) async fn run_mirror_export_loop(
         &grants_store,
         &capability_tokens_store,
         &sandboxes_store,
+        &quarantine_store,
     );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -313,8 +362,9 @@ pub(crate) async fn run_mirror_export_loop(
         grants_store = %grants_store.display(),
         capability_tokens_store = %capability_tokens_store.display(),
         sandboxes_store = %sandboxes_store.display(),
+        quarantine_store = %quarantine_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes, read-only)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine, read-only)"
     );
     loop {
         tokio::select! {
@@ -328,6 +378,7 @@ pub(crate) async fn run_mirror_export_loop(
                 &grants_store,
                 &capability_tokens_store,
                 &sandboxes_store,
+                &quarantine_store,
             ),
         }
     }
@@ -417,6 +468,53 @@ mod tests {
         publish_grants(&dir, &store, OffsetDateTime::now_utc());
         // No resident store → no published mirror (honest offline).
         assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_quarantine_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-qrn-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("quarantine.json");
+        publish_quarantine(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(QUARANTINE_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_quarantine_writes_resident_registry() {
+        use selfdef_quarantine_registry::{
+            BlockReport, MismatchDetail, MismatchField, MismatchSeverity, QuarantineMirrorSnapshot,
+            QuarantineRegistry,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-qrn-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("quarantine.json");
+        let mut reg = QuarantineRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let report = BlockReport {
+            tool: "rg".into(),
+            declarer: "operator-fp".into(),
+            capability_token_id: "tok-1".into(),
+            mismatches: vec![MismatchDetail {
+                field: MismatchField::ReadPaths,
+                declared: "/safe".into(),
+                observed: "/etc/passwd".into(),
+                first_observed_at: "2027-01-15T07:59:00Z".into(),
+                severity: MismatchSeverity::Critical,
+            }],
+        };
+        reg.record_block(&report, "q-1", "t1", now).unwrap();
+        reg.save(&store).unwrap();
+
+        publish_quarantine(&dir, &store, now);
+        let published = dir.join(QUARANTINE_FILE);
+        assert!(published.exists());
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: QuarantineMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.entries.len(), 1);
+        assert_eq!(snap.entries[0].quarantine_id, "q-1");
         std::fs::remove_dir_all(&dir).ok();
     }
 

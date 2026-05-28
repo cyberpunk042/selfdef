@@ -3375,6 +3375,7 @@ dependencies = [
  "selfdef-perimeter",
  "selfdef-profile-authority-gate",
  "selfdef-profile-mirror",
+ "selfdef-quarantine-registry",
  "selfdef-responder",
  "selfdef-sandbox-registry",
  "selfdef-scheduler",
@@ -5990,6 +5991,18 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-quarantine-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-quarantine-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
