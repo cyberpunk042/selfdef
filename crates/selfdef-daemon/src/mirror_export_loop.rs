@@ -10,15 +10,19 @@
 //!   is the honest value when no flex-profile exists).
 //! - **D-13 grants** (`grants.json`) — the daemon-resident grant
 //!   registry (`selfdef-grant-registry`). Published ONLY when the
+//!   resident store exists.
+//! - **D-14 capability-tokens** (`capability-tokens.json`) — the
+//!   daemon-resident capability-token registry
+//!   (`selfdef-capability-registry`, composing the 64-bit
+//!   `capability_word`). Same honesty bar: published ONLY when the
 //!   resident store exists, so the dashboard stays honestly offline
-//!   until a grant is provisioned rather than show empty-online state.
+//!   until a token is issued.
 //!
 //! Project boundary: this is IPS state published READ-ONLY. sovereign-os
 //! NEVER mutates it — mutations are `selfdefctl` + MS003 verbs on this
-//! (IPS) side only (MS043 R10212). The remaining mirror domains
-//! (capability/sandbox/quarantine/trust) are NOT yet published: their
-//! registries are not daemon-resident yet, so those dashboards stay
-//! honestly offline (follow-on increments wire each one).
+//! (IPS) side only (MS043 R10212). Remaining mirror domains
+//! (sandbox/quarantine/trust) stay honestly offline pending their own
+//! daemon-resident registries (follow-on increments).
 //!
 //! The pure projection is in [`project_snapshot`] (no I/O, unit-tested
 //! in isolation). The loop does file I/O + tokio ticks + cooperates
@@ -27,6 +31,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use selfdef_capability_registry::CapabilityRegistry;
 use selfdef_flex_profile::FlexProfile;
 use selfdef_grant_registry::GrantRegistry;
 use selfdef_profile_authority_gate::Profile as GateProfile;
@@ -48,6 +53,10 @@ const ACTIVE_PROFILE_FILE: &str = "active-profile.json";
 /// Published grants artifact filename, wire-stable with the sovereign-os
 /// D-13 consumer (`scripts/mirror/selfdef-grants-mirror.py`).
 const GRANTS_FILE: &str = "grants.json";
+
+/// Published capability-tokens artifact filename, wire-stable with the
+/// sovereign-os D-14 consumer (`scripts/mirror/selfdef-capability-mirror.py`).
+const CAPABILITY_TOKENS_FILE: &str = "capability-tokens.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -183,24 +192,71 @@ fn publish_grants(mirror_dir: &Path, grants_store: &Path, now: OffsetDateTime) {
     }
 }
 
+/// Publish the D-14 capability-tokens mirror from the daemon-resident
+/// capability registry. Same honesty bar as grants: only published when
+/// the resident store exists. TTL expiry is presentation-only.
+fn publish_capability_tokens(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let mut registry = match CapabilityRegistry::load(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: capability-tokens store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    let _ = registry.expire_due(now);
+    match write_json_atomic(mirror_dir, CAPABILITY_TOKENS_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            tokens = registry.tokens().len(),
+            active = registry.active_count(),
+            "mirror export: capability-tokens published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: capability-tokens write failed; will retry"
+        ),
+    }
+}
+
 /// One publish pass across every wired mirror domain. Best-effort —
 /// per-domain failures are logged + retried next tick, never fatal.
-fn publish_all(mirror_dir: &Path, flex_path: &Path, grants_store: &Path) {
+fn publish_all(
+    mirror_dir: &Path,
+    flex_path: &Path,
+    grants_store: &Path,
+    capability_tokens_store: &Path,
+) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
     publish_grants(mirror_dir, grants_store, now);
+    publish_capability_tokens(mirror_dir, capability_tokens_store, now);
 }
 
-/// M060 mirror-export loop (D-02 active-profile + D-13 grants). Publishes
-/// once at startup, then every [`MIRROR_EXPORT_INTERVAL_SECS`],
-/// cooperating with the daemon shutdown signal (clean exit on cancel).
+/// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
+/// capability-tokens). Publishes once at startup, then every
+/// [`MIRROR_EXPORT_INTERVAL_SECS`], cooperating with the daemon shutdown
+/// signal (clean exit on cancel).
 pub(crate) async fn run_mirror_export_loop(
     mirror_dir: PathBuf,
     flex_path: PathBuf,
     grants_store: PathBuf,
+    capability_tokens_store: PathBuf,
     shutdown: CancellationToken,
 ) {
-    publish_all(&mirror_dir, &flex_path, &grants_store);
+    publish_all(
+        &mirror_dir,
+        &flex_path,
+        &grants_store,
+        &capability_tokens_store,
+    );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // Consume the immediate first tick — startup already published.
@@ -209,8 +265,9 @@ pub(crate) async fn run_mirror_export_loop(
         mirror_dir = %mirror_dir.display(),
         flex_path = %flex_path.display(),
         grants_store = %grants_store.display(),
+        capability_tokens_store = %capability_tokens_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants, read-only)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens, read-only)"
     );
     loop {
         tokio::select! {
@@ -218,7 +275,9 @@ pub(crate) async fn run_mirror_export_loop(
                 info!("M060: shutdown signalled; exiting mirror-export loop");
                 return;
             }
-            _ = tick.tick() => publish_all(&mirror_dir, &flex_path, &grants_store),
+            _ = tick.tick() => publish_all(
+                &mirror_dir, &flex_path, &grants_store, &capability_tokens_store
+            ),
         }
     }
 }
@@ -307,6 +366,55 @@ mod tests {
         publish_grants(&dir, &store, OffsetDateTime::now_utc());
         // No resident store → no published mirror (honest offline).
         assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_capability_tokens_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-cap-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("capability-tokens.json");
+        publish_capability_tokens(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(CAPABILITY_TOKENS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_capability_tokens_writes_resident_registry() {
+        use selfdef_capability_registry::{
+            CapabilityMirrorSnapshot, CapabilityRegistry, CapabilityRequest, TrustRing,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-cap-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("capability-tokens.json");
+        let mut reg = CapabilityRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let req = CapabilityRequest {
+            actor: "operator-fp".into(),
+            profile: "careful".into(),
+            allowed_tools: vec!["tests".into(), "builds".into()],
+            trust_ring: TrustRing::Ring2,
+            authority_level: selfdef_capability_registry::AuthorityLevel::L4Execute,
+            sandbox_tier: "A".into(),
+            parent_token_id: String::new(),
+            ttl_seconds: 3600,
+            signature: "sig".into(),
+        };
+        reg.issue(&req, "tok-1", "t1", now).unwrap();
+        reg.activate("tok-1", now).unwrap();
+        reg.save(&store).unwrap();
+
+        publish_capability_tokens(&dir, &store, now);
+        let published = dir.join(CAPABILITY_TOKENS_FILE);
+        assert!(
+            published.exists(),
+            "capability-tokens mirror must be published"
+        );
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: CapabilityMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.tokens.len(), 1);
+        assert_eq!(snap.tokens[0].token_id, "tok-1");
         std::fs::remove_dir_all(&dir).ok();
     }
 

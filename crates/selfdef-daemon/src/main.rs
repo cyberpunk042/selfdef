@@ -419,21 +419,32 @@ async fn main() -> Result<()> {
     } else {
         let mirror_dir = std::path::PathBuf::from(&cfg.deployment.selfdef_mirror_dir);
         let flex_path = std::path::PathBuf::from(selfdef_flex_profile::DEFAULT_STATE_PATH);
-        // Honor the same override the API write path uses, so a relocated
-        // resident store is read + republished consistently.
+        // Honor the same overrides the API write paths use, so relocated
+        // resident stores are read + republished consistently.
         let grants_store = std::env::var("SELFDEF_GRANTS_PATH")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|_| {
                 std::path::PathBuf::from(selfdef_grant_registry::DEFAULT_STATE_PATH)
             });
+        let capability_tokens_store = std::env::var("SELFDEF_CAPABILITY_TOKENS_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_capability_registry::DEFAULT_STATE_PATH)
+            });
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
-            "M060: mirror export enabled (active-profile + grants, read-only)"
+            "M060: mirror export enabled (active-profile + grants + capability-tokens, read-only)"
         );
         Some(tokio::spawn(async move {
-            mirror_export_loop::run_mirror_export_loop(mirror_dir, flex_path, grants_store, sd)
-                .await
+            mirror_export_loop::run_mirror_export_loop(
+                mirror_dir,
+                flex_path,
+                grants_store,
+                capability_tokens_store,
+                sd,
+            )
+            .await
         }))
     };
 

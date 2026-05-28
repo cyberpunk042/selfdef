@@ -101,6 +101,7 @@ selfdef-execution-mode-policy = { path = "crates/selfdef-execution-mode-policy" 
 selfdef-filesystem-boundary = { path = "crates/selfdef-filesystem-boundary" }
 selfdef-flex-profile = { path = "crates/selfdef-flex-profile" }
 selfdef-grant-registry = { path = "crates/selfdef-grant-registry" }
+selfdef-capability-registry = { path = "crates/selfdef-capability-registry" }
 selfdef-hardware-requirements = { path = "crates/selfdef-hardware-requirements" }
 selfdef-network-boundary = { path = "crates/selfdef-network-boundary" }
 selfdef-profile-authority-gate = { path = "crates/selfdef-profile-authority-gate" }
