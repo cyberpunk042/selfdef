@@ -80,6 +80,17 @@ case "$1" in
         rm -rf /etc/systemd/system/selfdef-cli-mirror-doctor.service.d
         rm -rf /etc/systemd/system/selfdef-cli-mirror-doctor.timer.d
         rm -f /var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom
+        # M060 chain-wide observer: same shape as cli-mirror-doctor.
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-m060-doctor.timer ]; then
+            systemctl disable selfdef-m060-doctor.timer 2>/dev/null || true
+            systemctl stop selfdef-m060-doctor.timer 2>/dev/null || true
+            systemctl disable selfdef-m060-doctor.service 2>/dev/null || true
+            systemctl stop selfdef-m060-doctor.service 2>/dev/null || true
+        fi
+        rm -rf /etc/systemd/system/selfdef-m060-doctor.service.d
+        rm -rf /etc/systemd/system/selfdef-m060-doctor.timer.d
+        rm -f /var/lib/node_exporter/textfile_collector/selfdef-m060-doctor.prom
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
@@ -126,6 +137,12 @@ case "$1" in
            && [ -f /lib/systemd/system/selfdef-cli-mirror-doctor.timer ]; then
             systemctl stop selfdef-cli-mirror-doctor.timer 2>/dev/null || true
             systemctl stop selfdef-cli-mirror-doctor.service 2>/dev/null || true
+        fi
+        # M060 chain-wide doctor timer: same reinstall=upgrade contract.
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-m060-doctor.timer ]; then
+            systemctl stop selfdef-m060-doctor.timer 2>/dev/null || true
+            systemctl stop selfdef-m060-doctor.service 2>/dev/null || true
         fi
         ;;
     upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)

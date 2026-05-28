@@ -175,6 +175,14 @@ enum Command {
         /// $SELFDEF_CONFIG).
         #[arg(long)]
         config: Option<std::path::PathBuf>,
+        /// Additionally write a node_exporter-compatible textfile
+        /// with per-domain severity + presence gauges at PATH
+        /// (atomic tempfile + rename). Mirrors the cli-mirror doctor
+        /// --textfile flag — lets a systemd timer drive m060-doctor
+        /// on a cadence so chain-wide Prometheus alerts cover all
+        /// 6 mirror domains, not just D-CLI.
+        #[arg(long, value_name = "PATH")]
+        textfile: Option<std::path::PathBuf>,
     },
     /// M060 per-artifact publish-stats from the daemon /metrics endpoint
     /// (selfdef_m060_mirror_publish_total + selfdef_m060_mirror_last_
@@ -2309,8 +2317,13 @@ async fn main() -> Result<()> {
             print!("{rendered}");
             std::process::exit(exit);
         }
-        Command::M060Doctor { json, config } => {
-            let exit = m060_doctor::run(json, config.as_deref()).context("m060-doctor")?;
+        Command::M060Doctor {
+            json,
+            config,
+            textfile,
+        } => {
+            let exit = m060_doctor::run(json, config.as_deref(), textfile.as_deref())
+                .context("m060-doctor")?;
             std::process::exit(exit);
         }
         Command::M060Metrics { json, artifact } => {

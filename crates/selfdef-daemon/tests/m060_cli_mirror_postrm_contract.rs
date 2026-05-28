@@ -145,6 +145,48 @@ fn purge_arm_matches_sibling_unit_template() {
 }
 
 #[test]
+fn purge_handles_chain_doctor_timer_with_same_shape() {
+    // The chain-wide m060-doctor.timer must get the same
+    // disable+stop+drop-in-cleanup treatment as the cli-mirror sibling.
+    let arm = case_arm("purge").expect("purge arm");
+    for unit in ["selfdef-m060-doctor.timer", "selfdef-m060-doctor.service"] {
+        assert!(
+            arm.contains(&format!("systemctl disable {unit}")),
+            "purge arm must disable {unit}"
+        );
+        assert!(
+            arm.contains(&format!("systemctl stop {unit}")),
+            "purge arm must stop {unit}"
+        );
+    }
+    assert!(
+        arm.contains("rm -rf /etc/systemd/system/selfdef-m060-doctor.service.d"),
+        "purge must remove the m060-doctor service drop-in dir"
+    );
+    assert!(
+        arm.contains("rm -rf /etc/systemd/system/selfdef-m060-doctor.timer.d"),
+        "purge must remove the m060-doctor timer drop-in dir"
+    );
+    assert!(
+        arm.contains("rm -f /var/lib/node_exporter/textfile_collector/selfdef-m060-doctor.prom"),
+        "purge must remove the chain-wide doctor's textfile artifact"
+    );
+}
+
+#[test]
+fn remove_stops_chain_doctor_timer_without_disabling() {
+    let arm = case_arm("remove").expect("remove arm");
+    assert!(
+        arm.contains("systemctl stop selfdef-m060-doctor.timer"),
+        "remove must stop the chain-doctor timer"
+    );
+    assert!(
+        !arm.contains("systemctl disable selfdef-m060-doctor.timer"),
+        "remove must NOT disable the chain-doctor timer (reinstall=upgrade)"
+    );
+}
+
+#[test]
 fn purge_removes_doctor_textfile_artifact() {
     // The doctor systemd timer writes
     // /var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom
