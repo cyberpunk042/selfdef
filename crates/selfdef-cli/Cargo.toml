@@ -43,6 +43,7 @@ selfdef-guardian-mirror = { workspace = true }
 selfdef-guardian = { workspace = true }
 selfdef-scheduler-mirror = { workspace = true }
 selfdef-scheduler = { workspace = true }
+selfdef-rules-registry = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

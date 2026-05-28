@@ -40,6 +40,7 @@ mod perimeter;
 mod policy;
 mod quarantine_registry;
 mod repl;
+mod rules_registry;
 mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
@@ -428,6 +429,15 @@ enum Command {
     TrustScores {
         #[command(subcommand)]
         action: TrustScoresAction,
+    },
+    /// M060 D-12 — nftables rules-mirror registry operator surface.
+    /// READ-ONLY: rules are daemon-populated by the nft collector loop
+    /// (poll → `selfdef-rules-registry` → published mirror). Rule
+    /// installation lives in `selfdefctl + nft` at the IPS layer
+    /// (operator MS003 only); this surface observes, never mutates.
+    RulesMirror {
+        #[command(subcommand)]
+        action: RulesMirrorAction,
     },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
@@ -946,6 +956,39 @@ enum TrustScoresAction {
         /// MS003 signature.
         #[arg(long)]
         signature: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum RulesMirrorAction {
+    /// Read the live snapshot from the resident registry store.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-ring summary tiles (Ring 0..4 rule counts + counters).
+    Summaries {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Flat rule table — optionally filtered to one trust ring.
+    List {
+        /// Filter to a single ring (0..4, ring0..ring4, sovereign_kernel,
+        /// trusted_local, sandboxed, experimental, cloud_external).
+        #[arg(long)]
+        ring: Option<String>,
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Terse health-status verdict for D-12 (ok|empty|offline). Suitable
+    /// for monitoring + smoke scripts.
+    Status {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -2434,6 +2477,20 @@ async fn main() -> Result<()> {
             };
             std::process::exit(exit);
         }
+        Command::RulesMirror { action } => match action {
+            RulesMirrorAction::Show { json } => {
+                rules_registry::run_show(json).context("rules-mirror show")?
+            }
+            RulesMirrorAction::Summaries { json } => {
+                rules_registry::run_summaries(json).context("rules-mirror summaries")?
+            }
+            RulesMirrorAction::List { ring, json } => {
+                rules_registry::run_list(ring, json).context("rules-mirror list")?
+            }
+            RulesMirrorAction::Status { json } => {
+                rules_registry::run_status(json).context("rules-mirror status")?
+            }
+        },
         Command::TrustScores { action } => {
             let exit = match action {
                 TrustScoresAction::Show { json } => {

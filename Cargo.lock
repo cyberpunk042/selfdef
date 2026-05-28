@@ -2864,6 +2864,7 @@ dependencies = [
  "selfdef-perimeter-mirror",
  "selfdef-profile-authority-gate",
  "selfdef-responder",
+ "selfdef-rules-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
  "selfdef-signing",
