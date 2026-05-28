@@ -56,6 +56,7 @@ mod handlers;
 mod hardware;
 mod health;
 mod inference_backends;
+mod m060_health;
 mod mcp;
 pub mod metrics;
 mod modules;
@@ -388,6 +389,11 @@ pub fn router(state: ApiState) -> Router {
         // canonical projection. No mutation endpoints — TUI/web
         // NEVER mutates IPS state directly (R10212).
         .route("/v1/tui/snapshot", get(tui_mirror::snapshot))
+        // M060 chain health observability — reports the publish
+        // freshness of all 10 mirror artifacts (offline / degraded /
+        // stale / online). Pure observability surface; consumers
+        // (sovereign-os master-dashboard, MCP m060-doctor) poll it.
+        .route("/v1/m060/health", get(m060_health::health))
         // M060 D-18 — trust-scores *live registry* surface. Sister to
         // the existing schema-discovery GET /v1/trust-scores. Operator
         // surface is admit + signed manual-delta override.
