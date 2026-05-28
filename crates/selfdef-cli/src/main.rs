@@ -28,6 +28,7 @@ mod hardware;
 mod health;
 mod inference_backends;
 mod init;
+mod m060_doctor;
 mod mcp;
 mod models;
 mod modules;
@@ -154,6 +155,21 @@ enum Command {
         /// for CI / monitoring integration.
         #[arg(long)]
         json: bool,
+    },
+    /// M060 cross-repo mirror chain doctor (host side). Verifies the
+    /// selfdef-side state of the chain: reads [deployment].selfdef_mirror_dir
+    /// from selfdef.toml + checks per-domain (6 mirrors) resident-store
+    /// presence + published mirror-file presence. Filesystem-only; no daemon
+    /// process required. Sister to sovereign-os's `sovereign-osctl m060-doctor`
+    /// (which verifies the consumer side via HTTP).
+    M060Doctor {
+        /// JSON output for CI / monitoring integration.
+        #[arg(long)]
+        json: bool,
+        /// Override config path (default /etc/selfdef/selfdef.toml or
+        /// $SELFDEF_CONFIG).
+        #[arg(long)]
+        config: Option<std::path::PathBuf>,
     },
     /// First-run bootstrap. Writes starter config files +
     /// prints the operator checklist. Non-destructive by
@@ -2124,6 +2140,10 @@ async fn main() -> Result<()> {
                 doctor::render_human(&results)
             };
             print!("{rendered}");
+            std::process::exit(exit);
+        }
+        Command::M060Doctor { json, config } => {
+            let exit = m060_doctor::run(json, config.as_deref()).context("m060-doctor")?;
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
