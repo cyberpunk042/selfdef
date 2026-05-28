@@ -23,13 +23,16 @@
 //!   quarantine registry (`selfdef-quarantine-registry`). Entries are
 //!   daemon-populated by MS042 declaration-vs-observed detection;
 //!   operator mutations are release/forfeit overrides only. Same
-//!   honesty bar: published only when the resident store exists.
+//!   honesty bar.
+//! - **D-18 trust-scores** (`trust-scores.json`) — the daemon-resident
+//!   per-tool trust-score registry (`selfdef-trust-score-registry`,
+//!   composing the engine's `canonical_delta`). Daemon-populated by
+//!   scoring events; operator mutations are manual deltas (override).
+//!   Same honesty bar.
 //!
-//! Project boundary: this is IPS state published READ-ONLY. sovereign-os
-//! NEVER mutates it — mutations are `selfdefctl` + MS003 verbs on this
-//! (IPS) side only (MS043 R10212). Remaining mirror domain (D-18 trust)
-//! stays honestly offline pending its daemon-resident registry (also
-//! daemon-populated, by trust scoring rather than detection).
+//! **All 5 M060 mirror domains are wired**. Project boundary: IPS state
+//! published READ-ONLY. sovereign-os NEVER mutates — operator mutations
+//! are `selfdefctl` + MS003 verbs on this (IPS) side only (MS043 R10212).
 //!
 //! The pure projection is in [`project_snapshot`] (no I/O, unit-tested
 //! in isolation). The loop does file I/O + tokio ticks + cooperates
@@ -45,6 +48,7 @@ use selfdef_profile_authority_gate::Profile as GateProfile;
 use selfdef_profile_mirror::{Profile as MirrorProfile, ProfileMirrorSnapshot};
 use selfdef_quarantine_registry::QuarantineRegistry;
 use selfdef_sandbox_registry::SandboxRegistry;
+use selfdef_trust_score_registry::TrustScoreRegistry;
 use time::OffsetDateTime;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
@@ -74,6 +78,10 @@ const SANDBOXES_FILE: &str = "sandboxes.json";
 /// Published quarantine artifact filename, wire-stable with the
 /// sovereign-os D-17 consumer (`scripts/mirror/selfdef-quarantine-mirror.py`).
 const QUARANTINE_FILE: &str = "quarantine.json";
+
+/// Published trust-scores artifact filename, wire-stable with the
+/// sovereign-os D-18 consumer (`scripts/mirror/selfdef-trust-score-mirror.py`).
+const TRUST_SCORES_FILE: &str = "trust-scores.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -313,6 +321,38 @@ fn publish_quarantine(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
     }
 }
 
+/// Publish the D-18 trust-scores mirror from the daemon-resident
+/// trust-score registry. Same honesty bar: only published when the
+/// resident store exists. Daemon-populated by scoring events.
+fn publish_trust_scores(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let registry = match TrustScoreRegistry::load(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: trust-scores store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    match write_json_atomic(mirror_dir, TRUST_SCORES_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            tools = registry.tools().len(),
+            "mirror export: trust-scores published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: trust-scores write failed; will retry"
+        ),
+    }
+}
+
 /// One publish pass across every wired mirror domain. Best-effort —
 /// per-domain failures are logged + retried next tick, never fatal.
 fn publish_all(
@@ -322,6 +362,7 @@ fn publish_all(
     capability_tokens_store: &Path,
     sandboxes_store: &Path,
     quarantine_store: &Path,
+    trust_scores_store: &Path,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
@@ -329,12 +370,14 @@ fn publish_all(
     publish_capability_tokens(mirror_dir, capability_tokens_store, now);
     publish_sandboxes(mirror_dir, sandboxes_store, now);
     publish_quarantine(mirror_dir, quarantine_store, now);
+    publish_trust_scores(mirror_dir, trust_scores_store, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
 /// capability-tokens). Publishes once at startup, then every
 /// [`MIRROR_EXPORT_INTERVAL_SECS`], cooperating with the daemon shutdown
 /// signal (clean exit on cancel).
+#[allow(clippy::too_many_arguments)] // one path per mirror domain (5 + flex + dir + shutdown)
 pub(crate) async fn run_mirror_export_loop(
     mirror_dir: PathBuf,
     flex_path: PathBuf,
@@ -342,6 +385,7 @@ pub(crate) async fn run_mirror_export_loop(
     capability_tokens_store: PathBuf,
     sandboxes_store: PathBuf,
     quarantine_store: PathBuf,
+    trust_scores_store: PathBuf,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -351,6 +395,7 @@ pub(crate) async fn run_mirror_export_loop(
         &capability_tokens_store,
         &sandboxes_store,
         &quarantine_store,
+        &trust_scores_store,
     );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -363,8 +408,9 @@ pub(crate) async fn run_mirror_export_loop(
         capability_tokens_store = %capability_tokens_store.display(),
         sandboxes_store = %sandboxes_store.display(),
         quarantine_store = %quarantine_store.display(),
+        trust_scores_store = %trust_scores_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine, read-only)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores, read-only) — 5/5 mirror domains"
     );
     loop {
         tokio::select! {
@@ -379,6 +425,7 @@ pub(crate) async fn run_mirror_export_loop(
                 &capability_tokens_store,
                 &sandboxes_store,
                 &quarantine_store,
+                &trust_scores_store,
             ),
         }
     }
@@ -468,6 +515,42 @@ mod tests {
         publish_grants(&dir, &store, OffsetDateTime::now_utc());
         // No resident store → no published mirror (honest offline).
         assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_trust_scores_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-trust-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("trust-scores.json");
+        publish_trust_scores(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(TRUST_SCORES_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_trust_scores_writes_resident_registry() {
+        use selfdef_trust_score_registry::{
+            DeltaReason, TrustScoreMirrorSnapshot, TrustScoreRegistry,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-trust-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("trust-scores.json");
+        let mut reg = TrustScoreRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        reg.admit("rg", "operator-fp", 750, now).unwrap();
+        reg.record_delta("rg", DeltaReason::SuccessfulExecution, "t1", now)
+            .unwrap();
+        reg.save(&store).unwrap();
+
+        publish_trust_scores(&dir, &store, now);
+        let published = dir.join(TRUST_SCORES_FILE);
+        assert!(published.exists());
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: TrustScoreMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.tools.len(), 1);
+        assert_eq!(snap.tools[0].tool, "rg");
         std::fs::remove_dir_all(&dir).ok();
     }
 

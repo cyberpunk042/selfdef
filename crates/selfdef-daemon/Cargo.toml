@@ -52,6 +52,7 @@ selfdef-grant-registry = { workspace = true }
 selfdef-capability-registry = { workspace = true }
 selfdef-sandbox-registry = { workspace = true }
 selfdef-quarantine-registry = { workspace = true }
+selfdef-trust-score-registry = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }
