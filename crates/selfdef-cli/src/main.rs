@@ -30,6 +30,7 @@ mod health;
 mod inference_backends;
 mod init;
 mod m060_doctor;
+mod m060_metrics;
 mod mcp;
 mod models;
 mod modules;
@@ -173,6 +174,19 @@ enum Command {
         /// $SELFDEF_CONFIG).
         #[arg(long)]
         config: Option<std::path::PathBuf>,
+    },
+    /// M060 per-artifact publish-stats from the daemon /metrics endpoint
+    /// (selfdef_m060_mirror_publish_total + selfdef_m060_mirror_last_
+    /// publish_unix). Sister to `m060-doctor` (filesystem-state checks) —
+    /// queries the LIVE Prometheus surface for per-artifact counters,
+    /// useful during incident response when Prometheus itself may be
+    /// the unhealthy component. Exit 0 if every artifact is `ok`; 1 if
+    /// any is offline / failed / stale / degraded / OR /metrics is
+    /// unreachable.
+    M060Metrics {
+        /// JSON output for CI / monitoring integration.
+        #[arg(long)]
+        json: bool,
     },
     /// First-run bootstrap. Writes starter config files +
     /// prints the operator checklist. Non-destructive by
@@ -2243,6 +2257,10 @@ async fn main() -> Result<()> {
         }
         Command::M060Doctor { json, config } => {
             let exit = m060_doctor::run(json, config.as_deref()).context("m060-doctor")?;
+            std::process::exit(exit);
+        }
+        Command::M060Metrics { json } => {
+            let exit = m060_metrics::run(json).context("m060-metrics")?;
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
