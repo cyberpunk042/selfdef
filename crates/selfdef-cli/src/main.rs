@@ -12,6 +12,7 @@ mod audit_chains;
 mod authority;
 mod capability_tokens;
 mod capability_tokens_registry;
+mod cli_mirror_builder;
 mod commit_authority;
 mod communication_boundary;
 mod dashboard_prefs;
@@ -438,6 +439,16 @@ enum Command {
     RulesMirror {
         #[command(subcommand)]
         action: RulesMirrorAction,
+    },
+    /// MS007 typed-mirror crate `selfdef-cli-mirror` — projection of
+    /// this binary's own clap subcommand tree (with effect-class +
+    /// min-authority + signature-required classification per MS039
+    /// authority levels + MS043 R10281). Used by sovereign-os for
+    /// CLI introspection, completion, "how do I do X" cross-links,
+    /// and parity between schema-discovery + live runtime surface.
+    CliMirror {
+        #[command(subcommand)]
+        action: CliMirrorAction,
     },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
@@ -956,6 +967,24 @@ enum TrustScoresAction {
         /// MS003 signature.
         #[arg(long)]
         signature: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum CliMirrorAction {
+    /// Emit the full CliMirrorSnapshot 1.0.0 to stdout (JSON).
+    Snapshot {
+        /// Pass through JSON (default; here for parity with sister verbs).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-effect-class summary tiles (count per ReadOnly /
+    /// Diagnostic / Simulate / Prepare / Execute / Commit / Persist /
+    /// Destructive).
+    Summaries {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -2491,6 +2520,21 @@ async fn main() -> Result<()> {
                 rules_registry::run_status(json).context("rules-mirror status")?
             }
         },
+        Command::CliMirror { action } => {
+            // Self-introspection — walk THIS binary's clap tree.
+            use clap::CommandFactory;
+            let app = Cli::command();
+            let snap = cli_mirror_builder::build_snapshot(&app);
+            let _ = action; // both verbs emit JSON; differ only in payload shape
+            match action {
+                CliMirrorAction::Snapshot { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap)?);
+                }
+                CliMirrorAction::Summaries { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
+                }
+            }
+        }
         Command::TrustScores { action } => {
             let exit = match action {
                 TrustScoresAction::Show { json } => {

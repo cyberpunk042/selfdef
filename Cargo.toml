@@ -107,6 +107,8 @@ selfdef-quarantine-registry = { path = "crates/selfdef-quarantine-registry" }
 selfdef-trust-score-registry = { path = "crates/selfdef-trust-score-registry" }
 selfdef-audit-registry = { path = "crates/selfdef-audit-registry" }
 selfdef-rules-registry = { path = "crates/selfdef-rules-registry" }
+selfdef-cli-mirror = { path = "crates/selfdef-cli-mirror" }
+selfdef-tui-mirror = { path = "crates/selfdef-tui-mirror" }
 selfdef-hardware-requirements = { path = "crates/selfdef-hardware-requirements" }
 selfdef-network-boundary = { path = "crates/selfdef-network-boundary" }
 selfdef-profile-authority-gate = { path = "crates/selfdef-profile-authority-gate" }
