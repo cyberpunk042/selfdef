@@ -498,3 +498,46 @@ velociraptor_args = []
 #   "--artifact=Linux.Detection.SELinux.Audit",
 #   "--description=selfdef escalation host={host_tag} event={event_id}",
 # ]
+
+# ---------------------------------------------------------------- deployment
+# Deployment-target + cross-repo export knobs. All optional; defaults yield
+# the legacy single-host generic deployment with no exports.
+#
+# [deployment]
+# target = "generic"          # or "sain01" — selects state-dir layout
+#                             # (SDD-013); generic = /var/lib/selfdef,
+#                             # sain01 = /mnt/vault/context (ZFS).
+# sain01_strict = false       # SDD-017 §5: refuse to start on sain01
+#                             # target when hardware probe doesn't match.
+# hardware_metrics_path = ""  # SDD-017 §6: Layer B textfile-collector
+#                             # path for sain01_match (.prom). Operator
+#                             # opts in by pointing at their node_exporter
+#                             # textfile dir.
+# hardware_capabilities_path = ""
+#                             # SDD-017 §7 / SD-R10: HardwareCapabilities
+#                             # JSON export consumed by sovereign-os
+#                             # Wasm-AOT + hardware-aware policies.
+#
+# # ---- M060 cross-repo mirror export (D-02/13/14/15/17/18) ----
+# # When set, the daemon republishes each domain's daemon-resident
+# # registry READ-ONLY to this directory for the sovereign-os cockpit
+# # dashboards (D-02 active-profile, D-13 grants, D-14 capability-tokens,
+# # D-15 sandboxes, D-17 quarantine, D-18 trust-scores). Atomic
+# # tempfile+rename, 30s cadence, honest-offline when a domain's resident
+# # store is absent (no fabricated empty-online state). Co-located
+# # operators on a host that runs sovereign-os enable this by pointing
+# # at /run/sovereign-os/selfdef-mirror; sovereign-os mounts the dir as
+# # the consumer side and renders read-only per MS043 R10212.
+# selfdef_mirror_dir = "/run/sovereign-os/selfdef-mirror"
+#
+# # Per-domain resident-store overrides — only set if you've relocated
+# # the daemon's persistent state. Defaults are the registry crates'
+# # DEFAULT_STATE_PATH (/var/lib/selfdef/{grants,capability-tokens,
+# # sandboxes,quarantine,trust-scores}.json). Whatever path the daemon
+# # reads here must agree with the path the API + selfdefctl write to
+# # — both honor the same SELFDEF_<DOMAIN>_PATH env override.
+# # SELFDEF_GRANTS_PATH=...
+# # SELFDEF_CAPABILITY_TOKENS_PATH=...
+# # SELFDEF_SANDBOXES_PATH=...
+# # SELFDEF_QUARANTINE_PATH=...
+# # SELFDEF_TRUST_SCORES_PATH=...
