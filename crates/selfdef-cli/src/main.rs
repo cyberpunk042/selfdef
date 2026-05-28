@@ -37,6 +37,7 @@ mod notify;
 mod paths;
 mod perimeter;
 mod policy;
+mod quarantine_registry;
 mod repl;
 mod sandbox_registry;
 mod sandbox_tiers;
@@ -44,6 +45,7 @@ mod scheduler;
 mod ssh_wrap;
 mod tool_authority;
 mod trio;
+mod trust_score_registry;
 mod wizard;
 
 use std::path::PathBuf;
@@ -396,6 +398,20 @@ enum Command {
     Sandboxes {
         #[command(subcommand)]
         action: SandboxesAction,
+    },
+    /// M060 D-17 — quarantine registry operator surface. `show` reads
+    /// the snapshot; `release`/`forfeit` are the post-block overrides
+    /// (entries themselves are daemon-populated by MS042 detection).
+    Quarantine {
+        #[command(subcommand)]
+        action: QuarantineAction,
+    },
+    /// M060 D-18 — trust-score registry operator surface. `show` reads
+    /// the snapshot; `admit` registers a new tool; `operator-delta`
+    /// applies a signed manual adjustment.
+    TrustScores {
+        #[command(subcommand)]
+        action: TrustScoresAction,
     },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
@@ -833,6 +849,87 @@ enum SandboxesAction {
     Release {
         /// Allocation id to release.
         allocation_id: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum QuarantineAction {
+    /// Read the live snapshot via GET /v1/quarantine/snapshot.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Release a quarantine entry by id (operator override).
+    Release {
+        /// Quarantine id.
+        quarantine_id: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
+    },
+    /// Forfeit a quarantine entry by id (operator override, permanent).
+    Forfeit {
+        /// Quarantine id.
+        quarantine_id: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum TrustScoresAction {
+    /// Read the live snapshot via GET /v1/trust-scores/snapshot.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Admit a new tool via POST /v1/trust-scores/admit.
+    Admit {
+        /// Tool name to admit.
+        #[arg(long)]
+        tool: String,
+        /// MS003 declarer fingerprint.
+        #[arg(long)]
+        declarer: String,
+        /// Starting score (0..=1000).
+        #[arg(long, default_value_t = 750)]
+        initial_score: u16,
+        /// MS003 signature over the admit request.
+        #[arg(long)]
+        signature: String,
+    },
+    /// Apply an operator-signed manual delta via
+    /// POST /v1/trust-scores/operator-delta.
+    OperatorDelta {
+        /// Tool whose score is being adjusted.
+        #[arg(long)]
+        tool: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// DeltaReason (baseline|successful_execution|mismatch_minor|
+        /// mismatch_major|mismatch_critical|operator_adjustment|decay|
+        /// quarantine_release|forfeiture).
+        #[arg(long)]
+        reason: String,
+        /// Signed delta amount (negative for penalty).
+        #[arg(long)]
+        delta: i32,
+        /// Optional M049 trace_id of the triggering incident.
+        #[arg(long, default_value = "")]
+        trace_id: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
     },
 }
 
@@ -2294,6 +2391,52 @@ async fn main() -> Result<()> {
                 GrantsAction::Revoke { grant_id } => {
                     grants::run_revoke(&grant_id).context("grants revoke")?
                 }
+            };
+            std::process::exit(exit);
+        }
+        Command::Quarantine { action } => {
+            let exit = match action {
+                QuarantineAction::Show { json } => {
+                    quarantine_registry::run_show(json).context("quarantine show")?
+                }
+                QuarantineAction::Release {
+                    quarantine_id,
+                    actor,
+                    signature,
+                } => quarantine_registry::run_release(&quarantine_id, &actor, &signature)
+                    .context("quarantine release")?,
+                QuarantineAction::Forfeit {
+                    quarantine_id,
+                    actor,
+                    signature,
+                } => quarantine_registry::run_forfeit(&quarantine_id, &actor, &signature)
+                    .context("quarantine forfeit")?,
+            };
+            std::process::exit(exit);
+        }
+        Command::TrustScores { action } => {
+            let exit = match action {
+                TrustScoresAction::Show { json } => {
+                    trust_score_registry::run_show(json).context("trust-scores show")?
+                }
+                TrustScoresAction::Admit {
+                    tool,
+                    declarer,
+                    initial_score,
+                    signature,
+                } => trust_score_registry::run_admit(&tool, &declarer, initial_score, &signature)
+                    .context("trust-scores admit")?,
+                TrustScoresAction::OperatorDelta {
+                    tool,
+                    actor,
+                    reason,
+                    delta,
+                    trace_id,
+                    signature,
+                } => trust_score_registry::run_operator_delta(
+                    &tool, &actor, &reason, delta, &trace_id, &signature,
+                )
+                .context("trust-scores operator-delta")?,
             };
             std::process::exit(exit);
         }
