@@ -33,6 +33,12 @@
 //!   chain registry (`selfdef-audit-registry`, SHA-256 hash chain +
 //!   bounded-tail spans + integrity report). Append-only by MS016
 //!   R03567 doctrine; operator has no mutation surface.
+//! - **D-12 rules** (`rules.json`) — the daemon-resident nftables rule
+//!   registry (`selfdef-rules-registry`, MS024 nftables + MS038 network
+//!   boundary + MS039 Ring 0..4 trust topology). Daemon-populated by an
+//!   nft collector; the operator never appends rules through this
+//!   surface (rules are installed via selfdefctl + nft commands at the
+//!   IPS layer). Same honesty bar.
 //!
 //! Project boundary: IPS state
 //! published READ-ONLY. sovereign-os NEVER mutates — operator mutations
@@ -52,6 +58,7 @@ use selfdef_grant_registry::GrantRegistry;
 use selfdef_profile_authority_gate::Profile as GateProfile;
 use selfdef_profile_mirror::{Profile as MirrorProfile, ProfileMirrorSnapshot};
 use selfdef_quarantine_registry::QuarantineRegistry;
+use selfdef_rules_registry::RulesRegistry;
 use selfdef_sandbox_registry::SandboxRegistry;
 use selfdef_trust_score_registry::TrustScoreRegistry;
 use time::OffsetDateTime;
@@ -91,6 +98,11 @@ const TRUST_SCORES_FILE: &str = "trust-scores.json";
 /// Published audit artifact filename, wire-stable with the sovereign-os
 /// D-16 audit-chain consumer.
 const AUDIT_FILE: &str = "audit.json";
+
+/// Published rules artifact filename, wire-stable with the sovereign-os
+/// D-12 networking consumer (`scripts/mirror/selfdef-rules-mirror.py`
+/// when shipped).
+const RULES_FILE: &str = "rules.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -363,6 +375,39 @@ fn publish_audit(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
     }
 }
 
+/// Publish the D-12 rules mirror from the daemon-resident nftables
+/// rule registry. Same honesty bar: only published when the resident
+/// store exists. Daemon-populated by the nft collector loop; the
+/// operator never appends rules through this surface.
+fn publish_rules(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let registry = match RulesRegistry::load_from_path(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: rules store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    match write_json_atomic(mirror_dir, RULES_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            rules = registry.rule_count(),
+            "mirror export: rules published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: rules write failed; will retry"
+        ),
+    }
+}
+
 /// Publish the D-18 trust-scores mirror from the daemon-resident
 /// trust-score registry. Same honesty bar: only published when the
 /// resident store exists. Daemon-populated by scoring events.
@@ -407,6 +452,7 @@ fn publish_all(
     quarantine_store: &Path,
     trust_scores_store: &Path,
     audit_store: &Path,
+    rules_store: &Path,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
@@ -416,13 +462,14 @@ fn publish_all(
     publish_quarantine(mirror_dir, quarantine_store, now);
     publish_trust_scores(mirror_dir, trust_scores_store, now);
     publish_audit(mirror_dir, audit_store, now);
+    publish_rules(mirror_dir, rules_store, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
 /// capability-tokens). Publishes once at startup, then every
 /// [`MIRROR_EXPORT_INTERVAL_SECS`], cooperating with the daemon shutdown
 /// signal (clean exit on cancel).
-#[allow(clippy::too_many_arguments)] // one path per mirror domain (5 + flex + dir + shutdown)
+#[allow(clippy::too_many_arguments)] // one path per mirror domain
 pub(crate) async fn run_mirror_export_loop(
     mirror_dir: PathBuf,
     flex_path: PathBuf,
@@ -432,6 +479,7 @@ pub(crate) async fn run_mirror_export_loop(
     quarantine_store: PathBuf,
     trust_scores_store: PathBuf,
     audit_store: PathBuf,
+    rules_store: PathBuf,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -443,6 +491,7 @@ pub(crate) async fn run_mirror_export_loop(
         &quarantine_store,
         &trust_scores_store,
         &audit_store,
+        &rules_store,
     );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -457,8 +506,9 @@ pub(crate) async fn run_mirror_export_loop(
         quarantine_store = %quarantine_store.display(),
         trust_scores_store = %trust_scores_store.display(),
         audit_store = %audit_store.display(),
+        rules_store = %rules_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit, read-only) — 6/9 mirror domains wired (D-02/13/14/15/16/17/18)"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules, read-only) — 7/9 mirror domains wired (D-02/12/13/14/15/16/17/18)"
     );
     loop {
         tokio::select! {
@@ -475,6 +525,7 @@ pub(crate) async fn run_mirror_export_loop(
                 &quarantine_store,
                 &trust_scores_store,
                 &audit_store,
+                &rules_store,
             ),
         }
     }
@@ -616,6 +667,53 @@ mod tests {
         snap.validate_schema().unwrap();
         assert_eq!(snap.spans.len(), 1);
         assert_eq!(snap.spans[0].trace_id, "t1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_rules_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-rules-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("rules.json");
+        publish_rules(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(RULES_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_rules_writes_resident_registry() {
+        use selfdef_rules_registry::{
+            Disposition, RuleEntry, RulesMirrorSnapshot, RulesRegistry, TrustRing,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-rules-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("rules.json");
+        let mut reg = RulesRegistry::new();
+        reg.replace_rules(vec![RuleEntry {
+            handle: 1,
+            rule_id: "rule-001".into(),
+            ring: TrustRing::SovereignKernel,
+            table: "inet".into(),
+            chain: "selfdef-ring0".into(),
+            match_expr: "ip protocol tcp".into(),
+            disposition: Disposition::Accept,
+            priority: 100,
+            packets: 10,
+            bytes: 640,
+            installed_at: "2027-01-15T08:00:00Z".into(),
+            installed_by: Some("operator-fp".into()),
+            signature: "sig".into(),
+        }]);
+        reg.save_to_path(&store).unwrap();
+
+        publish_rules(&dir, &store, OffsetDateTime::now_utc());
+        let published = dir.join(RULES_FILE);
+        assert!(published.exists());
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: RulesMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.rules.len(), 1);
+        assert_eq!(snap.summaries.len(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
 

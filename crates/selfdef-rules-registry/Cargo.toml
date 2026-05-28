@@ -1,0 +1,23 @@
+[package]
+name = "selfdef-rules-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Daemon-resident registry of live nftables rule state — the producer side of the M060 D-12 networking mirror. Snapshots Ring 0..4 nft state on demand + persists to /var/lib/selfdef/rules.json for the selfdef-daemon mirror-export loop. Composes selfdef-rules-mirror (wire schema). Per MS024 + MS038 + MS039 + MS043 R10182."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-rules-mirror = { path = "../selfdef-rules-mirror" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

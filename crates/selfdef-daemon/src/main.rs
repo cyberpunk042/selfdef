@@ -451,10 +451,15 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|_| {
                 std::path::PathBuf::from(selfdef_audit_registry::DEFAULT_STATE_PATH)
             });
+        let rules_store = std::env::var("SELFDEF_RULES_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_rules_registry::DEFAULT_STATE_PATH)
+            });
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
-            "M060: mirror export enabled (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit, read-only)"
+            "M060: mirror export enabled (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules, read-only)"
         );
         Some(tokio::spawn(async move {
             mirror_export_loop::run_mirror_export_loop(
@@ -466,6 +471,7 @@ async fn main() -> Result<()> {
                 quarantine_store,
                 trust_scores_store,
                 audit_store,
+                rules_store,
                 sd,
             )
             .await

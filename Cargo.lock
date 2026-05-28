@@ -3393,6 +3393,7 @@ dependencies = [
  "selfdef-profile-mirror",
  "selfdef-quarantine-registry",
  "selfdef-responder",
+ "selfdef-rules-registry",
  "selfdef-sandbox-registry",
  "selfdef-scheduler",
  "selfdef-signing",
@@ -6321,6 +6322,18 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-rules-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-rules-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
