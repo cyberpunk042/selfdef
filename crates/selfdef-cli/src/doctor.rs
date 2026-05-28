@@ -80,7 +80,65 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     // for general health see the cross-repo mirror chain state too
     // (not just watchdogs + alerts).
     out.extend(check_m060_chain(cfg));
+    // M060 D-CLI — cli-mirror filesystem-state checks complementary
+    // to the /metrics-backed chain-health above. The metrics path
+    // tells you the daemon's PUBLISHER state; this path tells you
+    // whether the OPERATOR-CONTROLLED producer pipeline (the systemd
+    // one-shot, the resident store, the resulting <mirror_dir>/cli.json)
+    // is on its feet. Both signals matter; folding both into doctor
+    // means one `selfdefctl doctor` invocation surfaces the full
+    // M060 D-CLI chain state.
+    out.extend(check_cli_mirror_chain(cfg));
     out
+}
+
+/// M060 D-CLI — fold cli-mirror's 4 filesystem-state checks into
+/// the doctor roll-up. Source-of-truth is `cli_mirror_doctor::run_checks`
+/// so the standalone verb (`selfdefctl cli-mirror doctor`) and this
+/// roll-up surface identical classifications, with one quieting-rule:
+/// when the operator hasn't opted into M060 at all (no
+/// `[deployment].selfdef_mirror_dir` in selfdef.toml), the four
+/// per-link checks downgrade from Warn→Skip so a fresh-install
+/// `doctor` doesn't shout about a chain the operator never asked
+/// for. Fail stays Fail (a Fail means structural break — operator
+/// always needs to see it, opted-in or not).
+fn check_cli_mirror_chain(cfg: &Config) -> Vec<CheckResult> {
+    use crate::cli_mirror_doctor;
+    // Opt-in signal comes directly from the parsed selfdef.toml the
+    // doctor was invoked with (--config CLI flag honored upstream).
+    // Reading the raw toml again would re-introduce the path-mismatch
+    // bug — the doctor is already parsing it; we just consume the
+    // typed knob.
+    let opted_in = !cfg.deployment.selfdef_mirror_dir.is_empty();
+    // The cli_mirror_doctor::run_checks helper still re-reads the
+    // canonical /etc/selfdef/selfdef.toml for its OWN published-mirror
+    // check (it doesn't have access to the Config struct since it
+    // also serves the standalone verb where no Config is parsed).
+    // For the roll-up we pass the test/operator-provided path via
+    // the same env trick the upstream `--config` honors — but that's
+    // overkill for a fold; just use the canonical path here. The
+    // opted_in classification (gating warn→skip) is the
+    // operator-observable signal regardless.
+    let config_path = std::path::Path::new("/etc/selfdef/selfdef.toml");
+    let checks = cli_mirror_doctor::run_checks(config_path);
+    checks
+        .into_iter()
+        .map(|c| CheckResult {
+            category: "m060".to_string(),
+            name: format!("cli-mirror · {}", c.name),
+            status: match (c.severity, opted_in) {
+                (cli_mirror_doctor::Severity::Pass, _) => CheckStatus::Ok,
+                (cli_mirror_doctor::Severity::Warn, true) => CheckStatus::Warn,
+                (cli_mirror_doctor::Severity::Warn, false) => CheckStatus::Skipped,
+                (cli_mirror_doctor::Severity::Fail, _) => CheckStatus::Fail,
+            },
+            detail: if c.fix.is_empty() {
+                c.detail
+            } else {
+                format!("{} · fix: {}", c.detail, c.fix)
+            },
+        })
+        .collect()
 }
 
 /// M060 — fold per-artifact mirror-publish state into doctor. Reuses

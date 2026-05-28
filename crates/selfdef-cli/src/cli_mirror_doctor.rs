@@ -60,12 +60,12 @@ impl Severity {
 }
 
 /// One row of the operator-readable triage table.
-struct Check {
-    name: &'static str,
-    severity: Severity,
-    detail: String,
+pub(crate) struct Check {
+    pub(crate) name: &'static str,
+    pub(crate) severity: Severity,
+    pub(crate) detail: String,
     /// Suggested next step when severity != Pass. Empty when Pass.
-    fix: String,
+    pub(crate) fix: String,
 }
 
 impl Check {
@@ -95,6 +95,23 @@ impl Check {
     }
 }
 
+/// Compute the canonical 4-check set the dedicated verb runs. Used
+/// by both the standalone `selfdefctl cli-mirror doctor` verb (which
+/// renders these into a triage table) and the cross-cutting
+/// `selfdefctl doctor` roll-up (which converts them into CheckResult
+/// rows). Keeping a single source-of-truth means the operator gets
+/// identical classifications regardless of which surface they call.
+#[must_use]
+pub(crate) fn run_checks(config_path: &Path) -> Vec<Check> {
+    let resident = resident_store_path();
+    vec![
+        check_schema_version_invariant(),
+        check_resident_store(&resident),
+        check_systemd_unit(),
+        check_published_mirror(config_path),
+    ]
+}
+
 /// Resolve the resident-store path: env override wins, else crate const.
 fn resident_store_path() -> PathBuf {
     std::env::var_os("SELFDEF_CLI_MIRROR_PATH")
@@ -104,7 +121,7 @@ fn resident_store_path() -> PathBuf {
 
 /// Read `[deployment].selfdef_mirror_dir` from selfdef.toml without
 /// pulling in the full TOML parser — mirrors the m060_doctor sibling.
-fn read_mirror_dir_from_config(config_path: &Path) -> Option<PathBuf> {
+pub(crate) fn read_mirror_dir_from_config(config_path: &Path) -> Option<PathBuf> {
     let text = std::fs::read_to_string(config_path).ok()?;
     let mut in_deployment = false;
     for line in text.lines() {
@@ -149,7 +166,7 @@ fn file_age_secs(path: &Path) -> Option<u64> {
 /// age > 1 day is WARN (rebuilt selfdefctl with no re-emit); absent is
 /// WARN (shell-out fallback may still cover, but the doctor flags it
 /// so the operator can wire the one-shot).
-fn check_resident_store(path: &Path) -> Check {
+pub(crate) fn check_resident_store(path: &Path) -> Check {
     if !path.exists() {
         return Check::warn(
             "resident-store",
@@ -227,7 +244,7 @@ fn check_resident_store(path: &Path) -> Check {
 ///   3. systemctl unavailable (no systemd) OR unit not installed → WARN
 ///      (the shell-out fallback may still cover, but the operator
 ///      should know they're on the legacy path)
-fn check_systemd_unit() -> Check {
+pub(crate) fn check_systemd_unit() -> Check {
     // `is-active` is cheap + standalone; doesn't need any sd-bus glue.
     let probe = Command::new("systemctl")
         .args([
@@ -333,7 +350,7 @@ fn check_systemd_unit() -> Check {
 
 /// Inspect the published mirror — should exist when
 /// `[deployment].selfdef_mirror_dir` is set + selfdefd is running.
-fn check_published_mirror(config_path: &Path) -> Check {
+pub(crate) fn check_published_mirror(config_path: &Path) -> Check {
     let mirror_dir = match read_mirror_dir_from_config(config_path) {
         Some(p) => p,
         None => {
@@ -378,7 +395,7 @@ fn check_published_mirror(config_path: &Path) -> Check {
 /// consumer-side const at compile time. Drift here is a wire-shape
 /// regression (developer introduced a new schema without bumping the
 /// crate const), not an operator-actionable state. RED.
-fn check_schema_version_invariant() -> Check {
+pub(crate) fn check_schema_version_invariant() -> Check {
     // SCHEMA_VERSION is a const from selfdef-cli-mirror; the producer
     // (the in-process clap walker) reads the same const. They cannot
     // drift unless someone hand-edits the JSON. This check exists so
@@ -397,13 +414,7 @@ pub(crate) fn run(json: bool, config_override: Option<&Path>) -> Result<i32> {
         || PathBuf::from(DEFAULT_CONFIG_PATH),
         std::path::Path::to_path_buf,
     );
-    let resident = resident_store_path();
-    let checks = vec![
-        check_schema_version_invariant(),
-        check_resident_store(&resident),
-        check_systemd_unit(),
-        check_published_mirror(&config_path),
-    ];
+    let checks = run_checks(&config_path);
     let worst = checks
         .iter()
         .map(|c| c.severity)
@@ -497,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn check_resident_store_absent_is_warn() {
+    pub(crate) fn check_resident_store_absent_is_warn() {
         let path = std::env::temp_dir().join(format!(
             "cli-mirror-doctor-absent-{}.json",
             std::process::id()
@@ -510,7 +521,7 @@ mod tests {
     }
 
     #[test]
-    fn check_resident_store_valid_is_pass() {
+    pub(crate) fn check_resident_store_valid_is_pass() {
         let path = std::env::temp_dir().join(format!(
             "cli-mirror-doctor-valid-{}.json",
             std::process::id()
@@ -523,7 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn check_resident_store_malformed_json_is_fail() {
+    pub(crate) fn check_resident_store_malformed_json_is_fail() {
         let path =
             std::env::temp_dir().join(format!("cli-mirror-doctor-bad-{}.json", std::process::id()));
         fs::write(&path, b"this is not json").unwrap();
@@ -534,7 +545,7 @@ mod tests {
     }
 
     #[test]
-    fn check_resident_store_schema_drift_is_fail() {
+    pub(crate) fn check_resident_store_schema_drift_is_fail() {
         let path = std::env::temp_dir().join(format!(
             "cli-mirror-doctor-drift-{}.json",
             std::process::id()
@@ -556,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn check_published_mirror_no_config_is_warn() {
+    pub(crate) fn check_published_mirror_no_config_is_warn() {
         let path = std::env::temp_dir().join(format!(
             "cli-mirror-doctor-missing-config-{}.toml",
             std::process::id()
@@ -568,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn check_published_mirror_config_set_but_file_absent_is_warn() {
+    pub(crate) fn check_published_mirror_config_set_but_file_absent_is_warn() {
         let dir = std::env::temp_dir().join(format!(
             "cli-mirror-doctor-published-{}",
             std::process::id()
@@ -593,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn check_published_mirror_fresh_file_is_pass() {
+    pub(crate) fn check_published_mirror_fresh_file_is_pass() {
         let dir =
             std::env::temp_dir().join(format!("cli-mirror-doctor-pubfresh-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
