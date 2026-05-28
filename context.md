@@ -12,6 +12,63 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 
 `cyberpunk042/sovereign-os` is **Solution 1** — the runtime/cockpit. `cyberpunk042/devops-solutions-information-hub` is the **third piece** = read-only second-brain.
 
+## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
+
+The 5 sovereign-os mirror dashboards (D-13 grants, D-14 capability-tokens,
+D-15 sandboxes, D-17 quarantine, D-18 trust-scores) plus D-02 active-
+profile were producer-less shells consuming MS007 typed-mirror types with
+no daemon-side writer. This arc closes that publisher gap end-to-end.
+
+**State of the program on PR `cyberpunk042/selfdef#200` (branch
+`claude/recover-projects-b0oT6`, 13 commits, ~7500 LOC, all gates green
+except pre-existing `m3_pipeline` + info-hub coherence drift accepted
+as land-as-is):**
+
+| Domain | New daemon-resident registry crate | Persisted store | Mutation model |
+|---|---|---|---|
+| D-02 active-profile | (uses existing `selfdef-flex-profile`) + new `selfdef-profile-mirror` MS007 wire-schema crate | `/var/lib/selfdef/flex-profile.json` | always-published; R09535 Private default |
+| D-13 grants         | `selfdef-grant-registry`           | `/var/lib/selfdef/grants.json`             | operator-issued (issue/revoke) — full API + selfdefctl |
+| D-14 capability-tokens | `selfdef-capability-registry`   | `/var/lib/selfdef/capability-tokens.json`  | operator-issued (capability_word composed) — full API + selfdefctl |
+| D-15 sandboxes      | `selfdef-sandbox-registry`         | `/var/lib/selfdef/sandboxes.json`          | operator-issued (MS036×MS032 validation) — full API + selfdefctl |
+| D-17 quarantine     | `selfdef-quarantine-registry`      | `/var/lib/selfdef/quarantine.json`         | daemon-populated (MS042 detection); operator override release/forfeit — API + selfdefctl |
+| D-18 trust-scores   | `selfdef-trust-score-registry`     | `/var/lib/selfdef/trust-scores.json`       | daemon-populated (`canonical_delta` from `selfdef-trust-score-engine`); operator admit + manual-delta override — API + selfdefctl |
+
+**Daemon export loop** (`selfdef-daemon/src/mirror_export_loop.rs`):
+opt-in via `[deployment].selfdef_mirror_dir`, atomic-writes each domain's
+snapshot READ-ONLY to that directory when the resident store exists
+(honest offline otherwise — no fabricated empty-online state). 30s
+periodic + at startup, cooperates with the daemon shutdown signal. Per-
+domain env overrides (`SELFDEF_{GRANTS,CAPABILITY_TOKENS,SANDBOXES,
+QUARANTINE,TRUST_SCORES}_PATH`) kept symmetric between the API writer
+and the export reader so relocations don't desync.
+
+**Validation discipline** (registry-side, mirrors `selfdef-grant-issuer`):
+unsigned → BAD_REQUEST, empty mandatory fields → BAD_REQUEST, TTL=0 or
+above 86400s ceiling (MS040 R09407) → BAD_REQUEST, kind-specific
+predicates (ms032 range, sandbox tier letters, allowed_tools vocabulary)
+→ BAD_REQUEST; storage/format problems → 500. Capability tokens compose
+`selfdef_capability_word::CapabilityWord` from operator-requested
+`ToolClass` set + trust ring numeric per MS039 R09430. Trust-score
+deltas use the engine's `canonical_delta` per `DeltaReason`.
+
+**End-to-end verified at every seam** — the sovereign-os
+`scripts/mirror/selfdef-*-mirror.py` readers consume the daemon-shaped
+artifacts (exact serde shape) for D-02 / D-13 / D-14 / D-15, flipping
+each dashboard from `mirror_status=offline` → `online` with the right
+fields populated. D-17 / D-18 follow the same shape and validate
+identically.
+
+**Project-boundary discipline preserved (MS043 R10212):** IPS state
+mutation lives in selfdef only; sovereign-os renders READ-ONLY. Mirror
+verbs are `selfdefctl` + MS003-signed (the verify-only signing doctrine
+— operators sign externally with the `minisign` CLI). The cross-cutting
+commit-authority gating remains the open SDD-055 arc for all mutation
+surfaces.
+
+Sister doc update on the sovereign-os side: PR `cyberpunk042/sovereign-os#12`.
+
+---
+
 ## Current arc (2026-05-27): detection-watchdog single-source hardening — COMPLETE
 
 > The 2026-05-19 snapshot below (catalog + Rust-crate proliferation) is
