@@ -13,6 +13,7 @@ mod authority;
 mod capability_tokens;
 mod capability_tokens_registry;
 mod cli_mirror_builder;
+mod cli_mirror_doctor;
 mod commit_authority;
 mod communication_boundary;
 mod dashboard_prefs;
@@ -1027,6 +1028,33 @@ enum CliMirrorAction {
         /// Pass through JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Triage the M060 D-CLI mirror chain on this host. Inspects:
+    ///
+    ///   1. Resident store at `SELFDEF_CLI_MIRROR_PATH` (default
+    ///      `/var/lib/selfdef/cli-mirror.json`) — exists, age,
+    ///      schema-version, subcommand count.
+    ///   2. Systemd one-shot `selfdef-cli-mirror-emit.service` — last
+    ///      ExecMainStatus + active state.
+    ///   3. Published mirror at `<selfdef_mirror_dir>/cli.json` —
+    ///      exists, age vs the resident store's age (drift
+    ///      detection).
+    ///
+    /// Exits 0 (GREEN) when every check passes, 1 (YELLOW /
+    /// degraded) when at least one path is operator-actionable, 2
+    /// (RED) when the chain is structurally broken. Per-check
+    /// triage line printed in the canonical operator format used
+    /// by `selfdefctl doctor`.
+    Doctor {
+        /// Emit per-check state as JSON instead of the operator-
+        /// readable table. Schema mirrors the
+        /// `M060ChainCliMirrorReport` shape used by sister doctors.
+        #[arg(long)]
+        json: bool,
+        /// Override the canonical config path. Defaults to
+        /// `/etc/selfdef/selfdef.toml`.
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
     },
 }
 
@@ -2604,6 +2632,11 @@ async fn main() -> Result<()> {
                 },
                 CliMirrorAction::Summaries { json: _ } => {
                     println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
+                }
+                CliMirrorAction::Doctor { json, config } => {
+                    let exit_code = cli_mirror_doctor::run(json, config.as_deref())
+                        .context("cli-mirror doctor")?;
+                    std::process::exit(exit_code);
                 }
             }
         }
