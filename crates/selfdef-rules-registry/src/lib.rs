@@ -36,8 +36,8 @@ use time::format_description::well_known::Rfc3339;
 // Facade re-exports: consumers (daemon, CLI) depend only on this crate
 // for the rules types, not on the underlying mirror crate.
 pub use selfdef_rules_mirror::{
-    Disposition, MirrorError, RingSummary, RuleEntry, RulesMirrorSnapshot,
-    SCHEMA_VERSION, TrustRing,
+    Disposition, MirrorError, RingSummary, RuleEntry, RulesMirrorSnapshot, SCHEMA_VERSION,
+    TrustRing,
 };
 
 /// Default on-disk path for the persisted registry (operator override
@@ -147,8 +147,8 @@ impl RulesRegistry {
         let path = path.as_ref();
         match std::fs::read(path) {
             Ok(bytes) => {
-                let snapshot: RulesMirrorSnapshot = serde_json::from_slice(&bytes)
-                    .map_err(|e| RegistryError::Malformed {
+                let snapshot: RulesMirrorSnapshot =
+                    serde_json::from_slice(&bytes).map_err(|e| RegistryError::Malformed {
                         path: path.display().to_string(),
                         source: e,
                     })?;
@@ -180,10 +180,7 @@ impl RulesRegistry {
             path: parent.display().to_string(),
             source: e,
         })?;
-        let tmp = parent.join(format!(
-            ".rules.json.tmp.{}",
-            std::process::id()
-        ));
+        let tmp = parent.join(format!(".rules.json.tmp.{}", std::process::id()));
         let bytes = serde_json::to_vec_pretty(&self.snapshot).map_err(|e| {
             // Should not happen — our snapshot is always serializable.
             RegistryError::Malformed {
@@ -250,7 +247,10 @@ mod tests {
         assert_eq!(r.rule_count(), 3);
         let sums = r.summaries();
         assert_eq!(sums.len(), 2);
-        let k = sums.iter().find(|s| s.ring == TrustRing::SovereignKernel).unwrap();
+        let k = sums
+            .iter()
+            .find(|s| s.ring == TrustRing::SovereignKernel)
+            .unwrap();
         assert_eq!(k.rule_count, 2);
         assert_eq!(k.total_packets, 300);
         assert_eq!(k.total_bytes, 300 * 64);
