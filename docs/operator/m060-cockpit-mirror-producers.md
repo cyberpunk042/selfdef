@@ -208,8 +208,12 @@ is wire-level, not just doctrine. See:
 
 - **Setup**: this document (selfdef side) +
   `sovereign-os/docs/operator/m060-deployment-guide.md` (cockpit side).
-- **Incident response**: `sovereign-os/docs/operator/m060-incident-response.md`
-  (the surface-ladder docs the operator uses when a mirror goes red).
-- **Alert runbook**: `sovereign-os/docs/operator/m060-alert-runbook.md`.
+- **Incident response**: see the "Incident-response surface ladder"
+  section in `sovereign-os/docs/operator/m060-deployment-guide.md`
+  (line ~242 — the surface-ladder operators use when a mirror goes red).
+- **Alert runbook**: see the "Alert runbook" section in
+  `sovereign-os/docs/operator/m060-deployment-guide.md` (line ~287 —
+  the 5 Prometheus alerts on the chain-health observability stack,
+  with per-alert pager-actionable diagnoses).
 - **CLI**: `selfdefctl m060-doctor`, `selfdefctl m060-metrics`,
   `selfdefctl doctor --m060-health`.
