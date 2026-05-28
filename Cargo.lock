@@ -2410,6 +2410,7 @@ dependencies = [
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
  "selfdef-responder",
+ "selfdef-sandbox-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
  "selfdef-store",

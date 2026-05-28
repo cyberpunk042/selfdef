@@ -68,6 +68,7 @@ mod policy;
 mod quarantine;
 mod raid;
 mod repl;
+mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
 mod state;
@@ -353,6 +354,13 @@ pub fn router(state: ApiState) -> Router {
             "/v1/capability-tokens/revoke",
             post(capability_token_registry::revoke),
         )
+        // M060 D-15 — sandboxes *live registry* surface. Sister to the
+        // existing GET /v1/sandbox-tiers tier-discovery route. Operator
+        // allocate/release of MS036 sandbox allocations; the resident
+        // store is what the mirror-export loop republishes.
+        .route("/v1/sandboxes/snapshot", get(sandbox_registry::snapshot))
+        .route("/v1/sandboxes/allocate", post(sandbox_registry::allocate))
+        .route("/v1/sandboxes/release", post(sandbox_registry::release))
         // MS043 UX — operator dashboard preferences persisted daemon-
         // side so view choices survive browser/host switches. GET
         // returns the current TOML (missing file → blank-valid body),

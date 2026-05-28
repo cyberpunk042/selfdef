@@ -38,6 +38,7 @@ mod paths;
 mod perimeter;
 mod policy;
 mod repl;
+mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
 mod ssh_wrap;
@@ -388,6 +389,13 @@ enum Command {
     Grants {
         #[command(subcommand)]
         action: GrantsAction,
+    },
+    /// M060 D-15 — sandbox-allocation registry operator surface. `show`
+    /// reads the resident snapshot; `allocate`/`release` are the IPS-side
+    /// write path the mirror-export republishes for sovereign-os.
+    Sandboxes {
+        #[command(subcommand)]
+        action: SandboxesAction,
     },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
@@ -774,6 +782,57 @@ enum GrantsAction {
     Revoke {
         /// Grant id to revoke.
         grant_id: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum SandboxesAction {
+    /// Read the live snapshot via GET /v1/sandboxes/snapshot.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Allocate a sandbox via POST /v1/sandboxes/allocate.
+    Allocate {
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Active profile at allocation time (MS040).
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// MS036 sandbox tier: tier-a|tier-b|tier-c|tier-d.
+        #[arg(long)]
+        tier: String,
+        /// MS032 sandbox tier index (1..9; must lie in the configured
+        /// MS036 tier's range).
+        #[arg(long)]
+        ms032_tier: u8,
+        /// Underlying isolation primitive (host_seccomp / user_namespace
+        /// / networked_namespace / kvm_vfio / kvm_headless /
+        /// criu_checkpoint / zfs_clone / firecracker_microvm).
+        #[arg(long)]
+        isolation: String,
+        /// Tool occupying the allocation.
+        #[arg(long)]
+        tool: String,
+        /// Bound capability-token id (MS035 linkage).
+        #[arg(long)]
+        capability_token_id: String,
+        /// TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Release an allocation by id via POST /v1/sandboxes/release.
+    Release {
+        /// Allocation id to release.
+        allocation_id: String,
     },
 }
 
@@ -2234,6 +2293,41 @@ async fn main() -> Result<()> {
                 .context("grants issue")?,
                 GrantsAction::Revoke { grant_id } => {
                     grants::run_revoke(&grant_id).context("grants revoke")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::Sandboxes { action } => {
+            let exit = match action {
+                SandboxesAction::Show { json } => {
+                    sandbox_registry::run_show(json).context("sandboxes show")?
+                }
+                SandboxesAction::Allocate {
+                    actor,
+                    profile,
+                    tier,
+                    ms032_tier,
+                    isolation,
+                    tool,
+                    capability_token_id,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => sandbox_registry::run_allocate(
+                    &actor,
+                    &profile,
+                    &tier,
+                    ms032_tier,
+                    &isolation,
+                    &tool,
+                    &capability_token_id,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("sandboxes allocate")?,
+                SandboxesAction::Release { allocation_id } => {
+                    sandbox_registry::run_release(&allocation_id).context("sandboxes release")?
                 }
             };
             std::process::exit(exit);
