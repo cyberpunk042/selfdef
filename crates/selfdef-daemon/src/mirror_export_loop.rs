@@ -483,17 +483,80 @@ fn publish_all(
     trust_scores_store: &Path,
     audit_store: &Path,
     rules_store: &Path,
+    metrics: Option<&std::sync::Arc<selfdef_api::Metrics>>,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
+    record_outcome(metrics, mirror_dir, ACTIVE_PROFILE_FILE, None);
     publish_grants(mirror_dir, grants_store, now);
+    record_outcome(metrics, mirror_dir, GRANTS_FILE, Some(grants_store));
     publish_capability_tokens(mirror_dir, capability_tokens_store, now);
+    record_outcome(
+        metrics,
+        mirror_dir,
+        CAPABILITY_TOKENS_FILE,
+        Some(capability_tokens_store),
+    );
     publish_sandboxes(mirror_dir, sandboxes_store, now);
+    record_outcome(metrics, mirror_dir, SANDBOXES_FILE, Some(sandboxes_store));
     publish_quarantine(mirror_dir, quarantine_store, now);
+    record_outcome(metrics, mirror_dir, QUARANTINE_FILE, Some(quarantine_store));
     publish_trust_scores(mirror_dir, trust_scores_store, now);
+    record_outcome(
+        metrics,
+        mirror_dir,
+        TRUST_SCORES_FILE,
+        Some(trust_scores_store),
+    );
     publish_audit(mirror_dir, audit_store, now);
+    record_outcome(metrics, mirror_dir, AUDIT_FILE, Some(audit_store));
     publish_rules(mirror_dir, rules_store, now);
+    record_outcome(metrics, mirror_dir, RULES_FILE, Some(rules_store));
     publish_tui(mirror_dir, now);
+    record_outcome(metrics, mirror_dir, TUI_FILE, None);
+}
+
+/// Post-publish outcome classifier. Bumps the M060 publish counters
+/// based on whether the artifact actually appeared in the mirror dir
+/// since the call. The resident-store gate (`store`) lets us
+/// distinguish "honest offline" (no resident store → no metric) from
+/// "publish failed" (resident exists but no mirror file).
+fn record_outcome(
+    metrics: Option<&std::sync::Arc<selfdef_api::Metrics>>,
+    mirror_dir: &Path,
+    artifact: &str,
+    store: Option<&Path>,
+) {
+    let Some(m) = metrics else { return };
+    // Honest-offline (resident-gated artifacts only): don't bump any
+    // counter. Operator hasn't onboarded the domain yet; not a failure.
+    if let Some(s) = store {
+        if !s.exists() {
+            return;
+        }
+    }
+    let mirror_path = mirror_dir.join(artifact);
+    if !mirror_path.exists() {
+        m.record_m060_publish(artifact, false);
+        return;
+    }
+    // Mirror file exists. The publisher's atomic-rename pattern means
+    // a fresh write updates mtime; we treat any mtime within the last
+    // 60 seconds (2 ticks of the 30s export loop) as a successful
+    // publish this round. Anything older was a no-op this tick.
+    let fresh = std::fs::metadata(&mirror_path)
+        .ok()
+        .and_then(|md| md.modified().ok())
+        .and_then(|t| std::time::SystemTime::now().duration_since(t).ok())
+        .is_some_and(|age| age.as_secs() < 60);
+    if fresh {
+        m.record_m060_publish(artifact, true);
+    } else {
+        // Mirror is present but stale — this means publish_X didn't
+        // refresh it this tick. Could be load-failure (warn-logged
+        // inside the publisher) or a transient I/O issue.
+        m.record_m060_publish(artifact, false);
+    }
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
@@ -511,6 +574,7 @@ pub(crate) async fn run_mirror_export_loop(
     trust_scores_store: PathBuf,
     audit_store: PathBuf,
     rules_store: PathBuf,
+    metrics: Option<std::sync::Arc<selfdef_api::Metrics>>,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -523,6 +587,7 @@ pub(crate) async fn run_mirror_export_loop(
         &trust_scores_store,
         &audit_store,
         &rules_store,
+        metrics.as_ref(),
     );
     // MS007 cli-mirror is async (shells out to selfdefctl) — published
     // alongside the sync mirrors but on the async path. First call
@@ -562,6 +627,7 @@ pub(crate) async fn run_mirror_export_loop(
                     &trust_scores_store,
                     &audit_store,
                     &rules_store,
+                    metrics.as_ref(),
                 );
                 crate::cli_mirror_publisher::publish_cli(&mirror_dir).await;
             }
@@ -705,6 +771,78 @@ mod tests {
         snap.validate_schema().unwrap();
         assert_eq!(snap.spans.len(), 1);
         assert_eq!(snap.spans[0].trace_id, "t1");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_outcome_no_op_when_metrics_none() {
+        let dir = std::env::temp_dir().join(format!("selfdef-rec-none-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // Should not panic with None metrics, regardless of mirror state.
+        record_outcome(None, &dir, "doesnotmatter.json", None);
+        record_outcome(None, &dir, "doesnotmatter.json", Some(&dir.join("nope")));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_outcome_skips_when_resident_store_absent() {
+        use std::sync::Arc;
+        let dir = std::env::temp_dir().join(format!("selfdef-rec-skip-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let metrics = Arc::new(selfdef_api::Metrics::new("h"));
+        // Resident store missing → honest-offline; must NOT bump counter.
+        let absent_store = dir.join("absent.json");
+        record_outcome(Some(&metrics), &dir, "x.json", Some(&absent_store));
+        let body = metrics.render(0);
+        assert!(
+            !body.contains("selfdef_m060_mirror_publish_total{artifact=\"x.json\""),
+            "should not have recorded any outcome when resident store absent: {body}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_outcome_bumps_failed_when_resident_present_but_mirror_missing() {
+        use std::sync::Arc;
+        let dir = std::env::temp_dir().join(format!("selfdef-rec-fail-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let resident = dir.join("resident.json");
+        std::fs::write(&resident, b"{}").unwrap();
+        let metrics = Arc::new(selfdef_api::Metrics::new("h"));
+        // Resident exists but mirror file was never written → failed.
+        record_outcome(Some(&metrics), &dir, "missing.json", Some(&resident));
+        let body = metrics.render(0);
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"missing.json\",result=\"failed\"} 1"
+            ),
+            "{body}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn record_outcome_bumps_ok_when_mirror_is_freshly_written() {
+        use std::sync::Arc;
+        let dir = std::env::temp_dir().join(format!("selfdef-rec-ok-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mirror_file = dir.join("fresh.json");
+        std::fs::write(&mirror_file, b"{\"k\":1}").unwrap();
+        let metrics = Arc::new(selfdef_api::Metrics::new("h"));
+        // Static-shape (no store gate) + freshly-written mirror → ok.
+        record_outcome(Some(&metrics), &dir, "fresh.json", None);
+        let body = metrics.render(0);
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"fresh.json\",result=\"ok\"} 1"
+            ),
+            "{body}"
+        );
+        // Successful publish must stamp the last-publish gauge.
+        assert!(
+            body.contains("selfdef_m060_mirror_last_publish_unix{artifact=\"fresh.json\"}"),
+            "{body}"
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -416,6 +416,19 @@ async fn main() -> Result<()> {
     // [deployment].selfdef_mirror_dir. Publishes the active authority-
     // profile snapshot READ-ONLY for the sovereign-os cockpit. Lives for
     // the daemon's lifetime + observes the same shutdown signal.
+    //
+    // Construct the Metrics handle BEFORE spawning the mirror loop so
+    // the loop can bump per-artifact publish counters from the start.
+    // The metrics ingest task below also takes a clone of this same
+    // handle. When the API is disabled, we still construct + clone the
+    // handle (cheap, Arc'd) so the mirror loop has a place to record;
+    // it's only the /metrics scrape surface + bus-ingest task that the
+    // API flag gates.
+    let mirror_metrics = if cfg.api.enabled {
+        Some(Arc::new(selfdef_api::Metrics::new(host_tag.clone())))
+    } else {
+        None
+    };
     let _mirror_export_task = if cfg.deployment.selfdef_mirror_dir.is_empty() {
         None
     } else {
@@ -472,6 +485,7 @@ async fn main() -> Result<()> {
             .await
         });
         let sd = shutdown.clone();
+        let metrics_for_mirror = mirror_metrics.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
             "M060: mirror export enabled (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules, read-only)"
@@ -487,6 +501,7 @@ async fn main() -> Result<()> {
                 trust_scores_store,
                 audit_store,
                 rules_store,
+                metrics_for_mirror,
                 sd,
             )
             .await
@@ -588,8 +603,14 @@ async fn main() -> Result<()> {
     // bus and bumps counters per event). The ingest task is gated on
     // the API being enabled — without a scrape surface, the counters
     // are dead weight.
+    // mirror_metrics was constructed earlier so the M060 mirror-export
+    // loop could bump per-artifact publish counters from startup. Reuse
+    // the same Arc so /metrics + the mirror loop + the bus-ingest task
+    // all share one set of counters.
     let (metrics_handle, metrics_task) = if cfg.api.enabled {
-        let metrics = Arc::new(selfdef_api::Metrics::new(host_tag.clone()));
+        let metrics = mirror_metrics
+            .clone()
+            .unwrap_or_else(|| Arc::new(selfdef_api::Metrics::new(host_tag.clone())));
         let m = Arc::clone(&metrics);
         let b = Arc::clone(&bus);
         let sd = shutdown.clone();
