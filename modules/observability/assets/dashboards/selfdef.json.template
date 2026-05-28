@@ -404,6 +404,188 @@
           "legendFormat": "active"
         }
       ]
+    },
+    {
+      "id": 120,
+      "type": "row",
+      "title": "M060 cross-repo mirror export (10 publishers)",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 }
+    },
+    {
+      "id": 121,
+      "type": "stat",
+      "title": "publishes — succeeded (5m rate sum)",
+      "description": "M060 mirror-export — sum of per-artifact ok-publish rate over 5m across all 10 mirrors. Steady-state ≈ 10/30s = 0.333 publishes/s when the chain is fully online (all 10 ok every 30s tick).",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 56 },
+      "targets": [
+        {
+          "expr": "sum(rate(selfdef_m060_mirror_publish_total{result=\"ok\"}[5m]))",
+          "legendFormat": "ok/s"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 0.1  },
+              { "color": "green",  "value": 0.25 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 122,
+      "type": "stat",
+      "title": "publishes — failed (5m increase sum)",
+      "description": "M060 mirror-export — total failed publishes across all artifacts in the last 5 min. ANY non-zero value triggers the SelfdefM060PublishFailing alert.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 56 },
+      "targets": [
+        {
+          "expr": "sum(increase(selfdef_m060_mirror_publish_total{result=\"failed\"}[5m]))",
+          "legendFormat": "failed (5m)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1    },
+              { "color": "red",    "value": 5    }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 123,
+      "type": "stat",
+      "title": "stalest publisher (age, seconds)",
+      "description": "M060 mirror-export — for the artifact whose last successful publish is OLDEST, how long ago was it. Surfaces 'which publisher is stuck'. >300s triggers SelfdefM060PublishStale; >600s is critical.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 56 },
+      "targets": [
+        {
+          "expr": "max(time() - selfdef_m060_mirror_last_publish_unix)",
+          "legendFormat": "max(age)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 60   },
+              { "color": "orange", "value": 300  },
+              { "color": "red",    "value": 600  }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 124,
+      "type": "timeseries",
+      "title": "publish rate per artifact (ok)",
+      "description": "M060 mirror-export — 5m rate of successful publishes per artifact. Each artifact should hold steady at ≈ 0.033/s (1 publish per 30s tick). Drops to 0 = that artifact's publisher is wedged.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 60 },
+      "targets": [
+        {
+          "expr": "rate(selfdef_m060_mirror_publish_total{result=\"ok\"}[5m])",
+          "legendFormat": "{{artifact}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "stepAfter",
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true }
+      }
+    },
+    {
+      "id": 125,
+      "type": "timeseries",
+      "title": "failed publishes per artifact (5m increase)",
+      "description": "M060 mirror-export — 5m rolling increase of failed publishes per artifact. Identifies WHICH publisher is the source of an alert. A flat line at 0 = that publisher is healthy.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 60 },
+      "targets": [
+        {
+          "expr": "increase(selfdef_m060_mirror_publish_total{result=\"failed\"}[5m])",
+          "legendFormat": "{{artifact}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never"
+          }
+        }
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "showLegend": true }
+      }
+    },
+    {
+      "id": 126,
+      "type": "table",
+      "title": "per-artifact health snapshot",
+      "description": "M060 mirror-export — current per-artifact state: ok count, failed count, age of last successful publish. Sort by `age` desc to find the stalest publisher; sort by `failed` desc to find the most-failing.",
+      "datasource": { "type": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 68 },
+      "targets": [
+        {
+          "expr": "selfdef_m060_mirror_publish_total{result=\"ok\"}",
+          "legendFormat": "{{artifact}}",
+          "format": "table",
+          "instant": true,
+          "refId": "OK"
+        },
+        {
+          "expr": "selfdef_m060_mirror_publish_total{result=\"failed\"}",
+          "legendFormat": "{{artifact}}",
+          "format": "table",
+          "instant": true,
+          "refId": "FAIL"
+        },
+        {
+          "expr": "time() - selfdef_m060_mirror_last_publish_unix",
+          "legendFormat": "{{artifact}}",
+          "format": "table",
+          "instant": true,
+          "refId": "AGE"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        }
+      ]
     }
   ]
 }
