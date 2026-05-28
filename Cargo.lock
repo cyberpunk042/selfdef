@@ -2501,6 +2501,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-audit-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-mirror",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
 name = "selfdef-audit-rotation-policy"
 version = "0.1.0"
 dependencies = [
@@ -3338,6 +3351,7 @@ dependencies = [
  "clap",
  "sd-notify",
  "selfdef-api",
+ "selfdef-audit-registry",
  "selfdef-bus",
  "selfdef-capability-registry",
  "selfdef-collector-auditd",

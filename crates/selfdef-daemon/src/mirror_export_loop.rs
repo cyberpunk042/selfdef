@@ -29,8 +29,12 @@
 //!   composing the engine's `canonical_delta`). Daemon-populated by
 //!   scoring events; operator mutations are manual deltas (override).
 //!   Same honesty bar.
+//! - **D-16 audit** (`audit.json`) — the daemon-resident MS016 audit-
+//!   chain registry (`selfdef-audit-registry`, SHA-256 hash chain +
+//!   bounded-tail spans + integrity report). Append-only by MS016
+//!   R03567 doctrine; operator has no mutation surface.
 //!
-//! **All 5 M060 mirror domains are wired**. Project boundary: IPS state
+//! Project boundary: IPS state
 //! published READ-ONLY. sovereign-os NEVER mutates — operator mutations
 //! are `selfdefctl` + MS003 verbs on this (IPS) side only (MS043 R10212).
 //!
@@ -41,6 +45,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use selfdef_audit_registry::AuditRegistry;
 use selfdef_capability_registry::CapabilityRegistry;
 use selfdef_flex_profile::FlexProfile;
 use selfdef_grant_registry::GrantRegistry;
@@ -82,6 +87,10 @@ const QUARANTINE_FILE: &str = "quarantine.json";
 /// Published trust-scores artifact filename, wire-stable with the
 /// sovereign-os D-18 consumer (`scripts/mirror/selfdef-trust-score-mirror.py`).
 const TRUST_SCORES_FILE: &str = "trust-scores.json";
+
+/// Published audit artifact filename, wire-stable with the sovereign-os
+/// D-16 audit-chain consumer.
+const AUDIT_FILE: &str = "audit.json";
 
 /// The active-profile selection has no tracked "set at" timestamp —
 /// flex-profile records model/LoRA delta provenance, not baseline
@@ -321,6 +330,39 @@ fn publish_quarantine(mirror_dir: &Path, store: &Path, now: OffsetDateTime) {
     }
 }
 
+/// Publish the D-16 audit mirror from the daemon-resident audit-chain
+/// registry. Same honesty bar: only published when the resident store
+/// exists. Daemon-populated by every IPS decision (append_span).
+fn publish_audit(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
+    if !store.exists() {
+        return;
+    }
+    let registry = match AuditRegistry::load(store) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                store = %store.display(),
+                error = %e,
+                "mirror export: audit store unreadable; skipping (dashboard stays last-known)"
+            );
+            return;
+        }
+    };
+    match write_json_atomic(mirror_dir, AUDIT_FILE, registry.snapshot()) {
+        Ok(path) => debug!(
+            path = %path.display(),
+            spans = registry.spans().len(),
+            total_entries = registry.total_entries(),
+            "mirror export: audit published"
+        ),
+        Err(e) => warn!(
+            dir = %mirror_dir.display(),
+            error = %e,
+            "mirror export: audit write failed; will retry"
+        ),
+    }
+}
+
 /// Publish the D-18 trust-scores mirror from the daemon-resident
 /// trust-score registry. Same honesty bar: only published when the
 /// resident store exists. Daemon-populated by scoring events.
@@ -355,6 +397,7 @@ fn publish_trust_scores(mirror_dir: &Path, store: &Path, _now: OffsetDateTime) {
 
 /// One publish pass across every wired mirror domain. Best-effort —
 /// per-domain failures are logged + retried next tick, never fatal.
+#[allow(clippy::too_many_arguments)] // one path per mirror domain
 fn publish_all(
     mirror_dir: &Path,
     flex_path: &Path,
@@ -363,6 +406,7 @@ fn publish_all(
     sandboxes_store: &Path,
     quarantine_store: &Path,
     trust_scores_store: &Path,
+    audit_store: &Path,
 ) {
     let now = OffsetDateTime::now_utc();
     publish_profile(mirror_dir, flex_path);
@@ -371,6 +415,7 @@ fn publish_all(
     publish_sandboxes(mirror_dir, sandboxes_store, now);
     publish_quarantine(mirror_dir, quarantine_store, now);
     publish_trust_scores(mirror_dir, trust_scores_store, now);
+    publish_audit(mirror_dir, audit_store, now);
 }
 
 /// M060 mirror-export loop (D-02 active-profile + D-13 grants + D-14
@@ -386,6 +431,7 @@ pub(crate) async fn run_mirror_export_loop(
     sandboxes_store: PathBuf,
     quarantine_store: PathBuf,
     trust_scores_store: PathBuf,
+    audit_store: PathBuf,
     shutdown: CancellationToken,
 ) {
     publish_all(
@@ -396,6 +442,7 @@ pub(crate) async fn run_mirror_export_loop(
         &sandboxes_store,
         &quarantine_store,
         &trust_scores_store,
+        &audit_store,
     );
     let mut tick = tokio::time::interval(Duration::from_secs(MIRROR_EXPORT_INTERVAL_SECS));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -409,8 +456,9 @@ pub(crate) async fn run_mirror_export_loop(
         sandboxes_store = %sandboxes_store.display(),
         quarantine_store = %quarantine_store.display(),
         trust_scores_store = %trust_scores_store.display(),
+        audit_store = %audit_store.display(),
         interval_secs = MIRROR_EXPORT_INTERVAL_SECS,
-        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores, read-only) — 5/5 mirror domains"
+        "M060: mirror-export loop running (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit, read-only) — 6/9 mirror domains wired (D-02/13/14/15/16/17/18)"
     );
     loop {
         tokio::select! {
@@ -426,6 +474,7 @@ pub(crate) async fn run_mirror_export_loop(
                 &sandboxes_store,
                 &quarantine_store,
                 &trust_scores_store,
+                &audit_store,
             ),
         }
     }
@@ -515,6 +564,58 @@ mod tests {
         publish_grants(&dir, &store, OffsetDateTime::now_utc());
         // No resident store → no published mirror (honest offline).
         assert!(!dir.join(GRANTS_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_audit_skips_when_store_absent() {
+        let dir = std::env::temp_dir().join(format!("selfdef-audit-absent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("audit.json");
+        publish_audit(&dir, &store, OffsetDateTime::now_utc());
+        assert!(!dir.join(AUDIT_FILE).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn publish_audit_writes_resident_registry() {
+        use selfdef_audit_registry::{
+            AuditMirrorSnapshot, AuditRegistry, OcsfCategory, PolicyOutcome, SpanAppend,
+        };
+        let dir = std::env::temp_dir().join(format!("selfdef-audit-live-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("audit.json");
+        let mut reg = AuditRegistry::new();
+        let now = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+        let span = SpanAppend {
+            trace_id: "t1".into(),
+            profile: "careful".into(),
+            model: "qwen3-coder-32b".into(),
+            provider: "local-cuda".into(),
+            hardware: "3090_logic".into(),
+            tokens_prompt: 100,
+            tokens_completion: 50,
+            latency_ms: 1500,
+            cost_millicents: 1,
+            risk_score: 5,
+            memory_refs: vec![],
+            tool_refs: vec!["tests".into()],
+            policy_result: PolicyOutcome::Allow,
+            branch_id: "b1".into(),
+            ocsf_category: OcsfCategory::ProcessActivity,
+            signature: "sig".into(),
+        };
+        reg.append_span(&span, now).unwrap();
+        reg.save(&store).unwrap();
+
+        publish_audit(&dir, &store, now);
+        let published = dir.join(AUDIT_FILE);
+        assert!(published.exists());
+        let body = std::fs::read_to_string(&published).unwrap();
+        let snap: AuditMirrorSnapshot = serde_json::from_str(&body).unwrap();
+        snap.validate_schema().unwrap();
+        assert_eq!(snap.spans.len(), 1);
+        assert_eq!(snap.spans[0].trace_id, "t1");
         std::fs::remove_dir_all(&dir).ok();
     }
 
