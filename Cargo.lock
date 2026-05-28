@@ -2398,6 +2398,7 @@ dependencies = [
  "selfdef-flex-profile",
  "selfdef-friction-audit",
  "selfdef-friction-audit-mirror",
+ "selfdef-grant-registry",
  "selfdef-guardian",
  "selfdef-guardian-mirror",
  "selfdef-hardware",

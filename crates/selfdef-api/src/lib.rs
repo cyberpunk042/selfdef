@@ -49,6 +49,7 @@ mod filesystem_boundary;
 mod flex_profile;
 mod friction_audit;
 mod gpu;
+mod grants;
 mod guardian;
 mod handlers;
 mod hardware;
@@ -326,6 +327,14 @@ pub fn router(state: ApiState) -> Router {
         // the next caller-integration arc per SDD-055.
         .route("/v1/flex-profile/apply", post(flex_profile::apply))
         .route("/v1/flex-profile/revert", post(flex_profile::revert))
+        // M060 D-13 — grants mutation + read. The permission-correct
+        // write path for the daemon-resident grant registry the
+        // mirror-export loop republishes READ-ONLY. Same router/precedent
+        // as flex-profile above; SDD-055 commit-authority gating tracked
+        // there for all mutation surfaces.
+        .route("/v1/grants", get(grants::show))
+        .route("/v1/grants/issue", post(grants::issue))
+        .route("/v1/grants/revoke", post(grants::revoke))
         // MS043 UX — operator dashboard preferences persisted daemon-
         // side so view choices survive browser/host switches. GET
         // returns the current TOML (missing file → blank-valid body),

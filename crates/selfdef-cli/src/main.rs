@@ -21,6 +21,7 @@ mod filesystem_boundary;
 mod flex_profile;
 mod follow;
 mod friction_audit;
+mod grants;
 mod guardian;
 mod hardware;
 mod health;
@@ -380,6 +381,13 @@ enum Command {
         #[command(subcommand)]
         action: FlexProfileAction,
     },
+    /// M060 D-13 — grant registry operator surface. `show` reads the
+    /// resident snapshot; `issue`/`revoke` are the IPS-side write path
+    /// (via the daemon API) the mirror-export republishes for sovereign-os.
+    Grants {
+        #[command(subcommand)]
+        action: GrantsAction,
+    },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
     /// `GET /v1/dashboards`. Operator deep-links each via
@@ -723,6 +731,48 @@ enum FlexProfileAction {
         /// Pass through the raw JSON body (jq-friendly).
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum GrantsAction {
+    /// Read the current resident grant snapshot via GET /v1/grants.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Issue an operator-signed grant via POST /v1/grants/issue.
+    Issue {
+        /// Grant kind: filesystem|network|capability|communication|sandbox.
+        #[arg(long)]
+        kind: String,
+        /// Scope: path glob / FQDN / CIDR / capability tag (kind-dependent).
+        #[arg(long)]
+        scope: String,
+        /// Operator-authored reason (non-empty).
+        #[arg(long)]
+        reason: String,
+        /// Active profile at issuance time.
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Desired TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature over the request (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revoke a grant by id via POST /v1/grants/revoke.
+    Revoke {
+        /// Grant id to revoke.
+        grant_id: String,
     },
 }
 
@@ -2075,6 +2125,35 @@ async fn main() -> Result<()> {
                 FlexProfileAction::Schema => flex_profile::run_schema()?,
                 FlexProfileAction::Show { json } => {
                     flex_profile::run_show(json).context("flex-profile show")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::Grants { action } => {
+            let exit = match action {
+                GrantsAction::Show { json } => grants::run_show(json).context("grants show")?,
+                GrantsAction::Issue {
+                    kind,
+                    scope,
+                    reason,
+                    profile,
+                    actor,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => grants::run_issue(
+                    &kind,
+                    &scope,
+                    &reason,
+                    &profile,
+                    &actor,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("grants issue")?,
+                GrantsAction::Revoke { grant_id } => {
+                    grants::run_revoke(&grant_id).context("grants revoke")?
                 }
             };
             std::process::exit(exit);

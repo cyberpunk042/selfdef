@@ -29,6 +29,7 @@ selfdef-responder = { workspace = true }
 selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
 selfdef-flex-profile = { workspace = true }
+selfdef-grant-registry = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-hardware = { workspace = true }

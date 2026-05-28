@@ -419,7 +419,13 @@ async fn main() -> Result<()> {
     } else {
         let mirror_dir = std::path::PathBuf::from(&cfg.deployment.selfdef_mirror_dir);
         let flex_path = std::path::PathBuf::from(selfdef_flex_profile::DEFAULT_STATE_PATH);
-        let grants_store = std::path::PathBuf::from(selfdef_grant_registry::DEFAULT_STATE_PATH);
+        // Honor the same override the API write path uses, so a relocated
+        // resident store is read + republished consistently.
+        let grants_store = std::env::var("SELFDEF_GRANTS_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_grant_registry::DEFAULT_STATE_PATH)
+            });
         let sd = shutdown.clone();
         info!(
             mirror_dir = %mirror_dir.display(),
