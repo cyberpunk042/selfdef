@@ -35,6 +35,7 @@ selfdef-sandbox-registry = { workspace = true }
 selfdef-quarantine-registry = { workspace = true }
 selfdef-trust-score-registry = { workspace = true }
 selfdef-rules-registry = { workspace = true }
+selfdef-tui-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-hardware = { workspace = true }

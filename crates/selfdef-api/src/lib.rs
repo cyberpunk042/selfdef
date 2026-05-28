@@ -79,6 +79,7 @@ mod tool_authority;
 mod transport;
 mod trust_score_registry;
 mod trust_scores;
+mod tui_mirror;
 pub mod watchdog_metrics;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
@@ -379,6 +380,14 @@ pub fn router(state: ApiState) -> Router {
         // the resident snapshot to the dashboard. Rule installation
         // lives in `selfdefctl + nft` at the IPS layer (R10212).
         .route("/v1/rules/snapshot", get(rules_registry::snapshot))
+        // MS007 selfdef-tui-mirror — canonical 4-panel TUI layout
+        // (rules/grants/quarantine/authority across TL/TR/BL/BR)
+        // per MS043 R10141 + F05081 + R10298 ("a dashboard should
+        // not show vanity graphs"). Static-shape surface: the layout
+        // is FIXED by doctrine; the handler always returns the
+        // canonical projection. No mutation endpoints — TUI/web
+        // NEVER mutates IPS state directly (R10212).
+        .route("/v1/tui/snapshot", get(tui_mirror::snapshot))
         // M060 D-18 — trust-scores *live registry* surface. Sister to
         // the existing schema-discovery GET /v1/trust-scores. Operator
         // surface is admit + signed manual-delta override.

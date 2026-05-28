@@ -2417,6 +2417,7 @@ dependencies = [
  "selfdef-scheduler-mirror",
  "selfdef-store",
  "selfdef-trust-score-registry",
+ "selfdef-tui-mirror",
  "serde",
  "serde_json",
  "sha2",
