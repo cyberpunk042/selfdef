@@ -50,6 +50,20 @@ case "$1" in
         fi
         rm -f /etc/systemd/system/selfdef-scheduler.service
         rm -rf /etc/systemd/system/selfdef-scheduler.service.d
+        # M060 cli-mirror-emit: disable + stop the producer one-shot so
+        # purge leaves no orphaned timer / next-boot trigger pointing
+        # at the (now-missing) selfdefctl binary. The unit file itself
+        # is shipped via /lib/systemd/system (managed by dpkg, not us);
+        # any operator drop-in overrides under /etc/systemd/system
+        # belong to the operator and we do NOT delete those. The
+        # resident store /var/lib/selfdef/cli-mirror.json is purged by
+        # the broader /var/lib/selfdef wipe above.
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-cli-mirror-emit.service ]; then
+            systemctl disable selfdef-cli-mirror-emit.service 2>/dev/null || true
+            systemctl stop selfdef-cli-mirror-emit.service 2>/dev/null || true
+        fi
+        rm -rf /etc/systemd/system/selfdef-cli-mirror-emit.service.d
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
         fi
@@ -78,6 +92,15 @@ case "$1" in
         if [ -d /run/systemd/system ] \
            && [ -f /etc/systemd/system/selfdef-scheduler.service ]; then
             systemctl stop selfdef-scheduler.service 2>/dev/null || true
+        fi
+        # M060 cli-mirror-emit: stop the producer one-shot on remove
+        # so it doesn't fire post-uninstall (the ExecStart references
+        # /usr/bin/selfdefctl which dpkg will remove). The unit file
+        # itself stays in /lib/systemd/system for reinstall-as-upgrade
+        # (dpkg manages that path).
+        if [ -d /run/systemd/system ] \
+           && [ -f /lib/systemd/system/selfdef-cli-mirror-emit.service ]; then
+            systemctl stop selfdef-cli-mirror-emit.service 2>/dev/null || true
         fi
         ;;
     upgrade|deconfigure|failed-upgrade|abort-install|abort-upgrade|disappear)
