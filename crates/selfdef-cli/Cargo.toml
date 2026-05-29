@@ -48,6 +48,7 @@ selfdef-process-env-scrub-backend = { path = "../selfdef-process-env-scrub-backe
 selfdef-capability-drop-backend = { path = "../selfdef-capability-drop-backend" }
 selfdef-kernel-keyring-eviction-backend = { path = "../selfdef-kernel-keyring-eviction-backend" }
 selfdef-apparmor-profile-pivot-backend = { path = "../selfdef-apparmor-profile-pivot-backend" }
+selfdef-bpf-map-element-clear-backend = { path = "../selfdef-bpf-map-element-clear-backend" }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }

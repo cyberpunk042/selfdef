@@ -2906,6 +2906,7 @@ dependencies = [
  "selfdef-api-token-revocation-backend",
  "selfdef-apparmor-profile-pivot-backend",
  "selfdef-blockset-backend",
+ "selfdef-bpf-map-element-clear-backend",
  "selfdef-bus",
  "selfdef-capability-drop-backend",
  "selfdef-cli-mirror",

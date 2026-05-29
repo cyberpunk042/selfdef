@@ -1054,8 +1054,79 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-078 MS3 — clear element(s) from a kernel-side eBPF map.
+    /// Uses the bpf() syscall surface (BPF_MAP_DELETE_ELEM for element-
+    /// scope, BPF_MAP_GET_NEXT_KEY iteration + DELETE_ELEM for all-scope).
+    ///
+    /// Map-spec accepts pinned path (/sys/fs/bpf/<name>), id:<u32>,
+    /// or name:<map-name> (refuses on ambiguity).
+    ///
+    /// Duration capped by tier — autonomous 2m, responder 15m,
+    /// operator 1h, operator-overridden 4h. All-scope (--scope all)
+    /// requires operator+ tier due to blast radius. Clear is one-way:
+    /// selfdef did not snapshot prior values; the owning BPF program's
+    /// control plane must re-populate.
+    ClearBpfMap {
+        /// Map spec: /sys/fs/bpf/<name> | id:<u32> | name:<map-name>.
+        map_spec: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Scope: element (default; --key required) | all (operator+ only).
+        #[arg(long, default_value = "element")]
+        scope: String,
+        /// Hex-bytes key (e.g. "0a000001" for IPv4 10.0.0.1). Required
+        /// when --scope=element; forbidden when --scope=all.
+        #[arg(long)]
+        key: Option<String>,
+        /// Stay-cleared duration. Default 30m (capped by tier).
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-078 MS3 — clear an active bpf-map-element-clear handle.
+    /// Note: BPF map element clears are one-way at the kernel level —
+    /// selfdef did not snapshot prior values; the owning BPF program's
+    /// control plane must re-add elements. restore-bpf-map is
+    /// queue-clear + audit only.
+    RestoreBpfMap {
+        /// Bpf-map-element-clear handle or idempotency-key text.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_bpf_map_element_clear_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_bpf_map_element_clear_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_clear_scope(
+    s: &str,
+) -> Result<selfdef_bpf_map_element_clear_backend::ClearScope, String> {
+    use selfdef_bpf_map_element_clear_backend::ClearScope;
+    match s.trim().to_lowercase().as_str() {
+        "element" | "elem" => Ok(ClearScope::Element),
+        "all" => Ok(ClearScope::All),
+        other => Err(format!(
+            "unknown clear scope {other:?}; expected one of: element, all"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_apparmor_profile_pivot_backend::AuthorityTier {
@@ -4221,6 +4292,128 @@ async fn main() -> Result<()> {
                      note: AppArmor profile pivots are one-way at the kernel level — operator \
                      must restart the process under its original profile via the init system; \
                      restore is queue-clear + audit only)"
+                );
+            }
+        }
+        Command::ClearBpfMap {
+            map_spec,
+            reason,
+            scope,
+            key,
+            duration,
+            authority,
+            dry_run,
+        } => {
+            use selfdef_bpf_map_element_clear_backend::{
+                AuthorityTier, BpfMapElementClearBackend, ClearRequest, ClearScope, InMemoryBackend,
+                parse_key_hex, parse_map_spec,
+            };
+            use std::time::Duration;
+
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            if parse_map_spec(&map_spec).is_none() {
+                anyhow::bail!(
+                    "unparseable map spec {map_spec:?}; expected one of: \
+                     /sys/fs/bpf/<name> | id:<u32> | name:<map-name>"
+                );
+            }
+            let scope_parsed = parse_clear_scope(&scope)
+                .map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+            match scope_parsed {
+                ClearScope::Element => {
+                    let Some(k) = key.as_ref() else {
+                        anyhow::bail!(
+                            "--scope=element requires --key <hex> (e.g. --key 0a000001 for IPv4 10.0.0.1)"
+                        );
+                    };
+                    if parse_key_hex(k).is_none() {
+                        anyhow::bail!(
+                            "invalid --key {k:?}; expected even-length ascii hex (e.g. 0a000001)"
+                        );
+                    }
+                }
+                ClearScope::All => {
+                    if key.is_some() {
+                        anyhow::bail!(
+                            "--scope=all forbids --key (the whole map is iterated + cleared)"
+                        );
+                    }
+                }
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 4h tier."
+                );
+            }
+            if matches!(scope_parsed, ClearScope::All)
+                && !matches!(
+                    tier,
+                    AuthorityTier::Operator | AuthorityTier::OperatorOverridden
+                )
+            {
+                anyhow::bail!(
+                    "--scope=all requires --authority operator (or operator-overridden); \
+                     got {tier:?}. All-scope wipes every element and has the highest blast \
+                     radius (D-10 in SDD-078)."
+                );
+            }
+
+            if dry_run {
+                println!(
+                    "[dry-run] would clear BPF map {map_spec:?} ({scope_parsed:?}) key={key:?} \
+                     for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = ClearRequest {
+                map_spec: map_spec.clone(),
+                scope: scope_parsed,
+                key_hex: key.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                idempotency_key: format!(
+                    "cli:{map_spec}:{scope_parsed:?}:{key:?}:{reason}:{tier:?}"
+                ),
+            };
+            let receipt = backend
+                .clear(req)
+                .await
+                .with_context(|| format!("clearing BPF map {map_spec}"))?;
+            println!(
+                "cleared {} BPF map element(s) in {map_spec} ({scope_parsed:?}) for {secs}s · \
+                 tier={tier:?} · spec-kind={:?} · handle={:?}",
+                receipt.elements_cleared, receipt.map_spec_kind, receipt.handle
+            );
+        }
+        Command::RestoreBpfMap { target, force } => {
+            use selfdef_bpf_map_element_clear_backend::{
+                BpfMapElementClearBackend, ClearHandle, InMemoryBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = ClearHandle::Active(target.clone());
+            let receipt = backend
+                .restore(handle)
+                .await
+                .with_context(|| format!("restoring bpf-map-element-clear {target}"))?;
+            if receipt.cleared {
+                println!("cleared bpf-map-element-clear handle {target}");
+            } else {
+                println!(
+                    "no active bpf-map-element-clear for {target} (MS3 stateless backend; \
+                     note: BPF map element clears are one-way at the kernel level — selfdef \
+                     did not snapshot prior values; the owning BPF program's control plane \
+                     must re-add elements; restore is queue-clear + audit only)"
                 );
             }
         }
