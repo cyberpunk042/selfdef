@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-078 BPF map element clear observer (every 60s, 32nd sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-bpf-map-element-clears-textfile.sh
+# OnBootSec=960s — distinct from the prior 31 siblings (60s..930s).
+
+[Timer]
+OnBootSec=960s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-bpf-map-element-clears-textfile.service
+
+[Install]
+WantedBy=timers.target
