@@ -1,0 +1,47 @@
+[Unit]
+Description=Selfdef — emit MS048 Goldilocks Scheduler state textfile (PSI + DCGM + human-gate)
+Documentation=https://example.org/you/selfdef/blob/main/crates/selfdef-scheduler/src/bin/selfdef-scheduler-textfile.rs
+# Parallel to the 32 IPS observer .service units. Reads PSI + nvidia-smi
+# + IPS pending-restores; emits Prometheus textfile + OCSF JSONL.
+# Standard 12-clause R171 hardening.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=selfdef
+Group=selfdef
+UMask=0027
+
+# Override defaults via these env vars if the operator's host topology
+# differs from the sain-01 baseline. Defaults match the binary's
+# DEFAULT_* constants.
+Environment=SELFDEF_SCHEDULER_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-scheduler.prom
+Environment=SELFDEF_SCHEDULER_OCSF_PATH=/var/log/selfdef/scheduler.ocsf.jsonl
+Environment=SELFDEF_SCHEDULER_PSI_DIR=/proc/pressure
+Environment=SELFDEF_SCHEDULER_STATE_ROOT=/var/lib/selfdef
+ExecStart=/usr/bin/selfdef-scheduler-textfile
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+# Writes to textfile_collector + OCSF JSONL log dir; reads /proc/pressure,
+# /var/lib/selfdef/*/pending-restores.json, and exec's nvidia-smi.
+ReadWritePaths=/var/lib/node_exporter/textfile_collector /var/log/selfdef
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /proc/pressure
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+# Cannot use AF_UNIX-only here — nvidia-smi may need AF_NETLINK for
+# driver IPC. Allow the minimal AF_UNIX + AF_NETLINK set.
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# Scheduler textfile path doesn't need network — same discipline as
+# the IPS observers.
+PrivateNetwork=true

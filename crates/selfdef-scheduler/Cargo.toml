@@ -13,6 +13,10 @@ description = "SDD-031 Deliverable 2 — Goldilocks Scheduler runtime: per-profi
 name = "selfdef-scheduler"
 path = "src/bin/selfdef-scheduler.rs"
 
+[[bin]]
+name = "selfdef-scheduler-textfile"
+path = "src/bin/selfdef-scheduler-textfile.rs"
+
 [lints]
 workspace = true
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic MS048 Goldilocks Scheduler observer (every 60s, post-IPS-observer cadence)
+Documentation=https://example.org/you/selfdef/blob/main/crates/selfdef-scheduler/src/bin/selfdef-scheduler-textfile.rs
+# OnBootSec=990s — fires AFTER the 32 IPS observers (which schedule
+# 60s..960s). The scheduler observer sees a settled IPS state on
+# every boot.
+
+[Timer]
+OnBootSec=990s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-scheduler-textfile.service
+
+[Install]
+WantedBy=timers.target
