@@ -1,0 +1,16 @@
+[package]
+name = "selfdef-mfa-grant-revocation-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-069 MS1 — MFA-grant revocation backend trait + in-memory test impl. Fifth IPS enforcement primitive extending the quartet → pentet at the identity-axis (pairs with SDD-067 shell-session for incident-response gold)."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+serde_json = { workspace = true }
