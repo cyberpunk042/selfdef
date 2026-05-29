@@ -29,6 +29,7 @@
 pub mod backpressure_driver;
 pub mod dcgm;
 pub mod human_gate;
+pub mod prometheus_exporter;
 pub mod psi;
 
 use std::fs;
