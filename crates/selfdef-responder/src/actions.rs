@@ -1634,6 +1634,121 @@ impl Action for CapabilityDropAction {
     }
 }
 
+// ================================================ KernelKeyringEvictionAction
+//
+// SDD-076 MS2 — wires the KernelKeyringEvictionBackend trait into
+// the Action runner. Twelfth primitive in the IPS duodectet;
+// pairs with SDD-068 token-revoke + SDD-069 MFA-grant + SDD-074
+// env-scrub + SDD-075 capability-drop at the credential-axis
+// family (distinct surface — kernel keyctl-managed cache).
+
+use selfdef_kernel_keyring_eviction_backend::{
+    AuthorityTier as KkeTier, EvictKeyRequest, EvictionScope, KernelKeyringEvictionBackend,
+};
+
+pub struct KernelKeyringEvictionAction {
+    backend: Arc<dyn KernelKeyringEvictionBackend>,
+    authority: KkeTier,
+    duration: std::time::Duration,
+    /// Static key-spec list — typically configured per-rule
+    /// (e.g. "user:krb5cc/uid=1000" or "0xdeadbeef").
+    key_specs: Vec<String>,
+    scope: EvictionScope,
+    reason_prefix: String,
+}
+
+impl KernelKeyringEvictionAction {
+    pub fn new(
+        backend: Arc<dyn KernelKeyringEvictionBackend>,
+        authority: KkeTier,
+        duration: std::time::Duration,
+        key_specs: Vec<String>,
+        scope: EvictionScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            key_specs,
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for KernelKeyringEvictionAction {
+    fn name(&self) -> &'static str {
+        "kernel_keyring_eviction"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        if self.key_specs.is_empty() {
+            return Ok(ActionOutcome::skipped(
+                "no key_specs configured on action — kernel_keyring_eviction skipped",
+            ));
+        }
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        // Each key_spec triggers a separate evict call (the action
+        // can target multiple keys per event). Aggregate results
+        // into the outcome message.
+        let mut handles: Vec<String> = Vec::with_capacity(self.key_specs.len());
+        let mut total_evicted: usize = 0;
+        let mut total_not_found: usize = 0;
+        for spec in &self.key_specs {
+            let idempotency_key =
+                format!("{}:{:?}:{spec}:{:?}", event.id, self.authority, self.scope);
+            if dry_run {
+                handles.push(format!(
+                    "would evict {spec} ({:?}) for {}s under {:?}",
+                    self.scope,
+                    self.duration.as_secs(),
+                    self.authority
+                ));
+                continue;
+            }
+            let req = EvictKeyRequest {
+                key_spec: spec.clone(),
+                reason: reason.clone(),
+                duration: self.duration,
+                authority: self.authority,
+                scope: self.scope,
+                idempotency_key,
+            };
+            match self.backend.evict_key(req).await {
+                Ok(receipt) => {
+                    total_evicted += receipt.keys_evicted;
+                    if receipt.keys_evicted == 0 {
+                        total_not_found += 1;
+                    }
+                    handles.push(format!("{:?}", receipt.handle));
+                }
+                Err(e) => {
+                    return Err(ActionError::Exec(format!(
+                        "kernel_keyring_eviction backend on spec {spec:?}: {e}"
+                    )));
+                }
+            }
+        }
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would evict {} key(s) ({}); {}",
+                self.key_specs.len(),
+                self.key_specs.join(", "),
+                reason
+            )));
+        }
+        Ok(ActionOutcome::ok(format!(
+            "evicted {total_evicted} kernel keys across {} spec(s); {total_not_found} NotFound; \
+             handles={handles:?}; reason={reason}",
+            self.key_specs.len()
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3137,5 +3252,142 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "capability_drop");
+    }
+
+    // ---------------------------- KernelKeyringEvictionAction (SDD-076 MS2)
+
+    use selfdef_kernel_keyring_eviction_backend::{
+        AuthorityTier as KkeTier, EvictionScope, InMemoryBackend as KkeInMemoryBackend,
+    };
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_dry_run_renders_specs_and_scope() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Responder,
+            Duration::from_secs(900),
+            vec![
+                "user:krb5cc/uid=1000".into(),
+                "logon:dm-crypt:luks-xyz".into(),
+            ],
+            EvictionScope::Invalidate,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("2 key(s)"));
+        assert!(outcome.notes.contains("user:krb5cc"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_evicts_each_spec() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Operator,
+            Duration::from_secs(60 * 30),
+            vec!["user:s1".into(), "user:s2".into(), "0xdeadbeef".into()],
+            EvictionScope::Invalidate,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("evicted 3 kernel keys"));
+        assert_eq!(backend.active_count().await, 3);
+    }
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_not_found_aggregates() {
+        let backend = Arc::new(KkeInMemoryBackend::with_simulated_keys_evicted(0));
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Operator,
+            Duration::from_secs(60),
+            vec!["user:gone-1".into(), "user:gone-2".into()],
+            EvictionScope::Invalidate,
+            "stale-awareness",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(9090), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("evicted 0 kernel keys"));
+        assert!(outcome.notes.contains("2 NotFound"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_skipped_when_no_specs() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Operator,
+            Duration::from_secs(60),
+            vec![],
+            EvictionScope::Invalidate,
+            "test",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_unparseable_spec_propagates_error() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Operator,
+            Duration::from_secs(60),
+            vec!["unknown_type:foo".into()],
+            EvictionScope::Invalidate,
+            "typo",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("unparseable spec must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn kernel_keyring_eviction_propagates_authority_insufficient() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend.clone(),
+            KkeTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            vec!["user:test".into()],
+            EvictionScope::Invalidate,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[test]
+    fn kernel_keyring_eviction_action_name_is_stable_string() {
+        let backend = Arc::new(KkeInMemoryBackend::new());
+        let action = KernelKeyringEvictionAction::new(
+            backend,
+            KkeTier::Responder,
+            Duration::from_secs(60),
+            vec!["user:test".into()],
+            EvictionScope::Invalidate,
+            "x",
+        );
+        assert_eq!(action.name(), "kernel_keyring_eviction");
     }
 }

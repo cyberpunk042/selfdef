@@ -27,6 +27,7 @@ selfdef-process-tree-freeze-backend = { path = "../selfdef-process-tree-freeze-b
 selfdef-socket-fd-revocation-backend = { path = "../selfdef-socket-fd-revocation-backend" }
 selfdef-process-env-scrub-backend = { path = "../selfdef-process-env-scrub-backend" }
 selfdef-capability-drop-backend = { path = "../selfdef-capability-drop-backend" }
+selfdef-kernel-keyring-eviction-backend = { path = "../selfdef-kernel-keyring-eviction-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
