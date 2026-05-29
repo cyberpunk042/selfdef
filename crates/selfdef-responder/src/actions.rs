@@ -1845,6 +1845,132 @@ impl Action for ApparmorProfilePivotAction {
     }
 }
 
+// ==================================================== BpfMapElementClearAction
+//
+// SDD-078 MS2 — wires the BpfMapElementClearBackend trait into
+// the Action runner. Fourteenth primitive in the IPS quattuordectet;
+// pairs with SDD-076 kernel-keyring-eviction at the kernel-state-
+// eviction family — keyctl evicts credential cache; bpf-map-element
+// clear evicts BPF policy/counter state.
+
+use selfdef_bpf_map_element_clear_backend::{
+    AuthorityTier as BmcTier, BpfMapElementClearBackend, ClearRequest, ClearScope,
+    parse_key_hex as bmc_parse_key_hex, parse_map_spec as bmc_parse_map_spec,
+};
+
+pub struct BpfMapElementClearAction {
+    backend: Arc<dyn BpfMapElementClearBackend>,
+    authority: BmcTier,
+    duration: std::time::Duration,
+    /// Map spec — `/sys/fs/bpf/<n>` or `id:<u32>` or `name:<x>`.
+    map_spec: String,
+    scope: ClearScope,
+    /// Hex-bytes key. Required when `scope==Element`; must be None
+    /// when `scope==All`. Validated client-side before backend call.
+    key_hex: Option<String>,
+    reason_prefix: String,
+}
+
+impl BpfMapElementClearAction {
+    pub fn new(
+        backend: Arc<dyn BpfMapElementClearBackend>,
+        authority: BmcTier,
+        duration: std::time::Duration,
+        map_spec: impl Into<String>,
+        scope: ClearScope,
+        key_hex: Option<String>,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            map_spec: map_spec.into(),
+            scope,
+            key_hex,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for BpfMapElementClearAction {
+    fn name(&self) -> &'static str {
+        "bpf_map_element_clear"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        // Pre-validate map_spec + key_hex client-side so config
+        // errors surface at execute time, not after a backend round-trip.
+        if bmc_parse_map_spec(&self.map_spec).is_none() {
+            return Err(ActionError::Exec(format!(
+                "bpf_map_element_clear: unparseable map spec {:?} in action config",
+                self.map_spec
+            )));
+        }
+        match self.scope {
+            ClearScope::Element => {
+                let Some(key) = self.key_hex.as_ref() else {
+                    return Err(ActionError::Exec(
+                        "bpf_map_element_clear: element-scope requires key_hex in action config"
+                            .to_string(),
+                    ));
+                };
+                if bmc_parse_key_hex(key).is_none() {
+                    return Err(ActionError::Exec(format!(
+                        "bpf_map_element_clear: invalid key_hex {key:?} in action config"
+                    )));
+                }
+            }
+            ClearScope::All => {
+                if self.key_hex.is_some() {
+                    return Err(ActionError::Exec(
+                        "bpf_map_element_clear: all-scope forbids key_hex in action config"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{}:{}:{:?}:{:?}:{:?}",
+            event.id, self.map_spec, self.scope, self.key_hex, self.authority
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would clear BPF map {:?} ({:?}) key={:?} for {}s under {:?} ({reason})",
+                self.map_spec,
+                self.scope,
+                self.key_hex,
+                self.duration.as_secs(),
+                self.authority
+            )));
+        }
+
+        let req = ClearRequest {
+            map_spec: self.map_spec.clone(),
+            scope: self.scope,
+            key_hex: self.key_hex.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            idempotency_key,
+        };
+
+        match self.backend.clear(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "cleared {} BPF map element(s) in {:?} ({:?}); handle={:?}; {reason}",
+                receipt.elements_cleared, self.map_spec, self.scope, receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "bpf_map_element_clear backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3642,5 +3768,182 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "apparmor_profile_pivot");
+    }
+
+    // ----------------------------- BpfMapElementClearAction (SDD-078 MS2)
+
+    use selfdef_bpf_map_element_clear_backend::{
+        AuthorityTier as BmcTier, ClearScope as BmcScope,
+        InMemoryBackend as BmcInMemoryBackend,
+    };
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_dry_run_renders_spec_and_scope() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(900),
+            "/sys/fs/bpf/ip_allow_list",
+            BmcScope::Element,
+            Some("0a000001".to_string()),
+            "test-operator",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("ip_allow_list"));
+        assert!(outcome.notes.contains("0a000001"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_element_scope_executes() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(60 * 30),
+            "/sys/fs/bpf/ip_allow_list",
+            BmcScope::Element,
+            Some("0a000001".to_string()),
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("cleared 1 BPF map element"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_all_scope_under_operator() {
+        let backend = Arc::new(BmcInMemoryBackend::with_simulated_elements_cleared(17));
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(60 * 30),
+            "name:poisoned",
+            BmcScope::All,
+            None,
+            "wipe-all",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("cleared 17 BPF map element"));
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_unparseable_spec_propagates() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(60),
+            "no-prefix",
+            BmcScope::Element,
+            Some("00".to_string()),
+            "typo",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("unparseable spec must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_invalid_key_hex_propagates() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(60),
+            "/sys/fs/bpf/x",
+            BmcScope::Element,
+            Some("zz".to_string()),
+            "typo",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("invalid key hex must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_element_scope_without_key_propagates() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Operator,
+            Duration::from_secs(60),
+            "/sys/fs/bpf/x",
+            BmcScope::Element,
+            None,
+            "missing key",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("element scope without key must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_all_scope_low_tier_propagates() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Responder,
+            Duration::from_secs(60),
+            "/sys/fs/bpf/x",
+            BmcScope::All,
+            None,
+            "low-tier wipe",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("all-scope under Responder must propagate via backend");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn bpf_map_element_clear_propagates_authority_insufficient() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend.clone(),
+            BmcTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            "/sys/fs/bpf/x",
+            BmcScope::Element,
+            Some("00".to_string()),
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[test]
+    fn bpf_map_element_clear_action_name_is_stable_string() {
+        let backend = Arc::new(BmcInMemoryBackend::new());
+        let action = BpfMapElementClearAction::new(
+            backend,
+            BmcTier::Responder,
+            Duration::from_secs(60),
+            "/sys/fs/bpf/x",
+            BmcScope::Element,
+            Some("00".to_string()),
+            "x",
+        );
+        assert_eq!(action.name(), "bpf_map_element_clear");
     }
 }
