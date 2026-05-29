@@ -5185,6 +5185,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-mfa-grant-revocation-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-min-max-tracker"
 version = "0.1.0"
 dependencies = [
