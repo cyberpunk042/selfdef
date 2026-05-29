@@ -1,0 +1,24 @@
+[Unit]
+Description=Selfdef — periodic daemon process-state textfile observer (every 60s)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-daemon-process-textfile.sh
+# Pairs with selfdef-daemon-process-textfile.service. 60s cadence
+# matches the sibling cli-mirror-doctor + m060-doctor +
+# four-watchdog-doctor + modules-textfile timers — same observer-
+# freshness contract surfaced through last_run_unix. Offset boot
+# delay by 150s so the timer doesn't pile up against the other
+# observer timers (sibling cadences: cli-mirror 60s, m060 70s,
+# four-watchdog 90s, modules 120s, this 150s).
+
+[Timer]
+OnBootSec=150s
+OnUnitActiveSec=60s
+# Wedged-timer detection lives in selfdef_daemon_process_last_run_unix
+# going stale; the Prometheus rule paging on observer-freshness
+# covers the case where this timer stops firing.
+AccuracySec=5s
+# Randomize fleet-wide fire moment to avoid synchronized writes.
+RandomizedDelaySec=10s
+Unit=selfdef-daemon-process-textfile.service
+
+[Install]
+WantedBy=timers.target
