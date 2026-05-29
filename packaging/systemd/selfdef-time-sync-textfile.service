@@ -1,0 +1,41 @@
+[Unit]
+Description=Selfdef — emit time-sync textfile for node_exporter scrape (clock-drift detection)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-time-sync-textfile.sh
+# Runs every 60s. Surfaces time-sync state (synced / NTP active /
+# RTC TZ / drift seconds) so operators detect clock drift before
+# audit-trail timestamps become unreliable.
+#
+# 11th sibling observer. Same R171 hardening + atomic-write
+# convention.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_TIME_SYNC_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-time-sync.prom
+ExecStart=/usr/share/selfdef/selfdef-time-sync-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+# Hardening — timedatectl talks via D-Bus; /sys/class/rtc is
+# readable by default. No special caps needed.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
