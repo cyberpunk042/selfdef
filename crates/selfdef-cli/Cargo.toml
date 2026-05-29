@@ -38,6 +38,7 @@ selfdef-responder = { workspace = true }
 selfdef-blockset-backend = { path = "../selfdef-blockset-backend" }
 selfdef-process-quarantine-backend = { path = "../selfdef-process-quarantine-backend" }
 selfdef-session-revocation-backend = { path = "../selfdef-session-revocation-backend" }
+selfdef-api-token-revocation-backend = { path = "../selfdef-api-token-revocation-backend" }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }

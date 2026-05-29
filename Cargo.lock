@@ -2866,6 +2866,7 @@ dependencies = [
  "minisign",
  "reqwest",
  "selfdef-api",
+ "selfdef-api-token-revocation-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-cli-mirror",
