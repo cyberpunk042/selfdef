@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-069 MFA-grant revocation observer (every 60s, 23rd sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-mfa-grant-revocations-textfile.sh
+# OnBootSec=690s — distinct from the prior 22 siblings (60s..660s).
+
+[Timer]
+OnBootSec=690s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-mfa-grant-revocations-textfile.service
+
+[Install]
+WantedBy=timers.target
