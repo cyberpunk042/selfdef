@@ -26,6 +26,8 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod psi;
+
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
