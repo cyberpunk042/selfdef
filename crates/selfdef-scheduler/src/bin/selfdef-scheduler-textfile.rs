@@ -14,8 +14,19 @@
 //! per `~/selfdef/backlog/milestones/MS048-goldilocks-scheduler-hardware-
 //! aware-resource-routing.md`.
 //!
-//! Honored env vars (operator-tunable):
+//! Configuration precedence (highest → lowest):
 //!
+//! 1. Env vars (`SELFDEF_SCHEDULER_*`)
+//! 2. TOML config at `SELFDEF_SCHEDULER_CONFIG` (or
+//!    `/etc/selfdef/scheduler.toml` by default)
+//! 3. Compiled-in defaults
+//!
+//! M01171 operator-facing customization layer.
+//!
+//! Honored env vars (operator-tunable, override TOML):
+//!
+//! - `SELFDEF_SCHEDULER_CONFIG` — TOML config path
+//!   (default: `/etc/selfdef/scheduler.toml`; missing file is OK)
 //! - `SELFDEF_SCHEDULER_TEXTFILE_PATH` — Prometheus textfile target
 //!   (default: `/var/lib/node_exporter/textfile_collector/selfdef-scheduler.prom`)
 //! - `SELFDEF_SCHEDULER_OCSF_PATH` — OCSF JSONL append target
@@ -57,46 +68,64 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use selfdef_scheduler::backpressure_driver::BackpressureDriver;
+use selfdef_scheduler::config::{SchedulerConfig, DEFAULT_CONFIG_PATH};
 use selfdef_scheduler::dcgm::NvidiaSmiDcgmSource;
-use selfdef_scheduler::decision_audit::{
-    emit_driver_reading, rotate_audit_log, DEFAULT_DRIVER_AUDIT_PATH, DEFAULT_MAX_GENERATIONS,
-    DEFAULT_ROTATE_BYTES,
-};
+use selfdef_scheduler::decision_audit::{emit_driver_reading, rotate_audit_log};
 use selfdef_scheduler::human_gate::IpsPendingRestoresHumanGateSource;
 use selfdef_scheduler::ocsf_emitter::{append_ocsf_jsonl, render_ocsf_event};
 use selfdef_scheduler::prometheus_exporter::{
-    render_failure_sentinel, render_prometheus, write_textfile_atomic, DEFAULT_TEXTFILE_PATH,
+    render_failure_sentinel, render_prometheus, write_textfile_atomic,
 };
 use selfdef_scheduler::psi::ProcfsPsiSource;
-use selfdef_scheduler::DEFAULT_OCSF_PATH;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> ExitCode {
-    let textfile_path = env_path("SELFDEF_SCHEDULER_TEXTFILE_PATH", DEFAULT_TEXTFILE_PATH);
-    let ocsf_path = env_path("SELFDEF_SCHEDULER_OCSF_PATH", DEFAULT_OCSF_PATH);
-    let psi_dir = env_path("SELFDEF_SCHEDULER_PSI_DIR", "/proc/pressure");
-    let nvidia_smi = env_path("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", "nvidia-smi");
-    let state_root = env_path("SELFDEF_SCHEDULER_STATE_ROOT", "/var/lib/selfdef");
+    // 1. Load TOML config from SELFDEF_SCHEDULER_CONFIG (env) or
+    //    /etc/selfdef/scheduler.toml (default). Missing file is fine
+    //    (returns the default config).
+    let config_path = env_path("SELFDEF_SCHEDULER_CONFIG", DEFAULT_CONFIG_PATH);
+    let cfg = match SchedulerConfig::load_from(&config_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("  FAIL loading config from {}: {e}", config_path.display());
+            // Fall back to compiled-in defaults so the timer doesn't flap.
+            // Operator sees the error in journald.
+            SchedulerConfig::default()
+        }
+    };
+
+    // 2. Layer env-var overrides on top of the TOML config.
+    let textfile_path =
+        env_path_with_default("SELFDEF_SCHEDULER_TEXTFILE_PATH", &cfg.emit.textfile_path);
+    let ocsf_path = env_path_with_default("SELFDEF_SCHEDULER_OCSF_PATH", &cfg.emit.ocsf_path);
+    let psi_dir = env_path_with_default("SELFDEF_SCHEDULER_PSI_DIR", &cfg.substrate.psi_dir);
+    let nvidia_smi =
+        env_path_with_default("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", &cfg.substrate.nvidia_smi_bin);
+    let state_root =
+        env_path_with_default("SELFDEF_SCHEDULER_STATE_ROOT", &cfg.substrate.state_root);
     let ocsf_enabled = env::var("SELFDEF_SCHEDULER_OCSF_ENABLE")
         .map(|v| v != "0")
-        .unwrap_or(true);
+        .unwrap_or(cfg.emit.ocsf_enabled);
 
-    let audit_path = env_path("SELFDEF_SCHEDULER_AUDIT_PATH", DEFAULT_DRIVER_AUDIT_PATH);
+    let audit_path = env_path_with_default("SELFDEF_SCHEDULER_AUDIT_PATH", &cfg.emit.audit_path);
     let audit_enabled = env::var("SELFDEF_SCHEDULER_AUDIT_ENABLE")
         .map(|v| v != "0")
-        .unwrap_or(true);
+        .unwrap_or(cfg.emit.audit_enabled);
     let audit_rotate_bytes = env::var("SELFDEF_SCHEDULER_AUDIT_ROTATE_BYTES")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_ROTATE_BYTES);
+        .unwrap_or(cfg.emit.audit_rotate_bytes);
     let audit_max_generations = env::var("SELFDEF_SCHEDULER_AUDIT_MAX_GENERATIONS")
         .ok()
         .and_then(|v| v.parse::<u32>().ok())
-        .unwrap_or(DEFAULT_MAX_GENERATIONS);
-    let signer_kid = env::var("SELFDEF_SCHEDULER_SIGNER_KID").ok();
+        .unwrap_or(cfg.emit.audit_max_generations);
+    let signer_kid = env::var("SELFDEF_SCHEDULER_SIGNER_KID")
+        .ok()
+        .or_else(|| cfg.signer.kid.clone());
 
     eprintln!("[selfdef-scheduler-textfile {VERSION}] starting one-shot poll");
+    eprintln!("  config:   {}", config_path.display());
     eprintln!("  textfile: {}", textfile_path.display());
     eprintln!("  ocsf:     {}", ocsf_path.display());
     eprintln!("  audit:    {}", audit_path.display());
@@ -148,7 +177,7 @@ fn main() -> ExitCode {
             eprintln!("  WARN OCSF append failed (non-fatal): {e}");
         }
     } else {
-        eprintln!("  ocsf:     disabled via SELFDEF_SCHEDULER_OCSF_ENABLE=0");
+        eprintln!("  ocsf:     disabled (config or SELFDEF_SCHEDULER_OCSF_ENABLE=0)");
     }
 
     // Emit M01170 SHA-256-chained driver audit entry (if enabled), then
@@ -171,7 +200,7 @@ fn main() -> ExitCode {
             }
         }
     } else {
-        eprintln!("  audit:    disabled via SELFDEF_SCHEDULER_AUDIT_ENABLE=0");
+        eprintln!("  audit:    disabled (config or SELFDEF_SCHEDULER_AUDIT_ENABLE=0)");
     }
 
     eprintln!("[selfdef-scheduler-textfile {VERSION}] poll complete");
@@ -183,4 +212,14 @@ fn env_path(key: &str, default: &str) -> PathBuf {
         .ok()
         .map(PathBuf::from)
         .unwrap_or_else(|| Path::new(default).to_path_buf())
+}
+
+/// Variant that takes a `&Path` as the default, so the env-var
+/// override layer can fall back to a TOML-loaded path rather than
+/// a compile-time constant.
+fn env_path_with_default(key: &str, default: &Path) -> PathBuf {
+    env::var(key)
+        .ok()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| default.to_path_buf())
 }

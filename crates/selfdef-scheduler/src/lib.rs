@@ -27,6 +27,7 @@
 #![warn(missing_docs)]
 
 pub mod backpressure_driver;
+pub mod config;
 pub mod dcgm;
 pub mod decision_audit;
 pub mod human_gate;

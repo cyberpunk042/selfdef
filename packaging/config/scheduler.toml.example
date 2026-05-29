@@ -1,0 +1,102 @@
+# /etc/selfdef/scheduler.toml — MS048 Goldilocks Scheduler operator config
+#
+# This example shows EVERY tunable field with its compiled-in default.
+# All sections + keys are OPTIONAL — delete anything you don't want to
+# override, and the compiled-in default applies.
+#
+# Loaded by selfdef-scheduler-textfile (the systemd-timer-driven
+# observer binary). Reload by re-running the binary; long-running
+# daemon hot-reload is future work.
+#
+# Precedence (highest → lowest): env vars > this file > compiled-in defaults.
+
+[substrate]
+# /proc/pressure/ directory (Linux PSI source for cpu/memory/io).
+# Override on hosts with namespaced/relocated procfs (containers).
+psi_dir = "/proc/pressure"
+
+# nvidia-smi binary path. Override if you use a non-default install
+# location (e.g. /opt/cuda/bin/nvidia-smi).
+nvidia_smi_bin = "nvidia-smi"
+
+# State root for the human-gate source — sums pending operator-decision
+# entries from /var/lib/selfdef/<primitive>/pending-restores.json across
+# all 14 IPS primitives (SDD-065..078).
+state_root = "/var/lib/selfdef"
+
+[substrate.dcgm_indices]
+# nvidia-smi index of the Blackwell oracle (default 0 = first card).
+blackwell = 0
+# nvidia-smi index of the 3090 scout (default 1 = second card).
+# Override on hosts where the PCIe topology assigns indices differently.
+gpu3090 = 1
+
+[emit]
+# Prometheus text-format target. node_exporter scrapes this path.
+textfile_path = "/var/lib/node_exporter/textfile_collector/selfdef-scheduler.prom"
+
+# OCSF 1.1 JSONL append target. SIEM (e.g. wazuh, splunk forwarder)
+# tails this file.
+ocsf_path = "/var/log/selfdef/scheduler.ocsf.jsonl"
+
+# Disable OCSF emission entirely if you're not running a SIEM.
+ocsf_enabled = true
+
+# M01170 SHA-256-chained driver audit JSONL. Mounted on the ZFS
+# tank/vault/context dataset for "ZFS remembers" durability.
+audit_path = "/var/log/selfdef/scheduler.driver.audit.jsonl"
+
+# Disable audit if your storage budget can't afford the per-poll write.
+# (Not recommended — the audit IS the integrity-checkable replay log.)
+audit_enabled = true
+
+# Rotate the audit log when it crosses this byte threshold. Default
+# 67108864 = 64 MiB (about 30 days at 60s cadence with healthy
+# substrate ~120-byte entries).
+audit_rotate_bytes = 67108864
+
+# Keep this many rotated generations (.1 ... .audit_max_generations).
+# Combined with audit_rotate_bytes this caps total disk usage at
+# (max_generations + 1) * audit_rotate_bytes.
+audit_max_generations = 10
+
+[thresholds]
+# Backpressure thresholds — when a measurement crosses these the
+# corresponding *_pressure / *_high / *_busy state flag fires (with
+# HYSTERESIS_MARGIN=0.10 — once entered, must drop below threshold-
+# margin to exit).
+#
+# Defaults are the sain-01 baseline (operator's reference host). Tune
+# for hosts with different VRAM / RAM / disk-IO budgets.
+
+# Blackwell VRAM utilization fraction (R11333). VRAM exhaustion is
+# the most-critical resource axis.
+blackwell_vram_high = 0.90
+
+# RTX 3090 compute utilization fraction (R11337). The scout GPU is
+# noisier; a higher threshold is reasonable.
+gpu3090_busy = 0.80
+
+# CPU PSI some/avg10 fraction (R11340).
+cpu_pressure = 0.50
+
+# Memory PSI some/avg10 fraction (R11343). Lower than CPU because
+# memory pressure tends to cause cliff-failures rather than gradual
+# slowdowns.
+ram_pressure = 0.30
+
+# IO PSI some/avg10 fraction (R11346).
+io_pressure = 0.40
+
+# Pending operator-decision count threshold (R11349). When the
+# sum across the 14 IPS pending-restores queues exceeds this, the
+# scheduler defers autonomous routing per the peace-machine doctrine
+# clause "sovereign enough that intelligence remains in the user's hands".
+human_gate_queue_high = 5
+
+[signer]
+# MS003 multisig signer kid embedded in every emitted audit entry.
+# Leave commented out for unsigned mode (development / first-boot).
+# Set to your operator-supervised signer kid for production.
+#
+# kid = "kid-2026-q2"
