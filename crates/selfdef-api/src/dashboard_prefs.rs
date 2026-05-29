@@ -182,6 +182,23 @@ pub(crate) async fn show() -> Json<DashboardPrefs> {
     Json(read_prefs_from_disk(&path))
 }
 
+/// **MS043 UX batch 20** — sibling-module helper for `dashboards::show()`
+/// to merge operator-defined custom presets into the `GET /v1/dashboards`
+/// discovery response. Returns a flat `Vec<CustomPreset>` from the
+/// operator's on-disk prefs, or an empty vec if the file is
+/// missing/malformed (operator UI never sees an error here — degrades
+/// gracefully to builtin-only).
+pub(crate) fn read_custom_presets_for_discovery() -> Vec<CustomPreset> {
+    read_custom_presets_at(&prefs_path())
+}
+
+/// Test-and-prod helper: reads custom presets from a specific
+/// path. Used by `dashboards::show()` via `prefs_path()` in prod,
+/// and directly by unit tests that need to control the file.
+pub(crate) fn read_custom_presets_at(path: &Path) -> Vec<CustomPreset> {
+    read_prefs_from_disk(path).custom_presets
+}
+
 const VALID_RATES: &[&str] = &["fast", "normal", "slow", "paused"];
 /// SDD-056 § 8-tab specification + "all" pseudo-tab. Mirrors the
 /// `dashboards_tabs_are_one_of_eight_plus_all` test in dashboards.rs.
