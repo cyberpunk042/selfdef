@@ -740,6 +740,106 @@ impl Action for QuarantineProcessAction {
     }
 }
 
+// ======================================================== SessionRevocationAction
+//
+// SDD-067 MS2 — wires the SessionRevocationBackend trait into
+// the Action runner. Third primitive in the IPS trio
+// (BlockIpAction at perimeter + QuarantineProcessAction at
+// process + SessionRevocationAction at session/identity boundary).
+//
+// Distinct from the prior `RevokeSessionAction` (script-based stub
+// that shells out to an operator-provided revoke script);
+// SessionRevocationAction uses the structured
+// SessionRevocationBackend trait per SDD-067 with the InMemoryBackend
+// + future LoginctlBackend (MS1b) implementations.
+//
+// Extracts user from event.actor.user.name (existing selfdef-core
+// Actor field); submits RevokeRequest under configured tier+scope.
+
+use selfdef_session_revocation_backend::{
+    AuthorityTier as SrTier, RevocationScope, RevokeRequest, SessionRevocationBackend,
+};
+
+pub struct SessionRevocationAction {
+    backend: Arc<dyn SessionRevocationBackend>,
+    authority: SrTier,
+    duration: std::time::Duration,
+    scope: RevocationScope,
+    reason_prefix: String,
+}
+
+impl SessionRevocationAction {
+    pub fn new(
+        backend: Arc<dyn SessionRevocationBackend>,
+        authority: SrTier,
+        duration: std::time::Duration,
+        scope: RevocationScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+fn sdd067_user_from_event(event: &Event) -> Option<String> {
+    event
+        .actor
+        .as_ref()
+        .and_then(|a| a.user.as_ref())
+        .and_then(|u| u.name.clone())
+        .filter(|n| !n.is_empty())
+}
+
+#[async_trait]
+impl Action for SessionRevocationAction {
+    fn name(&self) -> &'static str {
+        "session_revocation"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(user) = sdd067_user_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.user.name in event — session_revocation skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!("{user}:{}:{:?}:{:?}", event.id, self.authority, self.scope);
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would revoke sessions for {user} ({:?}) for {}s under {:?} ({})",
+                self.scope,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = RevokeRequest {
+            user: user.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            idempotency_key,
+        };
+
+        match self.backend.revoke_sessions(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "revoked sessions for {user} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!("revoke_sessions backend: {e}"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1070,5 +1170,113 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "quarantine_process");
+    }
+
+    // ------------------------------ SessionRevocationAction (SDD-067 MS2)
+
+    use selfdef_session_revocation_backend::{
+        AuthorityTier as SrTier, InMemoryBackend as SrInMemoryBackend, RevocationScope,
+    };
+
+    fn finding_with_user(name: &str) -> Event {
+        Event::new(
+            ClassUid::DETECTION_FINDING,
+            1,
+            SeverityId::Critical,
+            "host",
+            "test",
+            0,
+        )
+        .with_actor(Actor {
+            user: Some(selfdef_core::observable::User {
+                name: Some(name.into()),
+                ..selfdef_core::observable::User::default()
+            }),
+            ..Actor::default()
+        })
+    }
+
+    #[tokio::test]
+    async fn session_revocation_dry_run_renders_user_and_duration() {
+        let backend = Arc::new(SrInMemoryBackend::new());
+        let action = SessionRevocationAction::new(
+            backend.clone(),
+            SrTier::Responder,
+            Duration::from_secs(900),
+            RevocationScope::Local,
+            "test-responder",
+        );
+        let outcome = action
+            .execute(&finding_with_user("alice"), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("alice"));
+        assert!(outcome.notes.contains("900s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn session_revocation_applies_real_revoke_when_not_dry_run() {
+        let backend = Arc::new(SrInMemoryBackend::new());
+        let action = SessionRevocationAction::new(
+            backend.clone(),
+            SrTier::Operator,
+            Duration::from_secs(60 * 60),
+            RevocationScope::Local,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_user("bob"), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("bob"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn session_revocation_skipped_when_no_user() {
+        let backend = Arc::new(SrInMemoryBackend::new());
+        let action = SessionRevocationAction::new(
+            backend.clone(),
+            SrTier::Responder,
+            Duration::from_secs(60),
+            RevocationScope::Local,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn session_revocation_propagates_authority_insufficient() {
+        let backend = Arc::new(SrInMemoryBackend::new());
+        let action = SessionRevocationAction::new(
+            backend.clone(),
+            SrTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            RevocationScope::Local,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_user("carol"), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[test]
+    fn session_revocation_action_name_is_stable_string() {
+        let backend = Arc::new(SrInMemoryBackend::new());
+        let action = SessionRevocationAction::new(
+            backend,
+            SrTier::Responder,
+            Duration::from_secs(60),
+            RevocationScope::Local,
+            "x",
+        );
+        assert_eq!(action.name(), "session_revocation");
     }
 }
