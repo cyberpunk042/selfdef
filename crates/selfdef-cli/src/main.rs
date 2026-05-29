@@ -707,8 +707,76 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-069 MS3 — revoke cached MFA grants for a principal
+    /// across pam_oath / selfdef-api / sovereign-os-cockpit
+    /// surfaces, forcing fresh 2FA on next auth.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 4h, operator-overridden 24h.
+    RevokeMfaGrant {
+        /// Target POSIX principal name.
+        principal: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-revoked duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Grant scope: all | comma-separated (pam,api,cockpit).
+        #[arg(long, default_value = "all")]
+        grant_scope: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-069 MS3 — clear an active MFA-grant revocation handle.
+    RestoreMfaGrant {
+        /// Principal or MFA-grant revocation handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_mfa_grant_revocation_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_mfa_grant_revocation_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_mfa_grant_scope(
+    s: &str,
+) -> Result<selfdef_mfa_grant_revocation_backend::MfaGrantScope, String> {
+    use selfdef_mfa_grant_revocation_backend::{MfaGrantScope, MfaGrantSurface};
+    let s = s.trim().to_lowercase();
+    if s == "all" {
+        return Ok(MfaGrantScope::All);
+    }
+    let mut surfaces = Vec::new();
+    for token in s.split(',') {
+        match token.trim() {
+            "pam" => surfaces.push(MfaGrantSurface::Pam),
+            "api" => surfaces.push(MfaGrantSurface::Api),
+            "cockpit" => surfaces.push(MfaGrantSurface::Cockpit),
+            "" => return Err("empty surface in list".into()),
+            other => return Err(format!("unknown MFA-grant surface: {other:?}")),
+        }
+    }
+    if surfaces.is_empty() {
+        return Err("no surfaces parsed".into());
+    }
+    Ok(MfaGrantScope::Specific(surfaces))
 }
 
 impl From<CliAuthority> for selfdef_api_token_revocation_backend::AuthorityTier {
@@ -2798,6 +2866,79 @@ async fn main() -> Result<()> {
                 println!("restored tokens for {target}");
             } else {
                 println!("no active token-revocation for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::RevokeMfaGrant {
+            principal,
+            reason,
+            duration,
+            authority,
+            grant_scope,
+            dry_run,
+        } => {
+            use selfdef_mfa_grant_revocation_backend::{
+                AuthorityTier, InMemoryBackend, MfaGrantRevocationBackend, MfaGrantRevokeRequest,
+            };
+            use std::time::Duration;
+
+            if principal.trim().is_empty() {
+                anyhow::bail!("principal must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 24h tier."
+                );
+            }
+            let scope = parse_mfa_grant_scope(&grant_scope)
+                .map_err(|e| anyhow::anyhow!("invalid --grant-scope: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would revoke MFA grants for {principal} ({scope:?}) for {secs}s \
+                     under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = MfaGrantRevokeRequest {
+                principal: principal.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                grant_scope: scope.clone(),
+                idempotency_key: format!("cli:{principal}:{reason}:{tier:?}:{scope:?}"),
+            };
+            let receipt = backend
+                .revoke_mfa_grants(req)
+                .await
+                .with_context(|| format!("revoking MFA grants for {principal}"))?;
+            println!(
+                "revoked MFA grants for {principal} for {secs}s · scope={scope:?} · tier={tier:?} \
+                 · handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::RestoreMfaGrant { target, force } => {
+            use selfdef_mfa_grant_revocation_backend::{
+                InMemoryBackend, MfaGrantRevocationBackend, MfaGrantRevocationHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = MfaGrantRevocationHandle::Active(target.clone());
+            let receipt = backend
+                .restore_mfa_grants(handle)
+                .await
+                .with_context(|| format!("restoring MFA grants for {target}"))?;
+            if receipt.restored {
+                println!("restored MFA grants for {target}");
+            } else {
+                println!("no active MFA-grant revocation for {target} (MS3 stateless backend)");
             }
         }
         Command::Mcp { action } => match action {
@@ -4959,6 +5100,71 @@ mod token_class_mask_tests {
                 assert_eq!(v.len(), 2);
                 assert!(v.contains(&TokenClass::Api));
                 assert!(v.contains(&TokenClass::Cockpit));
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+}
+
+// ============================================================ SDD-069 MS3 mfa-grant-scope parser tests
+
+#[cfg(test)]
+mod mfa_grant_scope_tests {
+    use super::parse_mfa_grant_scope;
+    use selfdef_mfa_grant_revocation_backend::{MfaGrantScope, MfaGrantSurface};
+
+    #[test]
+    fn parse_all_keyword_yields_all() {
+        assert!(matches!(
+            parse_mfa_grant_scope("all").unwrap(),
+            MfaGrantScope::All
+        ));
+    }
+
+    #[test]
+    fn parse_all_case_insensitive() {
+        assert!(matches!(
+            parse_mfa_grant_scope("ALL").unwrap(),
+            MfaGrantScope::All
+        ));
+    }
+
+    #[test]
+    fn parse_single_surface_yields_specific() {
+        match parse_mfa_grant_scope("pam").unwrap() {
+            MfaGrantScope::Specific(v) => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0], MfaGrantSurface::Pam);
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_comma_separated_list() {
+        match parse_mfa_grant_scope("pam,api,cockpit").unwrap() {
+            MfaGrantScope::Specific(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(v.contains(&MfaGrantSurface::Pam));
+                assert!(v.contains(&MfaGrantSurface::Api));
+                assert!(v.contains(&MfaGrantSurface::Cockpit));
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_unknown_surface() {
+        assert!(parse_mfa_grant_scope("bogus").is_err());
+    }
+
+    #[test]
+    fn parse_handles_whitespace_around_tokens() {
+        match parse_mfa_grant_scope(" pam , cockpit ").unwrap() {
+            MfaGrantScope::Specific(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v.contains(&MfaGrantSurface::Pam));
+                assert!(v.contains(&MfaGrantSurface::Cockpit));
             }
             _ => panic!("expected Specific"),
         }
