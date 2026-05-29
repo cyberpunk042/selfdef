@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod dcgm;
 pub mod psi;
 
 use std::fs;
