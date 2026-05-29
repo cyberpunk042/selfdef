@@ -2892,6 +2892,7 @@ dependencies = [
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
+ "selfdef-process-env-scrub-backend",
  "selfdef-process-quarantine-backend",
  "selfdef-process-tree-freeze-backend",
  "selfdef-profile-authority-gate",
@@ -5906,6 +5907,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-process-env-scrub-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-process-launch-policy"
 version = "0.1.0"
 dependencies = [
@@ -6301,6 +6313,7 @@ dependencies = [
  "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
  "selfdef-notifier",
+ "selfdef-process-env-scrub-backend",
  "selfdef-process-quarantine-backend",
  "selfdef-process-tree-freeze-backend",
  "selfdef-session-revocation-backend",

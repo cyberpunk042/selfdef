@@ -888,8 +888,90 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-074 MS3 — scrub specific environment variables from a
+    /// live process's /proc/<pid>/environ + (optionally) signal it
+    /// to refetch from its secret broker. Used post-rotation when
+    /// long-running processes still cache the old secret.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 2h, operator-overridden 6h.
+    ScrubEnv {
+        /// Target POSIX pid.
+        pid: i32,
+        /// Comma-separated list of variable names to scrub.
+        #[arg(long)]
+        vars: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-scrubbed duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Signal after scrub: sigusr1 | sigusr2 | sighup | none.
+        #[arg(long, default_value = "sigusr2")]
+        signal: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-074 MS3 — clear an active env-scrub handle. Note:
+    /// scrubbed values cannot be recovered (process memory was
+    /// zeroed); restore is queue-clear + audit only.
+    RestoreEnv {
+        /// Pid or env-scrub handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_process_env_scrub_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_process_env_scrub_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_scrub_signal(
+    s: &str,
+) -> Result<selfdef_process_env_scrub_backend::ScrubSignal, String> {
+    use selfdef_process_env_scrub_backend::ScrubSignal;
+    match s.trim().to_lowercase().as_str() {
+        "sigusr1" | "usr1" => Ok(ScrubSignal::Sigusr1),
+        "sigusr2" | "usr2" => Ok(ScrubSignal::Sigusr2),
+        "sighup" | "hup" => Ok(ScrubSignal::Sighup),
+        "none" | "no-signal" => Ok(ScrubSignal::None),
+        other => Err(format!(
+            "unknown scrub signal {other:?}; expected one of: sigusr1, sigusr2, sighup, none"
+        )),
+    }
+}
+
+pub(crate) fn parse_env_var_list(s: &str) -> Result<Vec<String>, String> {
+    let vars: Vec<String> = s
+        .split(',')
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .collect();
+    if vars.is_empty() {
+        return Err("--vars must contain at least one non-empty name".into());
+    }
+    for v in &vars {
+        if v.contains('=') || v.contains('\0') {
+            return Err(format!("var name {v:?} must not contain '=' or NUL"));
+        }
+    }
+    Ok(vars)
 }
 
 impl From<CliAuthority> for selfdef_socket_fd_revocation_backend::AuthorityTier {
@@ -3528,6 +3610,96 @@ async fn main() -> Result<()> {
                 println!(
                     "no active socket-fd-revocation for {target} (MS3 stateless backend; note: \
                      fds are not actually reopenable — restore is queue-clear + audit only)"
+                );
+            }
+        }
+        Command::ScrubEnv {
+            pid,
+            vars,
+            reason,
+            duration,
+            authority,
+            signal,
+            dry_run,
+        } => {
+            use selfdef_process_env_scrub_backend::{
+                AuthorityTier, InMemoryBackend, ProcessEnvScrubBackend, ScrubEnvRequest,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            if pid == 1 {
+                anyhow::bail!("pid 1 (init) is never env-scrubbable (SDD-074 sacrosanct gate)");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let vars_parsed =
+                parse_env_var_list(&vars).map_err(|e| anyhow::anyhow!("invalid --vars: {e}"))?;
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 6h tier."
+                );
+            }
+            let signal_parsed = parse_scrub_signal(&signal)
+                .map_err(|e| anyhow::anyhow!("invalid --signal: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would scrub vars {vars_parsed:?} on pid {pid} \
+                     (signal={signal_parsed:?}) for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = ScrubEnvRequest {
+                pid,
+                vars: vars_parsed.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                signal: signal_parsed,
+                idempotency_key: format!(
+                    "cli:{pid}:{}:{reason}:{tier:?}:{signal_parsed:?}",
+                    vars_parsed.join(",")
+                ),
+            };
+            let receipt = backend
+                .scrub_env(req)
+                .await
+                .with_context(|| format!("scrubbing env on pid {pid}"))?;
+            println!(
+                "scrubbed {} vars on pid {pid} for {secs}s · signal={signal_parsed:?} · \
+                 tier={tier:?} · handle={:?}",
+                receipt.vars_scrubbed, receipt.handle
+            );
+        }
+        Command::RestoreEnv { target, force } => {
+            use selfdef_process_env_scrub_backend::{
+                InMemoryBackend, ProcessEnvScrubBackend, ProcessEnvScrubHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = ProcessEnvScrubHandle::Active(target.clone());
+            let receipt = backend
+                .restore_env(handle)
+                .await
+                .with_context(|| format!("restoring env scrub {target}"))?;
+            if receipt.cleared {
+                println!("cleared env-scrub handle {target}");
+            } else {
+                println!(
+                    "no active process-env-scrub for {target} (MS3 stateless backend; note: \
+                     scrubbed values cannot be recovered — process memory was zeroed; restore \
+                     is queue-clear + audit only)"
                 );
             }
         }

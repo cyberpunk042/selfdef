@@ -25,6 +25,7 @@ selfdef-netns-isolation-backend = { path = "../selfdef-netns-isolation-backend" 
 selfdef-mount-binding-unbind-backend = { path = "../selfdef-mount-binding-unbind-backend" }
 selfdef-process-tree-freeze-backend = { path = "../selfdef-process-tree-freeze-backend" }
 selfdef-socket-fd-revocation-backend = { path = "../selfdef-socket-fd-revocation-backend" }
+selfdef-process-env-scrub-backend = { path = "../selfdef-process-env-scrub-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }

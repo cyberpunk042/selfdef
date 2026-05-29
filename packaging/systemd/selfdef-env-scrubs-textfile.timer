@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-074 process-env scrub observer (every 60s, 28th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-env-scrubs-textfile.sh
+# OnBootSec=840s — distinct from the prior 27 siblings (60s..810s).
+
+[Timer]
+OnBootSec=840s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-env-scrubs-textfile.service
+
+[Install]
+WantedBy=timers.target
