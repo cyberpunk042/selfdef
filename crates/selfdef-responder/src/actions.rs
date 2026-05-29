@@ -1117,6 +1117,106 @@ impl Action for NetnsIsolationAction {
     }
 }
 
+// =================================================== MountBindingUnbindAction
+//
+// SDD-071 MS2 — wires the MountBindingUnbindBackend trait into the
+// Action runner. Seventh primitive in the IPS septet; pairs with
+// SDD-066 process-freeze + SDD-070 netns-isolation at the
+// kernel-containment family.
+
+use selfdef_mount_binding_unbind_backend::{
+    AuthorityTier as MbTier, MountBindingUnbindBackend, UnbindMountRequest, UnbindScope as MbScope,
+};
+
+pub struct MountBindingUnbindAction {
+    backend: Arc<dyn MountBindingUnbindBackend>,
+    authority: MbTier,
+    duration: std::time::Duration,
+    scope: MbScope,
+    lazy: bool,
+    reason_prefix: String,
+}
+
+impl MountBindingUnbindAction {
+    pub fn new(
+        backend: Arc<dyn MountBindingUnbindBackend>,
+        authority: MbTier,
+        duration: std::time::Duration,
+        scope: MbScope,
+        lazy: bool,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            scope,
+            lazy,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+fn sdd071_mount_point_from_event(event: &Event) -> Option<String> {
+    event
+        .file
+        .as_ref()
+        .and_then(|f| f.path.clone())
+        .filter(|p| !p.is_empty())
+}
+
+#[async_trait]
+impl Action for MountBindingUnbindAction {
+    fn name(&self) -> &'static str {
+        "mount_binding_unbind"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(mount_point) = sdd071_mount_point_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no file.path in event — mount_binding_unbind skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{mount_point}:{}:{:?}:{:?}",
+            event.id, self.authority, self.scope
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would unbind {mount_point} ({:?}, lazy={}) for {}s under {:?} ({})",
+                self.scope,
+                self.lazy,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = UnbindMountRequest {
+            mount_point: mount_point.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope.clone(),
+            lazy: self.lazy,
+            idempotency_key,
+        };
+
+        match self.backend.unbind_mount(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "unbound {mount_point} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "mount_binding_unbind backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1878,5 +1978,136 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "netns_isolation");
+    }
+
+    // ----------------------------- MountBindingUnbindAction (SDD-071 MS2)
+
+    use selfdef_core::observable::File;
+    use selfdef_mount_binding_unbind_backend::{
+        AuthorityTier as MbTier, InMemoryBackend as MbInMemoryBackend, UnbindScope,
+    };
+
+    fn finding_with_path(path: &str) -> Event {
+        Event::new(
+            ClassUid::DETECTION_FINDING,
+            1,
+            SeverityId::Critical,
+            "host",
+            "test",
+            0,
+        )
+        .with_file(File {
+            path: Some(path.into()),
+            ..File::default()
+        })
+    }
+
+    #[tokio::test]
+    async fn mount_binding_unbind_dry_run_renders_mount_point_and_duration() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend.clone(),
+            MbTier::Responder,
+            Duration::from_secs(900),
+            UnbindScope::Bind,
+            true,
+            "test-responder",
+        );
+        let outcome = action
+            .execute(&finding_with_path("/mnt/leak"), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("/mnt/leak"));
+        assert!(outcome.notes.contains("900s"));
+        assert!(outcome.notes.contains("Bind"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn mount_binding_unbind_applies_real_unbind_when_not_dry_run() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend.clone(),
+            MbTier::Operator,
+            Duration::from_secs(60 * 30),
+            UnbindScope::Bind,
+            true,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_path("/mnt/escape"), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("/mnt/escape"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn mount_binding_unbind_skipped_when_no_path() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend.clone(),
+            MbTier::Responder,
+            Duration::from_secs(60),
+            UnbindScope::Bind,
+            true,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn mount_binding_unbind_propagates_authority_insufficient() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend.clone(),
+            MbTier::Autonomous,
+            Duration::from_secs(60 * 30),
+            UnbindScope::Bind,
+            true,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_path("/mnt/leak"), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn mount_binding_unbind_scoped_overlay() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend.clone(),
+            MbTier::Operator,
+            Duration::from_secs(60),
+            UnbindScope::Overlay,
+            true,
+            "scoped",
+        );
+        let outcome = action
+            .execute(&finding_with_path("/mnt/overlay"), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[test]
+    fn mount_binding_unbind_action_name_is_stable_string() {
+        let backend = Arc::new(MbInMemoryBackend::new());
+        let action = MountBindingUnbindAction::new(
+            backend,
+            MbTier::Responder,
+            Duration::from_secs(60),
+            UnbindScope::Bind,
+            true,
+            "x",
+        );
+        assert_eq!(action.name(), "mount_binding_unbind");
     }
 }
