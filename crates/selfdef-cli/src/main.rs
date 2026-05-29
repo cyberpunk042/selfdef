@@ -810,8 +810,70 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-072 MS3 — SIGSTOP-cascade a process tree (root + every
+    /// descendant) to contain fork-bombs or multi-worker exploits
+    /// without killing them — preserves forensic memory state.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 4h, operator-overridden 8h.
+    FreezeTree {
+        /// Root pid of the tree to freeze.
+        root_pid: i32,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-frozen duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Scope: descendants | strict | children
+        /// (strict = re-walk every 100ms until tree stabilises).
+        #[arg(long, default_value = "descendants")]
+        scope: String,
+        /// Exclude the root itself from the freeze cascade.
+        #[arg(long)]
+        exclude_self: bool,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-072 MS3 — SIGCONT-cascade an active process-tree-freeze handle.
+    ThawTree {
+        /// Root pid or process-tree-freeze handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_process_tree_freeze_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_process_tree_freeze_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_tree_scope(
+    s: &str,
+) -> Result<selfdef_process_tree_freeze_backend::TreeScope, String> {
+    use selfdef_process_tree_freeze_backend::TreeScope;
+    match s.trim().to_lowercase().as_str() {
+        "descendants" | "desc" => Ok(TreeScope::Descendants),
+        "strict" | "strict-descendants" | "strictdescendants" => Ok(TreeScope::StrictDescendants),
+        "children" | "children-only" | "childrenonly" => Ok(TreeScope::ChildrenOnly),
+        other => Err(format!(
+            "unknown tree scope {other:?}; expected one of: descendants, strict, children"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_mount_binding_unbind_backend::AuthorityTier {
@@ -3230,6 +3292,88 @@ async fn main() -> Result<()> {
                 println!("rebound {target}");
             } else {
                 println!("no active mount-binding-unbind for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::FreezeTree {
+            root_pid,
+            reason,
+            duration,
+            authority,
+            scope,
+            exclude_self,
+            dry_run,
+        } => {
+            use selfdef_process_tree_freeze_backend::{
+                AuthorityTier, FreezeTreeRequest, InMemoryBackend, ProcessTreeFreezeBackend,
+            };
+            use std::time::Duration;
+
+            if root_pid <= 0 {
+                anyhow::bail!("root_pid must be positive, got {root_pid}");
+            }
+            if root_pid == 1 {
+                anyhow::bail!("pid 1 (init) is never freezable (SDD-072 sacrosanct gate)");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 8h tier."
+                );
+            }
+            let scope_parsed =
+                parse_tree_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+            let include_self = !exclude_self;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would freeze tree root={root_pid} ({scope_parsed:?}, \
+                     include_self={include_self}) for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = FreezeTreeRequest {
+                root_pid,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed,
+                include_self,
+                idempotency_key: format!("cli:{root_pid}:{reason}:{tier:?}:{scope_parsed:?}"),
+            };
+            let receipt = backend
+                .freeze_tree(req)
+                .await
+                .with_context(|| format!("freezing tree root={root_pid}"))?;
+            println!(
+                "froze tree root={root_pid} for {secs}s · scope={scope_parsed:?} · \
+                 tier={tier:?} · frozen_pid_count={} · handle={:?}",
+                receipt.frozen_pid_count, receipt.handle
+            );
+        }
+        Command::ThawTree { target, force } => {
+            use selfdef_process_tree_freeze_backend::{
+                InMemoryBackend, ProcessTreeFreezeBackend, ProcessTreeHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = ProcessTreeHandle::Active(target.clone());
+            let receipt = backend
+                .thaw_tree(handle)
+                .await
+                .with_context(|| format!("thawing tree {target}"))?;
+            if receipt.thawed {
+                println!("thawed tree {target}");
+            } else {
+                println!("no active process-tree-freeze for {target} (MS3 stateless backend)");
             }
         }
         Command::Mcp { action } => match action {
