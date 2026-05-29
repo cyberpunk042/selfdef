@@ -2884,6 +2884,7 @@ dependencies = [
  "selfdef-hardware-requirements",
  "selfdef-integration-ntfy",
  "selfdef-mfa-grant-revocation-backend",
+ "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
  "selfdef-network-boundary",
  "selfdef-notifier",
@@ -5255,6 +5256,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-mount-binding-unbind-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-named-counter"
 version = "0.1.0"
 dependencies = [
@@ -6273,6 +6285,7 @@ dependencies = [
  "selfdef-bus",
  "selfdef-core",
  "selfdef-mfa-grant-revocation-backend",
+ "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
  "selfdef-notifier",
  "selfdef-process-quarantine-backend",

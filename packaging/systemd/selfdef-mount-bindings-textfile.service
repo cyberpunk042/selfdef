@@ -1,0 +1,36 @@
+[Unit]
+Description=Selfdef — emit SDD-071 mount-binding unbind state textfile
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-mount-bindings-textfile.sh
+# 25th sibling. Extends the IPS-hexet observability set → septet
+# at the filesystem-binding axis.
+# Standard 12-clause R171 hardening.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_MOUNT_BINDINGS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-mount-bindings.prom
+Environment=SELFDEF_MOUNT_BINDINGS_STATE_DIR=/var/lib/selfdef/mount-bindings
+ExecStart=/usr/share/selfdef/selfdef-mount-bindings-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
