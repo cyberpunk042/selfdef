@@ -2883,6 +2883,7 @@ dependencies = [
  "selfdef-rules-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
+ "selfdef-session-revocation-backend",
  "selfdef-signing",
  "selfdef-store",
  "selfdef-tool-capability-policy",

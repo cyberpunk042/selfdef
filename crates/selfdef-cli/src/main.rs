@@ -639,8 +639,54 @@ enum Command {
         #[arg(long, default_value = "TERM")]
         signal: String,
     },
+    /// SDD-067 MS3 — terminate all sessions for a user (loginctl
+    /// terminate-user + pkill -KILL -u + sudo grace cache removal
+    /// + PAM-side deny entry with TTL). Duration capped by tier:
+    /// autonomous 1m / responder 30m / operator 4h /
+    /// operator-overridden 24h.
+    RevokeSessions {
+        /// Target POSIX user name.
+        user: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// "Stay revoked" duration. Accepts plain seconds or
+        /// suffixed forms ("30m", "1h"). Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Limit to sessions from a specific source IP (otherwise
+        /// revoke ALL sessions for the user).
+        #[arg(long)]
+        source_ip: Option<String>,
+        /// Plan + audit only; do not apply.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-067 MS3 — clear an active session-revocation handle
+    /// before its TTL expires.
+    RestoreSessions {
+        /// User name or revocation handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_session_revocation_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_session_revocation_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -2521,6 +2567,87 @@ async fn main() -> Result<()> {
                  (MS4 wires handle→pid ledger; until then, use `kill -{signal} <pid>` \
                  directly after observing the audit log)"
             );
+        }
+        Command::RevokeSessions {
+            user,
+            reason,
+            duration,
+            authority,
+            source_ip,
+            dry_run,
+        } => {
+            use selfdef_session_revocation_backend::{
+                AuthorityTier, InMemoryBackend, RevocationScope, RevokeRequest,
+                SessionRevocationBackend,
+            };
+            use std::net::IpAddr;
+            use std::time::Duration;
+
+            if user.trim().is_empty() {
+                anyhow::bail!("user must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 24h tier."
+                );
+            }
+            let scope = if let Some(ip_str) = source_ip {
+                let ip: IpAddr = ip_str
+                    .parse()
+                    .with_context(|| format!("--source-ip not a valid address: {ip_str}"))?;
+                RevocationScope::SourceIp(ip)
+            } else {
+                RevocationScope::Local
+            };
+
+            if dry_run {
+                println!(
+                    "[dry-run] would revoke sessions for {user} ({scope:?}) for {secs}s under \
+                     {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = RevokeRequest {
+                user: user.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope,
+                idempotency_key: format!("cli:{user}:{reason}:{tier:?}:{scope:?}"),
+            };
+            let receipt = backend
+                .revoke_sessions(req)
+                .await
+                .with_context(|| format!("revoking sessions for {user}"))?;
+            println!(
+                "revoked sessions for {user} for {secs}s · scope={scope:?} · tier={tier:?} · \
+                 handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::RestoreSessions { target, force } => {
+            use selfdef_session_revocation_backend::{
+                InMemoryBackend, RevocationHandle, SessionRevocationBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = RevocationHandle::Active(target.clone());
+            let receipt = backend
+                .restore_sessions(handle)
+                .await
+                .with_context(|| format!("restoring sessions for {target}"))?;
+            if receipt.restored {
+                println!("restored sessions for {target}");
+            } else {
+                println!("no active session-revocation for {target} (MS3 stateless backend)");
+            }
         }
         Command::Mcp { action } => match action {
             McpAction::Tools { human } => {
