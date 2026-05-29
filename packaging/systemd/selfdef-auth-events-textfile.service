@@ -1,0 +1,52 @@
+[Unit]
+Description=Selfdef — emit auth-event textfile for node_exporter scrape (brute-force detection)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-auth-events-textfile.sh
+# Runs every 60s via the companion timer. Surfaces auth-event activity
+# (login failures + sudo + ssh) as Prometheus gauges so operators can
+# detect brute-force attacks + privilege escalation attempts early.
+#
+# Reads journalctl --since 5m --facility=auth,authpriv. Sister to
+# the 6 existing sibling observers — same R171 hardening + atomic-
+# write convention.
+#
+# Operator MUST grant selfdef user read access to systemd journal OR
+# add the selfdef user to the systemd-journal group for the wrapper
+# to read auth-facility entries.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+# NOTE: this service requires journal-read access. The selfdef user
+# must be a member of systemd-journal group OR the journal must be
+# world-readable for non-root users. Operators must explicitly grant
+# this access — drop-in:
+#   /etc/systemd/system/selfdef-auth-events-textfile.service.d/journal.conf
+#   [Service]
+#   SupplementaryGroups=systemd-journal
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_AUTH_EVENTS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-auth-events.prom
+Environment=SELFDEF_AUTH_EVENTS_WINDOW=5m
+ExecStart=/usr/share/selfdef/selfdef-auth-events-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

@@ -1,0 +1,19 @@
+[Unit]
+Description=Selfdef — periodic auth-event observer (every 60s, brute-force detection)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-auth-events-textfile.sh
+# Pairs with selfdef-auth-events-textfile.service. 60s cadence
+# matches the 6 sibling observers. Offset boot delay by 210s — 7th
+# and latest observer timer to fire after boot.
+# Sibling cadences: cli-mirror 60s, m060 70s, four-watchdog 90s,
+# modules 120s, daemon-process 150s, apparmor 180s, auth-events
+# 210s — 7 distinct boot offsets.
+
+[Timer]
+OnBootSec=210s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-auth-events-textfile.service
+
+[Install]
+WantedBy=timers.target
