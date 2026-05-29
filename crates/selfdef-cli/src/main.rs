@@ -739,8 +739,66 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-070 MS3 — isolate a process into a fresh network
+    /// namespace (and optionally pid/ipc), severing live network
+    /// reachability for forensics while the container is held.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 2h, operator-overridden 12h (kernel-containment
+    /// axis: shortest of the IPS hexet).
+    IsolatePid {
+        /// Target POSIX pid.
+        pid: i32,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-isolated duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Namespace scope: net | net-pid-ipc.
+        #[arg(long, default_value = "net")]
+        scope: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-070 MS3 — clear an active netns-isolation handle.
+    ReleaseIsolation {
+        /// Pid or netns-isolation handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_netns_isolation_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_netns_isolation_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_netns_scope(
+    s: &str,
+) -> Result<selfdef_netns_isolation_backend::IsolationScope, String> {
+    use selfdef_netns_isolation_backend::IsolationScope;
+    match s.trim().to_lowercase().as_str() {
+        "net" | "net-only" | "netonly" => Ok(IsolationScope::NetOnly),
+        "net-pid-ipc" | "netpidipc" | "all" => Ok(IsolationScope::NetPidIpc),
+        other => Err(format!(
+            "unknown netns scope {other:?}; expected one of: net, net-pid-ipc"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_mfa_grant_revocation_backend::AuthorityTier {
@@ -2939,6 +2997,82 @@ async fn main() -> Result<()> {
                 println!("restored MFA grants for {target}");
             } else {
                 println!("no active MFA-grant revocation for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::IsolatePid {
+            pid,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_netns_isolation_backend::{
+                AuthorityTier, InMemoryBackend, IsolatePidRequest, NetnsIsolationBackend,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 12h tier."
+                );
+            }
+            let scope_parsed =
+                parse_netns_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would isolate pid {pid} ({scope_parsed:?}) for {secs}s under \
+                     {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = IsolatePidRequest {
+                pid,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed,
+                idempotency_key: format!("cli:{pid}:{reason}:{tier:?}:{scope_parsed:?}"),
+            };
+            let receipt = backend
+                .isolate_pid(req)
+                .await
+                .with_context(|| format!("isolating pid {pid}"))?;
+            println!(
+                "isolated pid {pid} for {secs}s · scope={scope_parsed:?} · tier={tier:?} · \
+                 handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::ReleaseIsolation { target, force } => {
+            use selfdef_netns_isolation_backend::{
+                InMemoryBackend, NetnsIsolationBackend, NetnsIsolationHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = NetnsIsolationHandle::Active(target.clone());
+            let receipt = backend
+                .release_isolation(handle)
+                .await
+                .with_context(|| format!("releasing isolation for {target}"))?;
+            if receipt.released {
+                println!("released isolation for {target}");
+            } else {
+                println!("no active netns-isolation for {target} (MS3 stateless backend)");
             }
         }
         Command::Mcp { action } => match action {
