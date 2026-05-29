@@ -1,0 +1,16 @@
+[package]
+name = "selfdef-capability-drop-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-075 MS1 — per-process capability-drop backend trait + in-memory test impl. Eleventh IPS enforcement primitive extending dectet → undectet at the per-process privilege-set axis (pairs with SDD-066 freeze + SDD-070 netns-isolation)."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+serde_json = { workspace = true }
