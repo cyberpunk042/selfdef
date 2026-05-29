@@ -970,8 +970,74 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-076 MS3 — evict a kernel-keyring entry (kerberos TGT,
+    /// dm-crypt master key, NFS sec cred, etc.) via keyctl_invalidate.
+    /// Process keeps running; in-flight refs survive briefly; new
+    /// lookups fail with EKEYREVOKED forcing re-acquisition.
+    ///
+    /// Duration capped by tier — autonomous 2m, responder 15m,
+    /// operator 1h, operator-overridden 4h (kernel evictions are
+    /// irreversible — shortest of the duodectet).
+    EvictKey {
+        /// Key spec: `0x<hex>` numeric serial OR `<type>:<desc>`
+        /// where <type> ∈ user|logon|keyring|big_key|asymmetric|
+        /// trusted|encrypted|rxrpc|rxrpc_s|dns_resolver|
+        /// id_resolver|cifs.idmap|cifs.spnego.
+        key_spec: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-evicted duration. Default 30m (capped by tier).
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Scope: invalidate (default) | unlink | both.
+        #[arg(long, default_value = "invalidate")]
+        scope: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-076 MS3 — clear an active kernel-keyring eviction handle.
+    /// Note: kernel-keyring evictions are irreversible — the operator
+    /// must re-acquire the key via the upstream auth flow (KDC,
+    /// PAM, NFS server). restore-key is queue-clear + audit only.
+    RestoreKey {
+        /// Key spec or kernel-keyring-eviction handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_kernel_keyring_eviction_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_kernel_keyring_eviction_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_eviction_scope(
+    s: &str,
+) -> Result<selfdef_kernel_keyring_eviction_backend::EvictionScope, String> {
+    use selfdef_kernel_keyring_eviction_backend::EvictionScope;
+    match s.trim().to_lowercase().as_str() {
+        "invalidate" | "inv" => Ok(EvictionScope::Invalidate),
+        "unlink" | "unl" => Ok(EvictionScope::Unlink),
+        "both" => Ok(EvictionScope::Both),
+        other => Err(format!(
+            "unknown eviction scope {other:?}; expected one of: invalidate, unlink, both"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_capability_drop_backend::AuthorityTier {
@@ -3907,6 +3973,92 @@ async fn main() -> Result<()> {
                     "no active capability-drop for {target} (MS3 stateless backend; note: \
                      capability drops are irreversible at the kernel level — operator must \
                      restart the process to recover the dropped capability; restore is \
+                     queue-clear + audit only)"
+                );
+            }
+        }
+        Command::EvictKey {
+            key_spec,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_kernel_keyring_eviction_backend::{
+                AuthorityTier, EvictKeyRequest, InMemoryBackend, KernelKeyringEvictionBackend,
+                parse_key_spec,
+            };
+            use std::time::Duration;
+
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            if parse_key_spec(&key_spec).is_none() {
+                anyhow::bail!(
+                    "unparseable key spec {key_spec:?}; expected one of: 0x<hex> serial or \
+                     <type>:<desc> where <type> ∈ user|logon|keyring|big_key|asymmetric|trusted|\
+                     encrypted|rxrpc|rxrpc_s|dns_resolver|id_resolver|cifs.idmap|cifs.spnego"
+                );
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 4h tier."
+                );
+            }
+            let scope_parsed = parse_eviction_scope(&scope)
+                .map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would evict kernel-keyring entry {key_spec:?} ({scope_parsed:?}) \
+                     for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = EvictKeyRequest {
+                key_spec: key_spec.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed,
+                idempotency_key: format!("cli:{key_spec}:{reason}:{tier:?}:{scope_parsed:?}"),
+            };
+            let receipt = backend
+                .evict_key(req)
+                .await
+                .with_context(|| format!("evicting kernel keyring entry {key_spec}"))?;
+            println!(
+                "evicted {} keys for {key_spec} for {secs}s · scope={scope_parsed:?} · \
+                 tier={tier:?} · handle={:?}",
+                receipt.keys_evicted, receipt.handle
+            );
+        }
+        Command::RestoreKey { target, force } => {
+            use selfdef_kernel_keyring_eviction_backend::{
+                InMemoryBackend, KernelKeyringEvictionBackend, KernelKeyringHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = KernelKeyringHandle::Active(target.clone());
+            let receipt = backend
+                .restore_key(handle)
+                .await
+                .with_context(|| format!("restoring kernel-keyring eviction {target}"))?;
+            if receipt.cleared {
+                println!("cleared kernel-keyring-eviction handle {target}");
+            } else {
+                println!(
+                    "no active kernel-keyring-eviction for {target} (MS3 stateless backend; \
+                     note: kernel-keyring evictions are irreversible — operator must re-acquire \
+                     the key via upstream auth flow (KDC / PAM / NFS server); restore is \
                      queue-clear + audit only)"
                 );
             }
