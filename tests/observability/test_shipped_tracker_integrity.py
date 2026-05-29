@@ -170,12 +170,13 @@ def test_milestone_audit_coverage_above_threshold():
     text = _shipped_text()
     heading_re = re.compile(r"^### (MS\d{3})\b", re.MULTILINE)
     audited = {m.group(1) for m in heading_re.finditer(text)}
-    # Threshold: ≥40 milestones audited (of 48 selfdef milestones).
-    # The audit has shipped across MS001-MS007, MS009-MS011, MS013-MS018,
-    # MS020-MS021, MS023-MS031, MS032-MS035, MS037-MS048 (47 total).
-    # Setting threshold at 40 gives 1-row drift margin while catching
-    # accidental regressions.
-    assert len(audited) >= 40, (
+    # Threshold: ≥47 milestones audited (of 48 selfdef milestones).
+    # The audit now covers the FULL 48-milestone catalogue MS001..MS048
+    # after MS008 + MS012 + MS019 + MS036 audit rows landed this session
+    # (commits `00b447c` + this commit). Setting threshold at 47 gives
+    # 1-row drift margin while catching accidental regressions on the
+    # remaining 47 rows.
+    assert len(audited) >= 47, (
         f"SHIPPED.md milestone-audit coverage regressed: {len(audited)} "
         f"audited (threshold 40). Audited: {sorted(audited)}"
     )

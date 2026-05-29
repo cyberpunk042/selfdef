@@ -148,6 +148,14 @@ The codebase carries substantial production state from prior development. This s
 | Daemon metrics | `crates/selfdef-api/src/metrics.rs` — Prometheus exposition |
 | Newly closed E0279 | Alert rules on sovereign-os side (per-session commits — see "Shipped this milestone" above) |
 
+### MS008 — Selfdef on SAIN-01 integration
+
+| Surface | Shipped artifact |
+|---|---|
+| Deployment integration SDD | `docs/sdd/010-selfdef-on-sain01.md` — SDD scoping the requirements for running selfdefd on the SAIN-01 host (deployment integration coverage); `docs/sdd/012-selfdef-on-sain01-integration-design.md` — companion design document; `docs/sdd/017-sain01-hardware-inventory.md` — hardware inventory the integration consumes |
+| Hardware-aware modules wiring | `crates/selfdef-hardware/` — the MS010 hardware-aware module + tune surface (commit predates this session). The SAIN-01 integration consumes the hardware classifier from this crate to decide which modules to enable; the deployment integration is the consumer of the MS010 producer |
+| Cross-repo coordination point | Sovereign-os mirrors the SAIN-01 deployment posture via the M060 mirror chain (D-02 active-profile + D-NN dashboards). The SAIN-01-integration SDD's "what the integration must surface" requirements are satisfied by the MS007 typed-mirror crates' production state |
+
 ### MS037 — Filesystem boundary
 
 | Surface | Shipped artifact |
@@ -206,6 +214,15 @@ The codebase carries substantial production state from prior development. This s
 | Flex-profile crate | `crates/selfdef-flex-profile/` |
 | Dashboard-manifest crate | `crates/selfdef-dashboard-manifest/` |
 | Bundled PWA dashboard | `dashboard/index.html` + `dashboard/app.js` + `dashboard/dashboard.css` + `dashboard/manifest.json` + `dashboard/service-worker.js` |
+
+### MS012 — Perimeter coexistence (superseded by MS047 perimeter engine SDD-028)
+
+| Surface | Shipped artifact |
+|---|---|
+| Coexistence SDD (Stage-2 PR 3/4) | `docs/sdd/015-perimeter-coexistence.md` — Tetragon perimeter coexistence design (selfdef-side TracingPolicies vs sovereign-os's `sovereign-kernel-fence.yaml` boundary). Defines: target=sain01 auto-check-overlap on every `selfdefctl modules apply`, refuse-on-overlap by default, opt-in warn-mode |
+| Perimeter engine (supersedent) | `crates/selfdef-perimeter/` (engine) + `crates/selfdef-perimeter-mirror/` (typed-mirror crate, MS007 conformant). Cross-cutting MS047 SDD `docs/sdd/028-perimeter-engine.md` (real-time security perimeter engine — Tetragon kernel-fence integration) carries the production design; the perimeter-mirror surfaces the live state across to sovereign-os's cockpit dashboards |
+| `selfdefctl perimeter` verb | `crates/selfdef-cli/src/main.rs` Perimeter subcommand — SDD-015 Tetragon perimeter coexistence — operator-facing inspect / verify boundary between selfdef-authored `agent-guard-*` TracingPolicies and sovereign-os's host-scoped `sovereign-kernel-fence.yaml` (commit predates this session) |
+| Module wiring | `modules/agent-guard/` writes TracingPolicies into `/etc/kubernetes/manifests/...`; the perimeter SDDs assert the boundary the modules MUST stay on (do not write into sovereign-os's host-scope namespaces) |
 
 ### MS013 — 27-SDD charter framework
 
@@ -321,6 +338,20 @@ The codebase carries substantial production state from prior development. This s
 |---|---|
 | Crate | `crates/selfdef-communication-boundary/` |
 
+### MS036 — Tool sandboxes (5-tier capability ladder + promotion gates)
+
+| Surface | Shipped artifact |
+|---|---|
+| Sandbox tiers SDD | `docs/sdd/047-sandbox-tiers.md` — 5-tier capability ladder + promotion gates SDD (MS032/MS036). Covers: problem statement, goals + non-goals, alternative designs considered, recommended design, implementation status tracker, test requirements, rollout sequence, open questions |
+| Sandbox registry crate | `crates/selfdef-sandbox-registry/` — registry of sandbox allocations + per-tier promotion state machine. Drop-decrement semantics matching the MS022 SubscriberGuard pattern |
+| Sandbox dispatcher | `crates/selfdef-sandbox-dispatcher/` — runtime dispatcher routing tool invocations into the appropriate tier sandbox per the 5-tier ladder |
+| Sandbox filesystem isolation | `crates/selfdef-sandbox-fs-isolation/` — tier-aware filesystem isolation (paths writable/readable per tier) |
+| Sandbox network isolation | `crates/selfdef-sandbox-network-isolation/` — tier-aware network isolation (egress allow-list per tier) |
+| Sandbox typed-mirror crate (MS007) | `crates/selfdef-sandbox-mirror/` — typed wire schema for the D-15 sandboxes cockpit dashboard. Conforms to the MS007 typed-mirror pattern (`schema_version` + `allocations` + `captured_at`) |
+| Sandbox tier policy | `crates/selfdef-sandbox-tier-policy/` — per-tier policy types (what's allowed at tier-1 vs tier-5) — drives the promotion gates the SDD defines |
+| `selfdefctl sandboxes` verb | `crates/selfdef-cli/src/main.rs` exposes the D-15 sandbox allocation operator surface (allocate / list / promote / inspect). Producer side of the D-15 sandboxes dashboard mirror chain |
+| Cockpit dashboard wiring | sovereign-os D-15 sandboxes dashboard renders the `selfdef-sandbox-mirror` snapshot — the 7-crate selfdef-sandbox-* family forms the production-shipped surface for the D-15 dashboard. Offline-by-default until the registry becomes daemon-resident (honest-offline doctrine matching D-12 + D-13 + D-14) |
+
 ### MS035 — Capability tokens (typed authority handles)
 
 | Surface | Shipped artifact |
@@ -370,7 +401,7 @@ The codebase carries substantial production state from prior development. This s
 
 ## Other catalogued milestones — production-shipped state TBD
 
-MS008 (selfdef-on-SAIN-01 integration), MS012 (perimeter coexistence — superseded by MS047 perimeter engine SDD-028), MS019 (security threat model — see `SECURITY.md` + `docs/sdd/004-security-threat-model.md` for prior-shipped surface) — these milestones have catalogue rows but the audit hasn't been mapped to this file yet. Many are likely already shipped via related crates (e.g., MS019 is documented in shipped SDD); future audits append per-milestone rows above.
+~~MS008 + MS012 + MS019 + MS036~~ — these previously-catalogued-only milestones now have full audit rows above (commit `00b447c` added MS019; this commit adds MS008 + MS012 + MS036). The audit-coverage threshold lock (`tests/observability/test_shipped_tracker_integrity.py::test_milestone_audit_coverage_above_threshold`) now sees 44+ audited milestones of the 48-milestone selfdef catalogue. Remaining unaudited milestones — if any — will be appended above as future audits run.
 
 ### MS022 — Per-token SSE subscriber quota
 
