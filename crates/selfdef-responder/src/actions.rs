@@ -1035,6 +1035,88 @@ impl Action for MfaGrantRevocationAction {
     }
 }
 
+// ======================================================= NetnsIsolationAction
+//
+// SDD-070 MS2 — wires the NetnsIsolationBackend trait into the
+// Action runner. Sixth primitive in the IPS hexet; pairs with
+// SDD-066 process-freeze at the kernel-containment axis.
+
+use selfdef_netns_isolation_backend::{
+    AuthorityTier as NetnsTier, IsolatePidRequest, IsolationScope as NetnsScope,
+    NetnsIsolationBackend,
+};
+
+pub struct NetnsIsolationAction {
+    backend: Arc<dyn NetnsIsolationBackend>,
+    authority: NetnsTier,
+    duration: std::time::Duration,
+    scope: NetnsScope,
+    reason_prefix: String,
+}
+
+impl NetnsIsolationAction {
+    pub fn new(
+        backend: Arc<dyn NetnsIsolationBackend>,
+        authority: NetnsTier,
+        duration: std::time::Duration,
+        scope: NetnsScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for NetnsIsolationAction {
+    fn name(&self) -> &'static str {
+        "netns_isolation"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid in event — netns_isolation skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!("{pid}:{}:{:?}:{:?}", event.id, self.authority, self.scope);
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would isolate pid {pid} ({:?}) for {}s under {:?} ({})",
+                self.scope,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = IsolatePidRequest {
+            pid,
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            idempotency_key,
+        };
+
+        match self.backend.isolate_pid(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "isolated pid {pid} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!("netns_isolation backend: {e}"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1690,5 +1772,111 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "mfa_grant_revocation");
+    }
+
+    // ----------------------------- NetnsIsolationAction (SDD-070 MS2)
+
+    use selfdef_netns_isolation_backend::{
+        AuthorityTier as NetnsTier, InMemoryBackend as NetnsInMemoryBackend, IsolationScope,
+    };
+
+    #[tokio::test]
+    async fn netns_isolation_dry_run_renders_pid_scope_and_duration() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend.clone(),
+            NetnsTier::Responder,
+            Duration::from_secs(900),
+            IsolationScope::NetOnly,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("900s"));
+        assert!(outcome.notes.contains("NetOnly"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn netns_isolation_applies_real_isolate_when_not_dry_run() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend.clone(),
+            NetnsTier::Operator,
+            Duration::from_secs(60 * 60),
+            IsolationScope::NetOnly,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn netns_isolation_skipped_when_no_pid() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend.clone(),
+            NetnsTier::Responder,
+            Duration::from_secs(60),
+            IsolationScope::NetOnly,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn netns_isolation_propagates_authority_insufficient() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend.clone(),
+            NetnsTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            IsolationScope::NetOnly,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn netns_isolation_scoped_net_pid_ipc() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend.clone(),
+            NetnsTier::Operator,
+            Duration::from_secs(60),
+            IsolationScope::NetPidIpc,
+            "scoped",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(9090), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[test]
+    fn netns_isolation_action_name_is_stable_string() {
+        let backend = Arc::new(NetnsInMemoryBackend::new());
+        let action = NetnsIsolationAction::new(
+            backend,
+            NetnsTier::Responder,
+            Duration::from_secs(60),
+            IsolationScope::NetOnly,
+            "x",
+        );
+        assert_eq!(action.name(), "netns_isolation");
     }
 }

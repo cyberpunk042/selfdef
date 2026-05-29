@@ -21,6 +21,7 @@ selfdef-process-quarantine-backend = { path = "../selfdef-process-quarantine-bac
 selfdef-session-revocation-backend = { path = "../selfdef-session-revocation-backend" }
 selfdef-api-token-revocation-backend = { path = "../selfdef-api-token-revocation-backend" }
 selfdef-mfa-grant-revocation-backend = { path = "../selfdef-mfa-grant-revocation-backend" }
+selfdef-netns-isolation-backend = { path = "../selfdef-netns-isolation-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
