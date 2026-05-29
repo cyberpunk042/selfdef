@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod backpressure_driver;
 pub mod dcgm;
 pub mod human_gate;
 pub mod psi;
