@@ -674,8 +674,85 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-068 MS3 — revoke API/web tokens for a principal
+    /// across selfdef-api / sovereign-os-cockpit / mcp-aggregate.
+    ///
+    /// Duration capped by tier — autonomous 2m, responder 1h,
+    /// operator 8h, operator-overridden 72h.
+    RevokeTokens {
+        /// Principal (user name).
+        principal: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-revoked duration. Accepts plain seconds or suffixed
+        /// forms ("1h", "30m"). Default 1h.
+        #[arg(long, default_value = "1h")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Token-class scope: all (default) or comma-separated
+        /// list ("api", "cockpit", "mcp", or "other:NAME").
+        #[arg(long, default_value = "all")]
+        token_class: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-068 MS3 — clear an active token-revocation handle.
+    RestoreTokens {
+        /// Principal or token-revocation handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_api_token_revocation_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_api_token_revocation_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_token_class_mask(
+    s: &str,
+) -> Result<selfdef_api_token_revocation_backend::TokenClassMask, String> {
+    use selfdef_api_token_revocation_backend::{TokenClass, TokenClassMask};
+    let s = s.trim().to_lowercase();
+    if s == "all" {
+        return Ok(TokenClassMask::All);
+    }
+    let mut classes = Vec::new();
+    for token in s.split(',') {
+        let token = token.trim();
+        if let Some(name) = token.strip_prefix("other:") {
+            if name.is_empty() {
+                return Err("other: requires a name".into());
+            }
+            classes.push(TokenClass::Other(name.to_string()));
+            continue;
+        }
+        match token {
+            "api" => classes.push(TokenClass::Api),
+            "cockpit" => classes.push(TokenClass::Cockpit),
+            "mcp" => classes.push(TokenClass::Mcp),
+            "" => return Err("empty class in list".into()),
+            other => return Err(format!("unknown token class: {other:?}")),
+        }
+    }
+    if classes.is_empty() {
+        return Err("no classes parsed".into());
+    }
+    Ok(TokenClassMask::Specific(classes))
 }
 
 impl From<CliAuthority> for selfdef_session_revocation_backend::AuthorityTier {
@@ -2648,6 +2725,79 @@ async fn main() -> Result<()> {
                 println!("restored sessions for {target}");
             } else {
                 println!("no active session-revocation for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::RevokeTokens {
+            principal,
+            reason,
+            duration,
+            authority,
+            token_class,
+            dry_run,
+        } => {
+            use selfdef_api_token_revocation_backend::{
+                ApiTokenRevocationBackend, AuthorityTier, InMemoryBackend, TokenRevokeRequest,
+            };
+            use std::time::Duration;
+
+            if principal.trim().is_empty() {
+                anyhow::bail!("principal must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 72h tier."
+                );
+            }
+            let mask = parse_token_class_mask(&token_class)
+                .map_err(|e| anyhow::anyhow!("invalid --token-class: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would revoke tokens for {principal} ({mask:?}) for {secs}s under \
+                     {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = TokenRevokeRequest {
+                principal: principal.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                token_classes: mask.clone(),
+                idempotency_key: format!("cli:{principal}:{reason}:{tier:?}:{mask:?}"),
+            };
+            let receipt = backend
+                .revoke_tokens(req)
+                .await
+                .with_context(|| format!("revoking tokens for {principal}"))?;
+            println!(
+                "revoked tokens for {principal} for {secs}s · classes={mask:?} · tier={tier:?} · \
+                 handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::RestoreTokens { target, force } => {
+            use selfdef_api_token_revocation_backend::{
+                ApiTokenRevocationBackend, InMemoryBackend, TokenRevocationHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = TokenRevocationHandle::Active(target.clone());
+            let receipt = backend
+                .restore_tokens(handle)
+                .await
+                .with_context(|| format!("restoring tokens for {target}"))?;
+            if receipt.restored {
+                println!("restored tokens for {target}");
+            } else {
+                println!("no active token-revocation for {target} (MS3 stateless backend)");
             }
         }
         Command::Mcp { action } => match action {
@@ -4717,5 +4867,100 @@ mod block_ip_verb_tests {
         assert!(parse_duration_str("").is_err());
         assert!(parse_duration_str("1x").is_err());
         assert!(parse_duration_str("abc").is_err());
+    }
+}
+
+// ============================================================ SDD-068 MS3 token-class parser tests
+
+#[cfg(test)]
+mod token_class_mask_tests {
+    use super::parse_token_class_mask;
+    use selfdef_api_token_revocation_backend::{TokenClass, TokenClassMask};
+
+    #[test]
+    fn parse_all_keyword_yields_all() {
+        let mask = parse_token_class_mask("all").unwrap();
+        assert!(matches!(mask, TokenClassMask::All));
+    }
+
+    #[test]
+    fn parse_all_case_insensitive() {
+        let mask = parse_token_class_mask("ALL").unwrap();
+        assert!(matches!(mask, TokenClassMask::All));
+    }
+
+    #[test]
+    fn parse_single_class_yields_specific() {
+        let mask = parse_token_class_mask("api").unwrap();
+        match mask {
+            TokenClassMask::Specific(v) => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0], TokenClass::Api);
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_comma_separated_list() {
+        let mask = parse_token_class_mask("api,cockpit,mcp").unwrap();
+        match mask {
+            TokenClassMask::Specific(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(v.contains(&TokenClass::Api));
+                assert!(v.contains(&TokenClass::Cockpit));
+                assert!(v.contains(&TokenClass::Mcp));
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_other_prefix_with_name() {
+        let mask = parse_token_class_mask("other:webhook").unwrap();
+        match mask {
+            TokenClassMask::Specific(v) => {
+                assert_eq!(v.len(), 1);
+                assert_eq!(v[0], TokenClass::Other("webhook".into()));
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_mixed_known_and_other() {
+        let mask = parse_token_class_mask("api,other:custom,cockpit").unwrap();
+        match mask {
+            TokenClassMask::Specific(v) => {
+                assert_eq!(v.len(), 3);
+                assert!(v.contains(&TokenClass::Api));
+                assert!(v.contains(&TokenClass::Other("custom".into())));
+                assert!(v.contains(&TokenClass::Cockpit));
+            }
+            _ => panic!("expected Specific"),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_unknown_class() {
+        assert!(parse_token_class_mask("bogus").is_err());
+    }
+
+    #[test]
+    fn parse_rejects_empty_other_name() {
+        assert!(parse_token_class_mask("other:").is_err());
+    }
+
+    #[test]
+    fn parse_handles_whitespace_around_tokens() {
+        let mask = parse_token_class_mask(" api , cockpit ").unwrap();
+        match mask {
+            TokenClassMask::Specific(v) => {
+                assert_eq!(v.len(), 2);
+                assert!(v.contains(&TokenClass::Api));
+                assert!(v.contains(&TokenClass::Cockpit));
+            }
+            _ => panic!("expected Specific"),
+        }
     }
 }
