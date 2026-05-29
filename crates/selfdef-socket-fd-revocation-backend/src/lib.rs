@@ -282,3 +282,271 @@ impl SocketFdRevocationBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-073 MS5a state-journal adapter) ───────────────
+//
+// State-journaling layer for SDD-073. The actual fd close
+// (pidfd_open + pidfd_getfd + close) requires exotic substrate
+// and ships in a separate adapter (deferred until L3 nspawn);
+// FsBackend completes the observability + audit half of the
+// production loop end-to-end.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: SocketFdHandle,
+    pid: i32,
+    fd: i32,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    protocol: SocketProtocol,
+    expected_inode: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingFdRestore>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+    /// Same race-test injector as InMemoryBackend — set Some(inode)
+    /// to make the next revoke_fd() return a Stale handle when
+    /// req.expected_inode != inode.
+    simulated_current_inode: Mutex<Option<u64>>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, SocketFdRevocationError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            SocketFdRevocationError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-restores.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+            simulated_current_inode: Mutex::new(None),
+        })
+    }
+
+    pub fn with_simulated_current_inode(
+        state_dir: impl Into<PathBuf>,
+        inode: u64,
+    ) -> Result<Self, SocketFdRevocationError> {
+        let b = Self::open(state_dir)?;
+        *b.simulated_current_inode.lock().unwrap() = Some(inode);
+        Ok(b)
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let k = match &e.handle {
+                    SocketFdHandle::Active(k) | SocketFdHandle::Stale(k) => k.clone(),
+                };
+                (k, e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingFdRestore> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingFdRestore> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let k = match &p.handle {
+                    SocketFdHandle::Active(k) | SocketFdHandle::Stale(k) => k.clone(),
+                };
+                (k, p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), SocketFdRevocationError> {
+        let parent = target.parent().ok_or_else(|| {
+            SocketFdRevocationError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            SocketFdRevocationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            SocketFdRevocationError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), SocketFdRevocationError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec).map_err(|e| {
+            SocketFdRevocationError::BackendUnreachable(format!("serialize active: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingFdRestore> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec).map_err(|e| {
+            SocketFdRevocationError::BackendUnreachable(format!("serialize pending: {e}"))
+        })?;
+        Self::write_atomic(
+            &self.state_dir.join("pending-restores.json"),
+            &pending_bytes,
+        )?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl SocketFdRevocationBackend for FsBackend {
+    async fn revoke_fd(
+        &self,
+        req: RevokeFdRequest,
+    ) -> Result<RevokeFdReceipt, SocketFdRevocationError> {
+        validate(&req)?;
+        let stale = matches!(
+            (
+                req.expected_inode,
+                *self.simulated_current_inode.lock().unwrap(),
+            ),
+            (Some(exp), Some(curr)) if exp != curr
+        );
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            if stale {
+                let handle = SocketFdHandle::Stale(req.idempotency_key.clone());
+                let active_count = state.active.len();
+                return Ok(RevokeFdReceipt {
+                    handle,
+                    active_count,
+                });
+            }
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: SocketFdHandle::Active(key.clone()),
+                    pid: req.pid,
+                    fd: req.fd,
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    protocol: req.protocol,
+                    expected_inode: req.expected_inode,
+                })
+                .handle
+                .clone();
+            if let SocketFdHandle::Active(k) = &handle
+                && req.authority == AuthorityTier::Responder
+            {
+                state.pending.insert(
+                    k.clone(),
+                    PendingFdRestore {
+                        handle: handle.clone(),
+                        pid: req.pid,
+                        fd: req.fd,
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        protocol: req.protocol,
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(RevokeFdReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+        })
+    }
+
+    async fn restore_fd(
+        &self,
+        handle: SocketFdHandle,
+    ) -> Result<RestoreReceipt, SocketFdRevocationError> {
+        let (cleared, snapshot) = {
+            let key = match &handle {
+                SocketFdHandle::Active(k) | SocketFdHandle::Stale(k) => k.clone(),
+            };
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(&key);
+            let cleared = state.active.remove(&key).is_some();
+            (cleared, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(RestoreReceipt { cleared })
+    }
+
+    async fn pending_restores(&self) -> Vec<PendingFdRestore> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingFdRestore> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_restore_decided(&self, handle: &SocketFdHandle) -> bool {
+        let (removed, snapshot) = {
+            let key = match handle {
+                SocketFdHandle::Active(k) | SocketFdHandle::Stale(k) => k,
+            };
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
