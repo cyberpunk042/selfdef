@@ -193,9 +193,173 @@ The codebase carries substantial production state from prior development. This s
 | Systemd unit | `packaging/systemd/selfdef-scheduler.service` |
 | SDD | `docs/sdd/031-goldilocks-scheduler.md` |
 
+### MS009 — Audit cycles
+
+| Surface | Shipped artifact |
+|---|---|
+| Audit registry | `crates/selfdef-audit-registry/` — MS016 SHA-256 chain |
+
+### MS011 — Operator dashboard + flex profile
+
+| Surface | Shipped artifact |
+|---|---|
+| Flex-profile crate | `crates/selfdef-flex-profile/` |
+| Dashboard-manifest crate | `crates/selfdef-dashboard-manifest/` |
+| Bundled PWA dashboard | `dashboard/index.html` + `dashboard/app.js` + `dashboard/dashboard.css` + `dashboard/manifest.json` + `dashboard/service-worker.js` |
+
+### MS013 — 27-SDD charter framework
+
+| Surface | Shipped artifact |
+|---|---|
+| SDDs | `docs/sdd/` — 65 SDD documents (catalogued 27+ exceeded; framework production-saturated) |
+
+### MS014 — SSH-wrap (client-side defense)
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-ssh-wrap/` — drop-in ssh wrapper |
+
+### MS015 — NATS messaging backbone
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-nats/` |
+
+### MS018 — VPN-bridge multi-instance
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/vpn-bridge/` |
+
+### MS020 — Test contract (L1–L5 layered harness)
+
+| Surface | Shipped artifact |
+|---|---|
+| Operator-facing contract doc | `docs/dev/test-contract.md` |
+| Integration tests | 17 `tests/` dirs across the workspace + selfdef-daemon's per-crate integration tests |
+
+### MS021 — Shared module-script lib
+
+| Surface | Shipped artifact |
+|---|---|
+| Library | `packaging/lib/module-lib.sh` |
+
+### MS023 — Polarproxy module (TLS inspection)
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/polarproxy/` |
+
+### MS024 — Bridge-L2 module (layer-2 transparent bridge)
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/bridge-l2/` |
+
+### MS025 — Detect-host module (host-class detection)
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/detect-host/` |
+
+### MS026 — Integrity-sentinel module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/integrity-sentinel/` |
+
+### MS028 — BitNet GPU inference module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/bitnet-gpu-inference/` |
+
+### MS029 — SLM CPU loop module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/slm-cpu-loop/` |
+
+### MS030 — Tensor parallel inference module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/tensor-parallel-inference/` |
+
+### MS031 — WASM AOT cache module
+
+| Surface | Shipped artifact |
+|---|---|
+| Module | `modules/wasm-aot-cache/` |
+
+### MS032 — Sandbox tiers (9 tiers across MS036×MS032)
+
+| Surface | Shipped artifact |
+|---|---|
+| Sandbox crates | `crates/selfdef-sandbox-dispatcher/`, `crates/selfdef-sandbox-fs-isolation/`, `crates/selfdef-sandbox-network-isolation/`, `crates/selfdef-sandbox-tier-policy/`, `crates/selfdef-sandbox-registry/`, `crates/selfdef-sandbox-mirror/` |
+
+### MS033 — Policy and trace (every action observable + governed)
+
+| Surface | Shipped artifact |
+|---|---|
+| Policy crates | `crates/selfdef-action-trace-budget/`, `crates/selfdef-action-witness-policy/`, `crates/selfdef-actor-handoff-policy/`, `crates/selfdef-actor-introduction-policy/`, `crates/selfdef-actor-label-policy/`, `crates/selfdef-actor-suspension-policy/`, `crates/selfdef-alert-escalation-policy/`, `crates/selfdef-audit-log-rotation-policy/`, `crates/selfdef-audit-rotation-policy/`, `crates/selfdef-bundle-load-policy/` — 10+ policy crates (sample; many more in the workspace) |
+
+### MS034 — Communication boundary
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-communication-boundary/` |
+
+### MS035 — Capability tokens (typed authority handles)
+
+| Surface | Shipped artifact |
+|---|---|
+| Crates | `crates/selfdef-capability-mirror/`, `crates/selfdef-capability-registry/`, `crates/selfdef-capability-token-store/`, `crates/selfdef-capability-word/`, `crates/selfdef-tool-capability-policy/` |
+
+### MS039 — Authority levels + trust rings (IPS-side projection)
+
+| Surface | Shipped artifact |
+|---|---|
+| Authority crates | `crates/selfdef-commit-authority/`, `crates/selfdef-config-mutation-authority/`, `crates/selfdef-mode-transition-authority/`, `crates/selfdef-profile-authority-gate/`, `crates/selfdef-recovery-snapshot-authority/`, `crates/selfdef-replay-source-authority/`, `crates/selfdef-routing-decision-authority/`, `crates/selfdef-toggle-audit-authority/`, `crates/selfdef-trust-score-engine/`, `crates/selfdef-trust-score-history/` |
+
+### MS040 — Authority + 6-profile matrix (IPS-side projection)
+
+| Surface | Shipped artifact |
+|---|---|
+| Crates | `crates/selfdef-flex-profile/` + `crates/selfdef-profile-authority-gate/` |
+
+### MS041 — Commit authority (durable-change discipline)
+
+| Surface | Shipped artifact |
+|---|---|
+| Crate | `crates/selfdef-commit-authority/` |
+
+### MS042 — Tool authority (declaration-vs-observed discipline)
+
+| Surface | Shipped artifact |
+|---|---|
+| Crates | `crates/selfdef-collector-quarantine-ledger/`, `crates/selfdef-quarantine-cause-taxonomy/`, `crates/selfdef-quarantine-engine/`, `crates/selfdef-quarantine-mirror/`, `crates/selfdef-quarantine-registry/`, `crates/selfdef-quarantine-release-policy/` |
+
+### MS043 — IPS operator surface (CLI + TUI + dashboard-mirror exports) — additional rows
+
+| Surface | Shipped artifact |
+|---|---|
+| CLI binary | `crates/selfdef-cli/` (selfdefctl) |
+| API surface | `crates/selfdef-api/` |
+| TUI mirror | `crates/selfdef-tui-mirror/` |
+| Dashboard-manifest | `crates/selfdef-dashboard-manifest/` |
+
+### MS045 — UX coherence test harness (CLI + TUI + minimal-web)
+
+| Surface | Shipped artifact |
+|---|---|
+| UX checklist crate | `crates/selfdef-ux-checklist/` |
+| SDD | `docs/sdd/030-ux-coherence-test-harness.md` |
+| Layered test harness | `tests/ux-harness/` |
+
 ## Other catalogued milestones — production-shipped state TBD
 
-MS008, MS009, MS011-MS015, MS018-MS026, MS028-MS036, MS039-MS043 (other rows), MS045 — these milestones have catalogue rows in `backlog/milestones/MS*.md` but the corresponding production-shipped audit hasn't been done yet in this file. The 65 SDD documents in `docs/sdd/` cover most of these (SDDs ship as part of the surface) — future audits append per-milestone rows above.
+MS008 (selfdef-on-SAIN-01 integration), MS012 (perimeter coexistence — superseded by MS047 perimeter engine SDD-028), MS019 (security threat model — see `SECURITY.md` + `docs/sdd/004-security-threat-model.md` for prior-shipped surface), MS022 (per-token SSE subscriber quota — TBD per `crates/selfdef-api/` SSE-quota gating audit) — these milestones have catalogue rows but the audit hasn't been mapped to this file yet. Many are likely already shipped via related crates (e.g., MS019 is documented in shipped SDD); future audits append per-milestone rows above.
 
 The above per-milestone shipped audit is a SAMPLED snapshot, not a complete production-state survey. The trajectory: each commit that lands or audit cycle that runs appends rows here so the SHIPPED column converges toward the catalogue total as the multi-year project progresses.
 

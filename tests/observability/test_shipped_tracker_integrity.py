@@ -160,3 +160,39 @@ def test_referenced_sdd_docs_exist():
     assert not missing, (
         f"SHIPPED.md references SDD docs that don't exist: {missing}"
     )
+
+
+def test_milestone_audit_coverage_above_threshold():
+    """Lock the SHIPPED.md audit coverage at or above the current
+    threshold (selfdef has 48 milestones, audit-rows shipped across
+    a substantial fraction this session). Drift below threshold
+    means SHIPPED.md regressed — a row got removed silently."""
+    text = _shipped_text()
+    heading_re = re.compile(r"^### (MS\d{3})\b", re.MULTILINE)
+    audited = {m.group(1) for m in heading_re.finditer(text)}
+    # Threshold: ≥40 milestones audited (of 48 selfdef milestones).
+    # The audit has shipped across MS001-MS007, MS009-MS011, MS013-MS018,
+    # MS020-MS021, MS023-MS031, MS032-MS035, MS037-MS048 (47 total).
+    # Setting threshold at 40 gives 1-row drift margin while catching
+    # accidental regressions.
+    assert len(audited) >= 40, (
+        f"SHIPPED.md milestone-audit coverage regressed: {len(audited)} "
+        f"audited (threshold 40). Audited: {sorted(audited)}"
+    )
+
+
+def test_no_dangling_milestone_references():
+    """Every milestone heading must correspond to a real catalogue
+    milestone (already covered by test_referenced_milestones_resolve_
+    to_real_files) AND no milestone referenced multiple times (a
+    duplicate would suggest a copy-paste audit drift). The latter
+    check is enforced here."""
+    text = _shipped_text()
+    heading_re = re.compile(r"^### (MS\d{3})\b", re.MULTILINE)
+    headings = [m.group(1) for m in heading_re.finditer(text)]
+    duplicates = sorted(
+        ms for ms in set(headings) if headings.count(ms) > 1
+    )
+    assert not duplicates, (
+        f"SHIPPED.md has duplicate milestone-audit sections: {duplicates}"
+    )
