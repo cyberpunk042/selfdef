@@ -311,3 +311,268 @@ impl KernelKeyringEvictionBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-076 MS5a state-journal adapter) ───────────────
+//
+// State-journaling layer for SDD-076. The actual `keyctl_invalidate`
+// requires `CAP_SYS_ADMIN` substrate for keyrings outside the
+// caller's session (deferred). FsBackend completes the observability
+// + audit half of the SDD-076 production loop for the 30th-sibling
+// textfile observer.
+//
+// 11th application of wiki/patterns/01_drafts/
+// ms5a-state-journal-vs-enforcement-layer-separation.md.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: KernelKeyringHandle,
+    key_spec: String,
+    key_type: String,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    scope: EvictionScope,
+    keys_evicted: usize,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingKeyRestore>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+    simulated_keys_evicted: Mutex<Option<usize>>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, KernelKeyringEvictionError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            KernelKeyringEvictionError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-restores.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+            simulated_keys_evicted: Mutex::new(None),
+        })
+    }
+
+    pub fn with_simulated_keys_evicted(
+        state_dir: impl Into<PathBuf>,
+        n: usize,
+    ) -> Result<Self, KernelKeyringEvictionError> {
+        let b = Self::open(state_dir)?;
+        *b.simulated_keys_evicted.lock().unwrap() = Some(n);
+        Ok(b)
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let k = match &e.handle {
+                    KernelKeyringHandle::Active(k) | KernelKeyringHandle::NotFound(k) => k.clone(),
+                };
+                (k, e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingKeyRestore> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingKeyRestore> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let k = match &p.handle {
+                    KernelKeyringHandle::Active(k) | KernelKeyringHandle::NotFound(k) => k.clone(),
+                };
+                (k, p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), KernelKeyringEvictionError> {
+        let parent = target.parent().ok_or_else(|| {
+            KernelKeyringEvictionError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            KernelKeyringEvictionError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            KernelKeyringEvictionError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), KernelKeyringEvictionError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec).map_err(|e| {
+            KernelKeyringEvictionError::BackendUnreachable(format!("serialize active: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingKeyRestore> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec).map_err(|e| {
+            KernelKeyringEvictionError::BackendUnreachable(format!("serialize pending: {e}"))
+        })?;
+        Self::write_atomic(
+            &self.state_dir.join("pending-restores.json"),
+            &pending_bytes,
+        )?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl KernelKeyringEvictionBackend for FsBackend {
+    async fn evict_key(
+        &self,
+        req: EvictKeyRequest,
+    ) -> Result<EvictKeyReceipt, KernelKeyringEvictionError> {
+        let (ty, _desc) = validate(&req)?;
+        let keys_evicted = self.simulated_keys_evicted.lock().unwrap().unwrap_or(1);
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            if keys_evicted == 0 {
+                let handle = KernelKeyringHandle::NotFound(req.idempotency_key.clone());
+                let active_count = state.active.len();
+                return Ok(EvictKeyReceipt {
+                    handle,
+                    active_count,
+                    keys_evicted: 0,
+                });
+            }
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: KernelKeyringHandle::Active(key.clone()),
+                    key_spec: req.key_spec.clone(),
+                    key_type: ty.clone(),
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    scope: req.scope,
+                    keys_evicted,
+                })
+                .handle
+                .clone();
+            if let KernelKeyringHandle::Active(k) = &handle
+                && req.authority == AuthorityTier::Responder
+            {
+                state.pending.insert(
+                    k.clone(),
+                    PendingKeyRestore {
+                        handle: handle.clone(),
+                        key_spec: req.key_spec.clone(),
+                        key_type: ty,
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        scope: req.scope,
+                        keys_evicted,
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(EvictKeyReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+            keys_evicted,
+        })
+    }
+
+    async fn restore_key(
+        &self,
+        handle: KernelKeyringHandle,
+    ) -> Result<RestoreReceipt, KernelKeyringEvictionError> {
+        let (cleared, snapshot) = {
+            let key = match &handle {
+                KernelKeyringHandle::Active(k) | KernelKeyringHandle::NotFound(k) => k.clone(),
+            };
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(&key);
+            let cleared = state.active.remove(&key).is_some();
+            (cleared, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(RestoreReceipt { cleared })
+    }
+
+    async fn pending_restores(&self) -> Vec<PendingKeyRestore> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingKeyRestore> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_restore_decided(&self, handle: &KernelKeyringHandle) -> bool {
+        let (removed, snapshot) = {
+            let key = match handle {
+                KernelKeyringHandle::Active(k) | KernelKeyringHandle::NotFound(k) => k,
+            };
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
