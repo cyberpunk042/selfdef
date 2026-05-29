@@ -926,8 +926,97 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-075 MS3 — drop one or more Linux capabilities from a
+    /// running process's effective + permitted + inheritable +
+    /// bounding sets (or bounding-only) without killing it.
+    /// Least-privilege graduation: dial back a specific cap rather
+    /// than freezing/isolating the whole process.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 4h, operator-overridden 8h. Drops are irreversible
+    /// at the kernel level; --force on restore-cap is queue-clear
+    /// + audit only.
+    DropCap {
+        /// Target POSIX pid.
+        pid: i32,
+        /// Comma-separated capability names. Each canonicalises via
+        /// canonicalize_cap() — accepts `CAP_NET_ADMIN`,
+        /// `cap_net_admin`, `NET_ADMIN`, `net_admin` forms.
+        #[arg(long)]
+        caps: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-dropped duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Scope: bounding | all-sets.
+        #[arg(long, default_value = "all-sets")]
+        scope: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-075 MS3 — clear an active capability-drop handle. Note:
+    /// capability drops are irreversible at the kernel level;
+    /// restore is queue-clear + audit only. Operator must restart
+    /// the process to recover the dropped capability.
+    RestoreCap {
+        /// Pid or capability-drop handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_capability_drop_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_capability_drop_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_cap_scope(
+    s: &str,
+) -> Result<selfdef_capability_drop_backend::CapScope, String> {
+    use selfdef_capability_drop_backend::CapScope;
+    match s.trim().to_lowercase().as_str() {
+        "bounding" | "bounding-only" | "boundingonly" => Ok(CapScope::BoundingOnly),
+        "all-sets" | "allsets" | "all" => Ok(CapScope::AllSets),
+        other => Err(format!(
+            "unknown cap scope {other:?}; expected one of: bounding, all-sets"
+        )),
+    }
+}
+
+pub(crate) fn parse_cap_list(s: &str) -> Result<Vec<String>, String> {
+    use selfdef_capability_drop_backend::canonicalize_cap;
+    let raw: Vec<String> = s
+        .split(',')
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
+        .collect();
+    if raw.is_empty() {
+        return Err("--caps must contain at least one non-empty name".into());
+    }
+    let mut canon: Vec<String> = Vec::with_capacity(raw.len());
+    for name in &raw {
+        match canonicalize_cap(name) {
+            Some(c) => canon.push(c.to_string()),
+            None => return Err(format!("unknown capability name: {name:?}")),
+        }
+    }
+    Ok(canon)
 }
 
 impl From<CliAuthority> for selfdef_process_env_scrub_backend::AuthorityTier {
@@ -3728,6 +3817,97 @@ async fn main() -> Result<()> {
                     "no active process-env-scrub for {target} (MS3 stateless backend; note: \
                      scrubbed values cannot be recovered — process memory was zeroed; restore \
                      is queue-clear + audit only)"
+                );
+            }
+        }
+        Command::DropCap {
+            pid,
+            caps,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_capability_drop_backend::{
+                AuthorityTier, CapabilityDropBackend, DropCapsRequest, InMemoryBackend,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            if pid == 1 {
+                anyhow::bail!("pid 1 (init) is never cap-droppable (SDD-075 sacrosanct gate)");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let caps_parsed =
+                parse_cap_list(&caps).map_err(|e| anyhow::anyhow!("invalid --caps: {e}"))?;
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 8h tier."
+                );
+            }
+            let scope_parsed =
+                parse_cap_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would drop caps {caps_parsed:?} on pid {pid} ({scope_parsed:?}) \
+                     for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = DropCapsRequest {
+                pid,
+                caps: caps_parsed.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed,
+                idempotency_key: format!(
+                    "cli:{pid}:{}:{reason}:{tier:?}:{scope_parsed:?}",
+                    caps_parsed.join(",")
+                ),
+            };
+            let receipt = backend
+                .drop_caps(req)
+                .await
+                .with_context(|| format!("dropping caps on pid {pid}"))?;
+            println!(
+                "dropped {} caps on pid {pid} for {secs}s · scope={scope_parsed:?} · \
+                 tier={tier:?} · handle={:?}",
+                receipt.caps_dropped, receipt.handle
+            );
+        }
+        Command::RestoreCap { target, force } => {
+            use selfdef_capability_drop_backend::{
+                CapabilityDropBackend, CapabilityDropHandle, InMemoryBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = CapabilityDropHandle::Active(target.clone());
+            let receipt = backend
+                .restore_caps(handle)
+                .await
+                .with_context(|| format!("restoring cap drop {target}"))?;
+            if receipt.cleared {
+                println!("cleared capability-drop handle {target}");
+            } else {
+                println!(
+                    "no active capability-drop for {target} (MS3 stateless backend; note: \
+                     capability drops are irreversible at the kernel level — operator must \
+                     restart the process to recover the dropped capability; restore is \
+                     queue-clear + audit only)"
                 );
             }
         }
