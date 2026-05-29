@@ -28,6 +28,17 @@
 //!   (default: `/var/lib/selfdef`)
 //! - `SELFDEF_SCHEDULER_OCSF_ENABLE` — set to `0` to disable OCSF
 //!   append (default: `1` = enabled)
+//! - `SELFDEF_SCHEDULER_AUDIT_PATH` — M01170 SHA-256-chained driver
+//!   audit log path (default:
+//!   `/var/log/selfdef/scheduler.driver.audit.jsonl`)
+//! - `SELFDEF_SCHEDULER_AUDIT_ENABLE` — set to `0` to disable driver
+//!   audit append (default: `1` = enabled)
+//! - `SELFDEF_SCHEDULER_AUDIT_ROTATE_BYTES` — rotation threshold
+//!   (default: 67108864 = 64 MiB)
+//! - `SELFDEF_SCHEDULER_AUDIT_MAX_GENERATIONS` — rotation generation cap
+//!   (default: 10)
+//! - `SELFDEF_SCHEDULER_SIGNER_KID` — MS003-multisig signer kid embedded
+//!   in audit entries (default: none / unsigned)
 //!
 //! Honest-offline (substrate absent) is non-fatal: Prometheus textfile
 //! is still written with substrate_health flags showing which substrate
@@ -47,6 +58,10 @@ use std::process::ExitCode;
 
 use selfdef_scheduler::backpressure_driver::BackpressureDriver;
 use selfdef_scheduler::dcgm::NvidiaSmiDcgmSource;
+use selfdef_scheduler::decision_audit::{
+    emit_driver_reading, rotate_audit_log, DEFAULT_DRIVER_AUDIT_PATH, DEFAULT_MAX_GENERATIONS,
+    DEFAULT_ROTATE_BYTES,
+};
 use selfdef_scheduler::human_gate::IpsPendingRestoresHumanGateSource;
 use selfdef_scheduler::ocsf_emitter::{append_ocsf_jsonl, render_ocsf_event};
 use selfdef_scheduler::prometheus_exporter::{
@@ -67,9 +82,24 @@ fn main() -> ExitCode {
         .map(|v| v != "0")
         .unwrap_or(true);
 
+    let audit_path = env_path("SELFDEF_SCHEDULER_AUDIT_PATH", DEFAULT_DRIVER_AUDIT_PATH);
+    let audit_enabled = env::var("SELFDEF_SCHEDULER_AUDIT_ENABLE")
+        .map(|v| v != "0")
+        .unwrap_or(true);
+    let audit_rotate_bytes = env::var("SELFDEF_SCHEDULER_AUDIT_ROTATE_BYTES")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(DEFAULT_ROTATE_BYTES);
+    let audit_max_generations = env::var("SELFDEF_SCHEDULER_AUDIT_MAX_GENERATIONS")
+        .ok()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(DEFAULT_MAX_GENERATIONS);
+    let signer_kid = env::var("SELFDEF_SCHEDULER_SIGNER_KID").ok();
+
     eprintln!("[selfdef-scheduler-textfile {VERSION}] starting one-shot poll");
     eprintln!("  textfile: {}", textfile_path.display());
     eprintln!("  ocsf:     {}", ocsf_path.display());
+    eprintln!("  audit:    {}", audit_path.display());
     eprintln!("  psi:      {}", psi_dir.display());
     eprintln!("  dcgm:     {}", nvidia_smi.display());
     eprintln!("  state:    {}", state_root.display());
@@ -119,6 +149,29 @@ fn main() -> ExitCode {
         }
     } else {
         eprintln!("  ocsf:     disabled via SELFDEF_SCHEDULER_OCSF_ENABLE=0");
+    }
+
+    // Emit M01170 SHA-256-chained driver audit entry (if enabled), then
+    // rotate if the log exceeds the configured threshold. Both
+    // operations are non-fatal — chain integrity is preserved across
+    // even partial failures because rotation only happens on success.
+    if audit_enabled {
+        match emit_driver_reading(&audit_path, &reading, signer_kid.as_deref()) {
+            Ok(_) => {
+                // Rotate if needed. Failure here is logged but
+                // non-fatal — the entry already landed.
+                if let Err(e) =
+                    rotate_audit_log(&audit_path, audit_rotate_bytes, audit_max_generations)
+                {
+                    eprintln!("  WARN audit rotation failed (non-fatal): {e}");
+                }
+            }
+            Err(e) => {
+                eprintln!("  WARN driver audit append failed (non-fatal): {e}");
+            }
+        }
+    } else {
+        eprintln!("  audit:    disabled via SELFDEF_SCHEDULER_AUDIT_ENABLE=0");
     }
 
     eprintln!("[selfdef-scheduler-textfile {VERSION}] poll complete");

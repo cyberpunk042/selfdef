@@ -18,6 +18,7 @@ UMask=0027
 # DEFAULT_* constants.
 Environment=SELFDEF_SCHEDULER_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-scheduler.prom
 Environment=SELFDEF_SCHEDULER_OCSF_PATH=/var/log/selfdef/scheduler.ocsf.jsonl
+Environment=SELFDEF_SCHEDULER_AUDIT_PATH=/var/log/selfdef/scheduler.driver.audit.jsonl
 Environment=SELFDEF_SCHEDULER_PSI_DIR=/proc/pressure
 Environment=SELFDEF_SCHEDULER_STATE_ROOT=/var/lib/selfdef
 ExecStart=/usr/bin/selfdef-scheduler-textfile
