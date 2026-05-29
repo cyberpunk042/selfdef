@@ -47,6 +47,7 @@ mod rules_registry;
 mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
+mod sse_quota;
 mod ssh_wrap;
 mod tool_authority;
 mod trio;
@@ -202,6 +203,25 @@ enum Command {
         /// not present in the daemon's counters (publisher never ran).
         #[arg(long)]
         artifact: Option<String>,
+    },
+    /// MS022 SSE subscriber-quota live state from the daemon
+    /// /metrics endpoint. Reads the 6 selfdef_sse_subscribers_*
+    /// gauges (shipped in commit 77b4499) and renders an
+    /// operator-readable saturation table plus per-token breakdown.
+    /// Operator-side mirror of what sovereign-os surfaces through
+    /// the cockpit (proxy daemon plus alerts plus Grafana).
+    /// Exit 0 when saturation at-or-below 0.85 and no token saturated;
+    /// exit 1 when saturation above 0.85 or any token at cap;
+    /// exit 2 when saturation at 1.0 or /metrics unreachable.
+    SseQuota {
+        /// JSON output for monitoring integration.
+        #[arg(long)]
+        json: bool,
+        /// Show only the per-token saturated count + cap (skip the
+        /// full per-token table). Useful during incident response
+        /// when only the rollup matters.
+        #[arg(long)]
+        rollup_only: bool,
     },
     /// First-run bootstrap. Writes starter config files +
     /// prints the operator checklist. Non-destructive by
@@ -2328,6 +2348,10 @@ async fn main() -> Result<()> {
         }
         Command::M060Metrics { json, artifact } => {
             let exit = m060_metrics::run(json, artifact.as_deref()).context("m060-metrics")?;
+            std::process::exit(exit);
+        }
+        Command::SseQuota { json, rollup_only } => {
+            let exit = sse_quota::run(json, rollup_only).context("sse-quota")?;
             std::process::exit(exit);
         }
         Command::Init { action } => match action {

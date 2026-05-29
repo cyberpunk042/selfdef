@@ -225,9 +225,13 @@ Drift on either side fails contract tests on **BOTH sides**:
 - **Alert runbook**: see the `MS022Sse{GlobalQuotaApproaching,
   GlobalQuotaSaturated,PerTokenQuotaSaturated}` sections of the
   sovereign-os deployment guide.
-- **CLI**: `curl --unix-socket /run/selfdef.sock /metrics` (no
-  dedicated `selfdefctl` verb today — the metric surface is a
-  Prometheus pull-only contract; a future `selfdefctl m060-metrics
-  --artifact sse-quota` could surface it through the daemon api,
-  but that's an additive enhancement, not a regression on the
-  current state).
+- **CLI**: `selfdefctl sse-quota` — operator-side mirror of the
+  sovereign-os ms022-doctor verb. Reads the 6 gauges via the
+  daemon's `/metrics` endpoint (UNIX socket / TCP fallback),
+  classifies into ok / approaching / saturated / unreachable using
+  the same 0.85 + 1.0 thresholds the alert rules use, exits
+  0/1/2 mapping to the severity ladder. Flags: `--json` (monitoring
+  integration), `--rollup-only` (skip the per-token table during
+  incident response). Underlying `/metrics` text remains available
+  via `curl --unix-socket /run/selfdef.sock /metrics` for raw
+  inspection.
