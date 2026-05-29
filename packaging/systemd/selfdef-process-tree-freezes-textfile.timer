@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-072 process-tree freeze observer (every 60s, 26th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-process-tree-freezes-textfile.sh
+# OnBootSec=780s — distinct from the prior 25 siblings (60s..750s).
+
+[Timer]
+OnBootSec=780s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-process-tree-freezes-textfile.service
+
+[Install]
+WantedBy=timers.target
