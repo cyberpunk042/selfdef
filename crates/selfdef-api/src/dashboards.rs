@@ -28,40 +28,65 @@
 use axum::Json;
 use serde::Serialize;
 
-/// One operator-named dashboard view preset.
+/// One operator-named dashboard view preset. Holds builtin
+/// `&'static str` data zero-copy via the internal `BuiltinEntry`;
+/// the response shape uses owned `String` so operator-defined
+/// custom presets (loaded from dashboard-prefs.toml at request
+/// time) can be mixed in.
 #[derive(Debug, Serialize)]
 pub(crate) struct DashboardEntry {
     /// Machine-readable name (matches the active_preset enum in
     /// /v1/dashboard-prefs).
-    pub name: &'static str,
+    pub name: String,
     /// One-line operator-readable label.
-    pub label: &'static str,
+    pub label: String,
     /// Longer description of what the preset shows.
-    pub description: &'static str,
+    pub description: String,
     /// The active tab the preset switches to (one of the 8 SDD-056
     /// tabs + "all" pseudo-tab).
-    pub active_tab: &'static str,
+    pub active_tab: String,
     /// The refresh rate the preset selects.
-    pub refresh_rate: &'static str,
+    pub refresh_rate: String,
     /// Approximate number of panels visible (16 minus hidden). For
     /// discovery-tier reporting only; the actual visible set is in
     /// the dashboard's PRESETS table.
     pub visible_panel_count: u8,
+    /// **MS043 UX batch 20** — provenance marker so operator UI can
+    /// render builtin and custom presets differently (lock icon,
+    /// editability gate, etc.). One of `"builtin"` or `"custom"`.
+    pub origin: &'static str,
+}
+
+/// Internal compile-time representation of a builtin preset. Stays
+/// `&'static str` to keep the const table zero-alloc.
+#[derive(Debug)]
+struct BuiltinEntry {
+    name: &'static str,
+    label: &'static str,
+    description: &'static str,
+    active_tab: &'static str,
+    refresh_rate: &'static str,
+    visible_panel_count: u8,
 }
 
 /// Response envelope for `GET /v1/dashboards`.
 #[derive(Debug, Serialize)]
 pub(crate) struct DashboardsBody {
-    /// Total number of preset entries shipped.
+    /// Total number of preset entries shipped (builtins + customs).
     pub count: usize,
+    /// Number of builtin presets — stable; today 22.
+    pub builtin_count: usize,
+    /// Number of operator-defined custom presets — variable per
+    /// operator's `dashboard-prefs.toml`.
+    pub custom_count: usize,
     /// Operator-readable note about the multi-dashboard architecture.
     pub note: &'static str,
-    /// Sorted by name.
+    /// Sorted by name (builtins + customs interleaved alphabetically).
     pub dashboards: Vec<DashboardEntry>,
 }
 
-const DASHBOARDS: &[DashboardEntry] = &[
-    DashboardEntry {
+const DASHBOARDS: &[BuiltinEntry] = &[
+    BuiltinEntry {
         name: "audit-trail",
         label: "Audit trail",
         description: "Audit chains + alerts + logs tab focus; slow refresh — operator-pull forensic posture.",
@@ -69,7 +94,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "slow",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "compact",
         label: "Compact",
         description: "Always-visible strip only (composite health + 4 watchdogs + alerts). Smallest footprint; slow refresh.",
@@ -77,7 +102,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "slow",
         visible_panel_count: 6,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "cpu-bound",
         label: "CPU bound",
         description: "CPU + hardware + composite health. For operators investigating compute saturation; fast refresh.",
@@ -85,7 +110,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "default",
         label: "Default",
         description: "All 16 panels visible, no specific tab focus, normal refresh. The catch-all view.",
@@ -93,7 +118,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 16,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "gpu-monitor",
         label: "GPU monitor",
         description: "GPU + CPU + flex-profile + composite health. For inference / compute workloads; fast refresh.",
@@ -101,7 +126,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 4,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "health-only",
         label: "Health only",
         description: "Composite-health panel alone. Smallest footprint; slow refresh — first-glance heartbeat.",
@@ -109,7 +134,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "slow",
         visible_panel_count: 1,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "incident-response",
         label: "Incident response",
         description: "4 watchdogs + alerts + audit chains + logs tab focus; fast refresh — for active-incident triage.",
@@ -117,7 +142,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 7,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "inference",
         label: "Inference",
         description: "Composite health + inference backends + GPU + flex profile. Models tab focus; normal refresh.",
@@ -125,7 +150,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 4,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "inference-throughput",
         label: "Inference throughput",
         description: "Inference backends + GPU + flex-profile + composite health + CPU; fast refresh — tuning hot path.",
@@ -133,7 +158,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 5,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "ips-dectet-incident",
         label: "IPS dectet — incident drill-down",
         description: "All 10 IPS-dectet enforcement primitives (SDD-065 blockset / 066 quarantine / 067 revocations / 068 token-revocations / 069 mfa-grant-revocations / 070 netns-isolations / 071 mount-bindings / 072 process-tree-freezes / 073 socket-fd-revocations / 074 env-scrubs) + composite health + alerts. Logs tab focus; fast refresh — for live incident response when one or more IPS primitives is actively engaged.",
@@ -141,7 +166,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 12,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "ips-dectet-overview",
         label: "IPS dectet — enforcement overview",
         description: "Compact view of the IPS-dectet enforcement layer — 10 primitives' active/pending counts in rollup form + composite health. Profiles tab focus (or 'all' for full strip); normal refresh — operator-pull defensive-posture review without incident-mode urgency.",
@@ -149,7 +174,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 11,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "mcp-debug",
         label: "MCP debug",
         description: "MCP tab focus + alerts + logs; normal refresh — diagnosing external client problems.",
@@ -157,7 +182,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "mcp-tools",
         label: "MCP tools",
         description: "MCP + modules + alerts; normal refresh — managing tool-side rollout.",
@@ -165,7 +190,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "models-lab",
         label: "Models lab",
         description: "Models tab focus + inference backends + GPU; normal refresh — model evaluation / swap workflow.",
@@ -173,7 +198,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "module-status",
         label: "Module status",
         description: "Modules + profiles tabs focus + composite health; slow refresh — reviewing apply/check drift.",
@@ -181,7 +206,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "slow",
         visible_panel_count: 2,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "network-ops",
         label: "Network ops",
         description: "Network + storage + RAID + composite health; network tab focus; normal refresh.",
@@ -189,7 +214,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 4,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "paused-snapshot",
         label: "Paused snapshot",
         description: "All panels visible BUT refresh paused. Operator-driven one-shot inspection without polling load.",
@@ -197,7 +222,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "paused",
         visible_panel_count: 16,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "performance",
         label: "Performance",
         description: "Hardware + network + storage + RAID + GPU + CPU + composite health. Hardware tab focus; fast refresh.",
@@ -205,7 +230,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "fast",
         visible_panel_count: 7,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "repl-session",
         label: "REPL session",
         description: "REPL tab focus + composite health + alerts; normal refresh — for interactive operator sessions.",
@@ -213,7 +238,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "security",
         label: "Security",
         description: "Composite health + 4 watchdogs + alerts + audit chains. Logs tab focus; normal refresh.",
@@ -221,7 +246,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 7,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "storage-ops",
         label: "Storage ops",
         description: "Storage + RAID + composite health; normal refresh — disk / RAID maintenance posture.",
@@ -229,7 +254,7 @@ const DASHBOARDS: &[DashboardEntry] = &[
         refresh_rate: "normal",
         visible_panel_count: 3,
     },
-    DashboardEntry {
+    BuiltinEntry {
         name: "watchdog-deep",
         label: "Watchdog deep",
         description: "All four watchdogs (friction-audit + perimeter + guardian + scheduler) + composite health; fast refresh.",
@@ -240,23 +265,62 @@ const DASHBOARDS: &[DashboardEntry] = &[
 ];
 
 pub(crate) async fn show() -> Json<DashboardsBody> {
-    let dashboards: Vec<DashboardEntry> = DASHBOARDS
+    Json(build_body(
+        crate::dashboard_prefs::read_custom_presets_for_discovery(),
+    ))
+}
+
+/// **MS043 UX batch 20** — pure helper that builds the discovery body
+/// from a given custom-preset list. Tests pass a controlled vec;
+/// `show()` reads from disk.
+pub(crate) fn build_body(customs: Vec<crate::dashboard_prefs::CustomPreset>) -> DashboardsBody {
+    let mut dashboards: Vec<DashboardEntry> = DASHBOARDS
         .iter()
         .map(|d| DashboardEntry {
-            name: d.name,
-            label: d.label,
-            description: d.description,
-            active_tab: d.active_tab,
-            refresh_rate: d.refresh_rate,
+            name: d.name.to_string(),
+            label: d.label.to_string(),
+            description: d.description.to_string(),
+            active_tab: d.active_tab.to_string(),
+            refresh_rate: d.refresh_rate.to_string(),
             visible_panel_count: d.visible_panel_count,
+            origin: "builtin",
         })
         .collect();
-    Json(DashboardsBody {
+    let builtin_count = dashboards.len();
+    let custom_count = customs.len();
+    for cp in customs {
+        let visible_panel_count = TOTAL_PANELS.saturating_sub(cp.hidden_panels.len() as u8);
+        let description = format!(
+            "Operator-defined custom preset. Hides {} panel(s). [origin=custom]",
+            cp.hidden_panels.len()
+        );
+        dashboards.push(DashboardEntry {
+            name: cp.name,
+            label: cp.label,
+            description,
+            active_tab: cp.active_tab,
+            refresh_rate: cp.refresh_rate,
+            visible_panel_count,
+            origin: "custom",
+        });
+    }
+    // Sort merged list by name so operator UI sees a stable alphabetical
+    // order regardless of how many customs the operator has defined.
+    dashboards.sort_by(|a, b| a.name.cmp(&b.name));
+
+    DashboardsBody {
         count: dashboards.len(),
-        note: "22 operator-named view presets within the single PWA (5 original + 15 batch-17 expansion + 2 batch-18 IPS-dectet presets bridging SDD-065..074 enforcement work). Operator-pull deep-link: /dashboard/#preset=<name>. Distinct URL paths per dashboard is the Stage-2 arc; the 22 presets fulfill the operator's verbatim 'over 20 dashboards' target via the visibility+refresh+preset triad.",
+        builtin_count,
+        custom_count,
+        note: "22 builtin operator-named view presets within the single PWA (5 original + 15 batch-17 expansion + 2 batch-18 IPS-dectet) plus operator-defined custom presets from dashboard-prefs.toml (MS043 batch 20). Operator-pull deep-link: /dashboard/#preset=<name>. Customs carry origin=\"custom\" so operator UI can render them differently; builtins carry origin=\"builtin\".",
         dashboards,
-    })
+    }
 }
+
+/// Total panel count in the dashboard PWA. Used to compute
+/// `visible_panel_count = TOTAL_PANELS - hidden_panels.len()` for
+/// custom presets surfaced via `GET /v1/dashboards`.
+const TOTAL_PANELS: u8 = 16;
 
 #[cfg(test)]
 mod tests {
@@ -351,5 +415,117 @@ mod tests {
         let default = DASHBOARDS.iter().find(|d| d.name == "default").unwrap();
         assert_eq!(default.visible_panel_count, 16);
         assert_eq!(default.refresh_rate, "normal");
+    }
+
+    // ─────────────── MS043 UX batch 20 — custom-preset merge tests ───────────────
+
+    use crate::dashboard_prefs::{CustomPreset, read_custom_presets_at};
+
+    #[test]
+    fn build_body_returns_22_builtins_with_origin_marker_when_no_customs() {
+        let body = build_body(vec![]);
+        assert_eq!(body.count, 22);
+        assert_eq!(body.builtin_count, 22);
+        assert_eq!(body.custom_count, 0);
+        for d in &body.dashboards {
+            assert_eq!(d.origin, "builtin", "preset {} should be builtin", d.name);
+        }
+    }
+
+    #[test]
+    fn build_body_merges_customs_alphabetically() {
+        let customs = vec![
+            CustomPreset {
+                name: "my-view".into(),
+                label: "My custom view".into(),
+                hidden_panels: vec!["raid-section".into(), "storage-section".into()],
+                refresh_rate: "fast".into(),
+                active_tab: "logs".into(),
+            },
+            CustomPreset {
+                name: "ops-view".into(),
+                label: "Ops view".into(),
+                hidden_panels: vec!["mcp-section".into()],
+                refresh_rate: "slow".into(),
+                active_tab: "modules".into(),
+            },
+        ];
+        let body = build_body(customs);
+        assert_eq!(body.builtin_count, 22);
+        assert_eq!(body.custom_count, 2);
+        assert_eq!(body.count, 24);
+
+        // Customs interleaved alphabetically with builtins.
+        let my_view = body
+            .dashboards
+            .iter()
+            .find(|d| d.name == "my-view")
+            .unwrap();
+        assert_eq!(my_view.origin, "custom");
+        assert_eq!(my_view.label, "My custom view");
+        assert_eq!(my_view.refresh_rate, "fast");
+        assert_eq!(my_view.active_tab, "logs");
+        // visible_panel_count = 16 - 2 hidden
+        assert_eq!(my_view.visible_panel_count, 14);
+
+        let ops_view = body
+            .dashboards
+            .iter()
+            .find(|d| d.name == "ops-view")
+            .unwrap();
+        assert_eq!(ops_view.origin, "custom");
+        assert_eq!(ops_view.visible_panel_count, 15);
+
+        // Sort order: module-status < my-view < network-ops < ops-view
+        let names: Vec<&str> = body.dashboards.iter().map(|d| d.name.as_str()).collect();
+        let pos = |n: &str| names.iter().position(|x| *x == n).unwrap();
+        assert!(pos("module-status") < pos("my-view"));
+        assert!(pos("my-view") < pos("network-ops"));
+        assert!(pos("network-ops") < pos("ops-view"));
+    }
+
+    #[test]
+    fn read_custom_presets_at_returns_empty_for_missing_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("nope.toml");
+        let customs = read_custom_presets_at(&path);
+        assert!(customs.is_empty());
+    }
+
+    #[test]
+    fn read_custom_presets_at_loads_two_from_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("prefs.toml");
+        std::fs::write(
+            &path,
+            r#"
+schema_version = "1.0.0"
+hidden_panels = []
+refresh_rate = "normal"
+active_preset = "default"
+updated_at_ms = 0
+
+[[custom_presets]]
+name = "alpha"
+label = "Alpha"
+hidden_panels = ["mcp-section"]
+refresh_rate = "fast"
+active_tab = "logs"
+
+[[custom_presets]]
+name = "beta"
+label = "Beta"
+hidden_panels = []
+refresh_rate = "slow"
+active_tab = "all"
+"#,
+        )
+        .unwrap();
+        let customs = read_custom_presets_at(&path);
+        assert_eq!(customs.len(), 2);
+        assert_eq!(customs[0].name, "alpha");
+        assert_eq!(customs[0].active_tab, "logs");
+        assert_eq!(customs[1].name, "beta");
+        assert_eq!(customs[1].refresh_rate, "slow");
     }
 }
