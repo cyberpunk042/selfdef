@@ -240,3 +240,252 @@ impl ApiTokenRevocationBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-068 MS5a production adapter) ───────────────
+//
+// Filesystem-backed production adapter. Writes atomic JSON snapshots
+// of active.json + pending-restores.json under a state-dir, so the
+// 22nd-sibling textfile observer
+// (packaging/scripts/selfdef-token-revocations-textfile.sh) can scrape
+// them and emit Prometheus gauges.
+//
+// Atomicity: each write goes to a sibling tempfile in the same
+// directory, then `rename(tmp, target)` — POSIX-atomic within a
+// filesystem, so the observer never reads a partial write.
+//
+// Pure std::fs — no exotic syscalls, no kernel-version dependency.
+// Works in any container or bare-metal environment with write
+// access to the state directory.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// On-disk representation of an active token-revocation handle.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: TokenRevocationHandle,
+    principal: String,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    token_classes: TokenClassMask,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingTokenRestore>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+}
+
+impl FsBackend {
+    /// Opens or initialises an FsBackend rooted at `state_dir`.
+    /// Creates the directory if absent. Loads existing JSON if
+    /// present; silently re-initialises to empty if either file
+    /// is malformed (operator-recoverable: rm + restart).
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, TokenRevocationError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            TokenRevocationError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active_path = state_dir.join("active.json");
+        let pending_path = state_dir.join("pending-restores.json");
+        let active = Self::load_active(&active_path);
+        let pending = Self::load_pending(&pending_path);
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+        })
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        // Disk layout for active.json is an ARRAY of ActiveEntry
+        // (matching the observer's `jq length` scan + persist()'s
+        // serialize_pretty(Vec) call). Convert to the internal
+        // HashMap keyed by handle.
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let TokenRevocationHandle::Active(k) = &e.handle;
+                (k.clone(), e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingTokenRestore> {
+        // Same shape as load_active — array on disk, HashMap in memory.
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingTokenRestore> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let TokenRevocationHandle::Active(k) = &p.handle;
+                (k.clone(), p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), TokenRevocationError> {
+        // mktemp in same directory so rename(2) is atomic.
+        let parent = target.parent().ok_or_else(|| {
+            TokenRevocationError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            TokenRevocationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            // Best-effort cleanup of the tempfile on rename failure.
+            let _ = fs::remove_file(&tmp);
+            TokenRevocationError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), TokenRevocationError> {
+        // active.json is also an ARRAY for the observer's jq scan.
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec).map_err(|e| {
+            TokenRevocationError::BackendUnreachable(format!("serialize active: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+
+        let pending_vec: Vec<&PendingTokenRestore> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec).map_err(|e| {
+            TokenRevocationError::BackendUnreachable(format!("serialize pending: {e}"))
+        })?;
+        Self::write_atomic(
+            &self.state_dir.join("pending-restores.json"),
+            &pending_bytes,
+        )?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl ApiTokenRevocationBackend for FsBackend {
+    async fn revoke_tokens(
+        &self,
+        req: TokenRevokeRequest,
+    ) -> Result<TokenRevokeReceipt, TokenRevocationError> {
+        validate(&req)?;
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: TokenRevocationHandle::Active(key.clone()),
+                    principal: req.principal.clone(),
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    token_classes: req.token_classes.clone(),
+                })
+                .handle
+                .clone();
+            if req.authority == AuthorityTier::Responder {
+                let TokenRevocationHandle::Active(k) = &handle;
+                state.pending.insert(
+                    k.clone(),
+                    PendingTokenRestore {
+                        handle: handle.clone(),
+                        principal: req.principal.clone(),
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        token_classes: req.token_classes.clone(),
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(TokenRevokeReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+        })
+    }
+
+    async fn restore_tokens(
+        &self,
+        handle: TokenRevocationHandle,
+    ) -> Result<TokenRestoreReceipt, TokenRevocationError> {
+        let (removed, snapshot) = {
+            let TokenRevocationHandle::Active(key) = &handle;
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(key);
+            let removed = state.active.remove(key).is_some();
+            (removed, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(TokenRestoreReceipt { restored: removed })
+    }
+
+    async fn pending_restores(&self) -> Vec<PendingTokenRestore> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingTokenRestore> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_restore_decided(&self, handle: &TokenRevocationHandle) -> bool {
+        let (removed, snapshot) = {
+            let TokenRevocationHandle::Active(key) = handle;
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
