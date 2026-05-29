@@ -1,0 +1,42 @@
+[Unit]
+Description=Selfdef — emit SDD-067 session-revocation state textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-revocations-textfile.sh
+# Runs every 60s. Surfaces the SDD-067 session-revocation state
+# (active handles + pending operator-restore decisions). Pairs
+# with blockset (19th sibling, SDD-065) + quarantine (20th
+# sibling, SDD-066) to complete the trio of enforcement-layer
+# observability surfaces.
+#
+# 21st sibling observer. Standard 12-clause R171 hardening — no
+# CAP exception (read-only JSON file access).
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_REVOCATIONS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-revocations.prom
+Environment=SELFDEF_REVOCATIONS_STATE_DIR=/var/lib/selfdef/revocations
+ExecStart=/usr/share/selfdef/selfdef-revocations-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

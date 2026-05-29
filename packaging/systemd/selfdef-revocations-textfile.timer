@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic SDD-067 session-revocation observer (every 60s, 21st sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-revocations-textfile.sh
+# 21st sibling observer timer. OnBootSec=630s — distinct from
+# the prior 20 siblings (60s through 600s).
+
+[Timer]
+OnBootSec=630s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-revocations-textfile.service
+
+[Install]
+WantedBy=timers.target
