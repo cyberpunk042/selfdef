@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic SSH hardening baseline observer (every 60s, 16th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-sshd-config-textfile.sh
+# 16th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s/360s/390s/420s/450s/480s
+# — 16 distinct boot offsets.
+
+[Timer]
+OnBootSec=480s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-sshd-config-textfile.service
+
+[Install]
+WantedBy=timers.target
