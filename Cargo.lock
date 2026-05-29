@@ -2448,6 +2448,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-apparmor-profile-pivot-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-approval-flow"
 version = "0.1.0"
 dependencies = [

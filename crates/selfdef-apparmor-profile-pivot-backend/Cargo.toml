@@ -1,0 +1,17 @@
+[package]
+name = "selfdef-apparmor-profile-pivot-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-077 MS1+MS5a — AppArmor live profile-pivot backend trait + in-memory test impl + filesystem-backed state-journal adapter. The actual aa_change_profile/aa_change_hat via /proc/<pid>/attr/current requires CAP_MAC_ADMIN substrate (deferred); FsBackend handles state-journaling for the 31st-sibling textfile observer."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tempfile = { workspace = true }
