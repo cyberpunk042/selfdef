@@ -6243,6 +6243,7 @@ name = "selfdef-responder"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "selfdef-api-token-revocation-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-core",
