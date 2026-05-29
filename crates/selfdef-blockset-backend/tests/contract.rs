@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use selfdef_blockset_backend::{
     AuthorityTier, BackendError, BlockHandle, BlockIpRequest, BlockReceipt, BlockSetBackend,
-    InMemoryBackend,
+    InMemoryBackend, PendingExtension,
 };
 
 fn req(addr: IpAddr, dur_secs: u64, tier: AuthorityTier, reason: &str) -> BlockIpRequest {
@@ -193,4 +193,120 @@ async fn ipv6_link_local_is_never_blocked() {
     let r = req(link_local, 60, AuthorityTier::Operator, "test");
     let err = b.block_ip(r).await.expect_err("link-local must be refused");
     assert!(matches!(err, BackendError::LinkLocalRefused(_)));
+}
+
+// ───────────────────────── MS5 pending-extension queue tests ─────────────────────────
+
+#[tokio::test]
+async fn responder_tier_block_enqueues_pending_extension() {
+    let b = InMemoryBackend::new();
+    let addr = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 100));
+    let r = req(addr, 1800, AuthorityTier::Responder, "sshd brute force");
+    b.block_ip(r).await.unwrap();
+    let pending = b.pending_extensions().await;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].addr, addr);
+    assert_eq!(pending[0].original_authority, AuthorityTier::Responder);
+    assert_eq!(pending[0].original_reason, "sshd brute force");
+    assert_eq!(pending[0].seconds_remaining, 1800);
+}
+
+#[tokio::test]
+async fn operator_tier_block_does_not_enqueue() {
+    let b = InMemoryBackend::new();
+    let r = req(
+        IpAddr::V4(Ipv4Addr::new(203, 0, 113, 101)),
+        3600,
+        AuthorityTier::Operator,
+        "operator manual",
+    );
+    b.block_ip(r).await.unwrap();
+    let pending = b.pending_extensions().await;
+    assert!(
+        pending.is_empty(),
+        "operator-tier blocks must not enter pending queue"
+    );
+}
+
+#[tokio::test]
+async fn autonomous_tier_block_does_not_enqueue() {
+    let b = InMemoryBackend::new();
+    let r = req(
+        IpAddr::V4(Ipv4Addr::new(203, 0, 113, 102)),
+        60,
+        AuthorityTier::Autonomous,
+        "burst",
+    );
+    b.block_ip(r).await.unwrap();
+    assert!(b.pending_extensions().await.is_empty());
+}
+
+#[tokio::test]
+async fn pending_extensions_sorted_by_seconds_remaining_ascending() {
+    let b = InMemoryBackend::new();
+    for (oct, secs) in [(10, 3600u64), (11, 900), (12, 2400)] {
+        let r = req(
+            IpAddr::V4(Ipv4Addr::new(203, 0, 113, oct)),
+            secs,
+            AuthorityTier::Responder,
+            "test",
+        );
+        b.block_ip(r).await.unwrap();
+    }
+    let pending = b.pending_extensions().await;
+    assert_eq!(pending.len(), 3);
+    // Most-urgent first (smallest seconds_remaining).
+    assert_eq!(pending[0].seconds_remaining, 900);
+    assert_eq!(pending[1].seconds_remaining, 2400);
+    assert_eq!(pending[2].seconds_remaining, 3600);
+}
+
+#[tokio::test]
+async fn mark_extension_decided_removes_from_queue() {
+    let b = InMemoryBackend::new();
+    let addr = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 103));
+    let r = req(addr, 1800, AuthorityTier::Responder, "test");
+    let receipt = b.block_ip(r).await.unwrap();
+    assert_eq!(b.pending_extensions().await.len(), 1);
+    let removed = b.mark_extension_decided(&receipt.handle).await;
+    assert!(removed);
+    assert!(b.pending_extensions().await.is_empty());
+    // Underlying block remains active until unblock_ip or kernel TTL.
+    assert_eq!(b.active_v4_count().await, 1);
+}
+
+#[tokio::test]
+async fn mark_extension_decided_returns_false_for_unknown_handle() {
+    let b = InMemoryBackend::new();
+    let bogus = BlockHandle::Active("never-existed".into());
+    assert!(!b.mark_extension_decided(&bogus).await);
+}
+
+#[tokio::test]
+async fn unblock_ip_also_removes_pending_entry() {
+    let b = InMemoryBackend::new();
+    let addr = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 104));
+    let r = req(addr, 1800, AuthorityTier::Responder, "test");
+    let receipt = b.block_ip(r).await.unwrap();
+    assert_eq!(b.pending_extensions().await.len(), 1);
+    b.unblock_ip(receipt.handle).await.unwrap();
+    assert!(
+        b.pending_extensions().await.is_empty(),
+        "unblock_ip must also clear the pending-extension entry"
+    );
+}
+
+#[test]
+fn pending_extension_serializes_to_json() {
+    let p = PendingExtension {
+        handle: BlockHandle::Active("h-1".into()),
+        addr: IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7)),
+        original_authority: AuthorityTier::Responder,
+        original_reason: "sshd".into(),
+        seconds_remaining: 600,
+    };
+    let json = serde_json::to_string(&p).expect("must serialize");
+    assert!(json.contains("203.0.113.7"));
+    assert!(json.contains("sshd"));
+    assert!(json.contains("600"));
 }

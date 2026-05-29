@@ -89,10 +89,38 @@ pub enum BackendError {
     BackendUnreachable(String),
 }
 
+/// SDD-065 MS5 — a pending-extension entry. Responder-tier blocks
+/// approaching their TTL are queued here for operator review;
+/// the sovereign-os cockpit polls `pending_extensions()` and
+/// surfaces the queue with a one-click `extend to 24h` flow.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingExtension {
+    pub handle: BlockHandle,
+    pub addr: IpAddr,
+    pub original_authority: AuthorityTier,
+    pub original_reason: String,
+    /// Seconds remaining on the kernel-side TTL when the queue
+    /// entry was recorded. Operator sees "12s left, decide now".
+    pub seconds_remaining: u64,
+}
+
 #[async_trait]
 pub trait BlockSetBackend: Send + Sync {
     async fn block_ip(&self, req: BlockIpRequest) -> Result<BlockReceipt, BackendError>;
     async fn unblock_ip(&self, handle: BlockHandle) -> Result<UnblockReceipt, BackendError>;
+    /// MS5 — list pending responder-tier blocks waiting for operator
+    /// extension decision. Default impl returns empty for backends
+    /// that don't track this (e.g. raw NftablesBackend); the
+    /// in-memory backend overrides.
+    async fn pending_extensions(&self) -> Vec<PendingExtension> {
+        Vec::new()
+    }
+    /// MS5 — operator marked a handle as deserving extension; the
+    /// backend may purge it from the pending queue so subsequent
+    /// `pending_extensions()` calls don't re-surface it.
+    async fn mark_extension_decided(&self, _handle: &BlockHandle) -> bool {
+        false
+    }
 }
 
 // ───────────────────────── In-memory backend ─────────────────────────
@@ -102,6 +130,9 @@ struct State {
     v4: HashMap<String, BlockHandle>, // idempotency_key → handle
     v6: HashMap<String, BlockHandle>,
     handle_addr: HashMap<String, IpAddr>, // handle string → addr
+    // SDD-065 MS5 — pending operator-extension decisions, keyed by
+    // handle.  Inserted by block_ip() when authority == Responder.
+    pending: HashMap<String, PendingExtension>,
 }
 
 pub struct InMemoryBackend {
@@ -158,6 +189,10 @@ fn validate(req: &BlockIpRequest) -> Result<(), BackendError> {
 impl BlockSetBackend for InMemoryBackend {
     async fn block_ip(&self, req: BlockIpRequest) -> Result<BlockReceipt, BackendError> {
         validate(&req)?;
+        let req_authority = req.authority;
+        let req_reason = req.reason.clone();
+        let req_addr = req.addr;
+        let req_duration_secs = req.duration.as_secs();
         let mut state = self.inner.lock().unwrap();
         let (set, other_count) = match req.addr {
             IpAddr::V4(_) => (&mut state.v4, 0),
@@ -170,6 +205,21 @@ impl BlockSetBackend for InMemoryBackend {
         let _ = other_count;
         let BlockHandle::Active(s) = &handle;
         state.handle_addr.insert(s.clone(), req.addr);
+        // SDD-065 MS5 — responder-tier blocks join the operator
+        // extension queue. Operator decides "extend to 24h" or let
+        // the kernel TTL expire silently.
+        if req_authority == AuthorityTier::Responder {
+            state.pending.insert(
+                s.clone(),
+                PendingExtension {
+                    handle: handle.clone(),
+                    addr: req_addr,
+                    original_authority: req_authority,
+                    original_reason: req_reason,
+                    seconds_remaining: req_duration_secs,
+                },
+            );
+        }
         let scope_v4_count = state.v4.len();
         let scope_v6_count = state.v6.len();
         Ok(BlockReceipt {
@@ -182,6 +232,7 @@ impl BlockSetBackend for InMemoryBackend {
     async fn unblock_ip(&self, handle: BlockHandle) -> Result<UnblockReceipt, BackendError> {
         let BlockHandle::Active(key) = &handle;
         let mut state = self.inner.lock().unwrap();
+        state.pending.remove(key);
         let addr = state.handle_addr.remove(key);
         let removed = match addr {
             Some(IpAddr::V4(_)) => state.v4.remove(key).is_some(),
@@ -189,6 +240,21 @@ impl BlockSetBackend for InMemoryBackend {
             None => false,
         };
         Ok(UnblockReceipt { released: removed })
+    }
+
+    async fn pending_extensions(&self) -> Vec<PendingExtension> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingExtension> = state.pending.values().cloned().collect();
+        // Stable ordering for operator UI — most-recently-stamped
+        // handle first by seconds_remaining ascending (most urgent).
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_extension_decided(&self, handle: &BlockHandle) -> bool {
+        let BlockHandle::Active(key) = handle;
+        let mut state = self.inner.lock().unwrap();
+        state.pending.remove(key).is_some()
     }
 }
 
