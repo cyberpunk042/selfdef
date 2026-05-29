@@ -1,0 +1,43 @@
+[Unit]
+Description=Selfdef — emit SDD-066 quarantine state textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-quarantine-textfile.sh
+# Runs every 60s. Surfaces the SDD-066 process-quarantine state
+# (cgroupv2 quarantine-*.scope entries + freeze status + soonest
+# auto-release). Pairs with blockset observer (19th sibling,
+# SDD-065 enforcement state) at the operator-action-state axis.
+#
+# 20th sibling observer. Read-only access to /sys/fs/cgroup/
+# selfdef.slice (the slice owner is selfdefd). No special caps
+# beyond standard sibling pattern — reading cgroup files works
+# as the selfdef user.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_QUARANTINE_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-quarantine.prom
+Environment=SELFDEF_QUARANTINE_SLICE_PATH=/sys/fs/cgroup/selfdef.slice
+ExecStart=/usr/share/selfdef/selfdef-quarantine-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /sys/fs/cgroup/selfdef.slice
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
