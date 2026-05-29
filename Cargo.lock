@@ -6259,6 +6259,7 @@ dependencies = [
  "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-core",
+ "selfdef-mfa-grant-revocation-backend",
  "selfdef-notifier",
  "selfdef-process-quarantine-backend",
  "selfdef-session-revocation-backend",

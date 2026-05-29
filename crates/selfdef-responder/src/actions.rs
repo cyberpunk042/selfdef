@@ -941,6 +941,100 @@ impl Action for ApiTokenRevocationAction {
     }
 }
 
+// =================================================== MfaGrantRevocationAction
+//
+// SDD-069 MS2 — wires the MfaGrantRevocationBackend trait into
+// the Action runner. Fifth primitive in the IPS pentet.
+
+use selfdef_mfa_grant_revocation_backend::{
+    AuthorityTier as MgrTier, MfaGrantRevocationBackend, MfaGrantRevokeRequest, MfaGrantScope,
+};
+
+pub struct MfaGrantRevocationAction {
+    backend: Arc<dyn MfaGrantRevocationBackend>,
+    authority: MgrTier,
+    duration: std::time::Duration,
+    grant_scope: MfaGrantScope,
+    reason_prefix: String,
+}
+
+impl MfaGrantRevocationAction {
+    pub fn new(
+        backend: Arc<dyn MfaGrantRevocationBackend>,
+        authority: MgrTier,
+        duration: std::time::Duration,
+        grant_scope: MfaGrantScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            grant_scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+fn sdd069_principal_from_event(event: &Event) -> Option<String> {
+    event
+        .actor
+        .as_ref()
+        .and_then(|a| a.user.as_ref())
+        .and_then(|u| u.name.clone())
+        .filter(|n| !n.is_empty())
+}
+
+#[async_trait]
+impl Action for MfaGrantRevocationAction {
+    fn name(&self) -> &'static str {
+        "mfa_grant_revocation"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(principal) = sdd069_principal_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.user.name in event — mfa_grant_revocation skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{principal}:{}:{:?}:{:?}",
+            event.id, self.authority, self.grant_scope
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would revoke MFA grants for {principal} ({:?}) for {}s under {:?} ({})",
+                self.grant_scope,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = MfaGrantRevokeRequest {
+            principal: principal.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            grant_scope: self.grant_scope.clone(),
+            idempotency_key,
+        };
+
+        match self.backend.revoke_mfa_grants(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "revoked MFA grants for {principal} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "mfa_grant_revocation backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1487,5 +1581,114 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "api_token_revocation");
+    }
+
+    // ------------------------ MfaGrantRevocationAction (SDD-069 MS2)
+
+    use selfdef_mfa_grant_revocation_backend::{
+        AuthorityTier as MgrTier, InMemoryBackend as MgrInMemoryBackend, MfaGrantScope,
+        MfaGrantSurface,
+    };
+
+    #[tokio::test]
+    async fn mfa_grant_revocation_dry_run_renders_principal_and_duration() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend.clone(),
+            MgrTier::Responder,
+            Duration::from_secs(900),
+            MfaGrantScope::All,
+            "test-responder",
+        );
+        let outcome = action
+            .execute(&finding_with_user("alice"), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("alice"));
+        assert!(outcome.notes.contains("900s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn mfa_grant_revocation_applies_real_revoke_when_not_dry_run() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend.clone(),
+            MgrTier::Operator,
+            Duration::from_secs(60 * 60),
+            MfaGrantScope::All,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_user("bob"), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("bob"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn mfa_grant_revocation_skipped_when_no_principal() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend.clone(),
+            MgrTier::Responder,
+            Duration::from_secs(60),
+            MfaGrantScope::All,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn mfa_grant_revocation_propagates_authority_insufficient() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend.clone(),
+            MgrTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            MfaGrantScope::All,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_user("carol"), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn mfa_grant_revocation_scoped_surfaces_routed() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend.clone(),
+            MgrTier::Operator,
+            Duration::from_secs(60),
+            MfaGrantScope::Specific(vec![MfaGrantSurface::Pam, MfaGrantSurface::Api]),
+            "scoped",
+        );
+        let outcome = action
+            .execute(&finding_with_user("dan"), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[test]
+    fn mfa_grant_revocation_action_name_is_stable_string() {
+        let backend = Arc::new(MgrInMemoryBackend::new());
+        let action = MfaGrantRevocationAction::new(
+            backend,
+            MgrTier::Responder,
+            Duration::from_secs(60),
+            MfaGrantScope::All,
+            "x",
+        );
+        assert_eq!(action.name(), "mfa_grant_revocation");
     }
 }
