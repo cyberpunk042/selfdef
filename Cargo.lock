@@ -2897,6 +2897,7 @@ dependencies = [
  "selfdef-hardware",
  "selfdef-hardware-requirements",
  "selfdef-integration-ntfy",
+ "selfdef-kernel-keyring-eviction-backend",
  "selfdef-mfa-grant-revocation-backend",
  "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
