@@ -772,8 +772,83 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-071 MS3 — unbind a malicious bind-mount or overlay
+    /// exposing host secrets into a compromised process/container,
+    /// preserving open fds via lazy `umount -l` (default).
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 20m,
+    /// operator 1h, operator-overridden 6h (filesystem-binding
+    /// axis: shortest of the IPS septet).
+    UnbindMount {
+        /// Absolute path of the mount-point to detach.
+        mount_point: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-unbound duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Scope: bind | overlay | all-matching:<pattern>
+        /// (the third requires --authority operator-overridden).
+        #[arg(long, default_value = "bind")]
+        scope: String,
+        /// Use forced umount (--no-lazy → MS_FORCE; drops live fds).
+        /// Default is lazy (MS_DETACH) which preserves open fds.
+        #[arg(long)]
+        no_lazy: bool,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-071 MS3 — re-bind an active mount-binding-unbind handle.
+    RebindMount {
+        /// Mount-point or unbind handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_mount_binding_unbind_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_mount_binding_unbind_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_unbind_scope(
+    s: &str,
+) -> Result<selfdef_mount_binding_unbind_backend::UnbindScope, String> {
+    use selfdef_mount_binding_unbind_backend::UnbindScope;
+    let trimmed = s.trim();
+    let lower = trimmed.to_lowercase();
+    match lower.as_str() {
+        "bind" => Ok(UnbindScope::Bind),
+        "overlay" => Ok(UnbindScope::Overlay),
+        other => {
+            if let Some(pattern) = other.strip_prefix("all-matching:") {
+                if pattern.is_empty() {
+                    Err("all-matching:<pattern> requires a non-empty pattern".into())
+                } else {
+                    Ok(UnbindScope::AllMatching(pattern.to_string()))
+                }
+            } else {
+                Err(format!(
+                    "unknown unbind scope {other:?}; expected one of: bind, overlay, all-matching:<pattern>"
+                ))
+            }
+        }
+    }
 }
 
 impl From<CliAuthority> for selfdef_netns_isolation_backend::AuthorityTier {
@@ -3073,6 +3148,88 @@ async fn main() -> Result<()> {
                 println!("released isolation for {target}");
             } else {
                 println!("no active netns-isolation for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::UnbindMount {
+            mount_point,
+            reason,
+            duration,
+            authority,
+            scope,
+            no_lazy,
+            dry_run,
+        } => {
+            use selfdef_mount_binding_unbind_backend::{
+                AuthorityTier, InMemoryBackend, MountBindingUnbindBackend, UnbindMountRequest,
+            };
+            use std::time::Duration;
+
+            if mount_point.trim().is_empty() {
+                anyhow::bail!("mount_point must be non-empty");
+            }
+            if !mount_point.starts_with('/') {
+                anyhow::bail!("mount_point must be an absolute path, got {mount_point:?}");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 6h tier."
+                );
+            }
+            let scope_parsed =
+                parse_unbind_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+            let lazy = !no_lazy;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would unbind {mount_point} ({scope_parsed:?}, lazy={lazy}) for \
+                     {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = UnbindMountRequest {
+                mount_point: mount_point.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed.clone(),
+                lazy,
+                idempotency_key: format!("cli:{mount_point}:{reason}:{tier:?}:{scope_parsed:?}"),
+            };
+            let receipt = backend
+                .unbind_mount(req)
+                .await
+                .with_context(|| format!("unbinding {mount_point}"))?;
+            println!(
+                "unbound {mount_point} for {secs}s · scope={scope_parsed:?} · lazy={lazy} · \
+                 tier={tier:?} · handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::RebindMount { target, force } => {
+            use selfdef_mount_binding_unbind_backend::{
+                InMemoryBackend, MountBindingHandle, MountBindingUnbindBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = MountBindingHandle::Active(target.clone());
+            let receipt = backend
+                .rebind_mount(handle)
+                .await
+                .with_context(|| format!("rebinding {target}"))?;
+            if receipt.rebound {
+                println!("rebound {target}");
+            } else {
+                println!("no active mount-binding-unbind for {target} (MS3 stateless backend)");
             }
         }
         Command::Mcp { action } => match action {
