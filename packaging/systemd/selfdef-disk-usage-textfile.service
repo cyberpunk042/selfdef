@@ -1,0 +1,42 @@
+[Unit]
+Description=Selfdef — emit disk-usage textfile for node_exporter scrape (disk-fill detection)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-disk-usage-textfile.sh
+# Runs every 60s. Surfaces per-directory disk usage for selfdef-
+# relevant paths so operators detect disk-fill attacks before
+# they wedge the IPS spine.
+#
+# 10th sibling observer. Same R171 hardening + atomic-write
+# convention.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_DISK_USAGE_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-disk-usage.prom
+ExecStart=/usr/share/selfdef/selfdef-disk-usage-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+# Hardening — du needs read access to /var/lib/selfdef + /var/log;
+# both are mounted on /var so no special ReadOnlyPaths overrides
+# beyond ProtectSystem=strict.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /var/log
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
