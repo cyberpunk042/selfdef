@@ -1790,6 +1790,36 @@ enum SchedulerAction {
         #[command(subcommand)]
         action: SchedulerAuditCycleAction,
     },
+    /// M01163 + M01164: render the substrate-trio + backpressure
+    /// status panel from either the live Prometheus textfile or the
+    /// M01170 audit-log tail. Designed for SSH / AIR-GAPPED operator
+    /// terminals where Grafana isn't reachable.
+    Status {
+        /// Read from the M01170 audit log instead of the live
+        /// Prometheus textfile. Mutually exclusive with `--textfile`.
+        #[arg(long, conflicts_with = "textfile")]
+        audit: bool,
+        /// Read from the live Prometheus textfile (default).
+        #[arg(long)]
+        textfile: bool,
+        /// Override the source path (textfile or audit log).
+        /// Defaults to the M01171 config / DEFAULT_TEXTFILE_PATH /
+        /// DEFAULT_DRIVER_AUDIT_PATH per the active source.
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Render the single-line compact summary instead of the
+        /// full multi-line panel. Good for status-bar embedding.
+        #[arg(long)]
+        compact: bool,
+        /// Loop forever, re-rendering every N seconds. Implies
+        /// clearing the screen between renders.
+        #[arg(long)]
+        watch: Option<u64>,
+        /// Force plain-ASCII output, no ANSI color escapes (overrides
+        /// the NO_COLOR env var convention).
+        #[arg(long)]
+        no_color: bool,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -4653,6 +4683,14 @@ async fn main() -> Result<()> {
                     route,
                     json,
                 } => scheduler::run_force(&request_id, &route, json)?,
+                SchedulerAction::Status {
+                    audit,
+                    textfile: _, // default-true, flag is informational
+                    path,
+                    compact,
+                    watch,
+                    no_color,
+                } => scheduler::run_status(audit, path, compact, watch, no_color)?,
                 SchedulerAction::AuditCycle { action } => match action {
                     SchedulerAuditCycleAction::Replay { json } => {
                         scheduler::run_audit_cycle_replay(json)?

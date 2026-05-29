@@ -336,3 +336,104 @@ fn print_decision_row(d: &Decision) {
 fn _ring_dir_used() -> &'static Path {
     Path::new(DEFAULT_RING_DIR)
 }
+
+// ============================================================================
+// M01163 + M01164 — Status panel renderer (substrate trio + backpressure)
+// ============================================================================
+//
+// `selfdefctl scheduler status` — renders the M01163 panel from either
+// the live Prometheus textfile (default) or the M01170 audit-log tail.
+//
+// Source resolution:
+//   --path <P>          — explicit override
+//   --audit (no path)   — cfg.emit.audit_path (or DEFAULT_DRIVER_AUDIT_PATH)
+//   --textfile (no path)— cfg.emit.textfile_path (or DEFAULT_TEXTFILE_PATH)
+//
+// Style: --no-color forces Plain; otherwise auto-detect via
+// stdout.is_terminal() + NO_COLOR env convention.
+//
+// Loop: --watch SECS re-renders every SECS, clearing the screen
+// between renders when in ANSI mode.
+
+pub(crate) fn run_status(
+    from_audit: bool,
+    path_override: Option<PathBuf>,
+    compact: bool,
+    watch: Option<u64>,
+    no_color: bool,
+) -> Result<i32> {
+    use selfdef_scheduler::config::{DEFAULT_CONFIG_PATH, SchedulerConfig};
+    use selfdef_scheduler::tui_panel::PanelStyle;
+    use std::io::IsTerminal as _;
+
+    let cfg = SchedulerConfig::load_from(Path::new(DEFAULT_CONFIG_PATH)).unwrap_or_default();
+    let source_path: PathBuf = match path_override {
+        Some(p) => p,
+        None if from_audit => cfg.emit.audit_path.clone(),
+        None => cfg.emit.textfile_path.clone(),
+    };
+
+    let style = if no_color {
+        PanelStyle::Plain
+    } else {
+        PanelStyle::detect(std::io::stdout().is_terminal())
+    };
+
+    let render_once = || -> Result<String> { render_one(&source_path, from_audit, compact, style) };
+
+    match watch {
+        None => {
+            print!("{}", render_once()?);
+        }
+        Some(secs) => {
+            let interval = std::time::Duration::from_secs(secs.max(1));
+            loop {
+                if matches!(style, PanelStyle::AnsiColor) {
+                    print!("\x1b[2J\x1b[H");
+                }
+                print!("{}", render_once()?);
+                use std::io::Write as _;
+                std::io::stdout().flush().ok();
+                std::thread::sleep(interval);
+            }
+        }
+    }
+    Ok(0)
+}
+
+fn render_one(
+    source_path: &Path,
+    from_audit: bool,
+    compact: bool,
+    style: selfdef_scheduler::tui_panel::PanelStyle,
+) -> Result<String> {
+    use selfdef_scheduler::tui_panel::{
+        parse_textfile_into_reading, render_panel_compact, render_panel_styled,
+    };
+
+    let reading = if from_audit {
+        let text = std::fs::read_to_string(source_path)
+            .with_context(|| format!("reading audit log at {}", source_path.display()))?;
+        let last_line = text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .next_back()
+            .ok_or_else(|| anyhow!("audit log {} is empty", source_path.display()))?;
+        let entry: selfdef_scheduler::decision_audit::DriverAuditEntry =
+            serde_json::from_str(last_line)
+                .with_context(|| format!("parsing last entry of {}", source_path.display()))?;
+        entry.reading
+    } else {
+        let text = std::fs::read_to_string(source_path)
+            .with_context(|| format!("reading textfile at {}", source_path.display()))?;
+        parse_textfile_into_reading(&text)
+            .map_err(|reason| anyhow!("parsing textfile {}: {reason}", source_path.display()))?
+    };
+
+    if compact {
+        Ok(format!("{}\n", render_panel_compact(&reading)))
+    } else {
+        Ok(render_panel_styled(&reading, style))
+    }
+}
+

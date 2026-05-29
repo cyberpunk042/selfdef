@@ -451,7 +451,15 @@ pub fn render_panel_from_textfile(textfile_path: &Path) -> Result<String, PanelE
 /// `DriverReading` for rendering. Lossy: per-source reason text is
 /// reconstructed from the substrate_status rows when present;
 /// timestamps from last_run_unix.
-fn parse_textfile_into_reading(text: &str) -> Result<DriverReading, String> {
+///
+/// Public so the selfdef-cli's `selfdefctl scheduler status` command
+/// can reuse the parser for compact-mode + styled rendering paths
+/// without round-tripping the rendered panel string.
+///
+/// # Errors
+///
+/// Returns a human-readable error string if parsing fails.
+pub fn parse_textfile_into_reading(text: &str) -> Result<DriverReading, String> {
     let mut cpu_psi = 0.0_f32;
     let mut mem_psi = 0.0_f32;
     let mut io_psi = 0.0_f32;
