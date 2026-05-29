@@ -233,3 +233,227 @@ impl ProcessQuarantineBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-066 MS5a state-journal adapter) ───────────────
+//
+// State-journaling layer for SDD-066. Actual cgroup-v2 freezer
+// write (echo 1 > /sys/fs/cgroup/<slice>/cgroup.freeze) requires
+// exotic substrate (cgroup-v2 mounted + writable + CAP_SYS_ADMIN
+// in the relevant ns); ships in a separate adapter (deferred).
+// FsBackend completes the observability + audit half of the
+// SDD-066 production loop for the 20th-sibling textfile observer.
+//
+// Closes the IPS-dectet MS5a 10/10 (state-journal layer).
+// Per wiki/patterns/ms5a-state-journal-vs-enforcement-layer-separation.md.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: QuarantineHandle,
+    pid: i32,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    scope: FreezeScope,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingRelease>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, QuarantineError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            QuarantineError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-releases.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+        })
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let QuarantineHandle::Active(k) = &e.handle;
+                (k.clone(), e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingRelease> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingRelease> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let QuarantineHandle::Active(k) = &p.handle;
+                (k.clone(), p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), QuarantineError> {
+        let parent = target.parent().ok_or_else(|| {
+            QuarantineError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            QuarantineError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            QuarantineError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), QuarantineError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec)
+            .map_err(|e| QuarantineError::BackendUnreachable(format!("serialize active: {e}")))?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingRelease> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec)
+            .map_err(|e| QuarantineError::BackendUnreachable(format!("serialize pending: {e}")))?;
+        Self::write_atomic(
+            &self.state_dir.join("pending-releases.json"),
+            &pending_bytes,
+        )?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl ProcessQuarantineBackend for FsBackend {
+    async fn freeze_process(&self, req: FreezeRequest) -> Result<FreezeReceipt, QuarantineError> {
+        validate(&req)?;
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: QuarantineHandle::Active(key.clone()),
+                    pid: req.pid,
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    scope: req.scope,
+                })
+                .handle
+                .clone();
+            let QuarantineHandle::Active(k) = &handle;
+            if req.authority == AuthorityTier::Responder {
+                state.pending.insert(
+                    k.clone(),
+                    PendingRelease {
+                        handle: handle.clone(),
+                        pid: req.pid,
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        scope: req.scope,
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(FreezeReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+        })
+    }
+
+    async fn release_process(
+        &self,
+        handle: QuarantineHandle,
+    ) -> Result<ReleaseReceipt, QuarantineError> {
+        let (released, snapshot) = {
+            let QuarantineHandle::Active(key) = &handle;
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(key);
+            let released = state.active.remove(key).is_some();
+            (released, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(ReleaseReceipt { released })
+    }
+
+    async fn pending_releases(&self) -> Vec<PendingRelease> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingRelease> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_release_decided(&self, handle: &QuarantineHandle) -> bool {
+        let (removed, snapshot) = {
+            let QuarantineHandle::Active(key) = handle;
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}

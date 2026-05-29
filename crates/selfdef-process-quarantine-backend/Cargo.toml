@@ -3,14 +3,15 @@ name = "selfdef-process-quarantine-backend"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "SDD-066 MS1 — process-quarantine backend trait + in-memory test impl. The cgroupv2-freezer + signal-fallback adapters ship in MS1b under feature flags; this crate hosts the contract + InMemoryBackend usable by selfdef-responder unit tests."
+description = "SDD-066 MS1+MS5a — process-quarantine backend trait + in-memory test impl + filesystem-backed state-journal adapter. The cgroupv2-freezer enforcement requires exotic substrate (deferred); FsBackend handles state-journaling for the 20th-sibling textfile observer. Closes the IPS-dectet MS5a 10/10."
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 async-trait = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
-serde_json = { workspace = true }
+tempfile = { workspace = true }
