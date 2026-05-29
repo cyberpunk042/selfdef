@@ -6327,6 +6327,7 @@ dependencies = [
  "selfdef-api-token-revocation-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
+ "selfdef-capability-drop-backend",
  "selfdef-core",
  "selfdef-mfa-grant-revocation-backend",
  "selfdef-mount-binding-unbind-backend",
