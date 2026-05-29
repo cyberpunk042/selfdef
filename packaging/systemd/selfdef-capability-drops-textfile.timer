@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-075 per-process capability-drop observer (every 60s, 29th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-capability-drops-textfile.sh
+# OnBootSec=870s — distinct from the prior 28 siblings (60s..840s).
+
+[Timer]
+OnBootSec=870s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-capability-drops-textfile.service
+
+[Install]
+WantedBy=timers.target
