@@ -656,6 +656,90 @@ impl Action for BlockIpAction {
     }
 }
 
+// ====================================================== QuarantineProcessAction
+//
+// SDD-066 MS2 — wires the ProcessQuarantineBackend trait into
+// the Action runner. Extracts pid from event.actor (existing
+// pid_from_event helper); submits a FreezeRequest under the
+// configured authority tier + scope.
+
+use selfdef_process_quarantine_backend::{
+    AuthorityTier as PqTier, FreezeRequest, FreezeScope, ProcessQuarantineBackend,
+};
+
+pub struct QuarantineProcessAction {
+    backend: Arc<dyn ProcessQuarantineBackend>,
+    authority: PqTier,
+    duration: std::time::Duration,
+    scope: FreezeScope,
+    reason_prefix: String,
+}
+
+impl QuarantineProcessAction {
+    pub fn new(
+        backend: Arc<dyn ProcessQuarantineBackend>,
+        authority: PqTier,
+        duration: std::time::Duration,
+        scope: FreezeScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for QuarantineProcessAction {
+    fn name(&self) -> &'static str {
+        "quarantine_process"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor pid available — quarantine_process skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!("{pid}:{}:{:?}:{:?}", event.id, self.authority, self.scope);
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would freeze pid {pid} ({:?}) for {}s under {:?} ({})",
+                self.scope,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = FreezeRequest {
+            pid,
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            idempotency_key,
+        };
+
+        match self.backend.freeze_process(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "frozen pid {pid} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "quarantine_process backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -881,5 +965,110 @@ mod tests {
         let backend = Arc::new(InMemoryBackend::new());
         let action = BlockIpAction::new(backend, BsTier::Responder, Duration::from_secs(60), "x");
         assert_eq!(action.name(), "block_ip");
+    }
+
+    // ----------------------------- QuarantineProcessAction (SDD-066 MS2)
+
+    use selfdef_process_quarantine_backend::{
+        AuthorityTier as PqTier, FreezeScope, InMemoryBackend as PqInMemoryBackend,
+    };
+
+    #[tokio::test]
+    async fn quarantine_process_dry_run_renders_pid_and_duration() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend.clone(),
+            PqTier::Responder,
+            Duration::from_secs(600),
+            FreezeScope::Process,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4242), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4242"));
+        assert!(outcome.notes.contains("600s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn quarantine_process_applies_real_freeze_when_not_dry_run() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend.clone(),
+            PqTier::Operator,
+            Duration::from_secs(60 * 60),
+            FreezeScope::Process,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(4243), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("4243"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn quarantine_process_skipped_when_no_pid() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend.clone(),
+            PqTier::Responder,
+            Duration::from_secs(60),
+            FreezeScope::Process,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn quarantine_process_propagates_authority_insufficient() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend.clone(),
+            PqTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            FreezeScope::Process,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(4244), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn quarantine_process_tree_scope_routes_through_backend() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend.clone(),
+            PqTier::Operator,
+            Duration::from_secs(60),
+            FreezeScope::Tree,
+            "tree-test",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(4245), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[test]
+    fn quarantine_action_name_is_stable_string() {
+        let backend = Arc::new(PqInMemoryBackend::new());
+        let action = QuarantineProcessAction::new(
+            backend,
+            PqTier::Responder,
+            Duration::from_secs(60),
+            FreezeScope::Process,
+            "x",
+        );
+        assert_eq!(action.name(), "quarantine_process");
     }
 }

@@ -6234,6 +6234,7 @@ dependencies = [
  "selfdef-bus",
  "selfdef-core",
  "selfdef-notifier",
+ "selfdef-process-quarantine-backend",
  "serde",
  "serde_json",
  "tempfile",
