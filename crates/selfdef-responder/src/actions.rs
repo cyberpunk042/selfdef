@@ -572,6 +572,90 @@ impl Action for VelociraptorEscalateAction {
     }
 }
 
+// ============================================================= BlockIpAction
+//
+// SDD-065 MS2 — wires the BlockSetBackend trait into the Action
+// runner. Extracts the source IP from event.src_endpoint and
+// submits a BlockIpRequest under the configured authority tier.
+
+use selfdef_blockset_backend::{AuthorityTier as BsTier, BlockIpRequest, BlockSetBackend};
+use std::time::Duration;
+
+/// Block the source IP of the event via the configured backend.
+pub struct BlockIpAction {
+    backend: Arc<dyn BlockSetBackend>,
+    /// Authority tier under which this action operates. Determines
+    /// the maximum permissible duration; see SDD-065 §4.
+    authority: BsTier,
+    /// Block duration. Must be ≤ authority.max_duration().
+    duration: Duration,
+    /// Static reason prefix (the event id is appended for traceability).
+    reason_prefix: String,
+}
+
+impl BlockIpAction {
+    pub fn new(
+        backend: Arc<dyn BlockSetBackend>,
+        authority: BsTier,
+        duration: Duration,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+fn source_ip_from_event(event: &Event) -> Option<std::net::IpAddr> {
+    event.src_endpoint.as_ref().and_then(|ep| ep.ip)
+}
+
+#[async_trait]
+impl Action for BlockIpAction {
+    fn name(&self) -> &'static str {
+        "block_ip"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(addr) = source_ip_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no src_endpoint.ip in event — block_ip skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!("{addr}:{}:{:?}", event.id, self.authority);
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would block {addr} for {}s under {:?} ({})",
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = BlockIpRequest {
+            addr,
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            idempotency_key,
+        };
+
+        match self.backend.block_ip(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "blocked {addr} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!("block_ip backend: {e}"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -701,5 +785,101 @@ mod tests {
         // Only two `\n` markers, so requesting 2 lines returns from after
         // the first one onward.
         assert_eq!(tail_lines(input, 2), b"b\nc");
+    }
+
+    // ------------------------------ BlockIpAction (SDD-065 MS2)
+
+    use selfdef_blockset_backend::InMemoryBackend;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    fn finding_with_src_ip(ip: IpAddr) -> Event {
+        Event::new(
+            ClassUid::DETECTION_FINDING,
+            1,
+            SeverityId::Critical,
+            "host",
+            "test",
+            0,
+        )
+        .with_src_endpoint(selfdef_core::observable::Endpoint::ip_port(ip, 22))
+    }
+
+    #[tokio::test]
+    async fn block_ip_dry_run_renders_address_and_duration() {
+        let backend = Arc::new(InMemoryBackend::new());
+        let action = BlockIpAction::new(
+            backend.clone(),
+            BsTier::Responder,
+            Duration::from_secs(600),
+            "test-responder",
+        );
+        let ip = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 7));
+        let outcome = action
+            .execute(&finding_with_src_ip(ip), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("203.0.113.7"));
+        assert!(outcome.notes.contains("600s"));
+        // Backend untouched.
+        assert_eq!(backend.active_v4_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn block_ip_applies_real_block_when_not_dry_run() {
+        let backend = Arc::new(InMemoryBackend::new());
+        let action = BlockIpAction::new(
+            backend.clone(),
+            BsTier::Operator,
+            Duration::from_secs(60 * 60),
+            "operator-cli",
+        );
+        let ip = IpAddr::V4(Ipv4Addr::new(203, 0, 113, 8));
+        let outcome = action
+            .execute(&finding_with_src_ip(ip), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("203.0.113.8"));
+        assert_eq!(backend.active_v4_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn block_ip_skipped_when_no_src_endpoint() {
+        let backend = Arc::new(InMemoryBackend::new());
+        let action = BlockIpAction::new(
+            backend.clone(),
+            BsTier::Responder,
+            Duration::from_secs(60),
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_v4_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn block_ip_propagates_authority_insufficient_as_exec_error() {
+        let backend = Arc::new(InMemoryBackend::new());
+        // Autonomous max = 5m; request 1h ⇒ AuthorityInsufficient.
+        let action = BlockIpAction::new(
+            backend.clone(),
+            BsTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            "auto",
+        );
+        let ip = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 9));
+        let err = action
+            .execute(&finding_with_src_ip(ip), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[test]
+    fn action_name_is_stable_string() {
+        let backend = Arc::new(InMemoryBackend::new());
+        let action = BlockIpAction::new(backend, BsTier::Responder, Duration::from_secs(60), "x");
+        assert_eq!(action.name(), "block_ip");
     }
 }

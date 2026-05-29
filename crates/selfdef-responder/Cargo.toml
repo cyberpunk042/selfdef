@@ -16,6 +16,7 @@ workspace = true
 selfdef-core = { workspace = true }
 selfdef-bus = { workspace = true }
 selfdef-notifier = { workspace = true }
+selfdef-blockset-backend = { path = "../selfdef-blockset-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
