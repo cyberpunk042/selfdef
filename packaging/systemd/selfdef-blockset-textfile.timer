@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic SDD-065 blockset observer (every 60s, 19th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-blockset-textfile.sh
+# 19th sibling observer timer. OnBootSec=570s — distinct from
+# the prior 18 siblings.
+
+[Timer]
+OnBootSec=570s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-blockset-textfile.service
+
+[Install]
+WantedBy=timers.target
