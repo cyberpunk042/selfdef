@@ -2882,6 +2882,7 @@ dependencies = [
  "selfdef-api-token-revocation-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
+ "selfdef-capability-drop-backend",
  "selfdef-cli-mirror",
  "selfdef-commit-authority",
  "selfdef-config",
