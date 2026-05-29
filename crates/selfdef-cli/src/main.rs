@@ -641,9 +641,10 @@ enum Command {
     },
     /// SDD-067 MS3 — terminate all sessions for a user (loginctl
     /// terminate-user + pkill -KILL -u + sudo grace cache removal
-    /// + PAM-side deny entry with TTL). Duration capped by tier:
-    /// autonomous 1m / responder 30m / operator 4h /
-    /// operator-overridden 24h.
+    /// + PAM-side deny entry with TTL).
+    ///
+    /// Duration capped by tier — autonomous 1m, responder 30m,
+    /// operator 4h, operator-overridden 24h.
     RevokeSessions {
         /// Target POSIX user name.
         user: String,
