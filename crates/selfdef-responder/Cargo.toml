@@ -26,6 +26,7 @@ selfdef-mount-binding-unbind-backend = { path = "../selfdef-mount-binding-unbind
 selfdef-process-tree-freeze-backend = { path = "../selfdef-process-tree-freeze-backend" }
 selfdef-socket-fd-revocation-backend = { path = "../selfdef-socket-fd-revocation-backend" }
 selfdef-process-env-scrub-backend = { path = "../selfdef-process-env-scrub-backend" }
+selfdef-capability-drop-backend = { path = "../selfdef-capability-drop-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }

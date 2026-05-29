@@ -1521,6 +1521,119 @@ impl Action for ProcessEnvScrubAction {
     }
 }
 
+// ===================================================== CapabilityDropAction
+//
+// SDD-075 MS2 — wires the CapabilityDropBackend trait into the
+// Action runner. Eleventh primitive in the IPS undectet; pairs
+// with SDD-066 single-pid freeze + SDD-070 netns-isolation at
+// the kernel-containment family (least-privilege graduation:
+// drop one capability instead of freezing/isolating the whole
+// process).
+
+use selfdef_capability_drop_backend::{
+    AuthorityTier as CdrTier, CapScope, CapabilityDropBackend, DropCapsRequest, canonicalize_cap,
+};
+
+pub struct CapabilityDropAction {
+    backend: Arc<dyn CapabilityDropBackend>,
+    authority: CdrTier,
+    duration: std::time::Duration,
+    /// Static cap-name list — typically configured per-rule
+    /// (e.g. "CAP_NET_ADMIN,CAP_SYS_PTRACE"). Production rules
+    /// will populate this from event metadata too.
+    caps: Vec<String>,
+    scope: CapScope,
+    reason_prefix: String,
+}
+
+impl CapabilityDropAction {
+    pub fn new(
+        backend: Arc<dyn CapabilityDropBackend>,
+        authority: CdrTier,
+        duration: std::time::Duration,
+        caps: Vec<String>,
+        scope: CapScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            caps,
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for CapabilityDropAction {
+    fn name(&self) -> &'static str {
+        "capability_drop"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid in event — capability_drop skipped",
+            ));
+        };
+        if self.caps.is_empty() {
+            return Ok(ActionOutcome::skipped(
+                "no caps configured on action — capability_drop skipped",
+            ));
+        }
+        // Pre-validate cap names client-side so a typo in the action
+        // config surfaces at execute time instead of round-tripping
+        // through the backend's validator.
+        for c in &self.caps {
+            if canonicalize_cap(c).is_none() {
+                return Err(ActionError::Exec(format!(
+                    "capability_drop: unknown cap name {c:?} in action config"
+                )));
+            }
+        }
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{pid}:{}:{}:{:?}:{:?}",
+            event.id,
+            self.caps.join(","),
+            self.authority,
+            self.scope
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would drop caps {:?} on pid {pid} ({:?}) for {}s under {:?} ({})",
+                self.caps,
+                self.scope,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = DropCapsRequest {
+            pid,
+            caps: self.caps.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            idempotency_key,
+        };
+
+        match self.backend.drop_caps(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "dropped {} caps on pid {pid} ({reason}); handle={:?}",
+                receipt.caps_dropped, receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!("capability_drop backend: {e}"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2845,5 +2958,184 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "process_env_scrub");
+    }
+
+    // ---------------------------------- CapabilityDropAction (SDD-075 MS2)
+
+    use selfdef_capability_drop_backend::{
+        AuthorityTier as CdrTier, CapScope, InMemoryBackend as CdrInMemoryBackend,
+    };
+
+    #[tokio::test]
+    async fn capability_drop_dry_run_renders_caps_pid_and_scope() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Responder,
+            Duration::from_secs(900),
+            vec!["CAP_NET_ADMIN".into(), "CAP_SYS_PTRACE".into()],
+            CapScope::AllSets,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("CAP_NET_ADMIN"));
+        assert!(outcome.notes.contains("AllSets"));
+        assert!(outcome.notes.contains("900s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn capability_drop_applies_real_drop_when_not_dry_run() {
+        let backend = Arc::new(CdrInMemoryBackend::with_simulated_caps_held(2));
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Operator,
+            Duration::from_secs(60 * 60),
+            vec![
+                "CAP_NET_ADMIN".into(),
+                "CAP_SYS_PTRACE".into(),
+                "CAP_BPF".into(),
+            ],
+            CapScope::AllSets,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        // simulated 2 of 3 held → "dropped 2 caps"
+        assert!(outcome.notes.contains("dropped 2 caps"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn capability_drop_skipped_when_no_pid() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Responder,
+            Duration::from_secs(60),
+            vec!["CAP_NET_ADMIN".into()],
+            CapScope::AllSets,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn capability_drop_skipped_when_no_caps_configured() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Operator,
+            Duration::from_secs(60),
+            vec![], // empty
+            CapScope::AllSets,
+            "test",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn capability_drop_rejects_typo_in_action_config() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Operator,
+            Duration::from_secs(60),
+            vec!["CAP_NET_ADMIN".into(), "CAP_FROBNICATE".into()],
+            CapScope::AllSets,
+            "typo-test",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("unknown cap in action config must error pre-roundtrip");
+        let ActionError::Exec(msg) = &err else {
+            panic!("expected Exec error, got {err:?}");
+        };
+        assert!(msg.contains("CAP_FROBNICATE"), "got: {msg}");
+    }
+
+    #[tokio::test]
+    async fn capability_drop_propagates_authority_insufficient() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            vec!["CAP_NET_ADMIN".into()],
+            CapScope::AllSets,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn capability_drop_pid_one_refused() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Operator,
+            Duration::from_secs(60),
+            vec!["CAP_NET_ADMIN".into()],
+            CapScope::AllSets,
+            "test",
+        );
+        let err = action
+            .execute(&finding_with_pid(1), false)
+            .await
+            .expect_err("pid 1 (init) must be refused");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn capability_drop_redundant_yields_redundant_handle() {
+        let backend = Arc::new(CdrInMemoryBackend::with_simulated_caps_held(0));
+        let action = CapabilityDropAction::new(
+            backend.clone(),
+            CdrTier::Operator,
+            Duration::from_secs(60),
+            vec!["CAP_NET_ADMIN".into()],
+            CapScope::AllSets,
+            "stale-awareness",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(9090), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("Redundant"));
+        assert!(outcome.notes.contains("dropped 0 caps"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[test]
+    fn capability_drop_action_name_is_stable_string() {
+        let backend = Arc::new(CdrInMemoryBackend::new());
+        let action = CapabilityDropAction::new(
+            backend,
+            CdrTier::Responder,
+            Duration::from_secs(60),
+            vec!["CAP_NET_ADMIN".into()],
+            CapScope::AllSets,
+            "x",
+        );
+        assert_eq!(action.name(), "capability_drop");
     }
 }
