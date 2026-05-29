@@ -30,10 +30,13 @@ pub mod backpressure_driver;
 pub mod config;
 pub mod dcgm;
 pub mod decision_audit;
+pub mod driver_replay;
 pub mod human_gate;
 pub mod ocsf_emitter;
 pub mod prometheus_exporter;
 pub mod psi;
+
+pub use decision_audit::DriverAuditError;
 
 use std::fs;
 use std::io::Write;
