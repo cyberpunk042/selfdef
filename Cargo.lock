@@ -6272,6 +6272,7 @@ dependencies = [
  "selfdef-bus",
  "selfdef-core",
  "selfdef-mfa-grant-revocation-backend",
+ "selfdef-netns-isolation-backend",
  "selfdef-notifier",
  "selfdef-process-quarantine-backend",
  "selfdef-session-revocation-backend",
