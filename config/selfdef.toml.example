@@ -453,6 +453,20 @@ tcp_addr = ""                                # e.g. "127.0.0.1:8443"
 token_file = "/etc/selfdef/api.token"
 control_token_file = ""                      # e.g. "/etc/selfdef/api-control.token"
 
+# MS022 SSE subscriber-quota caps. The daemon enforces these on every
+# /v1/events/stream connect via SubscriberGuard::try_acquire — over-cap
+# requests get HTTP 429. The cap state is exposed at /metrics as 6
+# Prometheus gauges (selfdef_sse_subscribers_*) that sovereign-os
+# alerts + Grafana panel consume.
+#
+# Defaults are conservative — most deployments don't need to tune
+# these. See docs/operator/ms022-sse-subscriber-quota.md for the
+# raise-vs-leak diagnosis decision tree.
+#
+# Unset / 0 / commented → compiled defaults: 64 global, 8 per-token.
+# max_sse_subscribers           = 128
+# max_sse_subscribers_per_token = 16
+
 # Optional TLS for the TCP transport.
 #   - cert_path + key_path empty → plain HTTP over TCP (bearer-token only).
 #   - cert_path + key_path set   → TLS.
