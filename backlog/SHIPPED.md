@@ -231,6 +231,17 @@ The codebase carries substantial production state from prior development. This s
 |---|---|
 | Module | `modules/vpn-bridge/` |
 
+### MS019 — Security threat model
+
+| Surface | Shipped artifact |
+|---|---|
+| Operator-facing threat model | `SECURITY.md` — 17 sections covering assets, adversaries, trust assumptions, per-layer mitigations (build & supply chain / process / configuration & rules / storage / notification / tamper detection / four-watchdog set / API surface / policy surface), Hardening checklist for AI-machine deployment, known gaps tracker, vulnerability reporting channel. Linked from `README.md` security section |
+| SDD reference | `docs/sdd/004-security-threat-model.md` — 27 F-findings (F-2026/F-2027 numbered registry), 6 decisions (D-1 three new asset rows / D-2 new adversary class / D-3 two new mitigation layers / D-4 extended known-gaps / D-5 operator-facing hardening sidebar / D-6 doc mirror), implementation-status tracker, design alternatives considered (Alt-A inline / Alt-B new section / Alt-C hybrid recommended), test plan, rollout/migration notes, risks, follow-up findings |
+| Four-watchdog IPS spine cross-ref | `SECURITY.md` `#### Four-watchdog set (IPS spine, MS046+MS047+MS044+MS048)` section anchors the threat-model coverage of selfdef's IPS spine in the layered mitigations — MS046 (process watchdog) / MS047 (perimeter engine) / MS044 (tamper-detection watchdog) / MS048 (config watchdog). The four-watchdog coherence harness (`scripts/test/coherence.sh` 13-layer test gate in CI) closes the loop between the SDD threat model and the shipped runtime spine |
+| Signing-runbook + threat-model bridge | `docs/dev/signing.md` — referenced from `SECURITY.md` as the operator-runbook half of the threat-model section on detection-rule integrity. Closes the gap between the threat-model assertion ("rule signing prevents unsigned-rule loading") and the operator-side keys/rotation workflow |
+| Threat-model integration tests | `crates/selfdef-correlator/tests/signed_rules.rs` — locks the rule-signing detection-side invariant (the threat-model's principal storage-layer mitigation). Sister tests in `crates/selfdef-signing/src/lib.rs` lock the verify-only signing semantics. Cross-cutting reference in `crates/selfdef-doc-manifest/src/lib.rs` ties shipped doc-files to SECURITY.md sections for drift catch |
+| Pre-existing F-finding registry | The 27 F-2026/F-2027 findings in `docs/sdd/004-security-threat-model.md` represent a tracked-gap audit-cycle log distinct from the catalogued R-rows. F-finding closure happens in adjacent milestones (e.g. F-2027-018 closure landed in MS043 doctor `SELFDEF_DOCTOR_AGENT_GUARD_CONFIG` env override, F-2027-045 follow-up findings tracked in the SDD appendix) — the threat-model registry is the production-shipped tracker, not the catalogue R-rows |
+
 ### MS020 — Test contract (L1–L5 layered harness)
 
 | Surface | Shipped artifact |
