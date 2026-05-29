@@ -1,0 +1,47 @@
+[Unit]
+Description=Selfdef — emit nftables + conntrack textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-nftables-textfile.sh
+# Runs every 60s. Surfaces nftables ruleset state (tables/chains/
+# rules counts) + conntrack table fill-rate. Pairs with fail2ban
+# (13th sibling): fail2ban acts in-process; nftables is the
+# actual kernel packet-filter enforcing those bans.
+#
+# 14th sibling observer. Same R171 hardening BUT requires
+# CAP_NET_ADMIN to invoke `nft list ruleset` — documented
+# exception to the otherwise-no-caps pattern.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+# Required for `nft list ruleset`; conntrack metrics come from
+# /proc and need no caps.
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+Environment=SELFDEF_NFTABLES_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-nftables.prom
+ExecStart=/usr/share/selfdef/selfdef-nftables-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/sbin /usr/share/selfdef /var/lib/selfdef /proc/sys/net/netfilter
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# PrivateNetwork=false required for nft list ruleset (netlink to kernel).
+PrivateNetwork=false
