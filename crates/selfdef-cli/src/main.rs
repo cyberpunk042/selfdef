@@ -1857,6 +1857,34 @@ enum DashboardPrefsAction {
         /// New value for the field.
         value: String,
     },
+    /// MS043 UX batch 21 — define + persist a new operator-named
+    /// custom preset. Client-side pre-validates (name format,
+    /// non-collision with builtins, enum membership) before round-trip.
+    AddCustomPreset {
+        /// Machine-readable name. Must match `^[a-z0-9-]{3,32}$`
+        /// and must not collide with any builtin preset.
+        name: String,
+        /// Operator-readable label (1..=64 chars).
+        label: String,
+        /// Comma-separated section IDs to hide (empty string = none).
+        #[arg(long, default_value = "")]
+        hidden_panels: String,
+        /// Refresh rate: fast | normal | slow | paused.
+        #[arg(long, default_value = "normal")]
+        refresh_rate: String,
+        /// Active tab: one of the 8 SDD-056 tabs + "all" pseudo.
+        #[arg(long, default_value = "all")]
+        active_tab: String,
+    },
+    /// MS043 UX batch 21 — remove a custom preset. Falls back to
+    /// "default" for active_preset if the deleted name was active.
+    DeleteCustomPreset {
+        /// Name of the custom preset to remove.
+        name: String,
+    },
+    /// MS043 UX batch 21 — list operator-defined custom presets.
+    /// Builtin presets are discoverable via `selfdefctl dashboards`.
+    ListCustomPresets,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -4260,6 +4288,28 @@ async fn main() -> Result<()> {
             let exit = match action {
                 Some(DashboardPrefsAction::Set { field, value }) => {
                     dashboard_prefs::run_set(&field, &value).context("dashboard-prefs set")?
+                }
+                Some(DashboardPrefsAction::AddCustomPreset {
+                    name,
+                    label,
+                    hidden_panels,
+                    refresh_rate,
+                    active_tab,
+                }) => dashboard_prefs::run_add_custom_preset(
+                    &name,
+                    &label,
+                    &hidden_panels,
+                    &refresh_rate,
+                    &active_tab,
+                )
+                .context("dashboard-prefs add-custom-preset")?,
+                Some(DashboardPrefsAction::DeleteCustomPreset { name }) => {
+                    dashboard_prefs::run_delete_custom_preset(&name)
+                        .context("dashboard-prefs delete-custom-preset")?
+                }
+                Some(DashboardPrefsAction::ListCustomPresets) => {
+                    dashboard_prefs::run_list_custom_presets(json)
+                        .context("dashboard-prefs list-custom-presets")?
                 }
                 Some(DashboardPrefsAction::Show) | None => {
                     dashboard_prefs::run_show(json).context("dashboard-prefs show")?
