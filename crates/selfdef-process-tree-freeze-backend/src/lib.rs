@@ -257,3 +257,237 @@ impl ProcessTreeFreezeBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-072 MS5a state-journal adapter) ───────────────
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: ProcessTreeHandle,
+    root_pid: i32,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    scope: TreeScope,
+    include_self: bool,
+    frozen_pid_count: usize,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingTreeThaw>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+    simulated_frozen_pid_count: Mutex<usize>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, ProcessTreeFreezeError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            ProcessTreeFreezeError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-thaws.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+            simulated_frozen_pid_count: Mutex::new(1),
+        })
+    }
+
+    pub fn with_simulated_tree_size(
+        state_dir: impl Into<PathBuf>,
+        size: usize,
+    ) -> Result<Self, ProcessTreeFreezeError> {
+        let b = Self::open(state_dir)?;
+        *b.simulated_frozen_pid_count.lock().unwrap() = size;
+        Ok(b)
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let ProcessTreeHandle::Active(k) = &e.handle;
+                (k.clone(), e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingTreeThaw> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingTreeThaw> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let ProcessTreeHandle::Active(k) = &p.handle;
+                (k.clone(), p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), ProcessTreeFreezeError> {
+        let parent = target.parent().ok_or_else(|| {
+            ProcessTreeFreezeError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            ProcessTreeFreezeError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            ProcessTreeFreezeError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), ProcessTreeFreezeError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec).map_err(|e| {
+            ProcessTreeFreezeError::BackendUnreachable(format!("serialize active: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingTreeThaw> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec).map_err(|e| {
+            ProcessTreeFreezeError::BackendUnreachable(format!("serialize pending: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("pending-thaws.json"), &pending_bytes)?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl ProcessTreeFreezeBackend for FsBackend {
+    async fn freeze_tree(
+        &self,
+        req: FreezeTreeRequest,
+    ) -> Result<FreezeTreeReceipt, ProcessTreeFreezeError> {
+        validate(&req)?;
+        let frozen_pid_count = *self.simulated_frozen_pid_count.lock().unwrap();
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: ProcessTreeHandle::Active(key.clone()),
+                    root_pid: req.root_pid,
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    scope: req.scope,
+                    include_self: req.include_self,
+                    frozen_pid_count,
+                })
+                .handle
+                .clone();
+            let ProcessTreeHandle::Active(k) = &handle;
+            if req.authority == AuthorityTier::Responder {
+                state.pending.insert(
+                    k.clone(),
+                    PendingTreeThaw {
+                        handle: handle.clone(),
+                        root_pid: req.root_pid,
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        scope: req.scope,
+                        frozen_pid_count,
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(FreezeTreeReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+            frozen_pid_count,
+        })
+    }
+
+    async fn thaw_tree(
+        &self,
+        handle: ProcessTreeHandle,
+    ) -> Result<ThawReceipt, ProcessTreeFreezeError> {
+        let (thawed, snapshot) = {
+            let ProcessTreeHandle::Active(key) = &handle;
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(key);
+            let thawed = state.active.remove(key).is_some();
+            (thawed, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(ThawReceipt { thawed })
+    }
+
+    async fn pending_thaws(&self) -> Vec<PendingTreeThaw> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingTreeThaw> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_thaw_decided(&self, handle: &ProcessTreeHandle) -> bool {
+        let (removed, snapshot) = {
+            let ProcessTreeHandle::Active(key) = handle;
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
