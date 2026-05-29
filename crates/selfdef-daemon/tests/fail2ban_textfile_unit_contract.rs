@@ -8,15 +8,12 @@
 
 const SERVICE_UNIT: &str =
     include_str!("../../../packaging/systemd/selfdef-fail2ban-textfile.service");
-const TIMER_UNIT: &str =
-    include_str!("../../../packaging/systemd/selfdef-fail2ban-textfile.timer");
+const TIMER_UNIT: &str = include_str!("../../../packaging/systemd/selfdef-fail2ban-textfile.timer");
 const WRAPPER: &str = include_str!("../../../packaging/scripts/selfdef-fail2ban-textfile.sh");
 
 #[test]
 fn service_invokes_the_wrapper_at_canonical_path() {
-    assert!(
-        SERVICE_UNIT.contains("ExecStart=/usr/share/selfdef/selfdef-fail2ban-textfile.sh")
-    );
+    assert!(SERVICE_UNIT.contains("ExecStart=/usr/share/selfdef/selfdef-fail2ban-textfile.sh"));
 }
 
 #[test]
