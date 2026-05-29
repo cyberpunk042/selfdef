@@ -6677,6 +6677,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-socket-fd-revocation-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-source-attribution-policy"
 version = "0.1.0"
 dependencies = [
