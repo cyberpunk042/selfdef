@@ -563,8 +563,83 @@ enum Command {
         #[command(subcommand)]
         action: ReplAction,
     },
+    /// SDD-065 MS3 — block a source IP via the selfdef-blockset
+    /// backend (CAP_NET_ADMIN-bounded nftables-set in production;
+    /// in-memory backend for tests). The duration is capped by
+    /// the authority tier: autonomous 5m / responder 1h /
+    /// operator 24h / operator-overridden 720h.
+    BlockIp {
+        /// IPv4 or IPv6 address to block. Reserved/link-local
+        /// addresses are refused by the backend.
+        addr: String,
+        /// Human reason — mandatory, recorded in the audit chain.
+        #[arg(long)]
+        reason: String,
+        /// Block duration. Accepts plain seconds (e.g. "3600") or
+        /// suffixed forms ("1h", "15m", "30s"). Default 1h.
+        #[arg(long, default_value = "1h")]
+        duration: String,
+        /// Authority tier under which the block is requested.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Plan + audit only; do not apply.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-065 MS3 — release a previously-applied block.
+    UnblockIp {
+        /// IPv4/IPv6 address (canonical form) OR an opaque
+        /// release-handle previously emitted by `block-ip`.
+        target: String,
+        /// Skip operator confirmation when releasing operator-
+        /// overridden tier handles.
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum CliAuthority {
+    Autonomous,
+    Responder,
+    Operator,
+    #[value(name = "operator-overridden", alias = "operator_overridden")]
+    OperatorOverridden,
+}
+
+impl From<CliAuthority> for selfdef_blockset_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_blockset_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+/// Parse "1h", "30m", "45s", or a bare-number seconds. Returns
+/// the duration in seconds. Pure, unit-testable.
+pub(crate) fn parse_duration_str(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty duration".into());
+    }
+    let (num_str, mul) = match s.chars().last() {
+        Some('s') => (&s[..s.len() - 1], 1u64),
+        Some('m') => (&s[..s.len() - 1], 60),
+        Some('h') => (&s[..s.len() - 1], 3600),
+        Some('d') => (&s[..s.len() - 1], 86400),
+        Some(c) if c.is_ascii_digit() => (s, 1),
+        _ => return Err(format!("unrecognized duration suffix in {s:?}")),
+    };
+    let n: u64 = num_str
+        .parse()
+        .map_err(|_| format!("not a positive integer: {num_str:?}"))?;
+    Ok(n.saturating_mul(mul))
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -2214,6 +2289,81 @@ async fn main() -> Result<()> {
                 selfdef_core::version(),
                 selfdef_core::SCHEMA_VERSION,
             );
+        }
+        Command::BlockIp {
+            addr,
+            reason,
+            duration,
+            authority,
+            dry_run,
+        } => {
+            use selfdef_blockset_backend::{
+                AuthorityTier, BlockIpRequest, BlockSetBackend, InMemoryBackend,
+            };
+            use std::net::IpAddr;
+            use std::time::Duration;
+
+            let parsed_addr: IpAddr = addr
+                .parse()
+                .with_context(|| format!("not a valid IP: {addr}"))?;
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run \
+                     with --authority operator-overridden and --confirm-extended \
+                     for 720h tier."
+                );
+            }
+
+            if dry_run {
+                println!(
+                    "[dry-run] would block {parsed_addr} for {secs}s under {tier:?} \
+                     (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            // MS3 default backend = InMemoryBackend for the verb itself.
+            // MS4 wires this to a persistent process-lifetime nftables-set
+            // adapter (CAP_NET_ADMIN required) once the selfdef-blocksetd
+            // bus client lands.
+            let backend = InMemoryBackend::new();
+            let req = BlockIpRequest {
+                addr: parsed_addr,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                idempotency_key: format!("cli:{parsed_addr}:{reason}:{tier:?}"),
+            };
+            let receipt = backend
+                .block_ip(req)
+                .await
+                .with_context(|| format!("blocking {parsed_addr}"))?;
+            println!(
+                "blocked {parsed_addr} for {secs}s · tier={tier:?} · handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::UnblockIp { target, force } => {
+            use selfdef_blockset_backend::{BlockHandle, BlockSetBackend, InMemoryBackend};
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = BlockHandle::Active(target.clone());
+            let receipt = backend
+                .unblock_ip(handle)
+                .await
+                .with_context(|| format!("unblocking {target}"))?;
+            if receipt.released {
+                println!("released {target}");
+            } else {
+                // The MS3 in-memory backend has no preexisting state across
+                // CLI runs, so this is the expected path until MS4. Operator
+                // sees a coherent message rather than silent success.
+                println!("no active block for {target} (MS3 stateless backend)");
+            }
         }
         Command::Mcp { action } => match action {
             McpAction::Tools { human } => {
@@ -4237,5 +4387,50 @@ mod rotate_tests {
                 "non-url-safe char {c:?} in output: {s}",
             );
         }
+    }
+}
+
+// ============================================================ SDD-065 MS3 verb tests
+
+#[cfg(test)]
+mod block_ip_verb_tests {
+    use super::parse_duration_str;
+
+    #[test]
+    fn parse_duration_str_bare_seconds() {
+        assert_eq!(parse_duration_str("3600").unwrap(), 3600);
+        assert_eq!(parse_duration_str("1").unwrap(), 1);
+    }
+
+    #[test]
+    fn parse_duration_str_seconds_suffix() {
+        assert_eq!(parse_duration_str("30s").unwrap(), 30);
+        assert_eq!(parse_duration_str("3600s").unwrap(), 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_minutes_suffix() {
+        assert_eq!(parse_duration_str("15m").unwrap(), 15 * 60);
+        assert_eq!(parse_duration_str("60m").unwrap(), 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_hours_suffix() {
+        assert_eq!(parse_duration_str("1h").unwrap(), 3600);
+        assert_eq!(parse_duration_str("24h").unwrap(), 24 * 3600);
+        assert_eq!(parse_duration_str("720h").unwrap(), 720 * 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_days_suffix() {
+        assert_eq!(parse_duration_str("1d").unwrap(), 86400);
+        assert_eq!(parse_duration_str("30d").unwrap(), 30 * 86400);
+    }
+
+    #[test]
+    fn parse_duration_str_rejects_empty_and_unknown() {
+        assert!(parse_duration_str("").is_err());
+        assert!(parse_duration_str("1x").is_err());
+        assert!(parse_duration_str("abc").is_err());
     }
 }

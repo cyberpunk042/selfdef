@@ -2854,6 +2854,7 @@ dependencies = [
  "minisign",
  "reqwest",
  "selfdef-api",
+ "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-cli-mirror",
  "selfdef-commit-authority",
