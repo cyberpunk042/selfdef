@@ -1217,6 +1217,98 @@ impl Action for MountBindingUnbindAction {
     }
 }
 
+// ====================================================== ProcessTreeFreezeAction
+//
+// SDD-072 MS2 — wires the ProcessTreeFreezeBackend trait into the
+// Action runner. Eighth primitive in the IPS octet; pairs with
+// SDD-066 single-pid freeze + SDD-070 netns-isolation at the
+// kernel-containment family.
+
+use selfdef_process_tree_freeze_backend::{
+    AuthorityTier as PtfTier, FreezeTreeRequest, ProcessTreeFreezeBackend, TreeScope,
+};
+
+pub struct ProcessTreeFreezeAction {
+    backend: Arc<dyn ProcessTreeFreezeBackend>,
+    authority: PtfTier,
+    duration: std::time::Duration,
+    scope: TreeScope,
+    include_self: bool,
+    reason_prefix: String,
+}
+
+impl ProcessTreeFreezeAction {
+    pub fn new(
+        backend: Arc<dyn ProcessTreeFreezeBackend>,
+        authority: PtfTier,
+        duration: std::time::Duration,
+        scope: TreeScope,
+        include_self: bool,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            scope,
+            include_self,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for ProcessTreeFreezeAction {
+    fn name(&self) -> &'static str {
+        "process_tree_freeze"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(root_pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid in event — process_tree_freeze skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{root_pid}:{}:{:?}:{:?}",
+            event.id, self.authority, self.scope
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would freeze tree root={root_pid} ({:?}, include_self={}) for {}s under {:?} ({})",
+                self.scope,
+                self.include_self,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = FreezeTreeRequest {
+            root_pid,
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            include_self: self.include_self,
+            idempotency_key,
+        };
+
+        match self.backend.freeze_tree(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "froze tree root={root_pid} ({reason}); frozen_pid_count={}; handle={:?}",
+                receipt.frozen_pid_count, receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "process_tree_freeze backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2109,5 +2201,137 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "mount_binding_unbind");
+    }
+
+    // ---------------------------- ProcessTreeFreezeAction (SDD-072 MS2)
+
+    use selfdef_process_tree_freeze_backend::{
+        AuthorityTier as PtfTier, InMemoryBackend as PtfInMemoryBackend, TreeScope,
+    };
+
+    #[tokio::test]
+    async fn process_tree_freeze_dry_run_renders_root_pid_and_scope() {
+        let backend = Arc::new(PtfInMemoryBackend::new());
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Responder,
+            Duration::from_secs(900),
+            TreeScope::Descendants,
+            true,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("900s"));
+        assert!(outcome.notes.contains("Descendants"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn process_tree_freeze_applies_real_freeze_when_not_dry_run() {
+        let backend = Arc::new(PtfInMemoryBackend::with_simulated_tree_size(5));
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Operator,
+            Duration::from_secs(60 * 60),
+            TreeScope::Descendants,
+            true,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        assert!(outcome.notes.contains("frozen_pid_count=5"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn process_tree_freeze_skipped_when_no_pid() {
+        let backend = Arc::new(PtfInMemoryBackend::new());
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Responder,
+            Duration::from_secs(60),
+            TreeScope::Descendants,
+            true,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn process_tree_freeze_propagates_authority_insufficient() {
+        let backend = Arc::new(PtfInMemoryBackend::new());
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            TreeScope::Descendants,
+            true,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn process_tree_freeze_pid_one_refused() {
+        let backend = Arc::new(PtfInMemoryBackend::new());
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Operator,
+            Duration::from_secs(60),
+            TreeScope::Descendants,
+            true,
+            "test",
+        );
+        let err = action
+            .execute(&finding_with_pid(1), false)
+            .await
+            .expect_err("pid 1 (init) must be refused");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn process_tree_freeze_scoped_strict_descendants() {
+        let backend = Arc::new(PtfInMemoryBackend::with_simulated_tree_size(20));
+        let action = ProcessTreeFreezeAction::new(
+            backend.clone(),
+            PtfTier::Operator,
+            Duration::from_secs(60),
+            TreeScope::StrictDescendants,
+            true,
+            "fork-bomb",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(9090), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("frozen_pid_count=20"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[test]
+    fn process_tree_freeze_action_name_is_stable_string() {
+        let backend = Arc::new(PtfInMemoryBackend::new());
+        let action = ProcessTreeFreezeAction::new(
+            backend,
+            PtfTier::Responder,
+            Duration::from_secs(60),
+            TreeScope::Descendants,
+            true,
+            "x",
+        );
+        assert_eq!(action.name(), "process_tree_freeze");
     }
 }
