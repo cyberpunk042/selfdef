@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-077 AppArmor live profile-pivot observer (every 60s, 31st sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-apparmor-profile-pivots-textfile.sh
+# OnBootSec=930s — distinct from the prior 30 siblings (60s..900s).
+
+[Timer]
+OnBootSec=930s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-apparmor-profile-pivots-textfile.service
+
+[Install]
+WantedBy=timers.target

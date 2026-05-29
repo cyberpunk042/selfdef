@@ -1,0 +1,36 @@
+[Unit]
+Description=Selfdef — emit SDD-077 AppArmor live profile-pivot state textfile
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-apparmor-profile-pivots-textfile.sh
+# 31st sibling. Extends the IPS-duodectet observability set → tridectet
+# at the MAC (Mandatory Access Control) policy axis.
+# Standard 12-clause R171 hardening.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_APPARMOR_PROFILE_PIVOTS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-apparmor-profile-pivots.prom
+Environment=SELFDEF_APPARMOR_PROFILE_PIVOTS_STATE_DIR=/var/lib/selfdef/apparmor-profile-pivots
+ExecStart=/usr/share/selfdef/selfdef-apparmor-profile-pivots-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
