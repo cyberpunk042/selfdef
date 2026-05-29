@@ -1010,8 +1010,77 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-077 MS3 — pivot a running pid's AppArmor profile into
+    /// a stricter pre-loaded profile (e.g. selfdef-quarantine-strict,
+    /// selfdef-observe-only). Process keeps running; all subsequent
+    /// syscalls are evaluated against the new profile's rules.
+    ///
+    /// Duration capped by tier — autonomous 5m, responder 30m,
+    /// operator 4h, operator-overridden 24h. The pivot is one-way
+    /// at the kernel level: restore-profile is queue-clear + audit
+    /// only; operator must restart the process to recover the
+    /// original profile.
+    PivotProfile {
+        /// Target pid.
+        pid: i32,
+        /// Target profile (or hat, with `--scope hat`).
+        #[arg(long)]
+        to: String,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-pivoted duration. Default 30m (capped by tier).
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Scope: profile (default; full aa_change_profile) | hat
+        /// (aa_change_hat within current profile).
+        #[arg(long, default_value = "profile")]
+        scope: String,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-077 MS3 — clear an active AppArmor profile-pivot handle.
+    /// Note: AppArmor profile pivots are one-way at the kernel level —
+    /// the operator must restart the process under its original profile
+    /// via the init system to recover. restore-profile is queue-clear +
+    /// audit only.
+    RestoreProfile {
+        /// Profile-pivot handle or idempotency-key text.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_apparmor_profile_pivot_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_apparmor_profile_pivot_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_pivot_scope(
+    s: &str,
+) -> Result<selfdef_apparmor_profile_pivot_backend::PivotScope, String> {
+    use selfdef_apparmor_profile_pivot_backend::PivotScope;
+    match s.trim().to_lowercase().as_str() {
+        "profile" | "prof" => Ok(PivotScope::Profile),
+        "hat" => Ok(PivotScope::Hat),
+        other => Err(format!(
+            "unknown pivot scope {other:?}; expected one of: profile, hat"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_kernel_keyring_eviction_backend::AuthorityTier {
@@ -4060,6 +4129,98 @@ async fn main() -> Result<()> {
                      note: kernel-keyring evictions are irreversible — operator must re-acquire \
                      the key via upstream auth flow (KDC / PAM / NFS server); restore is \
                      queue-clear + audit only)"
+                );
+            }
+        }
+        Command::PivotProfile {
+            pid,
+            to,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_apparmor_profile_pivot_backend::{
+                ApparmorProfilePivotBackend, AuthorityTier, InMemoryBackend, PivotProfileRequest,
+                validate_profile_name,
+            };
+            use std::time::Duration;
+
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            if pid <= 1 {
+                anyhow::bail!(
+                    "pid {pid} sacrosanct (init / kernel-thread); pivot refused per SDD-077 C-3"
+                );
+            }
+            if validate_profile_name(&to).is_none() {
+                anyhow::bail!(
+                    "invalid profile name {to:?}; must match ^[a-zA-Z0-9_./-]{{1,256}}$ \
+                     (no shell metachars, no newlines, no overlong names)"
+                );
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 24h tier."
+                );
+            }
+            let scope_parsed = parse_pivot_scope(&scope)
+                .map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would pivot pid {pid} into AppArmor profile {to:?} ({scope_parsed:?}) \
+                     for {secs}s under {tier:?} (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = PivotProfileRequest {
+                pid,
+                target_profile: to.clone(),
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: scope_parsed,
+                idempotency_key: format!("cli:{pid}:{to}:{reason}:{tier:?}:{scope_parsed:?}"),
+            };
+            let receipt = backend
+                .pivot_profile(req)
+                .await
+                .with_context(|| format!("pivoting pid {pid} into profile {to}"))?;
+            println!(
+                "pivoted pid {pid} into AppArmor profile {to:?} for {secs}s · scope={scope_parsed:?} · \
+                 tier={tier:?} · was={:?} · handle={:?}",
+                receipt.original_profile, receipt.handle
+            );
+        }
+        Command::RestoreProfile { target, force } => {
+            use selfdef_apparmor_profile_pivot_backend::{
+                ApparmorProfilePivotBackend, ApparmorProfilePivotHandle, InMemoryBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = ApparmorProfilePivotHandle::Active(target.clone());
+            let receipt = backend
+                .restore_profile(handle)
+                .await
+                .with_context(|| format!("restoring apparmor-profile-pivot {target}"))?;
+            if receipt.cleared {
+                println!("cleared apparmor-profile-pivot handle {target}");
+            } else {
+                println!(
+                    "no active apparmor-profile-pivot for {target} (MS3 stateless backend; \
+                     note: AppArmor profile pivots are one-way at the kernel level — operator \
+                     must restart the process under its original profile via the init system; \
+                     restore is queue-clear + audit only)"
                 );
             }
         }

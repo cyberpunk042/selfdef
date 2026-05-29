@@ -2892,6 +2892,7 @@ dependencies = [
  "reqwest",
  "selfdef-api",
  "selfdef-api-token-revocation-backend",
+ "selfdef-apparmor-profile-pivot-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-capability-drop-backend",

@@ -47,6 +47,7 @@ selfdef-socket-fd-revocation-backend = { path = "../selfdef-socket-fd-revocation
 selfdef-process-env-scrub-backend = { path = "../selfdef-process-env-scrub-backend" }
 selfdef-capability-drop-backend = { path = "../selfdef-capability-drop-backend" }
 selfdef-kernel-keyring-eviction-backend = { path = "../selfdef-kernel-keyring-eviction-backend" }
+selfdef-apparmor-profile-pivot-backend = { path = "../selfdef-apparmor-profile-pivot-backend" }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }
