@@ -233,3 +233,222 @@ impl SessionRevocationBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-067 MS5a production adapter) ───────────────
+//
+// Same atomic-JSON pattern as SDD-068/069 FsBackend. Writes
+// active.json + pending-restores.json under a state-dir
+// (default /var/lib/selfdef/revocations) which the 21st-sibling
+// textfile observer scrapes.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: RevocationHandle,
+    user: String,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    scope: RevocationScope,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingRestore>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, RevocationError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            RevocationError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-restores.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+        })
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let RevocationHandle::Active(k) = &e.handle;
+                (k.clone(), e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingRestore> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingRestore> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let RevocationHandle::Active(k) = &p.handle;
+                (k.clone(), p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), RevocationError> {
+        let parent = target.parent().ok_or_else(|| {
+            RevocationError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            RevocationError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            RevocationError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), RevocationError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec)
+            .map_err(|e| RevocationError::BackendUnreachable(format!("serialize active: {e}")))?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingRestore> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec)
+            .map_err(|e| RevocationError::BackendUnreachable(format!("serialize pending: {e}")))?;
+        Self::write_atomic(
+            &self.state_dir.join("pending-restores.json"),
+            &pending_bytes,
+        )?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl SessionRevocationBackend for FsBackend {
+    async fn revoke_sessions(&self, req: RevokeRequest) -> Result<RevokeReceipt, RevocationError> {
+        validate(&req)?;
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: RevocationHandle::Active(key.clone()),
+                    user: req.user.clone(),
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    scope: req.scope,
+                })
+                .handle
+                .clone();
+            if req.authority == AuthorityTier::Responder {
+                let RevocationHandle::Active(k) = &handle;
+                state.pending.insert(
+                    k.clone(),
+                    PendingRestore {
+                        handle: handle.clone(),
+                        user: req.user.clone(),
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        scope: req.scope,
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(RevokeReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+        })
+    }
+
+    async fn restore_sessions(
+        &self,
+        handle: RevocationHandle,
+    ) -> Result<RestoreReceipt, RevocationError> {
+        let (removed, snapshot) = {
+            let RevocationHandle::Active(key) = &handle;
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(key);
+            let removed = state.active.remove(key).is_some();
+            (removed, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(RestoreReceipt { restored: removed })
+    }
+
+    async fn pending_restores(&self) -> Vec<PendingRestore> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingRestore> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_restore_decided(&self, handle: &RevocationHandle) -> bool {
+        let (removed, snapshot) = {
+            let RevocationHandle::Active(key) = handle;
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
