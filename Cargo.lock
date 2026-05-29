@@ -2877,6 +2877,7 @@ dependencies = [
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
+ "selfdef-process-quarantine-backend",
  "selfdef-profile-authority-gate",
  "selfdef-responder",
  "selfdef-rules-registry",

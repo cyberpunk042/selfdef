@@ -36,6 +36,7 @@ selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-blockset-backend = { path = "../selfdef-blockset-backend" }
+selfdef-process-quarantine-backend = { path = "../selfdef-process-quarantine-backend" }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }

@@ -596,8 +596,79 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-066 MS3 — freeze a process via cgroupv2-freezer (or
+    /// SIGSTOP fallback). The duration is capped by the authority
+    /// tier per SDD-066 §4: autonomous 2m / responder 15m /
+    /// operator 1h / operator-overridden 24h. Pre-snapshot of
+    /// /proc/<pid> ships separately.
+    QuarantinePid {
+        /// Target pid (must be > 0).
+        pid: i32,
+        /// Human reason — mandatory, recorded in the audit chain.
+        #[arg(long)]
+        reason: String,
+        /// Freeze duration. Accepts plain seconds or suffixed
+        /// forms ("5m", "1h", "30s"). Default 5m.
+        #[arg(long, default_value = "5m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Freeze only this pid (default) or the entire process
+        /// subtree (subject to cgroup-boundary constraint).
+        #[arg(long, value_enum, default_value_t = CliFreezeScope::Process)]
+        scope: CliFreezeScope,
+        /// Plan + audit only; do not apply.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-066 MS3 — release a quarantined process.
+    ReleasePid {
+        /// Target pid or release handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// SDD-066 MS3 — terminate a quarantined process instead of
+    /// releasing it. Useful when operator decides the post-freeze
+    /// forensic capture is sufficient and the process is hostile.
+    KillQuarantined {
+        /// Target pid or release handle.
+        target: String,
+        /// Signal: TERM (default; graceful) or KILL (force).
+        #[arg(long, default_value = "TERM")]
+        signal: String,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum CliFreezeScope {
+    Process,
+    Tree,
+}
+
+impl From<CliFreezeScope> for selfdef_process_quarantine_backend::FreezeScope {
+    fn from(c: CliFreezeScope) -> Self {
+        use selfdef_process_quarantine_backend::FreezeScope as F;
+        match c {
+            CliFreezeScope::Process => F::Process,
+            CliFreezeScope::Tree => F::Tree,
+        }
+    }
+}
+
+impl From<CliAuthority> for selfdef_process_quarantine_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_process_quarantine_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -2364,6 +2435,92 @@ async fn main() -> Result<()> {
                 // sees a coherent message rather than silent success.
                 println!("no active block for {target} (MS3 stateless backend)");
             }
+        }
+        Command::QuarantinePid {
+            pid,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_process_quarantine_backend::{
+                AuthorityTier, FreezeRequest, InMemoryBackend, ProcessQuarantineBackend,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 24h tier."
+                );
+            }
+            let fscope: selfdef_process_quarantine_backend::FreezeScope = scope.into();
+
+            if dry_run {
+                println!(
+                    "[dry-run] would freeze pid {pid} ({fscope:?}) for {secs}s under {tier:?} \
+                     (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = FreezeRequest {
+                pid,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: fscope,
+                idempotency_key: format!("cli:{pid}:{reason}:{tier:?}:{fscope:?}"),
+            };
+            let receipt = backend
+                .freeze_process(req)
+                .await
+                .with_context(|| format!("freezing pid {pid}"))?;
+            println!(
+                "frozen pid {pid} for {secs}s · scope={fscope:?} · tier={tier:?} · \
+                 handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::ReleasePid { target, force } => {
+            use selfdef_process_quarantine_backend::{
+                InMemoryBackend, ProcessQuarantineBackend, QuarantineHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = QuarantineHandle::Active(target.clone());
+            let receipt = backend
+                .release_process(handle)
+                .await
+                .with_context(|| format!("releasing {target}"))?;
+            if receipt.released {
+                println!("released {target}");
+            } else {
+                println!("no active quarantine for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::KillQuarantined { target, signal } => {
+            // MS3 stub — the kill action lands when MS2 audit-log
+            // ledger wires handle→pid lookup. For now we surface
+            // a coherent operator message.
+            let signal = signal.to_uppercase();
+            if !matches!(signal.as_str(), "TERM" | "KILL") {
+                anyhow::bail!("--signal must be TERM or KILL, got {signal}");
+            }
+            println!(
+                "[MS3 stub] would send SIG{signal} to quarantined target {target} \
+                 (MS4 wires handle→pid ledger; until then, use `kill -{signal} <pid>` \
+                 directly after observing the audit log)"
+            );
         }
         Command::Mcp { action } => match action {
             McpAction::Tools { human } => {
