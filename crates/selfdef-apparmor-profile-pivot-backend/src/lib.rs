@@ -63,7 +63,7 @@ pub fn validate_profile_name(name: &str) -> Option<&str> {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PivotProfileRequest {
-    pub pid: u32,
+    pub pid: i32,
     /// AppArmor profile (or hat, when `scope==Hat`) to pivot into.
     pub target_profile: String,
     pub reason: String,
@@ -109,7 +109,7 @@ pub struct RestoreReceipt {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PendingProfileRestore {
     pub handle: ApparmorProfilePivotHandle,
-    pub pid: u32,
+    pub pid: i32,
     pub target_profile: String,
     pub original_profile: String,
     pub original_authority: AuthorityTier,
@@ -140,7 +140,7 @@ pub enum ApparmorProfilePivotError {
     /// Target pid is sacrosanct (pid 1, kernel thread, or
     /// selfdefd itself). No syscall attempted.
     #[error("pid {pid} sacrosanct: {reason}")]
-    PidSacrosanct { pid: u32, reason: String },
+    PidSacrosanct { pid: i32, reason: String },
     /// `/sys/kernel/security/apparmor/` not mounted —
     /// enforcement substrate absent.
     #[error("enforcement offline: {0}")]
@@ -234,11 +234,15 @@ impl InMemoryBackend {
     }
 }
 
-fn check_sacrosanct(pid: u32) -> Result<(), ApparmorProfilePivotError> {
-    if pid == 0 || pid == 1 {
+fn check_sacrosanct(pid: i32) -> Result<(), ApparmorProfilePivotError> {
+    if pid <= 1 {
         return Err(ApparmorProfilePivotError::PidSacrosanct {
             pid,
-            reason: "init / kernel-thread pid".to_string(),
+            reason: if pid < 0 {
+                "negative pid invalid".to_string()
+            } else {
+                "init / kernel-thread pid".to_string()
+            },
         });
     }
     Ok(())
@@ -406,7 +410,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct ActiveEntry {
     handle: ApparmorProfilePivotHandle,
-    pid: u32,
+    pid: i32,
     target_profile: String,
     original_profile: String,
     original_reason: String,

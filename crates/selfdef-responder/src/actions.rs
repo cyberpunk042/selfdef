@@ -1749,6 +1749,102 @@ impl Action for KernelKeyringEvictionAction {
     }
 }
 
+// =================================================== ApparmorProfilePivotAction
+//
+// SDD-077 MS2 — wires the ApparmorProfilePivotBackend trait into
+// the Action runner. Thirteenth primitive in the IPS tridectet;
+// pairs with SDD-075 capability-drop at the privilege/policy
+// family — caps strip kernel-side capabilities; profile pivot
+// narrows the AppArmor MAC profile that further gates path /
+// network / cap usage within the remaining capability set.
+
+use selfdef_apparmor_profile_pivot_backend::{
+    ApparmorProfilePivotBackend, AuthorityTier as AppTier, PivotProfileRequest, PivotScope,
+};
+
+pub struct ApparmorProfilePivotAction {
+    backend: Arc<dyn ApparmorProfilePivotBackend>,
+    authority: AppTier,
+    duration: std::time::Duration,
+    /// AppArmor profile (or hat) to pivot the target pid into.
+    /// Typically `selfdef-observe-only` / `selfdef-quarantine-strict`
+    /// from action config — admin-loaded out-of-band.
+    target_profile: String,
+    scope: PivotScope,
+    reason_prefix: String,
+}
+
+impl ApparmorProfilePivotAction {
+    pub fn new(
+        backend: Arc<dyn ApparmorProfilePivotBackend>,
+        authority: AppTier,
+        duration: std::time::Duration,
+        target_profile: impl Into<String>,
+        scope: PivotScope,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            target_profile: target_profile.into(),
+            scope,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for ApparmorProfilePivotAction {
+    fn name(&self) -> &'static str {
+        "apparmor_profile_pivot"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid in event — apparmor_profile_pivot skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{pid}:{}:{}:{:?}:{:?}",
+            event.id, self.target_profile, self.authority, self.scope
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would pivot pid {pid} into AppArmor profile {:?} ({:?}) for {}s under {:?} ({reason})",
+                self.target_profile,
+                self.scope,
+                self.duration.as_secs(),
+                self.authority
+            )));
+        }
+
+        let req = PivotProfileRequest {
+            pid,
+            target_profile: self.target_profile.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            scope: self.scope,
+            idempotency_key,
+        };
+
+        match self.backend.pivot_profile(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "pivoted pid {pid} into AppArmor profile {:?} (was {:?}); handle={:?}; {reason}",
+                self.target_profile, receipt.original_profile, receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "apparmor_profile_pivot backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3389,5 +3485,162 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "kernel_keyring_eviction");
+    }
+
+    // ---------------------------- ApparmorProfilePivotAction (SDD-077 MS2)
+
+    use selfdef_apparmor_profile_pivot_backend::{
+        AuthorityTier as AppTier, InMemoryBackend as AppInMemoryBackend, PivotScope,
+    };
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_dry_run_renders_profile_and_scope() {
+        let backend = Arc::new(AppInMemoryBackend::with_original_profile("firefox"));
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Operator,
+            Duration::from_secs(900),
+            "selfdef-quarantine-strict",
+            PivotScope::Profile,
+            "test-operator",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("selfdef-quarantine-strict"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_pivots_the_pid() {
+        let backend = Arc::new(AppInMemoryBackend::with_original_profile("nginx"));
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Operator,
+            Duration::from_secs(60 * 30),
+            "selfdef-quarantine-strict",
+            PivotScope::Profile,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        assert!(outcome.notes.contains("nginx"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_skipped_without_pid() {
+        let backend = Arc::new(AppInMemoryBackend::new());
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Operator,
+            Duration::from_secs(60),
+            "selfdef-quarantine-strict",
+            PivotScope::Profile,
+            "test",
+        );
+        let outcome = action
+            .execute(&finding_without_pid(), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_no_target_when_forced() {
+        let backend = Arc::new(
+            AppInMemoryBackend::with_original_profile("firefox").force_no_target(),
+        );
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Autonomous,
+            Duration::from_secs(60),
+            "selfdef-observe-only",
+            PivotScope::Profile,
+            "test",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(matches!(
+            outcome.status,
+            Status::Success
+        ));
+        assert!(outcome.notes.contains("NoTarget"));
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_invalid_profile_propagates_error() {
+        let backend = Arc::new(AppInMemoryBackend::new());
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Operator,
+            Duration::from_secs(60),
+            "name with space",
+            PivotScope::Profile,
+            "typo",
+        );
+        let err = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .expect_err("invalid profile name must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_propagates_authority_insufficient() {
+        let backend = Arc::new(AppInMemoryBackend::new());
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            "selfdef-observe-only",
+            PivotScope::Profile,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn apparmor_profile_pivot_sacrosanct_pid_propagates() {
+        let backend = Arc::new(AppInMemoryBackend::new());
+        let action = ApparmorProfilePivotAction::new(
+            backend.clone(),
+            AppTier::Operator,
+            Duration::from_secs(60),
+            "selfdef-quarantine-strict",
+            PivotScope::Profile,
+            "x",
+        );
+        let err = action
+            .execute(&finding_with_pid(1), false)
+            .await
+            .expect_err("pid 1 must propagate as error");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[test]
+    fn apparmor_profile_pivot_action_name_is_stable_string() {
+        let backend = Arc::new(AppInMemoryBackend::new());
+        let action = ApparmorProfilePivotAction::new(
+            backend,
+            AppTier::Responder,
+            Duration::from_secs(60),
+            "selfdef-quarantine-strict",
+            PivotScope::Profile,
+            "x",
+        );
+        assert_eq!(action.name(), "apparmor_profile_pivot");
     }
 }

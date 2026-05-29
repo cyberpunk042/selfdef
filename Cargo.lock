@@ -6351,6 +6351,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "selfdef-api-token-revocation-backend",
+ "selfdef-apparmor-profile-pivot-backend",
  "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-capability-drop-backend",

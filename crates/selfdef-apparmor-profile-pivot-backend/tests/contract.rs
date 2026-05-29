@@ -9,7 +9,7 @@ use selfdef_apparmor_profile_pivot_backend::{
 };
 
 fn req(
-    pid: u32,
+    pid: i32,
     profile: &str,
     dur_secs: u64,
     tier: AuthorityTier,
