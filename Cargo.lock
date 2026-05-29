@@ -6342,6 +6342,7 @@ dependencies = [
  "selfdef-bus",
  "selfdef-capability-drop-backend",
  "selfdef-core",
+ "selfdef-kernel-keyring-eviction-backend",
  "selfdef-mfa-grant-revocation-backend",
  "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
