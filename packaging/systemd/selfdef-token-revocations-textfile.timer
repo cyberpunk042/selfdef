@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic SDD-068 token-revocation observer (every 60s, 22nd sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-token-revocations-textfile.sh
+# 22nd sibling observer timer. OnBootSec=660s — distinct from the
+# prior 21 siblings (60s through 630s).
+
+[Timer]
+OnBootSec=660s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-token-revocations-textfile.service
+
+[Install]
+WantedBy=timers.target
