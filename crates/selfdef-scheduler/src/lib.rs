@@ -27,6 +27,7 @@
 #![warn(missing_docs)]
 
 pub mod dcgm;
+pub mod human_gate;
 pub mod psi;
 
 use std::fs;
