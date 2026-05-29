@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-076 kernel-keyring-eviction observer (every 60s, 30th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-kernel-keyring-evictions-textfile.sh
+# OnBootSec=900s — distinct from the prior 29 siblings (60s..870s).
+
+[Timer]
+OnBootSec=900s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-kernel-keyring-evictions-textfile.service
+
+[Install]
+WantedBy=timers.target
