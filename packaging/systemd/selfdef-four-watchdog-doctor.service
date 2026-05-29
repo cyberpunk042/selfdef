@@ -1,0 +1,58 @@
+[Unit]
+Description=Selfdef — emit four-watchdog textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/SECURITY.md
+# Runs every 60s via the companion timer. Writes a node_exporter-
+# compatible textfile so the 9 four-watchdog alert classifications
+# (MS046 process / MS047 perimeter / MS044 tamper / MS048 config)
+# surface as Prometheus gauges alongside the existing M060 cli-mirror
+# and m060-chain doctor textfiles.
+#
+# Reads selfdefctl alerts --json — uses the SAME predicates the daemon
+# already serves at /v1/alerts, so the textfile cannot drift from the
+# in-daemon classifier. Writes the textfile atomically (tempfile +
+# rename) so node_exporter never sees a half-written file.
+#
+# Honest-offline: when selfdefd is unreachable OR selfdefctl is not on
+# PATH, emit a sentinel gauge (selfdef_four_watchdog_textfile_emit_
+# failed = 1) so monitoring can distinguish "no data" from "all
+# healthy" — never silently produces zeroed-out gauges.
+#
+# Sister unit to selfdef-cli-mirror-doctor.service +
+# selfdef-m060-doctor.service — same hardening posture + same
+# SuccessExitStatus contract for the 3-tier severity ladder.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_FOUR_WATCHDOG_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-four-watchdog.prom
+ExecStart=/usr/share/selfdef/four-watchdog-textfile.sh
+
+# The wrapper exits 0/1/2 mirroring the worst-severity ladder. Treat
+# 1+2 as success-with-data per the doctor convention so systemd doesn't
+# misclassify a fired alert as "unit failed".
+SuccessExitStatus=0 1 2
+TimeoutStartSec=30s
+
+# Hardening — same posture as the sibling -doctor services. The
+# wrapper needs PATH access to selfdefctl + jq.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# selfdefctl talks to the daemon via UNIX socket, no outbound network.
+PrivateNetwork=true
