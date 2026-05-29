@@ -74,6 +74,7 @@ mod rules_registry;
 mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
+mod sse_quota_metrics;
 mod state;
 mod storage;
 mod tool_authority;

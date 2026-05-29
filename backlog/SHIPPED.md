@@ -359,7 +359,14 @@ The codebase carries substantial production state from prior development. This s
 
 ## Other catalogued milestones — production-shipped state TBD
 
-MS008 (selfdef-on-SAIN-01 integration), MS012 (perimeter coexistence — superseded by MS047 perimeter engine SDD-028), MS019 (security threat model — see `SECURITY.md` + `docs/sdd/004-security-threat-model.md` for prior-shipped surface), MS022 (per-token SSE subscriber quota — TBD per `crates/selfdef-api/` SSE-quota gating audit) — these milestones have catalogue rows but the audit hasn't been mapped to this file yet. Many are likely already shipped via related crates (e.g., MS019 is documented in shipped SDD); future audits append per-milestone rows above.
+MS008 (selfdef-on-SAIN-01 integration), MS012 (perimeter coexistence — superseded by MS047 perimeter engine SDD-028), MS019 (security threat model — see `SECURITY.md` + `docs/sdd/004-security-threat-model.md` for prior-shipped surface) — these milestones have catalogue rows but the audit hasn't been mapped to this file yet. Many are likely already shipped via related crates (e.g., MS019 is documented in shipped SDD); future audits append per-milestone rows above.
+
+### MS022 — Per-token SSE subscriber quota
+
+| Surface | Shipped artifact |
+|---|---|
+| SSE cap enforcement (pre-session) | `crates/selfdef-api/src/handlers.rs` SubscriberGuard with `MAX_SSE_SUBSCRIBERS` (default 64 global) + `MAX_SSE_SUBSCRIBERS_PER_TOKEN` (default 8 per token) constants + operator-tunable `SseCaps` (`[api].max_sse_subscribers{,_per_token}`); per-token map in `ApiState::sse_subscribers_per_token` with atomic counters + automatic decrement on subscriber drop |
+| **NEW this commit** SSE quota Prometheus exposition | `crates/selfdef-api/src/sse_quota_metrics.rs` — 6 gauge series exposed at `/metrics`: `selfdef_sse_subscribers_global_active`, `_global_cap`, `_global_saturation` (active/cap ratio for alert thresholds), `_per_token_cap`, `_per_token{token_fp=…}`, `_per_token_saturated` (count of tokens at-or-above cap). Privacy-preserving 8-hex-char token fingerprint label; deterministic sort for stable scrape diffs. 9 unit tests covering escape contract, default + override caps, saturation math, per-token saturated rollup, sorted output |
 
 The above per-milestone shipped audit is a SAMPLED snapshot, not a complete production-state survey. The trajectory: each commit that lands or audit cycle that runs appends rows here so the SHIPPED column converges toward the catalogue total as the multi-year project progresses.
 
