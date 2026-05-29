@@ -2893,6 +2893,7 @@ dependencies = [
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
  "selfdef-process-quarantine-backend",
+ "selfdef-process-tree-freeze-backend",
  "selfdef-profile-authority-gate",
  "selfdef-responder",
  "selfdef-rules-registry",
@@ -5933,6 +5934,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-process-tree-freeze-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-profile-authority-gate"
 version = "0.1.0"
 dependencies = [
@@ -6289,6 +6301,7 @@ dependencies = [
  "selfdef-netns-isolation-backend",
  "selfdef-notifier",
  "selfdef-process-quarantine-backend",
+ "selfdef-process-tree-freeze-backend",
  "selfdef-session-revocation-backend",
  "serde",
  "serde_json",

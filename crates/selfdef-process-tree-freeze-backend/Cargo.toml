@@ -1,0 +1,16 @@
+[package]
+name = "selfdef-process-tree-freeze-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-072 MS1 — process-tree freeze backend trait + in-memory test impl. Eighth IPS enforcement primitive extending septet → octet at the process-graph containment axis (pairs with SDD-066 single-pid freeze + SDD-070 netns-isolation)."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+serde_json = { workspace = true }
