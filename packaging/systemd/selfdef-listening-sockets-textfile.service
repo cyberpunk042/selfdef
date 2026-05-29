@@ -1,0 +1,40 @@
+[Unit]
+Description=Selfdef — emit listening-sockets textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-listening-sockets-textfile.sh
+# Runs every 60s via the companion timer. Surfaces per-protocol
+# LISTEN socket counts so operators detect unexpected listeners
+# (post-exploitation backdoors, accidentally-exposed dev servers,
+# drifted-from-baseline daemons).
+#
+# 9th sibling observer. Same R171 hardening + atomic-write
+# convention as the 8 existing observers.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_LISTENING_SOCKETS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-listening-sockets.prom
+ExecStart=/usr/share/selfdef/selfdef-listening-sockets-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

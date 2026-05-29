@@ -1,0 +1,17 @@
+[Unit]
+Description=Selfdef — periodic listening-sockets observer (every 60s, 9th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-listening-sockets-textfile.sh
+# 9th sibling observer timer. Sibling cadences: cli-mirror 60s,
+# m060 70s, four-watchdog 90s, modules 120s, daemon-process 150s,
+# apparmor 180s, auth-events 210s, systemd-units 240s,
+# listening-sockets 270s — 9 distinct boot offsets.
+
+[Timer]
+OnBootSec=270s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-listening-sockets-textfile.service
+
+[Install]
+WantedBy=timers.target
