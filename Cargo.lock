@@ -6589,6 +6589,8 @@ dependencies = [
 name = "selfdef-scheduler"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "http-body-util",
  "minisign",
  "selfdef-scheduler-mirror",
  "selfdef-signing",
@@ -6597,7 +6599,9 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "toml",
+ "tower",
 ]
 
 [[package]]

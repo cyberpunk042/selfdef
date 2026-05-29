@@ -26,13 +26,20 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 sha2 = { workspace = true }
 toml = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true, features = ["sync", "fs"] }
 selfdef-scheduler-mirror = { workspace = true }
 selfdef-signing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 # M01172 policy-signer tests need to generate real minisign keypairs
 # + signatures at runtime so we test against the actual algorithm,
 # not a hardcoded fixture pair. Same dev-dep approach selfdef-cli
 # uses for cli_keys_verify_dir.rs + cli_modules_apply.rs.
 minisign = "0.9"
+# M01165 http_api tests use Tower's ServiceExt::oneshot to drive
+# the router without a real TCP listener.
+tower = { workspace = true, features = ["util"] }
+http-body-util = "0.1"

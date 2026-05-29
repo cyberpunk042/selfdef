@@ -31,6 +31,7 @@ pub mod config;
 pub mod dcgm;
 pub mod decision_audit;
 pub mod driver_replay;
+pub mod http_api;
 pub mod human_gate;
 pub mod ocsf_emitter;
 pub mod policy_signer;
