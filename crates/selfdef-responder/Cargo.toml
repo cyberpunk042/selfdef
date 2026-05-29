@@ -19,6 +19,7 @@ selfdef-notifier = { workspace = true }
 selfdef-blockset-backend = { path = "../selfdef-blockset-backend" }
 selfdef-process-quarantine-backend = { path = "../selfdef-process-quarantine-backend" }
 selfdef-session-revocation-backend = { path = "../selfdef-session-revocation-backend" }
+selfdef-api-token-revocation-backend = { path = "../selfdef-api-token-revocation-backend" }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 async-trait = { workspace = true }
