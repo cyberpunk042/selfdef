@@ -251,3 +251,230 @@ impl MountBindingUnbindBackend for InMemoryBackend {
         state.pending.remove(key).is_some()
     }
 }
+
+// ─────────────── FsBackend (SDD-071 MS5a state-journal adapter) ───────────────
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct ActiveEntry {
+    handle: MountBindingHandle,
+    mount_point: String,
+    original_reason: String,
+    original_authority: AuthorityTier,
+    scope: UnbindScope,
+    lazy: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+struct FsState {
+    #[serde(default)]
+    active: HashMap<String, ActiveEntry>,
+    #[serde(default)]
+    pending: HashMap<String, PendingMountRebind>,
+}
+
+pub struct FsBackend {
+    state_dir: PathBuf,
+    inner: Mutex<FsState>,
+}
+
+impl FsBackend {
+    pub fn open(state_dir: impl Into<PathBuf>) -> Result<Self, MountBindingUnbindError> {
+        let state_dir = state_dir.into();
+        fs::create_dir_all(&state_dir).map_err(|e| {
+            MountBindingUnbindError::BackendUnreachable(format!(
+                "create_dir_all {}: {e}",
+                state_dir.display()
+            ))
+        })?;
+        let active = Self::load_active(&state_dir.join("active.json"));
+        let pending = Self::load_pending(&state_dir.join("pending-rebinds.json"));
+        Ok(Self {
+            state_dir,
+            inner: Mutex::new(FsState { active, pending }),
+        })
+    }
+
+    fn load_active(path: &Path) -> HashMap<String, ActiveEntry> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<ActiveEntry> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|e| {
+                let k = match &e.handle {
+                    MountBindingHandle::Active(k) | MountBindingHandle::Contested(k) => k.clone(),
+                };
+                (k, e)
+            })
+            .collect()
+    }
+
+    fn load_pending(path: &Path) -> HashMap<String, PendingMountRebind> {
+        let bytes = match fs::read(path) {
+            Ok(b) => b,
+            Err(_) => return HashMap::new(),
+        };
+        let vec: Vec<PendingMountRebind> = match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return HashMap::new(),
+        };
+        vec.into_iter()
+            .map(|p| {
+                let k = match &p.handle {
+                    MountBindingHandle::Active(k) | MountBindingHandle::Contested(k) => k.clone(),
+                };
+                (k, p)
+            })
+            .collect()
+    }
+
+    fn write_atomic(target: &Path, bytes: &[u8]) -> Result<(), MountBindingUnbindError> {
+        let parent = target.parent().ok_or_else(|| {
+            MountBindingUnbindError::BackendUnreachable(format!(
+                "target {} has no parent",
+                target.display()
+            ))
+        })?;
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let pid = std::process::id();
+        let tmp = parent.join(format!(
+            "{}.tmp.{pid}.{nanos}",
+            target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("state")
+        ));
+        fs::write(&tmp, bytes).map_err(|e| {
+            MountBindingUnbindError::BackendUnreachable(format!("write {}: {e}", tmp.display()))
+        })?;
+        fs::rename(&tmp, target).map_err(|e| {
+            let _ = fs::remove_file(&tmp);
+            MountBindingUnbindError::BackendUnreachable(format!(
+                "rename {} -> {}: {e}",
+                tmp.display(),
+                target.display()
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn persist(&self, state: &FsState) -> Result<(), MountBindingUnbindError> {
+        let active_vec: Vec<&ActiveEntry> = state.active.values().collect();
+        let active_bytes = serde_json::to_vec_pretty(&active_vec).map_err(|e| {
+            MountBindingUnbindError::BackendUnreachable(format!("serialize active: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("active.json"), &active_bytes)?;
+        let pending_vec: Vec<&PendingMountRebind> = state.pending.values().collect();
+        let pending_bytes = serde_json::to_vec_pretty(&pending_vec).map_err(|e| {
+            MountBindingUnbindError::BackendUnreachable(format!("serialize pending: {e}"))
+        })?;
+        Self::write_atomic(&self.state_dir.join("pending-rebinds.json"), &pending_bytes)?;
+        Ok(())
+    }
+
+    pub async fn active_count(&self) -> usize {
+        self.inner.lock().unwrap().active.len()
+    }
+
+    pub fn state_dir(&self) -> &Path {
+        &self.state_dir
+    }
+}
+
+#[async_trait]
+impl MountBindingUnbindBackend for FsBackend {
+    async fn unbind_mount(
+        &self,
+        req: UnbindMountRequest,
+    ) -> Result<UnbindMountReceipt, MountBindingUnbindError> {
+        validate(&req)?;
+        let snapshot = {
+            let mut state = self.inner.lock().unwrap();
+            let key = req.idempotency_key.clone();
+            let handle = state
+                .active
+                .entry(key.clone())
+                .or_insert(ActiveEntry {
+                    handle: MountBindingHandle::Active(key.clone()),
+                    mount_point: req.mount_point.clone(),
+                    original_reason: req.reason.clone(),
+                    original_authority: req.authority,
+                    scope: req.scope.clone(),
+                    lazy: req.lazy,
+                })
+                .handle
+                .clone();
+            if let MountBindingHandle::Active(k) = &handle
+                && req.authority == AuthorityTier::Responder
+            {
+                state.pending.insert(
+                    k.clone(),
+                    PendingMountRebind {
+                        handle: handle.clone(),
+                        mount_point: req.mount_point.clone(),
+                        original_authority: req.authority,
+                        original_reason: req.reason.clone(),
+                        seconds_remaining: req.duration.as_secs(),
+                        scope: req.scope.clone(),
+                    },
+                );
+            }
+            let active_count = state.active.len();
+            (handle, active_count, state.clone())
+        };
+        self.persist(&snapshot.2)?;
+        Ok(UnbindMountReceipt {
+            handle: snapshot.0,
+            active_count: snapshot.1,
+        })
+    }
+
+    async fn rebind_mount(
+        &self,
+        handle: MountBindingHandle,
+    ) -> Result<RebindReceipt, MountBindingUnbindError> {
+        let (rebound, snapshot) = {
+            let key = match &handle {
+                MountBindingHandle::Active(k) | MountBindingHandle::Contested(k) => k.clone(),
+            };
+            let mut state = self.inner.lock().unwrap();
+            state.pending.remove(&key);
+            let rebound = state.active.remove(&key).is_some();
+            (rebound, state.clone())
+        };
+        self.persist(&snapshot)?;
+        Ok(RebindReceipt { rebound })
+    }
+
+    async fn pending_rebinds(&self) -> Vec<PendingMountRebind> {
+        let state = self.inner.lock().unwrap();
+        let mut out: Vec<PendingMountRebind> = state.pending.values().cloned().collect();
+        out.sort_by_key(|p| p.seconds_remaining);
+        out
+    }
+
+    async fn mark_rebind_decided(&self, handle: &MountBindingHandle) -> bool {
+        let (removed, snapshot) = {
+            let key = match handle {
+                MountBindingHandle::Active(k) | MountBindingHandle::Contested(k) => k,
+            };
+            let mut state = self.inner.lock().unwrap();
+            let removed = state.pending.remove(key).is_some();
+            (removed, state.clone())
+        };
+        if removed {
+            let _ = self.persist(&snapshot);
+        }
+        removed
+    }
+}
