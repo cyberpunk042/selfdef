@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic kernel-modules observer (every 60s, 12th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-kernel-modules-textfile.sh
+# 12th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s/360s — 12 distinct boot offsets.
+
+[Timer]
+OnBootSec=360s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-kernel-modules-textfile.service
+
+[Install]
+WantedBy=timers.target
