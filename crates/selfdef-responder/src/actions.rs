@@ -1420,6 +1420,107 @@ impl Action for SocketFdRevocationAction {
     }
 }
 
+// ======================================================== ProcessEnvScrubAction
+//
+// SDD-074 MS2 — wires the ProcessEnvScrubBackend trait into the
+// Action runner. Tenth primitive in the IPS dectet; pairs with
+// SDD-068 token-revocation at the credential-axis family
+// (SDD-068 revokes server-side, SDD-074 scrubs client-side cache).
+
+use selfdef_process_env_scrub_backend::{
+    AuthorityTier as PesTier, ProcessEnvScrubBackend, ScrubEnvRequest, ScrubSignal as PesSignal,
+};
+
+pub struct ProcessEnvScrubAction {
+    backend: Arc<dyn ProcessEnvScrubBackend>,
+    authority: PesTier,
+    duration: std::time::Duration,
+    /// Static variable-name list — typically configured per-rule
+    /// (e.g. "AWS_SECRET_ACCESS_KEY,DB_PASSWORD"). Production
+    /// rules will populate this from event metadata too.
+    vars: Vec<String>,
+    signal: PesSignal,
+    reason_prefix: String,
+}
+
+impl ProcessEnvScrubAction {
+    pub fn new(
+        backend: Arc<dyn ProcessEnvScrubBackend>,
+        authority: PesTier,
+        duration: std::time::Duration,
+        vars: Vec<String>,
+        signal: PesSignal,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            vars,
+            signal,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+#[async_trait]
+impl Action for ProcessEnvScrubAction {
+    fn name(&self) -> &'static str {
+        "process_env_scrub"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some(pid) = pid_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid in event — process_env_scrub skipped",
+            ));
+        };
+        if self.vars.is_empty() {
+            return Ok(ActionOutcome::skipped(
+                "no vars configured on action — process_env_scrub skipped",
+            ));
+        }
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{pid}:{}:{}:{:?}:{:?}",
+            event.id,
+            self.vars.join(","),
+            self.authority,
+            self.signal
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would scrub vars {:?} on pid {pid} (signal={:?}) for {}s under {:?} ({})",
+                self.vars,
+                self.signal,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = ScrubEnvRequest {
+            pid,
+            vars: self.vars.clone(),
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            signal: self.signal,
+            idempotency_key,
+        };
+
+        match self.backend.scrub_env(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "scrubbed {} vars on pid {pid} ({reason}); handle={:?}",
+                receipt.vars_scrubbed, receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!("process_env_scrub backend: {e}"))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2590,5 +2691,159 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "socket_fd_revocation");
+    }
+
+    // ----------------------------- ProcessEnvScrubAction (SDD-074 MS2)
+
+    use selfdef_process_env_scrub_backend::{
+        AuthorityTier as PesTier, InMemoryBackend as PesInMemoryBackend, ScrubSignal,
+    };
+
+    #[tokio::test]
+    async fn process_env_scrub_dry_run_renders_vars_and_signal() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Responder,
+            Duration::from_secs(900),
+            vec!["AWS_SECRET_ACCESS_KEY".into(), "DB_PASSWORD".into()],
+            ScrubSignal::Sigusr2,
+            "test-responder",
+        );
+        let outcome = action.execute(&finding_with_pid(4321), true).await.unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("AWS_SECRET_ACCESS_KEY"));
+        assert!(outcome.notes.contains("Sigusr2"));
+        assert!(outcome.notes.contains("900s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_applies_real_scrub_when_not_dry_run() {
+        let backend = Arc::new(PesInMemoryBackend::with_simulated_vars_matched(2));
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Operator,
+            Duration::from_secs(60 * 60),
+            vec!["A".into(), "B".into(), "C".into()],
+            ScrubSignal::Sigusr2,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(7777), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        // 2 of 3 requested vars actually matched.
+        assert!(outcome.notes.contains("scrubbed 2 vars"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_skipped_when_no_pid() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Responder,
+            Duration::from_secs(60),
+            vec!["X".into()],
+            ScrubSignal::None,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_skipped_when_no_vars_configured() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Operator,
+            Duration::from_secs(60),
+            vec![], // empty
+            ScrubSignal::None,
+            "test",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_propagates_authority_insufficient() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Autonomous,
+            Duration::from_secs(60 * 60),
+            vec!["X".into()],
+            ScrubSignal::Sigusr2,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid(8888), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_pid_one_refused() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Operator,
+            Duration::from_secs(60),
+            vec!["X".into()],
+            ScrubSignal::None,
+            "test",
+        );
+        let err = action
+            .execute(&finding_with_pid(1), false)
+            .await
+            .expect_err("pid 1 (init) must be refused");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn process_env_scrub_no_match_yields_no_match_handle() {
+        let backend = Arc::new(PesInMemoryBackend::with_simulated_vars_matched(0));
+        let action = ProcessEnvScrubAction::new(
+            backend.clone(),
+            PesTier::Operator,
+            Duration::from_secs(60),
+            vec!["X".into()],
+            ScrubSignal::None,
+            "no-match",
+        );
+        let outcome = action
+            .execute(&finding_with_pid(9090), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("NoMatch"));
+        assert!(outcome.notes.contains("scrubbed 0 vars"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[test]
+    fn process_env_scrub_action_name_is_stable_string() {
+        let backend = Arc::new(PesInMemoryBackend::new());
+        let action = ProcessEnvScrubAction::new(
+            backend,
+            PesTier::Responder,
+            Duration::from_secs(60),
+            vec!["X".into()],
+            ScrubSignal::Sigusr2,
+            "x",
+        );
+        assert_eq!(action.name(), "process_env_scrub");
     }
 }

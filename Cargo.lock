@@ -6312,6 +6312,7 @@ dependencies = [
  "selfdef-mount-binding-unbind-backend",
  "selfdef-netns-isolation-backend",
  "selfdef-notifier",
+ "selfdef-process-env-scrub-backend",
  "selfdef-process-quarantine-backend",
  "selfdef-process-tree-freeze-backend",
  "selfdef-session-revocation-backend",
