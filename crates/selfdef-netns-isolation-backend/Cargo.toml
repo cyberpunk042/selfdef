@@ -1,0 +1,16 @@
+[package]
+name = "selfdef-netns-isolation-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-070 MS1 — network-namespace isolation backend trait + in-memory test impl. Sixth IPS enforcement primitive extending pentet → hexet at the kernel-containment axis (pairs with SDD-066 process-freeze)."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+serde_json = { workspace = true }
