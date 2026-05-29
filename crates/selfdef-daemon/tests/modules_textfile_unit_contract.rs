@@ -1,8 +1,8 @@
 //! selfdef-modules-textfile observer — contract test.
 //!
-//! Locks the shape of the new module-catalog observer unit + timer
-//! + wrapper shipped this commit. Sister to the existing M060
-//! cli-mirror, m060-chain, and four-watchdog doctor observer
+//! Locks the shape of the new module-catalog observer unit, timer,
+//! and wrapper shipped this commit. Sister to the existing M060
+//! cli-mirror plus m060-chain plus four-watchdog doctor observer
 //! contracts.
 //!
 //! The module catalog is a load-bearing IPS surface — operators need
