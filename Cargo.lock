@@ -6303,6 +6303,7 @@ dependencies = [
  "selfdef-process-quarantine-backend",
  "selfdef-process-tree-freeze-backend",
  "selfdef-session-revocation-backend",
+ "selfdef-socket-fd-revocation-backend",
  "serde",
  "serde_json",
  "tempfile",
