@@ -6589,7 +6589,9 @@ dependencies = [
 name = "selfdef-scheduler"
 version = "0.1.0"
 dependencies = [
+ "minisign",
  "selfdef-scheduler-mirror",
+ "selfdef-signing",
  "serde",
  "serde_json",
  "sha2",

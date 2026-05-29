@@ -27,6 +27,12 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 toml = { workspace = true }
 selfdef-scheduler-mirror = { workspace = true }
+selfdef-signing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+# M01172 policy-signer tests need to generate real minisign keypairs
+# + signatures at runtime so we test against the actual algorithm,
+# not a hardcoded fixture pair. Same dev-dep approach selfdef-cli
+# uses for cli_keys_verify_dir.rs + cli_modules_apply.rs.
+minisign = "0.9"
