@@ -30,6 +30,8 @@ const VALID_PRESETS: &[&str] = &[
     "incident-response",
     "inference",
     "inference-throughput",
+    "ips-dectet-incident",
+    "ips-dectet-overview",
     "mcp-debug",
     "mcp-tools",
     "models-lab",

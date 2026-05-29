@@ -2908,6 +2908,30 @@
       refreshRate: "fast",
       tab: "models",
     },
+    "ips-dectet-incident": {
+      label: "IPS dectet — incident drill-down",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "alerts-section",
+        "health-section",
+        "audit-chains-section",
+        "findings-section",
+        "modules-section",
+        "control-section",
+      ]),
+      refreshRate: "fast",
+      tab: "logs",
+    },
+    "ips-dectet-overview": {
+      label: "IPS dectet — enforcement overview",
+      hidden: setMinus(ALL_SECTION_IDS, [
+        "health-section",
+        "modules-section",
+        "alerts-section",
+        "flex-profile-section",
+      ]),
+      refreshRate: "normal",
+      tab: "profiles",
+    },
     "mcp-debug": {
       label: "MCP debug",
       hidden: setMinus(ALL_SECTION_IDS, [

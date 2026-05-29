@@ -1,8 +1,10 @@
 //! `GET /v1/dashboards` — operator-pull discovery surface for the
-//! 20 operator-named dashboard view presets shipped under MS043 UX
+//! 22 operator-named dashboard view presets shipped under MS043 UX
 //! batch 12 (PWA-side preset selector) + batch 13/14 (daemon-side
 //! persistence + sync) + batch 17 (5→20 expansion fulfilling the
-//! operator's verbatim "20 dashboards" target).
+//! operator's verbatim "20 dashboards" target) + batch 18 (+2 IPS-
+//! dectet presets bridging the SDD-065..074 enforcement work into
+//! the preset menu).
 //!
 //! Verbatim operator direction (2026-05-19, sacrosanct):
 //!
@@ -10,7 +12,7 @@
 //! >  be turned on and off and there are also a tons of modes and
 //! >  profiles."
 //!
-//! The dashboard is one PWA today; the 20 operator-named view presets
+//! The dashboard is one PWA today; the 22 operator-named view presets
 //! act as distinct dashboards within that PWA. This route makes the
 //! preset catalog discoverable so:
 //!   - CLI: `selfdefctl dashboards` lists them
@@ -132,6 +134,22 @@ const DASHBOARDS: &[DashboardEntry] = &[
         visible_panel_count: 5,
     },
     DashboardEntry {
+        name: "ips-dectet-incident",
+        label: "IPS dectet — incident drill-down",
+        description: "All 10 IPS-dectet enforcement primitives (SDD-065 blockset / 066 quarantine / 067 revocations / 068 token-revocations / 069 mfa-grant-revocations / 070 netns-isolations / 071 mount-bindings / 072 process-tree-freezes / 073 socket-fd-revocations / 074 env-scrubs) + composite health + alerts. Logs tab focus; fast refresh — for live incident response when one or more IPS primitives is actively engaged.",
+        active_tab: "logs",
+        refresh_rate: "fast",
+        visible_panel_count: 12,
+    },
+    DashboardEntry {
+        name: "ips-dectet-overview",
+        label: "IPS dectet — enforcement overview",
+        description: "Compact view of the IPS-dectet enforcement layer — 10 primitives' active/pending counts in rollup form + composite health. Profiles tab focus (or 'all' for full strip); normal refresh — operator-pull defensive-posture review without incident-mode urgency.",
+        active_tab: "profiles",
+        refresh_rate: "normal",
+        visible_panel_count: 11,
+    },
+    DashboardEntry {
         name: "mcp-debug",
         label: "MCP debug",
         description: "MCP tab focus + alerts + logs; normal refresh — diagnosing external client problems.",
@@ -235,7 +253,7 @@ pub(crate) async fn show() -> Json<DashboardsBody> {
         .collect();
     Json(DashboardsBody {
         count: dashboards.len(),
-        note: "20 operator-named view presets within the single PWA (5 original + 15 batch-17 expansion). Operator-pull deep-link: /dashboard/#preset=<name>. Distinct URL paths per dashboard is the Stage-2 arc; the 20 presets fulfill the operator's verbatim 'over 20 dashboards' target via the visibility+refresh+preset triad.",
+        note: "22 operator-named view presets within the single PWA (5 original + 15 batch-17 expansion + 2 batch-18 IPS-dectet presets bridging SDD-065..074 enforcement work). Operator-pull deep-link: /dashboard/#preset=<name>. Distinct URL paths per dashboard is the Stage-2 arc; the 22 presets fulfill the operator's verbatim 'over 20 dashboards' target via the visibility+refresh+preset triad.",
         dashboards,
     })
 }
@@ -245,8 +263,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dashboards_table_has_20_entries() {
-        assert_eq!(DASHBOARDS.len(), 20);
+    fn dashboards_table_has_22_entries() {
+        assert_eq!(DASHBOARDS.len(), 22);
     }
 
     #[test]
@@ -265,6 +283,8 @@ mod tests {
             "incident-response",
             "inference",
             "inference-throughput",
+            "ips-dectet-incident",
+            "ips-dectet-overview",
             "mcp-debug",
             "mcp-tools",
             "models-lab",
