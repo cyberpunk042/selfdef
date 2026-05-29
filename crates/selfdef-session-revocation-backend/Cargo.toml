@@ -3,14 +3,15 @@ name = "selfdef-session-revocation-backend"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-description = "SDD-067 MS1 — session-revocation backend trait + in-memory test impl. The LoginctlBackend production adapter ships in MS1b under the `loginctl-backend` feature; this crate hosts the contract + InMemoryBackend for hermetic tests."
+description = "SDD-067 MS1+MS5a — session-revocation backend trait + in-memory test impl + filesystem-backed production adapter (FsBackend) writing atomic JSON to /var/lib/selfdef/revocations/{active,pending-restores}.json for the 21st-sibling textfile observer."
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 async-trait = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
-serde_json = { workspace = true }
+tempfile = { workspace = true }
