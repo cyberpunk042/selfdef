@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-070 netns-isolation observer (every 60s, 24th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-netns-isolations-textfile.sh
+# OnBootSec=720s — distinct from the prior 23 siblings (60s..690s).
+
+[Timer]
+OnBootSec=720s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-netns-isolations-textfile.service
+
+[Install]
+WantedBy=timers.target
