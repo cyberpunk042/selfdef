@@ -1,0 +1,41 @@
+[Unit]
+Description=Selfdef — emit SDD-068 API/web-token revocation state textfile
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-token-revocations-textfile.sh
+# Runs every 60s. Surfaces SDD-068 token-revocation state. 22nd
+# sibling completes the IPS-quartet observability set (19th
+# blockset + 20th quarantine + 21st revocations + 22nd
+# token-revocations).
+#
+# Standard 12-clause R171 hardening (no CAP exception —
+# read-only JSON access).
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_TOKEN_REVOCATIONS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-token-revocations.prom
+Environment=SELFDEF_TOKEN_REVOCATIONS_STATE_DIR=/var/lib/selfdef/token-revocations
+ExecStart=/usr/share/selfdef/selfdef-token-revocations-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
