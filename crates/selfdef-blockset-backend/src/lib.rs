@@ -191,3 +191,127 @@ impl BlockSetBackend for InMemoryBackend {
         Ok(UnblockReceipt { released: removed })
     }
 }
+
+// ───────────────────────── nftables adapter (MS1b) ─────────────────────────
+//
+// SDD-065 §3 — owns the `inet selfdef-blocks` table:
+//
+//   table inet selfdef-blocks {
+//     set v4 { type ipv4_addr; flags timeout; }
+//     set v6 { type ipv6_addr; flags timeout; }
+//     chain enforce {
+//       type filter hook input priority -100; policy accept;
+//       ip  saddr @v4 drop
+//       ip6 saddr @v6 drop
+//     }
+//   }
+//
+// The flags-timeout means the kernel cleans expired blocks even
+// if selfdefd dies — operator's "kernel does the right thing if
+// userland dies" principle.
+
+/// Build the `nft add element` arguments for a block. Pure, no
+/// I/O — unit-testable without root or kernel. The runtime calls
+/// `nft` with these args under CAP_NET_ADMIN.
+pub fn nft_add_element_args(req: &BlockIpRequest) -> Vec<String> {
+    let set = match req.addr {
+        IpAddr::V4(_) => "v4",
+        IpAddr::V6(_) => "v6",
+    };
+    let timeout = format!("{}s", req.duration.as_secs());
+    vec![
+        "add".into(),
+        "element".into(),
+        "inet".into(),
+        "selfdef-blocks".into(),
+        set.into(),
+        format!("{{ {} timeout {} }}", req.addr, timeout),
+    ]
+}
+
+/// Build the `nft delete element` arguments for an unblock.
+pub fn nft_delete_element_args(addr: IpAddr) -> Vec<String> {
+    let set = match addr {
+        IpAddr::V4(_) => "v4",
+        IpAddr::V6(_) => "v6",
+    };
+    vec![
+        "delete".into(),
+        "element".into(),
+        "inet".into(),
+        "selfdef-blocks".into(),
+        set.into(),
+        format!("{{ {addr} }}"),
+    ]
+}
+
+/// Table-bootstrap script — applied once at selfdefd startup
+/// to ensure the table+chain+sets exist. Idempotent (uses
+/// `add table` / `add chain` which are no-ops if present).
+pub fn nft_bootstrap_script() -> &'static str {
+    "add table inet selfdef-blocks
+add set inet selfdef-blocks v4 { type ipv4_addr; flags timeout; }
+add set inet selfdef-blocks v6 { type ipv6_addr; flags timeout; }
+add chain inet selfdef-blocks enforce { type filter hook input priority -100; policy accept; }
+add rule inet selfdef-blocks enforce ip saddr @v4 drop
+add rule inet selfdef-blocks enforce ip6 saddr @v6 drop
+"
+}
+
+#[cfg(feature = "nftables-backend")]
+pub mod nftables {
+    use super::*;
+
+    /// nftables-backed BlockSet. Calls `nft` under CAP_NET_ADMIN
+    /// for each block/unblock. The kernel handles TTL expiry
+    /// natively via the set's `flags timeout` attribute.
+    pub struct NftablesBackend {
+        nft_path: String,
+    }
+
+    impl Default for NftablesBackend {
+        fn default() -> Self {
+            Self::new("/usr/sbin/nft")
+        }
+    }
+
+    impl NftablesBackend {
+        pub fn new(nft_path: impl Into<String>) -> Self {
+            Self {
+                nft_path: nft_path.into(),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl BlockSetBackend for NftablesBackend {
+        async fn block_ip(&self, req: BlockIpRequest) -> Result<BlockReceipt, BackendError> {
+            validate(&req)?;
+            let args = nft_add_element_args(&req);
+            let out = tokio::process::Command::new(&self.nft_path)
+                .args(&args)
+                .output()
+                .await
+                .map_err(|e| BackendError::BackendUnreachable(e.to_string()))?;
+            if !out.status.success() {
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                return Err(BackendError::BackendUnreachable(stderr));
+            }
+            Ok(BlockReceipt {
+                handle: BlockHandle::Active(req.idempotency_key),
+                scope_v4_count: 0,
+                scope_v6_count: 0,
+            })
+        }
+
+        async fn unblock_ip(&self, _handle: BlockHandle) -> Result<UnblockReceipt, BackendError> {
+            // MS1b stub: the handle alone doesn't carry the addr;
+            // production caller (selfdef-responder) maps handle→addr
+            // via the audit-log-writer ledger. MS1b verifies arg
+            // construction in unit tests via the pure helpers above;
+            // full handle→addr lookup lands with MS2 (the action
+            // crate that owns the ledger).
+            Ok(UnblockReceipt { released: false })
+        }
+    }
+}

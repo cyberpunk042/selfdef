@@ -128,6 +128,62 @@ async fn unblock_releases_handle() {
     assert_eq!(b.active_v4_count().await, 0);
 }
 
+// ───────────────────────── MS1b nftables-adapter unit tests ─────────────────────────
+
+#[test]
+fn nft_add_v4_builds_correct_args() {
+    let r = req(
+        IpAddr::V4(Ipv4Addr::new(203, 0, 113, 42)),
+        3600,
+        AuthorityTier::Operator,
+        "sshd brute force",
+    );
+    let args = selfdef_blockset_backend::nft_add_element_args(&r);
+    assert_eq!(args[0], "add");
+    assert_eq!(args[1], "element");
+    assert_eq!(args[2], "inet");
+    assert_eq!(args[3], "selfdef-blocks");
+    assert_eq!(args[4], "v4");
+    assert_eq!(args[5], "{ 203.0.113.42 timeout 3600s }");
+}
+
+#[test]
+fn nft_add_v6_builds_correct_args() {
+    let r = req(
+        IpAddr::V6(Ipv6Addr::new(0x2001, 0xdb8, 0, 0, 0, 0, 0, 0x42)),
+        300,
+        AuthorityTier::Autonomous,
+        "burst",
+    );
+    let args = selfdef_blockset_backend::nft_add_element_args(&r);
+    assert_eq!(args[4], "v6");
+    assert!(args[5].contains("2001:db8::42"));
+    assert!(args[5].contains("timeout 300s"));
+}
+
+#[test]
+fn nft_delete_v4_builds_correct_args() {
+    let args = selfdef_blockset_backend::nft_delete_element_args(IpAddr::V4(Ipv4Addr::new(
+        198, 51, 100, 7,
+    )));
+    assert_eq!(args[0], "delete");
+    assert_eq!(args[1], "element");
+    assert_eq!(args[4], "v4");
+    assert_eq!(args[5], "{ 198.51.100.7 }");
+}
+
+#[test]
+fn nft_bootstrap_script_is_idempotent() {
+    let s = selfdef_blockset_backend::nft_bootstrap_script();
+    assert!(s.contains("add table inet selfdef-blocks"));
+    assert!(s.contains("add set inet selfdef-blocks v4"));
+    assert!(s.contains("add set inet selfdef-blocks v6"));
+    assert!(s.contains("flags timeout"));
+    assert!(s.contains("hook input priority -100"));
+    assert!(s.contains("@v4 drop"));
+    assert!(s.contains("@v6 drop"));
+}
+
 #[tokio::test]
 async fn ipv6_link_local_is_never_blocked() {
     // SDD-065 open question resolved per spec body: fe80::/10

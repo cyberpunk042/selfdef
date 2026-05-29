@@ -2578,6 +2578,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-blockset-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-bloom-filter"
 version = "0.1.0"
 dependencies = [

@@ -6,10 +6,18 @@ rust-version = "1.88"
 description = "SDD-065 MS1 — IP-block backend trait + in-memory test impl. The nftables-set adapter ships in MS1b under a `nftables-backend` feature; this crate hosts the contract + a hermetic test implementation usable by selfdef-responder unit tests."
 license = "MIT OR Apache-2.0"
 
+[features]
+default = []
+# MS1b — real nftables-set adapter. Disabled by default so the
+# crate compiles and tests on hosts without nft / without
+# CAP_NET_ADMIN. Production builds enable this feature.
+nftables-backend = ["dep:tokio"]
+
 [dependencies]
 async-trait = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, optional = true, features = ["process"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt"] }
