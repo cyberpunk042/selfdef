@@ -55,9 +55,29 @@ struct DashboardPrefs {
     refresh_rate: String,
     #[serde(default)]
     active_preset: String,
+    /// MS043 UX batch 21 — mirror of the daemon-side custom_presets
+    /// field added in batch 19; the CLI now reads + mutates it via
+    /// `selfdefctl dashboard-prefs add-custom-preset` / `delete-custom-preset`.
+    #[serde(default)]
+    custom_presets: Vec<CustomPreset>,
     #[serde(default)]
     updated_at_ms: u64,
 }
+
+/// MS043 UX batch 21 — CLI-side mirror of the daemon CustomPreset shape.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub(crate) struct CustomPreset {
+    pub name: String,
+    pub label: String,
+    #[serde(default)]
+    pub hidden_panels: Vec<String>,
+    pub refresh_rate: String,
+    pub active_tab: String,
+}
+
+const VALID_TABS: &[&str] = &[
+    "all", "models", "modules", "profiles", "hardware", "network", "logs", "mcp", "repl",
+];
 
 fn fetch_endpoint() -> Result<String> {
     let socket =
@@ -261,5 +281,295 @@ pub(crate) fn run_set(field: &str, value: &str) -> Result<i32> {
         eprintln!("daemon rejected PUT: HTTP {code}");
         eprintln!("{response_body}");
         Ok(3)
+    }
+}
+
+// ───────────────── MS043 UX batch 21 — custom-preset CLI ─────────────────
+
+/// Client-side validators mirroring `selfdef-api::dashboard_prefs::validate_custom_preset`.
+/// Catches operator mistakes before the round-trip; the daemon does
+/// the authoritative validation server-side too (defense-in-depth).
+fn validate_custom_preset_cli(cp: &CustomPreset) -> Result<(), String> {
+    let n = cp.name.as_str();
+    if !(3..=32).contains(&n.len()) {
+        return Err(format!(
+            "custom preset name {n:?} length must be 3..=32 chars"
+        ));
+    }
+    if !n
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        return Err(format!("custom preset name {n:?} must match ^[a-z0-9-]+$"));
+    }
+    if n.starts_with('-') || n.ends_with('-') {
+        return Err(format!(
+            "custom preset name {n:?} must not start or end with '-'"
+        ));
+    }
+    if VALID_PRESETS.contains(&n) {
+        return Err(format!(
+            "custom preset name {n:?} collides with a builtin; choose a different name"
+        ));
+    }
+    if cp.label.is_empty() || cp.label.len() > 64 {
+        return Err(format!(
+            "custom preset {n:?} label must be 1..=64 chars (got {})",
+            cp.label.len()
+        ));
+    }
+    if !VALID_RATES.contains(&cp.refresh_rate.as_str()) {
+        return Err(format!(
+            "custom preset {n:?} has invalid refresh_rate {:?}; expected one of {:?}",
+            cp.refresh_rate, VALID_RATES
+        ));
+    }
+    if !VALID_TABS.contains(&cp.active_tab.as_str()) {
+        return Err(format!(
+            "custom preset {n:?} has invalid active_tab {:?}; expected one of {:?}",
+            cp.active_tab, VALID_TABS
+        ));
+    }
+    Ok(())
+}
+
+fn parse_hidden_panels_csv(s: &str) -> Vec<String> {
+    if s.is_empty() {
+        Vec::new()
+    } else {
+        s.split(',')
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect()
+    }
+}
+
+fn fetch_current_prefs() -> Result<DashboardPrefs> {
+    let body = fetch_endpoint()?;
+    let mut prefs: DashboardPrefs = serde_json::from_str(&body)
+        .context("daemon returned non-JSON body for /v1/dashboard-prefs")?;
+    if prefs.schema_version.is_empty() {
+        prefs.schema_version = "1.0.0".to_string();
+    }
+    if prefs.refresh_rate.is_empty() {
+        prefs.refresh_rate = "normal".to_string();
+    }
+    if prefs.active_preset.is_empty() {
+        prefs.active_preset = "default".to_string();
+    }
+    Ok(prefs)
+}
+
+fn put_prefs(prefs: &DashboardPrefs) -> Result<(i32, String)> {
+    let body = serde_json::to_string(prefs).context("serialize prefs for PUT")?;
+    put_endpoint(&body)
+}
+
+/// `selfdefctl dashboard-prefs add-custom-preset` — define + persist
+/// a new operator-named preset. The daemon validates server-side
+/// too; this CLI pre-validates to save the operator from a 400 they
+/// could have foreseen.
+pub(crate) fn run_add_custom_preset(
+    name: &str,
+    label: &str,
+    hidden_panels: &str,
+    refresh_rate: &str,
+    active_tab: &str,
+) -> Result<i32> {
+    let cp = CustomPreset {
+        name: name.to_string(),
+        label: label.to_string(),
+        hidden_panels: parse_hidden_panels_csv(hidden_panels),
+        refresh_rate: refresh_rate.to_string(),
+        active_tab: active_tab.to_string(),
+    };
+    if let Err(e) = validate_custom_preset_cli(&cp) {
+        eprintln!("{e}");
+        return Ok(2);
+    }
+    let mut prefs = match fetch_current_prefs() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return Ok(1);
+        }
+    };
+    // Operator can't add a preset that already exists; suggest delete + re-add.
+    if prefs.custom_presets.iter().any(|p| p.name == cp.name) {
+        eprintln!(
+            "custom preset {name:?} already exists; use `selfdefctl dashboard-prefs \
+             delete-custom-preset {name}` first, then re-add"
+        );
+        return Ok(2);
+    }
+    prefs.custom_presets.push(cp.clone());
+    let (code, response_body) = put_prefs(&prefs)?;
+    if (200..300).contains(&code) {
+        println!("added custom preset {:?} ({})", cp.name, cp.label);
+        println!("total custom presets: {}", prefs.custom_presets.len());
+        Ok(0)
+    } else {
+        eprintln!("daemon rejected PUT: HTTP {code}");
+        eprintln!("{response_body}");
+        Ok(3)
+    }
+}
+
+/// `selfdefctl dashboard-prefs delete-custom-preset <name>` — remove
+/// a custom preset from `dashboard-prefs.toml`.
+///
+/// If the operator's `active_preset` is the one being deleted, the
+/// daemon's PUT validator would reject (orphan active_preset), so
+/// this command falls back to `default` for `active_preset` if it
+/// matches the deletion target.
+pub(crate) fn run_delete_custom_preset(name: &str) -> Result<i32> {
+    let mut prefs = match fetch_current_prefs() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return Ok(1);
+        }
+    };
+    let before = prefs.custom_presets.len();
+    prefs.custom_presets.retain(|p| p.name != name);
+    if prefs.custom_presets.len() == before {
+        eprintln!("no custom preset named {name:?} (nothing deleted)");
+        return Ok(2);
+    }
+    if prefs.active_preset == name {
+        eprintln!(
+            "note: active_preset was {name:?} which is being deleted; falling back to \"default\""
+        );
+        prefs.active_preset = "default".to_string();
+    }
+    let (code, response_body) = put_prefs(&prefs)?;
+    if (200..300).contains(&code) {
+        println!("deleted custom preset {name:?}");
+        println!("remaining custom presets: {}", prefs.custom_presets.len());
+        Ok(0)
+    } else {
+        eprintln!("daemon rejected PUT: HTTP {code}");
+        eprintln!("{response_body}");
+        Ok(3)
+    }
+}
+
+/// `selfdefctl dashboard-prefs list-custom-presets [--json]` —
+/// human or JSON listing of operator-defined custom presets. (The
+/// builtin presets are discoverable via `selfdefctl dashboards`.)
+pub(crate) fn run_list_custom_presets(json: bool) -> Result<i32> {
+    let prefs = match fetch_current_prefs() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{e}");
+            return Ok(1);
+        }
+    };
+    if json {
+        let body = serde_json::to_string_pretty(&prefs.custom_presets)
+            .context("serialize custom_presets")?;
+        println!("{body}");
+        return Ok(0);
+    }
+    if prefs.custom_presets.is_empty() {
+        println!("no operator-defined custom presets");
+        println!(
+            "(add one with: selfdefctl dashboard-prefs add-custom-preset <name> <label> \
+             <hidden-csv> <refresh_rate> <active_tab>)"
+        );
+        return Ok(0);
+    }
+    println!(
+        "{} operator-defined custom preset(s):",
+        prefs.custom_presets.len()
+    );
+    for cp in &prefs.custom_presets {
+        println!("  {} — {}", cp.name, cp.label);
+        println!(
+            "    refresh_rate={} active_tab={} hidden_panels={}",
+            cp.refresh_rate,
+            cp.active_tab,
+            if cp.hidden_panels.is_empty() {
+                "(none)".to_string()
+            } else {
+                cp.hidden_panels.join(",")
+            }
+        );
+    }
+    Ok(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_cp() -> CustomPreset {
+        CustomPreset {
+            name: "my-view".into(),
+            label: "My view".into(),
+            hidden_panels: vec!["raid-section".into()],
+            refresh_rate: "normal".into(),
+            active_tab: "logs".into(),
+        }
+    }
+
+    #[test]
+    fn valid_cp_passes() {
+        assert!(validate_custom_preset_cli(&valid_cp()).is_ok());
+    }
+
+    #[test]
+    fn name_too_short_rejected() {
+        let mut cp = valid_cp();
+        cp.name = "ab".into();
+        assert!(validate_custom_preset_cli(&cp).is_err());
+    }
+
+    #[test]
+    fn name_uppercase_rejected() {
+        let mut cp = valid_cp();
+        cp.name = "My-View".into();
+        assert!(validate_custom_preset_cli(&cp).is_err());
+    }
+
+    #[test]
+    fn name_collides_with_builtin_rejected() {
+        for builtin in ["default", "security", "ips-dectet-incident"] {
+            let mut cp = valid_cp();
+            cp.name = builtin.into();
+            let err = validate_custom_preset_cli(&cp).unwrap_err();
+            assert!(err.contains("collides with a builtin"));
+        }
+    }
+
+    #[test]
+    fn invalid_refresh_rate_rejected() {
+        let mut cp = valid_cp();
+        cp.refresh_rate = "blinky".into();
+        assert!(validate_custom_preset_cli(&cp).is_err());
+    }
+
+    #[test]
+    fn invalid_tab_rejected() {
+        let mut cp = valid_cp();
+        cp.active_tab = "not-a-tab".into();
+        assert!(validate_custom_preset_cli(&cp).is_err());
+    }
+
+    #[test]
+    fn parse_hidden_panels_csv_empty_string_yields_empty_vec() {
+        assert!(parse_hidden_panels_csv("").is_empty());
+    }
+
+    #[test]
+    fn parse_hidden_panels_csv_with_spaces_trims() {
+        let got = parse_hidden_panels_csv("a, b , c");
+        assert_eq!(got, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn parse_hidden_panels_csv_drops_blanks() {
+        let got = parse_hidden_panels_csv("a,,b,");
+        assert_eq!(got, vec!["a", "b"]);
     }
 }
