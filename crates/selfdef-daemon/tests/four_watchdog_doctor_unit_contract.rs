@@ -20,8 +20,7 @@ const DOCTOR_UNIT: &str =
     include_str!("../../../packaging/systemd/selfdef-four-watchdog-doctor.service");
 const DOCTOR_TIMER: &str =
     include_str!("../../../packaging/systemd/selfdef-four-watchdog-doctor.timer");
-const WRAPPER: &str =
-    include_str!("../../../packaging/scripts/four-watchdog-textfile.sh");
+const WRAPPER: &str = include_str!("../../../packaging/scripts/four-watchdog-textfile.sh");
 
 // ───────────────────────────────────────────────────── service unit tests
 
@@ -288,8 +287,10 @@ fn wrapper_documents_ips_spine_anchor() {
     // The wrapper documents what it observes — drift here = operators
     // don't know which production milestones this textfile maps to.
     assert!(
-        WRAPPER.contains("MS046") && WRAPPER.contains("MS047")
-            && WRAPPER.contains("MS044") && WRAPPER.contains("MS048"),
+        WRAPPER.contains("MS046")
+            && WRAPPER.contains("MS047")
+            && WRAPPER.contains("MS044")
+            && WRAPPER.contains("MS048"),
         "wrapper docstring must anchor to the 4 IPS-spine milestones"
     );
 }
