@@ -1309,6 +1309,117 @@ impl Action for ProcessTreeFreezeAction {
     }
 }
 
+// ===================================================== SocketFdRevocationAction
+//
+// SDD-073 MS2 — wires the SocketFdRevocationBackend trait into the
+// Action runner. Ninth primitive in the IPS nonet; pairs with
+// SDD-065 perimeter-block + SDD-070 netns-isolation at the
+// network-containment family.
+
+use selfdef_socket_fd_revocation_backend::{
+    AuthorityTier as SfrTier, RevokeFdRequest, SocketFdRevocationBackend,
+    SocketProtocol as SfrProtocol,
+};
+
+pub struct SocketFdRevocationAction {
+    backend: Arc<dyn SocketFdRevocationBackend>,
+    authority: SfrTier,
+    duration: std::time::Duration,
+    protocol: SfrProtocol,
+    /// When None, the action sends no inode hint; when Some, the
+    /// production adapter (MS5a) will verify /proc/<pid>/fdinfo/<fd>
+    /// still references the same inode before closing.
+    expected_inode: Option<u64>,
+    reason_prefix: String,
+}
+
+impl SocketFdRevocationAction {
+    pub fn new(
+        backend: Arc<dyn SocketFdRevocationBackend>,
+        authority: SfrTier,
+        duration: std::time::Duration,
+        protocol: SfrProtocol,
+        expected_inode: Option<u64>,
+        reason_prefix: impl Into<String>,
+    ) -> Self {
+        Self {
+            backend,
+            authority,
+            duration,
+            protocol,
+            expected_inode,
+            reason_prefix: reason_prefix.into(),
+        }
+    }
+}
+
+/// Extracts (pid, fd) from event payload. The fd is read from a
+/// custom event field; for MS2 we look at event.metadata.profiles
+/// for a "socket_fd:<n>" marker, falling back to None. Production
+/// integrations will populate event.metadata with structured fd
+/// info; this stub keeps MS2 deterministic for tests.
+fn sdd073_pid_fd_from_event(event: &Event) -> Option<(i32, i32)> {
+    let pid = pid_from_event(event)?;
+    let fd = event
+        .metadata
+        .profiles
+        .iter()
+        .find_map(|p| p.strip_prefix("socket_fd:")?.parse::<i32>().ok())?;
+    Some((pid, fd))
+}
+
+#[async_trait]
+impl Action for SocketFdRevocationAction {
+    fn name(&self) -> &'static str {
+        "socket_fd_revocation"
+    }
+
+    async fn execute(&self, event: &Event, dry_run: bool) -> Result<ActionOutcome, ActionError> {
+        let Some((pid, fd)) = sdd073_pid_fd_from_event(event) else {
+            return Ok(ActionOutcome::skipped(
+                "no actor.process.pid + metadata.profiles[socket_fd:N] in event — socket_fd_revocation skipped",
+            ));
+        };
+
+        let reason = format!("{}: event {}", self.reason_prefix, event.id);
+        let idempotency_key = format!(
+            "{pid}:{fd}:{}:{:?}:{:?}",
+            event.id, self.authority, self.protocol
+        );
+
+        if dry_run {
+            return Ok(ActionOutcome::dry_run(format!(
+                "would revoke fd {fd} on pid {pid} ({:?}) for {}s under {:?} ({})",
+                self.protocol,
+                self.duration.as_secs(),
+                self.authority,
+                reason
+            )));
+        }
+
+        let req = RevokeFdRequest {
+            pid,
+            fd,
+            reason: reason.clone(),
+            duration: self.duration,
+            authority: self.authority,
+            protocol: self.protocol,
+            expected_inode: self.expected_inode,
+            idempotency_key,
+        };
+
+        match self.backend.revoke_fd(req).await {
+            Ok(receipt) => Ok(ActionOutcome::ok(format!(
+                "revoked fd {fd} on pid {pid} ({reason}); handle={:?}",
+                receipt.handle
+            ))),
+            Err(e) => Err(ActionError::Exec(format!(
+                "socket_fd_revocation backend: {e}"
+            ))),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2333,5 +2444,151 @@ mod tests {
             "x",
         );
         assert_eq!(action.name(), "process_tree_freeze");
+    }
+
+    // -------------------------- SocketFdRevocationAction (SDD-073 MS2)
+
+    use selfdef_socket_fd_revocation_backend::{
+        AuthorityTier as SfrTier, InMemoryBackend as SfrInMemoryBackend, SocketProtocol,
+    };
+
+    fn finding_with_pid_and_fd(pid: i32, fd: i32) -> Event {
+        let mut event = finding_with_pid(pid);
+        event.metadata.profiles.push(format!("socket_fd:{fd}"));
+        event
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_dry_run_renders_pid_fd_and_protocol() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Responder,
+            Duration::from_secs(900),
+            SocketProtocol::Tcp,
+            None,
+            "test-responder",
+        );
+        let outcome = action
+            .execute(&finding_with_pid_and_fd(4321, 17), true)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::DryRun);
+        assert!(outcome.notes.contains("4321"));
+        assert!(outcome.notes.contains("fd 17"));
+        assert!(outcome.notes.contains("Tcp"));
+        assert!(outcome.notes.contains("900s"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_applies_real_revoke_when_not_dry_run() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Operator,
+            Duration::from_secs(30 * 60),
+            SocketProtocol::Tcp,
+            None,
+            "operator-cli",
+        );
+        let outcome = action
+            .execute(&finding_with_pid_and_fd(7777, 42), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("7777"));
+        assert!(outcome.notes.contains("fd 42"));
+        assert_eq!(backend.active_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_skipped_when_no_pid() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Responder,
+            Duration::from_secs(60),
+            SocketProtocol::Tcp,
+            None,
+            "test",
+        );
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_skipped_when_no_fd_marker() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Responder,
+            Duration::from_secs(60),
+            SocketProtocol::Tcp,
+            None,
+            "test",
+        );
+        // finding_with_pid alone — no socket_fd:N profile marker.
+        let outcome = action
+            .execute(&finding_with_pid(1234), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Skipped);
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_propagates_authority_insufficient() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Autonomous,
+            Duration::from_secs(30 * 60),
+            SocketProtocol::Tcp,
+            None,
+            "auto",
+        );
+        let err = action
+            .execute(&finding_with_pid_and_fd(8888, 9), false)
+            .await
+            .expect_err("over-tier must propagate");
+        assert!(matches!(err, ActionError::Exec(_)));
+    }
+
+    #[tokio::test]
+    async fn socket_fd_revocation_inode_race_yields_stale_handle() {
+        // Backend's current inode is 999; action passes expected=100
+        // → Stale handle, NOT counted as active.
+        let backend = Arc::new(SfrInMemoryBackend::with_simulated_current_inode(999));
+        let action = SocketFdRevocationAction::new(
+            backend.clone(),
+            SfrTier::Operator,
+            Duration::from_secs(60),
+            SocketProtocol::Tcp,
+            Some(100),
+            "race-check",
+        );
+        let outcome = action
+            .execute(&finding_with_pid_and_fd(9090, 5), false)
+            .await
+            .unwrap();
+        assert_eq!(outcome.status, Status::Success);
+        assert!(outcome.notes.contains("Stale"));
+        assert_eq!(backend.active_count().await, 0);
+    }
+
+    #[test]
+    fn socket_fd_revocation_action_name_is_stable_string() {
+        let backend = Arc::new(SfrInMemoryBackend::new());
+        let action = SocketFdRevocationAction::new(
+            backend,
+            SfrTier::Responder,
+            Duration::from_secs(60),
+            SocketProtocol::Tcp,
+            None,
+            "x",
+        );
+        assert_eq!(action.name(), "socket_fd_revocation");
     }
 }

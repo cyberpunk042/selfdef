@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic SDD-073 socket-fd revocation observer (every 60s, 27th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-socket-fd-revocations-textfile.sh
+# OnBootSec=810s — distinct from the prior 26 siblings (60s..780s).
+
+[Timer]
+OnBootSec=810s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-socket-fd-revocations-textfile.service
+
+[Install]
+WantedBy=timers.target

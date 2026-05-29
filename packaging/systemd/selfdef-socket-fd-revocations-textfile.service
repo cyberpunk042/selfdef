@@ -1,0 +1,36 @@
+[Unit]
+Description=Selfdef — emit SDD-073 socket-fd revocation state textfile
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-socket-fd-revocations-textfile.sh
+# 27th sibling. Extends the IPS-octet observability set → nonet
+# at the per-connection severance axis.
+# Standard 12-clause R171 hardening.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_SOCKET_FD_REVOCATIONS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-socket-fd-revocations.prom
+Environment=SELFDEF_SOCKET_FD_REVOCATIONS_STATE_DIR=/var/lib/selfdef/socket-fd-revocations
+ExecStart=/usr/share/selfdef/selfdef-socket-fd-revocations-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

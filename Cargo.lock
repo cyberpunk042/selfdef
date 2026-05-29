@@ -2901,6 +2901,7 @@ dependencies = [
  "selfdef-scheduler-mirror",
  "selfdef-session-revocation-backend",
  "selfdef-signing",
+ "selfdef-socket-fd-revocation-backend",
  "selfdef-store",
  "selfdef-tool-capability-policy",
  "selfdef-tui-mirror",
@@ -6303,6 +6304,7 @@ dependencies = [
  "selfdef-process-quarantine-backend",
  "selfdef-process-tree-freeze-backend",
  "selfdef-session-revocation-backend",
+ "selfdef-socket-fd-revocation-backend",
  "serde",
  "serde_json",
  "tempfile",
@@ -6674,6 +6676,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-socket-fd-revocation-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
