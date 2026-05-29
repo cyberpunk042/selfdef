@@ -1,0 +1,51 @@
+[Unit]
+Description=Selfdef — emit AppArmor profile-enforcement state textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-apparmor-textfile.sh
+# Runs every 60s via the companion timer. Surfaces selfdefd's
+# AppArmor profile-enforcement state (loaded?, enforce vs complain
+# mode?) as Prometheus gauges alongside the existing 5 sibling
+# observers.
+#
+# AppArmor enforcement is a load-bearing IPS surface: an operator
+# silently switching the selfdefd profile to complain mode weakens
+# the defensive posture without firing any other alarm. This
+# observer detects that drift.
+#
+# Reads /sys/kernel/security/apparmor/profiles (kernel-exposed).
+# Sister to selfdef-cli-mirror-doctor + selfdef-m060-doctor +
+# selfdef-four-watchdog-doctor + selfdef-modules-textfile +
+# selfdef-daemon-process-textfile — same R171 hardening posture +
+# atomic-write convention.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_APPARMOR_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-apparmor.prom
+Environment=SELFDEF_APPARMOR_PROFILE_NAME=/usr/bin/selfdefd
+ExecStart=/usr/share/selfdef/selfdef-apparmor-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+# Hardening — same posture as sibling units. /sys/kernel/security/
+# apparmor/profiles is world-readable; no special caps needed.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true
