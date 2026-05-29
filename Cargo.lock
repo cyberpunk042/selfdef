@@ -2672,6 +2672,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-bpf-map-element-clear-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-bundle-load-policy"
 version = "0.1.0"
 dependencies = [

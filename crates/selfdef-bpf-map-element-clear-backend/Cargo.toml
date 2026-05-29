@@ -1,0 +1,17 @@
+[package]
+name = "selfdef-bpf-map-element-clear-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "SDD-078 MS1+MS5a — eBPF map element clear backend trait + in-memory test impl + filesystem-backed state-journal adapter. The actual bpf(BPF_MAP_DELETE_ELEM) requires CAP_BPF/CAP_SYS_ADMIN substrate (deferred); FsBackend handles state-journaling for the 32nd-sibling textfile observer."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+tempfile = { workspace = true }
