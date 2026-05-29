@@ -1,0 +1,38 @@
+[Unit]
+Description=Selfdef — emit systemd-journal disk-usage textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-journal-disk-textfile.sh
+# Runs every 60s. Surfaces systemd journal disk-usage + persistent/
+# volatile mode. Pairs with disk-usage (8th sibling) at the
+# operational-disk axis.
+#
+# 18th sibling observer. Same R171 hardening as siblings.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_JOURNAL_DISK_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-journal-disk.prom
+ExecStart=/usr/share/selfdef/selfdef-journal-disk-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /var/log/journal /run/log/journal
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

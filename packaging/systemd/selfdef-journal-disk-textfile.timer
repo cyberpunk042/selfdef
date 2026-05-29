@@ -1,0 +1,14 @@
+[Unit]
+Description=Selfdef — periodic systemd-journal disk-usage observer (every 60s, 18th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-journal-disk-textfile.sh
+# 18th sibling observer timer. Sibling cadences extend to 540s.
+
+[Timer]
+OnBootSec=540s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-journal-disk-textfile.service
+
+[Install]
+WantedBy=timers.target
