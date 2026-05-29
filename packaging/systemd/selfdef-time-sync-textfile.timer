@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic time-sync observer (every 60s, 11th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-time-sync-textfile.sh
+# 11th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s — 11 distinct boot offsets.
+
+[Timer]
+OnBootSec=330s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-time-sync-textfile.service
+
+[Install]
+WantedBy=timers.target

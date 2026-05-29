@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic fail2ban defensive-response observer (every 60s, 13th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-fail2ban-textfile.sh
+# 13th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s/360s/390s — 13 distinct boot
+# offsets.
+
+[Timer]
+OnBootSec=390s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-fail2ban-textfile.service
+
+[Install]
+WantedBy=timers.target

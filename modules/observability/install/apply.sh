@@ -99,11 +99,13 @@ if [[ ! -f "$DASHBOARD_DST" ]] || ! cmp -s "$NEW_DASHBOARD" "$DASHBOARD_DST"; th
 fi
 module_record_file "$DASHBOARD_DST"
 
-# Drop the Prometheus alert rules (MS027 four-watchdog set — 9 alerts
-# with runbook_url linkage). The template is verbatim copy (no
-# placeholder substitution today), but install via the same pattern
-# so a future template variable can be wired in without changing
-# the deployment shape.
+# Drop the Prometheus alert rules. The template ships 15 rules across
+# 3 groups: MS027 four-watchdog (9), M060 cross-repo mirror-export (3),
+# SDD-062 detection-watchdog routed findings (1), plus MS011 storage
+# thresholds (2). All carry runbook_url. Verbatim copy today (no
+# placeholder substitution), but installed via the same pattern so a
+# future template variable can be wired in without changing the
+# deployment shape.
 ALERTS_TEMPLATE="${ASSETS_DIR}/alerts/selfdef.yml.template"
 if [[ -f "$ALERTS_TEMPLATE" ]]; then
     if [[ ! -f "$ALERTS_DST" ]] || ! cmp -s "$ALERTS_TEMPLATE" "$ALERTS_DST"; then

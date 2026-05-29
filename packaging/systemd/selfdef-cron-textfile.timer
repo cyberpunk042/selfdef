@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic cron + systemd-timer persistence observer (every 60s, 15th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-cron-textfile.sh
+# 15th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s/360s/390s/420s/450s — 15
+# distinct boot offsets.
+
+[Timer]
+OnBootSec=450s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-cron-textfile.service
+
+[Install]
+WantedBy=timers.target

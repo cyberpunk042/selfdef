@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic M060 chain doctor (every 60s, drives Prometheus)
+Documentation=https://example.org/you/selfdef/blob/main/docs/operator/m060-cockpit-mirror-producers.md
+# Pairs with selfdef-m060-doctor.service. Same 60s cadence as the
+# cli-mirror sibling so all chain-wide M060 alerts get refreshed on
+# the same cycle.
+
+[Timer]
+OnBootSec=70s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-m060-doctor.service
+
+[Install]
+WantedBy=timers.target

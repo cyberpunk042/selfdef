@@ -1,0 +1,46 @@
+[Unit]
+Description=Selfdef — write M060 chain doctor textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/docs/operator/m060-cockpit-mirror-producers.md
+# Runs every 60s via the companion timer. Writes a node_exporter-
+# compatible textfile covering all 6 chain-wide M060 mirror domains
+# (D-02 / D-13 / D-14 / D-15 / D-17 / D-18). Pairs with the
+# cli-mirror-doctor sibling that covers the D-CLI link specifically.
+#
+# Read-only — never mutates anything. The doctor walks filesystem
+# state (resident store + published mirror file) for each domain
+# and emits severity gauges that the existing M060Chain* + the new
+# M060MirrorDomain* alert rules fire on.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_M060_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-m060-doctor.prom
+ExecStart=/usr/bin/selfdefctl m060-doctor --textfile ${SELFDEF_M060_TEXTFILE_PATH}
+
+# The doctor exits 0 when consistent, 1 when there's a resident-but-
+# not-published wedge. The wedge is exactly what we want in
+# Prometheus — captured in the metric, not unit failure.
+SuccessExitStatus=0 1
+TimeoutStartSec=30s
+
+# Hardening — same posture as selfdef-cli-mirror-doctor.service.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

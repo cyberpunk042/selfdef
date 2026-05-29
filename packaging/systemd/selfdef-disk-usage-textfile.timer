@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic disk-usage observer (every 60s, 10th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-disk-usage-textfile.sh
+# 10th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s — 10 distinct boot offsets.
+
+[Timer]
+OnBootSec=300s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-disk-usage-textfile.service
+
+[Install]
+WantedBy=timers.target

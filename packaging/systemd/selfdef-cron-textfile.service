@@ -1,0 +1,39 @@
+[Unit]
+Description=Selfdef — emit cron + systemd-timer persistence catalog textfile
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-cron-textfile.sh
+# Runs every 60s. Surfaces userspace persistence-vector inventory:
+# cron entries + systemd timer count. Pairs with kernel-modules
+# (12th sibling): kernel-modules catches in-kernel rootkits, this
+# catches userspace persistence (cron backdoors, malicious timers).
+#
+# 15th sibling observer. Same R171 hardening as siblings.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_CRON_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-cron.prom
+ExecStart=/usr/share/selfdef/selfdef-cron-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /etc/cron.d /etc/cron.hourly /etc/cron.daily /etc/cron.weekly /etc/cron.monthly /etc/crontab /var/spool/cron
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

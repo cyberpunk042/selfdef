@@ -1,0 +1,40 @@
+[Unit]
+Description=Selfdef — emit systemd-unit-health textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-systemd-units-textfile.sh
+# Runs every 60s via the companion timer. Surfaces per-state counts
+# (active / inactive / failed / activating) for ALL selfdef-prefixed
+# systemd units so operators detect silent unit failures.
+#
+# Sister to the 7 existing observer wrappers — same R171 hardening
+# + atomic-write convention.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_SYSTEMD_UNITS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-systemd-units.prom
+Environment=SELFDEF_SYSTEMD_UNITS_PREFIX=selfdef-
+ExecStart=/usr/share/selfdef/selfdef-systemd-units-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

@@ -1,0 +1,19 @@
+[Unit]
+Description=Selfdef — periodic systemd-unit-health observer (every 60s, 8th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-systemd-units-textfile.sh
+# Pairs with selfdef-systemd-units-textfile.service. 60s cadence
+# matches the 7 sibling observers. Offset boot delay by 240s — 8th
+# and latest observer timer.
+# Sibling cadences: cli-mirror 60s, m060 70s, four-watchdog 90s,
+# modules 120s, daemon-process 150s, apparmor 180s, auth-events
+# 210s, systemd-units 240s — 8 distinct boot offsets.
+
+[Timer]
+OnBootSec=240s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-systemd-units-textfile.service
+
+[Install]
+WantedBy=timers.target

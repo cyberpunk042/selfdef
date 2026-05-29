@@ -35,6 +35,8 @@ selfdef-notifier-engine = { workspace = true }
 selfdef-notifier-orchestrator = { workspace = true }
 selfdef-integration-ntfy = { workspace = true }
 selfdef-responder = { workspace = true }
+selfdef-blockset-backend = { path = "../selfdef-blockset-backend" }
+selfdef-process-quarantine-backend = { path = "../selfdef-process-quarantine-backend" }
 selfdef-friction-audit-mirror = { workspace = true }
 selfdef-friction-audit = { workspace = true }
 selfdef-perimeter-mirror = { workspace = true }
@@ -43,6 +45,9 @@ selfdef-guardian-mirror = { workspace = true }
 selfdef-guardian = { workspace = true }
 selfdef-scheduler-mirror = { workspace = true }
 selfdef-scheduler = { workspace = true }
+selfdef-rules-registry = { workspace = true }
+selfdef-cli-mirror = { workspace = true }
+selfdef-tui-mirror = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

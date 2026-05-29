@@ -1,0 +1,57 @@
+[Unit]
+Description=Selfdef — write cli-mirror doctor textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/docs/operator/m060-cockpit-mirror-producers.md
+# Runs every 60s via the companion timer. Writes a node_exporter-
+# compatible textfile so the existing M060Chain* Prometheus alert
+# rules also fire on cli-mirror-specific degradations (resident
+# store absent, systemd unit failed, published mirror stale).
+#
+# Separate from selfdef-cli-mirror-emit.service: that one is the
+# PRODUCER (writes the resident store on selfdefctl upgrade); this
+# one is the OBSERVER (reads the resident-store + systemd + mirror
+# state into Prometheus). Both are read-only on the data plane.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+# Write the textfile under the node_exporter textfile_collector
+# directory. Operators relocating the collector dir override via the
+# Environment= drop-in (must match the node_exporter
+# --collector.textfile.directory= flag).
+Environment=SELFDEF_CLI_MIRROR_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-cli-mirror.prom
+Environment=SELFDEF_CLI_MIRROR_PATH=/var/lib/selfdef/cli-mirror.json
+ExecStart=/usr/bin/selfdefctl cli-mirror doctor --textfile ${SELFDEF_CLI_MIRROR_TEXTFILE_PATH}
+
+# `doctor` exits non-zero when the chain is degraded (1) or broken
+# (2). Those are the signals we WANT in Prometheus — the textfile
+# captured them. systemd treats them as unit failure, which would
+# mask successive runs. Override so the unit only reports failure
+# on exit codes the operator actually wants to know about (anything
+# outside the 0/1/2 doctor contract — e.g., panic, signal, OOM).
+SuccessExitStatus=0 1 2
+# 30s ceiling — doctor runs ~50ms locally; this guards against
+# systemctl-show blocking forever on a wedged systemd bus.
+TimeoutStartSec=30s
+
+# Hardening — same posture as selfdef-cli-mirror-emit.service.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# No outbound network — pure-local filesystem + systemctl probe.
+PrivateNetwork=true

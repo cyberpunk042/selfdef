@@ -248,3 +248,122 @@ fn doctor_rbac_container_scope_is_skip_with_not_gating_note() {
         "stdout: {stdout}",
     );
 }
+
+/// The cross-cutting `selfdefctl doctor` MUST surface the same 4
+/// cli-mirror checks the standalone `selfdefctl cli-mirror doctor`
+/// emits, so an operator who runs `doctor` for a daily health pulse
+/// sees D-CLI chain state without needing to know the dedicated
+/// verb exists. Drift between the two surfaces (e.g. someone adds a
+/// 5th check to the standalone verb and forgets the roll-up) fails
+/// this test.
+#[test]
+fn doctor_rolls_up_cli_mirror_chain_checks() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cfg = write_config(tmp.path(), "");
+    let out = run_doctor(&cfg, false);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // The m060 category must appear at all.
+    assert!(
+        stdout.contains("## m060"),
+        "doctor must show m060 category; stdout: {stdout}"
+    );
+    // Each cli-mirror check must surface under m060 with the
+    // canonical "cli-mirror · <check-name>" label.
+    for name in [
+        "cli-mirror · schema-version",
+        "cli-mirror · resident-store",
+        "cli-mirror · systemd-unit",
+        "cli-mirror · published-mirror",
+    ] {
+        assert!(
+            stdout.contains(name),
+            "doctor must roll up the standalone cli-mirror doctor's '{name}' check; \
+             stdout: {stdout}",
+        );
+    }
+    // Schema-version is the wire-invariant check — always Ok.
+    assert!(
+        stdout.contains("[  ok] cli-mirror · schema-version"),
+        "schema-version invariant must classify Ok; stdout: {stdout}",
+    );
+}
+
+/// Quieting contract: when the operator hasn't opted into M060 (no
+/// `[deployment].selfdef_mirror_dir` knob set), the cli-mirror checks
+/// downgrade Warn→Skip in the roll-up. A fresh-install `doctor` MUST
+/// NOT surface "M060 is broken" warnings for a chain the operator
+/// never asked for. The standalone `cli-mirror doctor` verb still
+/// shows the operator-actionable WARNs (operator explicitly invoked
+/// it).
+#[test]
+fn doctor_quiets_cli_mirror_warns_when_m060_opted_out() {
+    let tmp = tempfile::tempdir().unwrap();
+    // No [deployment].selfdef_mirror_dir → operator not on M060.
+    let cfg = write_config(tmp.path(), "");
+    let out = run_doctor(&cfg, false);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // resident-store + systemd-unit + published-mirror are warn-level
+    // in the dedicated verb on a fresh host; here they MUST be skip.
+    for name in [
+        "cli-mirror · resident-store",
+        "cli-mirror · systemd-unit",
+        "cli-mirror · published-mirror",
+    ] {
+        let line = stdout
+            .lines()
+            .find(|l| l.contains(name))
+            .unwrap_or_else(|| panic!("no {name} line; stdout:\n{stdout}"));
+        assert!(
+            line.contains("[skip]"),
+            "without [deployment].selfdef_mirror_dir set, {name} MUST be skip \
+             (operator hasn't onboarded M060). line: {line}",
+        );
+    }
+    // Detail must still carry the fix text so curious operators get
+    // the onboarding prompt even when skipped.
+    let resident = stdout
+        .lines()
+        .find(|l| l.contains("cli-mirror · resident-store"))
+        .expect("resident-store line");
+    assert!(
+        resident.contains("· fix:"),
+        "skip row must still carry the `· fix:` segment for discoverability; line: {resident}",
+    );
+}
+
+/// Inverse contract: when the operator HAS opted into M060
+/// (`[deployment].selfdef_mirror_dir` set in selfdef.toml), the
+/// cli-mirror warns surface as actual warns — the operator wants to
+/// know their opted-in chain is misconfigured.
+#[test]
+fn doctor_surfaces_cli_mirror_warns_when_m060_opted_in() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mirror_dir = tmp.path().join("mirror-dir");
+    std::fs::create_dir_all(&mirror_dir).unwrap();
+    // Opt the operator in by setting the knob.
+    let cfg = write_config(
+        tmp.path(),
+        &format!(
+            "[deployment]\nselfdef_mirror_dir = \"{}\"\n",
+            mirror_dir.display()
+        ),
+    );
+    let out = run_doctor(&cfg, false);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // resident-store still absent (no /var/lib/selfdef/cli-mirror.json
+    // in this test env), but now classifies as warn — the operator
+    // opted in, so they want to know.
+    let line = stdout
+        .lines()
+        .find(|l| l.contains("cli-mirror · resident-store"))
+        .unwrap_or_else(|| panic!("no resident-store line; stdout:\n{stdout}"));
+    assert!(
+        line.contains("[warn]"),
+        "with [deployment].selfdef_mirror_dir set, missing resident store MUST be warn \
+         (operator onboarded M060). line: {line}",
+    );
+    assert!(
+        line.contains("· fix:"),
+        "warn row must carry the operator-actionable `· fix:` segment; line: {line}",
+    );
+}

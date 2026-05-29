@@ -1,0 +1,39 @@
+[Unit]
+Description=Selfdef — emit apt/dpkg package-state textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-package-state-textfile.sh
+# Runs every 60s. Surfaces apt/dpkg package-state hygiene: pending
+# security updates + apt-update freshness + dpkg broken-package
+# count. Pairs with sshd-config (16th sibling) at the security-
+# baseline axis.
+#
+# 17th sibling observer. Same R171 hardening as siblings.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_PACKAGE_STATE_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-package-state.prom
+ExecStart=/usr/share/selfdef/selfdef-package-state-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=60s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /var/lib/apt /var/lib/dpkg /etc/apt
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

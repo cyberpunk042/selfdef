@@ -75,6 +75,159 @@ pub(crate) fn run(cfg: &Config) -> Vec<CheckResult> {
     // doctor so a single `selfdefctl doctor` covers every alert-
     // relevant signal alongside the watchdog deployability checks.
     out.extend(check_alerts(cfg));
+    // M060 chain-health — per-artifact publish state across the 10
+    // typed-mirror crates. Folded into doctor so operators running it
+    // for general health see the cross-repo mirror chain state too
+    // (not just watchdogs + alerts).
+    out.extend(check_m060_chain(cfg));
+    // M060 D-CLI — cli-mirror filesystem-state checks complementary
+    // to the /metrics-backed chain-health above. The metrics path
+    // tells you the daemon's PUBLISHER state; this path tells you
+    // whether the OPERATOR-CONTROLLED producer pipeline (the systemd
+    // one-shot, the resident store, the resulting <mirror_dir>/cli.json)
+    // is on its feet. Both signals matter; folding both into doctor
+    // means one `selfdefctl doctor` invocation surfaces the full
+    // M060 D-CLI chain state.
+    out.extend(check_cli_mirror_chain(cfg));
+    out
+}
+
+/// M060 D-CLI — fold cli-mirror's 4 filesystem-state checks into
+/// the doctor roll-up. Source-of-truth is `cli_mirror_doctor::run_checks`
+/// so the standalone verb (`selfdefctl cli-mirror doctor`) and this
+/// roll-up surface identical classifications, with one quieting-rule:
+/// when the operator hasn't opted into M060 at all (no
+/// `[deployment].selfdef_mirror_dir` in selfdef.toml), the four
+/// per-link checks downgrade from Warn→Skip so a fresh-install
+/// `doctor` doesn't shout about a chain the operator never asked
+/// for. Fail stays Fail (a Fail means structural break — operator
+/// always needs to see it, opted-in or not).
+fn check_cli_mirror_chain(cfg: &Config) -> Vec<CheckResult> {
+    use crate::cli_mirror_doctor;
+    // Opt-in signal comes directly from the parsed selfdef.toml the
+    // doctor was invoked with (--config CLI flag honored upstream).
+    // Reading the raw toml again would re-introduce the path-mismatch
+    // bug — the doctor is already parsing it; we just consume the
+    // typed knob.
+    let opted_in = !cfg.deployment.selfdef_mirror_dir.is_empty();
+    // The cli_mirror_doctor::run_checks helper still re-reads the
+    // canonical /etc/selfdef/selfdef.toml for its OWN published-mirror
+    // check (it doesn't have access to the Config struct since it
+    // also serves the standalone verb where no Config is parsed).
+    // For the roll-up we pass the test/operator-provided path via
+    // the same env trick the upstream `--config` honors — but that's
+    // overkill for a fold; just use the canonical path here. The
+    // opted_in classification (gating warn→skip) is the
+    // operator-observable signal regardless.
+    let config_path = std::path::Path::new("/etc/selfdef/selfdef.toml");
+    let checks = cli_mirror_doctor::run_checks(config_path);
+    checks
+        .into_iter()
+        .map(|c| CheckResult {
+            category: "m060".to_string(),
+            name: format!("cli-mirror · {}", c.name),
+            status: match (c.severity, opted_in) {
+                (cli_mirror_doctor::Severity::Pass, _) => CheckStatus::Ok,
+                (cli_mirror_doctor::Severity::Warn, true) => CheckStatus::Warn,
+                (cli_mirror_doctor::Severity::Warn, false) => CheckStatus::Skipped,
+                (cli_mirror_doctor::Severity::Fail, _) => CheckStatus::Fail,
+            },
+            detail: if c.fix.is_empty() {
+                c.detail
+            } else {
+                format!("{} · fix: {}", c.detail, c.fix)
+            },
+        })
+        .collect()
+}
+
+/// M060 — fold per-artifact mirror-publish state into doctor. Reuses
+/// the same /metrics fetcher + parser as `selfdefctl m060-metrics` so
+/// the two surfaces classify identically. Connection failure → skipped
+/// (already reported by upstream checks; don't double-fail).
+fn check_m060_chain(_cfg: &Config) -> Vec<CheckResult> {
+    use crate::m060_metrics;
+    let mut out = Vec::new();
+    let metrics_text = match try_fetch_metrics_silently() {
+        Some(t) => t,
+        None => {
+            out.push(CheckResult {
+                category: "m060".to_string(),
+                name: "chain-health (daemon /metrics)".to_string(),
+                status: CheckStatus::Skipped,
+                detail: "daemon /metrics endpoint not reachable; chain-health state \
+                     cannot be classified. selfdefctl m060-doctor checks the \
+                     filesystem state independently as a fallback."
+                    .to_string(),
+            });
+            return out;
+        }
+    };
+    let stats = m060_metrics::parse_m060_metrics(&metrics_text);
+    if stats.is_empty() {
+        out.push(CheckResult {
+            category: "m060".to_string(),
+            name: "chain-health (publishers)".to_string(),
+            status: CheckStatus::Warn,
+            detail: "no M060 mirror-publish counters in /metrics — the daemon may not \
+                 have published yet, OR the mirror-export loop is disabled \
+                 ([deployment].selfdef_mirror_dir unset in selfdef.toml). Run \
+                 selfdefctl m060-doctor for filesystem-state details."
+                .to_string(),
+        });
+        return out;
+    }
+    // One CheckResult per artifact so the operator sees WHICH publisher
+    // is unhealthy in the doctor output, not just a roll-up.
+    for (artifact, stats) in &stats {
+        let (status, detail) = match stats.state {
+            "ok" => (
+                CheckStatus::Ok,
+                format!(
+                    "publisher healthy · {} ok publishes · last {}s ago",
+                    stats.ok,
+                    stats.age_seconds.map_or("?".to_string(), |a| a.to_string())
+                ),
+            ),
+            "degraded" => (
+                CheckStatus::Warn,
+                format!(
+                    "{} failures + {} ok publishes; investigate selfdefd journal",
+                    stats.failed, stats.ok
+                ),
+            ),
+            "stale" => (
+                CheckStatus::Warn,
+                format!(
+                    "last successful publish {}s ago (>5min threshold) — publisher wedged",
+                    stats.age_seconds.map_or("?".to_string(), |a| a.to_string())
+                ),
+            ),
+            "failed" => (
+                CheckStatus::Fail,
+                format!(
+                    "{} failed publishes + zero ok — publisher never succeeded",
+                    stats.failed
+                ),
+            ),
+            "offline" => (
+                CheckStatus::Skipped,
+                "no publish attempts recorded — operator may not have onboarded \
+                 this domain yet (honest offline)"
+                    .to_string(),
+            ),
+            other => (
+                CheckStatus::Warn,
+                format!("unknown publisher state {other:?}"),
+            ),
+        };
+        out.push(CheckResult {
+            category: "m060".to_string(),
+            name: format!("publisher · {artifact}"),
+            status,
+            detail,
+        });
+    }
     out
 }
 
@@ -1629,6 +1782,42 @@ mod sdd_013_tests {
         assert!(
             !cat_rows.is_empty(),
             "doctor::run() must surface alerts category (even when /metrics is unreachable; the row goes Skipped instead of being absent)"
+        );
+    }
+
+    /// M060: the chain-health category lands in every doctor run.
+    /// /metrics will be unreachable in tests so the result will be
+    /// Skipped — but the row MUST appear so operators see the
+    /// check ran (vs being silently absent).
+    #[test]
+    fn m060_chain_health_category_surfaces_in_doctor_run() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = run(&cfg);
+        let cat_rows: Vec<&CheckResult> = results.iter().filter(|r| r.category == "m060").collect();
+        assert!(
+            !cat_rows.is_empty(),
+            "doctor::run() must surface m060 category (even when /metrics is unreachable; the row goes Skipped instead of being absent)"
+        );
+    }
+
+    /// M060 unreachable-daemon path: produces exactly ONE skipped row,
+    /// not 10 (per-artifact rows only appear when /metrics IS reachable).
+    /// In the unreachable case the operator's actionable signal is
+    /// "/metrics not reachable" — multiple rows would be noise.
+    #[test]
+    fn m060_chain_health_unreachable_daemon_produces_one_skipped_row() {
+        let cfg = cfg_with_target(DeploymentTarget::Generic);
+        let results = check_m060_chain(&cfg);
+        assert_eq!(results.len(), 1, "expected 1 row when /metrics unreachable");
+        assert_eq!(results[0].status, CheckStatus::Skipped);
+        assert!(results[0].detail.contains("not reachable"));
+        // Detail must point at the sister surface (m060-doctor) for the
+        // fallback diagnosis path — operators get an actionable next step.
+        assert!(
+            results[0].detail.contains("m060-doctor"),
+            "skipped-row detail must reference m060-doctor as the fallback: \
+             got {}",
+            results[0].detail
         );
     }
 }

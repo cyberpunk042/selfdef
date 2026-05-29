@@ -38,6 +38,7 @@
 mod alerts;
 mod audit_chains;
 mod authority;
+mod capability_token_registry;
 mod capability_tokens;
 mod commit_authority;
 mod communication_boundary;
@@ -49,11 +50,13 @@ mod filesystem_boundary;
 mod flex_profile;
 mod friction_audit;
 mod gpu;
+mod grants;
 mod guardian;
 mod handlers;
 mod hardware;
 mod health;
 mod inference_backends;
+mod m060_health;
 mod mcp;
 pub mod metrics;
 mod modules;
@@ -64,15 +67,21 @@ mod oracle_triage;
 mod perimeter;
 mod policy;
 mod quarantine;
+mod quarantine_registry;
 mod raid;
 mod repl;
+mod rules_registry;
+mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
+mod sse_quota_metrics;
 mod state;
 mod storage;
 mod tool_authority;
 mod transport;
+mod trust_score_registry;
 mod trust_scores;
+mod tui_mirror;
 pub mod watchdog_metrics;
 
 pub use metrics::{Metrics, run_ingest as run_metrics_ingest};
@@ -326,6 +335,78 @@ pub fn router(state: ApiState) -> Router {
         // the next caller-integration arc per SDD-055.
         .route("/v1/flex-profile/apply", post(flex_profile::apply))
         .route("/v1/flex-profile/revert", post(flex_profile::revert))
+        // M060 D-13 — grants mutation + read. The permission-correct
+        // write path for the daemon-resident grant registry the
+        // mirror-export loop republishes READ-ONLY. Same router/precedent
+        // as flex-profile above; SDD-055 commit-authority gating tracked
+        // there for all mutation surfaces.
+        .route("/v1/grants", get(grants::show))
+        .route("/v1/grants/issue", post(grants::issue))
+        .route("/v1/grants/revoke", post(grants::revoke))
+        // M060 D-14 — capability-tokens *live registry* surface. Sister
+        // to the existing GET /v1/capability-tokens schema-discovery
+        // route (which stays as the static doctrine surface). These three
+        // serve + mutate the daemon-resident token registry the
+        // mirror-export loop republishes for sovereign-os.
+        .route(
+            "/v1/capability-tokens/snapshot",
+            get(capability_token_registry::snapshot),
+        )
+        .route(
+            "/v1/capability-tokens/issue",
+            post(capability_token_registry::issue),
+        )
+        .route(
+            "/v1/capability-tokens/revoke",
+            post(capability_token_registry::revoke),
+        )
+        // M060 D-15 — sandboxes *live registry* surface. Sister to the
+        // existing GET /v1/sandbox-tiers tier-discovery route. Operator
+        // allocate/release of MS036 sandbox allocations; the resident
+        // store is what the mirror-export loop republishes.
+        .route("/v1/sandboxes/snapshot", get(sandbox_registry::snapshot))
+        .route("/v1/sandboxes/allocate", post(sandbox_registry::allocate))
+        .route("/v1/sandboxes/release", post(sandbox_registry::release))
+        // M060 D-17 — quarantine *live registry* surface. Sister to the
+        // existing schema-discovery GET /v1/quarantine. Daemon-populated
+        // by MS042 detection; operator surface is release/forfeit only.
+        .route(
+            "/v1/quarantine/snapshot",
+            get(quarantine_registry::snapshot),
+        )
+        .route("/v1/quarantine/release", post(quarantine_registry::release))
+        .route("/v1/quarantine/forfeit", post(quarantine_registry::forfeit))
+        // M060 D-12 — rules-mirror *live registry* surface. READ-ONLY:
+        // the daemon's rules_collector_loop populates the resident store
+        // from `nft -j list ruleset` every 30s; this handler projects
+        // the resident snapshot to the dashboard. Rule installation
+        // lives in `selfdefctl + nft` at the IPS layer (R10212).
+        .route("/v1/rules/snapshot", get(rules_registry::snapshot))
+        // MS007 selfdef-tui-mirror — canonical 4-panel TUI layout
+        // (rules/grants/quarantine/authority across TL/TR/BL/BR)
+        // per MS043 R10141 + F05081 + R10298 ("a dashboard should
+        // not show vanity graphs"). Static-shape surface: the layout
+        // is FIXED by doctrine; the handler always returns the
+        // canonical projection. No mutation endpoints — TUI/web
+        // NEVER mutates IPS state directly (R10212).
+        .route("/v1/tui/snapshot", get(tui_mirror::snapshot))
+        // M060 chain health observability — reports the publish
+        // freshness of all 10 mirror artifacts (offline / degraded /
+        // stale / online). Pure observability surface; consumers
+        // (sovereign-os master-dashboard, MCP m060-doctor) poll it.
+        .route("/v1/m060/health", get(m060_health::health))
+        // M060 D-18 — trust-scores *live registry* surface. Sister to
+        // the existing schema-discovery GET /v1/trust-scores. Operator
+        // surface is admit + signed manual-delta override.
+        .route(
+            "/v1/trust-scores/snapshot",
+            get(trust_score_registry::snapshot),
+        )
+        .route("/v1/trust-scores/admit", post(trust_score_registry::admit))
+        .route(
+            "/v1/trust-scores/operator-delta",
+            post(trust_score_registry::operator_delta),
+        )
         // MS043 UX — operator dashboard preferences persisted daemon-
         // side so view choices survive browser/host switches. GET
         // returns the current TOML (missing file → blank-valid body),

@@ -1,0 +1,16 @@
+[Unit]
+Description=Selfdef — periodic nftables + conntrack observer (every 60s, 14th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-nftables-textfile.sh
+# 14th sibling observer timer. Sibling cadences: 60s/70s/90s/120s/
+# 150s/180s/210s/240s/270s/300s/330s/360s/390s/420s — 14 distinct
+# boot offsets.
+
+[Timer]
+OnBootSec=420s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-nftables-textfile.service
+
+[Install]
+WantedBy=timers.target

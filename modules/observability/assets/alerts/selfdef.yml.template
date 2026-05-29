@@ -149,6 +149,95 @@ groups:
           description: "Mount {{ $labels.mountpoint }} ({{ $labels.fstype }}) at >=90% used. Audit-chain append failures imminent for any chain on this mount. Recover per runbook."
           runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/storage-degraded.md"
 
+  # ----- M060 cross-repo mirror-export loop -----
+  # The selfdef daemon publishes 10 typed-mirror artifacts every 30s into
+  # [deployment].selfdef_mirror_dir (default /run/sovereign-os/selfdef-
+  # mirror/). selfdef-api exposes per-artifact publish counters + last-
+  # publish-time gauges at /metrics. Alerts fire when any publisher fails
+  # (any selfdef_m060_mirror_publish_total{result="failed"} > 0) or when
+  # a successful publish hasn't occurred recently (time() -
+  # selfdef_m060_mirror_last_publish_unix > threshold). Honest-offline
+  # artifacts (operator-issued domains the operator hasn't onboarded yet)
+  # don't contribute — `record_outcome` skips them per design.
+  - name: selfdef-m060-mirror-export
+    interval: 30s
+    rules:
+      - alert: SelfdefM060PublishFailing
+        # Any artifact has a failed publish in the last 5 minutes.
+        # Per-artifact granularity in $labels.artifact lets the operator
+        # see WHICH publisher is wedged without paging on every artifact.
+        expr: |
+          increase(
+            selfdef_m060_mirror_publish_total{result="failed"}[5m]
+          ) > 0
+        for: 2m
+        labels:
+          severity: warning
+          subsystem: m060-mirror-export
+          m060_failure: publish
+        annotations:
+          summary: "M060 mirror publish failing for artifact {{ $labels.artifact }} on {{ $labels.instance }}"
+          description: >
+            The selfdef daemon's mirror_export_loop attempted to publish
+            {{ $labels.artifact }} but the post-call outcome check found
+            the mirror file missing or stale. Indicates a write failure
+            (disk full, permission error, ENOENT on the mirror_dir) OR a
+            registry-load failure. Check `journalctl -u selfdefd | grep
+            "mirror export"` for the specific warn line; the publish_*
+            function logs the underlying error before returning.
+          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+
+      - alert: SelfdefM060PublishStale
+        # No successful publish for any operator-issued artifact in 10
+        # minutes (= 20 ticks of the 30s loop). Don't fire if the gauge
+        # is absent (honest-offline; operator hasn't onboarded the
+        # domain). The check `absent()` defends against false-positives
+        # at scrape-startup before the first publish lands.
+        expr: |
+          time() - selfdef_m060_mirror_last_publish_unix > 600
+        for: 5m
+        labels:
+          severity: warning
+          subsystem: m060-mirror-export
+          m060_failure: stale
+        annotations:
+          summary: "M060 mirror artifact {{ $labels.artifact }} stale (>10min) on {{ $labels.instance }}"
+          description: >
+            Artifact {{ $labels.artifact }} has not been successfully
+            republished by selfdefd's mirror_export_loop in over 10
+            minutes. The export loop runs every 30s; 10m of silence on
+            a single artifact while others are fresh indicates that
+            artifact's publisher is wedged. Could be a registry-load
+            failure on its resident store, or a partial write that the
+            atomic rename never completed. Check the per-publisher warn
+            logs in journalctl.
+          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+
+      - alert: SelfdefM060PublishWedged
+        # Persistent fail rate: failed > 5 in 30m means the publisher
+        # has been failing every tick for 30 min straight. Operator
+        # intervention required (vs single-tick transient blips).
+        expr: |
+          increase(
+            selfdef_m060_mirror_publish_total{result="failed"}[30m]
+          ) > 5
+        for: 5m
+        labels:
+          severity: critical
+          subsystem: m060-mirror-export
+          m060_failure: wedged
+        annotations:
+          summary: "M060 mirror publisher WEDGED on artifact {{ $labels.artifact }} on {{ $labels.instance }}"
+          description: >
+            Artifact {{ $labels.artifact }} has failed to publish more
+            than 5 times in 30 minutes. The export loop ticks every 30s
+            (= max 60 ticks per 30m), so >5 failures means the
+            publisher is failing every several ticks. Persistent state —
+            no longer a transient blip. Likely root causes: mirror_dir
+            permission denied, disk full, atomic-rename failing on the
+            target filesystem, corrupt resident store. Investigate.
+          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+
   # ----- Detection-watchdog finding stream (SDD-062 routed) -----
   # The ~46 host detection-watchdogs emit alert-tier findings (planted
   # exec / writable LOLBin / injection pattern / writable config / a

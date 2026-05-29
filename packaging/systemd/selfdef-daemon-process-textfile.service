@@ -1,0 +1,59 @@
+[Unit]
+Description=Selfdef — emit daemon process-state textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-daemon-process-textfile.sh
+# Runs every 60s via the companion timer. Surfaces selfdefd runtime
+# process state (memory RSS + VSize, open FDs, threads, uptime,
+# systemd restart count) as Prometheus gauges alongside the existing
+# M060 cli-mirror, m060-chain, four-watchdog, and modules-catalog
+# doctor textfiles.
+#
+# Reads systemctl show + /proc/<pid>/ for the live selfdefd process —
+# fail-fast when daemon is not running (emits honest-offline sentinel
+# instead of zeroed gauges that would mask a crashed daemon as
+# "healthy with 0 memory").
+#
+# Process-state observability is a load-bearing IPS surface: memory
+# leak / FD exhaustion / restart loop detection lives here.
+#
+# Sister unit to selfdef-modules-textfile.service +
+# selfdef-four-watchdog-doctor.service + sibling observers — same
+# R171 hardening posture + same SuccessExitStatus contract.
+
+After=local-fs.target selfdefd.service
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_DAEMON_PROCESS_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-daemon-process.prom
+Environment=SELFDEF_DAEMON_UNIT=selfdefd.service
+ExecStart=/usr/share/selfdef/selfdef-daemon-process-textfile.sh
+
+# The wrapper exits 0 on successful emit and 2 on failure (no severity
+# ladder — daemon process state either reads or it doesn't). Distinct
+# from the doctor observers (0 1 2).
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+# Hardening — same posture as sibling units. Read-only /proc access
+# is allowed by default; ReadOnlyPaths=/proc would be circular since
+# /proc is dynamic.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# Need DBus access for systemctl show — DOES need network family.
+# DBus is over AF_UNIX so AF_UNIX above covers it.
+PrivateNetwork=true

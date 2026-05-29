@@ -1,6 +1,19 @@
 # Managed by the selfdef `observability` module. The module's
-# apply.sh renders this file with the operator's `scrape_targets`
-# spliced into the `static_configs.targets` list.
+# apply.sh renders this file by partitioning the operator's
+# `scrape_targets` CSV across the two jobs below:
+#
+#   - port 2112 (tetragon default) → `selfdef-tetragon` job
+#     (no bearer token; metrics_address is operator-bound)
+#   - port 8443 (selfdef-daemon default) → `selfdef-daemon` job
+#     (bearer_token_file from selfdef.toml [api].token_file —
+#     operators using a non-default token path override via
+#     drop-in /etc/prometheus/conf.d/selfdef-daemon.bearer.yml
+#     or edit this file post-apply)
+#
+# The two jobs ship distinct `source` labels so PromQL filters can
+# distinguish tetragon-source series from selfdef-daemon-source
+# series — both endpoints expose `*_events_total` style series, so
+# without the source label the two streams would silently collide.
 
 scrape_configs:
   - job_name: "selfdef-tetragon"
@@ -8,8 +21,25 @@ scrape_configs:
     metrics_path: "/metrics"
     static_configs:
       - targets:
-          # __SELFDEF_SCRAPE_TARGETS__ — rewritten by apply.sh
+          # __SELFDEF_TETRAGON_TARGETS__ — rewritten by apply.sh
           - "localhost:2112"
         labels:
           source: "tetragon"
+          managed_by: "selfdef"
+
+  - job_name: "selfdef-daemon"
+    scrape_interval: 15s
+    metrics_path: "/metrics"
+    # Bearer token required when scraping the daemon over TCP. The
+    # default path matches selfdef-config's [api].token_file. Operators
+    # on a non-default path drop in
+    # /etc/prometheus/conf.d/selfdef-daemon.bearer.yml with their
+    # override, or edit this rendered file post-apply.
+    bearer_token_file: "/etc/selfdef/api.token"
+    static_configs:
+      - targets:
+          # __SELFDEF_DAEMON_TARGETS__ — rewritten by apply.sh
+          - "localhost:8443"
+        labels:
+          source: "selfdef-daemon"
           managed_by: "selfdef"

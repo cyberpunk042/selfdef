@@ -45,6 +45,18 @@ pub struct Metrics {
     /// behind the broadcast. Non-zero means metrics are
     /// under-counting and the operator should resize the bus.
     ingest_lag_events: AtomicU64,
+
+    /// M060 mirror-export per-artifact publish counters. Keys are the
+    /// canonical artifact filename (e.g. `"grants.json"`); values are
+    /// (ok_count, failed_count). Set + bumped by the daemon's
+    /// `mirror_export_loop` on every tick — exposed at `/metrics` so
+    /// Prometheus can scrape directly from selfdefd without needing the
+    /// sovereign-os textfile-collector path.
+    m060_publish_counts: Mutex<HashMap<String, (u64, u64)>>,
+    /// M060 mirror-export per-artifact last-publish unix timestamp (in
+    /// seconds since epoch). Set on every successful publish; consumers
+    /// derive `age = time() - this` to detect stalled publishers.
+    m060_last_publish_unix: Mutex<HashMap<String, u64>>,
 }
 
 impl Metrics {
@@ -62,6 +74,37 @@ impl Metrics {
             events_total: AtomicU64::new(0),
             findings_total: AtomicU64::new(0),
             ingest_lag_events: AtomicU64::new(0),
+            m060_publish_counts: Mutex::new(HashMap::new()),
+            m060_last_publish_unix: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Record one M060 mirror-publish attempt. `artifact` is the
+    /// canonical filename (e.g. `"grants.json"`). On success, increments
+    /// the ok counter + stamps the last-publish gauge to now. On failure,
+    /// increments only the failed counter.
+    pub fn record_m060_publish(&self, artifact: &str, ok: bool) {
+        let mut counts = self
+            .m060_publish_counts
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+        let entry = counts.entry(artifact.to_string()).or_insert((0, 0));
+        if ok {
+            entry.0 += 1;
+        } else {
+            entry.1 += 1;
+        }
+        drop(counts);
+        if ok {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let mut ts = self
+                .m060_last_publish_unix
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            ts.insert(artifact.to_string(), now);
         }
     }
 
@@ -229,6 +272,62 @@ impl Metrics {
             self.ingest_lag_events.load(Ordering::Relaxed),
         )
         .unwrap();
+
+        // M060 mirror-export per-artifact publish counters. Two series
+        // sharing the `artifact` label: ok + failed. Operators alert on
+        // any failed > 0 OR on stale last-publish (now - ts > threshold).
+        out.push_str(
+            "# HELP selfdef_m060_mirror_publish_total M060 mirror-export attempts, by artifact + result.\n",
+        );
+        out.push_str("# TYPE selfdef_m060_mirror_publish_total counter\n");
+        let publish_snapshot: Vec<(String, (u64, u64))> = {
+            let m = self
+                .m060_publish_counts
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
+            v.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            v
+        };
+        for (artifact, (ok, failed)) in &publish_snapshot {
+            writeln!(
+                out,
+                "selfdef_m060_mirror_publish_total{{artifact=\"{}\",result=\"ok\"}} {ok}",
+                escape(artifact),
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "selfdef_m060_mirror_publish_total{{artifact=\"{}\",result=\"failed\"}} {failed}",
+                escape(artifact),
+            )
+            .unwrap();
+        }
+
+        // M060 last-publish unix timestamp per artifact. Prometheus
+        // pattern: `time() - selfdef_m060_mirror_last_publish_unix > 300`
+        // catches the "stale" failure mode (>5 min since last successful
+        // publish). Per-artifact granularity so the operator sees which
+        // publisher specifically is stuck.
+        out.push_str("# HELP selfdef_m060_mirror_last_publish_unix Unix timestamp of last successful M060 mirror publish, per artifact.\n");
+        out.push_str("# TYPE selfdef_m060_mirror_last_publish_unix gauge\n");
+        let ts_snapshot: Vec<(String, u64)> = {
+            let m = self
+                .m060_last_publish_unix
+                .lock()
+                .unwrap_or_else(|p| p.into_inner());
+            let mut v: Vec<_> = m.iter().map(|(k, v)| (k.clone(), *v)).collect();
+            v.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            v
+        };
+        for (artifact, ts) in &ts_snapshot {
+            writeln!(
+                out,
+                "selfdef_m060_mirror_last_publish_unix{{artifact=\"{}\"}} {ts}",
+                escape(artifact),
+            )
+            .unwrap();
+        }
 
         out
     }
@@ -437,5 +536,112 @@ mod tests {
         m.record_ingest_lag(3);
         let body = m.render(0);
         assert!(body.contains("selfdef_ingest_lag_events_total 8"), "{body}",);
+    }
+
+    #[test]
+    fn m060_publish_ok_increments_counter_and_stamps_timestamp() {
+        let m = Metrics::new("h");
+        m.record_m060_publish("grants.json", true);
+        m.record_m060_publish("grants.json", true);
+        let body = m.render(0);
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"grants.json\",result=\"ok\"} 2"
+            ),
+            "{body}"
+        );
+        // A successful publish must stamp the last-publish gauge.
+        assert!(
+            body.contains("selfdef_m060_mirror_last_publish_unix{artifact=\"grants.json\"}"),
+            "{body}"
+        );
+    }
+
+    #[test]
+    fn m060_publish_failed_increments_counter_but_does_not_stamp_timestamp() {
+        let m = Metrics::new("h");
+        m.record_m060_publish("audit.json", false);
+        m.record_m060_publish("audit.json", false);
+        m.record_m060_publish("audit.json", false);
+        let body = m.render(0);
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"audit.json\",result=\"failed\"} 3"
+            ),
+            "{body}"
+        );
+        // No successful publishes → last-publish gauge for this artifact
+        // MUST NOT appear (we don't fabricate a 0 — operators want to
+        // know honestly that the publisher has never succeeded).
+        assert!(
+            !body.contains("selfdef_m060_mirror_last_publish_unix{artifact=\"audit.json\"}"),
+            "last-publish gauge must NOT be present when no ok publishes: {body}"
+        );
+    }
+
+    #[test]
+    fn m060_publish_metrics_track_both_ok_and_failed_independently() {
+        let m = Metrics::new("h");
+        m.record_m060_publish("rules.json", true);
+        m.record_m060_publish("rules.json", false);
+        m.record_m060_publish("rules.json", true);
+        m.record_m060_publish("rules.json", false);
+        m.record_m060_publish("rules.json", true);
+        let body = m.render(0);
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"rules.json\",result=\"ok\"} 3"
+            ),
+            "{body}"
+        );
+        assert!(
+            body.contains(
+                "selfdef_m060_mirror_publish_total{artifact=\"rules.json\",result=\"failed\"} 2"
+            ),
+            "{body}"
+        );
+    }
+
+    #[test]
+    fn m060_publish_metrics_label_distinct_artifacts_separately() {
+        let m = Metrics::new("h");
+        m.record_m060_publish("grants.json", true);
+        m.record_m060_publish("audit.json", true);
+        m.record_m060_publish("cli.json", true);
+        m.record_m060_publish("tui.json", true);
+        let body = m.render(0);
+        for artifact in ["grants.json", "audit.json", "cli.json", "tui.json"] {
+            let line = format!(
+                "selfdef_m060_mirror_publish_total{{artifact=\"{artifact}\",result=\"ok\"}} 1"
+            );
+            assert!(body.contains(&line), "missing {line} in {body}");
+        }
+    }
+
+    #[test]
+    fn m060_publish_metrics_render_with_help_and_type_lines() {
+        let m = Metrics::new("h");
+        m.record_m060_publish("grants.json", true);
+        let body = m.render(0);
+        // Prometheus-required HELP + TYPE lines must precede the series.
+        assert!(body.contains("# HELP selfdef_m060_mirror_publish_total"));
+        assert!(body.contains("# TYPE selfdef_m060_mirror_publish_total counter"));
+        assert!(body.contains("# HELP selfdef_m060_mirror_last_publish_unix"));
+        assert!(body.contains("# TYPE selfdef_m060_mirror_last_publish_unix gauge"));
+    }
+
+    #[test]
+    fn m060_publish_metrics_absent_when_nothing_recorded() {
+        let m = Metrics::new("h");
+        let body = m.render(0);
+        // HELP/TYPE lines may appear but no concrete series.
+        assert!(
+            !body.contains("selfdef_m060_mirror_publish_total{"),
+            "should not emit any artifact-labeled series until recorded: {body}"
+        );
+        assert!(
+            !body.contains("selfdef_m060_mirror_last_publish_unix{"),
+            "should not emit any last-publish gauge until ok recorded: {body}"
+        );
     }
 }

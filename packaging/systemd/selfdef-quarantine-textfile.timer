@@ -1,0 +1,15 @@
+[Unit]
+Description=Selfdef — periodic SDD-066 quarantine state observer (every 60s, 20th sibling)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-quarantine-textfile.sh
+# 20th sibling observer timer. OnBootSec=600s — distinct from the
+# prior 19 siblings (60s through 570s).
+
+[Timer]
+OnBootSec=600s
+OnUnitActiveSec=60s
+AccuracySec=5s
+RandomizedDelaySec=10s
+Unit=selfdef-quarantine-textfile.service
+
+[Install]
+WantedBy=timers.target

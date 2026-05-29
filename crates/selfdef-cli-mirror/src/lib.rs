@@ -28,6 +28,13 @@ use thiserror::Error;
 /// unknown major versions.
 pub const SCHEMA_VERSION: &str = "1.0.0";
 
+/// Daemon-resident store path the cli-mirror producer writes to and
+/// the M060 export loop reads from. The selfdefctl `cli-mirror
+/// snapshot --output PATH` verb defaults here (operator can override
+/// via the env var `SELFDEF_CLI_MIRROR_PATH` or systemd-unit
+/// Environment=). The selfdefd export loop honors the same env var.
+pub const DEFAULT_STATE_PATH: &str = "/var/lib/selfdef/cli-mirror.json";
+
 /// Operator doctrine preserved verbatim per MS043 R10297. Surfaced
 /// publicly so consumers can render it in their own UX.
 pub const DOCTRINE_FULLSTACK_AT_THE_EDGES: &str = "Fullstack at the edges";

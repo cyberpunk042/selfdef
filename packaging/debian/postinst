@@ -140,10 +140,49 @@ case "$1" in
         # systemd
         if [ -d /run/systemd/system ]; then
             systemctl daemon-reload || true
-            # do NOT auto-start; let the operator enable when ready.
-            # Operators wanting boot-gate enforcement run:
+            # do NOT auto-start the daemon — let the operator enable
+            # when ready. Operators wanting boot-gate enforcement run:
             #   systemctl enable --now sovereign-guard.service
             #   systemctl enable --now selfdef-guardian.service
+
+            # M060 cli-mirror producer (D-CLI): one-shot that emits
+            # the resident cli-mirror artifact selfdefd's publisher
+            # prefers over the runtime shell-out. Idempotent + cheap
+            # (~50ms) — safe to run on every install / upgrade. Doing
+            # it here means a fresh install has a hot resident store
+            # by the time selfdefd starts.
+            if [ -x /usr/bin/selfdefctl ] \
+               && [ -f /lib/systemd/system/selfdef-cli-mirror-emit.service ]; then
+                # `start --no-block` would race; we want the emit to
+                # finish before postinst returns so a subsequent
+                # `systemctl start selfdefd` sees the resident store.
+                # Failures are non-fatal — the daemon's shell-out
+                # fallback still works.
+                systemctl start selfdef-cli-mirror-emit.service 2>/dev/null || true
+            fi
+            # M060 cli-mirror observer (D-CLI): timer + one-shot that
+            # writes a node_exporter textfile every 60s so the existing
+            # M060Chain* Prometheus alerts also fire on cli-mirror
+            # degradations. Enable + start only when the timer file
+            # is present AND the textfile_collector dir exists (it's
+            # operator-controlled — we don't create it). Operators
+            # without node_exporter installed silently no-op.
+            if [ -d /run/systemd/system ] \
+               && [ -f /lib/systemd/system/selfdef-cli-mirror-doctor.timer ] \
+               && [ -d /var/lib/node_exporter/textfile_collector ]; then
+                systemctl enable selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+                systemctl start selfdef-cli-mirror-doctor.timer 2>/dev/null || true
+            fi
+            # M060 chain-wide observer (covers D-02/13/14/15/17/18 — the
+            # 6 mirror domains exposed by the daemon's mirror_export_loop).
+            # Same enable+start gate: only when node_exporter is detected
+            # via its textfile_collector dir.
+            if [ -d /run/systemd/system ] \
+               && [ -f /lib/systemd/system/selfdef-m060-doctor.timer ] \
+               && [ -d /var/lib/node_exporter/textfile_collector ]; then
+                systemctl enable selfdef-m060-doctor.timer 2>/dev/null || true
+                systemctl start selfdef-m060-doctor.timer 2>/dev/null || true
+            fi
         fi
         ;;
 esac

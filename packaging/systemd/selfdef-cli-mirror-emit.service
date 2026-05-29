@@ -1,0 +1,67 @@
+[Unit]
+Description=Selfdef — emit cli-mirror resident store (M060 D-CLI producer)
+Documentation=https://example.org/you/selfdef/blob/main/crates/selfdef-cli-mirror/src/lib.rs
+# Runs whenever the unit is started — typically post-install (one-shot
+# via `systemctl start`), post-upgrade (debian postinst kicks it), and
+# on operator demand. The artifact is the operator-controlled producer
+# side of the M060 cli-mirror chain: selfdefctl walks its own live clap
+# tree and writes the canonical CliMirrorSnapshot 1.0.0 atomically to
+# the daemon-resident store at /var/lib/selfdef/cli-mirror.json.
+#
+# The selfdefd mirror-export loop (cli_mirror_publisher) prefers this
+# resident artifact over its runtime shell-out fallback (PATH dep + no
+# upgrade-pickup), so this unit is the recommended production wiring.
+#
+# Idempotent — runs to completion + exits. Re-run on every selfdefctl
+# upgrade so the emitted schema tracks the binary's live clap tree.
+
+# selfdefd doesn't have to be running for this unit to do its job —
+# the snapshot only needs the selfdefctl binary, not the daemon.
+# Listing the After= keeps the journal ordering operator-readable.
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+# selfdef user owns /var/lib/selfdef (per debian postinst). The user
+# can read its own state dir + atomic-write into it; that's all the
+# privilege this needs.
+User=selfdef
+Group=selfdef
+UMask=0027
+
+# `selfdefctl cli-mirror snapshot --output PATH` writes atomically
+# (tempfile + rename in the same dir). The path matches the crate-
+# level DEFAULT_STATE_PATH constant + selfdefd's
+# SELFDEF_CLI_MIRROR_PATH env-override default. Operators relocating
+# the resident store: set Environment=SELFDEF_CLI_MIRROR_PATH=…
+# (overrides both producer's --output destination + daemon's read
+# path; keep the two in sync).
+Environment=SELFDEF_CLI_MIRROR_PATH=/var/lib/selfdef/cli-mirror.json
+ExecStart=/usr/bin/selfdefctl cli-mirror snapshot --output ${SELFDEF_CLI_MIRROR_PATH}
+
+# Snapshot generation is ~50ms on a stock host (walk clap tree + serde).
+# 30s ceiling is generous + protects against future surface bloat.
+TimeoutStartSec=30s
+
+# Hardening — same posture as selfdef-doctor.service.
+NoNewPrivileges=true
+ProtectSystem=strict
+# The producer writes only inside /var/lib/selfdef.
+ReadWritePaths=/var/lib/selfdef
+# Read-only — selfdefctl needs its own bin path + the systemd journal.
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+# No outbound network — pure-local file operation.
+PrivateNetwork=true
+
+[Install]
+WantedBy=multi-user.target

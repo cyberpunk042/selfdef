@@ -1,0 +1,56 @@
+[Unit]
+Description=Selfdef — emit module-catalog textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-modules-textfile.sh
+# Runs every 60s via the companion timer. Writes a node_exporter-
+# compatible textfile so the selfdef module-catalog state surfaces
+# as Prometheus gauges alongside the existing M060 cli-mirror,
+# m060-chain, and four-watchdog doctor textfiles.
+#
+# Reads selfdefctl modules list --json — uses the SAME catalog the
+# daemon ships with so the textfile cannot drift from the in-daemon
+# module inventory. Writes the textfile atomically (tempfile +
+# rename) so node_exporter never sees a half-written file.
+#
+# Honest-offline: when selfdefctl is not on PATH OR daemon-side
+# module list fails, emit a sentinel gauge
+# (selfdef_modules_textfile_emit_failed = 1) so monitoring can
+# distinguish "no data" from "no modules installed" — never
+# silently produces zeroed-out gauges.
+#
+# Sister unit to selfdef-cli-mirror-doctor.service +
+# selfdef-m060-doctor.service + selfdef-four-watchdog-doctor.service
+# — same hardening posture + same SuccessExitStatus contract.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_MODULES_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-modules.prom
+ExecStart=/usr/share/selfdef/selfdef-modules-textfile.sh
+
+# The wrapper exits 0 on success and 2 on failure (no WARN/CRITICAL
+# semantic here — modules either enumerate or they don't). Treat 0
+# as success; failures propagate.
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+# Hardening — same posture as sibling -doctor + four-watchdog units.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

@@ -1,0 +1,24 @@
+[package]
+name = "selfdef-capability-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish.workspace = true
+description = "Daemon-resident, persistent registry of issued MS035 capability tokens — the live D-14 state the selfdef daemon projects into the selfdef-capability-mirror MS007 snapshot. Composes selfdef-capability-word (64-bit bit-field) + selfdef-capability-mirror (wire schema). Per MS035 R08219 + MS039 trust rings/authority levels + F04146 parent-child inheritance."
+
+[lints]
+workspace = true
+
+[dependencies]
+selfdef-capability-mirror = { path = "../selfdef-capability-mirror" }
+selfdef-capability-word = { path = "../selfdef-capability-word" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,43 @@
+[Unit]
+Description=Selfdef — emit SDD-065 blockset textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-blockset-textfile.sh
+# Runs every 60s. Surfaces the kernel-side selfdef-blocks nft
+# table state (SDD-065 §5). Pairs with nftables observer (14th
+# sibling) at the kernel-packet-filter axis.
+#
+# 19th sibling observer. Like 14th sibling, requires CAP_NET_ADMIN
+# for `nft list set` invocation — documented exception to the
+# default 12-clause hardening.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+Environment=SELFDEF_BLOCKSET_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-blockset.prom
+ExecStart=/usr/share/selfdef/selfdef-blockset-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/sbin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=false

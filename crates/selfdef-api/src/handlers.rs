@@ -113,6 +113,11 @@ pub(crate) async fn metrics(State(s): State<ApiState>) -> Response {
     // reads at scrape time — degrades gracefully (zero counts / -1
     // chain-events) when watchdog ring buffers / audit logs missing.
     body.push_str(&crate::watchdog_metrics::render());
+    // MS022 SSE subscriber quota gauges. Reads sse_subscribers +
+    // sse_subscribers_per_token off ApiState; the per-token map is
+    // sampled under-lock then formatted lock-free. Exposes the
+    // operator-controlled caps + the live saturation ratio.
+    body.push_str(&crate::sse_quota_metrics::render(&s));
     (
         StatusCode::OK,
         [(

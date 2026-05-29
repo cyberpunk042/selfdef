@@ -6,8 +6,11 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+mod cli_mirror_publisher;
 mod dispatcher_adapter;
 mod hardware_probe_loop;
+mod mirror_export_loop;
+mod rules_collector_loop;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -409,6 +412,102 @@ async fn main() -> Result<()> {
         None
     };
 
+    // M060 D-02 (R10063-R10068): cross-repo mirror export. Opt-in via
+    // [deployment].selfdef_mirror_dir. Publishes the active authority-
+    // profile snapshot READ-ONLY for the sovereign-os cockpit. Lives for
+    // the daemon's lifetime + observes the same shutdown signal.
+    //
+    // Construct the Metrics handle BEFORE spawning the mirror loop so
+    // the loop can bump per-artifact publish counters from the start.
+    // The metrics ingest task below also takes a clone of this same
+    // handle. When the API is disabled, we still construct + clone the
+    // handle (cheap, Arc'd) so the mirror loop has a place to record;
+    // it's only the /metrics scrape surface + bus-ingest task that the
+    // API flag gates.
+    let mirror_metrics = if cfg.api.enabled {
+        Some(Arc::new(selfdef_api::Metrics::new(host_tag.clone())))
+    } else {
+        None
+    };
+    let _mirror_export_task = if cfg.deployment.selfdef_mirror_dir.is_empty() {
+        None
+    } else {
+        let mirror_dir = std::path::PathBuf::from(&cfg.deployment.selfdef_mirror_dir);
+        let flex_path = std::path::PathBuf::from(selfdef_flex_profile::DEFAULT_STATE_PATH);
+        // Honor the same overrides the API write paths use, so relocated
+        // resident stores are read + republished consistently.
+        let grants_store = std::env::var("SELFDEF_GRANTS_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_grant_registry::DEFAULT_STATE_PATH)
+            });
+        let capability_tokens_store = std::env::var("SELFDEF_CAPABILITY_TOKENS_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_capability_registry::DEFAULT_STATE_PATH)
+            });
+        let sandboxes_store = std::env::var("SELFDEF_SANDBOXES_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_sandbox_registry::DEFAULT_STATE_PATH)
+            });
+        let quarantine_store = std::env::var("SELFDEF_QUARANTINE_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_quarantine_registry::DEFAULT_STATE_PATH)
+            });
+        let trust_scores_store = std::env::var("SELFDEF_TRUST_SCORES_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_trust_score_registry::DEFAULT_STATE_PATH)
+            });
+        let audit_store = std::env::var("SELFDEF_AUDIT_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_audit_registry::DEFAULT_STATE_PATH)
+            });
+        let rules_store = std::env::var("SELFDEF_RULES_PATH")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(selfdef_rules_registry::DEFAULT_STATE_PATH)
+            });
+        let rules_collector_store = rules_store.clone();
+        let rules_collector_shutdown = shutdown.clone();
+        // M060 D-12: poll `nft -j list ruleset` on its own cadence and
+        // persist into the resident rules registry. Decoupled from the
+        // mirror-export loop so a slow nft call cannot stall the other
+        // 7 mirror domains. The export loop reads the registry file.
+        tokio::spawn(async move {
+            rules_collector_loop::run_rules_collector_loop(
+                rules_collector_store,
+                rules_collector_shutdown,
+            )
+            .await
+        });
+        let sd = shutdown.clone();
+        let metrics_for_mirror = mirror_metrics.clone();
+        info!(
+            mirror_dir = %mirror_dir.display(),
+            "M060: mirror export enabled (active-profile + grants + capability-tokens + sandboxes + quarantine + trust-scores + audit + rules, read-only)"
+        );
+        Some(tokio::spawn(async move {
+            mirror_export_loop::run_mirror_export_loop(
+                mirror_dir,
+                flex_path,
+                grants_store,
+                capability_tokens_store,
+                sandboxes_store,
+                quarantine_store,
+                trust_scores_store,
+                audit_store,
+                rules_store,
+                metrics_for_mirror,
+                sd,
+            )
+            .await
+        }))
+    };
+
     // ---- correlator ----
     let (correlator_task, correlator) = if cfg.correlator.enabled {
         let sub = bus.subscribe();
@@ -504,8 +603,14 @@ async fn main() -> Result<()> {
     // bus and bumps counters per event). The ingest task is gated on
     // the API being enabled — without a scrape surface, the counters
     // are dead weight.
+    // mirror_metrics was constructed earlier so the M060 mirror-export
+    // loop could bump per-artifact publish counters from startup. Reuse
+    // the same Arc so /metrics + the mirror loop + the bus-ingest task
+    // all share one set of counters.
     let (metrics_handle, metrics_task) = if cfg.api.enabled {
-        let metrics = Arc::new(selfdef_api::Metrics::new(host_tag.clone()));
+        let metrics = mirror_metrics
+            .clone()
+            .unwrap_or_else(|| Arc::new(selfdef_api::Metrics::new(host_tag.clone())));
         let m = Arc::clone(&metrics);
         let b = Arc::clone(&bus);
         let sd = shutdown.clone();

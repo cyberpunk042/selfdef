@@ -2393,11 +2393,13 @@ dependencies = [
  "rustls-pki-types",
  "selfdef-api",
  "selfdef-bus",
+ "selfdef-capability-registry",
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-flex-profile",
  "selfdef-friction-audit",
  "selfdef-friction-audit-mirror",
+ "selfdef-grant-registry",
  "selfdef-guardian",
  "selfdef-guardian-mirror",
  "selfdef-hardware",
@@ -2407,10 +2409,15 @@ dependencies = [
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
+ "selfdef-quarantine-registry",
  "selfdef-responder",
+ "selfdef-rules-registry",
+ "selfdef-sandbox-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
  "selfdef-store",
+ "selfdef-trust-score-registry",
+ "selfdef-tui-mirror",
  "serde",
  "serde_json",
  "sha2",
@@ -2496,6 +2503,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-audit-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-audit-mirror",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
 name = "selfdef-audit-rotation-policy"
 version = "0.1.0"
 dependencies = [
@@ -2555,6 +2575,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-blockset-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -2747,6 +2778,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-capability-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-capability-mirror",
+ "selfdef-capability-word",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
 name = "selfdef-capability-token-store"
 version = "0.1.0"
 dependencies = [
@@ -2811,7 +2855,9 @@ dependencies = [
  "minisign",
  "reqwest",
  "selfdef-api",
+ "selfdef-blockset-backend",
  "selfdef-bus",
+ "selfdef-cli-mirror",
  "selfdef-commit-authority",
  "selfdef-config",
  "selfdef-core",
@@ -2831,13 +2877,16 @@ dependencies = [
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
  "selfdef-perimeter-mirror",
+ "selfdef-process-quarantine-backend",
  "selfdef-profile-authority-gate",
  "selfdef-responder",
+ "selfdef-rules-registry",
  "selfdef-scheduler",
  "selfdef-scheduler-mirror",
  "selfdef-signing",
  "selfdef-store",
  "selfdef-tool-capability-policy",
+ "selfdef-tui-mirror",
  "serde",
  "serde_json",
  "serde_yaml_ng",
@@ -3320,7 +3369,10 @@ dependencies = [
  "clap",
  "sd-notify",
  "selfdef-api",
+ "selfdef-audit-registry",
  "selfdef-bus",
+ "selfdef-capability-registry",
+ "selfdef-cli-mirror",
  "selfdef-collector-auditd",
  "selfdef-collector-canary",
  "selfdef-collector-ebpf",
@@ -3332,7 +3384,9 @@ dependencies = [
  "selfdef-core",
  "selfdef-correlator",
  "selfdef-ebpf-common",
+ "selfdef-flex-profile",
  "selfdef-friction-audit",
+ "selfdef-grant-registry",
  "selfdef-guardian",
  "selfdef-hardware",
  "selfdef-integration-discord",
@@ -3354,12 +3408,21 @@ dependencies = [
  "selfdef-notifier-engine",
  "selfdef-notifier-orchestrator",
  "selfdef-perimeter",
+ "selfdef-profile-authority-gate",
+ "selfdef-profile-mirror",
+ "selfdef-quarantine-registry",
  "selfdef-responder",
+ "selfdef-rules-registry",
+ "selfdef-sandbox-registry",
  "selfdef-scheduler",
  "selfdef-signing",
  "selfdef-store",
+ "selfdef-trust-score-registry",
+ "selfdef-tui-mirror",
+ "serde",
  "serde_json",
  "tempfile",
+ "time",
  "tokio",
  "tokio-util",
  "tracing",
@@ -4270,6 +4333,19 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-grant-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-grant-issuer",
+ "selfdef-grants-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -5788,6 +5864,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-process-quarantine-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "selfdef-process-spawn-registry"
 version = "0.1.0"
 dependencies = [
@@ -5802,6 +5889,17 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-profile-mirror"
+version = "0.1.0"
+dependencies = [
+ "minisign-verify",
+ "serde",
+ "serde_json",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -5942,6 +6040,18 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-quarantine-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-quarantine-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -6121,9 +6231,11 @@ name = "selfdef-responder"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "selfdef-blockset-backend",
  "selfdef-bus",
  "selfdef-core",
  "selfdef-notifier",
+ "selfdef-process-quarantine-backend",
  "serde",
  "serde_json",
  "tempfile",
@@ -6246,6 +6358,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "selfdef-rules-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-rules-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
 name = "selfdef-sandbox-dispatcher"
 version = "0.1.0"
 dependencies = [
@@ -6284,6 +6408,18 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-sandbox-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-sandbox-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
@@ -6422,6 +6558,17 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-session-revocation-backend"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]
@@ -7269,6 +7416,19 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "selfdef-trust-score-registry"
+version = "0.1.0"
+dependencies = [
+ "selfdef-trust-score-engine",
+ "selfdef-trust-score-mirror",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]

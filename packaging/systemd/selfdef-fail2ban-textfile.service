@@ -1,0 +1,42 @@
+[Unit]
+Description=Selfdef — emit fail2ban defensive-response textfile for node_exporter scrape
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-fail2ban-textfile.sh
+# Runs every 60s. Surfaces fail2ban-server alive-state, active-jail
+# count, and per-jail current/total ban counters. Pairs with
+# auth-events (11th sibling) — that detects attacks, this measures
+# the defensive response. Together: complete IPS attack/response
+# observability.
+#
+# 13th sibling observer. Same R171 hardening + atomic-write
+# convention. Note: PrivateNetwork=true OK because fail2ban-client
+# uses a local UNIX socket (/var/run/fail2ban/fail2ban.sock).
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_FAIL2BAN_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-fail2ban.prom
+ExecStart=/usr/share/selfdef/selfdef-fail2ban-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef /var/run/fail2ban
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

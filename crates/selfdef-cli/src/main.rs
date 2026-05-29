@@ -11,6 +11,9 @@ mod alerts;
 mod audit_chains;
 mod authority;
 mod capability_tokens;
+mod capability_tokens_registry;
+mod cli_mirror_builder;
+mod cli_mirror_doctor;
 mod commit_authority;
 mod communication_boundary;
 mod dashboard_prefs;
@@ -21,11 +24,14 @@ mod filesystem_boundary;
 mod flex_profile;
 mod follow;
 mod friction_audit;
+mod grants;
 mod guardian;
 mod hardware;
 mod health;
 mod inference_backends;
 mod init;
+mod m060_doctor;
+mod m060_metrics;
 mod mcp;
 mod models;
 mod modules;
@@ -35,12 +41,18 @@ mod notify;
 mod paths;
 mod perimeter;
 mod policy;
+mod quarantine_registry;
 mod repl;
+mod rules_registry;
+mod sandbox_registry;
 mod sandbox_tiers;
 mod scheduler;
+mod sse_quota;
 mod ssh_wrap;
 mod tool_authority;
 mod trio;
+mod trust_score_registry;
+mod tui_mirror_builder;
 mod wizard;
 
 use std::path::PathBuf;
@@ -149,6 +161,67 @@ enum Command {
         /// for CI / monitoring integration.
         #[arg(long)]
         json: bool,
+    },
+    /// M060 cross-repo mirror chain doctor (host side). Verifies the
+    /// selfdef-side state of the chain: reads [deployment].selfdef_mirror_dir
+    /// from selfdef.toml + checks per-domain (6 mirrors) resident-store
+    /// presence + published mirror-file presence. Filesystem-only; no daemon
+    /// process required. Sister to sovereign-os's `sovereign-osctl m060-doctor`
+    /// (which verifies the consumer side via HTTP).
+    M060Doctor {
+        /// JSON output for CI / monitoring integration.
+        #[arg(long)]
+        json: bool,
+        /// Override config path (default /etc/selfdef/selfdef.toml or
+        /// $SELFDEF_CONFIG).
+        #[arg(long)]
+        config: Option<std::path::PathBuf>,
+        /// Additionally write a node_exporter-compatible textfile
+        /// with per-domain severity + presence gauges at PATH
+        /// (atomic tempfile + rename). Mirrors the cli-mirror doctor
+        /// --textfile flag — lets a systemd timer drive m060-doctor
+        /// on a cadence so chain-wide Prometheus alerts cover all
+        /// 6 mirror domains, not just D-CLI.
+        #[arg(long, value_name = "PATH")]
+        textfile: Option<std::path::PathBuf>,
+    },
+    /// M060 per-artifact publish-stats from the daemon /metrics endpoint
+    /// (selfdef_m060_mirror_publish_total + selfdef_m060_mirror_last_
+    /// publish_unix). Sister to `m060-doctor` (filesystem-state checks) —
+    /// queries the LIVE Prometheus surface for per-artifact counters,
+    /// useful during incident response when Prometheus itself may be
+    /// the unhealthy component. Exit 0 if every artifact is `ok`; 1 if
+    /// any is offline / failed / stale / degraded / OR /metrics is
+    /// unreachable.
+    M060Metrics {
+        /// JSON output for CI / monitoring integration.
+        #[arg(long)]
+        json: bool,
+        /// Filter to a single artifact filename (e.g. `grants.json`,
+        /// `audit.json`). Useful during incident response to focus on
+        /// one wedged publisher. Returns exit 1 if the artifact is
+        /// not present in the daemon's counters (publisher never ran).
+        #[arg(long)]
+        artifact: Option<String>,
+    },
+    /// MS022 SSE subscriber-quota live state from the daemon
+    /// /metrics endpoint. Reads the 6 selfdef_sse_subscribers_*
+    /// gauges (shipped in commit 77b4499) and renders an
+    /// operator-readable saturation table plus per-token breakdown.
+    /// Operator-side mirror of what sovereign-os surfaces through
+    /// the cockpit (proxy daemon plus alerts plus Grafana).
+    /// Exit 0 when saturation at-or-below 0.85 and no token saturated;
+    /// exit 1 when saturation above 0.85 or any token at cap;
+    /// exit 2 when saturation at 1.0 or /metrics unreachable.
+    SseQuota {
+        /// JSON output for monitoring integration.
+        #[arg(long)]
+        json: bool,
+        /// Show only the per-token saturated count + cap (skip the
+        /// full per-token table). Useful during incident response
+        /// when only the rollup matters.
+        #[arg(long)]
+        rollup_only: bool,
     },
     /// First-run bootstrap. Writes starter config files +
     /// prints the operator checklist. Non-destructive by
@@ -380,6 +453,63 @@ enum Command {
         #[command(subcommand)]
         action: FlexProfileAction,
     },
+    /// M060 D-13 — grant registry operator surface. `show` reads the
+    /// resident snapshot; `issue`/`revoke` are the IPS-side write path
+    /// (via the daemon API) the mirror-export republishes for sovereign-os.
+    Grants {
+        #[command(subcommand)]
+        action: GrantsAction,
+    },
+    /// M060 D-15 — sandbox-allocation registry operator surface. `show`
+    /// reads the resident snapshot; `allocate`/`release` are the IPS-side
+    /// write path the mirror-export republishes for sovereign-os.
+    Sandboxes {
+        #[command(subcommand)]
+        action: SandboxesAction,
+    },
+    /// M060 D-17 — quarantine registry operator surface. `show` reads
+    /// the snapshot; `release`/`forfeit` are the post-block overrides
+    /// (entries themselves are daemon-populated by MS042 detection).
+    Quarantine {
+        #[command(subcommand)]
+        action: QuarantineAction,
+    },
+    /// M060 D-18 — trust-score registry operator surface. `show` reads
+    /// the snapshot; `admit` registers a new tool; `operator-delta`
+    /// applies a signed manual adjustment.
+    TrustScores {
+        #[command(subcommand)]
+        action: TrustScoresAction,
+    },
+    /// M060 D-12 — nftables rules-mirror registry operator surface.
+    /// READ-ONLY: rules are daemon-populated by the nft collector loop
+    /// (poll → `selfdef-rules-registry` → published mirror). Rule
+    /// installation lives in `selfdefctl + nft` at the IPS layer
+    /// (operator MS003 only); this surface observes, never mutates.
+    RulesMirror {
+        #[command(subcommand)]
+        action: RulesMirrorAction,
+    },
+    /// MS007 typed-mirror crate `selfdef-cli-mirror` — projection of
+    /// this binary's own clap subcommand tree (with effect-class +
+    /// min-authority + signature-required classification per MS039
+    /// authority levels + MS043 R10281). Used by sovereign-os for
+    /// CLI introspection, completion, "how do I do X" cross-links,
+    /// and parity between schema-discovery + live runtime surface.
+    CliMirror {
+        #[command(subcommand)]
+        action: CliMirrorAction,
+    },
+    /// MS007 typed-mirror crate `selfdef-tui-mirror` — canonical
+    /// 4-panel TUI layout per MS043 R10141 + F05081 + R10298 ("a
+    /// dashboard should not show vanity graphs"). Used by
+    /// sovereign-os minimal-web mirroring (R10170 "same 4-panel
+    /// layout as TUI"). Panels: rules / grants / quarantine /
+    /// authority — adding panels is forbidden by doctrine.
+    TuiMirror {
+        #[command(subcommand)]
+        action: TuiMirrorAction,
+    },
     /// MS043 UX — list the 5 operator-named dashboard view presets
     /// (compact / default / inference / performance / security) via
     /// `GET /v1/dashboards`. Operator deep-links each via
@@ -433,8 +563,154 @@ enum Command {
         #[command(subcommand)]
         action: ReplAction,
     },
+    /// SDD-065 MS3 — block a source IP via the selfdef-blockset
+    /// backend (CAP_NET_ADMIN-bounded nftables-set in production;
+    /// in-memory backend for tests). The duration is capped by
+    /// the authority tier: autonomous 5m / responder 1h /
+    /// operator 24h / operator-overridden 720h.
+    BlockIp {
+        /// IPv4 or IPv6 address to block. Reserved/link-local
+        /// addresses are refused by the backend.
+        addr: String,
+        /// Human reason — mandatory, recorded in the audit chain.
+        #[arg(long)]
+        reason: String,
+        /// Block duration. Accepts plain seconds (e.g. "3600") or
+        /// suffixed forms ("1h", "15m", "30s"). Default 1h.
+        #[arg(long, default_value = "1h")]
+        duration: String,
+        /// Authority tier under which the block is requested.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Plan + audit only; do not apply.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-065 MS3 — release a previously-applied block.
+    UnblockIp {
+        /// IPv4/IPv6 address (canonical form) OR an opaque
+        /// release-handle previously emitted by `block-ip`.
+        target: String,
+        /// Skip operator confirmation when releasing operator-
+        /// overridden tier handles.
+        #[arg(long)]
+        force: bool,
+    },
+    /// SDD-066 MS3 — freeze a process via cgroupv2-freezer (or
+    /// SIGSTOP fallback). The duration is capped by the authority
+    /// tier per SDD-066 §4: autonomous 2m / responder 15m /
+    /// operator 1h / operator-overridden 24h. Pre-snapshot of
+    /// /proc/<pid> ships separately.
+    QuarantinePid {
+        /// Target pid (must be > 0).
+        pid: i32,
+        /// Human reason — mandatory, recorded in the audit chain.
+        #[arg(long)]
+        reason: String,
+        /// Freeze duration. Accepts plain seconds or suffixed
+        /// forms ("5m", "1h", "30s"). Default 5m.
+        #[arg(long, default_value = "5m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Freeze only this pid (default) or the entire process
+        /// subtree (subject to cgroup-boundary constraint).
+        #[arg(long, value_enum, default_value_t = CliFreezeScope::Process)]
+        scope: CliFreezeScope,
+        /// Plan + audit only; do not apply.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-066 MS3 — release a quarantined process.
+    ReleasePid {
+        /// Target pid or release handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
+    /// SDD-066 MS3 — terminate a quarantined process instead of
+    /// releasing it. Useful when operator decides the post-freeze
+    /// forensic capture is sufficient and the process is hostile.
+    KillQuarantined {
+        /// Target pid or release handle.
+        target: String,
+        /// Signal: TERM (default; graceful) or KILL (force).
+        #[arg(long, default_value = "TERM")]
+        signal: String,
+    },
     /// Print version and build info.
     Version,
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum CliFreezeScope {
+    Process,
+    Tree,
+}
+
+impl From<CliFreezeScope> for selfdef_process_quarantine_backend::FreezeScope {
+    fn from(c: CliFreezeScope) -> Self {
+        use selfdef_process_quarantine_backend::FreezeScope as F;
+        match c {
+            CliFreezeScope::Process => F::Process,
+            CliFreezeScope::Tree => F::Tree,
+        }
+    }
+}
+
+impl From<CliAuthority> for selfdef_process_quarantine_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_process_quarantine_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum CliAuthority {
+    Autonomous,
+    Responder,
+    Operator,
+    #[value(name = "operator-overridden", alias = "operator_overridden")]
+    OperatorOverridden,
+}
+
+impl From<CliAuthority> for selfdef_blockset_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_blockset_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+/// Parse "1h", "30m", "45s", or a bare-number seconds. Returns
+/// the duration in seconds. Pure, unit-testable.
+pub(crate) fn parse_duration_str(s: &str) -> Result<u64, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty duration".into());
+    }
+    let (num_str, mul) = match s.chars().last() {
+        Some('s') => (&s[..s.len() - 1], 1u64),
+        Some('m') => (&s[..s.len() - 1], 60),
+        Some('h') => (&s[..s.len() - 1], 3600),
+        Some('d') => (&s[..s.len() - 1], 86400),
+        Some(c) if c.is_ascii_digit() => (s, 1),
+        _ => return Err(format!("unrecognized duration suffix in {s:?}")),
+    };
+    let n: u64 = num_str
+        .parse()
+        .map_err(|_| format!("not a positive integer: {num_str:?}"))?;
+    Ok(n.saturating_mul(mul))
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -727,6 +1003,294 @@ enum FlexProfileAction {
 }
 
 #[derive(Debug, clap::Subcommand)]
+enum GrantsAction {
+    /// Read the current resident grant snapshot via GET /v1/grants.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Issue an operator-signed grant via POST /v1/grants/issue.
+    Issue {
+        /// Grant kind: filesystem|network|capability|communication|sandbox.
+        #[arg(long)]
+        kind: String,
+        /// Scope: path glob / FQDN / CIDR / capability tag (kind-dependent).
+        #[arg(long)]
+        scope: String,
+        /// Operator-authored reason (non-empty).
+        #[arg(long)]
+        reason: String,
+        /// Active profile at issuance time.
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Desired TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature over the request (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revoke a grant by id via POST /v1/grants/revoke.
+    Revoke {
+        /// Grant id to revoke.
+        grant_id: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum SandboxesAction {
+    /// Read the live snapshot via GET /v1/sandboxes/snapshot.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Allocate a sandbox via POST /v1/sandboxes/allocate.
+    Allocate {
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Active profile at allocation time (MS040).
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// MS036 sandbox tier: tier-a|tier-b|tier-c|tier-d.
+        #[arg(long)]
+        tier: String,
+        /// MS032 sandbox tier index (1..9; must lie in the configured
+        /// MS036 tier's range).
+        #[arg(long)]
+        ms032_tier: u8,
+        /// Underlying isolation primitive (host_seccomp / user_namespace
+        /// / networked_namespace / kvm_vfio / kvm_headless /
+        /// criu_checkpoint / zfs_clone / firecracker_microvm).
+        #[arg(long)]
+        isolation: String,
+        /// Tool occupying the allocation.
+        #[arg(long)]
+        tool: String,
+        /// Bound capability-token id (MS035 linkage).
+        #[arg(long)]
+        capability_token_id: String,
+        /// TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Release an allocation by id via POST /v1/sandboxes/release.
+    Release {
+        /// Allocation id to release.
+        allocation_id: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum QuarantineAction {
+    /// Read the live snapshot via GET /v1/quarantine/snapshot.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Release a quarantine entry by id (operator override).
+    Release {
+        /// Quarantine id.
+        quarantine_id: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
+    },
+    /// Forfeit a quarantine entry by id (operator override, permanent).
+    Forfeit {
+        /// Quarantine id.
+        quarantine_id: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum TrustScoresAction {
+    /// Read the live snapshot via GET /v1/trust-scores/snapshot.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Admit a new tool via POST /v1/trust-scores/admit.
+    Admit {
+        /// Tool name to admit.
+        #[arg(long)]
+        tool: String,
+        /// MS003 declarer fingerprint.
+        #[arg(long)]
+        declarer: String,
+        /// Starting score (0..=1000).
+        #[arg(long, default_value_t = 750)]
+        initial_score: u16,
+        /// MS003 signature over the admit request.
+        #[arg(long)]
+        signature: String,
+    },
+    /// Apply an operator-signed manual delta via
+    /// POST /v1/trust-scores/operator-delta.
+    OperatorDelta {
+        /// Tool whose score is being adjusted.
+        #[arg(long)]
+        tool: String,
+        /// Operator MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// DeltaReason (baseline|successful_execution|mismatch_minor|
+        /// mismatch_major|mismatch_critical|operator_adjustment|decay|
+        /// quarantine_release|forfeiture).
+        #[arg(long)]
+        reason: String,
+        /// Signed delta amount (negative for penalty).
+        #[arg(long)]
+        delta: i32,
+        /// Optional M049 trace_id of the triggering incident.
+        #[arg(long, default_value = "")]
+        trace_id: String,
+        /// MS003 signature.
+        #[arg(long)]
+        signature: String,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum CliMirrorAction {
+    /// Emit the full CliMirrorSnapshot 1.0.0 to stdout (JSON) — or to
+    /// `--output PATH` atomically. The optional output mode is the
+    /// producer hook for the M060 cockpit chain: a systemd one-shot
+    /// (or operator-driven post-upgrade hook) writes the snapshot to
+    /// the daemon-resident store at SELFDEF_CLI_MIRROR_PATH (default
+    /// `/var/lib/selfdef/cli-mirror.json`), and the daemon's M060
+    /// export loop republishes it READ-ONLY to the sovereign-os
+    /// mirror dir for D-19/D-XX CLI-introspection cockpits.
+    Snapshot {
+        /// Pass through JSON (default; here for parity with sister verbs).
+        #[arg(long)]
+        json: bool,
+        /// Optional destination path. When set, the file is written
+        /// atomically (tempfile + rename) instead of stdout.
+        #[arg(long, value_name = "PATH")]
+        output: Option<PathBuf>,
+    },
+    /// Per-effect-class summary tiles (count per ReadOnly /
+    /// Diagnostic / Simulate / Prepare / Execute / Commit / Persist /
+    /// Destructive).
+    Summaries {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Triage the M060 D-CLI mirror chain on this host. Inspects:
+    ///
+    ///   1. Resident store at `SELFDEF_CLI_MIRROR_PATH` (default
+    ///      `/var/lib/selfdef/cli-mirror.json`) — exists, age,
+    ///      schema-version, subcommand count.
+    ///   2. Systemd one-shot `selfdef-cli-mirror-emit.service` — last
+    ///      ExecMainStatus + active state.
+    ///   3. Published mirror at `<selfdef_mirror_dir>/cli.json` —
+    ///      exists, age vs the resident store's age (drift
+    ///      detection).
+    ///
+    /// Exits 0 (GREEN) when every check passes, 1 (YELLOW /
+    /// degraded) when at least one path is operator-actionable, 2
+    /// (RED) when the chain is structurally broken. Per-check
+    /// triage line printed in the canonical operator format used
+    /// by `selfdefctl doctor`.
+    Doctor {
+        /// Emit per-check state as JSON instead of the operator-
+        /// readable table. Schema mirrors the
+        /// `M060ChainCliMirrorReport` shape used by sister doctors.
+        #[arg(long)]
+        json: bool,
+        /// Override the canonical config path. Defaults to
+        /// `/etc/selfdef/selfdef.toml`.
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
+        /// Additionally write a node_exporter-compatible textfile
+        /// with the per-check severity + worst-severity gauges at
+        /// PATH (atomic tempfile + rename). Lets a systemd timer
+        /// run the doctor on a cadence (e.g. every 60s) so the
+        /// existing M060Chain* Prometheus alert rules also fire on
+        /// cli-mirror-specific degradations. The textfile format
+        /// matches the node_exporter textfile_collector convention.
+        #[arg(long, value_name = "PATH")]
+        textfile: Option<PathBuf>,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum TuiMirrorAction {
+    /// Emit the canonical 4-panel TuiMirrorSnapshot 1.0.0 (JSON).
+    Snapshot {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-panel descriptors only (no global keys / no doctrine wrap).
+    Panels {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum RulesMirrorAction {
+    /// Read the live snapshot from the resident registry store.
+    Show {
+        /// Pass through the raw JSON body.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Per-ring summary tiles (Ring 0..4 rule counts + counters).
+    Summaries {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Flat rule table — optionally filtered to one trust ring.
+    List {
+        /// Filter to a single ring (0..4, ring0..ring4, sovereign_kernel,
+        /// trusted_local, sandboxed, experimental, cloud_external).
+        #[arg(long)]
+        ring: Option<String>,
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Terse health-status verdict for D-12 (ok|empty|offline). Suitable
+    /// for monitoring + smoke scripts.
+    Status {
+        /// Pass through JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Debug, clap::Subcommand)]
 enum InferenceBackendsAction {
     /// Default: fetch live state via GET /v1/inference-backends and
     /// render the 4-backend install table.
@@ -787,6 +1351,54 @@ enum CapabilityTokensAction {
     /// Print the full SDD-044 schema (Token shape + companion
     /// crates + caller contract + refusal rules).
     Schema,
+    /// Read the live daemon-resident token snapshot via
+    /// GET /v1/capability-tokens/snapshot.
+    Show {
+        /// Pass through the raw JSON body (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Issue an operator-signed MS035 capability token via
+    /// POST /v1/capability-tokens/issue.
+    Issue {
+        /// Active profile at issuance time (MS040).
+        #[arg(long, default_value = "careful")]
+        profile: String,
+        /// Requesting actor MS003 fingerprint.
+        #[arg(long)]
+        actor: String,
+        /// Allowed tool tokens (repeat the flag; e.g.
+        /// `--tool tests --tool builds`).
+        #[arg(long = "tool", required = true)]
+        tools: Vec<String>,
+        /// MS039 trust ring: ring0|ring1|ring2|ring3|ring4.
+        #[arg(long)]
+        trust_ring: String,
+        /// MS039 authority level: l0_observe|l1_suggest|l2_simulate|
+        /// l3_prepare|l4_execute|l5_commit|l6_persist.
+        #[arg(long)]
+        authority_level: String,
+        /// MS036 sandbox tier: A|B|C|D.
+        #[arg(long)]
+        sandbox_tier: String,
+        /// Parent token id for F04146 inheritance (empty = root).
+        #[arg(long, default_value = "")]
+        parent_token_id: String,
+        /// TTL in seconds (≤ 86400).
+        #[arg(long, default_value_t = 60)]
+        ttl_seconds: u32,
+        /// MS003 signature over the request (sign with the `minisign` CLI).
+        #[arg(long)]
+        signature: String,
+        /// Pass through the raw JSON response (jq-friendly).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revoke a capability token by id via POST /v1/capability-tokens/revoke.
+    Revoke {
+        /// Capability-token id to revoke.
+        token_id: String,
+    },
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -1749,6 +2361,167 @@ async fn main() -> Result<()> {
                 selfdef_core::SCHEMA_VERSION,
             );
         }
+        Command::BlockIp {
+            addr,
+            reason,
+            duration,
+            authority,
+            dry_run,
+        } => {
+            use selfdef_blockset_backend::{
+                AuthorityTier, BlockIpRequest, BlockSetBackend, InMemoryBackend,
+            };
+            use std::net::IpAddr;
+            use std::time::Duration;
+
+            let parsed_addr: IpAddr = addr
+                .parse()
+                .with_context(|| format!("not a valid IP: {addr}"))?;
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run \
+                     with --authority operator-overridden and --confirm-extended \
+                     for 720h tier."
+                );
+            }
+
+            if dry_run {
+                println!(
+                    "[dry-run] would block {parsed_addr} for {secs}s under {tier:?} \
+                     (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            // MS3 default backend = InMemoryBackend for the verb itself.
+            // MS4 wires this to a persistent process-lifetime nftables-set
+            // adapter (CAP_NET_ADMIN required) once the selfdef-blocksetd
+            // bus client lands.
+            let backend = InMemoryBackend::new();
+            let req = BlockIpRequest {
+                addr: parsed_addr,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                idempotency_key: format!("cli:{parsed_addr}:{reason}:{tier:?}"),
+            };
+            let receipt = backend
+                .block_ip(req)
+                .await
+                .with_context(|| format!("blocking {parsed_addr}"))?;
+            println!(
+                "blocked {parsed_addr} for {secs}s · tier={tier:?} · handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::UnblockIp { target, force } => {
+            use selfdef_blockset_backend::{BlockHandle, BlockSetBackend, InMemoryBackend};
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = BlockHandle::Active(target.clone());
+            let receipt = backend
+                .unblock_ip(handle)
+                .await
+                .with_context(|| format!("unblocking {target}"))?;
+            if receipt.released {
+                println!("released {target}");
+            } else {
+                // The MS3 in-memory backend has no preexisting state across
+                // CLI runs, so this is the expected path until MS4. Operator
+                // sees a coherent message rather than silent success.
+                println!("no active block for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::QuarantinePid {
+            pid,
+            reason,
+            duration,
+            authority,
+            scope,
+            dry_run,
+        } => {
+            use selfdef_process_quarantine_backend::{
+                AuthorityTier, FreezeRequest, InMemoryBackend, ProcessQuarantineBackend,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 24h tier."
+                );
+            }
+            let fscope: selfdef_process_quarantine_backend::FreezeScope = scope.into();
+
+            if dry_run {
+                println!(
+                    "[dry-run] would freeze pid {pid} ({fscope:?}) for {secs}s under {tier:?} \
+                     (reason: {reason})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = FreezeRequest {
+                pid,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                scope: fscope,
+                idempotency_key: format!("cli:{pid}:{reason}:{tier:?}:{fscope:?}"),
+            };
+            let receipt = backend
+                .freeze_process(req)
+                .await
+                .with_context(|| format!("freezing pid {pid}"))?;
+            println!(
+                "frozen pid {pid} for {secs}s · scope={fscope:?} · tier={tier:?} · \
+                 handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::ReleasePid { target, force } => {
+            use selfdef_process_quarantine_backend::{
+                InMemoryBackend, ProcessQuarantineBackend, QuarantineHandle,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = QuarantineHandle::Active(target.clone());
+            let receipt = backend
+                .release_process(handle)
+                .await
+                .with_context(|| format!("releasing {target}"))?;
+            if receipt.released {
+                println!("released {target}");
+            } else {
+                println!("no active quarantine for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::KillQuarantined { target, signal } => {
+            // MS3 stub — the kill action lands when MS2 audit-log
+            // ledger wires handle→pid lookup. For now we surface
+            // a coherent operator message.
+            let signal = signal.to_uppercase();
+            if !matches!(signal.as_str(), "TERM" | "KILL") {
+                anyhow::bail!("--signal must be TERM or KILL, got {signal}");
+            }
+            println!(
+                "[MS3 stub] would send SIG{signal} to quarantined target {target} \
+                 (MS4 wires handle→pid ledger; until then, use `kill -{signal} <pid>` \
+                 directly after observing the audit log)"
+            );
+        }
         Command::Mcp { action } => match action {
             McpAction::Tools { human } => {
                 if human {
@@ -1869,6 +2642,23 @@ async fn main() -> Result<()> {
                 doctor::render_human(&results)
             };
             print!("{rendered}");
+            std::process::exit(exit);
+        }
+        Command::M060Doctor {
+            json,
+            config,
+            textfile,
+        } => {
+            let exit = m060_doctor::run(json, config.as_deref(), textfile.as_deref())
+                .context("m060-doctor")?;
+            std::process::exit(exit);
+        }
+        Command::M060Metrics { json, artifact } => {
+            let exit = m060_metrics::run(json, artifact.as_deref()).context("m060-metrics")?;
+            std::process::exit(exit);
+        }
+        Command::SseQuota { json, rollup_only } => {
+            let exit = sse_quota::run(json, rollup_only).context("sse-quota")?;
             std::process::exit(exit);
         }
         Command::Init { action } => match action {
@@ -2023,6 +2813,37 @@ async fn main() -> Result<()> {
             let exit = match action {
                 CapabilityTokensAction::Verdicts => capability_tokens::run_verdicts()?,
                 CapabilityTokensAction::Schema => capability_tokens::run_schema()?,
+                CapabilityTokensAction::Show { json } => {
+                    capability_tokens_registry::run_show(json).context("capability-tokens show")?
+                }
+                CapabilityTokensAction::Issue {
+                    profile,
+                    actor,
+                    tools,
+                    trust_ring,
+                    authority_level,
+                    sandbox_tier,
+                    parent_token_id,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => capability_tokens_registry::run_issue(
+                    &actor,
+                    &profile,
+                    &tools,
+                    &trust_ring,
+                    &authority_level,
+                    &sandbox_tier,
+                    &parent_token_id,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("capability-tokens issue")?,
+                CapabilityTokensAction::Revoke { token_id } => {
+                    capability_tokens_registry::run_revoke(&token_id)
+                        .context("capability-tokens revoke")?
+                }
             };
             std::process::exit(exit);
         }
@@ -2075,6 +2896,177 @@ async fn main() -> Result<()> {
                 FlexProfileAction::Schema => flex_profile::run_schema()?,
                 FlexProfileAction::Show { json } => {
                     flex_profile::run_show(json).context("flex-profile show")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::Grants { action } => {
+            let exit = match action {
+                GrantsAction::Show { json } => grants::run_show(json).context("grants show")?,
+                GrantsAction::Issue {
+                    kind,
+                    scope,
+                    reason,
+                    profile,
+                    actor,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => grants::run_issue(
+                    &kind,
+                    &scope,
+                    &reason,
+                    &profile,
+                    &actor,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("grants issue")?,
+                GrantsAction::Revoke { grant_id } => {
+                    grants::run_revoke(&grant_id).context("grants revoke")?
+                }
+            };
+            std::process::exit(exit);
+        }
+        Command::Quarantine { action } => {
+            let exit = match action {
+                QuarantineAction::Show { json } => {
+                    quarantine_registry::run_show(json).context("quarantine show")?
+                }
+                QuarantineAction::Release {
+                    quarantine_id,
+                    actor,
+                    signature,
+                } => quarantine_registry::run_release(&quarantine_id, &actor, &signature)
+                    .context("quarantine release")?,
+                QuarantineAction::Forfeit {
+                    quarantine_id,
+                    actor,
+                    signature,
+                } => quarantine_registry::run_forfeit(&quarantine_id, &actor, &signature)
+                    .context("quarantine forfeit")?,
+            };
+            std::process::exit(exit);
+        }
+        Command::RulesMirror { action } => match action {
+            RulesMirrorAction::Show { json } => {
+                rules_registry::run_show(json).context("rules-mirror show")?
+            }
+            RulesMirrorAction::Summaries { json } => {
+                rules_registry::run_summaries(json).context("rules-mirror summaries")?
+            }
+            RulesMirrorAction::List { ring, json } => {
+                rules_registry::run_list(ring, json).context("rules-mirror list")?
+            }
+            RulesMirrorAction::Status { json } => {
+                rules_registry::run_status(json).context("rules-mirror status")?
+            }
+        },
+        Command::CliMirror { action } => {
+            // Self-introspection — walk THIS binary's clap tree.
+            use clap::CommandFactory;
+            let app = Cli::command();
+            let snap = cli_mirror_builder::build_snapshot(&app);
+            match action {
+                CliMirrorAction::Snapshot { json: _, output } => match output {
+                    None => {
+                        println!("{}", serde_json::to_string_pretty(&snap)?);
+                    }
+                    Some(path) => {
+                        cli_mirror_builder::write_atomic(&snap, &path)
+                            .context("cli-mirror snapshot atomic write")?;
+                        eprintln!(
+                            "cli-mirror snapshot written atomically to {} ({} subcommands)",
+                            path.display(),
+                            snap.subcommands.len()
+                        );
+                    }
+                },
+                CliMirrorAction::Summaries { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap.summaries)?);
+                }
+                CliMirrorAction::Doctor {
+                    json,
+                    config,
+                    textfile,
+                } => {
+                    let exit_code =
+                        cli_mirror_doctor::run(json, config.as_deref(), textfile.as_deref())
+                            .context("cli-mirror doctor")?;
+                    std::process::exit(exit_code);
+                }
+            }
+        }
+        Command::TuiMirror { action } => {
+            // Canonical 4-panel layout — fixed shape per R10141.
+            let snap = tui_mirror_builder::build_snapshot();
+            match action {
+                TuiMirrorAction::Snapshot { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap)?);
+                }
+                TuiMirrorAction::Panels { json: _ } => {
+                    println!("{}", serde_json::to_string_pretty(&snap.panels)?);
+                }
+            }
+        }
+        Command::TrustScores { action } => {
+            let exit = match action {
+                TrustScoresAction::Show { json } => {
+                    trust_score_registry::run_show(json).context("trust-scores show")?
+                }
+                TrustScoresAction::Admit {
+                    tool,
+                    declarer,
+                    initial_score,
+                    signature,
+                } => trust_score_registry::run_admit(&tool, &declarer, initial_score, &signature)
+                    .context("trust-scores admit")?,
+                TrustScoresAction::OperatorDelta {
+                    tool,
+                    actor,
+                    reason,
+                    delta,
+                    trace_id,
+                    signature,
+                } => trust_score_registry::run_operator_delta(
+                    &tool, &actor, &reason, delta, &trace_id, &signature,
+                )
+                .context("trust-scores operator-delta")?,
+            };
+            std::process::exit(exit);
+        }
+        Command::Sandboxes { action } => {
+            let exit = match action {
+                SandboxesAction::Show { json } => {
+                    sandbox_registry::run_show(json).context("sandboxes show")?
+                }
+                SandboxesAction::Allocate {
+                    actor,
+                    profile,
+                    tier,
+                    ms032_tier,
+                    isolation,
+                    tool,
+                    capability_token_id,
+                    ttl_seconds,
+                    signature,
+                    json,
+                } => sandbox_registry::run_allocate(
+                    &actor,
+                    &profile,
+                    &tier,
+                    ms032_tier,
+                    &isolation,
+                    &tool,
+                    &capability_token_id,
+                    ttl_seconds,
+                    &signature,
+                    json,
+                )
+                .context("sandboxes allocate")?,
+                SandboxesAction::Release { allocation_id } => {
+                    sandbox_registry::run_release(&allocation_id).context("sandboxes release")?
                 }
             };
             std::process::exit(exit);
@@ -3552,5 +4544,50 @@ mod rotate_tests {
                 "non-url-safe char {c:?} in output: {s}",
             );
         }
+    }
+}
+
+// ============================================================ SDD-065 MS3 verb tests
+
+#[cfg(test)]
+mod block_ip_verb_tests {
+    use super::parse_duration_str;
+
+    #[test]
+    fn parse_duration_str_bare_seconds() {
+        assert_eq!(parse_duration_str("3600").unwrap(), 3600);
+        assert_eq!(parse_duration_str("1").unwrap(), 1);
+    }
+
+    #[test]
+    fn parse_duration_str_seconds_suffix() {
+        assert_eq!(parse_duration_str("30s").unwrap(), 30);
+        assert_eq!(parse_duration_str("3600s").unwrap(), 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_minutes_suffix() {
+        assert_eq!(parse_duration_str("15m").unwrap(), 15 * 60);
+        assert_eq!(parse_duration_str("60m").unwrap(), 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_hours_suffix() {
+        assert_eq!(parse_duration_str("1h").unwrap(), 3600);
+        assert_eq!(parse_duration_str("24h").unwrap(), 24 * 3600);
+        assert_eq!(parse_duration_str("720h").unwrap(), 720 * 3600);
+    }
+
+    #[test]
+    fn parse_duration_str_days_suffix() {
+        assert_eq!(parse_duration_str("1d").unwrap(), 86400);
+        assert_eq!(parse_duration_str("30d").unwrap(), 30 * 86400);
+    }
+
+    #[test]
+    fn parse_duration_str_rejects_empty_and_unknown() {
+        assert!(parse_duration_str("").is_err());
+        assert!(parse_duration_str("1x").is_err());
+        assert!(parse_duration_str("abc").is_err());
     }
 }

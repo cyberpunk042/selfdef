@@ -1,0 +1,22 @@
+[Unit]
+Description=Selfdef — periodic four-watchdog doctor (every 60s, drives Prometheus)
+Documentation=https://example.org/you/selfdef/blob/main/SECURITY.md
+# Pairs with selfdef-four-watchdog-doctor.service. 60s cadence matches
+# the sibling selfdef-cli-mirror-doctor and selfdef-m060-doctor timers
+# — same observer-freshness contract surfaced through last_run_unix.
+# Offset boot delay by 90s so the timer doesn't pile up against the
+# other doctor timers at the same moment.
+
+[Timer]
+OnBootSec=90s
+OnUnitActiveSec=60s
+# Wedged-timer detection lives in selfdef_four_watchdog_last_run_unix
+# going stale; the Prometheus rule paging on observer-freshness covers
+# the case where this timer stops firing.
+AccuracySec=5s
+# Randomize fleet-wide fire moment to avoid synchronized writes.
+RandomizedDelaySec=10s
+Unit=selfdef-four-watchdog-doctor.service
+
+[Install]
+WantedBy=timers.target

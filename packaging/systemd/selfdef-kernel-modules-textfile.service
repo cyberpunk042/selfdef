@@ -1,0 +1,38 @@
+[Unit]
+Description=Selfdef — emit kernel-modules textfile for node_exporter scrape (rootkit detection)
+Documentation=https://example.org/you/selfdef/blob/main/packaging/scripts/selfdef-kernel-modules-textfile.sh
+# Runs every 60s. Surfaces loaded kernel module state for post-
+# exploitation rootkit detection + tainted-kernel monitoring.
+#
+# 12th sibling observer. Same R171 hardening + atomic-write
+# convention.
+
+After=local-fs.target
+
+[Service]
+Type=oneshot
+
+User=selfdef
+Group=selfdef
+UMask=0027
+
+Environment=SELFDEF_KERNEL_MODULES_TEXTFILE_PATH=/var/lib/node_exporter/textfile_collector/selfdef-kernel-modules.prom
+ExecStart=/usr/share/selfdef/selfdef-kernel-modules-textfile.sh
+
+SuccessExitStatus=0
+TimeoutStartSec=30s
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/etc/selfdef /usr/bin /usr/share/selfdef /var/lib/selfdef
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+LockPersonality=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+PrivateNetwork=true

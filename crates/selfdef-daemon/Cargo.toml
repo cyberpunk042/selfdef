@@ -45,6 +45,18 @@ selfdef-integration-write = { workspace = true }
 selfdef-integration-shared-audit-summary = { workspace = true }
 selfdef-integration-oracle-triage = { workspace = true }
 selfdef-hardware = { workspace = true }
+selfdef-flex-profile = { workspace = true }
+selfdef-profile-authority-gate = { workspace = true }
+selfdef-profile-mirror = { workspace = true }
+selfdef-grant-registry = { workspace = true }
+selfdef-capability-registry = { workspace = true }
+selfdef-sandbox-registry = { workspace = true }
+selfdef-quarantine-registry = { workspace = true }
+selfdef-trust-score-registry = { workspace = true }
+selfdef-audit-registry = { workspace = true }
+selfdef-rules-registry = { workspace = true }
+selfdef-tui-mirror = { workspace = true }
+selfdef-cli-mirror = { workspace = true }
 selfdef-responder = { workspace = true }
 selfdef-collector-auditd = { workspace = true }
 selfdef-collector-journald = { workspace = true }
@@ -66,7 +78,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-journald = { workspace = true }
 sd-notify = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -123,6 +137,65 @@ assets = [
     ["../../packaging/systemd/selfdefd.service",         "/lib/systemd/system/",                   "644"],
     ["../../packaging/systemd/selfdef-doctor.service",   "/lib/systemd/system/",                   "644"],
     ["../../packaging/systemd/selfdef-doctor.timer",     "/lib/systemd/system/",                   "644"],
+    ["../../packaging/systemd/selfdef-cli-mirror-emit.service", "/lib/systemd/system/",             "644"],
+    ["../../packaging/systemd/selfdef-cli-mirror-doctor.service", "/lib/systemd/system/",           "644"],
+    ["../../packaging/systemd/selfdef-cli-mirror-doctor.timer", "/lib/systemd/system/",             "644"],
+    ["../../packaging/systemd/selfdef-m060-doctor.service", "/lib/systemd/system/",                 "644"],
+    ["../../packaging/systemd/selfdef-m060-doctor.timer", "/lib/systemd/system/",                   "644"],
+    ["../../packaging/systemd/selfdef-four-watchdog-doctor.service", "/lib/systemd/system/",        "644"],
+    ["../../packaging/systemd/selfdef-four-watchdog-doctor.timer", "/lib/systemd/system/",          "644"],
+    ["../../packaging/scripts/four-watchdog-textfile.sh", "/usr/share/selfdef/",                    "755"],
+    ["../../packaging/systemd/selfdef-modules-textfile.service", "/lib/systemd/system/",            "644"],
+    ["../../packaging/systemd/selfdef-modules-textfile.timer", "/lib/systemd/system/",              "644"],
+    ["../../packaging/scripts/selfdef-modules-textfile.sh", "/usr/share/selfdef/",                  "755"],
+    ["../../packaging/systemd/selfdef-daemon-process-textfile.service", "/lib/systemd/system/",     "644"],
+    ["../../packaging/systemd/selfdef-daemon-process-textfile.timer", "/lib/systemd/system/",       "644"],
+    ["../../packaging/scripts/selfdef-daemon-process-textfile.sh", "/usr/share/selfdef/",           "755"],
+    ["../../packaging/systemd/selfdef-apparmor-textfile.service", "/lib/systemd/system/",           "644"],
+    ["../../packaging/systemd/selfdef-apparmor-textfile.timer", "/lib/systemd/system/",             "644"],
+    ["../../packaging/scripts/selfdef-apparmor-textfile.sh", "/usr/share/selfdef/",                 "755"],
+    ["../../packaging/systemd/selfdef-auth-events-textfile.service", "/lib/systemd/system/",        "644"],
+    ["../../packaging/systemd/selfdef-auth-events-textfile.timer", "/lib/systemd/system/",          "644"],
+    ["../../packaging/scripts/selfdef-auth-events-textfile.sh", "/usr/share/selfdef/",              "755"],
+    ["../../packaging/systemd/selfdef-systemd-units-textfile.service", "/lib/systemd/system/",      "644"],
+    ["../../packaging/systemd/selfdef-systemd-units-textfile.timer", "/lib/systemd/system/",        "644"],
+    ["../../packaging/scripts/selfdef-systemd-units-textfile.sh", "/usr/share/selfdef/",            "755"],
+    ["../../packaging/systemd/selfdef-listening-sockets-textfile.service", "/lib/systemd/system/",  "644"],
+    ["../../packaging/systemd/selfdef-listening-sockets-textfile.timer", "/lib/systemd/system/",    "644"],
+    ["../../packaging/scripts/selfdef-listening-sockets-textfile.sh", "/usr/share/selfdef/",        "755"],
+    ["../../packaging/systemd/selfdef-disk-usage-textfile.service", "/lib/systemd/system/",         "644"],
+    ["../../packaging/systemd/selfdef-disk-usage-textfile.timer", "/lib/systemd/system/",           "644"],
+    ["../../packaging/scripts/selfdef-disk-usage-textfile.sh", "/usr/share/selfdef/",               "755"],
+    ["../../packaging/systemd/selfdef-time-sync-textfile.service", "/lib/systemd/system/",          "644"],
+    ["../../packaging/systemd/selfdef-time-sync-textfile.timer", "/lib/systemd/system/",            "644"],
+    ["../../packaging/scripts/selfdef-time-sync-textfile.sh", "/usr/share/selfdef/",                "755"],
+    ["../../packaging/systemd/selfdef-kernel-modules-textfile.service", "/lib/systemd/system/",     "644"],
+    ["../../packaging/systemd/selfdef-kernel-modules-textfile.timer", "/lib/systemd/system/",       "644"],
+    ["../../packaging/scripts/selfdef-kernel-modules-textfile.sh", "/usr/share/selfdef/",           "755"],
+    ["../../packaging/systemd/selfdef-fail2ban-textfile.service", "/lib/systemd/system/",            "644"],
+    ["../../packaging/systemd/selfdef-fail2ban-textfile.timer", "/lib/systemd/system/",              "644"],
+    ["../../packaging/scripts/selfdef-fail2ban-textfile.sh", "/usr/share/selfdef/",                  "755"],
+    ["../../packaging/systemd/selfdef-nftables-textfile.service", "/lib/systemd/system/",            "644"],
+    ["../../packaging/systemd/selfdef-nftables-textfile.timer", "/lib/systemd/system/",              "644"],
+    ["../../packaging/scripts/selfdef-nftables-textfile.sh", "/usr/share/selfdef/",                  "755"],
+    ["../../packaging/systemd/selfdef-cron-textfile.service", "/lib/systemd/system/",                "644"],
+    ["../../packaging/systemd/selfdef-cron-textfile.timer", "/lib/systemd/system/",                  "644"],
+    ["../../packaging/scripts/selfdef-cron-textfile.sh", "/usr/share/selfdef/",                      "755"],
+    ["../../packaging/systemd/selfdef-sshd-config-textfile.service", "/lib/systemd/system/",         "644"],
+    ["../../packaging/systemd/selfdef-sshd-config-textfile.timer", "/lib/systemd/system/",           "644"],
+    ["../../packaging/scripts/selfdef-sshd-config-textfile.sh", "/usr/share/selfdef/",               "755"],
+    ["../../packaging/systemd/selfdef-package-state-textfile.service", "/lib/systemd/system/",       "644"],
+    ["../../packaging/systemd/selfdef-package-state-textfile.timer", "/lib/systemd/system/",         "644"],
+    ["../../packaging/scripts/selfdef-package-state-textfile.sh", "/usr/share/selfdef/",             "755"],
+    ["../../packaging/systemd/selfdef-journal-disk-textfile.service", "/lib/systemd/system/",        "644"],
+    ["../../packaging/systemd/selfdef-journal-disk-textfile.timer", "/lib/systemd/system/",          "644"],
+    ["../../packaging/scripts/selfdef-journal-disk-textfile.sh", "/usr/share/selfdef/",              "755"],
+    ["../../packaging/systemd/selfdef-blockset-textfile.service", "/lib/systemd/system/",            "644"],
+    ["../../packaging/systemd/selfdef-blockset-textfile.timer", "/lib/systemd/system/",              "644"],
+    ["../../packaging/scripts/selfdef-blockset-textfile.sh", "/usr/share/selfdef/",                  "755"],
+    ["../../packaging/systemd/selfdef-quarantine-textfile.service", "/lib/systemd/system/",          "644"],
+    ["../../packaging/systemd/selfdef-quarantine-textfile.timer", "/lib/systemd/system/",            "644"],
+    ["../../packaging/scripts/selfdef-quarantine-textfile.sh", "/usr/share/selfdef/",                "755"],
     ["../../packaging/apparmor/usr.bin.selfdefd",        "/etc/apparmor.d/",                       "644"],
     ["../../packaging/lib/module-lib.sh",                "/usr/share/selfdef/lib/module-lib.sh",   "644"],
     ["../../packaging/scripts/friction-audit.sh",        "/usr/share/selfdef/",                    "644"],
