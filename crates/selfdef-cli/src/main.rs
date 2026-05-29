@@ -846,8 +846,77 @@ enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// SDD-073 MS3 — force-close a specific socket fd on a target pid,
+    /// severing one in-flight connection without killing the process or
+    /// blocking the whole peer IP.
+    ///
+    /// Duration capped by tier — autonomous 2m, responder 15m,
+    /// operator 1h, operator-overridden 4h (per-connection axis:
+    /// shortest of the IPS nonet — fd numbers are recyclable).
+    RevokeFd {
+        /// Target POSIX pid.
+        pid: i32,
+        /// File descriptor on that pid (must be ≥ 0).
+        fd: i32,
+        /// Human reason — mandatory, audited.
+        #[arg(long)]
+        reason: String,
+        /// Stay-revoked duration. Default 30m.
+        #[arg(long, default_value = "30m")]
+        duration: String,
+        /// Authority tier.
+        #[arg(long, value_enum, default_value_t = CliAuthority::Operator)]
+        authority: CliAuthority,
+        /// Protocol filter: tcp | unix | netlink | any.
+        #[arg(long, default_value = "any")]
+        protocol: String,
+        /// Optional inode race-check — if provided, the MS5a
+        /// production adapter verifies /proc/<pid>/fdinfo/<fd>
+        /// still references this inode before closing.
+        #[arg(long)]
+        expected_inode: Option<u64>,
+        /// Plan + audit only.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// SDD-073 MS3 — clear an active socket-fd revocation handle.
+    /// Note: socket fds are not reopenable; restore is purely an
+    /// audit-log + queue-clear operation.
+    RestoreFd {
+        /// Pid/fd or socket-fd-revocation handle.
+        target: String,
+        #[arg(long)]
+        force: bool,
+    },
     /// Print version and build info.
     Version,
+}
+
+impl From<CliAuthority> for selfdef_socket_fd_revocation_backend::AuthorityTier {
+    fn from(c: CliAuthority) -> Self {
+        use selfdef_socket_fd_revocation_backend::AuthorityTier as A;
+        match c {
+            CliAuthority::Autonomous => A::Autonomous,
+            CliAuthority::Responder => A::Responder,
+            CliAuthority::Operator => A::Operator,
+            CliAuthority::OperatorOverridden => A::OperatorOverridden,
+        }
+    }
+}
+
+pub(crate) fn parse_socket_protocol(
+    s: &str,
+) -> Result<selfdef_socket_fd_revocation_backend::SocketProtocol, String> {
+    use selfdef_socket_fd_revocation_backend::SocketProtocol;
+    match s.trim().to_lowercase().as_str() {
+        "tcp" => Ok(SocketProtocol::Tcp),
+        "unix" | "afunix" | "af-unix" => Ok(SocketProtocol::Unix),
+        "netlink" | "nl" => Ok(SocketProtocol::Netlink),
+        "any" | "*" => Ok(SocketProtocol::Any),
+        other => Err(format!(
+            "unknown socket protocol {other:?}; expected one of: tcp, unix, netlink, any"
+        )),
+    }
 }
 
 impl From<CliAuthority> for selfdef_process_tree_freeze_backend::AuthorityTier {
@@ -3374,6 +3443,92 @@ async fn main() -> Result<()> {
                 println!("thawed tree {target}");
             } else {
                 println!("no active process-tree-freeze for {target} (MS3 stateless backend)");
+            }
+        }
+        Command::RevokeFd {
+            pid,
+            fd,
+            reason,
+            duration,
+            authority,
+            protocol,
+            expected_inode,
+            dry_run,
+        } => {
+            use selfdef_socket_fd_revocation_backend::{
+                AuthorityTier, InMemoryBackend, RevokeFdRequest, SocketFdRevocationBackend,
+            };
+            use std::time::Duration;
+
+            if pid <= 0 {
+                anyhow::bail!("pid must be positive, got {pid}");
+            }
+            if fd < 0 {
+                anyhow::bail!("fd must be non-negative, got {fd}");
+            }
+            if reason.trim().is_empty() {
+                anyhow::bail!("--reason must be non-empty");
+            }
+            let secs = parse_duration_str(&duration)
+                .map_err(|e| anyhow::anyhow!("invalid --duration: {e}"))?;
+            let tier: AuthorityTier = authority.into();
+            let max = tier.max_duration().as_secs();
+            if secs > max {
+                anyhow::bail!(
+                    "--duration {secs}s exceeds {tier:?} tier max ({max}s). Re-run with \
+                     --authority operator-overridden for the 4h tier."
+                );
+            }
+            let proto_parsed = parse_socket_protocol(&protocol)
+                .map_err(|e| anyhow::anyhow!("invalid --protocol: {e}"))?;
+
+            if dry_run {
+                println!(
+                    "[dry-run] would revoke fd {fd} on pid {pid} ({proto_parsed:?}) for {secs}s \
+                     under {tier:?} (reason: {reason}, expected_inode: {expected_inode:?})"
+                );
+                return Ok(());
+            }
+
+            let backend = InMemoryBackend::new();
+            let req = RevokeFdRequest {
+                pid,
+                fd,
+                reason: reason.clone(),
+                duration: Duration::from_secs(secs),
+                authority: tier,
+                protocol: proto_parsed,
+                expected_inode,
+                idempotency_key: format!("cli:{pid}:{fd}:{reason}:{tier:?}:{proto_parsed:?}"),
+            };
+            let receipt = backend
+                .revoke_fd(req)
+                .await
+                .with_context(|| format!("revoking fd {fd} on pid {pid}"))?;
+            println!(
+                "revoked fd {fd} on pid {pid} for {secs}s · protocol={proto_parsed:?} · \
+                 tier={tier:?} · handle={:?}",
+                receipt.handle
+            );
+        }
+        Command::RestoreFd { target, force } => {
+            use selfdef_socket_fd_revocation_backend::{
+                InMemoryBackend, SocketFdHandle, SocketFdRevocationBackend,
+            };
+            let _ = force;
+            let backend = InMemoryBackend::new();
+            let handle = SocketFdHandle::Active(target.clone());
+            let receipt = backend
+                .restore_fd(handle)
+                .await
+                .with_context(|| format!("restoring fd {target}"))?;
+            if receipt.cleared {
+                println!("restored fd {target}");
+            } else {
+                println!(
+                    "no active socket-fd-revocation for {target} (MS3 stateless backend; note: \
+                     fds are not actually reopenable — restore is queue-clear + audit only)"
+                );
             }
         }
         Command::Mcp { action } => match action {

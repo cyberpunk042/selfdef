@@ -2901,6 +2901,7 @@ dependencies = [
  "selfdef-scheduler-mirror",
  "selfdef-session-revocation-backend",
  "selfdef-signing",
+ "selfdef-socket-fd-revocation-backend",
  "selfdef-store",
  "selfdef-tool-capability-policy",
  "selfdef-tui-mirror",
