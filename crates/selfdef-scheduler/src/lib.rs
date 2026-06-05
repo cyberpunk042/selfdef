@@ -39,6 +39,7 @@ pub mod ocsf_emitter;
 pub mod policy_signer;
 pub mod prometheus_exporter;
 pub mod psi;
+pub mod scenarios;
 pub mod scheduling_law;
 pub mod tui_panel;
 
