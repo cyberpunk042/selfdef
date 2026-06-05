@@ -96,9 +96,41 @@ while IFS= read -r name; do
     fi
 done <<< "${alerts_names}"
 
+# Gate 4: in-document anchor integrity — every (#anchor) in runbook §1
+# resolves to a real `## N. Section Heading` further down in the same file.
+# A silent rename of a section heading without a §1 anchor update breaks the
+# deep-link with no detection until incident time.
+echo "▶ Gate 4: runbook §1 anchors must resolve to real section headings"
+
+# Extract anchors used in §1 (form: (#some-anchor-text))
+anchors=$(grep -E '^\| `Selfdef' "${RUNBOOK}" | grep -oE '\(#[0-9a-z-]+\)' | tr -d '()' | tr -d '#' | sort -u)
+
+# Markdown anchor-slug rule: lowercase, drop punctuation, then spaces→dash.
+# Per GitHub-flavored markdown, punctuation removal happens BEFORE the
+# space→dash transform, so `## 6. Blackwell + host pressure` becomes
+# `6-blackwell--host-pressure` (the `+` is dropped to nothing, leaving two
+# adjacent spaces, both becoming dashes). DO NOT tr-s collapse — that
+# would mismatch what the renderer produces.
+heading_slugs=$(grep -E '^## ' "${RUNBOOK}" \
+    | sed 's/^## //' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's|[^a-z0-9 -]+||g' \
+    | tr ' ' '-' \
+    | sort -u)
+
+while IFS= read -r anchor; do
+    [[ -z "${anchor}" ]] && continue
+    if echo "${heading_slugs}" | grep -qFx "${anchor}"; then
+        echo "  PASS anchor #${anchor} resolves to a real section heading"
+    else
+        echo "  FAIL anchor #${anchor} referenced in runbook §1 but NO matching `## N. ...` heading found"
+        failures=$((failures + 1))
+    fi
+done <<< "${anchors}"
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-cross-repo-alert-runbook-binding FAIL: ${failures} binding violation(s)"
     exit 1
 fi
 
-echo "L1-cross-repo-alert-runbook-binding PASS: runbook ↔ sovereign-os alerts symmetric"
+echo "L1-cross-repo-alert-runbook-binding PASS: runbook ↔ sovereign-os alerts symmetric + in-doc anchors resolve"
