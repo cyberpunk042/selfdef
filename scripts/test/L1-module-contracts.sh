@@ -200,10 +200,70 @@ for name in "${module_names[@]}"; do
     fi
 done
 
+# ----------------------------------------------------------------------
+# Gate 10: cross-module template references must target a real producer
+# ----------------------------------------------------------------------
+# An inline consumer module (e.g. suricata) may reference another
+# module's nft table or chain BY LITERAL NAME in its rule template
+# (see MS024 E0245: "the owning module does not know about its
+# consumers" — so the consumer carries the literal). If the producer
+# silently renames its table or chain, the manifest-level provides/
+# consumes gate (Gate 7) stays green because that contract speaks in
+# abstract keywords, but the template binding silently breaks at apply-
+# time on a real host. This gate freezes the producer↔consumer
+# template binding pairs at commit time.
+#
+# Producer table/chain → consumer modules: every (table, chain) pair
+# below must be present somewhere in the producer's own *.tmpl AND in
+# every consumer's *.tmpl. Symmetrically; either side renaming = FAIL.
+declare -A PRODUCER_TABLES
+PRODUCER_TABLES["bridge-l2"]="selfdef_bridge"
+declare -A PRODUCER_CHAINS
+PRODUCER_CHAINS["bridge-l2"]="forward_hook"
+declare -A CONSUMERS_OF
+CONSUMERS_OF["bridge-l2"]="suricata"
+
+for producer in "${!PRODUCER_TABLES[@]}"; do
+    table="${PRODUCER_TABLES[${producer}]}"
+    chain="${PRODUCER_CHAINS[${producer}]}"
+    producer_tmpl_dir="${MODULES_DIR}/${producer}/templates"
+    if [[ ! -d "${producer_tmpl_dir}" ]]; then
+        echo "  FAIL producer '${producer}' has no templates/ dir (cross-module surface) "
+        failures=$((failures + 1))
+        continue
+    fi
+    # producer side must declare both names
+    if ! grep -qr -e "${table}" "${producer_tmpl_dir}"; then
+        echo "  FAIL producer '${producer}' templates do not declare table '${table}' (drift from contract)"
+        failures=$((failures + 1))
+    fi
+    if ! grep -qr -e "${chain}" "${producer_tmpl_dir}"; then
+        echo "  FAIL producer '${producer}' templates do not declare chain '${chain}' (drift from contract)"
+        failures=$((failures + 1))
+    fi
+    # every consumer side must reference both names verbatim
+    for consumer in ${CONSUMERS_OF[${producer}]}; do
+        consumer_tmpl_dir="${MODULES_DIR}/${consumer}/templates"
+        if [[ ! -d "${consumer_tmpl_dir}" ]]; then
+            echo "  FAIL consumer '${consumer}' (of '${producer}') has no templates/ dir"
+            failures=$((failures + 1))
+            continue
+        fi
+        if ! grep -qr -e "${table}" "${consumer_tmpl_dir}"; then
+            echo "  FAIL consumer '${consumer}' templates do not reference producer '${producer}' table '${table}'"
+            failures=$((failures + 1))
+        fi
+        if ! grep -qr -e "${chain}" "${consumer_tmpl_dir}"; then
+            echo "  FAIL consumer '${consumer}' templates do not reference producer '${producer}' chain '${chain}'"
+            failures=$((failures + 1))
+        fi
+    done
+done
+
 # Summary
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-module-contracts FAIL: ${failures} contract violation(s)"
     exit 1
 fi
 
-echo "L1-module-contracts PASS: ${#module_names[@]} modules; manifests + install kinds + cross-module wiring + apply.sh invariants all coherent"
+echo "L1-module-contracts PASS: ${#module_names[@]} modules; manifests + install kinds + cross-module wiring + apply.sh invariants + producer↔consumer template bindings all coherent"
