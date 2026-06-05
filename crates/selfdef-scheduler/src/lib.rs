@@ -39,6 +39,7 @@ pub mod data_plane_services;
 pub mod dcgm;
 pub mod decision_audit;
 pub mod driver_replay;
+pub mod execution_pipeline;
 pub mod http_api;
 pub mod human_gate;
 pub mod kv_context_scheduling;
