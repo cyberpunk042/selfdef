@@ -86,6 +86,21 @@ speculation_tree) · Tool Gate (tool_scheduling) · Replay Log (decision_audit/
 decide) · KV Cache Controller (kv_context_scheduling/branch_kv_fusion). The
 crate comprehensively realizes the dump's runtime shape.
 
+**CPU data-plane layer** (dump 2268-2375 — the avx-plus-plus heart):
+`data_plane` (8 deterministic ops + 8 hot objects, "Text is payload. Bits are
+law."), `avx512_features` (7 AVX-512 instructions → AI-infra uses: VPTERNLOG/
+VPCOMPRESS/VPOPCNTDQ/VP2INTERSECT/VPCONFLICT/VBMI/k-masks), `data_plane_services`
+(6 services: Token Law Engine / Policy Scanner / JSON Commit Validator / Memory
+Bitmap Index / Branch Compactor / Replay Index). These encode the operator's
+"exploit the stack to the max, avx-plus-plus base reason" mandate as typed
+catalogs. selfdef-scheduler: **~32 modules / 436 lib tests** — the dump's entire
+CPU-cortex / scheduler / data-plane spec encoded, each module verbatim-cited.
+
+> The remaining unencoded dump sections (memory hierarchy / storage plane /
+> observability plane / memory index plane, dump 2375-3160) are **runtime
+> scope** — they belong in sovereign-os (Solution 1), not the selfdef IPS-side
+> scheduler. The selfdef CPU-cortex/scheduler dump-content is comprehensively done.
+
 `selfdef-scheduler` now **~29 modules / ~418 lib tests** (1 known pre-existing
 flake: `dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention,
 passes in isolation). All modules verbatim-cited to dump line ranges; none invented.
