@@ -50,3 +50,40 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -q 'polarproxy.service'        "${INSTALL_DIR}/apply.sh"
     grep -q 'selfdef-polarproxy.conf'   "${INSTALL_DIR}/apply.sh"
 }
+
+# ============================================================================
+# nat-redirect template contract — polarproxy installs an nft NAT redirect
+# in ITS OWN table (`inet selfdef_polarproxy`) so it never touches the
+# operator's existing nat table (same isolation invariant bridge-l2 + vpn-
+# bridge encode). The redirect is dstnat-priority on TCP/443 → listener
+# port. Silent regression here either (a) takes over the operator's nat
+# table or (b) silently stops redirecting, breaking TLS inspection.
+# ============================================================================
+
+@test "nat-redirect template lives in its own table (isolation invariant verbatim)" {
+    grep -qE 'own table|never touch.*nat table' \
+        "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "nat-redirect template declares table inet selfdef_polarproxy" {
+    grep -qE '^table[[:space:]]+inet[[:space:]]+selfdef_polarproxy[[:space:]]*\{' \
+        "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "nat-redirect chain hooks at output priority dstnat (NAT redirect contract)" {
+    grep -qE 'type[[:space:]]+nat[[:space:]]+hook[[:space:]]+output[[:space:]]+priority[[:space:]]+dstnat;[[:space:]]+policy[[:space:]]+accept;' \
+        "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "nat-redirect rule targets TCP/443 → @@LISTEN_PORT@@" {
+    grep -qE 'meta[[:space:]]+l4proto[[:space:]]+tcp[[:space:]]+tcp[[:space:]]+dport[[:space:]]+443[[:space:]]+redirect[[:space:]]+to[[:space:]]+:@@LISTEN_PORT@@' \
+        "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "nat-redirect rule carries selfdef-polarproxy comment (operator audit)" {
+    grep -q 'comment "selfdef-polarproxy"' "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}
+
+@test "nat-redirect template carries @@LISTEN_PORT@@ substitution token" {
+    grep -q '@@LISTEN_PORT@@' "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
+}

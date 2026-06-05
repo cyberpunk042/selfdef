@@ -46,3 +46,35 @@ INSTALL_DIR="${MODULE_DIR}/install"
     grep -q 'nfqueue'    "${INSTALL_DIR}/apply.sh"
     grep -qE 'af.packet|AF_PACKET' "${INSTALL_DIR}/apply.sh"
 }
+
+# ============================================================================
+# Cross-module consumer contract — suricata's nfqueue template adds a jump
+# INTO bridge-l2's `inet selfdef_bridge` table → `forward_hook` chain.
+# E0245 verbatim: "the owning module does not know about its consumers".
+# That makes a silent rename of either the table or the chain a CROSS-MODULE
+# silent break that only surfaces at apply-time on a real host. These
+# assertions freeze the consumer-side of bridge-l2's E0247 contract.
+# ============================================================================
+
+@test "nfqueue rule targets bridge-l2's selfdef_bridge table (E0245 consumer contract)" {
+    grep -qE 'inet[[:space:]]+selfdef_bridge' \
+        "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
+
+@test "nfqueue rule jumps into bridge-l2's forward_hook chain (E0247 consumer surface)" {
+    grep -qE 'add[[:space:]]+rule[[:space:]]+inet[[:space:]]+selfdef_bridge[[:space:]]+forward_hook' \
+        "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
+
+@test "nfqueue rule uses queue ... bypass (suricata-down fail-open is intentional)" {
+    grep -qE 'queue[[:space:]]+num[[:space:]]+@@QUEUE_NUM@@[[:space:]]+bypass' \
+        "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
+
+@test "nfqueue rule carries @@QUEUE_NUM@@ substitution token" {
+    grep -q '@@QUEUE_NUM@@' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
+
+@test "nfqueue rule carries selfdef-suricata comment (operator nft list rule audit)" {
+    grep -q 'comment "selfdef-suricata"' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
