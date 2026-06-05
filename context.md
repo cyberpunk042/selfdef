@@ -30,17 +30,29 @@ could not actually drive a routing `Decision`. This arc closed all three, on
 | `decide.rs` (SDD-031 D2) | `decide(&DriverReading, &RequestContext) -> Decision` orchestrator: score→recommend→`Decision::new`+`validate`; `decide_and_audit` adds SHA-256-chained `emit_audit_entry` append. The `Scheduler` the crate doc promised | `Decision::new`/`validate` (mirror), `emit_audit_entry` chain, real `MirrorError` vs runtime `SchedulerError::InvalidDecision` |
 
 The loop is now whole: `poll() → DriverReading → score_current_substrate →
-recommend_route → decide → Decision → audit + ring → HTTP surface`. The
-observability half also closed this session: `write_ring_buffer` (atomic,
-FIFO-bounded `DEFAULT_RING_MAX_ENTRIES`=256) + `decide_and_persist` connect the
-orchestrator's decisions to the ring the selfdef-api scheduler handlers
-(`GET /v1/scheduler` / `/history` / `/explain` / `/backpressure`) already read
-— previously the ring had a reader but no writer, so the operator surface read
-empty in production. **One remaining MS048 edge** (not blocking): wiring
-`decide_and_persist` into a live request-ingress loop — needs a request source
-(what a scheduling "request" is at the daemon boundary). That's the next
-selfdef scheduler unit; everything below it (score / route / decide / persist /
-read-back / HTTP) is in place.
+recommend_route → decide → Decision → {audit chain + ring + OCSF + Prometheus}`.
+
+**Decision observability — fully wired this session, end to end across both repos:**
+- `write_ring_buffer` (atomic, FIFO-bounded `DEFAULT_RING_MAX_ENTRIES`=256) +
+  `decide_and_persist` → the ring the selfdef-api handlers (`GET /v1/scheduler`
+  / `/history` / `/explain` / `/backpressure`) already read (was reader-without-writer).
+- `render_decision_ocsf` + `emit_decision_ocsf` + `decide_persist_and_emit` →
+  OCSF Detection Finding per decision (`event_kind="scheduler_decision"`,
+  Hibernate=High); MS026 SIEM coverage extended to the decision layer.
+- `render_decision_metrics` (route/profile/hibernate gauges) wired into the
+  M01174 textfile binary (real-run verified) → node_exporter scrape.
+- **sovereign-os** (read-only render, boundary-respecting): 3 Grafana panels
+  (route distribution + hibernate + window size) + the
+  `SelfdefSchedulerHighHibernateRate` alert (>50% deferral 15m) + selfdef
+  runbook §12 (sustained-deferral failure mode). Chain complete: metric → OCSF
+  → Prometheus → alert → Grafana → runbook.
+
+**One remaining MS048 edge** (not blocking): wiring `decide_persist_and_emit`
+into a live request-ingress loop — needs a request source (what a scheduling
+"request" carries at the daemon boundary; SDD-031 doesn't define it, it's in
+the avx-plus-plus dump tail). That's the next selfdef scheduler unit; everything
+below it (score / route / decide / persist / read-back / HTTP / OCSF / metrics /
+alert / dashboard / runbook) is in place.
 
 ## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
 
