@@ -48,6 +48,7 @@ pub mod request_lifecycle;
 pub mod scenarios;
 pub mod scheduler_reactions;
 pub mod scheduling_law;
+pub mod speculation_tree;
 pub mod speculative_parallelism;
 pub mod tier;
 pub mod tier_work_policy;
