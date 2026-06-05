@@ -87,3 +87,61 @@ INSTALL_DIR="${MODULE_DIR}/install"
 @test "nat-redirect template carries @@LISTEN_PORT@@ substitution token" {
     grep -q '@@LISTEN_PORT@@' "${MODULE_DIR}/templates/nat-redirect.rule.tmpl"
 }
+
+# ============================================================================
+# polarproxy.service.tmpl contract — systemd hardening + token contract.
+# The unit ships with 6 substitution tokens + a 5-clause systemd hardening
+# stack (NoNewPrivileges + ProtectSystem=strict + ProtectHome + PrivateTmp +
+# DynamicUser). Silent regression of any hardening clause widens the unit's
+# capability surface — exactly the failure mode MS024-cousin contract tests
+# exist to catch.
+# ============================================================================
+
+@test "polarproxy.service template is a systemd Type=simple unit" {
+    grep -qE '^Type=simple' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template runs PolarProxy ExecStart line" {
+    grep -qE '^ExecStart=.*PolarProxy' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template uses DynamicUser=yes (no static UID required)" {
+    grep -qE '^DynamicUser=yes' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template hardening: NoNewPrivileges=yes (no setuid escape)" {
+    grep -qE '^NoNewPrivileges=yes' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template hardening: ProtectSystem=strict (full root RO)" {
+    grep -qE '^ProtectSystem=strict' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template hardening: ProtectHome=yes (no /home access)" {
+    grep -qE '^ProtectHome=yes' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template hardening: PrivateTmp=yes (no /tmp pivot)" {
+    grep -qE '^PrivateTmp=yes' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template ReadWritePaths covers the log dir (only writable namespace)" {
+    grep -qE '^ReadWritePaths=@@LOG_DIR@@' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template carries all six substitution tokens (TLS+PCAP+CERTHTTP+LOG+CA+PASSWORD)" {
+    grep -q '@@LISTEN_PORT@@'         "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -q '@@PCAP_OVER_IP_PORT@@'   "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -q '@@CERT_HTTP_FLAG@@'      "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -q '@@LOG_DIR@@'             "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -q '@@CA_PFX_PATH@@'         "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+    grep -q '@@CA_PFX_PASSWORD_OPT@@' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template auto-restarts on failure (operator-visible service contract)" {
+    grep -qE '^Restart=on-failure' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
+
+@test "polarproxy.service template WantedBy=multi-user.target (boots into multi-user)" {
+    grep -qE '^WantedBy=multi-user\.target' "${MODULE_DIR}/templates/polarproxy.service.tmpl"
+}
