@@ -102,10 +102,18 @@ commit", 2427), `tool_schema_kv` (6 invariant-prefix caches + content addressing
 2543), `kv_cache_controller` (4-tier VRAM/RAM/NVMe-ZFS hierarchy + KvBlockMeta +
 7 decisions + 6 scan questions, "Let the CPU govern memory", 2477-2540).
 
-selfdef-scheduler: **39 modules / 464 lib tests** (single-threaded; the 1 dcgm
-parallel-flake aside), all bins build, selfdef-api compiles. The dump's entire
-CPU-cortex / scheduler / KV / tool / data-plane spec is encoded, each module
-verbatim-cited.
+Capstone: `golden_rule` (dump 2701-2728) — the 4 "Never" rules + 6 techniques,
+each technique's `realized_by()` pointing back at the module implementing it
+(content addressing→tool_schema_kv · prefix sharing→branch_kv_fusion ·
+speculative trees→speculation_tree · AVX-512 branch compaction→branch_masks · KV
+cache tiering→kv_cache_controller · deterministic commit→execution_pipeline).
+
+selfdef-scheduler: **~40 modules / 470 lib tests** (single-threaded; the 1 dcgm
+parallel-flake aside), all 3 bins build, selfdef-api compiles. **The dump's
+entire CPU-cortex / scheduler / KV / tool / data-plane spec (846-2728 +
+18000-18290) is encoded, each module verbatim-cited** — and this is the dump's
+OWN section boundary: immediately after the Golden Rule the dump says "Next
+layer: the storage and replay plane" (runtime scope).
 
 **Cross-repo "combine" seam — BUILT both sides:** selfdef produces
 (`selfdef-scheduler-decide` binary + `ms048-scheduler-integration-contract.md`);
