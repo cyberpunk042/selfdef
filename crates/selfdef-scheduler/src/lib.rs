@@ -89,6 +89,7 @@ pub mod runtime_shape;
 pub mod scenarios;
 pub mod scheduler_reactions;
 pub mod scheduling_law;
+pub mod serving_modes;
 pub mod speculation_tree;
 pub mod speculative_parallelism;
 pub mod system_planes;
