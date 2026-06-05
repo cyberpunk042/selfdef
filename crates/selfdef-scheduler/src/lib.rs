@@ -45,6 +45,7 @@ pub mod psi;
 pub mod request_lifecycle;
 pub mod scenarios;
 pub mod scheduling_law;
+pub mod speculative_parallelism;
 pub mod tier_work_policy;
 pub mod tool_scheduling;
 pub mod tui_panel;
