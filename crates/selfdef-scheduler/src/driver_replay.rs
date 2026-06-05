@@ -61,8 +61,10 @@ use crate::{
     BackpressureMonitor, BackpressureState, BackpressureThresholds, DriverAuditError,
 };
 
-// Pull DriverAuditError into scope via a type alias.
-type ReplayError = DriverAuditError;
+/// Replay error — alias of [`crate::DriverAuditError`] (the replay engine
+/// reads the same audit chain). Public so the `Returns [ReplayError]` doc
+/// links on the public replay functions resolve.
+pub type ReplayError = DriverAuditError;
 
 // Re-export the alias the decision_audit module exports so callers
 // have one error type.
