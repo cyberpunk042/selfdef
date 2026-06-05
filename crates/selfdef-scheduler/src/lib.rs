@@ -62,6 +62,7 @@ pub mod branch_lifecycle;
 pub mod branch_masks;
 pub mod config;
 pub mod decide;
+pub mod critical_separation;
 pub mod data_plane;
 pub mod data_plane_services;
 pub mod dcgm;
