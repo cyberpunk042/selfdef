@@ -6,6 +6,46 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — MS048 Goldilocks Scheduler + Deterministic Cortex Runtime COMPLETE (2026-06-05)
+
+The `selfdef-scheduler` crate now comprehensively realizes the avx-plus-plus
+dump's entire CPU-cortex / scheduler / KV / tool / data-plane specification
+(dump 846-2728 + 18000-18290) — **~40 verbatim-cited modules / 470 tests**,
+3 binaries, all clippy `-D warnings` clean; `selfdef-api` compiles against it.
+
+- **Decision pipeline**: substrate poll → `objective_signals` (7-axis) →
+  `scheduling_law` (Key Scheduling Law route recommender) → `decide`
+  orchestrator → 4-sink persistence (SHA-256 audit chain + ring buffer + OCSF
+  Detection Findings + Prometheus decision metrics).
+- **8 Deterministic Cortex Runtime engines** (`runtime_shape`), each
+  module-mapped: Branch (`branch_masks`/`branch_lifecycle`) · Policy
+  (`scheduling_law`/`tier_work_policy`) · Grammar · Memory Router
+  (`memory_scheduling`/`memory_admission`) · Speculation
+  (`speculative_parallelism`/`speculation_tree`) · Tool Gate
+  (`tool_scheduling`/`tool_call_transaction`) · Replay Log (`decision_audit`) ·
+  KV Cache Controller (`kv_context_scheduling`/`branch_kv_fusion`/
+  `kv_cache_controller`/`tool_schema_kv`).
+- **CPU data-plane layer** (the avx-plus-plus heart): `data_plane` (8 ops) ·
+  `avx512_features` (7 instructions: VPTERNLOG/VPCOMPRESS/VPOPCNTDQ/VP2INTERSECT
+  /VPCONFLICT/VBMI/k-masks) · `data_plane_services` (6 services) ·
+  `execution_pipeline` (CPU pipeline) · `worker_status_word` · `golden_rule`
+  (capstone doctrine, technique→module index).
+- **Request-ingress**: `selfdef-scheduler-decide` binary (task descriptor →
+  poll → decide_persist_and_emit → Decision JSON), real-run verified into
+  audit+ring+OCSF, packaged + documented.
+- **Observability**: selfdef-api `/v1/scheduler` (+ decision aggregate) ·
+  Prometheus textfile (substrate + decision metrics) · OCSF stream · operator
+  runbook (`ms048-scheduler-failure-modes.md` §12 deferral).
+- **Cross-repo integration contract** (`ms048-scheduler-integration-contract.md`)
+  — the producer-side seam the sovereign-os runtime consumes (sovereign-os ships
+  `scripts/inference/scheduler-bridge.py` + 8 unit tests).
+
+Every module cites its dump line range; nothing invented (operator rule "you
+cannot invent crap"). The build reaches the dump's own section boundary (the
+Golden Rule, after which the dump moves to the storage/replay plane — runtime
+scope). One pre-existing parallel-only test flake noted
+(`dcgm::nvidia_smi_real_substrate_success`; passes in isolation).
+
 ### Added — IPS authority/boundary dashboard group COMPLETE: 9 surfaces under the Authority tab (2026-05-27)
 
 Closed the operator-UX gap where the selfdef dashboard omitted the IPS "what's
