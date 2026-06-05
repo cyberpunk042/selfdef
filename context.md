@@ -70,12 +70,23 @@ tested modules in `selfdef-scheduler` — each verbatim-cited, no invention:
   decide() routes them exactly as the dump describes (Verify→Blackwell,
   defers when oracle busy, Draft→3090)
 
-Also added: `speculation_tree` (tree-structured speculation + TokenNode,
-2574-2606), `branch_kv_fusion` (branch KV ownership + prefix-share-on-fork,
-2608-2642), and a cross-module **coherence capstone** in `scenarios` proving
-decide → tier → {plane, role, work} are consistent for the dump's worked example.
+Also added: `speculation_tree` (tree speculation + TokenNode, 2574-2606),
+`branch_kv_fusion` (branch KV ownership + prefix-share-on-fork, 2608-2642),
+`memory_admission` ("not everything deserves KV" rules + 64-bit admission
+bitfield, 2648-2683), and a cross-module **coherence capstone** in `scenarios`
+proving decide → tier → {plane, role, work} are consistent for the dump's worked
+example.
 
-`selfdef-scheduler` now **~27 modules / 401 lib tests** (1 known pre-existing
+**Architectural capstone — `runtime_shape`**: the dump's "Deterministic Cortex
+Runtime" 8 engines (2670-2683) are ALL implemented, each mapped to its module:
+Branch Engine (branch_masks/lifecycle) · Policy Engine (scheduling_law/
+tier_work_policy) · Grammar Engine (branch_lifecycle Filter) · Memory Router
+(memory_scheduling/admission) · Speculation Engine (speculative_parallelism/
+speculation_tree) · Tool Gate (tool_scheduling) · Replay Log (decision_audit/
+decide) · KV Cache Controller (kv_context_scheduling/branch_kv_fusion). The
+crate comprehensively realizes the dump's runtime shape.
+
+`selfdef-scheduler` now **~29 modules / ~418 lib tests** (1 known pre-existing
 flake: `dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention,
 passes in isolation). All modules verbatim-cited to dump line ranges; none invented.
 
