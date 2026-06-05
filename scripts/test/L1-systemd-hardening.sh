@@ -292,9 +292,75 @@ else
     assert_grep_st "WantedBy=timers.target" "^WantedBy=timers\\.target"
 fi
 
+# ============================================================================
+# selfdef-scheduler.service — MS048 long-running Ring 0 daemon
+# ============================================================================
+# The fourth shipped systemd unit at the daemon layer (distinct from
+# the textfile observer): the Goldilocks Scheduler daemon proper. Ring 0
+# IPS service per MS039 trust topology. User=root (needs CAP_SYS_RESOURCE
+# on some kernels for /proc/pressure/* + /mnt/vault/context append).
+# AF_INET + AF_INET6 (HTTP API surface) + MemoryDenyWriteExecute
+# distinguish this from the observer.
+
+DAEMON_UNIT="${REPO_ROOT}/packaging/systemd/selfdef-scheduler.service"
+
+if [[ ! -f "${DAEMON_UNIT}" ]]; then
+    echo "  FAIL scheduler daemon unit not present at ${DAEMON_UNIT}"
+    failures=$((failures + 1))
+else
+    assert_grep_dmn() {
+        local label="$1"
+        local pattern="$2"
+        if grep -qE "${pattern}" "${DAEMON_UNIT}"; then
+            echo "  PASS scheduler.service: ${label}"
+        else
+            echo "  FAIL scheduler.service: ${label} — pattern not found: ${pattern}"
+            failures=$((failures + 1))
+        fi
+    }
+    # Unit + service contract
+    assert_grep_dmn "Description references Goldilocks Scheduler" \
+        "^Description=.*Goldilocks Scheduler"
+    assert_grep_dmn "After=tetragon.service (eBPF substrate dep)" \
+        "^After=tetragon\\.service"
+    assert_grep_dmn "Wants=selfdef-guardian.service (loose dep — starts without it)" \
+        "^Wants=selfdef-guardian\\.service"
+    assert_grep_dmn "StartLimitBurst caps restart storms" \
+        "^StartLimitBurst=[0-9]+"
+    assert_grep_dmn "StartLimitIntervalSec set" \
+        "^StartLimitIntervalSec=[0-9]+s?"
+    assert_grep_dmn "Type=simple" \
+        "^Type=simple"
+    assert_grep_dmn "ExecStart=/usr/local/bin/selfdef-scheduler" \
+        "^ExecStart=/usr/local/bin/selfdef-scheduler"
+    assert_grep_dmn "Restart=always" \
+        "^Restart=always"
+    assert_grep_dmn "User=root (Ring 0 — needs CAP_SYS_RESOURCE)" \
+        "^User=root"
+    # Hardening (14-clause baseline for the Ring 0 enforcer)
+    assert_grep_dmn "NoNewPrivileges=true" "^NoNewPrivileges=true"
+    assert_grep_dmn "ProtectSystem=strict" "^ProtectSystem=strict"
+    assert_grep_dmn "ProtectKernelTunables=true" "^ProtectKernelTunables=true"
+    assert_grep_dmn "ProtectKernelLogs=true" "^ProtectKernelLogs=true"
+    assert_grep_dmn "ProtectControlGroups=true" "^ProtectControlGroups=true"
+    assert_grep_dmn "RestrictAddressFamilies covers AF_UNIX + AF_INET + AF_INET6 (HTTP API)" \
+        "^RestrictAddressFamilies=.*AF_UNIX.*AF_INET6?|^RestrictAddressFamilies=.*AF_INET.*AF_UNIX"
+    assert_grep_dmn "LockPersonality=true" "^LockPersonality=true"
+    assert_grep_dmn "RestrictNamespaces=true" "^RestrictNamespaces=true"
+    assert_grep_dmn "RestrictRealtime=true" "^RestrictRealtime=true"
+    assert_grep_dmn "RestrictSUIDSGID=true" "^RestrictSUIDSGID=true"
+    assert_grep_dmn "SystemCallArchitectures=native" "^SystemCallArchitectures=native"
+    assert_grep_dmn "MemoryDenyWriteExecute=true (no JIT — daemon enforces, doesn't compile)" \
+        "^MemoryDenyWriteExecute=true"
+    assert_grep_dmn "ReadWritePaths covers /mnt/vault/context (R10386 audit log)" \
+        "^ReadWritePaths=.*\\/mnt\\/vault\\/context"
+    assert_grep_dmn "WantedBy=multi-user.target" \
+        "^WantedBy=multi-user\\.target"
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-systemd-hardening FAIL: ${failures} contract violation(s)"
     exit 1
 fi
 
-echo "L1-systemd-hardening PASS: 20 guardian-core R-rows + 12 ux-harness clauses + 7 ux-harness.timer clauses + 16 scheduler-textfile clauses + 5 scheduler-textfile.timer clauses present"
+echo "L1-systemd-hardening PASS: 20 guardian + 12 ux-harness + 7 ux-harness.timer + 16 scheduler-textfile + 5 scheduler-textfile.timer + 22 scheduler daemon clauses present"
