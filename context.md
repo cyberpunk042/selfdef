@@ -47,12 +47,32 @@ recommend_route → decide → Decision → {audit chain + ring + OCSF + Prometh
   runbook §12 (sustained-deferral failure mode). Chain complete: metric → OCSF
   → Prometheus → alert → Grafana → runbook.
 
-**One remaining MS048 edge** (not blocking): wiring `decide_persist_and_emit`
-into a live request-ingress loop — needs a request source (what a scheduling
-"request" carries at the daemon boundary; SDD-031 doesn't define it, it's in
-the avx-plus-plus dump tail). That's the next selfdef scheduler unit; everything
-below it (score / route / decide / persist / read-back / HTTP / OCSF / metrics /
-alert / dashboard / runbook) is in place.
+**Dump-grounded policy-module buildout (continued same session):** read the
+avx-plus-plus dump tail directly (`/home/user/infohub/raw/dumps/2026-05-18-…-AVX-plus-plus.md`,
+18341 lines) and encoded the entire Goldilocks scheduler section as typed +
+tested modules in `selfdef-scheduler` — each verbatim-cited, no invention:
+- `tier_work_policy` (M01151) — Blackwell accept/avoid · 3090 use-for · CPU
+  hot-ops + per-tier doctrines (dump 18043-18116)
+- `kv_context_scheduling` (M01152) — 5 signals + 4 routing preferences (18117-18138)
+- `memory_scheduling` (M01153) — 5-stage retrieval pipeline (18140-18152)
+- `tool_scheduling` (M01154) — 5-class treatment table (18154-18176)
+- `backpressure_response` — per-surface verbatim response actions (18181-18205)
+- `request_lifecycle` — canonical 10-step flow; step 1 "User request arrives"
+  IS the request-ingress entry (846-862)
+- `speculative_parallelism` — predict/prune/verify service-level speculation (4816-4834)
+- `scenarios` (M01167) — the dump's "code bug" worked example as CI fixtures;
+  decide() routes them exactly as the dump describes (Verify→Blackwell,
+  defers when oracle busy, Draft→3090)
+
+The "request" question is **resolved from the dump**: a scheduling request is a
+TASK entering the 10-step lifecycle (step 1), scored by the 7-axis objective and
+routed per `scheduling_law`. `RequestContext` (profile + model-estimated axes +
+id) faithfully encodes the decision inputs; `scenarios` pins the end-to-end
+behavior to the dump. selfdef-scheduler: **~20 modules, 352 lib tests green.**
+
+**Remaining MS048 edge** (not blocking): wiring `decide_persist_and_emit` into a
+live daemon loop driven by the gateway (the cross-repo request source on the
+sovereign-os runtime side). The decision/policy substrate is all in place.
 
 ## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
 
