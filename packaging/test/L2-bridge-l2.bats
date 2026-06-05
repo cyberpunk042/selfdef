@@ -81,3 +81,79 @@ INSTALL_DIR="${MODULE_DIR}/install"
     # doesn't exit with a parse error.
     [ "${status}" -ne 2 ]
 }
+
+# ============================================================================
+# E0247 nftables template structure invariants (verbatim from
+# templates/nftables.conf.tmpl). The bridge-l2 contract with consumer
+# modules (suricata, polarproxy, etc.) is that the rendered ruleset
+# exposes a `selfdef_bridge` table with a `forward_hook` chain those
+# consumers add jumps into. A silent rename here would break every
+# consumer at apply-time; the rules below freeze that contract.
+# ============================================================================
+
+@test "E0247 template declares table inet selfdef_bridge" {
+    grep -qE '^table[[:space:]]+inet[[:space:]]+selfdef_bridge[[:space:]]*\{' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 template exposes empty forward_hook chain for consumer modules" {
+    grep -qE '^[[:space:]]*chain[[:space:]]+forward_hook[[:space:]]*\{[[:space:]]*\}' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 template FORWARD chain hooks at priority filter with substitutable policy" {
+    grep -qE 'type[[:space:]]+filter[[:space:]]+hook[[:space:]]+forward[[:space:]]+priority[[:space:]]+filter;[[:space:]]+policy[[:space:]]+@@FORWARD_POLICY@@;' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 FORWARD chain jumps into forward_hook on both iif + oif (consumer surface)" {
+    grep -qE '^[[:space:]]*iifname[[:space:]]+"@@BRIDGE_NAME@@"[[:space:]]+jump[[:space:]]+forward_hook' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+    grep -qE '^[[:space:]]*oifname[[:space:]]+"@@BRIDGE_NAME@@"[[:space:]]+jump[[:space:]]+forward_hook' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 template carries three substitution tokens (BRIDGE_NAME, FORWARD_POLICY, MGMT_INPUT_RULE)" {
+    grep -q '@@BRIDGE_NAME@@' "${MODULE_DIR}/templates/nftables.conf.tmpl"
+    grep -q '@@FORWARD_POLICY@@' "${MODULE_DIR}/templates/nftables.conf.tmpl"
+    grep -q '@@MGMT_INPUT_RULE@@' "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 template input chain default policy is accept (management-iface drop is a substituted rule, not the chain policy)" {
+    grep -qE 'type[[:space:]]+filter[[:space:]]+hook[[:space:]]+input[[:space:]]+priority[[:space:]]+filter;[[:space:]]+policy[[:space:]]+accept;' \
+        "${MODULE_DIR}/templates/nftables.conf.tmpl"
+}
+
+@test "E0247 template flushes ruleset at top (bridge-l2 owns its table cleanly)" {
+    # First non-comment, non-blank line must be `flush ruleset`.
+    first=$(grep -vE '^[[:space:]]*(#|$)' "${MODULE_DIR}/templates/nftables.conf.tmpl" | head -1)
+    [ "${first}" = "flush ruleset" ]
+}
+
+# ============================================================================
+# E0248 forward_policy allowlist + idempotent-skip contract.
+# `apply.sh` validates forward_policy ∈ {accept, drop}; a silent allowlist
+# widening (e.g. accidentally accepting "reject") could render an nft
+# ruleset the kernel refuses to load, taking the bridge down. The skip
+# contract is similarly load-bearing: operators (and selfdefctl status
+# parsers) depend on the exact JSON `status:skipped` marker.
+# ============================================================================
+
+@test "E0248 apply.sh validates forward_policy against accept|drop allowlist" {
+    grep -qE '\[\[[[:space:]]+"\$FORWARD_POLICY"[[:space:]]+==[[:space:]]+"accept"[[:space:]]+\|\|[[:space:]]+"\$FORWARD_POLICY"[[:space:]]+==[[:space:]]+"drop"[[:space:]]+\]\]' \
+        "${INSTALL_DIR}/apply.sh"
+}
+
+@test "E0248 apply.sh emits status:skipped when ruleset already at target state" {
+    grep -qE 'emit_status[[:space:]]+"skipped"[[:space:]]+"already at target state"' \
+        "${INSTALL_DIR}/apply.sh"
+}
+
+@test "E0248 apply.sh writes ruleset to /etc/nftables.d/selfdef-bridge.conf (E0247 deploy path)" {
+    grep -qE '/etc/nftables\.d/selfdef-bridge\.conf' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "E0250 caveat surfaced in operator README (severs connection if run on bridged NIC)" {
+    grep -qiE 'sever|severs|severing' "${MODULE_DIR}/README.md"
+    grep -qiE 'management interface|console' "${MODULE_DIR}/README.md"
+}
