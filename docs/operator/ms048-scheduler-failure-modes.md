@@ -19,6 +19,7 @@ Alert names match `cyberpunk042/sovereign-os/config/prometheus/alerts/selfdef-sc
 | `SelfdefSchedulerBlackwellVramExhaustion` | `blackwell-exhaustion` | [§6 Blackwell + host pressure](#6-blackwell--host-pressure) |
 | `SelfdefSchedulerHumanGateQueueHigh` | `human-gate-backlog` | [§7 Human-gate backlog](#7-human-gate-backlog) |
 | `SelfdefSchedulerMultipleBackpressureFiring` | `multi-surface-pressure` | [§8 Multiple backpressure surfaces firing](#8-multiple-backpressure-surfaces-firing) |
+| `SelfdefSchedulerHighHibernateRate` | `scheduler-deferring` | [§12 Sustained routing deferral (high hibernate rate)](#12-sustained-routing-deferral-high-hibernate-rate) |
 | — (silent failures not in alerts but documented) | | [§9 Audit chain integrity breaks](#9-audit-chain-integrity-breaks) |
 | — | | [§10 Config file errors](#10-config-file-errors) |
 | — | | [§11 Permission / disk-full / read-only ZFS](#11-permission--disk-full--read-only-zfs) |
@@ -259,6 +260,38 @@ Recovery: free space on the ZFS dataset; expand the dataset; relocate the audit 
 ZFS has gone read-only (typically: pool fault). Surface in the sovereign-os ZFS health dashboard immediately. The scheduler will continue to log to journald but will write zero artifacts. This is a SEV-1 host-level issue — escalate per sovereign-os M068 ZFS architecture incident runbook.
 
 ---
+
+## 12. Sustained routing deferral (high hibernate rate)
+
+Alert: `SelfdefSchedulerHighHibernateRate` (`cd_link: scheduler-deferring`, warning, 15m). Fires when more than 50% of the decisions in the ring window routed to `Hibernate` — i.e. the scheduler is *correctly refusing to commit work* but has been doing so sustainedly.
+
+### What it means
+
+`Hibernate` is the Key Scheduling Law's safety stop (verbatim, SDD-031): *"Never let cheap speculation commit without expensive verification when risk demands it."* A decision hibernates in two situations:
+
+1. **Law clause 2** — risk is high (`axis_scores.risk` below the verification floor) AND the active MS040 profile demands verification (`oracle_verification_required` / `tests_required` / `strict_commit_gates`) AND the oracle tier (Blackwell) is under VRAM pressure. The scheduler refuses to route high-risk work to a scout/cortex tier without the oracle's verification.
+2. **All compute tiers pressured** — Blackwell VRAM high + 3090 busy + at least one PSI surface firing, so no tier is admissible and the request is deferred pending another resource.
+
+A few hibernate decisions are normal. *Sustained* (>50% for 15m) deferral means real work is not being routed.
+
+### Where to look
+
+- `selfdef_scheduler_decisions_hibernate` / `selfdef_scheduler_decisions_in_ring` — the ratio the alert evaluates.
+- `selfdef_scheduler_decisions_by_route{route="hibernate"}` — the per-tier partition over time (cockpit "routing decisions by tier" panel).
+- The decision OCSF stream (`event_kind="scheduler_decision"`, `severity_id=4` for Hibernate) carries the per-decision `message` (route + Law clause + the exact rationale) so you can see *why* each deferred.
+
+### Operator action
+
+Pick whichever root cause the substrate shows:
+
+- **Oracle VRAM pressure** (`selfdef_scheduler_blackwell_vram_high == 1`) — free Blackwell VRAM (stop/evict an idle model) so verification-gated work can route to the oracle. See §6.
+- **Host pressure** (CPU/RAM/IO PSI firing) — reduce host load; see §8.
+- **Human-gate backlog** (`selfdef_scheduler_human_gate_queue_depth` high) — clear the pending-restore queue; see §7.
+- **Profile too strict for the work** — if the deferral is verification-gated and you accept the risk, relax the active MS040 profile (e.g. `careful` → `fast`, or `production` → a lower-gate profile) via the operator profile surface. This is the operator's call per the peace-machine clause *"sovereign enough that intelligence remains in the user's hands"* — the scheduler will not silently lower its own gate.
+
+### Recovery
+
+The alert clears when the hibernate ratio drops below 50% as new decisions (routed to a real tier) age into the ring window. There is no daemon restart — deferral is a *correct* behavior, not a fault; the runbook entry exists so a sustained-deferral state is visible + explained, not silently absorbed.
 
 ## Cross-references
 
