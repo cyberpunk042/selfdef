@@ -53,6 +53,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod agent_dsl;
 pub mod avx512_features;
 pub mod backpressure_driver;
 pub mod backpressure_response;
