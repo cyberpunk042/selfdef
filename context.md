@@ -12,6 +12,29 @@ This repo is **Solution 2 — `selfdef`** — the IPS daemon. Boundary enforceme
 
 `cyberpunk042/sovereign-os` is **Solution 1** — the runtime/cockpit. `cyberpunk042/devops-solutions-information-hub` is the **third piece** = read-only second-brain.
 
+## Current arc (2026-06-05): MS048 scheduler runtime loop closed end-to-end — COMPLETE
+
+The MS048 Goldilocks Scheduler had its substrate-observability half shipped
+(PSI + DCGM + IPS-human-gate trio → `BackpressureDriver::poll()` →
+`DriverReading`; Prometheus/OCSF/audit emission; cockpit panel) and its
+scoring kernel (`evaluate_objective(AxisSignals, Profile)` + per-profile
+`AxisWeights`), but **three seams between them were missing** — the live poll
+could not actually drive a routing `Decision`. This arc closed all three, on
+`main`, each dump/SDD-grounded, tested, clippy-clean (`selfdef-scheduler`
+281/281 lib tests):
+
+| Module (new) | Closes | Composes only verbatim source |
+|---|---|---|
+| `objective_signals.rs` (M01159) | substrate→objective bridge: live `DriverReading` → the two box-measurable axes (`hardware_pressure` = `1.0 - max(5 substrate fractions)`; `human_attention` = linear IPS-queue ramp, cap 20 per dump 18205-18211); merges with the 4 model-proposed axes (substrate authoritative) | Peace Machine + Core Law "Models propose / Runtime routes / CPU enforces"; honest-offline (degraded substrate = 0.0, never fabricated headroom) |
+| `scheduling_law.rs` | route recommender — the middle `replay()` explicitly deferred ("Full route inference lands in a later round"). Picks `Route` from substrate + profile + scores under the **Key Scheduling Law** (2 clauses → `LawClause`) | SDD-031 verbatim Law + `Route` tier doc (Blackwell=oracle/Rtx3090=scout/Cpu=cortex/Hibernate=deferred) + verbatim `ProfileRules` flags + verbatim `BackpressureState` surfaces. One Stage-1 operator-tunable (`RISK_DEMANDS_VERIFICATION_FLOOR` 0.5, MS003-threshold pattern) |
+| `decide.rs` (SDD-031 D2) | `decide(&DriverReading, &RequestContext) -> Decision` orchestrator: score→recommend→`Decision::new`+`validate`; `decide_and_audit` adds SHA-256-chained `emit_audit_entry` append. The `Scheduler` the crate doc promised | `Decision::new`/`validate` (mirror), `emit_audit_entry` chain, real `MirrorError` vs runtime `SchedulerError::InvalidDecision` |
+
+The loop is now whole: `poll() → DriverReading → score_current_substrate →
+recommend_route → decide → Decision → audit`. Remaining MS048 edges (not
+blocking): wiring `decide_and_audit` into a live request-ingress loop (needs a
+request source), and surfacing last-N decisions through `selfdefctl scheduler
+show` / `GET /v1/scheduler/history` (SDD-031 D3/D4 observability).
+
 ## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
 
 The 5 sovereign-os mirror dashboards (D-13 grants, D-14 capability-tokens,
