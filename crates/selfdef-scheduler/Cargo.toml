@@ -17,6 +17,10 @@ path = "src/bin/selfdef-scheduler.rs"
 name = "selfdef-scheduler-textfile"
 path = "src/bin/selfdef-scheduler-textfile.rs"
 
+[[bin]]
+name = "selfdef-scheduler-decide"
+path = "src/bin/selfdef-scheduler-decide.rs"
+
 [lints]
 workspace = true
 
