@@ -89,6 +89,7 @@ pub mod policy_signer;
 pub mod prometheus_exporter;
 pub mod program_optimization;
 pub mod psi;
+pub mod reflexion;
 pub mod request_lifecycle;
 pub mod runtime_law;
 pub mod runtime_shape;
