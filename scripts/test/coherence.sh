@@ -81,6 +81,9 @@ run_layer "L1: mirror schema-version coherence (14 selfdef-*-mirror crates + 10 
 run_layer "L1: doctrine verbatim preservation (DOCTRINE_* constants + cross-crate name-collision coherence)" \
     bash scripts/test/L1-doctrine-verbatim-preservation.sh
 
+run_layer "L1: SDD header shape integrity (# SDD-NNN heading + Status + no number collisions across 78 SDDs)" \
+    bash scripts/test/L1-sdd-header-shape.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
