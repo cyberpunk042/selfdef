@@ -93,6 +93,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::backpressure_driver::{DriverReading, SourceStatus};
+use crate::{Decision, Route};
 
 /// Re-export the crate-level OCSF JSONL log path constant.
 pub const DEFAULT_OCSF_PATH: &str = crate::DEFAULT_OCSF_PATH;
@@ -301,6 +302,108 @@ pub fn append_ocsf_jsonl(path: &Path, event_line: &str) -> std::io::Result<()> {
     file.write_all(event_line.as_bytes())?;
     file.flush()?;
     Ok(())
+}
+
+// ============================================================================
+// Decision OCSF emission (parallels render_ocsf_event for routing decisions)
+// ============================================================================
+
+/// Derive an OCSF severity_id for a scheduling [`Decision`].
+///
+/// Mirrors [`derive_severity_id`]'s surface-count scaling, keyed on the
+/// routing outcome:
+/// - **High** — route is [`Route::Hibernate`]: the scheduler deferred /
+///   refused to route, either the Key Scheduling Law's clause-2 safety stop
+///   ("never let cheap speculation commit without expensive verification when
+///   risk demands it") or every compute tier under backpressure. The most
+///   operationally-significant outcome.
+/// - **Medium** — two or more backpressure surfaces firing, OR route fell
+///   back to [`Route::Cpu`] (deterministic cortex) from a GPU tier.
+/// - **Low** — exactly one backpressure surface firing.
+/// - **Informational** — routed to a compute tier with no backpressure.
+#[must_use]
+pub fn derive_decision_severity_id(decision: &Decision) -> OcsfSeverityId {
+    let surfaces = u32::from(decision.backpressure.pressure_count());
+    if matches!(decision.route, Route::Hibernate) {
+        return OcsfSeverityId::High;
+    }
+    if surfaces >= 2 || matches!(decision.route, Route::Cpu) {
+        return OcsfSeverityId::Medium;
+    }
+    if surfaces == 1 {
+        return OcsfSeverityId::Low;
+    }
+    OcsfSeverityId::Informational
+}
+
+/// Render one scheduling [`Decision`] into one OCSF Detection Finding JSON
+/// line (terminated by `\n`).
+///
+/// Parallel to [`render_ocsf_event`] (which covers substrate polls); this
+/// covers routing decisions so the SIEM sees BOTH what the scheduler observed
+/// AND what it decided. `metadata.event_kind = "scheduler_decision"`
+/// distinguishes these from the `"scheduler_observation"` poll events at
+/// ingestion. The decision rationale (route + Law clause) rides in `message`;
+/// `finding_info.uid` is the `request_id` so a decision finding correlates
+/// with its `/v1/scheduler/explain/:request-id` detail.
+#[must_use]
+pub fn render_decision_ocsf(decision: &Decision) -> String {
+    let now_unix_millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+
+    let severity = derive_decision_severity_id(decision);
+    let a = decision.axis_scores;
+    let b = decision.backpressure;
+    let observables = json!([
+        observable("profile", "String", json!(format!("{:?}", decision.profile))),
+        observable("route", "String", json!(format!("{:?}", decision.route))),
+        observable("compound", "Fraction", json!(a.compound as f64)),
+        observable("latency", "Fraction", json!(a.latency as f64)),
+        observable("cost", "Fraction", json!(a.cost as f64)),
+        observable("risk", "Fraction", json!(a.risk as f64)),
+        observable("energy", "Fraction", json!(a.energy as f64)),
+        observable("human_attention", "Fraction", json!(a.human_attention as f64)),
+        observable(
+            "hardware_pressure",
+            "Fraction",
+            json!(a.hardware_pressure as f64)
+        ),
+        observable("backpressure_count", "Counter", json!(b.pressure_count())),
+    ]);
+
+    let event = json!({
+        "time": now_unix_millis,
+        "category_uid": OCSF_CATEGORY_FINDINGS,
+        "class_uid": OCSF_CLASS_DETECTION_FINDING,
+        "type_uid": OCSF_CLASS_DETECTION_FINDING * 100 + OCSF_ACTIVITY_CREATE,
+        "activity_id": OCSF_ACTIVITY_CREATE,
+        "severity_id": severity.as_u32(),
+        "status_id": OCSF_STATUS_SUCCESS,
+        "message": decision.rationale,
+        "metadata": {
+            "version": crate::OCSF_SCHEMA_VERSION,
+            "product": {
+                "name": "selfdef-scheduler",
+                "vendor_name": "selfdef",
+            },
+            "event_kind": "scheduler_decision",
+        },
+        "finding_info": {
+            "uid": decision.request_id,
+            "title": format!(
+                "scheduler routed {:?} under {:?}",
+                decision.route, decision.profile
+            ),
+        },
+        "observables": observables,
+        "raw_data": serde_json::to_string(decision).unwrap_or_else(|_| "{}".into()),
+    });
+
+    let mut out = serde_json::to_string(&event).unwrap_or_else(|_| "{}".into());
+    out.push('\n');
+    out
 }
 
 // ============================================================================
@@ -567,5 +670,92 @@ mod tests {
         assert_eq!(OCSF_CATEGORY_FINDINGS, 2);
         assert_eq!(OCSF_ACTIVITY_CREATE, 1);
         assert_eq!(OCSF_STATUS_SUCCESS, 1);
+    }
+
+    // ---------------- Decision OCSF emission ---------------------------
+
+    fn decision_with(route: Route, backpressure: BackpressureState) -> Decision {
+        use crate::{AxisSignals, Profile, evaluate_objective};
+        let scores = evaluate_objective(
+            AxisSignals {
+                latency: 0.9,
+                cost: 0.8,
+                risk: 0.7,
+                energy: 0.6,
+                human_attention: 0.5,
+                hardware_pressure: 0.4,
+            },
+            Profile::Production,
+        );
+        Decision::new(
+            "req-0190abcd-7e11-7000-8000-deadbeef0001",
+            Profile::Production,
+            route,
+            scores,
+            backpressure,
+            1_700_000_000_000,
+            "sain-01",
+            "policy-kid-1",
+            "route=Hibernate [SpeculationRequiresVerification]: risk demands verification",
+        )
+    }
+
+    #[test]
+    fn decision_severity_hibernate_is_high() {
+        let d = decision_with(Route::Hibernate, BackpressureState::clean());
+        assert_eq!(derive_decision_severity_id(&d), OcsfSeverityId::High);
+    }
+
+    #[test]
+    fn decision_severity_cpu_fallback_is_medium() {
+        let d = decision_with(Route::Cpu, BackpressureState::clean());
+        assert_eq!(derive_decision_severity_id(&d), OcsfSeverityId::Medium);
+    }
+
+    #[test]
+    fn decision_severity_two_surfaces_is_medium() {
+        let bp = BackpressureState {
+            blackwell_vram_high: true,
+            gpu3090_busy: true,
+            ..BackpressureState::clean()
+        };
+        let d = decision_with(Route::Rtx3090, bp);
+        assert_eq!(derive_decision_severity_id(&d), OcsfSeverityId::Medium);
+    }
+
+    #[test]
+    fn decision_severity_one_surface_is_low() {
+        let bp = BackpressureState {
+            io_pressure: true,
+            ..BackpressureState::clean()
+        };
+        let d = decision_with(Route::Blackwell, bp);
+        assert_eq!(derive_decision_severity_id(&d), OcsfSeverityId::Low);
+    }
+
+    #[test]
+    fn decision_severity_clean_blackwell_is_informational() {
+        let d = decision_with(Route::Blackwell, BackpressureState::clean());
+        assert_eq!(
+            derive_decision_severity_id(&d),
+            OcsfSeverityId::Informational
+        );
+    }
+
+    #[test]
+    fn render_decision_ocsf_is_valid_jsonl_with_event_kind() {
+        let d = decision_with(Route::Hibernate, BackpressureState::clean());
+        let line = render_decision_ocsf(&d);
+        assert!(line.ends_with('\n'));
+        let v: Value = serde_json::from_str(line.trim_end()).expect("valid JSON");
+        assert_eq!(v["class_uid"], 2004);
+        assert_eq!(v["severity_id"], 4); // Hibernate => High
+        assert_eq!(v["metadata"]["event_kind"], "scheduler_decision");
+        assert_eq!(v["finding_info"]["uid"], "req-0190abcd-7e11-7000-8000-deadbeef0001");
+        assert!(v["message"].as_str().unwrap().contains("risk demands verification"));
+        // route + profile surfaced as observables
+        let obs = v["observables"].as_array().unwrap();
+        assert!(obs.iter().any(|o| o["name"] == "route"));
+        assert!(obs.iter().any(|o| o["name"] == "compound"));
     }
 }
