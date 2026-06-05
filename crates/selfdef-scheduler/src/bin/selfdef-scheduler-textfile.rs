@@ -74,9 +74,10 @@ use selfdef_scheduler::decision_audit::{emit_driver_reading, rotate_audit_log};
 use selfdef_scheduler::human_gate::IpsPendingRestoresHumanGateSource;
 use selfdef_scheduler::ocsf_emitter::{append_ocsf_jsonl, render_ocsf_event};
 use selfdef_scheduler::prometheus_exporter::{
-    render_failure_sentinel, render_prometheus, write_textfile_atomic,
+    render_decision_metrics, render_failure_sentinel, render_prometheus, write_textfile_atomic,
 };
 use selfdef_scheduler::psi::ProcfsPsiSource;
+use selfdef_scheduler::{DEFAULT_RING_DIR, read_ring_buffer};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -99,6 +100,7 @@ fn main() -> ExitCode {
     let textfile_path =
         env_path_with_default("SELFDEF_SCHEDULER_TEXTFILE_PATH", &cfg.emit.textfile_path);
     let ocsf_path = env_path_with_default("SELFDEF_SCHEDULER_OCSF_PATH", &cfg.emit.ocsf_path);
+    let ring_dir = env_path("SELFDEF_SCHEDULER_RING_DIR", DEFAULT_RING_DIR);
     let psi_dir = env_path_with_default("SELFDEF_SCHEDULER_PSI_DIR", &cfg.substrate.psi_dir);
     let nvidia_smi =
         env_path_with_default("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", &cfg.substrate.nvidia_smi_bin);
@@ -152,8 +154,15 @@ fn main() -> ExitCode {
         reading.measurements.human_gate_queue_depth,
     );
 
-    // Emit Prometheus textfile.
-    let prom = render_prometheus(&reading);
+    // Emit Prometheus textfile. Substrate gauges are authoritative; the
+    // decision metrics (route/profile/hibernate from the ring window) are
+    // appended supplementary. A ring-read failure must NOT block the
+    // substrate textfile, so it is best-effort + logged.
+    let mut prom = render_prometheus(&reading);
+    match read_ring_buffer(&ring_dir) {
+        Ok(decisions) => prom.push_str(&render_decision_metrics(&decisions)),
+        Err(e) => eprintln!("  WARN ring read for decision metrics failed (non-fatal): {e}"),
+    }
     if let Err(e) = write_textfile_atomic(&textfile_path, &prom) {
         eprintln!("  FAIL writing textfile: {e}");
         // Best-effort failure sentinel: try to write the sentinel
