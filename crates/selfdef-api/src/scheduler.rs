@@ -25,9 +25,40 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use selfdef_scheduler::{
-    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, SchedulerError,
+    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, Route, SchedulerError,
     audit_chain_check, now_ms, read_ring_buffer,
 };
+
+/// Aggregate routing-decision counts over the full ring window (parity with
+/// the `selfdef_scheduler_decisions_*` Prometheus gauges + the cockpit
+/// consumer). Computed from ALL retained decisions, not just the last 16.
+#[derive(Debug, Serialize)]
+pub(crate) struct DecisionSummary {
+    /// Total decisions in the ring window.
+    pub in_ring: usize,
+    /// Routed to the oracle tier (Blackwell).
+    pub blackwell: usize,
+    /// Routed to the scout tier (RTX 3090).
+    pub rtx3090: usize,
+    /// Routed to the deterministic cortex (CPU).
+    pub cpu: usize,
+    /// Split across tiers.
+    pub hybrid: usize,
+    /// Deferred (Hibernate — the Key Scheduling Law's safety refusal).
+    pub hibernate: usize,
+}
+
+fn summarize(decisions: &[Decision]) -> DecisionSummary {
+    let count = |r: Route| decisions.iter().filter(|d| d.route == r).count();
+    DecisionSummary {
+        in_ring: decisions.len(),
+        blackwell: count(Route::Blackwell),
+        rtx3090: count(Route::Rtx3090),
+        cpu: count(Route::Cpu),
+        hybrid: count(Route::Hybrid),
+        hibernate: count(Route::Hibernate),
+    }
+}
 
 /// Response body for `GET /v1/scheduler`.
 #[derive(Debug, Serialize)]
@@ -38,6 +69,8 @@ pub(crate) struct SchedulerBody {
     pub now_ms: u64,
     /// OCSF audit chain event count (None on chain integrity error).
     pub audit_chain_events: Option<usize>,
+    /// Routing-decision aggregate over the full ring window.
+    pub decisions_summary: DecisionSummary,
     /// Last 16 decisions (newest-first).
     pub decisions: Vec<Decision>,
 }
@@ -103,6 +136,8 @@ pub(crate) async fn show() -> Result<Json<SchedulerBody>, ApiError> {
     let now = now_ms();
     let decisions = read_ring_buffer(Path::new(DEFAULT_RING_DIR))
         .map_err(|e| ApiError::Internal(format!("ring read: {e}")))?;
+    // Summarize the FULL window before truncating to the last 16 for display.
+    let decisions_summary = summarize(&decisions);
     let last_16: Vec<Decision> = decisions.into_iter().take(16).collect();
     let audit_chain_events = audit_chain_check(Path::new(DEFAULT_AUDIT_LOG_PATH)).ok();
     let aggregate = aggregate(&last_16);
@@ -110,6 +145,7 @@ pub(crate) async fn show() -> Result<Json<SchedulerBody>, ApiError> {
         aggregate,
         now_ms: now,
         audit_chain_events,
+        decisions_summary,
         decisions: last_16,
     }))
 }
@@ -314,5 +350,56 @@ mod tests {
     fn parse_profile_rejects_unknown() {
         assert_eq!(parse_profile("bogus"), None);
         assert_eq!(parse_profile(""), None);
+    }
+
+    fn decision_routed(route: Route, ts_ms: u64) -> Decision {
+        let scores = evaluate_objective(
+            AxisSignals {
+                latency: 0.9,
+                cost: 0.8,
+                risk: 0.7,
+                energy: 0.6,
+                human_attention: 0.5,
+                hardware_pressure: 0.8,
+            },
+            Profile::Production,
+        );
+        Decision::new(
+            format!("req-{ts_ms}"),
+            Profile::Production,
+            route,
+            scores,
+            BackpressureState::clean(),
+            ts_ms,
+            "host-A",
+            "kid-1",
+            "test",
+        )
+    }
+
+    #[test]
+    fn summarize_counts_by_route_over_full_window() {
+        let decisions = vec![
+            decision_routed(Route::Blackwell, 1),
+            decision_routed(Route::Blackwell, 2),
+            decision_routed(Route::Hibernate, 3),
+            decision_routed(Route::Cpu, 4),
+            decision_routed(Route::Rtx3090, 5),
+        ];
+        let s = summarize(&decisions);
+        assert_eq!(s.in_ring, 5);
+        assert_eq!(s.blackwell, 2);
+        assert_eq!(s.hibernate, 1);
+        assert_eq!(s.cpu, 1);
+        assert_eq!(s.rtx3090, 1);
+        assert_eq!(s.hybrid, 0);
+    }
+
+    #[test]
+    fn summarize_empty_window_is_all_zero() {
+        let s = summarize(&[]);
+        assert_eq!(s.in_ring, 0);
+        assert_eq!(s.blackwell, 0);
+        assert_eq!(s.hibernate, 0);
     }
 }
