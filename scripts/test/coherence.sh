@@ -75,6 +75,9 @@ run_layer "L1: systemd unit + timer hardening (guardian + ux-harness; MS044 R104
 run_layer "L1: cross-repo alert ↔ runbook binding (MS048 runbook ↔ sovereign-os scheduler alerts)" \
     bash scripts/test/L1-cross-repo-alert-runbook-binding.sh
 
+run_layer "L1: mirror schema-version coherence (14 selfdef-*-mirror crates + 10 sovereign-os consumers in lockstep)" \
+    bash scripts/test/L1-mirror-schema-version-coherence.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
