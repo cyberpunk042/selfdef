@@ -94,6 +94,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::backpressure_driver::{DriverReading, SourceStatus};
+use crate::{Decision, Profile, Route};
 
 /// Canonical textfile collector path. Matches the convention used
 /// by the 14 IPS observers (`packaging/scripts/selfdef-*-textfile.sh`).
@@ -277,6 +278,83 @@ fn escape_label_value(value: &str) -> String {
             c => out.push(c),
         }
     }
+    out
+}
+
+/// Render Prometheus gauges describing the scheduler's recent *decisions*
+/// (the ring-buffer window), parallel to [`render_prometheus`] which covers
+/// the substrate poll. Aggregates a decision slice (typically the output of
+/// [`crate::read_ring_buffer`]) into:
+///
+/// - `selfdef_scheduler_decisions_in_ring` — window size
+/// - `selfdef_scheduler_decisions_by_route{route=…}` — per-tier partition
+///   (blackwell / rtx3090 / cpu / hybrid / hibernate)
+/// - `selfdef_scheduler_decisions_by_profile{profile=…}` — per-profile partition
+/// - `selfdef_scheduler_decisions_hibernate` — the Key Scheduling Law's
+///   safety-refusal count (route=Hibernate): the operator's key signal that
+///   the scheduler is deferring work rather than committing it.
+///
+/// These are gauges (a snapshot of the bounded ring window), not cumulative
+/// counters — honest given the ring is a fixed-size FIFO, not an infinite log.
+#[must_use]
+pub fn render_decision_metrics(decisions: &[Decision]) -> String {
+    let mut out = String::new();
+
+    emit_gauge(
+        &mut out,
+        "selfdef_scheduler_decisions_in_ring",
+        "Number of scheduler decisions currently retained in the ring-buffer window.",
+        decisions.len() as f64,
+    );
+
+    out.push_str(
+        "# HELP selfdef_scheduler_decisions_by_route Scheduler decisions in the ring window, partitioned by route.\n",
+    );
+    out.push_str("# TYPE selfdef_scheduler_decisions_by_route gauge\n");
+    for (route, label) in [
+        (Route::Blackwell, "blackwell"),
+        (Route::Rtx3090, "rtx3090"),
+        (Route::Cpu, "cpu"),
+        (Route::Hybrid, "hybrid"),
+        (Route::Hibernate, "hibernate"),
+    ] {
+        let n = decisions.iter().filter(|d| d.route == route).count();
+        let _ = writeln!(
+            out,
+            "selfdef_scheduler_decisions_by_route{{route=\"{label}\"}} {n}"
+        );
+    }
+
+    out.push_str(
+        "# HELP selfdef_scheduler_decisions_by_profile Scheduler decisions in the ring window, partitioned by active profile.\n",
+    );
+    out.push_str("# TYPE selfdef_scheduler_decisions_by_profile gauge\n");
+    for (profile, label) in [
+        (Profile::Fast, "fast"),
+        (Profile::Careful, "careful"),
+        (Profile::Private, "private"),
+        (Profile::Autonomous, "autonomous"),
+        (Profile::Experimental, "experimental"),
+        (Profile::Production, "production"),
+    ] {
+        let n = decisions.iter().filter(|d| d.profile == profile).count();
+        let _ = writeln!(
+            out,
+            "selfdef_scheduler_decisions_by_profile{{profile=\"{label}\"}} {n}"
+        );
+    }
+
+    let hibernate = decisions
+        .iter()
+        .filter(|d| matches!(d.route, Route::Hibernate))
+        .count();
+    emit_gauge(
+        &mut out,
+        "selfdef_scheduler_decisions_hibernate",
+        "Scheduler decisions in the ring window that deferred (Hibernate — the Key Scheduling Law safety refusal or all tiers under backpressure).",
+        hibernate as f64,
+    );
+
     out
 }
 
@@ -593,5 +671,74 @@ inside"#;
             .filter(|l| !l.starts_with("selfdef_scheduler_last_run_unix "))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    // ---------------- Decision metrics ------------------------------------
+
+    fn decision(route: Route, profile: Profile, ts_ms: u64) -> Decision {
+        use crate::{AxisSignals, evaluate_objective};
+        let scores = evaluate_objective(
+            AxisSignals {
+                latency: 0.9,
+                cost: 0.8,
+                risk: 0.7,
+                energy: 0.6,
+                human_attention: 0.5,
+                hardware_pressure: 0.4,
+            },
+            profile,
+        );
+        Decision::new(
+            format!("req-{ts_ms}"),
+            profile,
+            route,
+            scores,
+            BackpressureState::clean(),
+            ts_ms,
+            "sain-01",
+            "kid-1",
+            "test",
+        )
+    }
+
+    #[test]
+    fn decision_metrics_partition_by_route_and_profile() {
+        let decisions = vec![
+            decision(Route::Blackwell, Profile::Production, 1),
+            decision(Route::Blackwell, Profile::Careful, 2),
+            decision(Route::Hibernate, Profile::Careful, 3),
+            decision(Route::Cpu, Profile::Fast, 4),
+        ];
+        let out = render_decision_metrics(&decisions);
+        assert!(out.contains("selfdef_scheduler_decisions_in_ring 4"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_route{route=\"blackwell\"} 2"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_route{route=\"hibernate\"} 1"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_route{route=\"cpu\"} 1"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_route{route=\"rtx3090\"} 0"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_profile{profile=\"careful\"} 2"));
+        assert!(out.contains("selfdef_scheduler_decisions_by_profile{profile=\"production\"} 1"));
+        // hibernate safety-refusal gauge
+        assert!(out.contains("selfdef_scheduler_decisions_hibernate 1"));
+    }
+
+    #[test]
+    fn decision_metrics_empty_window_is_all_zero() {
+        let out = render_decision_metrics(&[]);
+        assert!(out.contains("selfdef_scheduler_decisions_in_ring 0"));
+        assert!(out.contains("selfdef_scheduler_decisions_hibernate 0"));
+        // every route + profile label still emitted (always-render, never drop)
+        for label in ["blackwell", "rtx3090", "cpu", "hybrid", "hibernate"] {
+            assert!(out.contains(&format!(
+                "selfdef_scheduler_decisions_by_route{{route=\"{label}\"}} 0"
+            )));
+        }
+    }
+
+    #[test]
+    fn decision_metrics_have_help_and_type_lines() {
+        let out = render_decision_metrics(&[decision(Route::Blackwell, Profile::Fast, 1)]);
+        assert!(out.contains("# HELP selfdef_scheduler_decisions_by_route"));
+        assert!(out.contains("# TYPE selfdef_scheduler_decisions_by_route gauge"));
+        assert!(out.contains("# TYPE selfdef_scheduler_decisions_hibernate gauge"));
     }
 }
