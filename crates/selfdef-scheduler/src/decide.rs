@@ -23,7 +23,10 @@ use std::path::Path;
 use crate::backpressure_driver::DriverReading;
 use crate::objective_signals::score_current_substrate;
 use crate::scheduling_law::recommend_route;
-use crate::{AxisSignals, Decision, MirrorError, Profile, SchedulerError, emit_audit_entry};
+use crate::{
+    AxisSignals, Decision, MirrorError, Profile, SchedulerError, emit_audit_entry,
+    write_ring_buffer,
+};
 
 /// Max rationale length the [`Decision::validate`] invariant allows
 /// (R-row bound). The orchestrator truncates the composed rationale at a
@@ -109,6 +112,38 @@ pub fn decide_and_audit(
     let decision =
         decide(reading, ctx).map_err(|e| SchedulerError::InvalidDecision(e.to_string()))?;
     emit_audit_entry(audit_log, &decision)?;
+    Ok(decision)
+}
+
+/// [`decide`] then persist the [`Decision`] to BOTH the SHA-256-chained
+/// audit log (`audit_log`) AND the decision ring buffer (`ring_dir`,
+/// bounded to `max_entries`).
+///
+/// This is the full production persistence path. The audit log is the
+/// tamper-evident chain (integrity); the ring buffer is what the operator's
+/// `GET /v1/scheduler` / `/history` / `/explain` HTTP surface reads
+/// (observability). Without the ring write, the orchestrator's decisions are
+/// in the audit chain but invisible to the live HTTP surface — this closes
+/// that gap.
+///
+/// Audit append happens first (the integrity record is authoritative); the
+/// ring write follows (observability is best-effort relative to integrity).
+///
+/// # Errors
+/// Returns [`SchedulerError::InvalidDecision`] on validation failure, or
+/// [`SchedulerError::Io`] / [`SchedulerError::Serde`] when either persistence
+/// step fails.
+pub fn decide_and_persist(
+    reading: &DriverReading,
+    ctx: &RequestContext,
+    audit_log: &Path,
+    ring_dir: &Path,
+    max_entries: usize,
+) -> Result<Decision, SchedulerError> {
+    let decision =
+        decide(reading, ctx).map_err(|e| SchedulerError::InvalidDecision(e.to_string()))?;
+    emit_audit_entry(audit_log, &decision)?;
+    write_ring_buffer(ring_dir, &decision, max_entries)?;
     Ok(decision)
 }
 
@@ -243,6 +278,39 @@ mod tests {
         for l in &lines {
             assert!(l.contains("prev_event_sha256"), "line missing chain field: {l}");
         }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn decide_and_persist_reaches_both_audit_and_ring() {
+        use crate::read_ring_buffer;
+        let dir = std::env::temp_dir().join(format!(
+            "selfdef-persist-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("scheduler_audit.log");
+        let ring = dir.join("ring");
+        let r = reading(ResourceMeasurements::clean(), BackpressureState::clean());
+
+        let d = decide_and_persist(&r, &ctx(Profile::Production), &log, &ring, 256)
+            .expect("persist");
+        assert_eq!(d.route, Route::Blackwell);
+
+        // audit log got the chained entry
+        let body = std::fs::read_to_string(&log).expect("read audit");
+        assert!(body.contains("prev_event_sha256"));
+
+        // ring buffer now surfaces the decision (what the HTTP /v1/scheduler reads)
+        let ring_decisions = read_ring_buffer(&ring).expect("read ring");
+        assert_eq!(ring_decisions.len(), 1);
+        assert_eq!(ring_decisions[0].request_id, d.request_id);
+        assert_eq!(ring_decisions[0].route, Route::Blackwell);
 
         std::fs::remove_dir_all(&dir).ok();
     }

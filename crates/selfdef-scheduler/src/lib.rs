@@ -800,6 +800,104 @@ pub fn read_ring_buffer(ring: &Path) -> Result<Vec<Decision>, SchedulerError> {
     Ok(out)
 }
 
+/// Default bounded retention for the decision ring buffer — the newest
+/// `DEFAULT_RING_MAX_ENTRIES` decisions are kept; older files are evicted
+/// FIFO. Matches the `/v1/scheduler/history` `limit` ceiling (256) so the
+/// HTTP surface can always serve the full retained window.
+pub const DEFAULT_RING_MAX_ENTRIES: usize = 256;
+
+/// Sanitize a request id into a filename-safe token (keep `[A-Za-z0-9._-]`,
+/// replace anything else with `_`). UUIDv7 request ids are already safe;
+/// this defends against an operator-forced id with odd characters.
+fn sanitize_for_filename(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+/// Append a [`Decision`] to the ring-buffer directory that
+/// [`read_ring_buffer`] consumes, then evict oldest entries beyond
+/// `max_entries` (FIFO by `ts_ms`-prefixed filename).
+///
+/// Each decision is written as one `<ts_ms:020>-<request_id>.json` file
+/// containing exactly the serialized [`Decision`] (the shape
+/// `read_ring_buffer` deserializes). Write is atomic — a temp file in the
+/// same directory is `rename(2)`-d into place — so a concurrent reader never
+/// sees a half-written file. `max_entries == 0` disables retention (keep
+/// all).
+///
+/// This is the writer half of the scheduler observability surface: the
+/// orchestrator persists each decision here so `GET /v1/scheduler`,
+/// `/history`, and `/explain` (which all read the ring) actually surface the
+/// decisions it makes.
+///
+/// # Errors
+/// Returns [`SchedulerError::Io`] on directory create / write / rename
+/// failure, or [`SchedulerError::Serde`] on serialization failure.
+pub fn write_ring_buffer(
+    ring: &Path,
+    decision: &Decision,
+    max_entries: usize,
+) -> Result<(), SchedulerError> {
+    fs::create_dir_all(ring).map_err(|e| SchedulerError::Io(e.to_string()))?;
+
+    let json = serde_json::to_string(decision).map_err(|e| SchedulerError::Serde(e.to_string()))?;
+    let stem = format!(
+        "{:020}-{}",
+        decision.ts_ms,
+        sanitize_for_filename(&decision.request_id)
+    );
+    let final_path = ring.join(format!("{stem}.json"));
+    let tmp_path = ring.join(format!(
+        ".{stem}.tmp.{}.{}",
+        std::process::id(),
+        now_ms()
+    ));
+
+    {
+        let mut f = fs::File::create(&tmp_path).map_err(|e| SchedulerError::Io(e.to_string()))?;
+        f.write_all(json.as_bytes())
+            .map_err(|e| SchedulerError::Io(e.to_string()))?;
+        f.sync_all().map_err(|e| SchedulerError::Io(e.to_string()))?;
+    }
+    fs::rename(&tmp_path, &final_path).map_err(|e| {
+        // best-effort cleanup of the temp file on rename failure
+        let _ = fs::remove_file(&tmp_path);
+        SchedulerError::Io(e.to_string())
+    })?;
+
+    if max_entries > 0 {
+        evict_ring_overflow(ring, max_entries)?;
+    }
+    Ok(())
+}
+
+/// Keep only the newest `max_entries` `*.json` files in `ring` (oldest-first
+/// eviction by the `ts_ms`-prefixed filename, which sorts chronologically).
+fn evict_ring_overflow(ring: &Path, max_entries: usize) -> Result<(), SchedulerError> {
+    let mut files: Vec<PathBuf> = fs::read_dir(ring)
+        .map_err(|e| SchedulerError::Io(e.to_string()))?
+        .filter_map(Result::ok)
+        .map(|d| d.path())
+        .filter(|p| p.extension().is_some_and(|e| e == "json"))
+        .collect();
+    if files.len() <= max_entries {
+        return Ok(());
+    }
+    files.sort(); // ts_ms-zero-padded prefix ⇒ lexicographic == chronological
+    let remove_count = files.len() - max_entries;
+    for p in files.into_iter().take(remove_count) {
+        let _ = fs::remove_file(p); // best-effort; a racing reader skips it
+    }
+    Ok(())
+}
+
 /// Default config: the audit log and ring paths.
 #[must_use]
 pub fn default_audit_log() -> PathBuf {
@@ -1203,5 +1301,57 @@ mod tests {
         .unwrap();
         let out = read_ring_buffer(&ring).unwrap();
         assert_eq!(out.len(), 1);
+    }
+
+    #[test]
+    fn write_ring_buffer_roundtrips_through_reader() {
+        let dir = TempDir::new().unwrap();
+        let ring = dir.path().join("ring");
+        write_ring_buffer(&ring, &sample_decision(500), DEFAULT_RING_MAX_ENTRIES).unwrap();
+        write_ring_buffer(&ring, &sample_decision(700), DEFAULT_RING_MAX_ENTRIES).unwrap();
+        write_ring_buffer(&ring, &sample_decision(600), DEFAULT_RING_MAX_ENTRIES).unwrap();
+        let out = read_ring_buffer(&ring).unwrap();
+        let ts: Vec<u64> = out.iter().map(|d| d.ts_ms).collect();
+        // reader sorts newest-first
+        assert_eq!(ts, vec![700, 600, 500]);
+    }
+
+    #[test]
+    fn write_ring_buffer_creates_dir_if_missing() {
+        let dir = TempDir::new().unwrap();
+        let ring = dir.path().join("nested").join("ring");
+        assert!(!ring.exists());
+        write_ring_buffer(&ring, &sample_decision(1), DEFAULT_RING_MAX_ENTRIES).unwrap();
+        assert_eq!(read_ring_buffer(&ring).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn write_ring_buffer_evicts_oldest_beyond_max() {
+        let dir = TempDir::new().unwrap();
+        let ring = dir.path().join("ring");
+        // write 5 decisions with ascending ts, retain only 3
+        for ts in [10_u64, 20, 30, 40, 50] {
+            write_ring_buffer(&ring, &sample_decision(ts), 3).unwrap();
+        }
+        let out = read_ring_buffer(&ring).unwrap();
+        let ts: Vec<u64> = out.iter().map(|d| d.ts_ms).collect();
+        // newest 3 kept, oldest (10, 20) evicted
+        assert_eq!(ts, vec![50, 40, 30]);
+    }
+
+    #[test]
+    fn write_ring_buffer_zero_max_keeps_all() {
+        let dir = TempDir::new().unwrap();
+        let ring = dir.path().join("ring");
+        for ts in [1_u64, 2, 3, 4] {
+            write_ring_buffer(&ring, &sample_decision(ts), 0).unwrap();
+        }
+        assert_eq!(read_ring_buffer(&ring).unwrap().len(), 4);
+    }
+
+    #[test]
+    fn sanitize_for_filename_replaces_unsafe_chars() {
+        assert_eq!(sanitize_for_filename("req-0190abcd_7e11.7"), "req-0190abcd_7e11.7");
+        assert_eq!(sanitize_for_filename("a/b c:d"), "a_b_c_d");
     }
 }
