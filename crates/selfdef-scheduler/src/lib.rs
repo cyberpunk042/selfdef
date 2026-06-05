@@ -35,6 +35,7 @@ pub mod branch_masks;
 pub mod config;
 pub mod decide;
 pub mod data_plane;
+pub mod data_plane_services;
 pub mod dcgm;
 pub mod decision_audit;
 pub mod driver_replay;
