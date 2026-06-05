@@ -57,6 +57,7 @@ pub mod agent_dsl;
 pub mod avx512_features;
 pub mod backpressure_driver;
 pub mod backpressure_response;
+pub mod batching;
 pub mod branch_kv_fusion;
 pub mod branch_lifecycle;
 pub mod branch_masks;
