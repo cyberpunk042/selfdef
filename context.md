@@ -30,10 +30,17 @@ could not actually drive a routing `Decision`. This arc closed all three, on
 | `decide.rs` (SDD-031 D2) | `decide(&DriverReading, &RequestContext) -> Decision` orchestrator: score→recommend→`Decision::new`+`validate`; `decide_and_audit` adds SHA-256-chained `emit_audit_entry` append. The `Scheduler` the crate doc promised | `Decision::new`/`validate` (mirror), `emit_audit_entry` chain, real `MirrorError` vs runtime `SchedulerError::InvalidDecision` |
 
 The loop is now whole: `poll() → DriverReading → score_current_substrate →
-recommend_route → decide → Decision → audit`. Remaining MS048 edges (not
-blocking): wiring `decide_and_audit` into a live request-ingress loop (needs a
-request source), and surfacing last-N decisions through `selfdefctl scheduler
-show` / `GET /v1/scheduler/history` (SDD-031 D3/D4 observability).
+recommend_route → decide → Decision → audit + ring → HTTP surface`. The
+observability half also closed this session: `write_ring_buffer` (atomic,
+FIFO-bounded `DEFAULT_RING_MAX_ENTRIES`=256) + `decide_and_persist` connect the
+orchestrator's decisions to the ring the selfdef-api scheduler handlers
+(`GET /v1/scheduler` / `/history` / `/explain` / `/backpressure`) already read
+— previously the ring had a reader but no writer, so the operator surface read
+empty in production. **One remaining MS048 edge** (not blocking): wiring
+`decide_and_persist` into a live request-ingress loop — needs a request source
+(what a scheduling "request" is at the daemon boundary). That's the next
+selfdef scheduler unit; everything below it (score / route / decide / persist /
+read-back / HTTP) is in place.
 
 ## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
 
