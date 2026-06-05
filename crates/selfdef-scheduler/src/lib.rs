@@ -44,6 +44,7 @@ pub mod prometheus_exporter;
 pub mod psi;
 pub mod scenarios;
 pub mod scheduling_law;
+pub mod tier_work_policy;
 pub mod tool_scheduling;
 pub mod tui_panel;
 
