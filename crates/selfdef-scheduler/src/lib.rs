@@ -39,6 +39,7 @@ pub mod driver_replay;
 pub mod http_api;
 pub mod human_gate;
 pub mod kv_context_scheduling;
+pub mod memory_admission;
 pub mod memory_scheduling;
 pub mod objective_signals;
 pub mod ocsf_emitter;
