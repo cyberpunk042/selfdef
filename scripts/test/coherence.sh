@@ -90,6 +90,9 @@ run_layer "L1: Decision schema cross-repo (selfdef-scheduler-mirror fields the s
 run_layer "L1: backlog/INDEX.md ↔ filesystem coherence (48 milestones × 3 gates — links resolve / files indexed / R-row counts match)" \
     bash scripts/test/L1-backlog-index-coherence.sh
 
+run_layer "L1: info-hub doc references (cross-repo deep-link integrity; skips when info-hub not adjacent)" \
+    bash scripts/test/L1-info-hub-doc-references.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
