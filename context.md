@@ -70,19 +70,31 @@ tested modules in `selfdef-scheduler` — each verbatim-cited, no invention:
   decide() routes them exactly as the dump describes (Verify→Blackwell,
   defers when oracle busy, Draft→3090)
 
-`selfdef-scheduler` now ~25 modules / 388 tests (1 known pre-existing flake:
-`dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention, passes
-in isolation). All modules verbatim-cited to dump line ranges; none invented.
+Also added: `speculation_tree` (tree-structured speculation + TokenNode,
+2574-2606), `branch_kv_fusion` (branch KV ownership + prefix-share-on-fork,
+2608-2642), and a cross-module **coherence capstone** in `scenarios` proving
+decide → tier → {plane, role, work} are consistent for the dump's worked example.
 
-The "request" question is **resolved from the dump**: a scheduling request is a
-TASK entering the 10-step lifecycle (step 1), scored by the 7-axis objective and
-routed per `scheduling_law`. `RequestContext` (profile + model-estimated axes +
-id) faithfully encodes the decision inputs; `scenarios` pins the end-to-end
-behavior to the dump. selfdef-scheduler: **~20 modules, 352 lib tests green.**
+`selfdef-scheduler` now **~27 modules / 401 lib tests** (1 known pre-existing
+flake: `dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention,
+passes in isolation). All modules verbatim-cited to dump line ranges; none invented.
 
-**Remaining MS048 edge** (not blocking): wiring `decide_persist_and_emit` into a
-live daemon loop driven by the gateway (the cross-repo request source on the
-sovereign-os runtime side). The decision/policy substrate is all in place.
+**Request-ingress: BUILT** (no longer a pending edge). The "request" question is
+resolved from the dump — a scheduling request is a TASK entering the 10-step
+lifecycle (step 1 "User request arrives"), scored by the 7-axis objective and
+routed per `scheduling_law`. The new `selfdef-scheduler-decide` binary is the
+concrete entry point: reads a task descriptor (profile + 4 model axes) from
+`--task-file`/stdin, polls the live substrate, runs the full
+`decide_persist_and_emit`, prints the `Decision`. Real-run verified: a careful
+high-risk task routes to Blackwell (Key Scheduling Law clause-2 escalation) and
+lands in the audit chain + ring + OCSF stream simultaneously. A one-shot binary
+(like the textfile binary) — does NOT touch the locked 5-route/7-subverb
+contracts.
+
+**Only remaining MS048 wiring** (cross-repo, genuinely next-phase): a daemon
+loop / the sovereign-os gateway invoking `selfdef-scheduler-decide` (or
+`decide_persist_and_emit`) per real model request. The entire selfdef-side
+decision/policy/persistence/observability substrate + entry point is in place.
 
 ## Current arc (2026-05-28): M060 cross-repo mirror producers — COMPLETE
 
