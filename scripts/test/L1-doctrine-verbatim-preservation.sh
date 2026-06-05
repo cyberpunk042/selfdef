@@ -51,6 +51,10 @@ declare -a DOCTRINE_ROWS=(
     "DOCTRINE_EVERY_ACTION_OBSERVABLE|selfdef-policy-decision|Every action becomes observable and governed"
     "DOCTRINE_AUTHORITY_FOLLOWS_EVIDENCE|selfdef-profile-authority-gate|Authority follows evidence"
     "DOCTRINE_EVERY_ACTION_EMITS_TRACE|selfdef-trace-span|Every action MUST emit a trace event object"
+    # Multi-line const declarations (value on a separate line after the `=`):
+    "DOCTRINE_FIVE_BOUNDARIES|selfdef-boundary-summary|the IPS-side 5-boundary doctrine: Communication / Capability / Sandbox / Filesystem / Network"
+    "DOCTRINE_TRACE_AT_DECISION|selfdef-policy-decision|Trace is emitted when the action is decided, not after"
+    "DOCTRINE_TRACE_AT_DECISION|selfdef-trace-span|Trace is emitted when the action is decided, not after"
 )
 
 # ============================================================================
