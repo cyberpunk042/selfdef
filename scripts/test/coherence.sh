@@ -72,6 +72,9 @@ run_layer "L1: module-system contracts (14 modules cross-wired)" \
 run_layer "L1: systemd unit + timer hardening (guardian + ux-harness; MS044 R10411-R10440 + MS045 R10738)" \
     bash scripts/test/L1-systemd-hardening.sh
 
+run_layer "L1: cross-repo alert ↔ runbook binding (MS048 runbook ↔ sovereign-os scheduler alerts)" \
+    bash scripts/test/L1-cross-repo-alert-runbook-binding.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
