@@ -110,3 +110,54 @@ with open('${MODULE_DIR}/profiles/${p}.toml', 'rb') as f:
 "
     done
 }
+
+# ============================================================================
+# templates/forward.rule.tmpl contract — per-instance NFT_TABLE token +
+# bidirectional rule pair + isolation invariant ("lives in its own table
+# so we never touch the operator's existing filter table"). A silent
+# regression here either (a) breaks per-instance isolation across the
+# `relay-via-server` + `publish` instances or (b) collides with the
+# operator's existing filter table, both of which are catalog-bound
+# contracts the verbatim source declares.
+# ============================================================================
+
+@test "template carries per-instance @@NFT_TABLE@@ token (SDD-003 multi-instance)" {
+    grep -q '@@NFT_TABLE@@' "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template carries @@WG_IFACE@@ + @@LAN_IFACE@@ substitution tokens" {
+    grep -q '@@WG_IFACE@@' "${MODULE_DIR}/templates/forward.rule.tmpl"
+    grep -q '@@LAN_IFACE@@' "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template declares table inet (selfdef_vpn_bridge namespace via NFT_TABLE token)" {
+    grep -qE '^table[[:space:]]+inet[[:space:]]+@@NFT_TABLE@@[[:space:]]*\{' \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template overlay->LAN rule allows WG iif + LAN oif" {
+    grep -qE 'iifname[[:space:]]+"@@WG_IFACE@@"[[:space:]]+oifname[[:space:]]+"@@LAN_IFACE@@"[[:space:]]+accept' \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template LAN->Overlay return path is established,related-gated (return conntrack)" {
+    grep -qE 'iifname[[:space:]]+"@@LAN_IFACE@@"[[:space:]]+oifname[[:space:]]+"@@WG_IFACE@@"[[:space:]]+ct[[:space:]]+state[[:space:]]+established,related[[:space:]]+accept' \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template FORWARD chain hooks at priority filter with policy accept" {
+    grep -qE 'type[[:space:]]+filter[[:space:]]+hook[[:space:]]+forward[[:space:]]+priority[[:space:]]+filter;[[:space:]]+policy[[:space:]]+accept;' \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template carries selfdef-vpn-bridge-{in,out} audit comments (so nft list rule identifies us)" {
+    grep -q 'comment "selfdef-vpn-bridge-out"' "${MODULE_DIR}/templates/forward.rule.tmpl"
+    grep -q 'comment "selfdef-vpn-bridge-in"'  "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
+
+@test "template isolation invariant documented in template header comment" {
+    # The verbatim "lives in its own table so we never touch the
+    # operator's existing filter table" is the safety contract.
+    grep -qE 'own table|never touch.*filter table' \
+        "${MODULE_DIR}/templates/forward.rule.tmpl"
+}
