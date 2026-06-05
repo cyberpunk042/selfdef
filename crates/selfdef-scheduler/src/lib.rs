@@ -73,6 +73,7 @@ pub mod dcgm;
 pub mod decision_audit;
 pub mod driver_replay;
 pub mod execution_pipeline;
+pub mod failure_codes;
 pub mod golden_rule;
 pub mod http_api;
 pub mod human_gate;
