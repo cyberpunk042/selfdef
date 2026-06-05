@@ -93,6 +93,9 @@ run_layer "L1: backlog/INDEX.md ↔ filesystem coherence (48 milestones × 3 gat
 run_layer "L1: info-hub doc references (cross-repo deep-link integrity; skips when info-hub not adjacent)" \
     bash scripts/test/L1-info-hub-doc-references.sh
 
+run_layer "L1: textfile observer R171 hardening (29 selfdef-*-textfile.service × 9 clauses = 261 assertions)" \
+    bash scripts/test/L1-textfile-observer-hardening.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
