@@ -46,6 +46,7 @@ pub mod prometheus_exporter;
 pub mod psi;
 pub mod request_lifecycle;
 pub mod scenarios;
+pub mod scheduler_reactions;
 pub mod scheduling_law;
 pub mod speculative_parallelism;
 pub mod tier;
