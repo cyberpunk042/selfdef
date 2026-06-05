@@ -234,4 +234,67 @@ mod tests {
             ]
         );
     }
+
+    // ---- cross-module coherence capstone --------------------------------
+    //
+    // Proves the scheduler's modules compose: the route decide() picks for the
+    // canonical scenario, converted through `tier`, lines up with the tier's
+    // work policy, lifecycle plane, and speculation role — the same physical
+    // tier viewed through every facet.
+
+    #[test]
+    fn verify_decision_coheres_across_tier_facets() {
+        use crate::request_lifecycle::Plane;
+        use crate::speculative_parallelism::SpeculationRole;
+        use crate::tier::{route_to_tier, tier_to_plane, tier_to_speculation_role};
+        use crate::tier_work_policy::{coding_work, HardwareTier};
+
+        // code-bug Verify on a clean box → oracle (Blackwell)
+        let s = code_bug_verify_clean();
+        let d = decide(&s.reading, &s.ctx).expect("valid");
+        assert_eq!(d.route, Route::Blackwell);
+
+        // route → tier → all facets agree it's the oracle
+        let tier = route_to_tier(d.route).expect("single tier");
+        assert_eq!(tier, HardwareTier::Blackwell);
+        assert_eq!(tier_to_plane(tier), Plane::Oracle); // lifecycle Verify is Oracle
+        assert_eq!(tier_to_speculation_role(tier), SpeculationRole::Verify); // speculation Verify
+
+        // and the oracle's coding work is the hard verification work, matching
+        // the dump's "Verify: Blackwell reviews top 2"
+        assert!(coding_work(tier).contains(&"final patch review"));
+        assert!(coding_work(tier).contains(&"architectural reasoning"));
+    }
+
+    #[test]
+    fn draft_decision_coheres_with_scout_facets() {
+        use crate::request_lifecycle::Plane;
+        use crate::speculative_parallelism::SpeculationRole;
+        use crate::tier::{route_to_tier, tier_to_plane, tier_to_speculation_role};
+        use crate::tier_work_policy::{coding_work, HardwareTier};
+
+        // code-bug Draft under Fast → scout (3090)
+        let s = code_bug_draft_scout();
+        let d = decide(&s.reading, &s.ctx).expect("valid");
+        assert_eq!(d.route, Route::Rtx3090);
+
+        let tier = route_to_tier(d.route).expect("single tier");
+        assert_eq!(tier, HardwareTier::Rtx3090);
+        assert_eq!(tier_to_plane(tier), Plane::Scout);
+        assert_eq!(tier_to_speculation_role(tier), SpeculationRole::Predict);
+        // the scout's coding work is the cheap drafting work
+        assert!(coding_work(tier).contains(&"small code model patches"));
+        assert!(coding_work(tier).contains(&"speculative edit proposals"));
+    }
+
+    #[test]
+    fn hibernate_decision_has_no_single_tier() {
+        use crate::tier::route_to_tier;
+        // oracle-pressured high-risk verify defers; a deferred branch is not
+        // bound to any single compute tier.
+        let s = code_bug_verify_oracle_pressured();
+        let d = decide(&s.reading, &s.ctx).expect("valid");
+        assert_eq!(d.route, Route::Hibernate);
+        assert_eq!(route_to_tier(d.route), None);
+    }
 }
