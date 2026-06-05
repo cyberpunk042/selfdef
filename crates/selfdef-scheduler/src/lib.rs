@@ -59,6 +59,7 @@ pub mod speculative_parallelism;
 pub mod tier;
 pub mod tier_work_policy;
 pub mod worker_status_word;
+pub mod tool_call_transaction;
 pub mod tool_schema_kv;
 pub mod tool_scheduling;
 pub mod tui_panel;
