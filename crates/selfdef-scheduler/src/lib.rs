@@ -1,8 +1,11 @@
 //! `selfdef-scheduler` — the Goldilocks Scheduler + Deterministic Cortex
 //! Runtime (MS048 / SDD-031), the IPS-side implementation of the avx-plus-plus
-//! dump's entire CPU-cortex / scheduler / KV / tool / data-plane specification
-//! (dump 846-2728 + 18000-18290). Every module is verbatim-cited to its dump
-//! line range; nothing is invented.
+//! dump's CPU-cortex / scheduler / KV / tool / data-plane specification
+//! (dump 846-2728 + 18000-18290) plus the IPS runtime-doctrine + serving +
+//! batching sections (dump 3637-4892: `runtime_law`, `critical_separation`,
+//! `human_gate_contract`, `program_optimization`, `agent_dsl`, `system_planes`,
+//! `serving_modes`, `batching`, `kv_aware_routing`). Every module is
+//! verbatim-cited to its dump line range; nothing is invented.
 //!
 //! # Core decision pipeline
 //!
