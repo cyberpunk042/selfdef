@@ -78,6 +78,9 @@ run_layer "L1: cross-repo alert ↔ runbook binding (MS048 runbook ↔ sovereign
 run_layer "L1: mirror schema-version coherence (14 selfdef-*-mirror crates + 10 sovereign-os consumers in lockstep)" \
     bash scripts/test/L1-mirror-schema-version-coherence.sh
 
+run_layer "L1: doctrine verbatim preservation (DOCTRINE_* constants + cross-crate name-collision coherence)" \
+    bash scripts/test/L1-doctrine-verbatim-preservation.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
