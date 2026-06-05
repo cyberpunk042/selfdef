@@ -39,6 +39,12 @@ textfile_path = "/var/lib/node_exporter/textfile_collector/selfdef-scheduler.pro
 # tails this file.
 ocsf_path = "/var/log/selfdef/scheduler.ocsf.jsonl"
 
+# Decision ring-buffer directory. The orchestrator writes one decision
+# per file here; the textfile binary reads it to emit the
+# selfdef_scheduler_decisions_* metrics, and the selfdef-api /v1/scheduler
+# handlers read it for the operator HTTP surface.
+ring_dir = "/var/cache/selfdef/scheduler/ring"
+
 # Disable OCSF emission entirely if you're not running a SIEM.
 ocsf_enabled = true
 

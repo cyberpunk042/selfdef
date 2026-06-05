@@ -50,6 +50,7 @@
 //! [emit]
 //! textfile_path = "/var/lib/node_exporter/textfile_collector/selfdef-scheduler.prom"
 //! ocsf_path = "/var/log/selfdef/scheduler.ocsf.jsonl"
+//! ring_dir = "/var/cache/selfdef/scheduler/ring"
 //! ocsf_enabled = true
 //! audit_path = "/var/log/selfdef/scheduler.driver.audit.jsonl"
 //! audit_enabled = true
@@ -94,7 +95,7 @@ use crate::decision_audit::{
     DEFAULT_DRIVER_AUDIT_PATH, DEFAULT_MAX_GENERATIONS, DEFAULT_ROTATE_BYTES,
 };
 use crate::prometheus_exporter::DEFAULT_TEXTFILE_PATH;
-use crate::DEFAULT_OCSF_PATH;
+use crate::{DEFAULT_OCSF_PATH, DEFAULT_RING_DIR};
 
 /// Default TOML config path.
 pub const DEFAULT_CONFIG_PATH: &str = "/etc/selfdef/scheduler.toml";
@@ -161,6 +162,10 @@ pub struct EmitConfig {
     pub textfile_path: PathBuf,
     /// OCSF JSONL append target.
     pub ocsf_path: PathBuf,
+    /// Decision ring-buffer directory (read for the decision metrics the
+    /// textfile binary appends; written by the orchestrator's
+    /// `decide_and_persist`).
+    pub ring_dir: PathBuf,
     /// `true` to emit OCSF events on every poll.
     pub ocsf_enabled: bool,
     /// M01170 driver-audit JSONL target.
@@ -178,6 +183,7 @@ impl Default for EmitConfig {
         Self {
             textfile_path: PathBuf::from(DEFAULT_TEXTFILE_PATH),
             ocsf_path: PathBuf::from(DEFAULT_OCSF_PATH),
+            ring_dir: PathBuf::from(DEFAULT_RING_DIR),
             ocsf_enabled: true,
             audit_path: PathBuf::from(DEFAULT_DRIVER_AUDIT_PATH),
             audit_enabled: true,
@@ -383,6 +389,7 @@ impl SchedulerConfig {
             ("substrate.state_root", &self.substrate.state_root),
             ("emit.textfile_path", &self.emit.textfile_path),
             ("emit.ocsf_path", &self.emit.ocsf_path),
+            ("emit.ring_dir", &self.emit.ring_dir),
             ("emit.audit_path", &self.emit.audit_path),
         ] {
             if p.as_os_str().is_empty() {
@@ -413,6 +420,7 @@ mod tests {
         assert_eq!(c.substrate.dcgm_indices, DcgmGpuIndices::sain01_baseline());
         assert_eq!(c.emit.textfile_path, PathBuf::from(DEFAULT_TEXTFILE_PATH));
         assert_eq!(c.emit.ocsf_path, PathBuf::from(DEFAULT_OCSF_PATH));
+        assert_eq!(c.emit.ring_dir, PathBuf::from(DEFAULT_RING_DIR));
         assert!(c.emit.ocsf_enabled);
         assert!(c.emit.audit_enabled);
         assert_eq!(c.emit.audit_rotate_bytes, DEFAULT_ROTATE_BYTES);

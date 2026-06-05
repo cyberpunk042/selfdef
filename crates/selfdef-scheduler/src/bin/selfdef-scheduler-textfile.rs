@@ -77,7 +77,7 @@ use selfdef_scheduler::prometheus_exporter::{
     render_decision_metrics, render_failure_sentinel, render_prometheus, write_textfile_atomic,
 };
 use selfdef_scheduler::psi::ProcfsPsiSource;
-use selfdef_scheduler::{DEFAULT_RING_DIR, read_ring_buffer};
+use selfdef_scheduler::read_ring_buffer;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -100,7 +100,7 @@ fn main() -> ExitCode {
     let textfile_path =
         env_path_with_default("SELFDEF_SCHEDULER_TEXTFILE_PATH", &cfg.emit.textfile_path);
     let ocsf_path = env_path_with_default("SELFDEF_SCHEDULER_OCSF_PATH", &cfg.emit.ocsf_path);
-    let ring_dir = env_path("SELFDEF_SCHEDULER_RING_DIR", DEFAULT_RING_DIR);
+    let ring_dir = env_path_with_default("SELFDEF_SCHEDULER_RING_DIR", &cfg.emit.ring_dir);
     let psi_dir = env_path_with_default("SELFDEF_SCHEDULER_PSI_DIR", &cfg.substrate.psi_dir);
     let nvidia_smi =
         env_path_with_default("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", &cfg.substrate.nvidia_smi_bin);
