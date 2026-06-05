@@ -28,6 +28,7 @@
 
 pub mod backpressure_driver;
 pub mod config;
+pub mod decide;
 pub mod dcgm;
 pub mod decision_audit;
 pub mod driver_replay;
