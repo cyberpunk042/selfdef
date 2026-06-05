@@ -28,6 +28,7 @@
 
 pub mod backpressure_driver;
 pub mod backpressure_response;
+pub mod branch_lifecycle;
 pub mod config;
 pub mod decide;
 pub mod dcgm;
