@@ -121,6 +121,46 @@ pub fn tier_avoids(tier: HardwareTier, work_class: &str) -> bool {
     avoids(tier).contains(&work_class)
 }
 
+// ============================================================================
+// Coding-domain tier breakdown (dump 864-878, "For coding specifically")
+// ============================================================================
+
+/// RTX 3090 coding work (dump 865-869).
+pub const CODING_RTX3090: [&str; 4] = [
+    "grep/ripgrep summaries",
+    "small code model patches",
+    "speculative edit proposals",
+    "test failure classification",
+];
+
+/// CPU coding work (dump 871-876).
+pub const CODING_CPU: [&str; 5] = [
+    "dependency graph",
+    "patch risk scoring",
+    "branch scheduling",
+    "syntax/grammar constraints",
+    "deterministic merge logic",
+];
+
+/// Blackwell coding work (dump 878-882).
+pub const CODING_BLACKWELL: [&str; 4] = [
+    "architectural reasoning",
+    "final patch review",
+    "hard bug analysis",
+    "large-context synthesis",
+];
+
+/// The coding-domain work classes for a tier (dump's "For coding specifically"
+/// breakdown). A concrete domain instance of the general tier policy.
+#[must_use]
+pub const fn coding_work(tier: HardwareTier) -> &'static [&'static str] {
+    match tier {
+        HardwareTier::Blackwell => &CODING_BLACKWELL,
+        HardwareTier::Rtx3090 => &CODING_RTX3090,
+        HardwareTier::Cpu => &CODING_CPU,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,6 +223,29 @@ mod tests {
         );
         assert_eq!(doctrine(HardwareTier::Rtx3090), "The 3090 should work ahead.");
         assert_eq!(doctrine(HardwareTier::Cpu), "The CPU decides.");
+    }
+
+    #[test]
+    fn coding_breakdown_sizes_match_dump() {
+        assert_eq!(coding_work(HardwareTier::Rtx3090).len(), 4);
+        assert_eq!(coding_work(HardwareTier::Cpu).len(), 5);
+        assert_eq!(coding_work(HardwareTier::Blackwell).len(), 4);
+    }
+
+    #[test]
+    fn coding_work_is_verbatim_per_tier() {
+        // oracle does the hard architectural reasoning; scout does cheap greps;
+        // cpu does the deterministic graph/merge logic.
+        assert!(coding_work(HardwareTier::Blackwell).contains(&"architectural reasoning"));
+        assert!(coding_work(HardwareTier::Rtx3090).contains(&"grep/ripgrep summaries"));
+        assert!(coding_work(HardwareTier::Cpu).contains(&"deterministic merge logic"));
+    }
+
+    #[test]
+    fn coding_work_lists_are_disjoint_across_tiers() {
+        for w in CODING_BLACKWELL {
+            assert!(!CODING_RTX3090.contains(&w) && !CODING_CPU.contains(&w), "{w} not unique");
+        }
     }
 
     #[test]
