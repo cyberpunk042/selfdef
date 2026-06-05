@@ -102,6 +102,9 @@ run_layer "L1: textfile observer timer fleet (29 timers × 5 cadence clauses + p
 run_layer "L1: module-lib version coherence (SDD-061; library v4 must satisfy all 182 consumers)" \
     bash scripts/test/L1-module-lib-version-coherence.sh
 
+run_layer "L1: sigma rule ↔ test pairing (22 rules ↔ 22 .tests.yaml × 3 invariants)" \
+    bash scripts/test/L1-sigma-rule-test-pairing.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
