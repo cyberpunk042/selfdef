@@ -81,6 +81,7 @@ pub mod human_gate_contract;
 pub mod kv_aware_routing;
 pub mod kv_cache_controller;
 pub mod kv_context_scheduling;
+pub mod learning;
 pub mod memory_admission;
 pub mod memory_scheduling;
 pub mod objective_signals;
