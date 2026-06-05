@@ -109,9 +109,65 @@ assert_grep "SystemCallArchitectures=native (no 32-bit syscall pivot)" \
 assert_grep "R10386 ReadWritePaths includes /mnt/vault/context (audit log write)" \
     "^ReadWritePaths=.*\\/mnt\\/vault\\/context"
 
+# ============================================================================
+# selfdef-ux-harness.service — MS045 R10738 + R10748 + hardening parallel
+# ============================================================================
+# Sister production unit to guardian-core.service. Type=oneshot (the harness
+# runs to completion then exits, paired with a systemd timer for daily runs
+# per R10738). Carries a 4-clause hardening posture (NoNewPrivileges,
+# PrivateTmp, ProtectSystem=strict, ProtectHome=true) + ReadWritePaths scoped
+# to its log dir. The MS045 catalog pins R10738 (timer) + R10748 (readiness
+# on activation) but neither pins the unit's hardening clauses — silently
+# regressing the hardening here is the same drift class this gate catches
+# for Guardian.
+
+UX_UNIT="${REPO_ROOT}/config/systemd/selfdef-ux-harness.service"
+
+if [[ ! -f "${UX_UNIT}" ]]; then
+    echo "  FAIL ux-harness unit not present at ${UX_UNIT}"
+    failures=$((failures + 1))
+else
+    assert_grep_unit() {
+        local label="$1"
+        local pattern="$2"
+        if grep -qE "${pattern}" "${UX_UNIT}"; then
+            echo "  PASS ux-harness: ${label}"
+        else
+            echo "  FAIL ux-harness: ${label} — pattern not found: ${pattern}"
+            failures=$((failures + 1))
+        fi
+    }
+    # Unit + service contract
+    assert_grep_unit "Description references MS045 UX coherence test harness" \
+        "^Description=.*MS045.*UX[[:space:]]+coherence[[:space:]]+test[[:space:]]+harness"
+    assert_grep_unit "Type=oneshot (R10738 daily-timer pairing — runs to completion)" \
+        "^Type=oneshot"
+    assert_grep_unit "ExecStart=/usr/bin/selfdef-ux-harness --json (R10748 readiness output)" \
+        "^ExecStart=/usr/bin/selfdef-ux-harness[[:space:]]+--json"
+    assert_grep_unit "StandardOutput appends to /var/log/selfdef/ux-harness.jsonl" \
+        "^StandardOutput=append:/var/log/selfdef/ux-harness\\.jsonl"
+    assert_grep_unit "ConditionPathExists guards on the binary (no-binary => clean skip)" \
+        "^ConditionPathExists=/usr/bin/selfdef-ux-harness"
+    # Hardening parallel to guardian-core
+    assert_grep_unit "NoNewPrivileges=true" \
+        "^NoNewPrivileges=true"
+    assert_grep_unit "PrivateTmp=true" \
+        "^PrivateTmp=true"
+    assert_grep_unit "ProtectSystem=strict" \
+        "^ProtectSystem=strict"
+    assert_grep_unit "ProtectHome=true" \
+        "^ProtectHome=true"
+    assert_grep_unit "ReadWritePaths=/var/log/selfdef (the only writable namespace)" \
+        "^ReadWritePaths=/var/log/selfdef"
+    assert_grep_unit "TimeoutStartSec bounds run length (no hung-harness)" \
+        "^TimeoutStartSec=[0-9]+"
+    assert_grep_unit "WantedBy=multi-user.target" \
+        "^WantedBy=multi-user\\.target"
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
-    echo "L1-guardian-systemd-hardening FAIL: ${failures} contract violation(s)"
+    echo "L1-systemd-hardening FAIL: ${failures} contract violation(s)"
     exit 1
 fi
 
-echo "L1-guardian-systemd-hardening PASS: all 20 R-row-grounded clauses present"
+echo "L1-systemd-hardening PASS: all 20 guardian-core R-rows + 12 ux-harness clauses present"
