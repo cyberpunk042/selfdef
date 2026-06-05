@@ -1,25 +1,52 @@
-//! `selfdef-scheduler` — SDD-031 Deliverable 2: Goldilocks Scheduler
-//! runtime (avx-plus-plus dump tail lines 18000-18250 IPS-side
-//! implementation).
+//! `selfdef-scheduler` — the Goldilocks Scheduler + Deterministic Cortex
+//! Runtime (MS048 / SDD-031), the IPS-side implementation of the avx-plus-plus
+//! dump's entire CPU-cortex / scheduler / KV / tool / data-plane specification
+//! (dump 846-2728 + 18000-18290). Every module is verbatim-cited to its dump
+//! line range; nothing is invented.
 //!
-//! Provides:
-//! - [`ProfileRules`] — verbatim sain-01 §10 + dump 18000-18100 per-profile
-//!   rule registry (the same request schedules differently under different
-//!   profiles per R11254)
-//! - [`AxisWeights`] — per-profile 7-axis weight matrix per R11291-R11332
-//! - [`evaluate_objective`] — 7-axis objective function (latency + cost +
-//!   risk + energy + human_attention + hardware_pressure + compound)
-//! - [`BackpressureMonitor`] — 5 surfaces + thresholds + hysteresis +
-//!   per-surface response policy per R11333-R11362
-//! - [`Scheduler`] — top-level orchestrator: ingests request signals,
-//!   evaluates objective under active profile + backpressure, emits a
-//!   [`Decision`], appends to audit chain
-//! - [`emit_audit_entry`] — atomic append to ZFS audit log + SHA-256 chain
-//! - [`audit_chain_check`] — chain integrity verifier
-//! - [`replay`] — counterfactual replay against alternate profile per
-//!   R11393-R11398
-//! - [`PsiSource`] / [`DcgmSource`] / [`HumanGateSource`] — Effector-style
-//!   traits stubbable for testing (real-source bridges land in D7+)
+//! # Core decision pipeline
+//!
+//! [`ProfileRules`] (per-profile rule registry) + [`AxisWeights`] +
+//! [`evaluate_objective`] (the 7-axis objective) + [`BackpressureMonitor`]
+//! (5 surfaces + hysteresis) feed the pipeline:
+//!
+//! ```text
+//! BackpressureDriver::poll  (backpressure_driver — PSI + DCGM + human-gate)
+//!   → objective_signals::score_current_substrate   (substrate → axes)
+//!   → scheduling_law::recommend_route              (Key Scheduling Law)
+//!   → decide::decide / decide_persist_and_emit     (the orchestrator)
+//!       → emit_audit_entry (SHA-256 chain) + write_ring_buffer + OCSF + Prometheus
+//! ```
+//!
+//! The `selfdef-scheduler-decide` binary is the request-ingress entry point;
+//! [`replay`] does counterfactual replay; [`emit_audit_entry`] /
+//! [`audit_chain_check`] are the audit ledger.
+//!
+//! # The 8 Deterministic Cortex Runtime engines ([`runtime_shape`])
+//!
+//! - **Branch Engine** — [`branch_masks`] (AVX-512 tick) + [`branch_lifecycle`]
+//! - **Policy Engine** — [`scheduling_law`] + [`tier_work_policy`]
+//! - **Grammar Engine** — [`branch_lifecycle`] (Filter masks)
+//! - **Memory Router** — [`memory_scheduling`] + [`memory_admission`]
+//! - **Speculation Engine** — [`speculative_parallelism`] + [`speculation_tree`]
+//! - **Tool Gate** — [`tool_scheduling`] + [`tool_call_transaction`]
+//! - **Replay Log** — [`decision_audit`] + [`decide`]
+//! - **KV Cache Controller** — [`kv_context_scheduling`] + [`branch_kv_fusion`]
+//!   + [`kv_cache_controller`] + [`tool_schema_kv`]
+//!
+//! # CPU data-plane layer (the avx-plus-plus heart)
+//!
+//! [`data_plane`] (8 ops) · [`avx512_features`] (7 instructions) ·
+//! [`data_plane_services`] (6 services) · [`execution_pipeline`] (the CPU
+//! pipeline) · [`worker_status_word`] (telemetry) · [`golden_rule`] (the
+//! capstone doctrine, with each technique mapped back to its module).
+//!
+//! # Observability + integration
+//!
+//! [`prometheus_exporter`] · [`ocsf_emitter`] · [`tui_panel`] · [`http_api`] ·
+//! [`config`] · [`policy_signer`] (MS003 verify-only) · [`scenarios`] (the
+//! dump's canonical code-bug fixtures) · [`tier`] (cross-facet conversions).
+//! Cross-repo consumption: `docs/operator/ms048-scheduler-integration-contract.md`.
 //!
 //! Standing rule: We do not minimize anything.
 
