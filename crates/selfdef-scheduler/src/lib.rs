@@ -28,6 +28,7 @@
 
 pub mod backpressure_driver;
 pub mod backpressure_response;
+pub mod branch_kv_fusion;
 pub mod branch_lifecycle;
 pub mod branch_masks;
 pub mod config;
