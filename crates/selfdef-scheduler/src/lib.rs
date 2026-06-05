@@ -42,6 +42,7 @@ pub mod driver_replay;
 pub mod execution_pipeline;
 pub mod http_api;
 pub mod human_gate;
+pub mod kv_cache_controller;
 pub mod kv_context_scheduling;
 pub mod memory_admission;
 pub mod memory_scheduling;
