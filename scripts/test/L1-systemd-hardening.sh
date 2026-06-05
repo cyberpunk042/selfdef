@@ -165,9 +165,51 @@ else
         "^WantedBy=multi-user\\.target"
 fi
 
+# ============================================================================
+# selfdef-ux-harness.timer — MS045 R10738 timer pairing
+# ============================================================================
+# The ux-harness unit is Type=oneshot; the periodic run cadence lives in
+# this timer. R10738 says "harness systemd timer runs daily" — currently
+# implemented as OnUnitActiveSec=6h (4x daily, strictly more frequent than
+# daily; no violation). Persistent=true is what guarantees a missed
+# schedule still fires on next boot — a silent regression to Persistent=
+# false would silently drop missed runs.
+
+UX_TIMER="${REPO_ROOT}/config/systemd/selfdef-ux-harness.timer"
+
+if [[ ! -f "${UX_TIMER}" ]]; then
+    echo "  FAIL ux-harness timer not present at ${UX_TIMER}"
+    failures=$((failures + 1))
+else
+    assert_grep_timer() {
+        local label="$1"
+        local pattern="$2"
+        if grep -qE "${pattern}" "${UX_TIMER}"; then
+            echo "  PASS ux-harness.timer: ${label}"
+        else
+            echo "  FAIL ux-harness.timer: ${label} — pattern not found: ${pattern}"
+            failures=$((failures + 1))
+        fi
+    }
+    assert_grep_timer "Description references MS045 + periodic UX coherence" \
+        "^Description=.*MS045"
+    assert_grep_timer "[Timer] section present" \
+        "^\\[Timer\\]"
+    assert_grep_timer "OnBootSec set (timer fires after boot, not only after install)" \
+        "^OnBootSec=[0-9]+(sec|s|min|m|h|d)"
+    assert_grep_timer "OnUnitActiveSec set (recurring cadence, R10738)" \
+        "^OnUnitActiveSec=[0-9]+(sec|s|min|m|h|d)"
+    assert_grep_timer "RandomizedDelaySec set (no synchronous-fleet load spike)" \
+        "^RandomizedDelaySec=[0-9]+(sec|s|min|m|h|d)"
+    assert_grep_timer "Persistent=true (missed runs fire on next boot — no silent drops)" \
+        "^Persistent=true"
+    assert_grep_timer "WantedBy=timers.target (timer auto-starts with timers.target)" \
+        "^WantedBy=timers\\.target"
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-systemd-hardening FAIL: ${failures} contract violation(s)"
     exit 1
 fi
 
-echo "L1-systemd-hardening PASS: all 20 guardian-core R-rows + 12 ux-harness clauses present"
+echo "L1-systemd-hardening PASS: 20 guardian-core R-rows + 12 ux-harness clauses + 7 ux-harness.timer clauses present"
