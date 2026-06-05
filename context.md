@@ -93,13 +93,31 @@ VPCOMPRESS/VPOPCNTDQ/VP2INTERSECT/VPCONFLICT/VBMI/k-masks), `data_plane_services
 (6 services: Token Law Engine / Policy Scanner / JSON Commit Validator / Memory
 Bitmap Index / Branch Compactor / Replay Index). These encode the operator's
 "exploit the stack to the max, avx-plus-plus base reason" mandate as typed
-catalogs. selfdef-scheduler: **~32 modules / 436 lib tests** — the dump's entire
-CPU-cortex / scheduler / data-plane spec encoded, each module verbatim-cited.
+catalogs.
 
-> The remaining unencoded dump sections (memory hierarchy / storage plane /
-> observability plane / memory index plane, dump 2375-3160) are **runtime
-> scope** — they belong in sovereign-os (Solution 1), not the selfdef IPS-side
-> scheduler. The selfdef CPU-cortex/scheduler dump-content is comprehensively done.
+**KV + tool + pipeline layer** (dump 2408-2570): `tool_call_transaction` (8
+deterministic stages, 2408), `execution_pipeline` (Fetch→Decode→Execute→Validate
+→Retire→Commit CPU pipeline, "speculative AI execution with deterministic
+commit", 2427), `tool_schema_kv` (6 invariant-prefix caches + content addressing,
+2543), `kv_cache_controller` (4-tier VRAM/RAM/NVMe-ZFS hierarchy + KvBlockMeta +
+7 decisions + 6 scan questions, "Let the CPU govern memory", 2477-2540).
+
+selfdef-scheduler: **39 modules / 464 lib tests** (single-threaded; the 1 dcgm
+parallel-flake aside), all bins build, selfdef-api compiles. The dump's entire
+CPU-cortex / scheduler / KV / tool / data-plane spec is encoded, each module
+verbatim-cited.
+
+**Cross-repo "combine" seam — BUILT both sides:** selfdef produces
+(`selfdef-scheduler-decide` binary + `ms048-scheduler-integration-contract.md`);
+**sovereign-os consumes** (`scripts/inference/scheduler-bridge.py` +
+`tests/unit/test_scheduler_bridge.py` 8 cases + inference INDEX) — read-only,
+graceful-offline, honors Hibernate, maps route→backend tier. Wiring the bridge
+into `router.py`'s live decision is the one remaining operator architecture call.
+
+> The remaining unencoded dump sections (storage plane / observability plane /
+> memory index plane, dump 2755-3160) are **runtime scope** — sovereign-os
+> (Solution 1), and overlap locked SDDs (017 ZFS, 016/023 observability). The
+> selfdef CPU-cortex/scheduler/KV dump-content is comprehensively done.
 
 `selfdef-scheduler` now **~29 modules / ~418 lib tests** (1 known pre-existing
 flake: `dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention,
