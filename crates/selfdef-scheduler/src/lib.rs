@@ -80,6 +80,7 @@ pub mod policy_signer;
 pub mod prometheus_exporter;
 pub mod psi;
 pub mod request_lifecycle;
+pub mod runtime_law;
 pub mod runtime_shape;
 pub mod scenarios;
 pub mod scheduler_reactions;
