@@ -95,6 +95,12 @@ selfdefctl scheduler replay <req-id> [--profile P]   # counterfactual replay
 selfdefctl scheduler weights [--profile P]  # 7-axis weight matrix
 selfdefctl scheduler force <req-id> --route R   # Ring 0 operator override
 selfdefctl scheduler audit-cycle replay   # chain integrity check
+
+# per-request decide binary (MS048 SDD-031 D2, sovereign-os bridge entry point)
+echo '{"profile":"careful","latency":0.7,"cost":0.6,"risk":0.2,"energy":0.5}' \
+    | selfdef-scheduler-decide                       # one-shot decide → Decision JSON on stdout
+selfdef-scheduler-decide --task-file /path/task.json # file mode (no stdin)
+selfdef-scheduler-textfile                            # one-shot Prometheus textfile emit
 ```
 
 ## Modules (operator-activatable bundles)
