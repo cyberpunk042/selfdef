@@ -27,6 +27,7 @@
 #![warn(missing_docs)]
 
 pub mod backpressure_driver;
+pub mod backpressure_response;
 pub mod config;
 pub mod decide;
 pub mod dcgm;
