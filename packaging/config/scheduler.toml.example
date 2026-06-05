@@ -4,9 +4,23 @@
 # All sections + keys are OPTIONAL — delete anything you don't want to
 # override, and the compiled-in default applies.
 #
-# Loaded by selfdef-scheduler-textfile (the systemd-timer-driven
-# observer binary). Reload by re-running the binary; long-running
-# daemon hot-reload is future work.
+# Loaded by BOTH scheduler binaries (same config + env knobs):
+#   - selfdef-scheduler-textfile : systemd-timer-driven OBSERVER. Polls the
+#     substrate each tick and writes the Prometheus textfile + OCSF + driver
+#     audit (substrate + decision metrics). No request needed.
+#   - selfdef-scheduler-decide   : one-shot request-INGRESS. Reads a task
+#     descriptor (the scheduling "request") and routes it:
+#         echo '{"profile":"careful","latency":0.7,"cost":0.7,
+#                "risk":0.2,"energy":0.7}' | selfdef-scheduler-decide
+#       (or: selfdef-scheduler-decide --task-file task.json)
+#     It polls the live substrate, runs the 7-axis objective + Key Scheduling
+#     Law, persists the Decision to the audit chain + ring + OCSF, and prints
+#     the Decision JSON. profile is required; the four model axes default to
+#     0.5; request_id is generated if absent. The substrate axes
+#     (hardware_pressure, human_attention) are always measured, never taken
+#     from the task. A daemon loop or the sovereign-os gateway invokes it
+#     per real model request.
+# Reload by re-running the binary; long-running daemon hot-reload is future work.
 #
 # Precedence (highest → lowest): env vars > this file > compiled-in defaults.
 
