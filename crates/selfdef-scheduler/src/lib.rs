@@ -74,6 +74,7 @@ pub mod golden_rule;
 pub mod http_api;
 pub mod human_gate;
 pub mod human_gate_contract;
+pub mod kv_aware_routing;
 pub mod kv_cache_controller;
 pub mod kv_context_scheduling;
 pub mod memory_admission;
