@@ -41,6 +41,7 @@ pub mod prometheus_exporter;
 pub mod psi;
 pub mod scenarios;
 pub mod scheduling_law;
+pub mod tool_scheduling;
 pub mod tui_panel;
 
 pub use decision_audit::DriverAuditError;
