@@ -60,9 +60,19 @@ tested modules in `selfdef-scheduler` — each verbatim-cited, no invention:
 - `request_lifecycle` — canonical 10-step flow; step 1 "User request arrives"
   IS the request-ingress entry (846-862)
 - `speculative_parallelism` — predict/prune/verify service-level speculation (4816-4834)
+- `branch_lifecycle` — 8-stage branch transaction (Spawn→Learn) + 5 Filter masks (1275-1304)
+- `branch_masks` — AVX-512 per-branch tick (dead/risk/oracle/scout/tool/merge), budget decrement (1308-1340)
+- `worker_status_word` — 64-bit telemetry word, 8 byte-fields (3187-3200)
+- `scheduler_reactions` — "AI DevOps layer" 5 internal-signal feedback rules (3158-3185)
+- `tier` (M01149) — canonical Route↔HardwareTier↔Plane↔SpeculationRole conversions
+- `tier_work_policy` coding extension — "For coding specifically" per-tier tasks (864-882)
 - `scenarios` (M01167) — the dump's "code bug" worked example as CI fixtures;
   decide() routes them exactly as the dump describes (Verify→Blackwell,
   defers when oracle busy, Draft→3090)
+
+`selfdef-scheduler` now ~25 modules / 388 tests (1 known pre-existing flake:
+`dcgm::nvidia_smi_real_substrate_success` — parallel-tempdir contention, passes
+in isolation). All modules verbatim-cited to dump line ranges; none invented.
 
 The "request" question is **resolved from the dump**: a scheduling request is a
 TASK entering the 10-step lifecycle (step 1), scored by the 7-axis objective and
