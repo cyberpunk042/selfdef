@@ -406,6 +406,16 @@ pub fn render_decision_ocsf(decision: &Decision) -> String {
     out
 }
 
+/// Convenience: render a [`Decision`] OCSF finding and append it to the
+/// JSONL log at `path` in one call (composes [`render_decision_ocsf`] +
+/// [`append_ocsf_jsonl`]).
+///
+/// # Errors
+/// Returns `std::io::Error` on open / write failure.
+pub fn emit_decision_ocsf(path: &Path, decision: &Decision) -> std::io::Result<()> {
+    append_ocsf_jsonl(path, &render_decision_ocsf(decision))
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

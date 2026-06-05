@@ -22,6 +22,7 @@ use std::path::Path;
 
 use crate::backpressure_driver::DriverReading;
 use crate::objective_signals::score_current_substrate;
+use crate::ocsf_emitter::emit_decision_ocsf;
 use crate::scheduling_law::recommend_route;
 use crate::{
     AxisSignals, Decision, MirrorError, Profile, SchedulerError, emit_audit_entry,
@@ -144,6 +145,33 @@ pub fn decide_and_persist(
         decide(reading, ctx).map_err(|e| SchedulerError::InvalidDecision(e.to_string()))?;
     emit_audit_entry(audit_log, &decision)?;
     write_ring_buffer(ring_dir, &decision, max_entries)?;
+    Ok(decision)
+}
+
+/// [`decide_and_persist`] plus an OCSF Detection Finding appended to the
+/// SIEM JSONL stream at `ocsf_path`.
+///
+/// This is the full observability path: the integrity chain (audit log) and
+/// operator surface (ring) are written first, then the SIEM event
+/// (`render_decision_ocsf` — `event_kind="scheduler_decision"`). OCSF is
+/// last because it is the most downstream consumer; a failure there still
+/// leaves the authoritative audit + ring records intact, but is surfaced so
+/// the caller knows the SIEM did not receive the event.
+///
+/// # Errors
+/// Returns [`SchedulerError::InvalidDecision`] on validation failure, or
+/// [`SchedulerError::Io`] / [`SchedulerError::Serde`] when audit / ring / OCSF
+/// persistence fails.
+pub fn decide_persist_and_emit(
+    reading: &DriverReading,
+    ctx: &RequestContext,
+    audit_log: &Path,
+    ring_dir: &Path,
+    max_entries: usize,
+    ocsf_path: &Path,
+) -> Result<Decision, SchedulerError> {
+    let decision = decide_and_persist(reading, ctx, audit_log, ring_dir, max_entries)?;
+    emit_decision_ocsf(ocsf_path, &decision).map_err(|e| SchedulerError::Io(e.to_string()))?;
     Ok(decision)
 }
 
@@ -311,6 +339,46 @@ mod tests {
         assert_eq!(ring_decisions.len(), 1);
         assert_eq!(ring_decisions[0].request_id, d.request_id);
         assert_eq!(ring_decisions[0].route, Route::Blackwell);
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn decide_persist_and_emit_reaches_audit_ring_and_ocsf() {
+        use crate::read_ring_buffer;
+        let dir = std::env::temp_dir().join(format!(
+            "selfdef-persist-emit-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("scheduler_audit.log");
+        let ring = dir.join("ring");
+        let ocsf = dir.join("scheduler.ocsf.jsonl");
+        let r = reading(ResourceMeasurements::clean(), BackpressureState::clean());
+
+        let d = decide_persist_and_emit(
+            &r,
+            &ctx(Profile::Production),
+            &log,
+            &ring,
+            256,
+            &ocsf,
+        )
+        .expect("persist+emit");
+        assert_eq!(d.route, Route::Blackwell);
+
+        // all three sinks received the decision
+        assert!(std::fs::read_to_string(&log).unwrap().contains("prev_event_sha256"));
+        assert_eq!(read_ring_buffer(&ring).unwrap().len(), 1);
+        let ocsf_body = std::fs::read_to_string(&ocsf).expect("read ocsf");
+        assert!(ocsf_body.contains("scheduler_decision"));
+        assert!(ocsf_body.contains(&d.request_id));
+        // exactly one JSONL line
+        assert_eq!(ocsf_body.lines().filter(|l| !l.trim().is_empty()).count(), 1);
 
         std::fs::remove_dir_all(&dir).ok();
     }
