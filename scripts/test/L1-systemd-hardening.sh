@@ -207,9 +207,94 @@ else
         "^WantedBy=timers\\.target"
 fi
 
+# ============================================================================
+# selfdef-scheduler-textfile.{service,timer} — MS048 M01174 observer
+# ============================================================================
+# Third shipped systemd unit pair at the daemon layer: the one-shot
+# Prometheus textfile emitter the cockpit consumer reads. The .service
+# comment claims "Standard 12-clause R171 hardening" but no L1 gate
+# enforced it; this section closes that gap.
+#
+# Distinguishing properties vs guardian/ux-harness:
+#   - PrivateNetwork=true (cockpit observer never needs net)
+#   - User=selfdef / Group=selfdef (no DynamicUser — needs stable user
+#     for /var/lib/selfdef/* read access)
+#   - 60s OnUnitActiveSec; Persistent intentionally NOT set (missed
+#     60s-cadence runs aren't worth catching up — the next fire is at
+#     most 60s away).
+
+SCHED_UNIT="${REPO_ROOT}/packaging/systemd/selfdef-scheduler-textfile.service"
+SCHED_TIMER="${REPO_ROOT}/packaging/systemd/selfdef-scheduler-textfile.timer"
+
+if [[ ! -f "${SCHED_UNIT}" ]]; then
+    echo "  FAIL scheduler-textfile unit not present at ${SCHED_UNIT}"
+    failures=$((failures + 1))
+else
+    assert_grep_sched() {
+        local label="$1"
+        local pattern="$2"
+        if grep -qE "${pattern}" "${SCHED_UNIT}"; then
+            echo "  PASS scheduler-textfile: ${label}"
+        else
+            echo "  FAIL scheduler-textfile: ${label} — pattern not found: ${pattern}"
+            failures=$((failures + 1))
+        fi
+    }
+    # Service contract
+    assert_grep_sched "Description references MS048 Goldilocks Scheduler" \
+        "^Description=.*MS048.*Goldilocks Scheduler"
+    assert_grep_sched "Type=oneshot (paired with 60s timer)" \
+        "^Type=oneshot"
+    assert_grep_sched "ExecStart=/usr/bin/selfdef-scheduler-textfile" \
+        "^ExecStart=/usr/bin/selfdef-scheduler-textfile"
+    assert_grep_sched "User=selfdef (stable user — needs /var/lib/selfdef read)" \
+        "^User=selfdef"
+    # Hardening clauses (the "12-clause R171" the .service comment promises)
+    assert_grep_sched "NoNewPrivileges=true" "^NoNewPrivileges=true"
+    assert_grep_sched "ProtectSystem=strict" "^ProtectSystem=strict"
+    assert_grep_sched "ProtectKernelTunables=true" "^ProtectKernelTunables=true"
+    assert_grep_sched "ProtectKernelLogs=true" "^ProtectKernelLogs=true"
+    assert_grep_sched "ProtectControlGroups=true" "^ProtectControlGroups=true"
+    assert_grep_sched "RestrictAddressFamilies covers AF_UNIX + AF_NETLINK (nvidia-smi needs them)" \
+        "^RestrictAddressFamilies=.*AF_UNIX.*AF_NETLINK|^RestrictAddressFamilies=.*AF_NETLINK.*AF_UNIX"
+    assert_grep_sched "LockPersonality=true" "^LockPersonality=true"
+    assert_grep_sched "RestrictNamespaces=true" "^RestrictNamespaces=true"
+    assert_grep_sched "RestrictRealtime=true" "^RestrictRealtime=true"
+    assert_grep_sched "RestrictSUIDSGID=true" "^RestrictSUIDSGID=true"
+    assert_grep_sched "SystemCallArchitectures=native" "^SystemCallArchitectures=native"
+    assert_grep_sched "PrivateNetwork=true (cockpit observer never needs net)" \
+        "^PrivateNetwork=true"
+    assert_grep_sched "ReadWritePaths includes textfile_collector + /var/log/selfdef" \
+        "^ReadWritePaths=.*textfile_collector.*\\/var\\/log\\/selfdef"
+fi
+
+if [[ ! -f "${SCHED_TIMER}" ]]; then
+    echo "  FAIL scheduler-textfile timer not present at ${SCHED_TIMER}"
+    failures=$((failures + 1))
+else
+    assert_grep_st() {
+        local label="$1"
+        local pattern="$2"
+        if grep -qE "${pattern}" "${SCHED_TIMER}"; then
+            echo "  PASS scheduler-textfile.timer: ${label}"
+        else
+            echo "  FAIL scheduler-textfile.timer: ${label} — pattern not found: ${pattern}"
+            failures=$((failures + 1))
+        fi
+    }
+    assert_grep_st "[Timer] section present" "^\\[Timer\\]"
+    assert_grep_st "OnBootSec=990s (fires AFTER 32 IPS observers' 60-960s window)" \
+        "^OnBootSec=990s"
+    assert_grep_st "OnUnitActiveSec=60s (post-IPS-observer cadence)" \
+        "^OnUnitActiveSec=60s"
+    assert_grep_st "Unit=selfdef-scheduler-textfile.service (pairs the unit)" \
+        "^Unit=selfdef-scheduler-textfile\\.service"
+    assert_grep_st "WantedBy=timers.target" "^WantedBy=timers\\.target"
+fi
+
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-systemd-hardening FAIL: ${failures} contract violation(s)"
     exit 1
 fi
 
-echo "L1-systemd-hardening PASS: 20 guardian-core R-rows + 12 ux-harness clauses + 7 ux-harness.timer clauses present"
+echo "L1-systemd-hardening PASS: 20 guardian-core R-rows + 12 ux-harness clauses + 7 ux-harness.timer clauses + 16 scheduler-textfile clauses + 5 scheduler-textfile.timer clauses present"
