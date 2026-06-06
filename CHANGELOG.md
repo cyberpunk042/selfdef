@@ -6,6 +6,139 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — 100% L2 functional coverage achieved across all 187 module apply.sh scripts (2026-06-06)
+
+Closes the L2 coverage gap that opened during the variant-B
+idempotency-bug audit. Of the 187 modules with an `install/apply.sh`,
+all 187 now have a paired `packaging/test/L2-<module>.bats` functional
+suite. The full L2 fleet is 196 suites / 2062 test cases / 0
+failures locally + via `scripts/test/coherence.sh`.
+
+New L2 suites added this work block (17 modules, ~200 new cases):
+  bluetooth-disable, unprivileged-userns-baseline, pam-history,
+  ssh-moduli-harden, nullok-disable, pam-pwquality,
+  loopback-only-dns, acct-baseline, mta-loopback-detect,
+  secure-boot-status, swap-encryption-detect, tmpfs-baseline,
+  package-trust-baseline, service-account-lock, selinux-baseline,
+  nftables-baseline, firewalld-baseline.
+
+Each suite asserts the canonical invariants from the variant-B
+sweep:
+  - Profile validation + missing-config + missing-binary die paths
+  - DRY_RUN does NOT mutate or fire destructive side-effects
+  - Idempotent re-apply: mtime preserved + no destructive
+    side-effects (systemctl reload / nft reload / etc.)
+  - Anti-timestamp: no `^# Generated <ISO-date>` lines in rendered
+    output (defeats cmp -s)
+  - Refuse-to-brick guards where applicable (acknowledge_paranoid /
+    acknowledge_tmpfs / acknowledge_egress / acknowledge_relabel /
+    acknowledge_no_rootless)
+  - Single-shot backup invariant where applicable (preserve operator
+    pre-apply distro state across re-applies)
+  - Asymmetric profile-action invariants (e.g. ssh-add-BEFORE-set-
+    default-zone for firewalld + nftables anti-lockout)
+  - emit_status JSON surfaces changes count / live state / wired-in
+    flag
+
+### Fixed — nullok-disable mutated its own .selfdef-nullok-backup files on re-apply (2026-06-06)
+
+REAL BUG surfaced by the new L2 functional suite. On every re-apply
+of `profile=enforce`, the script's `for f in "$PAM_D"/*` loop
+walked the PREVIOUS apply's `.selfdef-nullok-backup` files. This
+detected nullok in the backup (the backup PRESERVES the original
+nullok-having distro state), created a backup-of-backup
+(`login.selfdef-nullok-backup.selfdef-nullok-backup`), and
+sed-mutated the original backup itself — destroying the preserved
+distro state the backup-once invariant was meant to keep.
+
+Fix: explicit `*.selfdef-nullok-backup` skip in the PAM-dir walk.
+L2 suite asserts the backup-once invariant + the script bug it
+surfaced.
+
+### Fixed — nftables-baseline silent EXIT=1 under set -euo pipefail + empty allow_udp (2026-06-06)
+
+REAL BUG #2 surfaced by the new L2 functional suite. With:
+
+    set -euo pipefail
+    udp_set="$(echo "$ALLOW_UDP" | tr "," "\n" | grep -E "^[0-9]+$" | sort -un | paste -sd, -)"
+
+…when `ALLOW_UDP` is empty (the typical operator config — most don't
+configure allow_udp), `grep` returns exit-1 (no matches). Bash 5.2's
+set -euo pipefail propagates the failing pipeline OUT of the
+command-substitution and silently aborts the script. The script
+exited 1 without writing the dropin, without backing up the live
+ruleset, without firing `nft -f` — and with NO log message.
+Operators saw an empty-exit cycle and trusted the firewall was up;
+it wasn't.
+
+Fix: trailing `|| true` on the tcp_set + udp_set substitutions so
+`grep`-finds-nothing is a benign empty result instead of a script-
+killing exit. Pattern is the canonical defensive shell idiom for
+grep-as-filter inside command-substitution under pipefail.
+
+### Fixed — variant-B idempotency bug class closed across 14 modules (2026-06-06)
+
+Continues the variant-A idempotency sweep with the second variant
+of the bug: modules that BOTH rendered a `# Generated <timestamp>`
+metadata line AND lacked a `cmp -s` content-change guard before
+`mv -f`. Effect: every apply rewrote the file (timestamp changes)
+AND fired destructive side-effects (systemctl reload, nft delete +
+load, logind reload) even when the substantive content was
+unchanged.
+
+Modules fixed (3 batches):
+  Batch 1 (f3aa1ca + 6bc3e77): coredump-suid-restrict,
+    ctrlaltdel-disable, login-defs-baseline, pam-history,
+    ssh-moduli-harden (5 modules)
+  Batch 2 (e1ac739): bluetooth-disable, hardware-tune-cache,
+    bitnet-gpu-inference, nftables-baseline (4 modules)
+  Batch 3 (040a8a3): sysctl-network-baseline,
+    unprivileged-userns-baseline, wireless-disable, wwan-disable,
+    slm-cpu-loop (5 modules)
+
+Canonical fix pattern per module:
+  - Drop render-timestamp from rendered metadata (env-file, JSON
+    field, header comment, profile marker)
+  - Add `if [[ -f "$dst" ]] && cmp -s "$tmp" "$dst"; then rm -f
+    "$tmp"; else mv -f "$tmp" "$dst"; log "wrote $dst"; fi`
+  - Destructive side-effects (systemctl reload-logind, nft
+    delete-table + nft -f, etc.) move INTO the content-changed
+    else branch so no-op apply is fully side-effect-free
+
+Pre-existing 9 L2 suites strengthened (c1936b0) with the canonical
+mtime-preservation + anti-timestamp invariants so future
+regressions of variant-B are caught immediately.
+
+Full-tree audit (mv -f with no cmp -s, OR rendered timestamp)
+returns clean across modules/ after this sweep.
+
+### Improved — sdd-tally + L1-sdd-header-shape recognize 3 additional Status header shapes (2026-06-06)
+
+Before: 17 SDDs classified as `unknown` because the regex only
+matched the `> Status: **<state>**` blockquote-bold canonical shape.
+After: 0 unknown; the 4 status-header shapes used across the SDD
+corpus are all recognized:
+
+  1. `> Status: **state**`     (blockquote + bold span — canonical)
+  2. `> Status: state`         (blockquote plain)
+  3. `**Status:** state`       (markdown-bold inline — adopted for
+                                SDD-065..078 action-surface specs)
+  4. `Status: state`           (plain — SDD-062/063)
+
+sdd-tally also gains a fallback: SDDs with no Status header but with
+an `## Implementation status` section + at least one `- [x]` + zero
+`- [ ]` are classified as `implemented` (catches SDD-061/063 where
+all D-N rows are checked).
+
+L1-sdd-header-shape extended to recognize all 4 shapes too —
+previously emitted 14 `ADVISORY` lines per CI run for SDD-065..078;
+now emits 0. SDD-061 gets a proper `**Status:** implemented` header
+inline.
+
+Final SDD ledger breakdown (2026-06-06): 52 implemented / 2
+accepted / 1 review / 2 scoping / 19 draft / 1 living / 0 unknown
+(total 79).
+
 ### Fixed — L1-prometheus-alerts adopts the L1-info-hub-doc-references advisory pattern (2026-06-06)
 
 Closes the L1-prometheus-alerts cross-repo state-divergence red by
