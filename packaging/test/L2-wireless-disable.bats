@@ -164,3 +164,65 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (rfkill block scope = 'wifi' — NOT 'all', which would kill bluetooth too): per-radio scoping" {
+    # rfkill block 'all' would also disable Bluetooth (the
+    # bluetooth-disable module owns that surface). Lock the
+    # per-radio scoping so the two modules remain composable.
+    write_config "rfkill"
+    run_wd
+    grep -qE 'rfkill block wifi' "${RF_LOG}"
+    ! grep -qE 'rfkill block all' "${RF_LOG}"
+    ! grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+}
+
+@test "INVARIANT (driver-coverage: brcmfmac + mt76 + rtw88_core + ath11k blacklisted — modern-chipset coverage)" {
+    # The pre-existing test only checks iwlwifi + ath9k (older
+    # Intel + Atheros). Lock the broader modern-chipset coverage:
+    # brcmfmac (Broadcom), mt76 family (MediaTek), rtw88_core
+    # (Realtek), ath11k (Qualcomm Wi-Fi 6 / 6E).
+    write_config "mask"
+    run_wd
+    grep -q '^blacklist brcmfmac$'    "${MODPROBE_FILE}"
+    grep -q '^blacklist mt76$'        "${MODPROBE_FILE}"
+    grep -q '^blacklist rtw88_core$'  "${MODPROBE_FILE}"
+    grep -q '^blacklist ath11k$'      "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — predictable for stale-cleanup head -1 grep)" {
+    # The downgrade-path's stale-file detection uses
+    # 'head -1 \$MODPROBE_FILE | grep -qF \$HEADER_MARKER'.
+    # The header MUST be the first line — not buried mid-file or
+    # after a comment — or the stale-cleanup grep misses + leaves
+    # selfdef-owned files orphaned.
+    write_config "mask"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef wireless-disable" ]
+}
+
+@test "INVARIANT (mask re-arm after operator deletion: re-creates blacklist file with header marker)" {
+    # Operator deletes the modprobe file out-of-band (maybe
+    # debugging Wi-Fi). Next apply must re-create it cleanly
+    # with header-marker intact so the downgrade-path can still
+    # identify ownership.
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    rm -f "${MODPROBE_FILE}"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef wireless-disable' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (JSON emit_status: status=ok + profile + wired_carrier surfaced)" {
+    # emit_status surfaces wired_carrier=true|false in the message
+    # body so the operator dashboard can flag "wired-fallback OK"
+    # vs "console-only after this apply" — critical visibility for
+    # a module that may sever remote access.
+    write_config "rfkill"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=rfkill'* ]]
+    [[ "${output}" == *'wired_carrier='* ]]
+}
