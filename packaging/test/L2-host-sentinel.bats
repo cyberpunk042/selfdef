@@ -255,3 +255,38 @@ run_wd() {
     DRY_RUN=1 run_wd
     [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
 }
+
+@test "INVARIANT (policy files chmod 0644 — system-config convention for Tetragon policy_dir)" {
+    write_config "audit"
+    run_wd
+    [ "$(stat -c '%a' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml")" = "644" ]
+    [ "$(stat -c '%a' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")" = "644" ]
+}
+
+@test "INVARIANT (apiVersion: cilium.io/v1alpha1 present — Tetragon CRD compliance)" {
+    # Tetragon's TracingPolicy CRD lives under cilium.io/v1alpha1.
+    # Wrong apiVersion = Tetragon rejects the policy.
+    write_config "audit"
+    run_wd
+    grep -qE '^apiVersion: cilium.io/v1alpha1' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml"
+    grep -qE '^apiVersion: cilium.io/v1alpha1' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+}
+
+@test "INVARIANT (policy re-arm after operator out-of-band deletion: re-creates policy files)" {
+    write_config "audit"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
+    rm -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" \
+          "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
+    [ -f "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile + installed-policy count surfaced for operator dashboard)" {
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"host-sentinel"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=audit'* ]]
+}
