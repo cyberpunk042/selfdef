@@ -16,7 +16,10 @@ else
     exit 2
 fi
 
-SELINUX_CONFIG="/etc/selinux/config"
+# SELFDEF_SELINUX_CONFIG_FILE + SELFDEF_AUTORELABEL_FILE added
+# 2026-06-06 for L2 testability — live defaults unchanged.
+SELINUX_CONFIG="${SELFDEF_SELINUX_CONFIG_FILE:-/etc/selinux/config}"
+SELFDEF_AUTORELABEL_FILE="${SELFDEF_AUTORELABEL_FILE:-/.autorelabel}"
 
 # Returns the current live mode: Enforcing / Permissive / Disabled
 # / unavailable.

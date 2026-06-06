@@ -72,7 +72,7 @@ if [[ "$PROFILE" == "enforcing" ]]; then
             exit 0
         fi
         sed -i 's/^SELINUX=.*/SELINUX=enforcing/' "$SELINUX_CONFIG" 2>/dev/null || true
-        touch /.autorelabel 2>/dev/null || true
+        touch "$SELFDEF_AUTORELABEL_FILE" 2>/dev/null || true
         log "set SELINUX=enforcing + scheduled /.autorelabel — OPERATOR MUST REBOOT to relabel + enter enforcing"
         emit_status "ok" "selinux-baseline profile=enforcing (relabel scheduled; reboot required)"
         exit 0
