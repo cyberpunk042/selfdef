@@ -165,3 +165,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — ld.so.conf inventory enumerates dynamic-linker search-path)" {
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (search-path dir under /var/tmp): writable-root expansion" {
+    printf '/var/tmp/evil/lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (search-path dir under /dev/shm): tmpfs writable-root expansion" {
+    printf '/dev/shm/evil/lib\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bare /var/tmp — SDD-063 consolidated bare-root)" {
+    printf '/var/tmp\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bare /dev/shm — SDD-063 consolidated bare-root)" {
+    printf '/dev/shm\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bare /home — SDD-063 consolidated bare-root)" {
+    printf '/home\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ld.so.conf.d drop-in also scanned — not only main conf)" {
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    printf '/tmp/dropin-evil/lib\n' > "${DROPIN}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '/opt/app/lib\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ld-so-conf -- ')
+    [ "${main_count}" = "1" ]
+}
