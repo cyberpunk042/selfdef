@@ -100,3 +100,101 @@ mk_suid() { printf 'ELF-%s' "$1" > "${ROOT}/$1"; chmod 4755 "${ROOT}/$1"; }
     PROFILE=enforce run run_wd
     [ "${status}" -ne 0 ]
 }
+
+@test "baseline is chmod 0600 (confidentiality — setuid inventory enumerates priv-elevated binaries)" {
+    mk_suid sudo
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "boundary: 3 added suid binaries → warn (the 1..3 range is INCLUSIVE on the high end)" {
+    mk_suid sudo
+    run_wd
+    mk_suid a1; mk_suid a2; mk_suid a3
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"suid_drift"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "boundary: 4 added suid binaries → alert (just over the warn ceiling — locks the >=4 cutoff)" {
+    mk_suid sudo
+    run_wd
+    mk_suid a1; mk_suid a2; mk_suid a3; mk_suid a4
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"bulk_delta"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "DELTA detect — sgid (chmod 2755) binary IS surfaced (not just suid)" {
+    # Locks that the find expression catches `-perm -2000` (sgid)
+    # alongside `-perm -4000` (suid). A regression that drops one
+    # half lands RED on this test.
+    mk_suid sudo
+    run_wd
+    printf 'ELF-sgid' > "${ROOT}/cgroup-mgr"
+    chmod 2755 "${ROOT}/cgroup-mgr"            # sgid-only, no suid
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # cgroup-mgr (sgid) MUST surface as an added entry.
+    cap | grep -q 'cgroup-mgr'
+}
+
+@test "DELTA detect — REMOVED suid binary surfaces in removed_sample (operator deinstallation)" {
+    mk_suid sudo
+    mk_suid passwd-binary
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${ROOT}/passwd-binary"
+    run_wd
+    cap | grep -q 'passwd-binary'
+    cap | grep -qE '"removed":[1-9]'
+}
+
+@test "INVARIANT (perm-change > hash-change priority): adding suid + changing hash → warn / suid_drift (NOT suid_hash_drift)" {
+    # Severity ladder: added/perm-changed > hash-changed.
+    # A run with BOTH an addition AND a content change must
+    # escalate as suid_drift (the added-set priority), not
+    # downgrade to suid_hash_drift (the hash-only event).
+    mk_suid sudo
+    run_wd
+    mk_suid newsuid
+    printf 'ELF-tampered' > "${ROOT}/sudo"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"suid_drift"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "added/removed/perm/hash counts surface in JSON (operator triage observability)" {
+    mk_suid sudo
+    mk_suid passwd-binary
+    run_wd
+    mk_suid newsuid
+    printf 'ELF-tampered' > "${ROOT}/passwd-binary"
+    rm -f "${ROOT}/sudo"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"added":1'
+    cap | grep -q '"removed":1'
+    cap | grep -q '"hash_change":1'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_suid sudo
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-suid-sgid -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (no auto-trust): suid-sgid-watchdog does NOT refresh the baseline on delta — alert STAYS until operator updates" {
+    mk_suid sudo
+    run_wd
+    mk_suid backdoor
+    run_wd                                                  # first delta
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                                  # alert STAYS
+    cap | grep -qE '"event":"(suid_drift|bulk_delta)"'
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
