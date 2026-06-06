@@ -31,12 +31,20 @@ fi
 tmp="$(mktemp "${SYSCTL_DROPIN}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=full"
+    # No render-timestamp — defeats cmp -s idempotency.
+    echo "# profile=full"
     cat "${CONFIGS_SRC}/full.conf"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$SYSCTL_DROPIN"
-log "wrote $SYSCTL_DROPIN"
+
+# Idempotency: skip rewrite when content unchanged (preserves
+# mtime so downstream watchdogs don't flag spurious findings).
+if [[ -f "$SYSCTL_DROPIN" ]] && cmp -s "$tmp" "$SYSCTL_DROPIN"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$SYSCTL_DROPIN"
+    log "wrote $SYSCTL_DROPIN"
+fi
 
 if sysctl -w "kernel.randomize_va_space=2" >/dev/null 2>&1; then
     log "live: kernel.randomize_va_space=2 (full ASLR)"

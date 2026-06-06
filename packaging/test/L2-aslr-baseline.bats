@@ -90,11 +90,25 @@ run_wd() {
     grep -q 'sysctl -w kernel.randomize_va_space=2' "${SCTL_LOG}"
 }
 
-@test "drop-in content includes the timestamped header comment" {
+@test "drop-in content includes header marker + profile (no render-timestamp, 2026-06-06 idempotency fix)" {
     write_config "full"
     run_wd
-    grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "${DROPIN}"
+    grep -q 'managed-by: selfdef aslr-baseline' "${DROPIN}"
     grep -q 'profile=full' "${DROPIN}"
+    # CRITICAL: NO render-timestamp — including it would defeat the
+    # cmp -s idempotency check (per dns-shield/proc-hidepid fix
+    # lineage, 2026-06-06).
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in (2026-06-06 fix)" {
+    write_config "full"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "INVARIANT: DRY_RUN does not write drop-in or fire sysctl" {
