@@ -120,6 +120,9 @@ run_layer "L1: AppArmor profile integrity (selfdefd envelope: allow rules + deny
 run_layer "L1: JSON Schema fleet integrity (docs/schemas/*.schema.json — \$schema + \$id + title + required + additionalProperties=false)" \
     bash scripts/test/L1-json-schema-fleet.sh
 
+run_layer "L1: systemd drop-in integrity (selfdefd.service.d/ebpf.conf: 3 required caps + no escalation)" \
+    bash scripts/test/L1-systemd-dropin-integrity.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
