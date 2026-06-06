@@ -21,7 +21,8 @@ DRY_RUN="${SELFDEF_DRY_RUN:-0}"
 CONFIG_FILE="${SELFDEF_AA_BASELINE_CONFIG:-/etc/selfdef/modules/apparmor-baseline.toml}"
 LIB_DIR="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 MODULE_DIR="$(dirname "$LIB_DIR")"
-CONFIGS_SRC="${MODULE_DIR}/configs"
+# Source override: operator-test affordance + L2 testability.
+CONFIGS_SRC="${SELFDEF_AA_CONFIGS_SRC:-${MODULE_DIR}/configs}"
 
 # shellcheck disable=SC1091
 source "${LIB_DIR}/lib.sh"
@@ -34,8 +35,12 @@ case "$PROFILE" in
     *) die "profile must be complain|enforce, got '$PROFILE'" ;;
 esac
 
-# Verify AppArmor is enabled in the running kernel.
-if [[ ! -d /sys/kernel/security/apparmor ]]; then
+# Verify AppArmor is enabled in the running kernel. The sysfs check
+# location can be overridden via SELFDEF_AA_SYSFS_DIR (operator-test
+# affordance + L2 testability) so a captured snapshot or fixture can
+# be fed in; live default is /sys/kernel/security/apparmor.
+AA_SYSFS_DIR="${SELFDEF_AA_SYSFS_DIR:-/sys/kernel/security/apparmor}"
+if [[ ! -d "$AA_SYSFS_DIR" ]]; then
     die "AppArmor LSM not enabled in running kernel — boot with apparmor=1 OR install + reboot with the apparmor package"
 fi
 
