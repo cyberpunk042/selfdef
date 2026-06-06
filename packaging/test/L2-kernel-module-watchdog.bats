@@ -265,3 +265,53 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-kernel-modules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): kernel-module-watchdog does NOT refresh baseline on out-of-tree detection — alert STAYS until operator updates" {
+    # Out-of-tree (rootkit) module loads are NEVER routine; the
+    # alert must persist across runs until operator explicitly
+    # re-baselines.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 rootkit_lkm
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"out_of_tree_module"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_KMOD_PROFILE)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (kernel field surfaces uname -r for operator verification — multi-kernel-version hosts)" {
+    # Multi-kernel hosts (booted from a non-default kernel) need
+    # to verify the watchdog is checking the RIGHT modules/$(uname
+    # -r)/ tree. The 'kernel' field surfaces that.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    # The kernel field should be present in the JSON.
+    cap | grep -qE '"kernel":"[^"]+"'
+}
+
+@test "INVARIANT (severity precedence: out_of_tree + mass-new same scan → out_of_tree event takes precedence over mass_new_modules)" {
+    # When BOTH out-of-tree AND mass-new fire in same scan, the
+    # event reports out_of_tree_module (more-specific signal).
+    # Already covered by existing test 13 — this duplicates as a
+    # safety lock.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 a b c rootkit_lkm    # 4 new, 1 out-of-tree
+    stage_ko a; stage_ko b; stage_ko c
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"out_of_tree_module"'
+    ! cap | grep -q '"event":"mass_new_modules"'
+}
