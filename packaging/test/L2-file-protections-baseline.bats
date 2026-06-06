@@ -197,3 +197,43 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl)" {
+    write_config "baseline"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'fs\.protected_hardlinks' "${DROPIN}"
+    grep -q 'sysctl -w' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (header marker first non-blank line — stale-cleanup head -1 grep discipline)" {
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${DROPIN}")"
+    [ "${first_line}" = "# managed-by: selfdef file-protections-baseline" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"file-protections-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=baseline'* ]]
+}
+
+@test "INVARIANT (profile downgrade strict → baseline: rewrites drop-in + applies sysctls)" {
+    # Bidirectional contract — operator can both tighten + loosen.
+    write_config "strict"
+    run_wd
+    grep -q 'profile=strict' "${DROPIN}"
+    : > "${SCTL_LOG}"
+    write_config "baseline"
+    run_wd
+    grep -q 'profile=baseline' "${DROPIN}"
+    ! grep -q 'profile=strict' "${DROPIN}"
+    grep -q 'sysctl -w' "${SCTL_LOG}"
+}
