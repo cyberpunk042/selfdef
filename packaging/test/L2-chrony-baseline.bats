@@ -205,3 +205,59 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=pool'* ]]
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + fires restart)" {
+    write_config "pool"
+    run_wd
+    [ -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf" ]
+    rm -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${CHRONY_DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'systemctl restart' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (makestep directive present: chrony auto-corrects large clock drift — both profiles need this)" {
+    # makestep 1.0 3 means: if step > 1.0 second in any of the
+    # first 3 clock corrections, step rather than slew. Required
+    # for boot-time clock recovery after long power-off.
+    write_config "pool"
+    run_wd
+    grep -qE '^makestep[[:space:]]+1\.0[[:space:]]+3' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    write_config "nts"
+    run_wd
+    grep -qE '^makestep[[:space:]]+1\.0[[:space:]]+3' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (rtcsync directive present: hardware-RTC sync — both profiles need this)" {
+    # rtcsync writes the kernel-synced time back to the hardware
+    # RTC every 11 minutes. Required so reboot doesn't start with
+    # a stale clock.
+    write_config "pool"
+    run_wd
+    grep -qE '^rtcsync$' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    write_config "nts"
+    run_wd
+    grep -qE '^rtcsync$' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (NTS profile: each server line carries 'nts' keyword — actual NTS protocol activated, not just NTP)" {
+    # The whole point of NTS profile is the 'nts' keyword on
+    # the server line — that's what activates authenticated NTP.
+    # A regression dropping 'nts' from server lines would give
+    # plain unauthenticated NTP under "nts" profile name.
+    write_config "nts"
+    run_wd
+    grep -qE '^server time.cloudflare.com nts ' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+    grep -qE '^server time.nist.gov nts ' "${CHRONY_DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (graceful reload preference: chronyd config reload — restart is the canonical for chrony config-change)" {
+    # chronyd reads /etc/chrony/conf.d/ at start; config changes
+    # need restart (or 'chronyc reload sources' for narrow
+    # reloads). Lock that restart fires as the canonical
+    # mechanism here.
+    write_config "pool"
+    run_wd
+    grep -q 'systemctl restart chronyd' "${SYSEOF_LOG}"
+}
