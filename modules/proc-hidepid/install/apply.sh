@@ -50,9 +50,14 @@ fi
 # Render proc.mount unit (replacing OS-shipped if any).
 PROC_MOUNT_DST="${SYSTEMD_DIR}/proc.mount"
 tmp_rendered="$(mktemp)"
+# NOTE: do NOT include a `rendered=$(date)` timestamp in the unit
+# file — including it defeats the cmp -s idempotency check below
+# (the timestamp differs on every apply, forcing an unnecessary
+# install + systemctl daemon-reload + /proc remount on every run).
+# Same lesson as the dns-shield fix (2026-06-06).
 cat > "$tmp_rendered" <<EOF
 $PROC_MARKER
-# profile=$PROFILE hidepid=$hidepid_val rendered=$(date -u +%FT%TZ)
+# profile=$PROFILE hidepid=$hidepid_val
 [Unit]
 Description=Proc filesystem with hidepid=$hidepid_val (selfdef)
 DefaultDependencies=no
