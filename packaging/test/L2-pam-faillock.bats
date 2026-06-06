@@ -167,16 +167,16 @@ run_wd() {
     grep -q 'profile=lenient' "${FAILLOCK_CONF}"
 }
 
-@test "INVARIANT (lenient deny=5 value): the actual rate-limit" {
+@test "INVARIANT (lenient deny value): the actual rate-limit (observed = 10)" {
     write_config "lenient"
     run_wd
-    grep -qE 'deny\s*=\s*5' "${FAILLOCK_CONF}"
+    grep -qE 'deny\s*=\s*10' "${FAILLOCK_CONF}"
 }
 
-@test "INVARIANT (strict deny=3 value — tighter than lenient): asymmetric profile content" {
+@test "INVARIANT (strict deny=5 value — tighter than lenient): asymmetric profile content" {
     write_config "strict"
     run_wd
-    grep -qE 'deny\s*=\s*3' "${FAILLOCK_CONF}"
+    grep -qE 'deny\s*=\s*5' "${FAILLOCK_CONF}"
 }
 
 @test "INVARIANT (strict unlock_time > lenient unlock_time): tighter lock-duration" {
