@@ -229,3 +229,50 @@ run_wd() {
     # Dir mtime should not bump on idempotent re-apply.
     [ "${mtime_before}" = "${mtime_after}" ]
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + restarts coredump.socket)" {
+    # Operator may rm the drop-in or the coredump dir — apply must
+    # rebuild both and re-arm the socket so coredump landing-place
+    # is restored.
+    write_config "redirect"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    [ -d "${COREDUMP_DIR}" ]
+    rm -f "${DROPIN_DIR}/50-selfdef.conf"
+    rm -rf "${COREDUMP_DIR}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    [ -d "${COREDUMP_DIR}" ]
+    grep -q 'systemctl restart systemd-coredump.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "disabled"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"coredumpd-redirect"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=disabled'* ]]
+}
+
+@test "INVARIANT (compress + ExternalSizeMax + ProcessSizeMax all surface in redirect profile drop-in — full content fidelity)" {
+    # Beyond just Storage=external, lock that the auxiliary settings
+    # (Compress + size caps) ALSO surface in the dropin so an
+    # attacker swapping the file with a Storage=external-but-no-caps
+    # version is caught by content diff.
+    write_config "redirect"
+    run_wd
+    grep -qE 'Compress=yes' "${DROPIN_DIR}/50-selfdef.conf"
+    grep -qE 'ExternalSizeMax=' "${DROPIN_DIR}/50-selfdef.conf"
+    grep -qE 'ProcessSizeMax=' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (disabled profile does NOT carry Storage=external — strict mutual-exclusion)" {
+    # The disabled profile is Storage=none ONLY. Any leftover
+    # Storage=external from a prior profile would be a profile-
+    # transition bug. Lock mutual-exclusion.
+    write_config "disabled"
+    run_wd
+    grep -qE 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+    ! grep -qE 'Storage=external' "${DROPIN_DIR}/50-selfdef.conf"
+}
