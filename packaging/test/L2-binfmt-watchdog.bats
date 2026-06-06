@@ -153,3 +153,60 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -eq 0 ]
 }
+
+@test "baseline is chmod 0600 (confidentiality — binfmt inventory enumerates kernel-trigger code-exec surface)" {
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (interpreter under /var/tmp): writable-root expansion" {
+    printf ':evil:M:0:magic:mask:/var/tmp/.interpreter:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (interpreter under /dev/shm): tmpfs writable-root expansion" {
+    printf ':evil:M:0:magic:mask:/dev/shm/.interpreter:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (interpreter under /home): user-writable hijack coverage" {
+    printf ':evil:M:0:magic:mask:/home/user/.interpreter:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable binfmt.d conf): file itself world-writable → alert" {
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable binfmt.d conf): group-writable → alert above world-writable bar" {
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (multi-line config with both benign + suspicious — suspicious wins)" {
+    # Even if a config carries a benign registration alongside a
+    # suspicious one, severity should escalate to the suspicious one.
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n:evil:M:0:magic:mask:/tmp/evil:OC\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf ':qemu-arm:M:0:magic:mask:/usr/bin/qemu-arm:OCF\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-binfmt -- ')
+    [ "${main_count}" = "1" ]
+}
