@@ -49,7 +49,8 @@ fi
 render_ruleset() {
     cat <<EOF
 ${HEADER_MARKER}
-# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=${PROFILE}
+# No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+# profile=${PROFILE}
 # SSH allow ports: ${tcp_set} (SSH always included — anti-lockout)
 table inet selfdef_filter {
     chain input {
@@ -120,16 +121,24 @@ if [[ ! -f "$BACKUP_FILE" ]]; then
 fi
 
 chmod 0644 "$tmp"
-mv -f "$tmp" "$NFT_DROPIN"
-log "wrote $NFT_DROPIN"
-
-# Load it live. We delete our own table first (idempotent
-# re-apply) then load.
-nft delete table inet selfdef_filter 2>/dev/null || true
-if nft -f "$NFT_DROPIN" 2>/dev/null; then
-    log "loaded selfdef_filter ruleset (profile=$PROFILE)"
+# Idempotency: skip rewrite + live reload when content unchanged.
+# (kernel-side ruleset assumed coherent with the file; an operator
+# who hand-modifies the live ruleset can force re-apply by
+# touching $NFT_DROPIN or removing it.)
+if [[ -f "$NFT_DROPIN" ]] && cmp -s "$tmp" "$NFT_DROPIN"; then
+    rm -f "$tmp"
+    log "$NFT_DROPIN unchanged — skipping reload"
 else
-    log "WARN: nft -f load failed; ruleset file written but not live (run 'nft -f $NFT_DROPIN' manually)"
+    mv -f "$tmp" "$NFT_DROPIN"
+    log "wrote $NFT_DROPIN"
+    # Load it live. We delete our own table first (idempotent
+    # re-apply) then load.
+    nft delete table inet selfdef_filter 2>/dev/null || true
+    if nft -f "$NFT_DROPIN" 2>/dev/null; then
+        log "loaded selfdef_filter ruleset (profile=$PROFILE)"
+    else
+        log "WARN: nft -f load failed; ruleset file written but not live (run 'nft -f $NFT_DROPIN' manually)"
+    fi
 fi
 
 emit_status "ok" "nftables-baseline profile=$PROFILE ssh_ports='${SSH_PORTS}' tcp_allow=$tcp_set egress=$egress_policy"

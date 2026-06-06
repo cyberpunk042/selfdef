@@ -62,7 +62,7 @@ if [[ "$PROFILE" == "mask" ]]; then
         tmp="$(mktemp "${MODPROBE_BLACKLIST}.XXXXXX")"
         {
             echo "$HEADER_MARKER"
-            echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — do not edit."
+            # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
             echo "# Blacklists bluetooth-related kernel modules so they"
             echo "# cannot be auto-loaded via uevent/coldplug after reboot."
             echo
@@ -72,8 +72,13 @@ if [[ "$PROFILE" == "mask" ]]; then
             done
         } > "$tmp"
         chmod 0644 "$tmp"
-        mv -f "$tmp" "$MODPROBE_BLACKLIST"
-        log "wrote $MODPROBE_BLACKLIST (blacklist + install-/bin/true for ${#BT_MODULES[@]} modules)"
+        # Idempotency: skip rewrite when content unchanged.
+        if [[ -f "$MODPROBE_BLACKLIST" ]] && cmp -s "$tmp" "$MODPROBE_BLACKLIST"; then
+            rm -f "$tmp"
+        else
+            mv -f "$tmp" "$MODPROBE_BLACKLIST"
+            log "wrote $MODPROBE_BLACKLIST (blacklist + install-/bin/true for ${#BT_MODULES[@]} modules)"
+        fi
     fi
 fi
 
