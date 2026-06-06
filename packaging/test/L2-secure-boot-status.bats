@@ -1,0 +1,178 @@
+#!/usr/bin/env bats
+# L2 functional suite for secure-boot-status.
+#
+# secure-boot-status runs a periodic check that UEFI Secure
+# Boot is enabled. The detector ships as a libexec script +
+# systemd service + timer, profile-selected by a 50-profile.conf
+# drop-in (Environment=SELFDEF_SECURE_BOOT_PROFILE=...).
+#
+# Profiles:
+#   monitor → log finding; exit 0 regardless
+#   require → exit non-zero if SecureBoot is not enabled (the
+#             service's failure surface lets operator alerting
+#             hooks pick it up)
+#
+# Same install pattern as mta-loopback-detect — install_one()
+# helper does cmp -s, the daemon-reload + enable --now are
+# gated on `changes > 0` (no-op apply is fully side-effect-free).
+#
+# Run with: bats packaging/test/L2-secure-boot-status.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/secure-boot-status/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/systemctl" <<'SYSEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+exit 0
+SYSEOF
+    chmod +x "${BIN}/systemctl"
+    export SYSEOF_LOG="${TMP}/systemctl.log"
+    : > "${SYSEOF_LOG}"
+    CONF="${TMP}/secure-boot-status.toml"
+    LIBEXEC_DIR="${TMP}/libexec/selfdef"
+    SYSTEMD_DIR="${TMP}/systemd"
+    DROPIN_DIR_SVC="${SYSTEMD_DIR}/selfdef-secure-boot-status.service.d"
+    DROPIN_PROFILE="${DROPIN_DIR_SVC}/50-profile.conf"
+    SCRIPT_DST="${LIBEXEC_DIR}/secure-boot-status.sh"
+    SVC_DST="${SYSTEMD_DIR}/selfdef-secure-boot-status.service"
+    TIMER_DST="${SYSTEMD_DIR}/selfdef-secure-boot-status.timer"
+    mkdir -p "${SYSTEMD_DIR}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SYSEOF_LOG="${SYSEOF_LOG}" \
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_SECURE_BOOT_CONFIG="${CONF}" \
+    SELFDEF_LIBEXEC_DIR="${LIBEXEC_DIR}" \
+    SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_SECURE_BOOT_CONFIG="${TMP}/missing.toml"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_SECURE_BOOT_CONFIG="${SELFDEF_SECURE_BOOT_CONFIG}" \
+        SELFDEF_LIBEXEC_DIR="${LIBEXEC_DIR}" \
+        SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config not readable"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_SECURE_BOOT_CONFIG="${CONF}" \
+        SELFDEF_LIBEXEC_DIR="${LIBEXEC_DIR}" \
+        SELFDEF_SYSTEMD_DIR="${SYSTEMD_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be monitor|require"* ]]
+}
+
+@test "monitor profile installs the libexec script + service + timer + profile dropin" {
+    write_config "monitor"
+    run_wd
+    [ -f "${SCRIPT_DST}" ]
+    [ -f "${SVC_DST}" ]
+    [ -f "${TIMER_DST}" ]
+    [ -f "${DROPIN_PROFILE}" ]
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=monitor$' "${DROPIN_PROFILE}"
+}
+
+@test "require profile installs the artifact set with require profile env" {
+    write_config "require"
+    run_wd
+    [ -f "${DROPIN_PROFILE}" ]
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
+}
+
+@test "libexec script is chmod 0755 (executable for the systemd unit)" {
+    write_config "monitor"
+    run_wd
+    [ "$(stat -c '%a' "${SCRIPT_DST}")" = "755" ]
+}
+
+@test "service + timer + dropin are chmod 0644 (system-config convention)" {
+    write_config "monitor"
+    run_wd
+    [ "$(stat -c '%a' "${SVC_DST}")" = "644" ]
+    [ "$(stat -c '%a' "${TIMER_DST}")" = "644" ]
+    [ "$(stat -c '%a' "${DROPIN_PROFILE}")" = "644" ]
+}
+
+@test "first apply fires daemon-reload + enables the timer" {
+    write_config "monitor"
+    run_wd
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+    grep -q 'systemctl enable --now selfdef-secure-boot-status.timer' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite artifacts OR fire systemctl" {
+    write_config "monitor"
+    run_wd
+    script_mtime_before="$(stat -c '%Y' "${SCRIPT_DST}")"
+    svc_mtime_before="$(stat -c '%Y' "${SVC_DST}")"
+    timer_mtime_before="$(stat -c '%Y' "${TIMER_DST}")"
+    dropin_mtime_before="$(stat -c '%Y' "${DROPIN_PROFILE}")"
+    : > "${SYSEOF_LOG}"
+    sleep 1
+    run_wd
+    script_mtime_after="$(stat -c '%Y' "${SCRIPT_DST}")"
+    svc_mtime_after="$(stat -c '%Y' "${SVC_DST}")"
+    timer_mtime_after="$(stat -c '%Y' "${TIMER_DST}")"
+    dropin_mtime_after="$(stat -c '%Y' "${DROPIN_PROFILE}")"
+    [ "${script_mtime_before}" = "${script_mtime_after}" ]
+    [ "${svc_mtime_before}" = "${svc_mtime_after}" ]
+    [ "${timer_mtime_before}" = "${timer_mtime_after}" ]
+    [ "${dropin_mtime_before}" = "${dropin_mtime_after}" ]
+    ! grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl enable' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: profile switch monitor → require REWRITES profile dropin AND fires daemon-reload + enable" {
+    write_config "monitor"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "require"
+    run_wd
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+    grep -q 'systemctl enable --now selfdef-secure-boot-status.timer' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: DRY_RUN does not write any artifact or fire systemctl" {
+    write_config "monitor"
+    DRY_RUN=1 run_wd
+    ! [ -f "${SCRIPT_DST}" ]
+    ! [ -f "${SVC_DST}" ]
+    ! [ -f "${TIMER_DST}" ]
+    ! [ -f "${DROPIN_PROFILE}" ]
+    ! grep -q 'systemctl' "${SYSEOF_LOG}"
+}
+
+@test "default profile is monitor (no profile key — conservative log-only default)" {
+    : > "${CONF}"
+    run_wd
+    [ -f "${DROPIN_PROFILE}" ]
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=monitor$' "${DROPIN_PROFILE}"
+}
+
+@test "emit_status reports changes count (4 first install; 0 idempotent)" {
+    write_config "monitor"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'changes=4'* ]]
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'changes=0'* ]]
+}
