@@ -239,3 +239,48 @@ EOF
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (tmpfs tmp.mount carries size cap directive — defaults to 25% RAM per refuse-to-brick contract)" {
+    # The whole point of the acknowledge_tmpfs gate is that /tmp
+    # gets RAM-backed with a size cap. Lock that the tmp.mount
+    # actually carries the size= or Size= directive.
+    write_config "tmpfs" "true"
+    run_wd
+    [ -f "${TMP_MOUNT}" ]
+    grep -qE '(size=|Options=.*size=)' "${TMP_MOUNT}"
+}
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates noexec drop-ins)" {
+    write_config "noexec"
+    run_wd
+    [ -f "${TMP_DROPIN}" ]
+    rm -f "${TMP_DROPIN}" "${VARTMP_DROPIN}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${TMP_DROPIN}" ]
+    [ -f "${VARTMP_DROPIN}" ]
+    grep -qE 'noexec' "${TMP_DROPIN}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (drop-ins carry selfdef-identifier header — operator audit trail + uninstall identification)" {
+    write_config "noexec"
+    run_wd
+    # Look for managed-by or selfdef header marker.
+    grep -qE '^#.*selfdef|^#.*managed-by' "${TMP_DROPIN}"
+    grep -qE '^#.*selfdef|^#.*managed-by' "${VARTMP_DROPIN}"
+}
+
+@test "INVARIANT (profile upgrade noexec → tmpfs with ack: creates tmp.mount + fires reload)" {
+    # The reverse direction of downgrade tests. Both transitions
+    # must work — locks the bidirectional contract.
+    write_config "noexec"
+    run_wd
+    ! [ -f "${TMP_MOUNT}" ]
+    : > "${SYSEOF_LOG}"
+    write_config "tmpfs" "true"
+    run_wd
+    [ -f "${TMP_MOUNT}" ]
+    grep -qE '^Type=tmpfs' "${TMP_MOUNT}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
