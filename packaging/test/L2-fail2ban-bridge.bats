@@ -148,3 +148,54 @@ run_wd() {
     [ -f "${JAIL_D}/50-selfdef.conf" ]
     ! [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
 }
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    # Stronger than test-117's "no reload" — locks the file-mtime
+    # preservation that the cmp -s guard provides.
+    write_config "standard"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${JAIL_D}/50-selfdef.conf")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${JAIL_D}/50-selfdef.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (profile upgrade standard → broad): adds recidive drop-in + fires reload" {
+    # The reverse direction of test-104 (broad → standard). Both
+    # transitions must work — locks the bidirectional contract.
+    write_config "standard"
+    run_wd
+    ! [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    write_config "broad"
+    : > "${F2B_LOG}"
+    run_wd
+    [ -f "${JAIL_D}/60-selfdef-recidive.conf" ]
+    grep -q 'fail2ban-client reload' "${F2B_LOG}"
+}
+
+@test "INVARIANT (recidive drop-in perms): chmod 0644 (system-config convention for /etc/fail2ban/jail.d)" {
+    write_config "broad"
+    run_wd
+    [ "$(stat -c '%a' "${JAIL_D}/60-selfdef-recidive.conf")" = "644" ]
+}
+
+@test "INVARIANT (graceful-reload fallback): when fail2ban-client missing, falls back to systemctl restart" {
+    # Remove the fake fail2ban-client → script should NOT just die,
+    # it should detect-and-fallback.
+    rm -f "${BIN}/fail2ban-client"
+    write_config "standard"
+    run_wd || true   # tolerate non-zero — what we lock here is the fallback shape
+    [ -f "${JAIL_D}/50-selfdef.conf" ]
+    # When client missing, the script must fall back to systemctl restart.
+    grep -q 'systemctl restart fail2ban' "${SYSEOF_LOG}" || \
+        grep -q 'systemctl reload fail2ban' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): fail2ban drop-in must not carry a Generated <ISO-date> line" {
+    # Latent variant-A risk class — without this guard, re-install
+    # would replace the drop-in every time and flush ban-state.
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${JAIL_D}/50-selfdef.conf"
+}
