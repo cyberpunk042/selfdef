@@ -48,12 +48,15 @@ if command -v systemctl >/dev/null 2>&1; then
 fi
 printf 'auditd\t%s\n' "$adstate" >> "$current"
 
-# Config file hashes.
-for f in /etc/audit/auditd.conf /etc/audit/audit.rules; do
+# Config file hashes. Path override (SELFDEF_AUDITCFG_CONFDIR) lets
+# the L2 suite + operator-test affordance point at a fixture tree
+# replicating /etc/audit's layout. Live default is /etc/audit.
+CONFDIR="${SELFDEF_AUDITCFG_CONFDIR:-/etc/audit}"
+for f in "$CONFDIR/auditd.conf" "$CONFDIR/audit.rules"; do
     [[ -f "$f" ]] && printf 'conf\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,12)}')" >> "$current"
 done
-if [[ -d /etc/audit/rules.d ]]; then
-    for f in /etc/audit/rules.d/*; do
+if [[ -d "$CONFDIR/rules.d" ]]; then
+    for f in "$CONFDIR"/rules.d/*; do
         [[ -f "$f" ]] && printf 'conf\t%s\t%s\n' "$f" "$(sha256sum "$f" 2>/dev/null | awk '{print substr($1,1,12)}')" >> "$current"
     done
 fi

@@ -1,0 +1,217 @@
+#!/usr/bin/env bats
+# L2 functional suite for audit-config-watchdog.
+#
+# audit-config-watchdog catches T1562.001 Impair Defenses against
+# the Linux audit subsystem. An attacker blinding the host runs:
+#   auditctl -D            (flush all rules → rule_count drops to 0)
+#   systemctl stop auditd  (auditd state → inactive)
+#   auditctl -e 0          (enabled flag → 0)
+# All show as deltas vs the baseline.
+#
+# Severity tiers:
+#   ok    → no delta (audit_intact)
+#   warn  → conf-file change OR rule count reduced but >0
+#   alert → rules flushed to 0 OR auditd disabled OR enabled flag
+#           turned off (the T1562.001 signatures)
+#
+# Uses SELFDEF_AUDITCFG_CONFDIR env-var override (added 2026-06-06)
+# for the /etc/audit directory, and shadows auditctl + systemctl on
+# PATH so the test controls all 3 telemetry sources.
+#
+# Run with: bats packaging/test/L2-audit-config-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/audit-config-watchdog/systemd/audit-config-watchdog.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/audit-config-baseline.tsv"
+    CONFDIR="${TMP}/audit-confdir"
+    mkdir -p "${CONFDIR}/rules.d"
+    # State files the fake auditctl + systemctl read.
+    export STATE_RULES="${TMP}/state-rules.txt"
+    export STATE_ENABLED="${TMP}/state-enabled.txt"
+    export STATE_AUDITD="${TMP}/state-auditd.txt"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+mk_auditctl() {
+    cat > "${BIN}/auditctl" <<'AEOF'
+#!/usr/bin/env bash
+case "$1" in
+    -l)
+        if [[ -s "${STATE_RULES}" ]]; then
+            cat "${STATE_RULES}"
+        else
+            echo "No rules"
+        fi
+        ;;
+    -s)
+        printf 'enabled %s\n' "$(cat "${STATE_ENABLED}" 2>/dev/null || echo '?')"
+        ;;
+esac
+AEOF
+    chmod +x "${BIN}/auditctl"
+}
+
+mk_systemctl() {
+    cat > "${BIN}/systemctl" <<'SEOF'
+#!/usr/bin/env bash
+if [[ "$1" == "is-active" && "$2" == "auditd" ]]; then
+    cat "${STATE_AUDITD}" 2>/dev/null || echo "inactive"
+fi
+SEOF
+    chmod +x "${BIN}/systemctl"
+}
+
+# set_state <rules-text> <enabled> <auditd-state>
+set_state() {
+    printf '%s\n' "$1" > "${STATE_RULES}"
+    [[ -z "$1" ]] && : > "${STATE_RULES}"
+    printf '%s\n' "$2" > "${STATE_ENABLED}"
+    printf '%s\n' "$3" > "${STATE_AUDITD}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    STATE_RULES="${STATE_RULES}" \
+    STATE_ENABLED="${STATE_ENABLED}" \
+    STATE_AUDITD="${STATE_AUDITD}" \
+    SELFDEF_AUDITCFG_PROFILE="${PROFILE:-report}" \
+    SELFDEF_AUDITCFG_BASELINE="${BASELINE}" \
+    SELFDEF_AUDITCFG_CONFDIR="${CONFDIR}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+setup_baseline_state() {
+    mk_auditctl
+    mk_systemctl
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes" "1" "active"
+    printf 'log_file = /var/log/audit/audit.log\n' > "${CONFDIR}/auditd.conf"
+}
+
+@test "first run captures audit state + chmod 0600" {
+    setup_baseline_state
+    run_wd
+    [ -f "${BASELINE}" ]
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"rule_count":3'
+    cap | grep -q '"auditd":"active"'
+}
+
+@test "unchanged state on second run → ok / audit_intact" {
+    setup_baseline_state
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "auditd STOPPED (T1562.001 signature) → alert / auditd_disabled" {
+    setup_baseline_state
+    run_wd
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes" "1" "inactive"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"auditd_disabled"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "auditctl -D (rules flushed to 0) → alert / audit_rules_flushed" {
+    setup_baseline_state
+    run_wd
+    set_state "" "1" "active"            # rule flushed
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_rules_flushed"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"rule_count":0'
+}
+
+@test "auditctl -e 0 (enabled flipped off) → alert / audit_disabled_flag" {
+    setup_baseline_state
+    run_wd
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes" "0" "active"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_disabled_flag"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "rule count REDUCED but still >0 → warn / audit_rules_reduced" {
+    setup_baseline_state
+    run_wd                               # baseline = 3 rules
+    set_state "-w /etc/passwd -p wa -k passwd_changes" "1" "active"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_rules_reduced"'
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"rule_count":1'
+}
+
+@test "conf-file changed (with rules + auditd intact) → warn / audit_conf_changed" {
+    setup_baseline_state
+    run_wd
+    # Edit auditd.conf — rule count + enabled + auditd unchanged.
+    printf 'log_file = /var/log/audit/audit.log\nmax_log_file = 100\n' > "${CONFDIR}/auditd.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_conf_changed"'
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"conf_changes":1'
+}
+
+@test "the emitted JSON carries every promised schema field" {
+    setup_baseline_state
+    run_wd
+    line="$(cap)"
+    printf '%s' "${line}" | grep -q '"tag":"selfdef-audit-config"'
+    printf '%s' "${line}" | grep -q '"severity":'
+    printf '%s' "${line}" | grep -q '"event":'
+    printf '%s' "${line}" | grep -q '"profile":'
+    printf '%s' "${line}" | grep -qE '"rule_count":[0-9]+'
+    printf '%s' "${line}" | grep -q '"auditd":'
+}
+
+@test "enforce profile + auditd disabled → exit 1" {
+    setup_baseline_state
+    run_wd
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes" "1" "inactive"
+    run env PATH="${BIN}:${PATH}" \
+        STATE_RULES="${STATE_RULES}" \
+        STATE_ENABLED="${STATE_ENABLED}" \
+        STATE_AUDITD="${STATE_AUDITD}" \
+        SELFDEF_AUDITCFG_PROFILE=enforce \
+        SELFDEF_AUDITCFG_BASELINE="${BASELINE}" \
+        SELFDEF_AUDITCFG_CONFDIR="${CONFDIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+}
+
+@test "enforce profile + unchanged → exit 0" {
+    setup_baseline_state
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run_wd
+    cap | grep -q '"severity":"ok"'
+}
