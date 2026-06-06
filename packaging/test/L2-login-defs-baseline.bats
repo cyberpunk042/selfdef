@@ -174,3 +174,47 @@ run_wd() {
     run_wd
     [ -f "${DROPIN}" ]
 }
+
+@test "INVARIANT (standard PASS_MAX_DAYS = 365): the actual rate-limit (observed value)" {
+    write_config "standard"
+    run_wd
+    grep -qE 'PASS_MAX_DAYS[[:space:]]+365' "${DROPIN}"
+}
+
+@test "INVARIANT (strict PASS_MAX_DAYS = 90 — tighter than standard 365): asymmetric tightening" {
+    write_config "strict"
+    run_wd
+    grep -qE 'PASS_MAX_DAYS[[:space:]]+90' "${DROPIN}"
+}
+
+@test "INVARIANT (SHA_CRYPT_MIN_ROUNDS pinned across both profiles — locks crypto-cost floor)" {
+    # If MIN_ROUNDS drifts down, password-hash cracking gets cheaper.
+    # Both profiles must keep MIN_ROUNDS at the baseline (65536).
+    write_config "standard"
+    run_wd
+    grep -qE 'SHA_CRYPT_MIN_ROUNDS[[:space:]]+65536' "${DROPIN}"
+}
+
+@test "INVARIANT (profile downgrade strict → standard): rewrites drop-in back to looser PASS_MAX_DAYS=365" {
+    write_config "strict"
+    run_wd
+    grep -qE 'PASS_MAX_DAYS[[:space:]]+90' "${DROPIN}"
+    write_config "standard"
+    run_wd
+    grep -qE 'PASS_MAX_DAYS[[:space:]]+365' "${DROPIN}"
+    ! grep -qE 'PASS_MAX_DAYS[[:space:]]+90' "${DROPIN}"
+}
+
+@test "INVARIANT (legacy marker block end-marker fence is the canonical # end-selfdef shape)" {
+    # If the end-marker drifts, sed -i strip won't match and duplicate
+    # blocks will accumulate.
+    write_config "standard"
+    run_wd
+    grep -qE '^# end-selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
+}
+
+@test "INVARIANT (legacy marker block start-marker is the canonical # managed-by shape)" {
+    write_config "standard"
+    run_wd
+    grep -qE '^# managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}"
+}
