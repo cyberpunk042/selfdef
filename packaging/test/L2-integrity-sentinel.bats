@@ -130,3 +130,91 @@ EOF
     unset SELFDEF_DRY_RUN SELFDEF_INTEGRITY_SENTINEL_CONFIG
     [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (real-apply creates baseline.sha256 with sha256-hash + path per line)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "test content" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    run bash "${INSTALL_DIR}/apply.sh"
+    baseline_exists=0
+    [ -f "${TEST_DIR}/baseline.sha256" ] && baseline_exists=1
+    has_hash=0
+    if [ "${baseline_exists}" = "1" ]; then
+        grep -qE '^[0-9a-f]{64}[[:space:]]+' "${TEST_DIR}/baseline.sha256" && has_hash=1
+    fi
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    [ "${status}" -eq 0 ]
+    [ "${baseline_exists}" = "1" ]
+    [ "${has_hash}" = "1" ]
+}
+
+@test "INVARIANT (drift detection: strict profile + modified file → check.sh fails)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "original content" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    # Modify the monitored file.
+    echo "tampered content" > "${TEST_DIR}/target.txt"
+    # check.sh in strict profile must exit non-zero on drift.
+    run bash "${INSTALL_DIR}/check.sh"
+    rc=${status}
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    [ "${rc}" -ne 0 ]
+}
+
+@test "INVARIANT (drift detection: warn-only profile + modified file → check.sh passes with warning)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "original" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "warn-only"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    echo "tampered" > "${TEST_DIR}/target.txt"
+    # warn-only profile must pass (exit 0) even on drift.
+    run bash "${INSTALL_DIR}/check.sh"
+    rc=${status}
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    [ "${rc}" -eq 0 ]
+}
+
+@test "INVARIANT (check.sh on intact baseline + unchanged files → exit 0)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_INTEGRITY_SENTINEL_CONFIG="${TEST_DIR}/integrity.toml"
+    echo "${TEST_DIR}/target.txt" > "${TEST_DIR}/paths.txt"
+    echo "stable content" > "${TEST_DIR}/target.txt"
+    cat > "${SELFDEF_INTEGRITY_SENTINEL_CONFIG}" <<EOF
+profile = "strict"
+paths_file = "${TEST_DIR}/paths.txt"
+baseline_path = "${TEST_DIR}/baseline.sha256"
+on_missing = "create"
+EOF
+    bash "${INSTALL_DIR}/apply.sh" >/dev/null 2>&1
+    # No mutation — check.sh passes.
+    run bash "${INSTALL_DIR}/check.sh"
+    rc=${status}
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_INTEGRITY_SENTINEL_CONFIG
+    [ "${rc}" -eq 0 ]
+}
