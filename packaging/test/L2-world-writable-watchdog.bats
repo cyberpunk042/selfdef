@@ -137,3 +137,41 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" = "0" ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (sample cap at 10: 20 world-writable files → MAIN tag sample contains at most 10)" {
+    for i in $(seq 1 20); do
+        printf 'x' > "${ROOT}/ww-distinct-${i}"
+        chmod 0666 "${ROOT}/ww-distinct-${i}"
+    done
+    run_wd
+    cap | grep -qE '"finding_count":20'
+    main_line="$(cap | grep -E '^-t selfdef-world-writable --')"
+    found_in_main="$(printf '%s' "${main_line}" | grep -oE 'ww-distinct-[0-9]+' | sort -u | wc -l)"
+    [ "${found_in_main}" -le 10 ]
+}
+
+@test "INVARIANT (recursive scan: world-writable file in nested subdirectory surfaces)" {
+    mkdir -p "${ROOT}/a/b/c"
+    printf 'x' > "${ROOT}/a/b/c/deep-loose"
+    chmod 0666 "${ROOT}/a/b/c/deep-loose"
+    run_wd
+    cap | grep -q '"event":"world_writable_found"'
+    cap | grep -q 'deep-loose'
+}
+
+@test "INVARIANT (group-writable 0664 file is NOT flagged: only world-writable matters — content boundary)" {
+    # The scope is world-writable specifically (perm 0002). Group-
+    # writable (perm 0020) is owned by different watchdog axes
+    # (e.g. modules-load-watchdog). Lock the boundary.
+    printf 'x' > "${ROOT}/group-write"; chmod 0664 "${ROOT}/group-write"
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    ! cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (enforce + ok severity → exit 0): no world-writable files passes even in enforce" {
+    printf 'x' > "${ROOT}/normal"; chmod 0644 "${ROOT}/normal"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"ok"'
+}
