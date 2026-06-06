@@ -114,3 +114,66 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — polkit rules inventory enumerates auth-grant surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (existing-file polkit.Result.YES grant addition): editing a rule to add a YES grant → alert" {
+    # An ADDED rule file is the canonical case (test 4 above), but
+    # an attacker can also edit an EXISTING file to add a YES grant.
+    # Locks both attack paths.
+    seed_benign
+    run_wd
+    printf 'polkit.addRule(function(action, subject) {\n  return polkit.Result.YES;\n});\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable rule): baseline_initial fires alert if a rule file is already world-writable at install-time" {
+    seed_benign
+    chmod 0666 "${RULE}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (group-writable rule file): a group-writable .rules → alert above the bare world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED rule file → warn / polkit_rules_changed (operator pruning)" {
+    seed_benign
+    cat > "${RULESD}/20-other.rules" <<'EOF'
+polkit.addRule(function(a, s) { return polkit.Result.AUTH_ADMIN; });
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${RULESD}/20-other.rules"
+    run_wd
+    cap | grep -qE '"event":"polkit_rules_changed"'
+}
+
+@test "DELTA detect — newly-ADDED rule filename surfaces in JSON sample (operator triage)" {
+    seed_benign
+    run_wd
+    printf 'polkit.addRule(function(a, s) { return polkit.Result.AUTH_ADMIN; });\n' > "${RULESD}/99-distinctive-attacker.rules"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'distinctive-attacker'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
+    [ "${main_count}" = "1" ]
+}
