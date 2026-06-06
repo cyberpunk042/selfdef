@@ -240,3 +240,41 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -ne 0 ]
 }
+
+@test "INVARIANT (weakener-detect: selinux=0 → alert): LSM-disable coverage" {
+    # selinux=0 disables the SELinux LSM at boot.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet selinux=0"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (weakener-detect: apparmor=0 → alert): alternative LSM-disable coverage" {
+    # apparmor=0 disables the AppArmor LSM at boot.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet apparmor=0"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multiple weakeners in same cmdline: alert fires + sample includes multiple)" {
+    # Realistic attacker scenario: maximally weaken on next boot.
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet mitigations=off nokaslr lockdown=none audit=0"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # Multiple weakeners in the same cmdline — verify the sample
+    # field carries multiple names.
+    cap | grep -q 'mitigations=off'
+    cap | grep -q 'nokaslr'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_CMDLINE_PROFILE)" {
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet splash"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line per SDD-062 consumer contract)" {
+    write_cmdline "BOOT_IMAGE=/vmlinuz ro quiet splash"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-cmdline -- ')
+    [ "${main_count}" = "1" ]
+}
