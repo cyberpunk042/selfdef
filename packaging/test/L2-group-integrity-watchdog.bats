@@ -273,3 +273,65 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-group-integrity -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (disk group also privileged — raw disk access → alert)" {
+    # disk group can read+write raw disk devices. Adding a member
+    # = trivial privilege escalation via /dev/sda direct access.
+    echo 'disk:x:6:' >> "${GROUP_FILE}"
+    write_passwd_group
+    cat >> "${GROUP_FILE}" <<'EOF'
+disk:x:6:bob
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^disk:x:6:bob|disk:x:6:bob,evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"alert"'
+    cap | grep -q 'disk:evil'
+}
+
+@test "INVARIANT (commented group line NOT included in inventory: # prefix filtered)" {
+    # /etc/group has comment support. A commented privileged-group
+    # line must not surface as a real group with members.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a commented sudo-group expansion (operator note).
+    cat >> "${GROUP_FILE}" <<'EOF'
+# sudo:x:27:alice,evil_future_plan
+EOF
+    run_wd
+    # Commented sudo expansion should NOT surface as a real privileged add.
+    ! cap | grep -q '"event":"privileged_group_member_added"'
+}
+
+@test "INVARIANT (severity precedence: privileged-add + non-privileged change same scan → alert wins)" {
+    # Mixed scan: attacker adds to privileged group AND modifies
+    # non-privileged group. Severity must be alert (privileged
+    # wins ladder).
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Privileged change.
+    sed -i 's|^docker:x:998:bob|docker:x:998:bob,evil|' "${GROUP_FILE}"
+    # Non-privileged change.
+    sed -i 's|^users:x:100:alice,bob|users:x:100:alice,bob,charlie|' "${GROUP_FILE}"
+    echo 'charlie:x:1002:1002:Charlie:/home/charlie:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q '"event":"privileged_group_member_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-priv-add same scan: 2 sudo additions both surface in priv_sample)" {
+    # Mass-privilege-add scenario: attacker adds multiple users
+    # to sudo group at once. All must surface.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^sudo:x:27:alice|sudo:x:27:alice,evil1,evil2|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -q '"event":"privileged_group_member_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'sudo:evil1'
+    cap | grep -q 'sudo:evil2'
+}
