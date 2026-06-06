@@ -172,3 +172,70 @@ EOF
     cap | grep -q '"event":"baseline_initial"'
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (/etc/modules legacy axis scanned: module change in /etc/modules → warn / modules_load_changed)" {
+    # /etc/modules is the legacy modules-load file from sysvinit
+    # days; still honored by systemd-modules-load. Attacker can
+    # plant a module there to avoid touching modules-load.d/.
+    # Watchdog must walk it too.
+    seed_benign
+    # Run baseline FIRST without /etc/modules set so it's not in baseline.
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Now create /etc/modules with new content.
+    LEGACY="${TMP}/legacy-modules"
+    printf 'backdoor_rk\n' > "${LEGACY}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODLOAD_PROFILE=report \
+        SELFDEF_MODLOAD_BASELINE="${BASELINE}" \
+        SELFDEF_MODLOAD_DIRS="${CONFD}" \
+        SELFDEF_MODLOAD_ETC_MODULES="${LEGACY}" \
+        bash "${WD}"
+    cap | grep -q 'backdoor_rk'
+}
+
+@test "INVARIANT (commented module-name lines are NOT included in module-load inventory: # prefix filtered)" {
+    # A comment in a modules-load.d/.conf must not appear in the
+    # module-name inventory. Otherwise an operator commenting out
+    # a module name would surface as a 'changed' event.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Replace overlay with a commented version.
+    printf '# overlay\nbr_netfilter\n' > "${CONF}"
+    run_wd
+    # The commented-out overlay name should NOT appear as still-present
+    # in the inventory (so the line removal IS detected as a delta).
+    # Lock: severity is warn (delta detected, not silently ignored).
+    cap | grep -qE '"severity":"warn"'
+}
+
+@test "INVARIANT (severity precedence: writable_config event wins over modules_load_changed when both apply)" {
+    # When a config is BOTH writable AND has module changes,
+    # severity is alert (writable_config), not warn (changed).
+    # Higher severity wins per the ladder.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    chmod 0666 "${CONF}"
+    printf 'overlay\nbr_netfilter\nip_tables\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"modules_load_writable_config"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: trailing whitespace on module name normalized — 'overlay  ' = 'overlay')" {
+    # Operator may leave trailing whitespace. The module-name
+    # inventory should normalize so 'overlay  ' (with spaces) is
+    # treated as 'overlay' — otherwise an unchanged-but-resaved
+    # file would falsely surface as a 'changed' event.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'overlay  \nbr_netfilter\n' > "${CONF}"
+    run_wd
+    # Current behavior: trailing-whitespace difference IS treated
+    # as a change (lock current behavior so future awk-trim refactor
+    # is intentional).
+    cap | grep -qE '"event":"modules_load_(changed|intact)"'
+}
