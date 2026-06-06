@@ -23,8 +23,12 @@ const SAMPLE_AUDIT_LINES: &[&str] = &[
     r#"type=USER_LOGIN msg=audit(1736944500.123:1234568): pid=4567 uid=0 acct="alice" exe="/usr/sbin/sshd" hostname=10.0.0.4 res=success"#,
     // Account check (success)
     r#"type=USER_ACCT msg=audit(1736944501.000:1234569): pid=4568 uid=1000 msg='op=PAM:accounting acct="alice" res=success'"#,
-    // Other type
-    r#"type=ANOM_PROMISCUOUS msg=audit(1736944600.000:1234570): dev=eth0 prom=256 old_prom=0"#,
+    // Promiscuous-mode anomaly — categorized as PROCESS_ACTIVITY + High + T1040.
+    r#"type=ANOM_PROMISCUOUS msg=audit(1736944600.000:1234570): dev=eth0 prom=256 old_prom=0 auid=1000"#,
+    // Genuinely unhandled record type — exercises the "other" fallback that
+    // must preserve raw payload. DAEMON_START is a real auditd kind not
+    // specifically dispatched by build_event(), so it lands via build_other_event().
+    r#"type=DAEMON_START msg=audit(1736944700.000:1234571): op=start ver=3.0.7 format=raw kernel=6.1.0 auid=4294967295 pid=987 uid=0 ses=4294967295 subj=unconfined res=success"#,
 ];
 
 #[tokio::test(flavor = "current_thread")]
@@ -108,7 +112,27 @@ async fn auditd_to_sqlite_pipeline() {
     );
     assert_eq!(failed.attack[0].id, "T1110");
 
-    // The unknown record type should still land, with raw payload.
+    // ANOM_PROMISCUOUS — categorized as PROCESS_ACTIVITY + High severity with
+    // T1040 (Network Sniffing) attack tag. Verifies the dedicated dispatcher
+    // wired at lib.rs:208 (build_anom_promiscuous_event).
+    let promisc = events
+        .iter()
+        .find(|e| e.class_uid == ClassUid::PROCESS_ACTIVITY && e.severity_id == SeverityId::High)
+        .expect("anom_promiscuous event");
+    assert_eq!(promisc.status_id, Some(StatusId::Failure));
+    assert!(
+        !promisc.attack.is_empty(),
+        "anom_promiscuous should be tagged with T1040"
+    );
+    assert_eq!(promisc.attack[0].id, "T1040");
+    assert!(
+        promisc.raw.is_some(),
+        "anom_promiscuous should preserve raw payload"
+    );
+
+    // DAEMON_START — genuinely unhandled record type lands via the "other"
+    // fallback path (ClassUid 0, Informational severity) and MUST preserve
+    // raw payload so audit-trail completeness is maintained.
     let other = events
         .iter()
         .find(|e| e.class_uid == ClassUid::new(0))
