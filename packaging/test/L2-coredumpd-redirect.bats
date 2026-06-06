@@ -179,3 +179,53 @@ run_wd() {
     [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
     cmp -s "${CONFIGS_SRC}/redirect.conf" "${DROPIN_DIR}/50-selfdef.conf"
 }
+
+@test "INVARIANT (profile transition disabled → redirect): rewrites drop-in + restarts" {
+    write_config "disabled"
+    run_wd
+    grep -q 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+    write_config "redirect"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'Storage=external' "${DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'systemctl restart systemd-coredump.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    write_config "redirect"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN_DIR}/50-selfdef.conf")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN_DIR}/50-selfdef.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (redirect content carries Storage=external — the actual redirect mechanism)" {
+    write_config "redirect"
+    run_wd
+    grep -qE 'Storage=external' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (drop-in carries [Coredump] section header — valid systemd-coredump fragment)" {
+    write_config "redirect"
+    run_wd
+    grep -qE '^\[Coredump\]' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (drop-in chmod 0644 — system-config convention)" {
+    write_config "redirect"
+    run_wd
+    [ "$(stat -c '%a' "${DROPIN_DIR}/50-selfdef.conf")" = "644" ]
+}
+
+@test "INVARIANT (coredump dir creation is idempotent — re-apply doesn't re-create-recreate)" {
+    write_config "redirect"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${COREDUMP_DIR}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${COREDUMP_DIR}")"
+    # Dir mtime should not bump on idempotent re-apply.
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
