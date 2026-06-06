@@ -130,3 +130,60 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — auditd-plugins inventory enumerates root-exec-on-auditd-start surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (plugin path under /var/tmp): writable-root coverage" {
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /var/tmp/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (plugin path under /dev/shm): tmpfs writable-root coverage" {
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /dev/shm/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (plugin path under /home): user-writable root coverage" {
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /home/user/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable plugin conf): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable plugin conf): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-audit-plugins -- ')
+    [ "${main_count}" = "1" ]
+}
