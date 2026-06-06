@@ -45,7 +45,7 @@ pub struct Selector {
     pub match_binaries: Vec<String>,
     /// match-pid-ns (container PID namespace filter).
     pub match_pid_ns: bool,
-    /// action when selector matches (e.g. "SIGKILL", "Override", "FollowFD").
+    /// action when selector matches (e.g. "Sigkill", "Override", "FollowFD").
     pub action: String,
 }
 
@@ -110,9 +110,16 @@ pub enum PolicyError {
     NameInvalid(String),
 }
 
-/// Known-good selector actions (Tetragon-supported).
+/// Known-good selector actions (Tetragon-supported). Per the upstream
+/// Tetragon API the action enum is title-cased — `Sigkill`, not
+/// `SIGKILL`. The shipped policy at
+/// `packaging/tetragon-policies/sovereign-perimeter.yaml` uses
+/// `Sigkill` and L1-perimeter-yaml-lint.sh asserts the same; the prior
+/// uppercase `SIGKILL` here was a docs/typo that would have rejected
+/// the real shipped policy if anything had ever invoked `validate()`
+/// against it.
 pub const ALLOWED_ACTIONS: &[&str] = &[
-    "SIGKILL",
+    "Sigkill",
     "Override",
     "FollowFD",
     "UnfollowFD",
@@ -195,7 +202,7 @@ mod tests {
                     match_args: vec![0, 1],
                     match_binaries: vec!["/usr/bin/python3".into()],
                     match_pid_ns: true,
-                    action: "SIGKILL".into(),
+                    action: "Sigkill".into(),
                 }],
             },
             signature: "ms003-sig".into(),
@@ -281,9 +288,23 @@ mod tests {
 
     #[test]
     fn allowed_actions_includes_canonical() {
-        for a in ["SIGKILL", "Override", "FollowFD", "Post", "Signal"] {
+        // Per Tetragon's title-cased action enum. The pre-fix list
+        // accidentally hardcoded `SIGKILL` (uppercase) which would have
+        // rejected the real shipped policy (`Sigkill`).
+        for a in ["Sigkill", "Override", "FollowFD", "Post", "Signal"] {
             assert!(ALLOWED_ACTIONS.contains(&a));
         }
+    }
+
+    #[test]
+    fn allowed_actions_does_not_contain_uppercase_sigkill() {
+        // Regression guard: if a future edit accidentally re-introduces
+        // "SIGKILL" (uppercase), this test fails. The Tetragon API uses
+        // title-case "Sigkill" and the L1-perimeter-yaml-lint gate +
+        // packaging/tetragon-policies/sovereign-perimeter.yaml both
+        // assume title-case.
+        assert!(!ALLOWED_ACTIONS.contains(&"SIGKILL"));
+        assert!(ALLOWED_ACTIONS.contains(&"Sigkill"));
     }
 
     #[test]
