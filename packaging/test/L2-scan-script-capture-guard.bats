@@ -129,8 +129,23 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
 @test "every watchdog that creates a baseline/manifest chmod 0600s it (no inventory leak)" {
     bad=()
     for f in $(scan_scripts); do
-        # Creates a baseline by snapshotting the current inventory into it.
-        grep -qE 'cp "\$current" "\$\{?(BASELINE|MANIFEST)' "$f" || continue
+        # Creates a baseline by either:
+        #   (a) `cp "$current" "$BASELINE"` — the canonical comm-delta idiom,
+        #   (b) `printf '...' > "$BASELINE"` / `echo '...' > "$BASELINE"` —
+        #       the direct-write idiom used when the baseline is a single
+        #       small value (e.g. kernel-cmdline-watchdog snapshots one line).
+        # Either path creates a fresh file under the user's umask (typically
+        # 0022 → 0644 = world-readable inventory leak), so both need an
+        # explicit `chmod 0600`. The earlier guard only checked (a); (b)
+        # would have shipped a future watchdog with a world-readable
+        # baseline undetected.
+        # `grep -c` exits 1 when there are zero matches, which under `set -e`
+        # (bats default) would abort the test — `|| true` keeps the count at 0.
+        creates_via_cp=$(grep -cE 'cp "\$current" "\$\{?(BASELINE|MANIFEST)' "$f" || true)
+        creates_via_direct=$(grep -cE '> *"\$\{?(BASELINE|MANIFEST)' "$f" || true)
+        if (( creates_via_cp == 0 && creates_via_direct == 0 )); then
+            continue
+        fi
         # Must lock it to 0600 (owner-only) — the inventory is sensitive.
         grep -qE 'chmod 0?600 "\$\{?(BASELINE|MANIFEST)' "$f" || bad+=("$(basename "$f")")
     done

@@ -53,6 +53,16 @@ dns-resolver class) are both now covered by one structural check rather
 than two emitter-shape regexes — the right invariant the bug class actually
 demands.
 
+Companion: the chmod-0600 inventory-leak guard was extended in the same
+pass to cover the `printf '...' > "$BASELINE"` direct-write idiom in
+addition to the canonical `cp "$current" "$BASELINE"` snapshot. Currently
+one watchdog uses the direct-write idiom (kernel-cmdline-watchdog) and it
+already chmods correctly, so no live leak. The guard extension future-
+proofs: any new watchdog that creates a baseline via direct redirect
+without `chmod 0600` will now be flagged before merge. Negative-control
+synthesized: a direct-write baseline script with no chmod is correctly
+flagged by the extended guard.
+
 ### Added — MS048 Goldilocks Scheduler + Deterministic Cortex Runtime COMPLETE (2026-06-05)
 
 The `selfdef-scheduler` crate now comprehensively realizes the avx-plus-plus
