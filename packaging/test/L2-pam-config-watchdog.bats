@@ -215,3 +215,56 @@ EOF
     cap | grep -q '"event":"pam_config_changed"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (pam_unix.so HASH changes specifically — the pam_unix.so signature on hash drift)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'attacker-pwned-pam-unix' > "${LIB_DIR}/pam_unix.so"
+    run_wd
+    cap | grep -q 'pam_unix'   # specific module name surfaces in JSON
+}
+
+@test "INVARIANT (rule-add to common-password — symmetric to common-auth axis)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'password sufficient pam_attacker.so backdoor=1' >> "${PAM_DIR}/common-password"
+    echo 'fake' > "${LIB_DIR}/pam_attacker.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (NEW pam.d file (e.g. attacker creates /etc/pam.d/distinctive-backdoor) → alert)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${PAM_DIR}/distinctive-backdoor" <<'EOF'
+auth sufficient pam_distinctive_backdoor.so
+EOF
+    echo 'fake' > "${LIB_DIR}/pam_distinctive_backdoor.so"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'distinctive-backdoor'
+}
+
+@test "INVARIANT (compound delta: hash drift + rule add simultaneously → alert with both event signatures)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Hash drift AND rule add together.
+    echo 'attacker-pwned-pam-unix' > "${LIB_DIR}/pam_unix.so"
+    echo 'auth sufficient pam_evil.so' >> "${PAM_DIR}/common-auth"
+    echo 'fake' > "${LIB_DIR}/pam_evil.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_pam_inventory
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-pam-config -- ')
+    [ "${main_count}" = "1" ]
+}
