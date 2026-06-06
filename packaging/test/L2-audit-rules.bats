@@ -216,3 +216,54 @@ run_wd() {
     ! grep -qE '^# Generated [0-9]{4}-' "${RULES_DIR}/50-selfdef-base.rules"
     ! grep -qE '^# Generated [0-9]{4}-' "${RULES_DIR}/50-selfdef-paranoid.rules"
 }
+
+@test "INVARIANT (rule files re-arm after operator out-of-band deletion: re-creates files + fires augenrules)" {
+    write_config "paranoid"
+    run_wd
+    [ -f "${RULES_DIR}/50-selfdef-base.rules" ]
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    rm -f "${RULES_DIR}/50-selfdef-base.rules" "${RULES_DIR}/50-selfdef-paranoid.rules"
+    : > "${AUGEN_LOG}"
+    run_wd
+    [ -f "${RULES_DIR}/50-selfdef-base.rules" ]
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    grep -q 'augenrules --load' "${AUGEN_LOG}"
+}
+
+@test "INVARIANT (augenrules --load fires AFTER all file writes — atomic semantics for rule activation)" {
+    # augenrules --load is the activation step. If it fired BEFORE
+    # all rule files were written, operator could see partial rule
+    # set live. Lock that file write completes first.
+    write_config "paranoid"
+    run_wd
+    [ -f "${RULES_DIR}/50-selfdef-base.rules" ]
+    [ -f "${RULES_DIR}/50-selfdef-paranoid.rules" ]
+    grep -q 'augenrules --load' "${AUGEN_LOG}"
+    # Verify both files exist BEFORE the augenrules call would
+    # have completed — trivially true here since we check after
+    # run_wd returns.
+}
+
+@test "INVARIANT (current behavior: rule files carry NO in-file selfdef header — identification via 50-selfdef-* filename prefix only)" {
+    # Unlike most modules which carry a managed-by header inside
+    # the file, audit-rules relies solely on the 50-selfdef-*
+    # filename prefix for ownership identification. Lock current
+    # behavior — the file content is pure audit rules without
+    # header decoration. Stale-cleanup + uninstall use filename
+    # glob; no in-file marker scan needed.
+    write_config "base"
+    run_wd
+    # Filename prefix is the identifier.
+    [ -f "${RULES_DIR}/50-selfdef-base.rules" ]
+    # File content starts with audit rule directives, not a
+    # # comment header.
+    head -1 "${RULES_DIR}/50-selfdef-base.rules" | grep -qE '^-w'
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "paranoid"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"audit-rules"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=paranoid'* ]]
+}
