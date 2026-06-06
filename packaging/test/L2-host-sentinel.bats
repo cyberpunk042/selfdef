@@ -201,3 +201,57 @@ run_wd() {
     grep -q 'action: Post' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
     ! grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
 }
+
+@test "INVARIANT (profile downgrade enforce → audit): rewrites Sigkill back to Post" {
+    write_config "enforce"
+    run_wd
+    grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    write_config "audit"
+    run_wd
+    grep -q 'action: Post' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+    ! grep -q 'action: Sigkill' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves policy file mtime" {
+    write_config "audit"
+    run_wd
+    mtime_kmod_before="$(stat -c '%Y' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml")"
+    mtime_ld_before="$(stat -c '%Y' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")"
+    sleep 1
+    run_wd
+    mtime_kmod_after="$(stat -c '%Y' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml")"
+    mtime_ld_after="$(stat -c '%Y' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml")"
+    [ "${mtime_kmod_before}" = "${mtime_kmod_after}" ]
+    [ "${mtime_ld_before}" = "${mtime_ld_after}" ]
+}
+
+@test "INVARIANT (policy carries TracingPolicy kind — actual Tetragon CRD)" {
+    write_config "audit"
+    run_wd
+    grep -qE '^kind: TracingPolicy' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml"
+    grep -qE '^kind: TracingPolicy' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+}
+
+@test "INVARIANT (kmod policy carries do_init_module kprobe — the actual LKM-load trigger)" {
+    write_config "audit"
+    run_wd
+    grep -q 'do_init_module' "${POLICY_DIR}/selfdef-host-kmod-watch.yaml"
+}
+
+@test "INVARIANT (ld-preload policy carries execve syscall trace — the actual exec trigger)" {
+    # LD_PRELOAD takes effect on execve; the policy must trace that.
+    write_config "audit"
+    run_wd
+    grep -qE 'sys_enter_execve|execve' "${POLICY_DIR}/selfdef-host-ld-preload-watch.yaml"
+}
+
+@test "INVARIANT (DRY_RUN does not write OR remove policy files)" {
+    # First, install policies.
+    write_config "audit"
+    run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
+    # Now flip enable=false but use DRY_RUN — file should stay.
+    write_config "audit" "false" "true"
+    DRY_RUN=1 run_wd
+    [ -f "${POLICY_DIR}/selfdef-host-kmod-watch.yaml" ]
+}
