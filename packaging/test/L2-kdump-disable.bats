@@ -185,3 +185,34 @@ run_wd() {
     grep -q 'systemctl list-unit-files kexec-tools.service' "${SYSEOF_LOG}"
     grep -q 'systemctl list-unit-files kdump-tools.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (acted=3 when all 3 variants present; acted=1 when only one — operator dashboard distro-aware)" {
+    write_config "mask"
+    output_all="$(KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd 2>&1)"
+    [[ "${output_all}" == *'acted=3'* ]]
+    : > "${SYSEOF_LOG}"
+    output_one="$(KDUMP_PRESENT=1 KEXEC_PRESENT=0 KDUMPTOOLS_PRESENT=0 run_wd 2>&1)"
+    [[ "${output_one}" == *'acted=1'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op when no kdump variants present — healthy minimal endpoint has zero)" {
+    write_config "mask"
+    output="$(KDUMP_PRESENT=0 KEXEC_PRESENT=0 KDUMPTOOLS_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]] || [[ "${output}" == *'acted=0'* ]]
+}
+
+@test "INVARIANT (no auto-uninstall: kdump-tools / kexec-tools packages NEVER auto-removed; only stop+disable+mask)" {
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order per unit: stop → disable → mask — terminate-then-clear-then-gate)" {
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    stop_line="$(grep -n 'systemctl stop kdump.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable kdump.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask kdump.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
