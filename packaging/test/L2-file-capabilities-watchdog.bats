@@ -189,3 +189,63 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     cap | grep -q '"event":"dangerous_capability_added"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (recursive scan: cap binary in subdirectory of ROOT surfaces — not only top-level)" {
+    # A binary planted in a subdirectory (sub/bin/) must still be
+    # caught — file-capabilities-watchdog scans recursively.
+    mk_cap ping cap_net_raw+ep
+    run_wd
+    mkdir -p "${ROOT}/sub/bin"
+    printf '#!/bin/sh\n' > "${ROOT}/sub/bin/sneaky"
+    chmod 0755 "${ROOT}/sub/bin/sneaky"
+    setcap cap_setuid+ep "${ROOT}/sub/bin/sneaky"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'sneaky'
+}
+
+@test "INVARIANT (permitted-only cap set: cap_net_raw+p — permitted-without-effective — also tracked)" {
+    # Capabilities can be granted with just the permitted bit
+    # (+p) and gain effective via prctl from the binary. Lock
+    # that the watchdog tracks BOTH the +ep and the +p flavors
+    # — not only the +ep ladder.
+    mk_cap baseline cap_net_raw+ep
+    run_wd
+    mk_cap permitted_only cap_dac_override+p
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # The binary appears in the added set (delta detected).
+    cap | grep -q 'permitted_only'
+}
+
+@test "INVARIANT (combined add+remove: both axes surface concurrently in JSON)" {
+    mk_cap ping cap_net_raw+ep
+    mk_cap nginx cap_net_bind_service+ep
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Remove nginx + add a new one in same scan.
+    rm -f "${ROOT}/nginx"
+    mk_cap newcap cap_net_bind_service+ep
+    run_wd
+    cap | grep -qE '"added":[1-9]'
+    cap | grep -qE '"removed":[1-9]'
+}
+
+@test "INVARIANT (baseline format: each line records path + capability string for diff replay — space-separated per getcap output)" {
+    # The baseline is the sorted output of getcap with ' = '
+    # collapsed to ' ' — format is '<path> <caps>'. Each non-
+    # empty line must have at least 2 whitespace-separated
+    # fields (path + caps). Locks the format so downstream
+    # parsers + selfdef-recap don't break.
+    mk_cap ping cap_net_raw+ep
+    mk_cap nginx cap_net_bind_service+ep
+    run_wd
+    [ -s "${BASELINE}" ]
+    awk 'NF<2{bad=1} END{exit bad?1:0}' "${BASELINE}"
+    grep -q "ping" "${BASELINE}"
+    grep -q "nginx" "${BASELINE}"
+    # Each line ends with cap_... + a flag suffix (=ep / +ep / etc.)
+    grep -qE 'cap_net_raw[+=]' "${BASELINE}"
+    grep -qE 'cap_net_bind_service[+=]' "${BASELINE}"
+}
