@@ -40,12 +40,18 @@ if [[ -d "$LOGIN_DEFS_D" ]] || mkdir -p "$LOGIN_DEFS_D" 2>/dev/null; then
     tmp="$(mktemp "${DROPIN}.XXXXXX")"
     {
         echo "$HEADER_MARKER"
-        echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+        # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+        echo "# profile=$PROFILE"
         cat "$src"
     } > "$tmp"
     chmod 0644 "$tmp"
-    mv -f "$tmp" "$DROPIN"
-    log "wrote $DROPIN"
+    # Idempotency: skip rewrite when content unchanged.
+    if [[ -f "$DROPIN" ]] && cmp -s "$tmp" "$DROPIN"; then
+        rm -f "$tmp"
+    else
+        mv -f "$tmp" "$DROPIN"
+        log "wrote $DROPIN"
+    fi
 fi
 
 # Fallback: some login(1) builds only consult /etc/login.defs.

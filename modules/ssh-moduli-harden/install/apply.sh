@@ -60,7 +60,13 @@ tmp="$(mktemp "${MODULI_FILE}.XXXXXX")"
 # Preserve comment header + keep only strong moduli lines.
 awk -v t="$THRESHOLD" '/^#/ {print; next} NF==5 && $5+0 >= t {print}' "$MODULI_FILE" > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$MODULI_FILE"
+# Idempotency: skip rewrite when filtered content matches existing.
+if cmp -s "$tmp" "$MODULI_FILE"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$MODULI_FILE"
+    log "rewrote $MODULI_FILE"
+fi
 
 new_keep=$(count_moduli_ge "$MODULI_FILE" "$THRESHOLD")
 log "filtered $MODULI_FILE — $new_keep moduli >= ${THRESHOLD}-bit retained"

@@ -51,12 +51,18 @@ fi
 tmp="$(mktemp "${PWHISTORY_CONF}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$src"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$PWHISTORY_CONF"
-log "wrote $PWHISTORY_CONF"
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "$PWHISTORY_CONF" ]] && cmp -s "$tmp" "$PWHISTORY_CONF"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$PWHISTORY_CONF"
+    log "wrote $PWHISTORY_CONF"
+fi
 
 # DETECT-AND-NOTICE: is pam_pwhistory.so actually wired?
 wired=$(detect_pam_wiring)

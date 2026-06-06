@@ -32,12 +32,18 @@ render() {
     tmp="$(mktemp "${dst}.XXXXXX")"
     {
         echo "$HEADER_MARKER"
-        echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+        # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+        echo "# profile=$PROFILE"
         cat "$src"
     } > "$tmp"
     chmod 0644 "$tmp"
-    mv -f "$tmp" "$dst"
-    log "wrote $dst"
+    # Idempotency: skip rewrite when content unchanged.
+    if [[ -f "$dst" ]] && cmp -s "$tmp" "$dst"; then
+        rm -f "$tmp"
+    else
+        mv -f "$tmp" "$dst"
+        log "wrote $dst"
+    fi
 }
 
 # Always render the suid_dumpable sysctl drop-in.

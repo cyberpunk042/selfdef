@@ -46,14 +46,19 @@ fi
 tmp="$(mktemp "${LOGIND_DROPIN}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=burst-guard"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=burst-guard"
     echo "[Login]"
     echo "CtrlAltDelBurstAction=none"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$LOGIND_DROPIN"
-log "wrote $LOGIND_DROPIN"
-
-run "reload systemd-logind" -- systemctl kill -s HUP systemd-logind 2>/dev/null || true
+# Idempotency: skip rewrite + logind reload when content unchanged.
+if [[ -f "$LOGIND_DROPIN" ]] && cmp -s "$tmp" "$LOGIND_DROPIN"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$LOGIND_DROPIN"
+    log "wrote $LOGIND_DROPIN"
+    run "reload systemd-logind" -- systemctl kill -s HUP systemd-logind 2>/dev/null || true
+fi
 
 emit_status "ok" "ctrlaltdel-disable profile=burst-guard (CtrlAltDelBurstAction=none)"
