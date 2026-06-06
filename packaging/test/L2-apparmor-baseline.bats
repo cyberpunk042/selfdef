@@ -194,3 +194,62 @@ cupsd' run_wd
     grep -q 'aa-complain firefox' "${AAFLIP_LOG}"
     ! grep -q 'aa-enforce' "${AAFLIP_LOG}"
 }
+
+@test "INVARIANT (curated list installed): first apply copies the curated list from CONFIGS_SRC to AA_LIST" {
+    write_config "complain"
+    [ ! -f "${AA_LIST}" ]                       # not yet installed
+    AA_LOADED='firefox' run_wd
+    [ -f "${AA_LIST}" ]
+    grep -q '^firefox$' "${AA_LIST}"
+    grep -q '^cupsd$' "${AA_LIST}"
+}
+
+@test "INVARIANT (idempotent install): re-apply with same curated list preserves AA_LIST mtime" {
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    [ -f "${AA_LIST}" ]
+    mtime_before="$(stat -c '%Y' "${AA_LIST}")"
+    sleep 1
+    AA_LOADED='firefox' run_wd
+    mtime_after="$(stat -c '%Y' "${AA_LIST}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (curated-list update): if CONFIGS_SRC changes, the AA_LIST file is replaced" {
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    grep -q '^firefox$' "${AA_LIST}"
+    # Update the source — re-apply should copy the new content.
+    cat > "${CONFIGS_SRC}/selfdef-curated-profiles.list" <<'EOF'
+firefox
+new-profile
+EOF
+    AA_LOADED='firefox' run_wd
+    grep -q '^new-profile$' "${AA_LIST}"
+}
+
+@test "INVARIANT (profile switch complain→enforce): a re-apply with the new profile flips the existing-loaded profiles to enforce" {
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    grep -q 'aa-complain firefox' "${AAFLIP_LOG}"
+    : > "${AAFLIP_LOG}"
+    write_config "enforce"
+    AA_LOADED='firefox' run_wd
+    grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
+    ! grep -q 'aa-complain' "${AAFLIP_LOG}"
+}
+
+@test "INVARIANT (empty AA_LOADED): no loaded profiles → no aa-flip calls (clean no-op)" {
+    write_config "enforce"
+    AA_LOADED='' run_wd
+    ! grep -q 'aa-enforce' "${AAFLIP_LOG}"
+    ! grep -q 'aa-complain' "${AAFLIP_LOG}"
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "complain"
+    AA_LOADED='firefox' output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"apparmor-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=complain'* ]]
+}
