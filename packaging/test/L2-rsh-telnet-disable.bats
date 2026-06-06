@@ -111,3 +111,66 @@ run_wd() {
     LEGACY_PRESENT=1 run_wd
     grep -q 'systemctl mask telnet.socket' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (telnet family coverage): all 3 telnet-related units acted on (socket + telnetd + telnet.service)" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl mask telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask telnetd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask telnet.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (rsh family coverage): all 6 rsh/rlogin/rexec units acted on (socket + service for each of 3 protocols)" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl mask rsh.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rsh.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rlogin.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rlogin.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rexec.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rexec.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (tftp family coverage): all 3 tftp units acted on (socket + service + atftpd alt)" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl mask tftp.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask tftp.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask atftpd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (finger family coverage): both finger units acted on (socket + service)" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl mask finger.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask finger.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (.socket+service dual coverage in stop profile): stop also acts on .socket variants (not just .service)" {
+    # .socket can re-activate .service on demand — both must be
+    # touched. Catches a regression that disables only .service
+    # while leaving .socket re-activation alive.
+    write_config "stop"
+    LEGACY_PRESENT=1 run_wd
+    grep -q 'systemctl stop telnet.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rsh.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl stop tftp.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask profile fires the same mask set" {
+    write_config "mask"
+    LEGACY_PRESENT=1 run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    LEGACY_PRESENT=1 run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "emit_status surfaces profile + unit count in JSON (operator observability)" {
+    write_config "mask"
+    output="$(LEGACY_PRESENT=1 run_wd 2>&1)"
+    [[ "${output}" == *'"module":"rsh-telnet-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
