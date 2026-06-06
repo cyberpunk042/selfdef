@@ -238,3 +238,58 @@ EOF
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + fires reload)" {
+    # Operator may rm the drop-in — apply must rebuild and reload
+    # sshd so hardening is restored.
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    rm -f "${DST}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE 'systemctl (reload|restart) (sshd|ssh)' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "paranoid" "true"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"ssh-hardening"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=paranoid'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — paranoid w/o ack dies even after prior standard install)" {
+    # Operator installs standard first, then flips to paranoid but
+    # FORGETS to set selfdef_acknowledge_allowgroups. apply MUST refuse
+    # AND leave the prior standard drop-in unchanged — no silent
+    # escalation to AllowGroups ssh (HARD LOCKOUT).
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    ! grep -qE '^AllowGroups\s+ssh' "${DST}"
+    # Operator sets paranoid w/o ack.
+    write_config "paranoid" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_SSH_HARDENING_CONFIG="${CONF}" \
+        SELFDEF_SSHD_DROPIN_DIR="${SSHD_DROPIN_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    # Prior standard drop-in preserved — no AllowGroups injected.
+    ! grep -qE '^AllowGroups\s+ssh' "${DST}"
+}
+
+@test "INVARIANT (standard carries additional hardening: ChallengeResponseAuthentication no + X11Forwarding no + LoginGraceTime tightened)" {
+    # Beyond just root-disable + password-disable, lock that
+    # standard carries the full SDD-038-stated hardening set:
+    # ChallengeResponseAuthentication (keyboard-interactive),
+    # X11Forwarding, LoginGraceTime tightening.
+    write_config "standard"
+    run_wd
+    # Either ChallengeResponseAuthentication OR KbdInteractiveAuthentication (newer key).
+    grep -qE '^(ChallengeResponseAuthentication|KbdInteractiveAuthentication)\s+no' "${DST}"
+    grep -qE '^X11Forwarding\s+no' "${DST}"
+    # LoginGraceTime tightened to <=60s (sshd default is 120s).
+    grep -qE '^LoginGraceTime\s+([0-9]|[1-5][0-9]|60)s?$' "${DST}"
+}
