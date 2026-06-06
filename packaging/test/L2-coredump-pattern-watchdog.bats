@@ -201,3 +201,33 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-coredump-pattern -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (pipe to /var/tmp/* → alert): writable-root expansion on pipe-handler axis" {
+    write_pattern "|/var/tmp/.x %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"core_pattern_hijacked"'
+}
+
+@test "INVARIANT (pipe to /dev/shm/* → alert): writable-root expansion on pipe-handler axis" {
+    write_pattern "|/dev/shm/.x %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"core_pattern_hijacked"'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_COREPAT_PROFILE)" {
+    write_pattern "core"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (pattern with trailing whitespace — sysctl reads may have padding — handled cleanly)" {
+    # /proc/sys/kernel/core_pattern may include trailing newline/
+    # spaces depending on read mechanism. Lock that trailing
+    # whitespace doesn't confuse the detector.
+    write_pattern "core   "
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"core_pattern_safe"'
+}
