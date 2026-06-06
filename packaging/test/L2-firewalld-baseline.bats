@@ -276,3 +276,39 @@ remove_firewall_cmd() {
     # ssh still added.
     grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
 }
+
+@test "INVARIANT (emit_status JSON: module + status + profile surfaced for operator dashboard)" {
+    write_config "block"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"firewalld-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=block'* ]]
+}
+
+@test "INVARIANT (re-arm after operator zone deletion: re-creates zone idempotently)" {
+    # If the operator out-of-band removes the selfdef zone (e.g. via
+    # firewall-cmd --permanent --delete-zone=selfdef), the next apply
+    # MUST re-create it. Simulated here by toggling PRE_EXISTING_ZONES
+    # back to not-include-selfdef on second apply.
+    write_config "baseline"
+    PRE_EXISTING_ZONES="public block drop trusted selfdef" run_wd
+    # Now operator-delete: selfdef no longer in zone list.
+    : > "${FW_LOG}"
+    PRE_EXISTING_ZONES="public block drop trusted" run_wd
+    grep -q -- '--permanent --new-zone=selfdef' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+}
+
+@test "INVARIANT (block profile preserves ssh-allow + adds REJECT target — visible-deny does NOT lock out remote ops)" {
+    # block profile uses REJECT instead of DROP (operator visibility of
+    # denied attempts via icmp), but ssh MUST still be added so remote
+    # ops aren't locked out by the visible-deny variant.
+    write_config "block"
+    run_wd
+    grep -q -- '--permanent --zone=selfdef --set-target=%%REJECT%%' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+    # ssh ordering still BEFORE set-default (anti-lockout).
+    ssh_line="$(grep -nF -e '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}" | head -1 | cut -d: -f1)"
+    default_line="$(grep -nF -e '--set-default-zone=selfdef' "${FW_LOG}" | head -1 | cut -d: -f1)"
+    [ "${ssh_line}" -lt "${default_line}" ]
+}
