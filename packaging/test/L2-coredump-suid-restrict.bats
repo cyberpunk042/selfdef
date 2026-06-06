@@ -211,3 +211,45 @@ run_wd() {
     # Even with disk unchanged, sysctl -w fires for the live-knob.
     grep -q 'sysctl -w fs.suid_dumpable=0' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates sysctl drop-in + fires sysctl -w)" {
+    # Operator may rm the sysctl drop-in — apply must rebuild
+    # and re-apply live so kernel state is restored.
+    write_config "suid-only"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    rm -f "${SYSCTL_DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    grep -q 'sysctl -w fs.suid_dumpable=0' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (re-arm after operator out-of-band deletion all-off: re-creates BOTH drop-ins)" {
+    # all-off has 2 drop-ins (sysctl + limits.d). Both must be
+    # re-armed on deletion.
+    write_config "all-off"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    [ -f "${LIMITS_DROPIN}" ]
+    rm -f "${SYSCTL_DROPIN}" "${LIMITS_DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${SYSCTL_DROPIN}" ]
+    [ -f "${LIMITS_DROPIN}" ]
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "suid-only"
+    run_wd
+    first_line="$(awk 'NF' "${SYSCTL_DROPIN}" | head -1)"
+    [[ "${first_line}" == *"selfdef coredump-suid-restrict"* ]]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "all-off"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"coredump-suid-restrict"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=all-off'* ]]
+}
