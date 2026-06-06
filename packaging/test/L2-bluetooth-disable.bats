@@ -216,3 +216,44 @@ run_wd() {
     [ -f "${MODPROBE_BLACKLIST}" ]
     grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (per-radio rfkill scope: 'bluetooth' NOT 'all' or 'wifi' — composability with wireless-disable + wwan-disable)" {
+    # rfkill block 'all' would also kill Wi-Fi (wireless-disable
+    # module owns that surface) + WWAN (wwan-disable module).
+    # Lock per-radio scoping so the three modules can be composed.
+    write_config "mask"
+    run_wd
+    grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+    ! grep -qE 'rfkill block all' "${RF_LOG}"
+    ! grep -qE 'rfkill block wifi' "${RF_LOG}"
+    ! grep -qE 'rfkill block wwan' "${RF_LOG}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — predictable for stale-cleanup head -1 grep)" {
+    # Mirror wireless-disable + wwan-disable discipline. The
+    # downgrade-path stale-cleanup uses head -1 + grep -F. Header
+    # MUST be first line.
+    write_config "mask"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_BLACKLIST}")"
+    [ "${first_line}" = "# managed-by: selfdef bluetooth-disable" ]
+}
+
+@test "INVARIANT (blacklist re-arm after operator out-of-band deletion: re-creates blacklist with header marker)" {
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    rm -f "${MODPROBE_BLACKLIST}"
+    run_wd
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    grep -q 'managed-by: selfdef bluetooth-disable' "${MODPROBE_BLACKLIST}"
+    grep -q '^blacklist btusb$' "${MODPROBE_BLACKLIST}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"bluetooth-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
