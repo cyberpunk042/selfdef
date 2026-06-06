@@ -56,21 +56,35 @@ trap 'rm -f "${tmp_plan}"' EXIT
     printf '\n  ]\n'
     printf '}\n'
 } > "${tmp_plan}"
-mv -f "${tmp_plan}" "${ETC_DIR}/slice-plan.json"
-chmod 0644 "${ETC_DIR}/slice-plan.json"
+chmod 0644 "${tmp_plan}"
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "${ETC_DIR}/slice-plan.json" ]] && cmp -s "${tmp_plan}" "${ETC_DIR}/slice-plan.json"; then
+    rm -f "${tmp_plan}"
+else
+    mv -f "${tmp_plan}" "${ETC_DIR}/slice-plan.json"
+fi
 trap - EXIT
 
 # Runtime env file — sources hardware-tune-cache output + TP knobs.
-cat > "${ETC_DIR}/runtime.env" <<EOF
-# tensor-parallel-inference runtime env (SD-R58)
-EOF
-if [ -r "${TUNE_FILE}" ]; then
-    echo ". \"${TUNE_FILE}\"" >> "${ETC_DIR}/runtime.env"
-fi
+# Build atomically via mktemp + cmp -s so a no-op apply does not
+# touch the file (the prior `cat > … <<EOF` + repeated `>>`-append
+# rewrite-rewrite pattern was a variant-A idempotency bug — 2026-06-06).
+tmp_env="$(mktemp "${ETC_DIR}/runtime.env.XXXXXX")"
+trap 'rm -f "${tmp_env}"' EXIT
 {
+    echo "# tensor-parallel-inference runtime env (SD-R58)"
+    if [ -r "${TUNE_FILE}" ]; then
+        echo ". \"${TUNE_FILE}\""
+    fi
     echo "TP_SLICE_PLAN=\"${ETC_DIR}/slice-plan.json\""
     echo "TP_NRANKS=\"${nranks}\""
-} >> "${ETC_DIR}/runtime.env"
-chmod 0644 "${ETC_DIR}/runtime.env"
+} > "${tmp_env}"
+chmod 0644 "${tmp_env}"
+if [[ -f "${ETC_DIR}/runtime.env" ]] && cmp -s "${tmp_env}" "${ETC_DIR}/runtime.env"; then
+    rm -f "${tmp_env}"
+else
+    mv -f "${tmp_env}" "${ETC_DIR}/runtime.env"
+fi
+trap - EXIT
 
 emit_status "ok" "provisioned ${ETC_DIR} (${nranks} rank(s))"
