@@ -110,3 +110,68 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — sysctl inventory enumerates kernel-hardening posture)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (kptr_restrict weakening): kptr_restrict=0 → alert (kernel pointer leak surface)" {
+    seed_benign
+    run_wd
+    printf 'kernel.kptr_restrict = 0\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (yama.ptrace_scope weakening): ptrace_scope=0 → alert (any-uid ptrace = credential dump)" {
+    seed_benign
+    run_wd
+    printf 'kernel.yama.ptrace_scope = 0\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ASLR partial-disable): randomize_va_space=1 (partial) → alert (only full=2 is safe)" {
+    seed_benign
+    run_wd
+    printf 'kernel.randomize_va_space = 1\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing weak sysctl): baseline_initial fires alert if sysctl already has a weak value at install-time" {
+    printf 'kernel.randomize_va_space = 0\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (multi-weakening composition): multiple weakened sysctls in one file → alert (any one is enough)" {
+    seed_benign
+    run_wd
+    printf 'kernel.randomize_va_space = 0\nkernel.kptr_restrict = 0\nkernel.yama.ptrace_scope = 0\nfs.suid_dumpable = 1\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "DELTA detect — newly-WEAKENED sysctl key surfaces in JSON sample (operator triage)" {
+    seed_benign
+    run_wd
+    printf 'kernel.randomize_va_space = 0\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'randomize_va_space'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sysctl-hardening -- ')
+    [ "${main_count}" = "1" ]
+}
