@@ -174,3 +174,53 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in with TMOUT directive)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'TMOUT=900' "${DROPIN}"
+    grep -q 'managed-by: selfdef shell-timeout-baseline' "${DROPIN}"
+}
+
+@test "INVARIANT (asymmetric tightening: strict TMOUT < standard TMOUT — strict must enforce SHORTER timeout)" {
+    write_config "standard"
+    run_wd
+    std_tmout="$(grep -oE 'TMOUT=[0-9]+' "${DROPIN}" | head -1 | cut -d= -f2)"
+    write_config "strict"
+    run_wd
+    strict_tmout="$(grep -oE 'TMOUT=[0-9]+' "${DROPIN}" | head -1 | cut -d= -f2)"
+    [ -n "${std_tmout}" ]
+    [ -n "${strict_tmout}" ]
+    [ "${strict_tmout}" -lt "${std_tmout}" ]
+}
+
+@test "INVARIANT (interactive-shell guard: drop-in guards on case \$- in *i* — non-interactive scripts unaffected)" {
+    # Bash sets the 'i' flag in \$- for interactive shells. Non-
+    # interactive scripts (cron jobs / batch jobs) must NOT inherit
+    # TMOUT — they'd get killed mid-execution. Lock the guard.
+    write_config "standard"
+    run_wd
+    grep -qE 'case[[:space:]]+\$\-[[:space:]]+in[[:space:]]*\*i\*' "${DROPIN}" || \
+        grep -qE '\$-.*i' "${DROPIN}"
+}
+
+@test "INVARIANT (header-marker comment after shebang: line 1=shebang, line 2 starts with managed-by — stale-cleanup head -2 grep)" {
+    # Shebang is line 1; managed-by header on line 2 enables
+    # downgrade-path stale-cleanup detection.
+    write_config "standard"
+    run_wd
+    head -1 "${DROPIN}" | grep -qF '#!/bin/sh'
+    sed -n '2p' "${DROPIN}" | grep -qE '#.*managed-by.*selfdef.*shell-timeout-baseline'
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"shell-timeout-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=standard'* ]]
+}
