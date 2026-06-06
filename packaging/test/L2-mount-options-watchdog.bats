@@ -188,3 +188,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "BOUNDARY: 2-misses + 1-miss (sum=3) → alert (the broad-weaken pattern combines across mount points)" {
+    mk_findmnt
+    # /tmp missing nodev+noexec (2 misses) AND /var/tmp missing noexec (1 miss) = sum 3
+    write_fixture \
+        $'/tmp\tnosuid,relatime' \
+        $'/var/tmp\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"missing_flags":3'
+}
+
+@test "INVARIANT (/dev/shm + noexec): missing noexec on /dev/shm surfaces in sample (executable-tmpfs attack surface)" {
+    mk_findmnt
+    write_fixture $'/dev/shm\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '/dev/shm:noexec'
+}
+
+@test "INVARIANT (/boot read-write detected via missing nodev): /boot must carry nodev too" {
+    mk_findmnt
+    write_fixture $'/boot\tnosuid,relatime'   # missing nodev + noexec
+    run_wd
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -q '/boot:nodev'
+}
+
+@test "INVARIANT (per-mount-point isolation): expecting nosuid only — non-expected flag IS NOT alerted on" {
+    mk_findmnt
+    # /home doesn't carry noexec expectation (would break user execs); confirm not flagged.
+    write_fixture \
+        $'/home\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"all_flags_present"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,noexec,relatime'
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-mount-options -- ')
+    [ "${main_count}" = "1" ]
+}
