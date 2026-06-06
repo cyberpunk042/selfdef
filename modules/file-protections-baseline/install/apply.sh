@@ -35,12 +35,19 @@ fi
 tmp="$(mktemp "${SYSCTL_DROPIN}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$SRC"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$SYSCTL_DROPIN"
-log "wrote $SYSCTL_DROPIN"
+
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "$SYSCTL_DROPIN" ]] && cmp -s "$tmp" "$SYSCTL_DROPIN"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$SYSCTL_DROPIN"
+    log "wrote $SYSCTL_DROPIN"
+fi
 
 applied=0; soft_fails=0
 while IFS='=' read -r key val; do

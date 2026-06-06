@@ -36,12 +36,19 @@ fi
 tmp="$(mktemp "${SYSCTL_DROPIN}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE (kernel.sysrq=$WANT)"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE (kernel.sysrq=$WANT)"
     cat "$SRC"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$SYSCTL_DROPIN"
-log "wrote $SYSCTL_DROPIN"
+
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "$SYSCTL_DROPIN" ]] && cmp -s "$tmp" "$SYSCTL_DROPIN"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$SYSCTL_DROPIN"
+    log "wrote $SYSCTL_DROPIN"
+fi
 
 if sysctl -w "kernel.sysrq=$WANT" >/dev/null 2>&1; then
     log "live: kernel.sysrq=$WANT"

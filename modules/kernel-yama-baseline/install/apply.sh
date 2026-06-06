@@ -57,12 +57,19 @@ fi
 tmp="$(mktemp "${SYSCTL_DROPIN}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE (ptrace_scope=$WANT)"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE (ptrace_scope=$WANT)"
     cat "$SRC"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$SYSCTL_DROPIN"
-log "wrote $SYSCTL_DROPIN"
+
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "$SYSCTL_DROPIN" ]] && cmp -s "$tmp" "$SYSCTL_DROPIN"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$SYSCTL_DROPIN"
+    log "wrote $SYSCTL_DROPIN"
+fi
 
 # Apply live (subject to the EINVAL-if-live=3 caveat above).
 if sysctl -w "kernel.yama.ptrace_scope=$WANT" >/dev/null 2>&1; then

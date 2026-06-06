@@ -100,8 +100,18 @@ run_wd() {
     write_config "baseline"
     run_wd
     grep -q 'managed-by: selfdef rare-filesystems-disable' "${MODPROBE_FILE}"
-    grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "${MODPROBE_FILE}"
+    ! grep -qE '^# Generated [0-9]{4}-' "${MODPROBE_FILE}"  # no timestamp (2026-06-06 idempotency fix)
     grep -q 'profile=baseline' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite blacklist (2026-06-06 idempotency fix)" {
+    write_config "baseline"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${MODPROBE_FILE}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${MODPROBE_FILE}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "INVARIANT: DRY_RUN does not write blacklist file" {

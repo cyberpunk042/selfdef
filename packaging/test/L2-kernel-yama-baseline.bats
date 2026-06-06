@@ -126,6 +126,16 @@ run_wd() {
     [ -f "${DROPIN}" ]                  # drop-in still placed
 }
 
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in (2026-06-06 idempotency fix)" {
+    write_config "strict"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
 @test "INVARIANT: DRY_RUN does not write drop-in or fire sysctl -w" {
     write_config "strict"
     DRY_RUN=1 run_wd

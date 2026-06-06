@@ -31,12 +31,19 @@ fi
 tmp="$(mktemp "${MODPROBE_FILE}.XXXXXX")"
 {
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+    # No render-timestamp — defeats cmp -s idempotency (2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$SRC"
 } > "$tmp"
 chmod 0644 "$tmp"
-mv -f "$tmp" "$MODPROBE_FILE"
-log "wrote $MODPROBE_FILE"
+
+# Idempotency: skip rewrite when content unchanged.
+if [[ -f "$MODPROBE_FILE" ]] && cmp -s "$tmp" "$MODPROBE_FILE"; then
+    rm -f "$tmp"
+else
+    mv -f "$tmp" "$MODPROBE_FILE"
+    log "wrote $MODPROBE_FILE"
+fi
 
 # Warn if any of the target modules is currently loaded (the
 # blacklist takes effect on NEXT load; current load persists

@@ -100,7 +100,17 @@ run_wd() {
     run_wd
     grep -q 'managed-by: selfdef file-protections-baseline' "${DROPIN}"
     grep -q 'profile=baseline' "${DROPIN}"
-    grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "${DROPIN}"
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"  # no timestamp (2026-06-06 idempotency fix)
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in (2026-06-06 idempotency fix)" {
+    write_config "baseline"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "INVARIANT: DRY_RUN does not write drop-in or fire sysctl" {
