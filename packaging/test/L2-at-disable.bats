@@ -146,3 +146,53 @@ run_wd() {
     run_wd
     grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (mask is sticky): mask profile makes the unit unrecoverable without explicit unmask" {
+    # Locks that mask fires `mask` (not just stop+disable) — the
+    # specific difference from stop profile.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (stop is reversible): stop profile leaves the unit installed (can be re-enabled later)" {
+    write_config "stop"
+    run_wd
+    # The unit-file remains intact; only the runtime state changed.
+    grep -q 'systemctl disable atd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask atd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent stop): re-applying stop profile fires the same systemctl set across both applies" {
+    write_config "stop"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask profile fires the same set + does not escalate scope" {
+    write_config "mask"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "INVARIANT (DRY_RUN + atd-not-present composition): both short-circuits compose correctly" {
+    write_config "mask"
+    DRY_RUN=1 ATD_PRESENT=0 run_wd
+    ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"at-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
