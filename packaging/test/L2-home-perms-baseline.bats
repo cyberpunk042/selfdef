@@ -153,3 +153,58 @@ run_wd() {
     [ "$(stat -c '%a' "${HOMES}/bob")"   = "750" ]
     [ "$(stat -c '%a' "${HOMES}/carol")" = "750" ]
 }
+
+@test "INVARIANT (profile downgrade strict → group): NOT permitted to loosen 0700 → 0750" {
+    # Critical: even profile downgrade does NOT loosen. 'Only ever tighten'
+    # applies regardless of profile change direction.
+    write_config "strict"
+    mk_home alice 1001 0755
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "700" ]   # tightened to 700
+    write_config "group"
+    run_wd
+    # Profile downgrade does NOT loosen 700 to 750.
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "700" ]
+}
+
+@test "INVARIANT (world-readable 0755 + executable bit retained for tight 0750/0700)" {
+    # The owner exec bit MUST be retained, otherwise the user can't
+    # cd into their own home.
+    write_config "group"
+    mk_home alice 1001 0755
+    run_wd
+    # Owner read+write+exec is bits 7; check 75x not 64x.
+    perms="$(stat -c '%a' "${HOMES}/alice")"
+    case "${perms}" in 750|700) : ;; *) fail "perms ${perms} drop owner-exec" ;; esac
+}
+
+@test "INVARIANT (uid=1000 boundary): exactly uid 1000 is treated as user (not system)" {
+    # The system-accounts skip is uid < 1000. uid=1000 should be acted on.
+    write_config "group"
+    mk_home boundary 1000 0755
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/boundary")" = "750" ]
+}
+
+@test "INVARIANT (idempotent — re-apply on already-tightened home is a no-op)" {
+    write_config "group"
+    mk_home alice 1001 0755
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "750" ]
+    # Idempotent — re-apply should not error.
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "750" ]
+}
+
+@test "INVARIANT (operator can opt-out specific user via skip-list config)" {
+    # Default skip-prefixes: operator + selfdef-*. Other users should
+    # be tightened. Locks the canonical skip-list shape.
+    write_config "group"
+    mk_home alice 1001 0755
+    mk_home operator 1002 0755   # skipped
+    mk_home selfdef-test 1003 0755 # skipped
+    run_wd
+    [ "$(stat -c '%a' "${HOMES}/alice")" = "750" ]
+    [ "$(stat -c '%a' "${HOMES}/operator")" = "755" ]
+    [ "$(stat -c '%a' "${HOMES}/selfdef-test")" = "755" ]
+}
