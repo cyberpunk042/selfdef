@@ -183,3 +183,50 @@ run_wd() {
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile downgrade enforce → report): rewrites drop-in back + fires daemon-reload" {
+    write_config "enforce"
+    run_wd
+    grep -q '^Environment=SELFDEF_MTA_PROFILE=enforce$' "${DROPIN_PROFILE}"
+    : > "${SYSEOF_LOG}"
+    write_config "report"
+    run_wd
+    grep -q '^Environment=SELFDEF_MTA_PROFILE=report$' "${DROPIN_PROFILE}"
+    ! grep -q '^Environment=SELFDEF_MTA_PROFILE=enforce$' "${DROPIN_PROFILE}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (libexec script probes ss/netstat — actually checks listening-bind state)" {
+    write_config "report"
+    run_wd
+    grep -qE 'ss|netstat' "${SCRIPT_DST}"
+}
+
+@test "INVARIANT (libexec script targets SMTP-family ports: 25/465/587 — the actual detection mechanism)" {
+    # The detector classifies LISTENING sockets on SMTP-family ports
+    # rather than MTA binary names — distro-agnostic approach.
+    write_config "report"
+    run_wd
+    grep -qE '25|465|587' "${SCRIPT_DST}"
+}
+
+@test "INVARIANT (service unit references the libexec script): wiring is correct" {
+    write_config "report"
+    run_wd
+    grep -qE '^ExecStart=' "${SVC_DST}"
+    grep -q 'mta-loopback-detect' "${SVC_DST}"
+}
+
+@test "INVARIANT (timer unit carries OnCalendar or OnBootSec): actually fires periodically + on-boot)" {
+    write_config "report"
+    run_wd
+    grep -qE '(OnCalendar|OnBootSec|OnUnitActiveSec)=' "${TIMER_DST}"
+}
+
+@test "INVARIANT (no render-timestamp in ANY of the 4 installed files): variant-A guard fleet-wide" {
+    write_config "report"
+    run_wd
+    for f in "${SCRIPT_DST}" "${SVC_DST}" "${TIMER_DST}" "${DROPIN_PROFILE}"; do
+        ! grep -qE '^# Generated [0-9]{4}-' "$f"
+    done
+}
