@@ -47,8 +47,11 @@ else
 fi
 
 # PAM stack wiring detection (same as pam-faillock).
-pam_files=( /etc/pam.d/common-password /etc/pam.d/system-auth \
-            /etc/pam.d/password-auth   /etc/pam.d/passwd )
+# SELFDEF_PWQUALITY_PAM_DIR added 2026-06-06 for L2 testability —
+# live default unchanged.
+_pam_dir="${SELFDEF_PWQUALITY_PAM_DIR:-/etc/pam.d}"
+pam_files=( "${_pam_dir}/common-password" "${_pam_dir}/system-auth" \
+            "${_pam_dir}/password-auth"   "${_pam_dir}/passwd" )
 wired=false
 for pf in "${pam_files[@]}"; do
     if [[ -r "$pf" ]] && grep -q "pam_pwquality\.so" "$pf"; then

@@ -1,0 +1,160 @@
+#!/usr/bin/env bats
+# L2 functional suite for pam-pwquality.
+#
+# pam-pwquality installs /etc/security/pwquality.conf.d/50-
+# selfdef.conf with the chosen password-quality profile.
+# pam_pwquality.so reads pwquality.conf + the conf.d/ drop-ins
+# to enforce length / charset-class / dictionary checks at
+# password-change time.
+#
+# Profiles:
+#   standard → NIST SP 800-63B-aligned baseline (length min,
+#              breach-DB-style restrictions)
+#   strict   → audit-frameworks-aligned bar (CIS Benchmark /
+#              DISA STIG family — tighter length + class
+#              requirements + minimum-character-classes
+#              constraints)
+#
+# DETECT-AND-NOTICE pattern: pam_pwquality.so must ALSO be
+# wired into /etc/pam.d/common-password (Debian) or system-
+# auth/password-auth (RHEL/Fedora). The module installs the
+# drop-in unconditionally; if no /etc/pam.d/* references the
+# module the drop-in is DORMANT and a NOTICE logs distro-
+# specific enable instructions.
+#
+# Adds SELFDEF_PWQUALITY_PAM_DIR env-var (added 2026-06-06)
+# for L2 testability. SELFDEF_PWQUALITY_D was already exposed
+# in the script. Live defaults unchanged.
+#
+# Run with: bats packaging/test/L2-pam-pwquality.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/pam-pwquality/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    CONF="${TMP}/pam-pwquality.toml"
+    PWQUALITY_D="${TMP}/pwquality.conf.d"
+    DST="${PWQUALITY_D}/50-selfdef.conf"
+    PAM_DIR="${TMP}/pam.d"
+    mkdir -p "${PAM_DIR}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_PWQUALITY_CONFIG="${CONF}" \
+    SELFDEF_PWQUALITY_D="${PWQUALITY_D}" \
+    SELFDEF_PWQUALITY_PAM_DIR="${PAM_DIR}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_PWQUALITY_CONFIG="${TMP}/missing.toml"
+    run env SELFDEF_PWQUALITY_CONFIG="${SELFDEF_PWQUALITY_CONFIG}" \
+        SELFDEF_PWQUALITY_D="${PWQUALITY_D}" \
+        SELFDEF_PWQUALITY_PAM_DIR="${PAM_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config not readable"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env SELFDEF_PWQUALITY_CONFIG="${CONF}" \
+        SELFDEF_PWQUALITY_D="${PWQUALITY_D}" \
+        SELFDEF_PWQUALITY_PAM_DIR="${PAM_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be standard|strict"* ]]
+}
+
+@test "standard profile installs the drop-in" {
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    # The standard profile config should declare a password length
+    # floor (minlen) — universal across pwquality profiles.
+    grep -qE '^[[:space:]]*minlen' "${DST}"
+}
+
+@test "strict profile installs the drop-in with stricter content" {
+    write_config "strict"
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE '^[[:space:]]*minlen' "${DST}"
+}
+
+@test "drop-in is chmod 0644 (system-config convention)" {
+    write_config "standard"
+    run_wd
+    [ "$(stat -c '%a' "${DST}")" = "644" ]
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in" {
+    write_config "standard"
+    run_wd
+    [ -f "${DST}" ]
+    mtime_before="$(stat -c '%Y' "${DST}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DST}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: profile switch standard → strict changes the drop-in (content differs)" {
+    write_config "standard"
+    run_wd
+    sha_standard="$(sha256sum "${DST}" | awk '{print $1}')"
+    write_config "strict"
+    run_wd
+    sha_strict="$(sha256sum "${DST}" | awk '{print $1}')"
+    [ "${sha_standard}" != "${sha_strict}" ]
+}
+
+@test "INVARIANT: DRY_RUN does not write the drop-in" {
+    write_config "standard"
+    DRY_RUN=1 run_wd
+    ! [ -f "${DST}" ]
+}
+
+@test "DETECT-AND-NOTICE: pam_pwquality.so unwired in /etc/pam.d → log distro-specific enable instructions" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *"NOTICE: pwquality config installed but no /etc/pam.d/*"* ]] \
+        || [[ "${output}" == *"pam_pwquality.so"* && "${output}" == *"installed"* ]]
+}
+
+@test "DETECT-AND-NOTICE: pam_pwquality.so wired in common-password → no unwired-NOTICE" {
+    cat > "${PAM_DIR}/common-password" <<'EOF'
+password requisite pam_pwquality.so retry=3
+password [success=1 default=ignore] pam_unix.so obscure use_authtok try_first_pass yescrypt
+EOF
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" != *"installed but no /etc/pam.d/*"* ]]
+    [[ "${output}" == *'pam_wired=true'* ]]
+}
+
+@test "default profile is standard (no profile key)" {
+    : > "${CONF}"
+    run_wd
+    [ -f "${DST}" ]
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'profile=standard'* ]]
+}
+
+@test "emit_status reports changes count + pam_wired status in JSON" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'changes=1'* ]]
+    [[ "${output}" == *'pam_wired=false'* ]]
+    # Second apply is a no-op → changes=0.
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'changes=0'* ]]
+}
