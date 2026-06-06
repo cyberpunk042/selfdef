@@ -189,3 +189,68 @@ seed_trust_root() {
     [ "${status}" = "0" ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (multi-event aggregation: 2 tampered baselines + 1 removed wrapper → critical=5 in JSON; per-line counting)" {
+    # Locks accurate counting when multiple critical events occur
+    # in the same scan. Each tampered baseline surfaces as 2 lines
+    # (old removed + new added) per the comm -23 / comm -13
+    # split — so 2 tampered baselines = 4 critical lines + 1
+    # removed wrapper = 5 critical. Lock the per-line counting
+    # contract so operator dashboards don't undercount.
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    printf 'file\t/etc/crontab\tEVIL888\n' > "${STATE}/cron-job-baseline.tsv"
+    rm -f "${LIBEXEC}/account-watchdog.sh"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"critical":5'
+}
+
+@test "INVARIANT (BOTH .tsv-class and .sh-class tampers in same scan: both flow through critical-class path → single alert)" {
+    # A coordinated attack edits BOTH a baseline (.tsv) AND a
+    # wrapper (.sh) — both should escalate to alert in the same
+    # scan; only one alert JSON line emitted (the consolidated
+    # one).
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    printf '#!/bin/sh\n# PATCHED\nexit 0\n' > "${LIBEXEC}/account-watchdog.sh"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-self-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (manifest TSV format: each line has at least 3 fields — kind\\tpath\\thash for diff replay)" {
+    # Locks the manifest schema for downstream selfdef-relabel
+    # + integrity-restore tooling. A regression to 2-field format
+    # would lose the kind classification (tsv vs sh).
+    seed_trust_root
+    run_wd
+    [ -s "${MANIFEST}" ]
+    awk -F'\t' '{if(NF<3) bad=1} END{exit bad?1:0}' "${MANIFEST}"
+}
+
+@test "INVARIANT (auto-trust SAME-scan timing: alert fires AND manifest gets refreshed in the SAME scan; second-run sees intact)" {
+    # Locks the auto-trust meta-watchdog timing contract: alert
+    # for THIS run, but the manifest is updated atomically with
+    # the alert so the NEXT run reports intact. Locks against a
+    # regression that refreshes BEFORE alert (would suppress) OR
+    # that doesn't refresh at all (would re-alert forever).
+    seed_trust_root
+    run_wd
+    printf 'file\t/etc/passwd\tEVIL999\n' > "${STATE}/account-baseline.tsv"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'                  # this run alerts
+    cap | grep -q '"severity":"alert"'
+    # Verify the manifest got refreshed — the new EVIL999 hash
+    # must now be in the manifest, so the next run sees intact.
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_intact"'
+    cap | grep -q '"severity":"ok"'
+}
