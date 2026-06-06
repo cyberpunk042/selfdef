@@ -167,3 +167,43 @@ run_wd() {
     run_wd
     grep -q 'profile=security-only' "${DNF_AUTO_CONF}"
 }
+
+@test "INVARIANT (security-only carries apply_updates = yes — the actual auto-apply mechanism)" {
+    write_config "security-only"
+    run_wd
+    grep -qE 'apply_updates\s*=\s*yes' "${DNF_AUTO_CONF}"
+}
+
+@test "INVARIANT (security-only carries upgrade_type = security — the actual scope-restriction)" {
+    write_config "security-only"
+    run_wd
+    grep -qE 'upgrade_type\s*=\s*security' "${DNF_AUTO_CONF}"
+}
+
+@test "INVARIANT (security-and-reboot carries reboot = when-needed): asymmetric profile content" {
+    write_config "security-and-reboot"
+    run_wd
+    grep -qE 'reboot\s*=\s*(when-needed|when-changed|yes)' "${DNF_AUTO_CONF}"
+}
+
+@test "INVARIANT (security-only does NOT carry reboot directive): asymmetric content lock" {
+    write_config "security-only"
+    run_wd
+    ! grep -qE '^reboot\s*=\s*(when-needed|when-changed|yes)' "${DNF_AUTO_CONF}"
+}
+
+@test "INVARIANT (profile downgrade security-and-reboot → security-only): rewrites without reboot" {
+    write_config "security-and-reboot"
+    run_wd
+    grep -q 'profile=security-and-reboot' "${DNF_AUTO_CONF}"
+    write_config "security-only"
+    run_wd
+    grep -q 'profile=security-only' "${DNF_AUTO_CONF}"
+    ! grep -q 'profile=security-and-reboot' "${DNF_AUTO_CONF}"
+}
+
+@test "INVARIANT (no render-timestamp in automatic.conf): defeats cmp -s idempotency" {
+    write_config "security-only"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DNF_AUTO_CONF}"
+}
