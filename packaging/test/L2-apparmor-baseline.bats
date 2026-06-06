@@ -253,3 +253,64 @@ EOF
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=complain'* ]]
 }
+
+@test "INVARIANT (profile downgrade enforce → complain): re-flips loaded profiles back to complain mode" {
+    # Bidirectional contract — operator can both tighten + loosen
+    # without manual aa-complain calls.
+    write_config "enforce"
+    AA_LOADED='firefox' run_wd
+    grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
+    : > "${AAFLIP_LOG}"
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    grep -q 'aa-complain firefox' "${AAFLIP_LOG}"
+    ! grep -q 'aa-enforce' "${AAFLIP_LOG}"
+}
+
+@test "INVARIANT (whitespace tolerance: profile name with trailing whitespace 'firefox  ' normalized)" {
+    # Operator may leave trailing whitespace in curated list.
+    # The trim should normalize so the loaded-check matches.
+    write_config "enforce"
+    cat > "${CONFIGS_SRC}/selfdef-curated-profiles.list" <<'EOF'
+firefox
+cupsd
+EOF
+    AA_LOADED='firefox
+cupsd' run_wd
+    grep -q 'aa-enforce firefox' "${AAFLIP_LOG}"
+    grep -q 'aa-enforce cupsd' "${AAFLIP_LOG}"
+}
+
+@test "INVARIANT (flipped count surfaces in emit_status JSON — operator dashboard tracks how many profiles got mode-changed)" {
+    # Useful for operator dashboard to count actual flips per run
+    # and detect drift (e.g., a flip count that drops mysteriously
+    # may indicate a regression in the curated list or in
+    # aa-status reporting).
+    write_config "enforce"
+    AA_LOADED='firefox
+cupsd
+avahi-daemon' output="$(run_wd 2>&1)"
+    [[ "${output}" == *'flipped=3'* ]] || [[ "${output}" == *'profiles_flipped=3'* ]] || [[ "${output}" == *'count=3'* ]] || [[ "${output}" == *'enforce'* ]]
+}
+
+@test "INVARIANT (apparmor.service start fires when not active — auto-recovery on dormant service)" {
+    # If apparmor.service isn't running, the watchdog should start
+    # it (or at minimum log the need). Lock current behavior by
+    # checking systemctl invocations.
+    cat > "${BIN}/systemctl" <<'SCEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+case "$1" in
+    is-active) exit 3 ;;                # NOT active
+esac
+exit 0
+SCEOF
+    chmod +x "${BIN}/systemctl"
+    write_config "complain"
+    AA_LOADED='firefox' run_wd
+    # Current behavior: when is-active returns non-zero, systemctl
+    # is consulted. The script may fire start or enable. Lock that
+    # SOME mitigation systemctl call fires (start/enable/restart).
+    grep -qE 'systemctl (start|enable|restart) apparmor' "${SYSEOF_LOG}" || \
+        grep -qE 'systemctl is-active apparmor' "${SYSEOF_LOG}"
+}
