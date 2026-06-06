@@ -190,3 +190,41 @@ run_wd() {
     run_wd
     ! grep -qE '0\.0\.0\.0|:::$' "${DST}"
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + fires restart)" {
+    write_config "loopback"
+    run_wd
+    [ -f "${DST}" ]
+    rm -f "${DST}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${DST}" ]
+    grep -qE '^DNSStubListener=yes' "${DST}"
+    grep -q 'restart systemd-resolved' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (drop-in carries managed-by header marker — operator audit trail + stale-cleanup)" {
+    write_config "loopback"
+    run_wd
+    grep -qE '^#.*selfdef.*loopback-only-dns|^#.*managed-by' "${DST}"
+}
+
+@test "INVARIANT (disabled-listener profile does NOT carry 127.0.0.53 — scope boundary; profiles are mutually-exclusive mechanisms)" {
+    # disabled-listener turns OFF the stub listener entirely. Lock
+    # that this profile doesn't accidentally also include the
+    # loopback bind address (which only makes sense with the
+    # listener enabled).
+    write_config "disabled-listener"
+    run_wd
+    grep -qE '^DNSStubListener=no' "${DST}"
+    # No DNS= line binding to loopback (only loopback profile sets that).
+    ! grep -qE '^DNS=127\.0\.0\.53' "${DST}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "loopback"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"loopback-only-dns"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=loopback'* ]]
+}
