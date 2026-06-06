@@ -71,10 +71,16 @@ backup_and_install() {
     return 0
 }
 
+# Destination paths overridable via env-vars (operator-test
+# affordance + L2 testability). Live defaults unchanged.
+ISSUE_DST="${SELFDEF_MOTD_ISSUE:-/etc/issue}"
+ISSUE_NET_DST="${SELFDEF_MOTD_ISSUE_NET:-/etc/issue.net}"
+MOTD_DST="${SELFDEF_MOTD_MOTD:-/etc/motd}"
+
 changes=0
-backup_and_install "${TEMPLATES_SRC}/issue.txt"     "/etc/issue"     "issue.txt"     && changes=$((changes + 1)) || true
-backup_and_install "${TEMPLATES_SRC}/issue.net.txt" "/etc/issue.net" "issue.net.txt" && changes=$((changes + 1)) || true
-backup_and_install "${TEMPLATES_SRC}/motd.txt"      "/etc/motd"      "motd.txt"      && changes=$((changes + 1)) || true
+backup_and_install "${TEMPLATES_SRC}/issue.txt"     "${ISSUE_DST}"     "issue.txt"     && changes=$((changes + 1)) || true
+backup_and_install "${TEMPLATES_SRC}/issue.net.txt" "${ISSUE_NET_DST}" "issue.net.txt" && changes=$((changes + 1)) || true
+backup_and_install "${TEMPLATES_SRC}/motd.txt"      "${MOTD_DST}"      "motd.txt"      && changes=$((changes + 1)) || true
 
 # Verbose profile: install the dynamic motd hook.
 DYN_HOOK="${UPDATE_MOTD_DIR}/50-selfdef-presence"
