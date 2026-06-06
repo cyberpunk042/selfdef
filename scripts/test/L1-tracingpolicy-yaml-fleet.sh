@@ -176,8 +176,10 @@ PY
 )
 echo "${result}"
 
-# Extract failure count from python output
-fleet_failures=$(echo "${result}" | grep -oE 'FLEET_FAILURES=[0-9]+' | head -1 | cut -d= -f2)
+# Extract failure count from python output. grep may match nothing on
+# a green run (no FLEET_FAILURES line is emitted then); || true so
+# set -e doesn't abort the script.
+fleet_failures=$(echo "${result}" | { grep -oE 'FLEET_FAILURES=[0-9]+' || true; } | head -1 | cut -d= -f2)
 if [[ -n "${fleet_failures}" && "${fleet_failures}" -gt 0 ]]; then
     failures=$((failures + fleet_failures))
 fi
