@@ -163,3 +163,61 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — ssh-client inventory enumerates outbound-ssh exec surface)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (ProxyCommand under /var/tmp): writable-root expansion" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    printf 'Host *\n    ProxyCommand /var/tmp/.x %%h %%p\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (LocalCommand under /tmp — symmetric axis to ProxyCommand)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    printf 'Host *\n    PermitLocalCommand yes\n    LocalCommand /tmp/.x\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (Match exec under /var/tmp): writable-root on Match-exec axis" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    printf 'Match host *.internal exec "/var/tmp/.probe"\n    User root\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (config in ssh_config.d also scanned — not only the main file)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    printf 'Host *\n    ProxyCommand /tmp/.dropin-attacker %%h %%p\n' > "${CONFD}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable ssh_config → alert)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'Host *\n    ProxyCommand /usr/bin/nc %%h %%p\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-ssh-client-config -- ')
+    [ "${main_count}" = "1" ]
+}
