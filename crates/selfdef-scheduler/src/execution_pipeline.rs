@@ -102,7 +102,10 @@ mod tests {
 
     #[test]
     fn stage_content_verbatim() {
-        assert_eq!(PipelineStage::Fetch.content(), "user task, memory refs, branch state");
+        assert_eq!(
+            PipelineStage::Fetch.content(),
+            "user task, memory refs, branch state"
+        );
         assert_eq!(
             PipelineStage::Retire.content(),
             "Blackwell verifies high-value transitions"
@@ -123,7 +126,10 @@ mod tests {
 
     #[test]
     fn architecture_is_verbatim() {
-        assert_eq!(ARCHITECTURE, "speculative AI execution with deterministic commit");
+        assert_eq!(
+            ARCHITECTURE,
+            "speculative AI execution with deterministic commit"
+        );
     }
 
     #[test]

@@ -161,6 +161,9 @@ mod tests {
 
     #[test]
     fn doctrine_is_verbatim() {
-        assert_eq!(DOCTRINE, "many branches, shared context, deterministic commit");
+        assert_eq!(
+            DOCTRINE,
+            "many branches, shared context, deterministic commit"
+        );
     }
 }

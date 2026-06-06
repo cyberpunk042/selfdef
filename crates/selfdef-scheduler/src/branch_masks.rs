@@ -134,7 +134,11 @@ mod tests {
 
     #[test]
     fn dead_mask_when_budget_exhausted() {
-        let s = BranchScalars { budget: 10, cost: 10, ..base() };
+        let s = BranchScalars {
+            budget: 10,
+            cost: 10,
+            ..base()
+        };
         let (b, m) = tick(&s, DEFAULT_RISK_THRESHOLD);
         assert_eq!(b, 0);
         assert!(m.dead);
@@ -142,7 +146,11 @@ mod tests {
 
     #[test]
     fn budget_saturates_at_zero_never_negative() {
-        let s = BranchScalars { budget: 5, cost: 10, ..base() };
+        let s = BranchScalars {
+            budget: 5,
+            cost: 10,
+            ..base()
+        };
         let (b, m) = tick(&s, DEFAULT_RISK_THRESHOLD);
         assert_eq!(b, 0);
         assert!(m.dead);
@@ -150,48 +158,81 @@ mod tests {
 
     #[test]
     fn risk_mask_above_threshold() {
-        let s = BranchScalars { risk: 0.8, ..base() };
+        let s = BranchScalars {
+            risk: 0.8,
+            ..base()
+        };
         let (_, m) = tick(&s, 0.5);
         assert!(m.risk);
-        let s2 = BranchScalars { risk: 0.3, ..base() };
+        let s2 = BranchScalars {
+            risk: 0.3,
+            ..base()
+        };
         let (_, m2) = tick(&s2, 0.5);
         assert!(!m2.risk);
     }
 
     #[test]
     fn oracle_mask_low_confidence_high_value() {
-        let s = BranchScalars { confidence: Confidence::Low, value: Value::High, ..base() };
+        let s = BranchScalars {
+            confidence: Confidence::Low,
+            value: Value::High,
+            ..base()
+        };
         let (_, m) = tick(&s, DEFAULT_RISK_THRESHOLD);
         assert!(m.oracle);
         // low confidence but LOW value → not oracle
-        let s2 = BranchScalars { confidence: Confidence::Low, value: Value::Low, ..base() };
+        let s2 = BranchScalars {
+            confidence: Confidence::Low,
+            value: Value::Low,
+            ..base()
+        };
         let (_, m2) = tick(&s2, DEFAULT_RISK_THRESHOLD);
         assert!(!m2.oracle);
     }
 
     #[test]
     fn scout_mask_medium_confidence_low_cost() {
-        let s = BranchScalars { confidence: Confidence::Medium, cost_low: true, ..base() };
+        let s = BranchScalars {
+            confidence: Confidence::Medium,
+            cost_low: true,
+            ..base()
+        };
         let (_, m) = tick(&s, DEFAULT_RISK_THRESHOLD);
         assert!(m.scout);
         // medium confidence but not low cost → not scout
-        let s2 = BranchScalars { confidence: Confidence::Medium, cost_low: false, ..base() };
+        let s2 = BranchScalars {
+            confidence: Confidence::Medium,
+            cost_low: false,
+            ..base()
+        };
         let (_, m2) = tick(&s2, DEFAULT_RISK_THRESHOLD);
         assert!(!m2.scout);
     }
 
     #[test]
     fn tool_mask_requested_and_allowed() {
-        let s = BranchScalars { tool_requested: true, tool_allowed: true, ..base() };
+        let s = BranchScalars {
+            tool_requested: true,
+            tool_allowed: true,
+            ..base()
+        };
         assert!(tick(&s, DEFAULT_RISK_THRESHOLD).1.tool);
         // requested but not allowed → masked off
-        let s2 = BranchScalars { tool_requested: true, tool_allowed: false, ..base() };
+        let s2 = BranchScalars {
+            tool_requested: true,
+            tool_allowed: false,
+            ..base()
+        };
         assert!(!tick(&s2, DEFAULT_RISK_THRESHOLD).1.tool);
     }
 
     #[test]
     fn merge_mask_on_high_similarity() {
-        let s = BranchScalars { similarity_high: true, ..base() };
+        let s = BranchScalars {
+            similarity_high: true,
+            ..base()
+        };
         assert!(tick(&s, DEFAULT_RISK_THRESHOLD).1.merge);
     }
 

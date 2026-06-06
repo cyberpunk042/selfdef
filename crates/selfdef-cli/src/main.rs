@@ -4272,8 +4272,8 @@ async fn main() -> Result<()> {
                      --authority operator-overridden for the 24h tier."
                 );
             }
-            let scope_parsed = parse_pivot_scope(&scope)
-                .map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+            let scope_parsed =
+                parse_pivot_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
 
             if dry_run {
                 println!(
@@ -4335,8 +4335,8 @@ async fn main() -> Result<()> {
             dry_run,
         } => {
             use selfdef_bpf_map_element_clear_backend::{
-                AuthorityTier, BpfMapElementClearBackend, ClearRequest, ClearScope, InMemoryBackend,
-                parse_key_hex, parse_map_spec,
+                AuthorityTier, BpfMapElementClearBackend, ClearRequest, ClearScope,
+                InMemoryBackend, parse_key_hex, parse_map_spec,
             };
             use std::time::Duration;
 
@@ -4349,8 +4349,8 @@ async fn main() -> Result<()> {
                      /sys/fs/bpf/<name> | id:<u32> | name:<map-name>"
                 );
             }
-            let scope_parsed = parse_clear_scope(&scope)
-                .map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
+            let scope_parsed =
+                parse_clear_scope(&scope).map_err(|e| anyhow::anyhow!("invalid --scope: {e}"))?;
             match scope_parsed {
                 ClearScope::Element => {
                     let Some(k) = key.as_ref() else {

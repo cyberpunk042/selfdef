@@ -118,7 +118,10 @@ mod tests {
         assert_eq!(m.len(), 10);
         assert_eq!(m[0].name(), "task success");
         assert_eq!(m[9].name(), "memory usefulness");
-        assert_eq!(OptimizationMetric::OracleCallsPerTask.name(), "oracle calls per task");
+        assert_eq!(
+            OptimizationMetric::OracleCallsPerTask.name(),
+            "oracle calls per task"
+        );
     }
 
     #[test]

@@ -74,13 +74,12 @@ async fn fs_backend_persists_all_scope() {
     assert_eq!(receipt.elements_cleared, 42);
     let bytes = std::fs::read(tmp.path().join("active.json")).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(
-        v.as_array().unwrap()[0]["scope"].as_str().unwrap(),
-        "All"
-    );
+    assert_eq!(v.as_array().unwrap()[0]["scope"].as_str().unwrap(), "All");
     assert!(v.as_array().unwrap()[0]["key_hex"].is_null());
     assert_eq!(
-        v.as_array().unwrap()[0]["elements_cleared"].as_u64().unwrap(),
+        v.as_array().unwrap()[0]["elements_cleared"]
+            .as_u64()
+            .unwrap(),
         42
     );
 }

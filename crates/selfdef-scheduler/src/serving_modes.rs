@@ -88,8 +88,14 @@ mod tests {
 
     #[test]
     fn goals_verbatim() {
-        assert_eq!(ServingMode::LowLatencyInteractive.goal(), "fastest good answer");
-        assert_eq!(ServingMode::AgenticBatch.goal(), "many branches / tool loops");
+        assert_eq!(
+            ServingMode::LowLatencyInteractive.goal(),
+            "fastest good answer"
+        );
+        assert_eq!(
+            ServingMode::AgenticBatch.goal(),
+            "many branches / tool loops"
+        );
         assert_eq!(
             ServingMode::LongContextWorkbench.goal(),
             "huge docs / repo / long sessions"
@@ -102,8 +108,16 @@ mod tests {
             ServingMode::LowLatencyInteractive.use_for(),
             "chat, coding help, command planning"
         );
-        assert!(ServingMode::AgenticBatch.use_for().contains("research agents"));
-        assert!(ServingMode::LongContextWorkbench.use_for().contains("repo-wide work"));
+        assert!(
+            ServingMode::AgenticBatch
+                .use_for()
+                .contains("research agents")
+        );
+        assert!(
+            ServingMode::LongContextWorkbench
+                .use_for()
+                .contains("repo-wide work")
+        );
     }
 
     #[test]

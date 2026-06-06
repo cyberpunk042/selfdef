@@ -128,7 +128,10 @@ mod tests {
     #[test]
     fn stage_names_verbatim() {
         assert_eq!(ToolCallStage::ParseJson.name(), "parse JSON");
-        assert_eq!(ToolCallStage::CheckPermissionBits.name(), "check permission bits");
+        assert_eq!(
+            ToolCallStage::CheckPermissionBits.name(),
+            "check permission bits"
+        );
         assert_eq!(ToolCallStage::CommitOrReject.name(), "commit or reject");
     }
 

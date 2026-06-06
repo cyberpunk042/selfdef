@@ -130,7 +130,10 @@ mod tests {
     #[test]
     fn engine_names_are_verbatim() {
         assert_eq!(CortexEngine::BranchEngine.name(), "Branch Engine");
-        assert_eq!(CortexEngine::KvCacheController.name(), "KV Cache Controller");
+        assert_eq!(
+            CortexEngine::KvCacheController.name(),
+            "KV Cache Controller"
+        );
         assert_eq!(CortexEngine::ReplayLog.name(), "Replay Log");
     }
 
@@ -146,14 +149,26 @@ mod tests {
 
     #[test]
     fn key_engine_module_mappings() {
-        assert!(CortexEngine::PolicyEngine.implemented_by().contains(&"scheduling_law"));
-        assert!(CortexEngine::SpeculationEngine
-            .implemented_by()
-            .contains(&"speculation_tree"));
-        assert!(CortexEngine::KvCacheController
-            .implemented_by()
-            .contains(&"branch_kv_fusion"));
-        assert!(CortexEngine::ReplayLog.implemented_by().contains(&"decision_audit"));
+        assert!(
+            CortexEngine::PolicyEngine
+                .implemented_by()
+                .contains(&"scheduling_law")
+        );
+        assert!(
+            CortexEngine::SpeculationEngine
+                .implemented_by()
+                .contains(&"speculation_tree")
+        );
+        assert!(
+            CortexEngine::KvCacheController
+                .implemented_by()
+                .contains(&"branch_kv_fusion")
+        );
+        assert!(
+            CortexEngine::ReplayLog
+                .implemented_by()
+                .contains(&"decision_audit")
+        );
     }
 
     #[test]

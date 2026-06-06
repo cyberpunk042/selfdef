@@ -65,11 +65,11 @@ pub mod branch_kv_fusion;
 pub mod branch_lifecycle;
 pub mod branch_masks;
 pub mod config;
-pub mod decide;
 pub mod critical_separation;
 pub mod data_plane;
 pub mod data_plane_services;
 pub mod dcgm;
+pub mod decide;
 pub mod decision_audit;
 pub mod driver_replay;
 pub mod execution_pipeline;
@@ -87,8 +87,8 @@ pub mod memory_scheduling;
 pub mod objective_signals;
 pub mod ocsf_emitter;
 pub mod policy_signer;
-pub mod prometheus_exporter;
 pub mod program_optimization;
+pub mod prometheus_exporter;
 pub mod psi;
 pub mod reflexion;
 pub mod request_lifecycle;
@@ -103,11 +103,11 @@ pub mod speculative_parallelism;
 pub mod system_planes;
 pub mod tier;
 pub mod tier_work_policy;
-pub mod worker_status_word;
 pub mod tool_call_transaction;
-pub mod tool_schema_kv;
 pub mod tool_scheduling;
+pub mod tool_schema_kv;
 pub mod tui_panel;
+pub mod worker_status_word;
 
 pub use decision_audit::DriverAuditError;
 
@@ -921,17 +921,14 @@ pub fn write_ring_buffer(
         sanitize_for_filename(&decision.request_id)
     );
     let final_path = ring.join(format!("{stem}.json"));
-    let tmp_path = ring.join(format!(
-        ".{stem}.tmp.{}.{}",
-        std::process::id(),
-        now_ms()
-    ));
+    let tmp_path = ring.join(format!(".{stem}.tmp.{}.{}", std::process::id(), now_ms()));
 
     {
         let mut f = fs::File::create(&tmp_path).map_err(|e| SchedulerError::Io(e.to_string()))?;
         f.write_all(json.as_bytes())
             .map_err(|e| SchedulerError::Io(e.to_string()))?;
-        f.sync_all().map_err(|e| SchedulerError::Io(e.to_string()))?;
+        f.sync_all()
+            .map_err(|e| SchedulerError::Io(e.to_string()))?;
     }
     fs::rename(&tmp_path, &final_path).map_err(|e| {
         // best-effort cleanup of the temp file on rename failure
@@ -1418,7 +1415,10 @@ mod tests {
 
     #[test]
     fn sanitize_for_filename_replaces_unsafe_chars() {
-        assert_eq!(sanitize_for_filename("req-0190abcd_7e11.7"), "req-0190abcd_7e11.7");
+        assert_eq!(
+            sanitize_for_filename("req-0190abcd_7e11.7"),
+            "req-0190abcd_7e11.7"
+        );
         assert_eq!(sanitize_for_filename("a/b c:d"), "a_b_c_d");
     }
 }

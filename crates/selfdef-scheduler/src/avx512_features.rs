@@ -68,9 +68,7 @@ impl Avx512Feature {
     #[must_use]
     pub const fn ai_use(self) -> &'static str {
         match self {
-            Self::Vpternlog => {
-                "fuse policy logic: commit = verified & valid | trusted_fast_path"
-            }
+            Self::Vpternlog => "fuse policy logic: commit = verified & valid | trusted_fast_path",
             Self::VpcompressVpexpand => "pack active branches into dense GPU batches",
             Self::Vpopcntdq => "count overlap in memory sketches / permission masks",
             Self::Vp2intersect => {
@@ -157,7 +155,10 @@ mod tests {
 
     #[test]
     fn caution_is_verbatim() {
-        assert_eq!(CAUTION, "we are engineers, not priests of instruction mnemonics");
+        assert_eq!(
+            CAUTION,
+            "we are engineers, not priests of instruction mnemonics"
+        );
     }
 
     #[test]

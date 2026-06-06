@@ -194,7 +194,10 @@ pub fn render_panel_styled(reading: &DriverReading, style: PanelStyle) -> String
     render_source_row(&mut out, "DCGM", &h.dcgm_status, style);
     render_source_row(&mut out, "human-gate", &h.human_gate_status, style);
     let _ = writeln!(out, " {rule}");
-    let _ = writeln!(out, " MEASUREMENT                       THRESHOLD     STATE");
+    let _ = writeln!(
+        out,
+        " MEASUREMENT                       THRESHOLD     STATE"
+    );
     render_pct_row(
         &mut out,
         "CPU PSI",
@@ -244,20 +247,13 @@ pub fn render_panel_styled(reading: &DriverReading, style: PanelStyle) -> String
         style,
     );
     let _ = writeln!(out, " {rule}");
-    let _ = writeln!(
-        out,
-        " Degraded substrates: {}/3",
-        h.degraded_count()
-    );
+    let _ = writeln!(out, " Degraded substrates: {}/3", h.degraded_count());
     let _ = writeln!(
         out,
         " Backpressure surfaces firing: {}/6",
         backpressure_count(s)
     );
-    let _ = writeln!(
-        out,
-        " {rule}"
-    );
+    let _ = writeln!(out, " {rule}");
     let _ = writeln!(
         out,
         " Note: thresholds shown are sain-01 defaults; runtime values"
@@ -541,7 +537,9 @@ pub fn parse_textfile_into_reading(text: &str) -> Result<DriverReading, String> 
             "selfdef_scheduler_substrate_status" => {
                 let source = parse_label_value(labels, "source").unwrap_or("");
                 let kind = parse_label_value(labels, "kind").unwrap_or("");
-                let reason = parse_label_value(labels, "reason").unwrap_or("").to_string();
+                let reason = parse_label_value(labels, "reason")
+                    .unwrap_or("")
+                    .to_string();
                 let target = match source {
                     "psi" => &mut psi_status,
                     "dcgm" => &mut dcgm_status,
@@ -658,8 +656,7 @@ mod tests {
     #[test]
     fn render_panel_marks_degraded_substrate() {
         let mut r = sample_reading();
-        r.substrate_health.dcgm_status =
-            SourceStatus::Unavailable("kernel < 4.20".to_string());
+        r.substrate_health.dcgm_status = SourceStatus::Unavailable("kernel < 4.20".to_string());
         let out = render_panel(&r);
         assert!(out.contains("Unavailable: kernel < 4.20"));
         assert!(out.contains("Degraded substrates: 1/3"));
@@ -844,7 +841,10 @@ selfdef_scheduler_cpu_psi 0.2
 selfdef_scheduler_substrate_status{source="psi",kind="errored",reason="x"} 1
 "#;
         let r = parse_textfile_into_reading(text).unwrap();
-        assert!(matches!(r.substrate_health.psi_status, SourceStatus::Errored(_)));
+        assert!(matches!(
+            r.substrate_health.psi_status,
+            SourceStatus::Errored(_)
+        ));
     }
 
     #[test]

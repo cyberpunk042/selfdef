@@ -30,8 +30,7 @@ use serde::Serialize;
 pub const DOCTRINE: &str = "It is an AI transaction engine.";
 
 /// The five deterministic masks the Filter stage applies (dump 1290, verbatim).
-pub const FILTER_MASKS: [&str; 5] =
-    ["grammar", "budget", "risk", "permissions", "duplication"];
+pub const FILTER_MASKS: [&str; 5] = ["grammar", "budget", "risk", "permissions", "duplication"];
 
 /// The eight branch-lifecycle stages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -88,7 +87,9 @@ impl BranchStage {
             Self::Spawn => "Create root branch from user task.",
             Self::Retrieve => "Pull relevant memory/code/context.",
             Self::Draft => "3090 proposes several continuations or plans.",
-            Self::Filter => "CPU applies deterministic masks: grammar, budget, risk, permissions, duplication.",
+            Self::Filter => {
+                "CPU applies deterministic masks: grammar, budget, risk, permissions, duplication."
+            }
             Self::Verify => "RTX PRO 6000 validates or improves high-value branches.",
             Self::Act => "Tool calls happen only if CPU policy allows them.",
             Self::Commit => "Accepted branch state is written to replay log.",
@@ -153,7 +154,11 @@ mod tests {
 
     #[test]
     fn memory_owns_retrieve_commit_learn() {
-        for s in [BranchStage::Retrieve, BranchStage::Commit, BranchStage::Learn] {
+        for s in [
+            BranchStage::Retrieve,
+            BranchStage::Commit,
+            BranchStage::Learn,
+        ] {
             assert_eq!(s.plane(), Plane::Memory, "{s:?} should be Memory");
         }
     }

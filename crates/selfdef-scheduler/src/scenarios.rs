@@ -247,7 +247,7 @@ mod tests {
         use crate::request_lifecycle::Plane;
         use crate::speculative_parallelism::SpeculationRole;
         use crate::tier::{route_to_tier, tier_to_plane, tier_to_speculation_role};
-        use crate::tier_work_policy::{coding_work, HardwareTier};
+        use crate::tier_work_policy::{HardwareTier, coding_work};
 
         // code-bug Verify on a clean box → oracle (Blackwell)
         let s = code_bug_verify_clean();
@@ -271,7 +271,7 @@ mod tests {
         use crate::request_lifecycle::Plane;
         use crate::speculative_parallelism::SpeculationRole;
         use crate::tier::{route_to_tier, tier_to_plane, tier_to_speculation_role};
-        use crate::tier_work_policy::{coding_work, HardwareTier};
+        use crate::tier_work_policy::{HardwareTier, coding_work};
 
         // code-bug Draft under Fast → scout (3090)
         let s = code_bug_draft_scout();

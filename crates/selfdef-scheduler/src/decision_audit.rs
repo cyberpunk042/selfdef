@@ -578,7 +578,10 @@ mod tests {
         let path = tmp.path().join("audit.jsonl");
         let _ = emit_driver_reading(&path, &reading(1), None).unwrap();
         let body = fs::read_to_string(&path).unwrap();
-        let tampered = body.replace("\"prev_event_sha256\":null", "\"prev_event_sha256\":\"deadbeef\"");
+        let tampered = body.replace(
+            "\"prev_event_sha256\":null",
+            "\"prev_event_sha256\":\"deadbeef\"",
+        );
         fs::write(&path, tampered).unwrap();
         let err = verify_chain(&path).unwrap_err();
         assert!(matches!(err, DriverAuditError::ChainBreak { line: 1, .. }));
@@ -631,9 +634,18 @@ mod tests {
         let rotated = rotate_audit_log(&path, 1, 3).unwrap();
         assert!(rotated);
         // After rotation: .3 was dropped, .2→.3, .1→.2, current→.1
-        assert_eq!(fs::read_to_string(generation_path(&path, 1)).unwrap(), "current");
-        assert_eq!(fs::read_to_string(generation_path(&path, 2)).unwrap(), "gen1");
-        assert_eq!(fs::read_to_string(generation_path(&path, 3)).unwrap(), "gen2");
+        assert_eq!(
+            fs::read_to_string(generation_path(&path, 1)).unwrap(),
+            "current"
+        );
+        assert_eq!(
+            fs::read_to_string(generation_path(&path, 2)).unwrap(),
+            "gen1"
+        );
+        assert_eq!(
+            fs::read_to_string(generation_path(&path, 3)).unwrap(),
+            "gen2"
+        );
         // gen3 dropped (the .4 path never existed; check the previous
         // .3 contents are now "gen2" not "gen3").
     }

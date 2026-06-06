@@ -125,8 +125,10 @@ mod tests {
 
     #[test]
     fn model_stages_are_embedding_and_oracle() {
-        let model: Vec<MemoryStage> =
-            stages_in_order().into_iter().filter(|s| s.uses_model()).collect();
+        let model: Vec<MemoryStage> = stages_in_order()
+            .into_iter()
+            .filter(|s| s.uses_model())
+            .collect();
         assert_eq!(
             model,
             vec![MemoryStage::EmbeddingRerank, MemoryStage::OracleSynthesis]

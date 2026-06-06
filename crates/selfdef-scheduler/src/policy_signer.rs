@@ -309,8 +309,7 @@ mod tests {
         /// to it. Mirrors what `minisign -S -m <target>` does.
         fn sign_file(&self, target_path: &Path) {
             let sk = self.keypair.sk.clone();
-            let mut target =
-                std::fs::File::open(target_path).expect("test target file must open");
+            let mut target = std::fs::File::open(target_path).expect("test target file must open");
             let sig = minisign::sign(None, &sk, &mut target, None, None)
                 .expect("minisign sign must succeed");
             let sig_path = selfdef_signing::signature_path_for(target_path);
@@ -349,9 +348,7 @@ mod tests {
         assert!(!SignatureOutcome::SignedOk.is_failure());
         assert!(!SignatureOutcome::Unsigned.is_signed_ok());
         assert!(!SignatureOutcome::Unsigned.is_failure());
-        let f = SignatureOutcome::SignatureFailed {
-            reason: "x".into(),
-        };
+        let f = SignatureOutcome::SignatureFailed { reason: "x".into() };
         assert!(!f.is_signed_ok());
         assert!(f.is_failure());
     }

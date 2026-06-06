@@ -44,7 +44,10 @@ async fn fs_backend_persists_active_with_original_profile() {
         ))
         .await
         .unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Active(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Active(_)
+    ));
     assert_eq!(receipt.original_profile, "firefox");
     let bytes = std::fs::read(tmp.path().join("active.json")).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -202,7 +205,10 @@ async fn fs_backend_pid_one_sacrosanct() {
         .unwrap_err();
     assert!(matches!(
         err,
-        selfdef_apparmor_profile_pivot_backend::ApparmorProfilePivotError::PidSacrosanct { pid: 1, .. }
+        selfdef_apparmor_profile_pivot_backend::ApparmorProfilePivotError::PidSacrosanct {
+            pid: 1,
+            ..
+        }
     ));
 }
 
@@ -221,7 +227,10 @@ async fn fs_backend_operator_overridden_unconfined_persists() {
         ))
         .await
         .unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Active(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Active(_)
+    ));
     let bytes = std::fs::read(tmp.path().join("active.json")).unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(

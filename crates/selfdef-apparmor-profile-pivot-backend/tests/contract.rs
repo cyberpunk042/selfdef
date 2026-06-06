@@ -43,7 +43,10 @@ async fn pivot_returns_receipt_with_active_handle() {
         .pivot_profile(r)
         .await
         .expect("pivot under Operator tier must succeed");
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Active(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Active(_)
+    ));
     assert_eq!(receipt.active_count, 1);
     assert_eq!(receipt.original_profile, "firefox");
 }
@@ -90,7 +93,10 @@ async fn pid_one_is_sacrosanct() {
         "x",
     );
     let err = b.pivot_profile(r).await.expect_err("pid 1 must error");
-    assert!(matches!(err, ApparmorProfilePivotError::PidSacrosanct { pid: 1, .. }));
+    assert!(matches!(
+        err,
+        ApparmorProfilePivotError::PidSacrosanct { pid: 1, .. }
+    ));
 }
 
 #[tokio::test]
@@ -105,7 +111,10 @@ async fn pid_zero_is_sacrosanct() {
         "x",
     );
     let err = b.pivot_profile(r).await.expect_err("pid 0 must error");
-    assert!(matches!(err, ApparmorProfilePivotError::PidSacrosanct { pid: 0, .. }));
+    assert!(matches!(
+        err,
+        ApparmorProfilePivotError::PidSacrosanct { pid: 0, .. }
+    ));
 }
 
 #[tokio::test]
@@ -230,7 +239,10 @@ async fn operator_overridden_tier_may_pivot_into_unconfined() {
         "forensic-capture",
     );
     let receipt = b.pivot_profile(r).await.unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Active(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Active(_)
+    ));
 }
 
 #[tokio::test]
@@ -245,7 +257,10 @@ async fn no_target_when_forced() {
         "missing profile",
     );
     let receipt = b.pivot_profile(r).await.unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::NoTarget(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::NoTarget(_)
+    ));
     assert_eq!(receipt.active_count, 0);
 }
 
@@ -261,7 +276,10 @@ async fn denied_when_forced() {
         "current profile forbids",
     );
     let receipt = b.pivot_profile(r).await.unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Denied(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Denied(_)
+    ));
 }
 
 #[tokio::test]
@@ -276,7 +294,10 @@ async fn stale_when_forced() {
         "process died",
     );
     let receipt = b.pivot_profile(r).await.unwrap();
-    assert!(matches!(receipt.handle, ApparmorProfilePivotHandle::Stale(_)));
+    assert!(matches!(
+        receipt.handle,
+        ApparmorProfilePivotHandle::Stale(_)
+    ));
 }
 
 #[tokio::test]

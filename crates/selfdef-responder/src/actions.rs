@@ -3669,19 +3669,15 @@ mod tests {
             PivotScope::Profile,
             "test",
         );
-        let outcome = action
-            .execute(&finding_without_pid(), false)
-            .await
-            .unwrap();
+        let outcome = action.execute(&finding_without_pid(), false).await.unwrap();
         assert_eq!(outcome.status, Status::Skipped);
         assert_eq!(backend.active_count().await, 0);
     }
 
     #[tokio::test]
     async fn apparmor_profile_pivot_no_target_when_forced() {
-        let backend = Arc::new(
-            AppInMemoryBackend::with_original_profile("firefox").force_no_target(),
-        );
+        let backend =
+            Arc::new(AppInMemoryBackend::with_original_profile("firefox").force_no_target());
         let action = ApparmorProfilePivotAction::new(
             backend.clone(),
             AppTier::Autonomous,
@@ -3695,10 +3691,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(outcome.status, Status::Success);
-        assert!(matches!(
-            outcome.status,
-            Status::Success
-        ));
+        assert!(matches!(outcome.status, Status::Success));
         assert!(outcome.notes.contains("NoTarget"));
     }
 
@@ -3773,8 +3766,7 @@ mod tests {
     // ----------------------------- BpfMapElementClearAction (SDD-078 MS2)
 
     use selfdef_bpf_map_element_clear_backend::{
-        AuthorityTier as BmcTier, ClearScope as BmcScope,
-        InMemoryBackend as BmcInMemoryBackend,
+        AuthorityTier as BmcTier, ClearScope as BmcScope, InMemoryBackend as BmcInMemoryBackend,
     };
 
     #[tokio::test]

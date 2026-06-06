@@ -113,9 +113,11 @@ mod tests {
         for s in separations() {
             assert!(!s.enforced_by().is_empty(), "{s:?} not enforced");
         }
-        assert!(SeparationRule::ProposalIsNotExecution
-            .enforced_by()
-            .contains("tool_call_transaction"));
+        assert!(
+            SeparationRule::ProposalIsNotExecution
+                .enforced_by()
+                .contains("tool_call_transaction")
+        );
     }
 
     #[test]

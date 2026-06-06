@@ -107,7 +107,12 @@ pub struct KvBlockMeta {
 /// The four tiers in dump order.
 #[must_use]
 pub fn hierarchy() -> [KvTier; 4] {
-    [KvTier::Vram, KvTier::SystemRam, KvTier::NvmeZfs, KvTier::CpuAvx512]
+    [
+        KvTier::Vram,
+        KvTier::SystemRam,
+        KvTier::NvmeZfs,
+        KvTier::CpuAvx512,
+    ]
 }
 
 #[cfg(test)]
@@ -118,7 +123,10 @@ mod tests {
     fn four_tiers_with_verbatim_roles() {
         assert_eq!(KvTier::Vram.role(), "L1/L2 cache");
         assert_eq!(KvTier::SystemRam.role(), "L3 / page cache");
-        assert_eq!(KvTier::NvmeZfs.role(), "cold cache / replay / persisted context");
+        assert_eq!(
+            KvTier::NvmeZfs.role(),
+            "cold cache / replay / persisted context"
+        );
         assert_eq!(KvTier::CpuAvx512.role(), "cache controller");
     }
 
@@ -134,7 +142,10 @@ mod tests {
     fn seven_kv_decisions_verbatim() {
         assert_eq!(CPU_KV_DECISIONS.len(), 7);
         assert_eq!(CPU_KV_DECISIONS[0], "which prefixes deserve hot KV");
-        assert_eq!(CPU_KV_DECISIONS[6], "which project docs are worth prefill-once reuse");
+        assert_eq!(
+            CPU_KV_DECISIONS[6],
+            "which project docs are worth prefill-once reuse"
+        );
     }
 
     #[test]

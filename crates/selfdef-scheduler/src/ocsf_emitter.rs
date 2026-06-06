@@ -90,7 +90,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::backpressure_driver::{DriverReading, SourceStatus};
 use crate::{Decision, Route};
@@ -295,10 +295,7 @@ pub fn append_ocsf_jsonl(path: &Path, event_line: &str) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).ok();
     }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     file.write_all(event_line.as_bytes())?;
     file.flush()?;
     Ok(())
@@ -357,14 +354,22 @@ pub fn render_decision_ocsf(decision: &Decision) -> String {
     let a = decision.axis_scores;
     let b = decision.backpressure;
     let observables = json!([
-        observable("profile", "String", json!(format!("{:?}", decision.profile))),
+        observable(
+            "profile",
+            "String",
+            json!(format!("{:?}", decision.profile))
+        ),
         observable("route", "String", json!(format!("{:?}", decision.route))),
         observable("compound", "Fraction", json!(a.compound as f64)),
         observable("latency", "Fraction", json!(a.latency as f64)),
         observable("cost", "Fraction", json!(a.cost as f64)),
         observable("risk", "Fraction", json!(a.risk as f64)),
         observable("energy", "Fraction", json!(a.energy as f64)),
-        observable("human_attention", "Fraction", json!(a.human_attention as f64)),
+        observable(
+            "human_attention",
+            "Fraction",
+            json!(a.human_attention as f64)
+        ),
         observable(
             "hardware_pressure",
             "Fraction",
@@ -602,8 +607,7 @@ mod tests {
     #[test]
     fn degraded_substrate_appears_in_enrichments_with_reason() {
         let mut r = baseline_reading();
-        r.substrate_health.psi_status =
-            SourceStatus::Unavailable("kernel < 4.20".to_string());
+        r.substrate_health.psi_status = SourceStatus::Unavailable("kernel < 4.20".to_string());
         r.substrate_health.dcgm_status = SourceStatus::Errored("driver crash".to_string());
         let v = parse_event_line(&render_ocsf_event(&r));
         let enr = v["enrichments"].as_array().unwrap();
@@ -761,8 +765,16 @@ mod tests {
         assert_eq!(v["class_uid"], 2004);
         assert_eq!(v["severity_id"], 4); // Hibernate => High
         assert_eq!(v["metadata"]["event_kind"], "scheduler_decision");
-        assert_eq!(v["finding_info"]["uid"], "req-0190abcd-7e11-7000-8000-deadbeef0001");
-        assert!(v["message"].as_str().unwrap().contains("risk demands verification"));
+        assert_eq!(
+            v["finding_info"]["uid"],
+            "req-0190abcd-7e11-7000-8000-deadbeef0001"
+        );
+        assert!(
+            v["message"]
+                .as_str()
+                .unwrap()
+                .contains("risk demands verification")
+        );
         // route + profile surfaced as observables
         let obs = v["observables"].as_array().unwrap();
         assert!(obs.iter().any(|o| o["name"] == "route"));

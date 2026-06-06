@@ -189,8 +189,14 @@ mod tests {
         for (i, s) in l.iter().enumerate() {
             assert_eq!(s.order(), (i + 1) as u8);
         }
-        assert_eq!(LearningStep::ExecuteTask.text(), "Execute task with branch runtime.");
-        assert_eq!(LearningStep::PromoteOnEvidence.text(), "Promote after evidence threshold.");
+        assert_eq!(
+            LearningStep::ExecuteTask.text(),
+            "Execute task with branch runtime."
+        );
+        assert_eq!(
+            LearningStep::PromoteOnEvidence.text(),
+            "Promote after evidence threshold."
+        );
     }
 
     #[test]

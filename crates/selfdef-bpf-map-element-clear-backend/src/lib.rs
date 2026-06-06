@@ -206,10 +206,8 @@ pub enum BpfMapElementClearError {
 #[async_trait]
 pub trait BpfMapElementClearBackend: Send + Sync {
     async fn clear(&self, req: ClearRequest) -> Result<ClearReceipt, BpfMapElementClearError>;
-    async fn restore(
-        &self,
-        handle: ClearHandle,
-    ) -> Result<RestoreReceipt, BpfMapElementClearError>;
+    async fn restore(&self, handle: ClearHandle)
+    -> Result<RestoreReceipt, BpfMapElementClearError>;
     async fn pending_restores(&self) -> Vec<PendingMapRestore> {
         Vec::new()
     }

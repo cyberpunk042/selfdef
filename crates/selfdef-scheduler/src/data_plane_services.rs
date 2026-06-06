@@ -80,9 +80,7 @@ impl DataPlaneService {
     #[must_use]
     pub const fn description(self) -> &'static str {
         match self {
-            Self::TokenLawEngine => {
-                "combines grammar/schema/tool/safety masks over vocab bitsets"
-            }
+            Self::TokenLawEngine => "combines grammar/schema/tool/safety masks over vocab bitsets",
             Self::PolicyScanner => {
                 "Hyperscan-style multi-pattern matching over tool intents and outputs"
             }
@@ -129,7 +127,10 @@ mod tests {
     #[test]
     fn service_names_verbatim() {
         assert_eq!(DataPlaneService::TokenLawEngine.name(), "Token Law Engine");
-        assert_eq!(DataPlaneService::JsonCommitValidator.name(), "JSON Commit Validator");
+        assert_eq!(
+            DataPlaneService::JsonCommitValidator.name(),
+            "JSON Commit Validator"
+        );
         assert_eq!(DataPlaneService::ReplayIndex.name(), "Replay Index");
     }
 
@@ -139,9 +140,11 @@ mod tests {
             DataPlaneService::MemoryBitmapIndex.description(),
             "CRoaring-style memory sets: project ∩ topic ∩ freshness ∩ trust ∩ permissions"
         );
-        assert!(DataPlaneService::BranchCompactor
-            .description()
-            .contains("AVX-512 compresses surviving branches"));
+        assert!(
+            DataPlaneService::BranchCompactor
+                .description()
+                .contains("AVX-512 compresses surviving branches")
+        );
     }
 
     #[test]

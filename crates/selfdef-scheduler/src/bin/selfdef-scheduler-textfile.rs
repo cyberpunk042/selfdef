@@ -68,7 +68,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use selfdef_scheduler::backpressure_driver::BackpressureDriver;
-use selfdef_scheduler::config::{SchedulerConfig, DEFAULT_CONFIG_PATH};
+use selfdef_scheduler::config::{DEFAULT_CONFIG_PATH, SchedulerConfig};
 use selfdef_scheduler::dcgm::NvidiaSmiDcgmSource;
 use selfdef_scheduler::decision_audit::{emit_driver_reading, rotate_audit_log};
 use selfdef_scheduler::human_gate::IpsPendingRestoresHumanGateSource;
@@ -102,8 +102,10 @@ fn main() -> ExitCode {
     let ocsf_path = env_path_with_default("SELFDEF_SCHEDULER_OCSF_PATH", &cfg.emit.ocsf_path);
     let ring_dir = env_path_with_default("SELFDEF_SCHEDULER_RING_DIR", &cfg.emit.ring_dir);
     let psi_dir = env_path_with_default("SELFDEF_SCHEDULER_PSI_DIR", &cfg.substrate.psi_dir);
-    let nvidia_smi =
-        env_path_with_default("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", &cfg.substrate.nvidia_smi_bin);
+    let nvidia_smi = env_path_with_default(
+        "SELFDEF_SCHEDULER_NVIDIA_SMI_BIN",
+        &cfg.substrate.nvidia_smi_bin,
+    );
     let state_root =
         env_path_with_default("SELFDEF_SCHEDULER_STATE_ROOT", &cfg.substrate.state_root);
     let ocsf_enabled = env::var("SELFDEF_SCHEDULER_OCSF_ENABLE")

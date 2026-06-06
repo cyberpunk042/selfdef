@@ -82,7 +82,9 @@ pub const CPU_HOT_OPS: [&str; 8] = [
 #[must_use]
 pub const fn doctrine(tier: HardwareTier) -> &'static str {
     match tier {
-        HardwareTier::Blackwell => "Keep the Blackwell hot with meaningful work, not busy with junk.",
+        HardwareTier::Blackwell => {
+            "Keep the Blackwell hot with meaningful work, not busy with junk."
+        }
         HardwareTier::Rtx3090 => "The 3090 should work ahead.",
         HardwareTier::Cpu => "The CPU decides.",
     }
@@ -174,7 +176,10 @@ mod tests {
     #[test]
     fn blackwell_avoids_cheap_classification() {
         assert!(tier_avoids(HardwareTier::Blackwell, "cheap classification"));
-        assert!(tier_avoids(HardwareTier::Blackwell, "repeated boilerplate prefill"));
+        assert!(tier_avoids(
+            HardwareTier::Blackwell,
+            "repeated boilerplate prefill"
+        ));
         // and does not RUN what it avoids
         assert!(!tier_runs(HardwareTier::Blackwell, "cheap classification"));
     }
@@ -221,7 +226,10 @@ mod tests {
             doctrine(HardwareTier::Blackwell),
             "Keep the Blackwell hot with meaningful work, not busy with junk."
         );
-        assert_eq!(doctrine(HardwareTier::Rtx3090), "The 3090 should work ahead.");
+        assert_eq!(
+            doctrine(HardwareTier::Rtx3090),
+            "The 3090 should work ahead."
+        );
         assert_eq!(doctrine(HardwareTier::Cpu), "The CPU decides.");
     }
 
@@ -244,7 +252,10 @@ mod tests {
     #[test]
     fn coding_work_lists_are_disjoint_across_tiers() {
         for w in CODING_BLACKWELL {
-            assert!(!CODING_RTX3090.contains(&w) && !CODING_CPU.contains(&w), "{w} not unique");
+            assert!(
+                !CODING_RTX3090.contains(&w) && !CODING_CPU.contains(&w),
+                "{w} not unique"
+            );
         }
     }
 

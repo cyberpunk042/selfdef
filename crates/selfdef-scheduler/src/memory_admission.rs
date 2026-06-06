@@ -71,7 +71,11 @@ const FLAGS: (u32, u32) = (48, 16);
 
 #[inline]
 const fn mask(width: u32) -> u64 {
-    if width >= 64 { u64::MAX } else { (1u64 << width) - 1 }
+    if width >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << width) - 1
+    }
 }
 
 #[inline]
@@ -158,7 +162,10 @@ mod tests {
         assert_eq!(DO_NOT_CACHE_IF.len(), 5);
         assert_eq!(CACHE_IF[0], "reused often");
         assert_eq!(CACHE_IF[5], "part of tool/system/project base");
-        assert_eq!(DO_NOT_CACHE_IF[2], "user-private but cross-session forbidden");
+        assert_eq!(
+            DO_NOT_CACHE_IF[2],
+            "user-private but cross-session forbidden"
+        );
         assert_eq!(DOCTRINE, "That policy is a bitfield, not a prompt.");
     }
 

@@ -104,7 +104,9 @@ pub fn is_high_information(reflection: &str) -> bool {
         return false;
     }
     let lower = r.to_ascii_lowercase();
-    const FACT_MARKERS: [&str; 6] = ["because", "expected", "failed", "due to", "caused", "returned"];
+    const FACT_MARKERS: [&str; 6] = [
+        "because", "expected", "failed", "due to", "caused", "returned",
+    ];
     FACT_MARKERS.iter().any(|m| lower.contains(m))
 }
 
@@ -123,8 +125,14 @@ mod tests {
 
     #[test]
     fn step_text_verbatim() {
-        assert_eq!(ReflectionStep::CollectObjectiveOutcome.text(), "collect objective outcome");
-        assert_eq!(ReflectionStep::ValidateAgainstTrace.text(), "validate reflection against trace");
+        assert_eq!(
+            ReflectionStep::CollectObjectiveOutcome.text(),
+            "collect objective outcome"
+        );
+        assert_eq!(
+            ReflectionStep::ValidateAgainstTrace.text(),
+            "validate reflection against trace"
+        );
         assert_eq!(
             ReflectionStep::RetrieveOnMatch.text(),
             "retrieve only when matching conditions apply"
@@ -149,9 +157,15 @@ mod tests {
 
     #[test]
     fn examples_verbatim() {
-        assert_eq!(GOOD_EXAMPLE, "npm test failed because jest config expected ESM.");
+        assert_eq!(
+            GOOD_EXAMPLE,
+            "npm test failed because jest config expected ESM."
+        );
         assert_eq!(BAD_EXAMPLE, "I should be more careful.");
-        assert_eq!(DOCTRINE, "The CPU/runtime should reject low-information reflections.");
+        assert_eq!(
+            DOCTRINE,
+            "The CPU/runtime should reject low-information reflections."
+        );
     }
 
     #[test]

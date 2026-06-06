@@ -61,8 +61,16 @@ pub struct LifecycleStep {
 #[must_use]
 pub fn request_lifecycle() -> [LifecycleStep; 10] {
     [
-        LifecycleStep { order: 1, plane: Plane::Entry, action: "User request arrives" },
-        LifecycleStep { order: 2, plane: Plane::Cpu, action: "CPU creates root branch" },
+        LifecycleStep {
+            order: 1,
+            plane: Plane::Entry,
+            action: "User request arrives",
+        },
+        LifecycleStep {
+            order: 2,
+            plane: Plane::Cpu,
+            action: "CPU creates root branch",
+        },
         LifecycleStep {
             order: 3,
             plane: Plane::Memory,
@@ -73,7 +81,11 @@ pub fn request_lifecycle() -> [LifecycleStep; 10] {
             plane: Plane::Scout,
             action: "3090 reranks/summarizes/expands cheap candidates",
         },
-        LifecycleStep { order: 5, plane: Plane::Cpu, action: "CPU packs prompt plan" },
+        LifecycleStep {
+            order: 5,
+            plane: Plane::Cpu,
+            action: "CPU packs prompt plan",
+        },
         LifecycleStep {
             order: 6,
             plane: Plane::Oracle,
@@ -188,7 +200,13 @@ mod tests {
 
     #[test]
     fn plane_serde_roundtrips() {
-        for p in [Plane::Entry, Plane::Cpu, Plane::Scout, Plane::Oracle, Plane::Memory] {
+        for p in [
+            Plane::Entry,
+            Plane::Cpu,
+            Plane::Scout,
+            Plane::Oracle,
+            Plane::Memory,
+        ] {
             let j = serde_json::to_string(&p).unwrap();
             let back: Plane = serde_json::from_str(&j).unwrap();
             assert_eq!(p, back);

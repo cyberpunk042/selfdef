@@ -48,9 +48,11 @@ impl BackpressureSurface {
     #[must_use]
     pub const fn responses(self) -> &'static [&'static str] {
         match self {
-            Self::BlackwellVramHigh => {
-                &["reduce context", "evict low-value KV", "switch smaller oracle"]
-            }
+            Self::BlackwellVramHigh => &[
+                "reduce context",
+                "evict low-value KV",
+                "switch smaller oracle",
+            ],
             Self::Gpu3090Busy => &["reduce branch width", "use CPU classifiers"],
             Self::CpuPressure => &["defer background indexing/evals"],
             Self::RamPressure => &["hibernate branches", "compact memory"],
@@ -114,7 +116,11 @@ mod tests {
     fn blackwell_responses_are_verbatim() {
         assert_eq!(
             BackpressureSurface::BlackwellVramHigh.responses(),
-            &["reduce context", "evict low-value KV", "switch smaller oracle"]
+            &[
+                "reduce context",
+                "evict low-value KV",
+                "switch smaller oracle"
+            ]
         );
     }
 

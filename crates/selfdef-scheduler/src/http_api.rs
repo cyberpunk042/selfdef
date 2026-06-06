@@ -76,11 +76,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use crate::backpressure_driver::{DriverReading, SubstrateHealth};
-use crate::decision_audit::{verify_chain, ChainStats, DriverAuditEntry};
-use crate::driver_replay::{replay_audit_log, ReplayStats};
-use crate::tui_panel::{parse_textfile_into_reading, render_panel_compact};
 use crate::BackpressureThresholds;
+use crate::backpressure_driver::{DriverReading, SubstrateHealth};
+use crate::decision_audit::{ChainStats, DriverAuditEntry, verify_chain};
+use crate::driver_replay::{ReplayStats, replay_audit_log};
+use crate::tui_panel::{parse_textfile_into_reading, render_panel_compact};
 
 // ============================================================================
 // HttpApiState
@@ -114,7 +114,11 @@ impl HttpApiState {
         }
     }
 
-    fn path_for(&self, source: SourceKind, override_path: Option<PathBuf>) -> Result<PathBuf, ApiError> {
+    fn path_for(
+        &self,
+        source: SourceKind,
+        override_path: Option<PathBuf>,
+    ) -> Result<PathBuf, ApiError> {
         let candidate = match override_path {
             Some(p) => p,
             None => match source {
@@ -350,7 +354,7 @@ mod tests {
     use crate::decision_audit::emit_driver_reading;
     use crate::prometheus_exporter::render_prometheus;
     use crate::{BackpressureState, ResourceMeasurements};
-    use axum::body::{to_bytes, Body};
+    use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use std::fs;
     use tempfile::tempdir;
@@ -575,7 +579,12 @@ mod tests {
         let v = body_json(resp).await;
         assert_eq!(v["entries_replayed"], 2);
         // 0.88 > 0.80 alt threshold → counterfactual fires.
-        assert!(v["blackwell_vram_high"]["only_counterfactual_fired"].as_u64().unwrap() >= 1);
+        assert!(
+            v["blackwell_vram_high"]["only_counterfactual_fired"]
+                .as_u64()
+                .unwrap()
+                >= 1
+        );
     }
 
     // ---------------- HttpApiState::path_for guards ---------------

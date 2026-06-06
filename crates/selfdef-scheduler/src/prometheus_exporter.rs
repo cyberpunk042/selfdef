@@ -250,7 +250,10 @@ fn emit_gauge_bool(out: &mut String, name: &str, help: &str, value: bool) {
 
 fn emit_substrate_healthy(out: &mut String, source: &str, status: &SourceStatus) {
     let value = if status.is_healthy() { 1.0 } else { 0.0 };
-    let _ = writeln!(out, "selfdef_scheduler_substrate_healthy{{source=\"{source}\"}} {value}");
+    let _ = writeln!(
+        out,
+        "selfdef_scheduler_substrate_healthy{{source=\"{source}\"}} {value}"
+    );
 }
 
 fn emit_substrate_status(out: &mut String, source: &str, status: &SourceStatus) {
@@ -497,8 +500,7 @@ mod tests {
     #[test]
     fn renders_substrate_unavailable_with_reason_label() {
         let mut r = sample_reading();
-        r.substrate_health.psi_status =
-            SourceStatus::Unavailable("kernel < 4.20".to_string());
+        r.substrate_health.psi_status = SourceStatus::Unavailable("kernel < 4.20".to_string());
         let out = render_prometheus(&r);
         assert!(out.contains("selfdef_scheduler_substrate_healthy{source=\"psi\"} 0"));
         assert!(out.contains(

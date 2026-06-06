@@ -332,8 +332,7 @@ mod tests {
             human_gate_queue_depth: 2,
             ..ResourceMeasurements::clean()
         });
-        let scores =
-            score_current_substrate(&r, neutral_model_signals(), Profile::Production, 20);
+        let scores = score_current_substrate(&r, neutral_model_signals(), Profile::Production, 20);
         assert!(scores.compound >= 0.0 && scores.compound <= 1.0);
         // substrate axes are reflected in the returned scores
         assert!((scores.hardware_pressure - 0.70).abs() < 1e-6);
@@ -373,8 +372,7 @@ mod tests {
             human_gate_queue_depth: 4,
             ..ResourceMeasurements::clean()
         });
-        let fast =
-            score_current_substrate(&r, neutral_model_signals(), Profile::Fast, 20).compound;
+        let fast = score_current_substrate(&r, neutral_model_signals(), Profile::Fast, 20).compound;
         let careful =
             score_current_substrate(&r, neutral_model_signals(), Profile::Careful, 20).compound;
         // Careful weights human_attention + hardware_pressure heavily (0.9/0.9)

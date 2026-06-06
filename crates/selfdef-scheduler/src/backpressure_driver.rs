@@ -73,10 +73,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BackpressureMonitor, BackpressureState, ResourceMeasurements};
 use crate::dcgm::{DcgmError, DcgmSource};
 use crate::human_gate::{HumanGateError, HumanGateSource};
 use crate::psi::{PsiError, PsiSource};
+use crate::{BackpressureMonitor, BackpressureState, ResourceMeasurements};
 
 // ============================================================================
 // SourceStatus + SubstrateHealth
@@ -344,7 +344,10 @@ mod tests {
     #[test]
     fn poll_all_healthy_composes_measurements() {
         let mut d = driver(
-            MockPsiSource::clean().with_cpu(0.2).with_mem(0.1).with_io(0.05),
+            MockPsiSource::clean()
+                .with_cpu(0.2)
+                .with_mem(0.1)
+                .with_io(0.05),
             MockDcgmSource::clean()
                 .with_blackwell_vram(12288, 24576)
                 .with_gpu3090_util(0.4),
@@ -541,4 +544,3 @@ mod tests {
         assert_eq!(r.measurements.human_gate_queue_depth, 2);
     }
 }
-

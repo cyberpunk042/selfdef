@@ -510,10 +510,9 @@ impl DcgmSource for NvidiaSmiDcgmSource {
             .arg(format!("--format={NVIDIA_SMI_FORMAT}"))
             .output()
             .map_err(|e| match e.kind() {
-                std::io::ErrorKind::NotFound => DcgmError::Unavailable(format!(
-                    "{} not found on PATH",
-                    self.command.display()
-                )),
+                std::io::ErrorKind::NotFound => {
+                    DcgmError::Unavailable(format!("{} not found on PATH", self.command.display()))
+                }
                 _ => DcgmError::CommandIo(e),
             })?;
         if !output.status.success() {
@@ -638,9 +637,9 @@ impl MockDcgmSource {
 impl DcgmSource for MockDcgmSource {
     fn read(&self) -> Result<DcgmReading, DcgmError> {
         match &self.fail_with {
-            Some(MockFailureMode::Unavailable) => Err(DcgmError::Unavailable(
-                "mock unavailable".to_string(),
-            )),
+            Some(MockFailureMode::Unavailable) => {
+                Err(DcgmError::Unavailable("mock unavailable".to_string()))
+            }
             Some(MockFailureMode::GpuMissing(index)) => Err(DcgmError::GpuMissing {
                 index: *index,
                 observed: vec![],
@@ -794,8 +793,7 @@ garbage row
             GpuReading::clean(1),
             GpuReading::clean(2),
         ];
-        let reading =
-            assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap();
+        let reading = assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap();
         assert_eq!(reading.others.len(), 1);
         assert_eq!(reading.others[0].index, 2);
     }
@@ -803,8 +801,7 @@ garbage row
     #[test]
     fn assemble_missing_blackwell_index_rejected() {
         let gpus = vec![GpuReading::clean(1), GpuReading::clean(2)];
-        let err =
-            assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap_err();
+        let err = assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap_err();
         let DcgmError::GpuMissing { index, observed } = err else {
             panic!("expected GpuMissing")
         };
@@ -815,8 +812,7 @@ garbage row
     #[test]
     fn assemble_missing_gpu3090_index_rejected() {
         let gpus = vec![GpuReading::clean(0)];
-        let err =
-            assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap_err();
+        let err = assemble_dcgm_reading(gpus, DcgmGpuIndices::sain01_baseline(), 0).unwrap_err();
         let DcgmError::GpuMissing { index, .. } = err else {
             panic!("expected GpuMissing")
         };
@@ -826,8 +822,7 @@ garbage row
     #[test]
     fn assemble_with_custom_indices() {
         let gpus = vec![GpuReading::clean(2), GpuReading::clean(5)];
-        let reading =
-            assemble_dcgm_reading(gpus, DcgmGpuIndices::custom(5, 2), 0).unwrap();
+        let reading = assemble_dcgm_reading(gpus, DcgmGpuIndices::custom(5, 2), 0).unwrap();
         assert_eq!(reading.blackwell.index, 5);
         assert_eq!(reading.gpu3090.index, 2);
     }
@@ -928,11 +923,7 @@ garbage row
     #[test]
     fn nvidia_smi_returns_no_gpus_yields_unavailable() {
         let tmp = tempdir().unwrap();
-        let script = write_fixture_script(
-            tmp.path(),
-            "nvidia-smi-empty",
-            "#!/bin/sh\nexit 0\n",
-        );
+        let script = write_fixture_script(tmp.path(), "nvidia-smi-empty", "#!/bin/sh\nexit 0\n");
         let src = NvidiaSmiDcgmSource::new().with_command_path(&script);
         let err = src.read().unwrap_err();
         assert!(matches!(err, DcgmError::Unavailable(_)));

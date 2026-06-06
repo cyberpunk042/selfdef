@@ -82,7 +82,10 @@ fn clamp_rationale(s: String) -> String {
 pub fn decide(reading: &DriverReading, ctx: &RequestContext) -> Result<Decision, MirrorError> {
     let scores = score_current_substrate(reading, ctx.model_signals, ctx.profile, ctx.max_queue);
     let rec = recommend_route(reading, ctx.profile, &scores);
-    let rationale = clamp_rationale(format!("route={:?} [{:?}]: {}", rec.route, rec.law_clause, rec.rationale));
+    let rationale = clamp_rationale(format!(
+        "route={:?} [{:?}]: {}",
+        rec.route, rec.law_clause, rec.rationale
+    ));
     let decision = Decision::new(
         ctx.request_id.clone(),
         ctx.profile,
@@ -178,8 +181,8 @@ pub fn decide_persist_and_emit(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Route;
     use crate::ResourceMeasurements;
+    use crate::Route;
     use crate::backpressure_driver::SubstrateHealth;
     use crate::objective_signals::DEFAULT_HUMAN_ATTENTION_QUEUE_CAP;
     use selfdef_scheduler_mirror::BackpressureState;
@@ -202,7 +205,7 @@ mod tests {
                 cost: 0.7,
                 risk: 0.7,
                 energy: 0.7,
-                human_attention: 0.0, // overwritten
+                human_attention: 0.0,   // overwritten
                 hardware_pressure: 0.0, // overwritten
             },
             max_queue: DEFAULT_HUMAN_ATTENTION_QUEUE_CAP,
@@ -304,7 +307,10 @@ mod tests {
         let lines: Vec<&str> = body.lines().filter(|l| !l.trim().is_empty()).collect();
         assert_eq!(lines.len(), 2);
         for l in &lines {
-            assert!(l.contains("prev_event_sha256"), "line missing chain field: {l}");
+            assert!(
+                l.contains("prev_event_sha256"),
+                "line missing chain field: {l}"
+            );
         }
 
         std::fs::remove_dir_all(&dir).ok();
@@ -326,8 +332,8 @@ mod tests {
         let ring = dir.join("ring");
         let r = reading(ResourceMeasurements::clean(), BackpressureState::clean());
 
-        let d = decide_and_persist(&r, &ctx(Profile::Production), &log, &ring, 256)
-            .expect("persist");
+        let d =
+            decide_and_persist(&r, &ctx(Profile::Production), &log, &ring, 256).expect("persist");
         assert_eq!(d.route, Route::Blackwell);
 
         // audit log got the chained entry
@@ -360,25 +366,25 @@ mod tests {
         let ocsf = dir.join("scheduler.ocsf.jsonl");
         let r = reading(ResourceMeasurements::clean(), BackpressureState::clean());
 
-        let d = decide_persist_and_emit(
-            &r,
-            &ctx(Profile::Production),
-            &log,
-            &ring,
-            256,
-            &ocsf,
-        )
-        .expect("persist+emit");
+        let d = decide_persist_and_emit(&r, &ctx(Profile::Production), &log, &ring, 256, &ocsf)
+            .expect("persist+emit");
         assert_eq!(d.route, Route::Blackwell);
 
         // all three sinks received the decision
-        assert!(std::fs::read_to_string(&log).unwrap().contains("prev_event_sha256"));
+        assert!(
+            std::fs::read_to_string(&log)
+                .unwrap()
+                .contains("prev_event_sha256")
+        );
         assert_eq!(read_ring_buffer(&ring).unwrap().len(), 1);
         let ocsf_body = std::fs::read_to_string(&ocsf).expect("read ocsf");
         assert!(ocsf_body.contains("scheduler_decision"));
         assert!(ocsf_body.contains(&d.request_id));
         // exactly one JSONL line
-        assert_eq!(ocsf_body.lines().filter(|l| !l.trim().is_empty()).count(), 1);
+        assert_eq!(
+            ocsf_body.lines().filter(|l| !l.trim().is_empty()).count(),
+            1
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

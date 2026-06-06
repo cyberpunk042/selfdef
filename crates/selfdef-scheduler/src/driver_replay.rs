@@ -55,11 +55,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::backpressure_driver::DriverReading;
-use crate::decision_audit::DriverAuditEntry;
 use crate::decision_audit::DEFAULT_MAX_GENERATIONS;
-use crate::{
-    BackpressureMonitor, BackpressureState, BackpressureThresholds, DriverAuditError,
-};
+use crate::decision_audit::DriverAuditEntry;
+use crate::{BackpressureMonitor, BackpressureState, BackpressureThresholds, DriverAuditError};
 
 /// Replay error — alias of [`crate::DriverAuditError`] (the replay engine
 /// reads the same audit chain). Public so the `Returns [ReplayError]` doc
@@ -326,12 +324,14 @@ fn replay_text_keep_state(
         let original_state = entry.reading.state;
         let counterfactual_state =
             replay_driver_reading(&entry.reading, alt, prev_counterfactual_state);
-        stats
-            .cpu_pressure
-            .observe(original_state.cpu_pressure, counterfactual_state.cpu_pressure);
-        stats
-            .ram_pressure
-            .observe(original_state.ram_pressure, counterfactual_state.ram_pressure);
+        stats.cpu_pressure.observe(
+            original_state.cpu_pressure,
+            counterfactual_state.cpu_pressure,
+        );
+        stats.ram_pressure.observe(
+            original_state.ram_pressure,
+            counterfactual_state.ram_pressure,
+        );
         stats
             .io_pressure
             .observe(original_state.io_pressure, counterfactual_state.io_pressure);
@@ -339,9 +339,10 @@ fn replay_text_keep_state(
             original_state.blackwell_vram_high,
             counterfactual_state.blackwell_vram_high,
         );
-        stats
-            .gpu3090_busy
-            .observe(original_state.gpu3090_busy, counterfactual_state.gpu3090_busy);
+        stats.gpu3090_busy.observe(
+            original_state.gpu3090_busy,
+            counterfactual_state.gpu3090_busy,
+        );
         stats.human_gate_queue_high.observe(
             original_state.human_gate_queue_high,
             counterfactual_state.human_gate_queue_high,
@@ -382,11 +383,11 @@ const _DEFAULT_MAX_GENERATIONS_LINK: u32 = DEFAULT_MAX_GENERATIONS;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ResourceMeasurements;
     use crate::backpressure_driver::SubstrateHealth;
     use crate::decision_audit::{
-        emit_driver_reading, rotate_audit_log, DEFAULT_MAX_GENERATIONS as MAX_GENS,
+        DEFAULT_MAX_GENERATIONS as MAX_GENS, emit_driver_reading, rotate_audit_log,
     };
-    use crate::ResourceMeasurements;
     use tempfile::tempdir;
 
     fn reading_with(ts: u128, cpu: f32, blackwell: f32) -> DriverReading {
@@ -447,7 +448,10 @@ mod tests {
         // should stay pressured.
         let in_band = reading_with(2, 0.42, 0.0);
         let s2 = replay_driver_reading(&in_band, &baseline_thresholds(), s1);
-        assert!(s2.cpu_pressure, "0.42 in hysteresis band should stay pressured");
+        assert!(
+            s2.cpu_pressure,
+            "0.42 in hysteresis band should stay pressured"
+        );
     }
 
     #[test]

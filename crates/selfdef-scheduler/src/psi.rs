@@ -152,7 +152,11 @@ impl PsiResourceReading {
     pub const fn clean(emit_full: bool) -> Self {
         Self {
             some: PsiBucket::clean(),
-            full: if emit_full { Some(PsiBucket::clean()) } else { None },
+            full: if emit_full {
+                Some(PsiBucket::clean())
+            } else {
+                None
+            },
         }
     }
 }
@@ -338,11 +342,7 @@ pub fn parse_psi_line(
     )))
 }
 
-fn parse_avg_percent(
-    resource: &'static str,
-    line: &str,
-    value: &str,
-) -> Result<f32, PsiError> {
+fn parse_avg_percent(resource: &'static str, line: &str, value: &str) -> Result<f32, PsiError> {
     let pct: f32 = value.parse().map_err(|e| PsiError::Parse {
         resource,
         line: line.to_string(),
@@ -490,10 +490,7 @@ fn read_resource(
             path.display()
         )));
     }
-    let contents = fs::read_to_string(&path).map_err(|source| PsiError::Io {
-        resource,
-        source,
-    })?;
+    let contents = fs::read_to_string(&path).map_err(|source| PsiError::Io { resource, source })?;
     parse_psi_file_contents(resource, &contents)
 }
 
@@ -789,11 +786,7 @@ full avg10=0 avg60=0 avg300=0 total=0
     fn procfs_honest_offline_one_resource_missing() {
         // Cpu + memory present, io missing → Unavailable on io.
         let tmp = tempdir().unwrap();
-        write_pressure_file(
-            tmp.path(),
-            "cpu",
-            "some avg10=0 avg60=0 avg300=0 total=0\n",
-        );
+        write_pressure_file(tmp.path(), "cpu", "some avg10=0 avg60=0 avg300=0 total=0\n");
         write_pressure_file(
             tmp.path(),
             "memory",
@@ -820,17 +813,19 @@ full avg10=0 avg60=0 avg300=0 total=0
         );
         let src = ProcfsPsiSource::with_dir(tmp.path());
         let err = src.read().unwrap_err();
-        assert!(matches!(err, PsiError::Parse { resource: "cpu", .. }));
+        assert!(matches!(
+            err,
+            PsiError::Parse {
+                resource: "cpu",
+                ..
+            }
+        ));
     }
 
     #[test]
     fn procfs_captured_at_advances() {
         let tmp = tempdir().unwrap();
-        write_pressure_file(
-            tmp.path(),
-            "cpu",
-            "some avg10=0 avg60=0 avg300=0 total=0\n",
-        );
+        write_pressure_file(tmp.path(), "cpu", "some avg10=0 avg60=0 avg300=0 total=0\n");
         write_pressure_file(
             tmp.path(),
             "memory",

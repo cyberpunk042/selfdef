@@ -109,7 +109,10 @@ mod tests {
         assert_eq!(ops.len(), 8);
         assert_eq!(ops[0].name(), "JSON/tool-call validation");
         assert_eq!(ops[7].name(), "trace/replay indexing");
-        assert_eq!(DataPlaneOp::MemorySetIntersection.name(), "memory-set intersection");
+        assert_eq!(
+            DataPlaneOp::MemorySetIntersection.name(),
+            "memory-set intersection"
+        );
     }
 
     #[test]

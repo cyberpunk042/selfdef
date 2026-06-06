@@ -142,10 +142,16 @@ mod tests {
             assert!(!l.enforced_by().is_empty(), "{l:?} not enforced");
         }
         // spot-check key mappings
-        assert!(RuntimeLaw::NoSideEffectWithoutReplayLog
-            .enforced_by()
-            .contains("decision_audit"));
-        assert!(RuntimeLaw::HostOwnsTruth.enforced_by().contains("kv_cache_controller"));
+        assert!(
+            RuntimeLaw::NoSideEffectWithoutReplayLog
+                .enforced_by()
+                .contains("decision_audit")
+        );
+        assert!(
+            RuntimeLaw::HostOwnsTruth
+                .enforced_by()
+                .contains("kv_cache_controller")
+        );
     }
 
     #[test]

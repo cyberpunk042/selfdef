@@ -127,7 +127,10 @@ mod tests {
     #[test]
     fn cached_prefix_prefers_reuse() {
         let h = routing_hint(&signals(true, false, false, LoadShape::PrefillHeavy, false));
-        assert!(h.prefer_reuse, "cached prefix should prefer reuse (avoid prefill)");
+        assert!(
+            h.prefer_reuse,
+            "cached prefix should prefer reuse (avoid prefill)"
+        );
     }
 
     #[test]
@@ -139,7 +142,13 @@ mod tests {
 
     #[test]
     fn cold_request_does_not_prefer_reuse() {
-        let h = routing_hint(&signals(false, false, false, LoadShape::PrefillHeavy, false));
+        let h = routing_hint(&signals(
+            false,
+            false,
+            false,
+            LoadShape::PrefillHeavy,
+            false,
+        ));
         assert!(!h.prefer_reuse);
         assert!(!h.keep_resident);
     }

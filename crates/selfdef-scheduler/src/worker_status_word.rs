@@ -145,7 +145,10 @@ mod tests {
     #[test]
     fn fields_occupy_their_dump_specified_bytes() {
         // load bucket in the lowest byte
-        assert_eq!(WorkerStatusWord::new(0xAB, 0, 0, 0, 0, 0, 0, 0).bits(), 0xAB);
+        assert_eq!(
+            WorkerStatusWord::new(0xAB, 0, 0, 0, 0, 0, 0, 0).bits(),
+            0xAB
+        );
         // flags in the highest byte
         assert_eq!(
             WorkerStatusWord::new(0, 0, 0, 0, 0, 0, 0, 0xCD).bits(),

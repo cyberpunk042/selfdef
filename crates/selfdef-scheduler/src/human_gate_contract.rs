@@ -123,7 +123,10 @@ mod tests {
     fn six_actions_verbatim() {
         assert_eq!(HumanGateAction::Approve.label(), "approve");
         assert_eq!(HumanGateAction::RouteToSandbox.label(), "route to sandbox");
-        assert_eq!(HumanGateAction::LowerRaisePermission.label(), "lower/raise permission");
+        assert_eq!(
+            HumanGateAction::LowerRaisePermission.label(),
+            "lower/raise permission"
+        );
         assert_eq!(actions().len(), 6);
     }
 
@@ -147,7 +150,10 @@ mod tests {
 
     #[test]
     fn doctrines_verbatim() {
-        assert_eq!(DOCTRINE, "Human-in-the-loop should not be a dumb approve button.");
+        assert_eq!(
+            DOCTRINE,
+            "Human-in-the-loop should not be a dumb approve button."
+        );
         assert_eq!(DURABLE_EXECUTION, "Pause, persist, resume.");
     }
 

@@ -25,8 +25,8 @@ use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 
 use selfdef_scheduler::{
-    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, Route, SchedulerError,
-    audit_chain_check, now_ms, read_ring_buffer,
+    AxisWeights, DEFAULT_AUDIT_LOG_PATH, DEFAULT_RING_DIR, Decision, Profile, Route,
+    SchedulerError, audit_chain_check, now_ms, read_ring_buffer,
 };
 
 /// Aggregate routing-decision counts over the full ring window (parity with

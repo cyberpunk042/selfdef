@@ -39,7 +39,7 @@
 //! Standing rule: We do not minimize anything.
 
 use crate::backpressure_driver::DriverReading;
-use crate::{AxisScores, ProfileRules, Profile, Route};
+use crate::{AxisScores, Profile, ProfileRules, Route};
 
 /// Risk-score floor below which the Key Scheduling Law's second clause
 /// engages ("when risk demands it"). [`AxisScores::risk`] is `1.0` for low
@@ -218,10 +218,9 @@ pub fn recommend_route(
     RouteRecommendation {
         route: Route::Hibernate,
         law_clause: LawClause::None,
-        rationale:
-            "all compute tiers (Blackwell/Rtx3090/Cpu) under backpressure; hibernating \
+        rationale: "all compute tiers (Blackwell/Rtx3090/Cpu) under backpressure; hibernating \
              pending another resource"
-                .to_string(),
+            .to_string(),
     }
 }
 

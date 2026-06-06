@@ -306,9 +306,9 @@ impl SchedulerConfig {
                 });
             }
         };
-        let text = std::str::from_utf8(&bytes).map_err(|_| ConfigError::Validation(format!(
-            "{} contains non-UTF-8 bytes", path.display()
-        )))?;
+        let text = std::str::from_utf8(&bytes).map_err(|_| {
+            ConfigError::Validation(format!("{} contains non-UTF-8 bytes", path.display()))
+        })?;
         let cfg: SchedulerConfig = toml::from_str(text).map_err(|source| ConfigError::Parse {
             path: path.to_path_buf(),
             source,
@@ -333,10 +333,11 @@ impl SchedulerConfig {
     /// Returns [`ConfigError::Parse`] on malformed TOML,
     /// [`ConfigError::Validation`] on validation failure.
     pub fn parse_str(toml_text: &str) -> Result<Self, ConfigError> {
-        let cfg: SchedulerConfig = toml::from_str(toml_text).map_err(|source| ConfigError::Parse {
-            path: PathBuf::from("<string>"),
-            source,
-        })?;
+        let cfg: SchedulerConfig =
+            toml::from_str(toml_text).map_err(|source| ConfigError::Parse {
+                path: PathBuf::from("<string>"),
+                source,
+            })?;
         cfg.validate()?;
         Ok(cfg)
     }

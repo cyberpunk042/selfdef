@@ -73,7 +73,9 @@ impl KvRoutingRequest {
     /// blocks are reusable?").
     #[must_use]
     pub fn has_reusable_kv(&self, resident_kv: &[u64]) -> bool {
-        self.kv_ref_candidates.iter().any(|k| resident_kv.contains(k))
+        self.kv_ref_candidates
+            .iter()
+            .any(|k| resident_kv.contains(k))
     }
 }
 
@@ -95,8 +97,14 @@ mod tests {
     #[test]
     fn five_questions_verbatim() {
         assert_eq!(ROUTING_QUESTIONS.len(), 5);
-        assert_eq!(ROUTING_QUESTIONS[0], "Which server already has this prefix hot?");
-        assert_eq!(ROUTING_QUESTIONS[4], "Which context block is expensive to rebuild?");
+        assert_eq!(
+            ROUTING_QUESTIONS[0],
+            "Which server already has this prefix hot?"
+        );
+        assert_eq!(
+            ROUTING_QUESTIONS[4],
+            "Which context block is expensive to rebuild?"
+        );
     }
 
     #[test]

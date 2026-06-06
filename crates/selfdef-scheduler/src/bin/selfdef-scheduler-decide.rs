@@ -80,11 +80,15 @@ fn parse_profile(s: &str) -> Option<Profile> {
 }
 
 fn env_path(name: &str, default: &str) -> PathBuf {
-    env::var(name).map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(default))
+    env::var(name)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(default))
 }
 
 fn env_path_with_default(name: &str, default: &Path) -> PathBuf {
-    env::var(name).map(PathBuf::from).unwrap_or_else(|_| default.to_path_buf())
+    env::var(name)
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| default.to_path_buf())
 }
 
 fn read_task_input() -> Result<String, String> {
@@ -130,8 +134,10 @@ fn main() -> ExitCode {
     let config_path = env_path("SELFDEF_SCHEDULER_CONFIG", DEFAULT_CONFIG_PATH);
     let cfg = SchedulerConfig::load_from(&config_path).unwrap_or_default();
     let psi_dir = env_path_with_default("SELFDEF_SCHEDULER_PSI_DIR", &cfg.substrate.psi_dir);
-    let nvidia_smi =
-        env_path_with_default("SELFDEF_SCHEDULER_NVIDIA_SMI_BIN", &cfg.substrate.nvidia_smi_bin);
+    let nvidia_smi = env_path_with_default(
+        "SELFDEF_SCHEDULER_NVIDIA_SMI_BIN",
+        &cfg.substrate.nvidia_smi_bin,
+    );
     let state_root =
         env_path_with_default("SELFDEF_SCHEDULER_STATE_ROOT", &cfg.substrate.state_root);
     let audit_path = env_path_with_default("SELFDEF_SCHEDULER_AUDIT_PATH", &cfg.emit.audit_path);
@@ -142,7 +148,9 @@ fn main() -> ExitCode {
     let mut driver = BackpressureDriver::new(
         Box::new(ProcfsPsiSource::with_dir(&psi_dir)),
         Box::new(NvidiaSmiDcgmSource::new().with_command_path(&nvidia_smi)),
-        Box::new(IpsPendingRestoresHumanGateSource::with_state_root(&state_root)),
+        Box::new(IpsPendingRestoresHumanGateSource::with_state_root(
+            &state_root,
+        )),
     );
     let reading = driver.poll();
 
@@ -163,7 +171,11 @@ fn main() -> ExitCode {
         max_queue: DEFAULT_HUMAN_ATTENTION_QUEUE_CAP,
         ts_ms: now_ms(),
         hostname: hostname(),
-        signer_kid_policy: cfg.signer.kid.clone().unwrap_or_else(|| "unsigned".to_string()),
+        signer_kid_policy: cfg
+            .signer
+            .kid
+            .clone()
+            .unwrap_or_else(|| "unsigned".to_string()),
     };
 
     match decide_persist_and_emit(
@@ -182,7 +194,9 @@ fn main() -> ExitCode {
                     ExitCode::SUCCESS
                 }
                 Err(e) => {
-                    eprintln!("[selfdef-scheduler-decide {VERSION}] FAIL serializing decision: {e}");
+                    eprintln!(
+                        "[selfdef-scheduler-decide {VERSION}] FAIL serializing decision: {e}"
+                    );
                     ExitCode::from(1)
                 }
             }

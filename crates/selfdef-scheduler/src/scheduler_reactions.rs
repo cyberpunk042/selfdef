@@ -74,7 +74,10 @@ impl ReactionTrigger {
                 "reduce structured branches per tick",
                 "relax structure until final output",
             ],
-            Self::ToolRejectionHigh => &["route more planning to oracle", "tighten prompt/tool schema"],
+            Self::ToolRejectionHigh => &[
+                "route more planning to oracle",
+                "tighten prompt/tool schema",
+            ],
         }
     }
 }
@@ -123,9 +126,11 @@ mod tests {
 
     #[test]
     fn tool_rejection_routes_to_oracle() {
-        assert!(ReactionTrigger::ToolRejectionHigh
-            .responses()
-            .contains(&"route more planning to oracle"));
+        assert!(
+            ReactionTrigger::ToolRejectionHigh
+                .responses()
+                .contains(&"route more planning to oracle")
+        );
     }
 
     #[test]

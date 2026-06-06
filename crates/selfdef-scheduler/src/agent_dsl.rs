@@ -129,7 +129,10 @@ mod tests {
 
     #[test]
     fn apply_patch_requires_verbatim() {
-        assert_eq!(APPLY_PATCH_REQUIRES, ["workspace_write", "policy_ok", "diff_valid"]);
+        assert_eq!(
+            APPLY_PATCH_REQUIRES,
+            ["workspace_write", "policy_ok", "diff_valid"]
+        );
     }
 
     #[test]

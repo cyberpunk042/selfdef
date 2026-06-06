@@ -436,4 +436,3 @@ fn render_one(
         Ok(render_panel_styled(&reading, style))
     }
 }
-

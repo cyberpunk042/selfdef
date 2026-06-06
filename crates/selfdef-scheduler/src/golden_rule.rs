@@ -36,8 +36,7 @@ pub const NEVER_RULES: [&str; 4] = [
 ];
 
 /// The closing thesis (dump 2728, verbatim).
-pub const THESIS: &str =
-    "this is the point where the workstation stops being \"a PC with GPUs\" and starts becoming a local AI operating system.";
+pub const THESIS: &str = "this is the point where the workstation stops being \"a PC with GPUs\" and starts becoming a local AI operating system.";
 
 /// The six techniques that overcome the hardware limits (dump 2718-2725).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -126,7 +125,10 @@ mod tests {
             Technique::Avx512BranchCompaction.name(),
             "AVX-512 branch compaction"
         );
-        assert_eq!(Technique::DeterministicCommit.name(), "deterministic commit");
+        assert_eq!(
+            Technique::DeterministicCommit.name(),
+            "deterministic commit"
+        );
     }
 
     #[test]
@@ -136,7 +138,10 @@ mod tests {
             assert!(!t.realized_by().is_empty(), "{t:?} not realized");
         }
         assert_eq!(Technique::PrefixSharing.realized_by(), "branch_kv_fusion");
-        assert_eq!(Technique::KvCacheTiering.realized_by(), "kv_cache_controller");
+        assert_eq!(
+            Technique::KvCacheTiering.realized_by(),
+            "kv_cache_controller"
+        );
     }
 
     #[test]

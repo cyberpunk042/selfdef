@@ -27,12 +27,15 @@
 use serde::{Deserialize, Serialize};
 
 /// The closing thesis (dump 3994, verbatim).
-pub const THESIS: &str =
-    "A programmable, replayable, measurable, permissioned cognition runtime.";
+pub const THESIS: &str = "A programmable, replayable, measurable, permissioned cognition runtime.";
 
 /// The evolution path (dump 3990, verbatim).
-pub const EVOLUTION_PATH: [&str; 4] =
-    ["Prompt chain", "Agent loop", "Durable graph", "Deterministic AI OS"];
+pub const EVOLUTION_PATH: [&str; 4] = [
+    "Prompt chain",
+    "Agent loop",
+    "Durable graph",
+    "Deterministic AI OS",
+];
 
 /// The seven system planes (dump 3968-3988).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -99,8 +102,14 @@ mod tests {
         let p = planes();
         assert_eq!(p.len(), 7);
         assert_eq!(SystemPlane::Inference.role(), "probabilistic workers");
-        assert_eq!(SystemPlane::Control.role(), "deterministic branch graph scheduler");
-        assert_eq!(SystemPlane::Programming.role(), "typed durable workflow graphs");
+        assert_eq!(
+            SystemPlane::Control.role(),
+            "deterministic branch graph scheduler"
+        );
+        assert_eq!(
+            SystemPlane::Programming.role(),
+            "typed durable workflow graphs"
+        );
     }
 
     #[test]
@@ -114,7 +123,12 @@ mod tests {
     fn evolution_path_verbatim() {
         assert_eq!(
             EVOLUTION_PATH,
-            ["Prompt chain", "Agent loop", "Durable graph", "Deterministic AI OS"]
+            [
+                "Prompt chain",
+                "Agent loop",
+                "Durable graph",
+                "Deterministic AI OS"
+            ]
         );
     }
 
