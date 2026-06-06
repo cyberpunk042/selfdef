@@ -148,3 +148,82 @@ Scanned files: 1"
     cap | grep -q '"event":"no_findings"'
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (FOUND-line sample is capped at 5 lines for log volume — 10 FOUNDs → only first 5 in sample)" {
+    # The script's grep ' FOUND\$' | head -5 cap limits sample to 5
+    # entries even when 10+ FOUNDs are present. Lock that — the
+    # -detail companion tag still emits all 10 for journal
+    # forensics.
+    mk_clam 1 "/v/1: Trojan.A FOUND
+/v/2: Trojan.B FOUND
+/v/3: Trojan.C FOUND
+/v/4: Trojan.D FOUND
+/v/5: Trojan.E FOUND
+/v/6: Trojan.F FOUND
+/v/7: Trojan.G FOUND
+/v/8: Trojan.H FOUND
+/v/9: Trojan.I FOUND
+/v/10: Trojan.J FOUND
+Infected files: 10
+Scanned files: 1234"
+    run_wd
+    cap | grep -q '"infected":10'
+    # The MAIN tag record's sample must NOT contain Trojan.F-J
+    # (capped at 5).
+    main_line=$(cap | grep -E '^-t selfdef-clamav --')
+    ! printf '%s' "${main_line}" | grep -q 'Trojan.F'
+    ! printf '%s' "${main_line}" | grep -q 'Trojan.J'
+    # First 5 ARE in the sample.
+    printf '%s' "${main_line}" | grep -q 'Trojan.A'
+    printf '%s' "${main_line}" | grep -q 'Trojan.E'
+}
+
+@test "INVARIANT (degenerate empty stdout — rc 0, blank stdout → still ok)" {
+    # Defensive parse: clamscan exits 0 with no summary block.
+    # Wrapper should treat as ok / no_findings, not crash on
+    # empty parse.
+    mk_clam 0 ""
+    run_wd
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (infected + scanned default to 0 when summary block is missing — defensive parse)" {
+    # When the summary lines aren't present, the awk parse returns
+    # empty → the wrapper's ${infected:-0} fallback locks the JSON
+    # field at 0. Critical for downstream consumers that expect
+    # numeric fields.
+    mk_clam 0 "no summary block here"
+    run_wd
+    cap | grep -q '"infected":0'
+    cap | grep -q '"scanned":0'
+}
+
+@test "INVARIANT (clamscan_rc surfaces in JSON — operator sees the raw exit code)" {
+    mk_clam 2 "ERROR: x"
+    run_wd
+    cap | grep -q '"clamscan_rc":2'
+}
+
+@test "INVARIANT (freshclam_rc surfaces in JSON — sig-DB-update health for operator dashboard)" {
+    mk_clam 0 "Infected files: 0
+Scanned files: 1"
+    run_wd
+    cap | grep -q '"freshclam_rc":'
+}
+
+@test "INVARIANT (sample is pipe-separated for multiple FOUNDs — downstream parser contract)" {
+    # The script does '| tr "\\n" "|"' to flatten multi-line FOUND
+    # samples into a single JSON-safe field. Pipe IS the
+    # separator. Downstream alerting hooks split on | to render
+    # the operator email.
+    mk_clam 1 "/v/x: First.Trojan FOUND
+/v/y: Second.Trojan FOUND
+Infected files: 2
+Scanned files: 1234"
+    run_wd
+    main_line=$(cap | grep -E '^-t selfdef-clamav --')
+    printf '%s' "${main_line}" | grep -q 'First.Trojan'
+    printf '%s' "${main_line}" | grep -q 'Second.Trojan'
+    # And both are joined by '|'.
+    printf '%s' "${main_line}" | grep -qE 'First.Trojan FOUND\|.*Second.Trojan FOUND'
+}
