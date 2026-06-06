@@ -154,3 +154,78 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+# ============================================================
+# Writable-root expansion across all 3 common pivots
+# ============================================================
+
+@test "INVARIANT (ModulePath under /var/tmp): writable-root expansion on ModulePath axis" {
+    printf 'Section "Files"\n    ModulePath "/var/tmp/xmods"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ModulePath under /dev/shm): writable-root expansion on ModulePath axis" {
+    printf 'Section "Files"\n    ModulePath "/dev/shm/xmods"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# SDD-063 bare-root variants
+# ============================================================
+
+@test "INVARIANT (bare /var/tmp as ModulePath): SDD-063 bare-root variant" {
+    printf 'Section "Files"\n    ModulePath "/var/tmp"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (bare /dev/shm as ModulePath): SDD-063 bare-root variant" {
+    printf 'Section "Files"\n    ModulePath "/dev/shm"\nEndSection\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# xorg.conf.d drop-in axis (not only main /etc/X11/xorg.conf)
+# ============================================================
+
+@test "INVARIANT (xorg.conf.d drop-in axis: writable ModulePath in drop-in → alert; not only main xorg.conf scanned)" {
+    # Attackers commonly plant a writable ModulePath in
+    # /etc/X11/xorg.conf.d/00-evil.conf to avoid touching the main
+    # xorg.conf (less visible). The watchdog must walk xorg.conf.d/
+    # too.
+    XCD="${TMP}/xorg.conf.d"
+    mkdir -p "${XCD}"
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules"\nEndSection\n' > "${CONF}"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_XORG_PROFILE="${PROFILE:-report}" \
+        SELFDEF_XORG_BASELINE="${BASELINE}" \
+        SELFDEF_XORG_DIRS="${XCD}" \
+        SELFDEF_XORG_FILES="${CONF}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant the evil drop-in.
+    printf 'Section "Files"\n    ModulePath "/tmp/evil"\nEndSection\n' > "${XCD}/00-evil.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_MODULE_LIB="${LIB}" \
+        SELFDEF_XORG_PROFILE="${PROFILE:-report}" \
+        SELFDEF_XORG_BASELINE="${BASELINE}" \
+        SELFDEF_XORG_DIRS="${XCD}" \
+        SELFDEF_XORG_FILES="${CONF}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# JSON record contract (SDD-062 single-line consumer)
+# ============================================================
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line — SDD-062 downstream JSON-line consumer contract)" {
+    printf 'Section "Files"\n    ModulePath "/usr/lib/xorg/modules"\nEndSection\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-xorg-config -- ')
+    [ "${main_count}" = "1" ]
+}
