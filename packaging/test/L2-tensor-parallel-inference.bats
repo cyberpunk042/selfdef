@@ -175,3 +175,42 @@ teardown_real_run() {
     grep -q 'TP_NRANKS=' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env"
     teardown_real_run
 }
+
+@test "INVARIANT (slice-plan.json carries ranks field — schema contract for downstream consumer)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -q '"ranks"' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json"
+    teardown_real_run
+}
+
+@test "INVARIANT (slice-plan.json carries slices array — schema contract for downstream consumer)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    grep -q '"slices"' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json"
+    teardown_real_run
+}
+
+@test "INVARIANT (slice-plan.json + runtime.env modes are chmod 0644 — system-config convention)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    plan_mode="$(stat -c '%a' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json")"
+    env_mode="$(stat -c '%a' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env")"
+    teardown_real_run
+    [ "${plan_mode}" = "644" ]
+    [ "${env_mode}" = "644" ]
+}
+
+@test "INVARIANT (TP_NRANKS in runtime.env equals ranks count in slice-plan.json — cross-file consistency)" {
+    # Both files derive from the same nranks counter — they must
+    # agree. Otherwise downstream TP runtime sees mismatched ranks.
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    plan_ranks="$(python3 -c "import json; print(json.load(open('${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/slice-plan.json')).get('ranks'))")"
+    env_nranks="$(grep -oE 'TP_NRANKS="[0-9]+"' "${SELFDEF_TENSOR_PARALLEL_ETC_DIR}/runtime.env" | grep -oE '[0-9]+')"
+    teardown_real_run
+    [ "${plan_ranks}" = "${env_nranks}" ]
+}
