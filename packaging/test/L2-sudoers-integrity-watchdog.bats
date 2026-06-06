@@ -235,3 +235,73 @@ EOF
     cap | grep -q '"event":"dangerous_sudo_grant_added"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (group-grant axis: %group NOPASSWD also tracked, not only user grants)" {
+    # Attacker drops a NOPASSWD grant on a %group instead of a
+    # user. Watchdog must track the %group form too.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/backdoor-group" <<'EOF'
+%evil ALL=(ALL) NOPASSWD: ALL
+EOF
+    run_wd
+    cap | grep -q '"event":"dangerous_sudo_grant_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented dangerous grant is NOT flagged: # prefix filtered)" {
+    # An operator note about a future grant must not surface
+    # as a real grant addition.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/notes" <<'EOF'
+# notes: would grant evil ALL=(ALL) NOPASSWD: ALL but operator declined
+EOF
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance in grant line: 'evil    ALL=(ALL)' multi-space NOPASSWD detection)" {
+    # Operator/attacker may use multi-spaces or tabs. Locks
+    # whitespace-tolerant grant parser still catches dangerous
+    # patterns.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/ws-attack" <<'EOF'
+evil    ALL=(ALL)   NOPASSWD:   ALL
+EOF
+    run_wd
+    cap | grep -q '"event":"dangerous_sudo_grant_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-grant single file: multiple ordinary additions in one drop-in surface as added=N)" {
+    # When a single new drop-in carries multiple grant lines,
+    # the added count must reflect ALL of them, not 1.
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/multi-ops" <<'EOF'
+bob ALL=(root) /bin/systemctl restart nginx
+carol ALL=(root) /bin/systemctl restart redis
+EOF
+    run_wd
+    cap | grep -qE '"added":[2-9]'
+    cap | grep -q '"event":"sudo_grant_added"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line per SDD-062 consumer contract — even on delta)" {
+    write_sudo_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SUDOERS_D_DIR}/backdoor" <<'EOF'
+evil ALL=(ALL) NOPASSWD: ALL
+EOF
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sudoers-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
