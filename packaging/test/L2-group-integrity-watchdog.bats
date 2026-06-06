@@ -209,3 +209,67 @@ have_account_db() { [ -r /etc/group ] && [ -r /etc/passwd ]; }
     rc="$(PROFILE=report run_wd_rc)"
     [ "${rc}" = "0" ]
 }
+
+@test "INVARIANT (wheel group privileged-add → alert): per-distro coverage" {
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^wheel:x:10:|wheel:x:10:evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -q '"event":"privileged_group_member_added"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'wheel:evil'
+}
+
+@test "INVARIANT (PRIMARY-GID pass via passwd): user joining privileged group only via pgid → alert" {
+    # CRITICAL invariant — the 2nd inventory pass. A user whose
+    # primary gid IS the docker group's gid will not appear in the
+    # docker group's member field, but they ARE a docker member
+    # by primary-gid pass.
+    write_passwd_group
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # New user with pgid=998 (docker's gid).
+    echo 'attacker:x:1003:998:Attacker:/home/attacker:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q '"event":"privileged_group_member_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (shadow group also privileged → alert)" {
+    # shadow group can read /etc/shadow. Adding a member = privilege escalation.
+    echo 'shadow:x:42:bob' >> "${GROUP_FILE}"   # initial: bob only
+    write_passwd_group
+    # Re-add shadow with bob (write_passwd_group truncates).
+    cat >> "${GROUP_FILE}" <<'EOF'
+shadow:x:42:bob
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^shadow:x:42:bob|shadow:x:42:bob,evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"alert"'
+    cap | grep -q 'shadow:evil'
+}
+
+@test "INVARIANT (lxd group also privileged — container escape vector → alert)" {
+    # lxd group can launch containers + escape to root.
+    echo 'lxd:x:120:bob' >> "${GROUP_FILE}"
+    write_passwd_group
+    cat >> "${GROUP_FILE}" <<'EOF'
+lxd:x:120:bob
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    sed -i 's|^lxd:x:120:bob|lxd:x:120:bob,evil|' "${GROUP_FILE}"
+    run_wd
+    cap | grep -qE '"severity":"alert"'
+    cap | grep -q 'lxd:evil'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_passwd_group
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-group-integrity -- ')
+    [ "${main_count}" = "1" ]
+}
