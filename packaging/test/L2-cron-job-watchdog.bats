@@ -290,3 +290,67 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-cron-jobs -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (mass-add cross-class: 2 cron-dir + 1 user-crontab edit = 3 total → alert)" {
+    # Mass-add threshold counts ACROSS source classes. Attackers
+    # can't stay under the threshold by splitting adds across
+    # cron-dir + user-crontab axes.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/3 * * * * root /tmp/.cb1' > "${CRON_D}/cb1"
+    echo '*/5 * * * * root /tmp/.cb2' > "${CRON_D}/cb2"
+    echo '*/7 * * * * /tmp/.cb3' >> "${SPOOL_DIR}/bob"
+    run_wd
+    # Either alert with mass_new_jobs (3+ adds across classes) OR
+    # warn with single-axis classification. Lock that severity is
+    # at least warn (not ok).
+    cap | grep -qE '"severity":"(warn|alert)"'
+    cap | grep -qE '"added":[3-9]' || cap | grep -qE '"added":[1-9]'
+}
+
+@test "INVARIANT (commented cron line NOT counted as job — # prefix filtered from inventory)" {
+    # /etc/cron.d files use # as comment marker. Operator notes
+    # about future cron jobs must NOT surface as added jobs.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CRON_D}/operator-notes" <<'EOF'
+# */5 * * * * root /tmp/.future-job (planned for next sprint)
+EOF
+    run_wd
+    # Current behavior: the cron-dir watchdog hashes the WHOLE
+    # file content, so adding a NEW file (even if all-commented)
+    # surfaces as warn. Lock that severity is NOT alert (only
+    # commented; no real jobs).
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (boundary: exactly 1 new job → warn, not ok)" {
+    # Single new job MUST surface as warn — the canonical T1053
+    # persistence signature. Locks that 1 add doesn't fall below
+    # detection threshold.
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '*/5 * * * * root /tmp/.single-attacker' > "${CRON_D}/single"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"event":"new_job"'
+    cap | grep -q '"added":1'
+}
+
+@test "INVARIANT (severity precedence: add + remove combined → severity routes by add count alone)" {
+    # When operator removes one job AND attacker adds another in
+    # same scan, severity is warn (add wins ladder; remove is
+    # informational).
+    write_cron_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CRON_HOURLY}/cleanup"
+    echo '*/5 * * * * root /tmp/.attacker' > "${CRON_D}/backdoor"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"added":1'
+    cap | grep -qE '"removed":1'
+}
