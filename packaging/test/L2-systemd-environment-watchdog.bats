@@ -208,3 +208,50 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-systemd-env -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): systemd-environment-watchdog does NOT refresh baseline on LD_* injection — alert STAYS until operator updates" {
+    # T1574.006 every-service env-injection — LD_* injection alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    printf '[Manager]\nDefaultEnvironment=LD_PRELOAD=/tmp/x.so\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"systemd_env_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (env value under /dev/shm tmpfs writable-root → alert)" {
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment=HELPER=/dev/shm/.attacker\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-config scan: system.conf.d + user.conf.d axes — LD_* in EITHER → alert)" {
+    # systemd reads BOTH system.conf.d/* AND user.conf.d/*.
+    # Attacker may plant in either. Lock multi-dir axis.
+    USERCONFD="${TMP}/user.conf.d"; mkdir -p "${USERCONFD}"
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    DIRS="${CONFD} ${USERCONFD}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant LD_PRELOAD in user.conf.d.
+    printf '[Manager]\nDefaultEnvironment=LD_PRELOAD=/tmp/evil.so\n' > "${USERCONFD}/10-user-env.conf"
+    DIRS="${CONFD} ${USERCONFD}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'DefaultEnvironment    =    LD_PRELOAD=...' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces around = to evade naive grep.
+    # Lock whitespace-tolerant parser.
+    printf '[Manager]\nDefaultEnvironment=LANG=en_US.UTF-8\n' > "${CONF}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Manager]\nDefaultEnvironment    =    LD_PRELOAD=/tmp/x.so\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
