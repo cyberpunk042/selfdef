@@ -136,3 +136,47 @@ usb_storage            73728  0' DRY_RUN=1 run_wd
     [ -f "${MODPROBE_D}/50-selfdef-usb-storage.conf" ]
     cmp -s modules/usb-storage-mass-disable/configs/blocked.conf "${MODPROBE_D}/50-selfdef-usb-storage.conf"
 }
+
+@test "INVARIANT (blocked drop-in covers BOTH usb_storage + uas modules)" {
+    write_config "blocked"
+    run_wd
+    grep -qE '(blacklist|install) usb_storage' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+    grep -qE '(blacklist|install) uas' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
+
+@test "INVARIANT (audited drop-in content differs from blocked — audited logs, blocked denies)" {
+    write_config "audited"
+    run_wd
+    sha_a="$(sha256sum "${MODPROBE_D}/50-selfdef-usb-storage.conf" | awk '{print $1}')"
+    write_config "blocked"
+    run_wd
+    sha_b="$(sha256sum "${MODPROBE_D}/50-selfdef-usb-storage.conf" | awk '{print $1}')"
+    [ "${sha_a}" != "${sha_b}" ]
+}
+
+@test "INVARIANT (profile transition audited → blocked): rewrites drop-in + fires rmmod on loaded modules" {
+    write_config "audited"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' run_wd
+    : > "${RMMOD_LOG}"
+    write_config "blocked"
+    LSMOD_OUTPUT='Module                  Size  Used by
+usb_storage            73728  0' run_wd
+    grep -q 'rmmod usb_storage' "${RMMOD_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves drop-in mtime" {
+    write_config "blocked"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${MODPROBE_D}/50-selfdef-usb-storage.conf")"
+    sleep 1
+    LSMOD_OUTPUT='Module                  Size  Used by' run_wd
+    mtime_after="$(stat -c '%Y' "${MODPROBE_D}/50-selfdef-usb-storage.conf")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "blocked"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${MODPROBE_D}/50-selfdef-usb-storage.conf"
+}
