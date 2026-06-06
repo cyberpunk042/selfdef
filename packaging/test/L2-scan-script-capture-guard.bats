@@ -83,22 +83,45 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
     # the former writes a *different* path, the latter has no `>`/`>>`.
     bad=()
     for f in $(scan_scripts); do
+        # If a watchdog declares the canonical `current=$(mktemp)` diff
+        # temp file AND reads it via comm, then `$current` MUST be
+        # populated. The emitter shape is irrelevant — printf, awk,
+        # echo -e, or any other TSV producer all hit the same silent-no-op
+        # trap if their output goes to stdout rather than the diff temp
+        # file. The earlier gate keyed on `printf '...\t...\n'` and
+        # SILENTLY SKIPPED watchdogs that used awk or echo -e to emit
+        # records — that gap let dns-resolver-watchdog (awk on
+        # /etc/resolv.conf + echo -e for the /etc/hosts override count)
+        # ship a silent no-op for the entire 2026-06-05 dev window
+        # (fixed 2026-06-06). The right invariant is the structural one:
+        # declares `current=` AND comm-reads it → $current must be
+        # populated, no matter how the producer shapes its records.
+        #
+        # The `current=` declaration check (not just `$current` reference)
+        # avoids false-positives on the legitimate two-temp-file pattern
+        # (e.g. hidden-process-watchdog's `visible` + `alive` set-difference,
+        # which uses its own variable names and doesn't need `$current` at
+        # all).
+        grep -qE '^[[:space:]]*current=' "$f" || continue
         grep -qE 'comm -23|comm -13' "$f" || continue
-        # Builds TSV records? (format has a literal \t and ends \n; the
-        # JSON-emit printf has no \t, the inline `printf '%s\t'` search-key
-        # has no trailing \n, so neither matches.)
-        grep -qE "printf '[^']*\\\\t[^']*\\\\n'" "$f" || continue
-        # Must populate $current at least once.
+        # Must populate $current at least once via a `>` or `>>` redirect to
+        # the literal token `"$current"`. The `${current}.sorted` dedup path
+        # and `mv … "$current"` shuffling do NOT count: the former writes a
+        # different path, the latter has no shell redirect operator. (And the
+        # `cp "$current" "$BASELINE"` snapshot reads $current rather than
+        # writes it.)
         grep -qE '>>? *"\$current"' "$f" || bad+=("$(basename "$f")")
     done
     if [ "${#bad[@]}" -gt 0 ]; then
-        printf 'comm-delta watchdog builds records but never populates $current: %s\n' "${bad[*]}" >&2
-        printf 'FIX: populate the temp file — append `>> "$current"` to each record\n' >&2
-        printf '     `printf "...\\t...\\n"`, or redirect the collection block with\n' >&2
-        printf '     `done > "$current"`. Without it the records go to stdout, $current\n' >&2
-        printf '     is empty, and the watchdog silently detects nothing (the 2026-05-27\n' >&2
+        printf 'comm-delta watchdog reads $current but never populates it: %s\n' "${bad[*]}" >&2
+        printf 'FIX: populate the temp file — `>> "$current"` on each record\n' >&2
+        printf '     `printf "...\\t...\\n"`, OR wrap the emit block with\n' >&2
+        printf '     `{ ... } | sort -u > "$current"` / `done > "$current"`.\n' >&2
+        printf '     Without it the records go to stdout, $current is empty,\n' >&2
+        printf '     and the watchdog silently detects nothing (the 2026-05-27\n' >&2
         printf '     self-integrity / account / pam-config / cron-job / ssh-authkeys /\n' >&2
-        printf '     sudoers / systemd-unit / group-integrity bug class).\n' >&2
+        printf '     sudoers / systemd-unit / group-integrity bug class — and\n' >&2
+        printf '     the 2026-06-06 dns-resolver awk/echo-e variant of the same).\n' >&2
         return 1
     fi
 }

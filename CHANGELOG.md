@@ -28,12 +28,30 @@ locks the capture regression: baseline non-empty, `baseline_count` non-zero,
 unconditional `hosts_overrides` record present, `no_delta` on second run.
 All 4 cases pass locally.
 
-The L2 scan-script capture guard (`L2-scan-script-capture-guard.bats`) was
-already correct: its `>>? *"\$current"` regex catches both inline `>>` and
-block `>` redirects. The dns-resolver bug evaded it because the script
-contained `> "${current}.sorted"` and `mv ... "$current"` — neither a direct
-shell redirect to `$current` itself. The fix uses `> "$current"` directly so
-the guard now passes the redirect-presence check on this watchdog too.
+### Fixed — L2-scan-script-capture-guard awk/echo-e blind spot (2026-06-06)
+
+The L2 capture guard's `comm-delta` invariant was filtering candidate scripts
+on the emitter-format shape — `grep -qE "printf '[^']*\\t[^']*\\n'"`. That
+gate was too narrow: dns-resolver-watchdog used `awk` (for the
+`/etc/resolv.conf` parse) and `echo -e` (for the resolvectl pipeline + the
+`/etc/hosts` count) to produce its TSV records, both of which produce the
+same `\t`-separated output but neither matches the `printf` regex. The guard
+silently skipped dns-resolver and the silent-no-op bug went undetected.
+
+Strengthened the gate-2 invariant: any watchdog that declares
+`current=$(mktemp)` AND reads it via `comm` must populate `$current` —
+regardless of which emitter idiom (printf / awk / echo -e / read-loop)
+produces the records. Verified negative-control: replaying the pre-fix
+dns-resolver shape through the new guard flags it correctly (gate-1
+`current=` matches, gate-2 `comm` matches, gate-3 `> "$current"` populate
+absent → flagged). False-positive control: hidden-process-watchdog's
+legitimate two-temp-file pattern (`visible` + `alive` set-difference, no
+`current=` at all) passes by skipping at gate-1.
+
+The two earlier guard passes (2026-05-27 cron-job class + 2026-06-06
+dns-resolver class) are both now covered by one structural check rather
+than two emitter-shape regexes — the right invariant the bug class actually
+demands.
 
 ### Added — MS048 Goldilocks Scheduler + Deterministic Cortex Runtime COMPLETE (2026-06-05)
 
