@@ -215,3 +215,66 @@ run_wd() {
     grep -q '^0\.0\.0\.0 ads\.example$' "${HOSTS_FILE}"
     ! grep -q '^0\.0\.0\.0 analytics\.example$' "${HOSTS_FILE}"
 }
+
+@test "INVARIANT (comment-line in operator file is NOT rendered): comment-skip guard" {
+    write_config "base"
+    cat > "${OPERATOR_FILE}" <<'EOF'
+# This is just a comment, not a domain
+real-bad-site.example
+EOF
+    run_wd
+    grep -q '^0\.0\.0\.0 real-bad-site\.example$' "${HOSTS_FILE}"
+    # Literal '# This is just a comment...' should NOT become a hosts line.
+    ! grep -qE '^0\.0\.0\.0 #' "${HOSTS_FILE}"
+}
+
+@test "INVARIANT (blank-line in operator file is NOT rendered as 0.0.0.0)" {
+    write_config "base"
+    cat > "${OPERATOR_FILE}" <<'EOF'
+real-bad-site.example
+
+another-bad.example
+EOF
+    run_wd
+    grep -q '^0\.0\.0\.0 real-bad-site\.example$' "${HOSTS_FILE}"
+    grep -q '^0\.0\.0\.0 another-bad\.example$' "${HOSTS_FILE}"
+    # No empty 0.0.0.0 line.
+    ! grep -qE '^0\.0\.0\.0 *$' "${HOSTS_FILE}"
+}
+
+@test "INVARIANT (allowlist applies to BOTH bare + www variants): allowing X removes both X and www.X" {
+    write_config "base"
+    printf '%s\n' 'ads.example' > "${ALLOW_FILE}"
+    run_wd
+    ! grep -q '^0\.0\.0\.0 ads\.example$' "${HOSTS_FILE}"
+    ! grep -q '^0\.0\.0\.0 www\.ads\.example$' "${HOSTS_FILE}"
+}
+
+@test "INVARIANT (deduplication: same domain in base + operator → renders ONCE)" {
+    write_config "base"
+    # Re-add base list domain via operator file.
+    printf '%s\n' 'ads.example' > "${OPERATOR_FILE}"
+    run_wd
+    # Count occurrences — should be 1 (or 2 with www, but not more).
+    n_ads=$(grep -c '^0\.0\.0\.0 ads\.example$' "${HOSTS_FILE}")
+    [ "${n_ads}" = "1" ]
+}
+
+@test "INVARIANT (BEGIN/END markers form a SINGLE block — not multiple stacks on re-apply)" {
+    write_config "base"
+    run_wd
+    run_wd
+    run_wd
+    n_begin=$(grep -c 'selfdef dns-shield BEGIN' "${HOSTS_FILE}")
+    n_end=$(grep -c 'selfdef dns-shield END' "${HOSTS_FILE}")
+    [ "${n_begin}" = "1" ]
+    [ "${n_end}" = "1" ]
+}
+
+@test "INVARIANT (END marker comes AFTER BEGIN — bracket integrity)" {
+    write_config "base"
+    run_wd
+    begin_line=$(grep -nE '^# === selfdef dns-shield BEGIN' "${HOSTS_FILE}" | head -1 | cut -d: -f1)
+    end_line=$(grep -nE '^# === selfdef dns-shield END' "${HOSTS_FILE}" | head -1 | cut -d: -f1)
+    [ "${end_line}" -gt "${begin_line}" ]
+}
