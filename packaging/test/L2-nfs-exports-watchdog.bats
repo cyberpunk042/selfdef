@@ -169,3 +169,66 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-nfs-exports -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (exports.d drop-in axis: dangerous export in drop-in → alert; not only main /etc/exports scanned)" {
+    # Attackers may plant dangerous export in
+    # /etc/exports.d/00-evil.conf. Watchdog must walk dir too.
+    EXPORTSD="${TMP}/exports.d"
+    mkdir -p "${EXPORTSD}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_NFSEXP_PROFILE=report \
+        SELFDEF_NFSEXP_BASELINE="${BASELINE}" \
+        SELFDEF_NFSEXP_FILE="${EXPORTS}" \
+        SELFDEF_NFSEXP_D="${EXPORTSD}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/evil *(rw,no_root_squash)\n' > "${EXPORTSD}/00-evil.exports"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_NFSEXP_PROFILE=report \
+        SELFDEF_NFSEXP_BASELINE="${BASELINE}" \
+        SELFDEF_NFSEXP_FILE="${EXPORTS}" \
+        SELFDEF_NFSEXP_D="${EXPORTSD}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented dangerous export NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/public 192.168.1.0/24(ro,root_squash,secure)\n# /srv/data *(rw,no_root_squash) — future, not yet active\n' > "${EXPORTS}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (auto-trust): nfs-exports-watchdog DOES auto-refresh baseline (operator NFS reconfiguration common)" {
+    # CONTRAST against no-auto-trust family. NFS export changes
+    # ARE common operator actions (sharing new paths, restricting
+    # client lists). Watchdog flags delta for THIS run; baseline
+    # catches up on next. Asymmetry against future no-auto-trust
+    # regression.
+    seed_benign
+    run_wd
+    printf '/srv/data *(rw,no_root_squash)\n' > "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"nfs_exports_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (multiple dangerous flags on same line: no_root_squash + insecure combined → still single alert)" {
+    # When a single export carries MULTIPLE dangerous flags, the
+    # alert fires once (not per-flag). Locks the consolidation.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/srv/data *(rw,no_root_squash,insecure)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q '"event":"nfs_exports_dangerous"'
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-nfs-exports -- ')
+    [ "${main_count}" = "1" ]
+}
