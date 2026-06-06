@@ -16,9 +16,9 @@ else
     exit 2
 fi
 
-LOGIN_DEFS_D="/etc/login.defs.d"
+LOGIN_DEFS_D="${SELFDEF_LOGIN_DEFS_D:-/etc/login.defs.d}"
 DROPIN="${LOGIN_DEFS_D}/50-selfdef-login-defs.conf"
 # Fallback append target for distros without login.defs.d.
-LEGACY_LOGIN_DEFS="/etc/login.defs"
+LEGACY_LOGIN_DEFS="${SELFDEF_LEGACY_LOGIN_DEFS:-/etc/login.defs}"
 HEADER_MARKER="# managed-by: selfdef login-defs-baseline"
 SENTINEL_KEYS=(PASS_MAX_DAYS PASS_MIN_DAYS PASS_WARN_AGE ENCRYPT_METHOD)
