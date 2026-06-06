@@ -176,3 +176,44 @@ run_wd() {
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile downgrade require → monitor): rewrites drop-in back + fires daemon-reload" {
+    write_config "require"
+    run_wd
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
+    : > "${SYSEOF_LOG}"
+    write_config "monitor"
+    run_wd
+    grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=monitor$' "${DROPIN_PROFILE}"
+    ! grep -q '^Environment=SELFDEF_SECURE_BOOT_PROFILE=require$' "${DROPIN_PROFILE}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (libexec script probes mokutil or efivars for SecureBoot state)" {
+    # The detector must actually check Secure Boot state via mokutil
+    # --sb-state OR /sys/firmware/efi/efivars/SecureBoot-*.
+    write_config "monitor"
+    run_wd
+    grep -qE 'mokutil|efivars|SecureBoot' "${SCRIPT_DST}"
+}
+
+@test "INVARIANT (service unit references libexec script — wiring is correct)" {
+    write_config "monitor"
+    run_wd
+    grep -qE '^ExecStart=' "${SVC_DST}"
+    grep -q 'secure-boot-status' "${SVC_DST}"
+}
+
+@test "INVARIANT (timer unit carries OnCalendar / OnBootSec / OnUnitActiveSec — actually fires periodically)" {
+    write_config "monitor"
+    run_wd
+    grep -qE '(OnCalendar|OnBootSec|OnUnitActiveSec)=' "${TIMER_DST}"
+}
+
+@test "INVARIANT (no render-timestamp in ANY of the 4 installed files): variant-A guard fleet-wide" {
+    write_config "monitor"
+    run_wd
+    for f in "${SCRIPT_DST}" "${SVC_DST}" "${TIMER_DST}" "${DROPIN_PROFILE}"; do
+        ! grep -qE '^# Generated [0-9]{4}-' "$f"
+    done
+}
