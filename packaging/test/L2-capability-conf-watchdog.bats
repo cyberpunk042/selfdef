@@ -195,3 +195,48 @@ seed_benign() {
     run_wd                                              # baseline refreshed
     cap | grep -q '"event":"capability_conf_intact"'
 }
+
+@test "INVARIANT (commented dangerous grant NOT flagged: # prefix filtered from inventory)" {
+    # capability.conf supports # comments. Operator notes about
+    # hypothetical bad grants must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\n# cap_setuid example-attacker\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"capability_conf_dangerous_grant"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous-cap detect): cap_sys_admin grant → alert (the catch-all super-capability)" {
+    # cap_sys_admin is the "almost-root" capability covering mount/
+    # namespace/firmware-load/kexec. Locks coverage.
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_sys_admin evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-grant composition): file with multiple dangerous caps → alert (any one triggers)" {
+    # Attacker stacks several capabilities. The detector must alert
+    # regardless of how many or which order.
+    seed_benign
+    run_wd
+    printf 'cap_net_raw netuser\ncap_setuid evil\ncap_sys_module evil\ncap_dac_override evil\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: 'cap_setuid    evil' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces to evade naive grep-based
+    # detection. Lock whitespace-tolerant parser.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'cap_net_raw netuser\ncap_setuid    evil\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
