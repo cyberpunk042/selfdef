@@ -147,3 +147,61 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — GSS mech inventory enumerates auth-handling code-load surface)" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (mechanism .so under /var/tmp): writable-root expansion" {
+    printf 'gssapi_evil 1.2.3.4 /var/tmp/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (mechanism .so under /dev/shm): tmpfs writable-root expansion" {
+    printf 'gssapi_evil 1.2.3.4 /dev/shm/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (mechanism .so under /home): user-writable hijack coverage" {
+    printf 'gssapi_evil 1.2.3.4 /home/user/evil.so\n' > "${MECH}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (mech.d drop-in also scanned — not only main mech file)" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    printf 'gssapi_evil 1.2.3.4 /tmp/evil.so\n' > "${MECHD}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable mech file → alert)" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    chmod 0666 "${MECH}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable mech file): group-writable → alert above world-writable bar" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    chmod 0664 "${MECH}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'gssapi_krb5 1.2.840.113554.1.2.2 mech_krb5.so\n' > "${MECH}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-gss-mech -- ')
+    [ "${main_count}" = "1" ]
+}
