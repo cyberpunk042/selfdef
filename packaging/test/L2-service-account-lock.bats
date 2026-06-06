@@ -241,3 +241,59 @@ run_wd() {
     [[ "${output}" == *'audited=1'* ]]
     [[ "${output}" == *'locked=1'* ]]
 }
+
+@test "INVARIANT (multiple non-reserved interactive accounts: ALL get chsh + passwd -l)" {
+    # Lock the multi-account coverage. Two non-reserved
+    # interactive shells both should get neutralized.
+    cat > "${PASSWD_FILE}" <<'EOF'
+root:x:0:0:root:/root:/bin/bash
+www-data:x:33:33:www-data:/var/www:/bin/bash
+postfix:x:114:121:postfix:/var/spool/postfix:/bin/sh
+alice:x:1000:1000:Alice,,,:/home/alice:/bin/bash
+EOF
+    write_config "enforce"
+    run_wd
+    # Both non-reserved interactive accounts get neutralized.
+    grep -qE 'chsh.*-s.*nologin.*www-data' "${CHSH_LOG}"
+    grep -qE 'chsh.*-s.*nologin.*postfix' "${CHSH_LOG}"
+    grep -q 'passwd -l www-data' "${PASSWD_LOG}"
+    grep -q 'passwd -l postfix' "${PASSWD_LOG}"
+    # alice (UID>=1000) NOT touched.
+    ! grep -q 'chsh.*alice' "${CHSH_LOG}"
+}
+
+@test "INVARIANT (audit JSON: audited=N + locked=0 contract — read-only invariant)" {
+    write_synth_passwd
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'audited=1'* ]]
+    # Audit mode MUST report locked=0 — never any actual locks.
+    [[ "${output}" == *'locked=0'* ]]
+}
+
+@test "INVARIANT (chsh AND passwd both fire per account — atomicity contract; chsh-without-passwd-l leaves password active)" {
+    # Locking the shell without locking the password leaves a
+    # hole: an attacker with the password could still re-set the
+    # shell via chsh. Both MUST fire per account.
+    write_synth_passwd
+    write_config "enforce"
+    run_wd
+    chsh_count="$(grep -c 'chsh.*www-data' "${CHSH_LOG}")"
+    passwd_count="$(grep -c 'passwd -l www-data' "${PASSWD_LOG}")"
+    [ "${chsh_count}" -ge 1 ]
+    [ "${passwd_count}" -ge 1 ]
+}
+
+@test "INVARIANT (whitespace tolerance in reserved_uids CSV: '0, 1, 2, 3' with spaces normalized)" {
+    # Operator may write the CSV with spaces. Parser must handle.
+    write_synth_passwd
+    printf 'profile = "enforce"\n' > "${CONF}"
+    printf 'reserved_uids = "0, 1, 2, 3"\n' >> "${CONF}"
+    run_wd
+    # www-data (uid=33, not in reserved list with or without
+    # whitespace) MUST get locked.
+    grep -qE 'chsh.*-s.*nologin.*www-data' "${CHSH_LOG}"
+    # root (uid=0, in reserved list) MUST NOT.
+    ! grep -q 'chsh.*root' "${CHSH_LOG}"
+}
