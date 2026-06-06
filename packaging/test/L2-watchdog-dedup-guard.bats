@@ -152,6 +152,49 @@ scan_scripts() { compgen -G "${SCRIPTS_GLOB}"; }
     fi
 }
 
+@test "every scan script has at most one MAIN logger tag (SDD-062 single-record contract for downstream Sigma routing)" {
+    # Each scan run emits ONE main JSON record (the SDD-062 downstream
+    # consumer routes by tag). A script may also emit a -detail companion
+    # for verbose follow-up; that's OK. What's NOT OK is >1 distinct
+    # MAIN tag (a tag without -detail or -sample suffix) — Sigma consumer
+    # would not route deterministically.
+    bad=()
+    for f in $(scan_scripts); do
+        # Distinct MAIN tag names (excluding -detail / -sample variants).
+        main_tags="$(grep -oE 'logger -t selfdef-[a-z0-9-]+' "$f" \
+            | sort -u \
+            | grep -vE -- '-(detail|sample|verbose)$' \
+            | wc -l)"
+        if [ "${main_tags}" -gt 1 ]; then
+            bad+=("$(basename "$f"):${main_tags}-distinct-main-tags")
+        fi
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'scan script uses >1 distinct MAIN logger tag: %s\n' "${bad[*]}" >&2
+        printf 'FIX: each scan script emits ONE main tag selfdef-<module>.\n' >&2
+        printf '     -detail / -sample / -verbose suffix variants are OK.\n' >&2
+        return 1
+    fi
+}
+
+@test "every scan script that has profile semantics carries report+enforce profile dispatcher" {
+    # The standard fail-loud / enforce-exit-non-zero contract requires
+    # the script to branch on profile. Without this, the L2 enforce-
+    # profile tests (and operator-set SELFDEF_*_PROFILE=enforce) would
+    # silently no-op.
+    bad=()
+    for f in $(scan_scripts); do
+        grep -q 'SELFDEF_MODULE_LIB' "$f" || continue
+        grep -qE 'PROFILE' "$f" || continue
+        # if it talks about PROFILE at all, it must distinguish enforce.
+        grep -qE 'enforce' "$f" || bad+=("$(basename "$f"):missing-enforce-branch")
+    done
+    if [ "${#bad[@]}" -gt 0 ]; then
+        printf 'scan script references PROFILE but no enforce branch: %s\n' "${bad[*]}" >&2
+        return 1
+    fi
+}
+
 @test "module-lib-sourcing watchdogs gate the lib version, and dir-helper users require v4" {
     # SDD-061 D-6 / SDD-063: a watchdog that sources module-lib must refuse to
     # run against a too-old lib (the version gate `SELFDEF_MODULE_LIB_VERSION
