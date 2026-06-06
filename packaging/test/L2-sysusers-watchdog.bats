@@ -113,3 +113,71 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — sysusers inventory enumerates declarative user-add surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (membership-into-sudo): an `m` membership into sudo → alert" {
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp sudo\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (membership-into-wheel): an `m` membership into wheel → alert" {
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp wheel\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (membership-into-docker): an `m` membership into docker → alert (container-mount root escalation)" {
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp docker\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing uid-0): baseline_initial fires alert if sysusers already declares a uid-0 entry at install-time" {
+    printf 'u backdoor 0 "root clone"\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (group-writable sysusers): group-writable → alert above the world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED sysusers .conf file (operator pruning) → warn" {
+    seed_benign
+    cat > "${CONFD}/other.conf" <<'EOF'
+u svc 1001 "Service Account"
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CONFD}/other.conf"
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sysusers -- ')
+    [ "${main_count}" = "1" ]
+}
