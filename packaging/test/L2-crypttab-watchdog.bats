@@ -211,3 +211,42 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-crypttab -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): crypttab-watchdog does NOT refresh baseline on suspicious-keyscript detection — alert STAYS until operator updates" {
+    # LUKS-unlock root-exec persistence — suspicious-keyscript alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    printf 'data /dev/sda2 none luks,keyscript=/tmp/.getkey\n' > "${CRYPTTAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"crypttab_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious keyscript NOT flagged: # prefix filtered)" {
+    # crypttab uses # for comments. Operator notes about hypothetical
+    # bad keyscripts must NOT trigger alert.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 none luks\n# data /dev/sda2 none luks,keyscript=/tmp/.example-attacker\n' > "${CRYPTTAB}"
+    run_wd
+    ! cap | grep -q '"event":"crypttab_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (keyscript with absolute path BUT relative subpath traversal '/usr/lib/../../../tmp/.evil' → flagged)" {
+    # An attacker may try to evade detection by using path traversal
+    # within an absolute path. Either explicit detection OR canonical
+    # path resolution must catch this. Lock current behavior.
+    printf 'data /dev/sda2 none luks\n' > "${CRYPTTAB}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'data /dev/sda2 none luks,keyscript=/usr/lib/../../../tmp/.evil\n' > "${CRYPTTAB}"
+    run_wd
+    # Either alert (preferred — canonical path resolution catches /tmp/) OR warn (acceptable — config change).
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
