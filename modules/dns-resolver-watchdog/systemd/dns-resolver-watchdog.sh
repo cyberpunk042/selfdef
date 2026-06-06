@@ -22,6 +22,11 @@ set -u
 
 PROFILE="${SELFDEF_DNSRES_PROFILE:-report}"
 BASELINE="${SELFDEF_DNSRES_BASELINE:-/var/lib/selfdef/dns-resolver-baseline.tsv}"
+# SELFDEF_DNSRES_RESOLV_FILE + SELFDEF_DNSRES_HOSTS_FILE added
+# 2026-06-06 for L2 delta-testability. Live defaults unchanged.
+# resolvectl is mocked via PATH override in tests.
+RESOLV_FILE="${SELFDEF_DNSRES_RESOLV_FILE:-/etc/resolv.conf}"
+HOSTS_FILE="${SELFDEF_DNSRES_HOSTS_FILE:-/etc/hosts}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -29,10 +34,9 @@ trap 'rm -f "$current"' EXIT
 {
     # resolv.conf may be a symlink to systemd-resolved's stub; we
     # read the effective file either way.
-    RESOLV="/etc/resolv.conf"
-    if [[ -r "$RESOLV" ]]; then
+    if [[ -r "$RESOLV_FILE" ]]; then
         awk '/^nameserver/ {print "nameserver\t" $2}
-             /^search/     {for(i=2;i<=NF;i++) print "search\t" $i}' "$RESOLV"
+             /^search/     {for(i=2;i<=NF;i++) print "search\t" $i}' "$RESOLV_FILE"
     fi
 
     # systemd-resolved actual upstreams (the stub 127.0.0.53 hides
@@ -46,8 +50,8 @@ trap 'rm -f "$current"' EXIT
 
     # /etc/hosts override count (a sudden jump = mass-hijack via
     # hosts entries, the poor-man's DNS redirect).
-    if [[ -r /etc/hosts ]]; then
-        hc=$(grep -cvE '^\s*(#|$)' /etc/hosts 2>/dev/null || echo 0)
+    if [[ -r "$HOSTS_FILE" ]]; then
+        hc=$(grep -cvE '^\s*(#|$)' "$HOSTS_FILE" 2>/dev/null || echo 0)
         printf 'hosts_overrides\t%s\n' "$hc"
     fi
 } | sort -u > "$current"
