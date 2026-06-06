@@ -181,3 +181,54 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-sysusers -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): sysusers-watchdog does NOT refresh baseline on uid-0 detection — alert STAYS until operator updates" {
+    # T1136 declarative user-add persistence — uid-0 alert MUST
+    # persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'u backdoor 0 "root clone"\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"sysusers_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented sysusers entry NOT counted: # prefix filtered from inventory)" {
+    # sysusers.d supports # comments. Operator notes about
+    # hypothetical uid-0 entries must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'u myapp 999 "My App Daemon"\ng myapp 999\n# u backdoor 0 "example bad config"\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"sysusers_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: sysusers.d drop-in axis — uid-0 in ANY watched dir → alert)" {
+    # /usr/lib/sysusers.d + /etc/sysusers.d + /run/sysusers.d are
+    # all honored by systemd-sysusers. Attacker may plant uid-0
+    # in any of them. Lock multi-dir axis.
+    CONFD2="${TMP}/sysusers.d2"; mkdir -p "${CONFD2}"
+    seed_benign
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant uid-0 in second drop-in dir.
+    printf 'u backdoor 0 "root clone"\n' > "${CONFD2}/evil.conf"
+    DIRS_V="${CONFD} ${CONFD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (membership-into-disk): an \`m\` membership into disk group → alert (raw block device read = credential dump)" {
+    # disk group membership = unrestricted /dev/sd* access = read /etc/shadow
+    # raw from disk + write /etc/passwd raw → root.
+    seed_benign
+    run_wd
+    printf 'u myapp 999 "My App Daemon"\nm myapp disk\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
