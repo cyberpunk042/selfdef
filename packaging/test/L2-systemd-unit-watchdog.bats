@@ -273,3 +273,97 @@ EOF
     cap | grep -q '"event":"unit_added_or_changed"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (ExecStartPost change also detected — not only ExecStart): full unit-file content hash" {
+    # The watchdog hashes the ENTIRE FragmentPath content — not
+    # just the ExecStart line. Patching ExecStartPost (or
+    # ExecStopPost, ExecReload, EnvironmentFile, etc.) is a
+    # known persistence trick that must also surface.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${SYSTEMD_UNIT_DIR}/nginx.service" <<'EOF'
+[Unit]
+Description=nginx HTTP server
+[Service]
+ExecStart=/usr/sbin/nginx -g 'daemon off;'
+ExecStartPost=/tmp/.callback-post
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (socket-unit modification detected): docker.socket axis is hashed, not only .service axis" {
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker re-points docker.socket to a writable path.
+    cat > "${SYSTEMD_UNIT_DIR}/docker.socket" <<'EOF'
+[Socket]
+ListenStream=/tmp/.fake-docker.sock
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-add: 2 enabled units added at once → both surface in added count)" {
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket evil1.service evil2.service"
+    cat > "${SYSTEMD_UNIT_DIR}/evil1.service" <<'EOF'
+ExecStart=/tmp/.x1
+EOF
+    cat > "${SYSTEMD_UNIT_DIR}/evil2.service" <<'EOF'
+ExecStart=/tmp/.x2
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"added":2'
+}
+
+@test "INVARIANT (add + remove combined: alert severity wins over warn — added unit is higher priority signal)" {
+    # When an attacker SWAPS units (disable cron, enable evil),
+    # both deltas surface in the same scan. Per the severity
+    # ladder, alert (add) wins over warn (remove) — the combined
+    # severity must be alert.
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service evil.service"
+    cat > "${SYSTEMD_UNIT_DIR}/evil.service" <<'EOF'
+ExecStart=/tmp/.x
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"added":1'
+    cap | grep -q '"removed":1'
+}
+
+@test "INVARIANT (baseline format TAB-separated: unit\\tstate\\thash — downstream parser contract)" {
+    # The TSV format is the downstream-parser contract — diffs +
+    # alerting hooks split on TAB. A space-separated baseline
+    # would corrupt unit names with spaces (rare but possible).
+    write_unit_inventory
+    run_wd
+    # Every non-empty line has exactly 2 TABs (3 fields).
+    while IFS= read -r line; do
+        tab_count=$(awk -F'\t' '{print NF-1}' <<< "${line}")
+        [ "${tab_count}" = "2" ]
+    done < "${BASELINE}"
+}
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line per SDD-062 consumer contract — even on delta)" {
+    write_unit_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    export SYSTEMD_UNITS="sshd.service nginx.service docker.socket evil.service"
+    cat > "${SYSTEMD_UNIT_DIR}/evil.service" <<'EOF'
+ExecStart=/tmp/.x
+EOF
+    run_wd
+    # The MAIN tag selfdef-systemd-units (not the -detail tag) must
+    # appear exactly once for downstream JSON-line consumer.
+    main_count=$(cap | grep -cE '^-t selfdef-systemd-units -- ')
+    [ "${main_count}" = "1" ]
+}
