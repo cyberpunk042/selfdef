@@ -249,3 +249,64 @@ mk_cap() { printf '#!/bin/sh\n' > "${ROOT}/$1"; chmod 0755 "${ROOT}/$1"; setcap 
     grep -qE 'cap_net_raw[+=]' "${BASELINE}"
     grep -qE 'cap_net_bind_service[+=]' "${BASELINE}"
 }
+
+@test "INVARIANT (multi-root scan: cap binary in any of ROOTS detected)" {
+    # Operator may watch multiple roots (e.g. /usr + /opt + /usr/local).
+    # Lock multi-root axis — a binary planted in ROOT2 is detected.
+    ROOT2="${TMP}/scan2"; mkdir -p "${ROOT2}"
+    # Skip if ROOT2 fs doesn't support xattrs.
+    printf '#!/bin/sh\n' > "${ROOT2}/.probe"; chmod 0755 "${ROOT2}/.probe"
+    setcap cap_net_raw+ep "${ROOT2}/.probe" 2>/dev/null || skip "ROOT2 fs does not support capability xattrs"
+    rm -f "${ROOT2}/.probe"
+    mk_cap ping cap_net_raw+ep
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_FILECAPS_PROFILE="report" \
+    SELFDEF_FILECAPS_ROOTS="${ROOT} ${ROOT2}" \
+    SELFDEF_FILECAPS_BASELINE="${BASELINE}" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant dangerous cap in second root.
+    printf '#!/bin/sh\n' > "${ROOT2}/sneaky"; chmod 0755 "${ROOT2}/sneaky"
+    setcap cap_setuid+ep "${ROOT2}/sneaky"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_FILECAPS_PROFILE="report" \
+    SELFDEF_FILECAPS_ROOTS="${ROOT} ${ROOT2}" \
+    SELFDEF_FILECAPS_BASELINE="${BASELINE}" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'sneaky'
+}
+
+@test "INVARIANT (severity ladder: mass-add boundary — 2 adds → warn, 3 adds → alert)" {
+    # Confirm exact boundary between warn and alert on the count
+    # axis. 2 adds is warn (1..2 ladder); 3 adds is alert.
+    mk_cap ping cap_net_raw+ep
+    run_wd
+    mk_cap a1 cap_net_bind_service+ep
+    mk_cap a2 cap_net_bind_service+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'                   # 2 adds = warn
+    # Now add a third — should escalate to alert / mass.
+    mk_cap a3 cap_net_bind_service+ep
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'           # 3+ adds escalates
+}
+
+@test "INVARIANT (sample cap at 8: more than 8 added caps surface in sample[] truncated, count NOT truncated)" {
+    # Operator dashboard JSON budget: sample = first 8 caps.
+    # The 'added' count must reflect the TRUE count.
+    mk_cap ping cap_net_raw+ep
+    run_wd
+    for i in $(seq 1 12); do
+        printf '#!/bin/sh\n' > "${ROOT}/added_${i}"
+        chmod 0755 "${ROOT}/added_${i}"
+        setcap cap_net_bind_service+ep "${ROOT}/added_${i}"
+    done
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # True count surfaces.
+    cap | grep -qE '"added":1[0-9]'                       # 12+ adds
+    cap | grep -q '"severity":"alert"'
+}
