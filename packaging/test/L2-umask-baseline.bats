@@ -129,3 +129,44 @@ run_wd() {
     run_wd
     cmp -s modules/umask-baseline/configs/group-profile.sh "${PROFILE_D}/50-selfdef-umask.sh"
 }
+
+@test "INVARIANT (group profile umask value): drop-in sets umask 0027 exactly" {
+    write_config "group"
+    run_wd
+    grep -qE 'umask +0027' "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (strict profile umask value): drop-in sets umask 0077 exactly" {
+    write_config "strict"
+    run_wd
+    grep -qE 'umask +0077' "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (group profile login.defs UMASK directive): correct format" {
+    write_config "group"
+    run_wd
+    grep -qE 'UMASK[[:space:]]+0?27' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+}
+
+@test "INVARIANT (strict profile login.defs UMASK directive): correct format" {
+    write_config "strict"
+    run_wd
+    grep -qE 'UMASK[[:space:]]+0?77' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+}
+
+@test "INVARIANT (profile downgrade strict → group): rewrites BOTH drop-ins with looser umask" {
+    write_config "strict"
+    run_wd
+    grep -qE 'umask +0077' "${PROFILE_D}/50-selfdef-umask.sh"
+    write_config "group"
+    run_wd
+    grep -qE 'umask +0027' "${PROFILE_D}/50-selfdef-umask.sh"
+    ! grep -qE 'umask +0077' "${PROFILE_D}/50-selfdef-umask.sh"
+}
+
+@test "INVARIANT (no render-timestamp in either drop-in): defeats cmp -s idempotency guard" {
+    write_config "group"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${PROFILE_D}/50-selfdef-umask.sh"
+    ! grep -qE '^# Generated [0-9]{4}-' "${LOGIN_DEFS_D}/50-selfdef-umask.conf"
+}
