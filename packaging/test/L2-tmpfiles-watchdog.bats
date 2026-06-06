@@ -172,3 +172,56 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-tmpfiles -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): tmpfiles-watchdog does NOT refresh baseline on setuid-entry detection — alert STAYS until operator updates" {
+    # tmpfiles.d setuid entries are NEVER routine; the alert must
+    # persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'd /run/myapp 0755 root root -\nf /run/myapp/shell 4755 root root -\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"tmpfiles_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented setuid entry NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'd /run/myapp 0755 root root -\nf /run/myapp/state 0644 root root -\n# f /run/myapp/shell 4755 root root -\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"tmpfiles_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (newly-ADDED .conf with setuid entry → alert; new-file + suspicious-entry combined)" {
+    # Attacker drops a fresh tmpfiles.d/.conf containing setuid
+    # entries. Watchdog must alert on BOTH the new file AND the
+    # suspicious entry, with alert severity taking precedence.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${CONFD}/00-evil.conf" <<'EOF'
+f /run/backdoor 4755 root root -
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"tmpfiles_suspicious"'
+}
+
+@test "INVARIANT (Z chmod-only entry on a non-setuid mode is NOT flagged: chmod-mode tmpfiles type distinct from setuid-creation)" {
+    # Z = recursively-restore-perms type entries are operator-
+    # tuning. A Z entry with mode 0755 is a legit operator op.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a Z (recursive chmod) entry with non-setuid mode.
+    printf 'd /run/myapp 0755 root root -\nf /run/myapp/state 0644 root root -\nZ /run/myapp 0755 root root -\n' > "${CONF}"
+    run_wd
+    # Severity is warn (content delta), not alert (no setuid).
+    cap | grep -qE '"severity":"(warn|ok)"'
+    ! cap | grep -q '"event":"tmpfiles_suspicious"'
+}
