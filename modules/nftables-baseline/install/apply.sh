@@ -31,9 +31,13 @@ ALLOW_UDP=$(toml_get allow_udp "$CONFIG_FILE" 2>/dev/null || echo "")
 SSH_PORTS=$(detect_ssh_ports)
 
 # Build the SSH + extra TCP allow set (SSH always included).
-tcp_set="$(echo "$SSH_PORTS $(echo "$ALLOW_TCP" | tr ',' ' ')" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un | paste -sd, -)"
+# Trailing `|| true` is load-bearing: grep returns 1 when no matches
+# (e.g. operator configured no allow_udp), and with `set -euo pipefail`
+# the failing pipeline aborts the script otherwise — a latent bug
+# surfaced 2026-06-06 by the new L2 functional suite.
+tcp_set="$(echo "$SSH_PORTS $(echo "$ALLOW_TCP" | tr ',' ' ')" | tr ' ' '\n' | grep -E '^[0-9]+$' | sort -un | paste -sd, - || true)"
 [[ -z "$tcp_set" ]] && tcp_set="22"
-udp_set="$(echo "$ALLOW_UDP" | tr ',' '\n' | grep -E '^[0-9]+$' | sort -un | paste -sd, -)"
+udp_set="$(echo "$ALLOW_UDP" | tr ',' '\n' | grep -E '^[0-9]+$' | sort -un | paste -sd, - || true)"
 
 # locked profile: egress default-drop requires acknowledge.
 egress_policy="accept"

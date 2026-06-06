@@ -16,10 +16,13 @@ else
     exit 2
 fi
 
-NFT_DROPIN_DIR="/etc/nftables.d"
-NFT_DROPIN="${NFT_DROPIN_DIR}/selfdef-baseline.nft"
-BACKUP_DIR="/var/lib/selfdef"
-BACKUP_FILE="${BACKUP_DIR}/nftables-ruleset.bak"
+# SELFDEF_NFT_DROPIN_DIR + SELFDEF_NFT_DROPIN + SELFDEF_NFT_BACKUP_DIR
+# + SELFDEF_NFT_BACKUP_FILE added 2026-06-06 for L2 testability —
+# live defaults unchanged.
+NFT_DROPIN_DIR="${SELFDEF_NFT_DROPIN_DIR:-/etc/nftables.d}"
+NFT_DROPIN="${SELFDEF_NFT_DROPIN:-${NFT_DROPIN_DIR}/selfdef-baseline.nft}"
+BACKUP_DIR="${SELFDEF_NFT_BACKUP_DIR:-/var/lib/selfdef}"
+BACKUP_FILE="${SELFDEF_NFT_BACKUP_FILE:-${BACKUP_DIR}/nftables-ruleset.bak}"
 HEADER_MARKER="# managed-by: selfdef nftables-baseline"
 
 # SSH is ALWAYS in the allow set — the anti-lockout invariant.
