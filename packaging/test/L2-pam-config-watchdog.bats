@@ -268,3 +268,55 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-pam-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (commented PAM line NOT in inventory: # prefix filtered from pamline records)" {
+    # /etc/pam.d/* files use # as comment marker. Operator notes
+    # about hypothetical rules must NOT surface as real auth-stack
+    # entries.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Add a commented evil rule.
+    echo '# auth sufficient pam_evil.so backdoor=1 — future plan, not yet active' >> "${PAM_DIR}/common-auth"
+    run_wd
+    # Severity must NOT be alert (no real rule added).
+    ! cap | grep -q '"severity":"alert"'
+    ! cap | grep -q '"event":"pam_config_changed"'
+}
+
+@test "INVARIANT (multi-file scan: changes across multiple pam.d files all surface)" {
+    # Attacker plants backdoor rules in multiple files at once.
+    # All must surface in single scan.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant backdoor in two files.
+    echo 'auth sufficient pam_evil_a.so' >> "${PAM_DIR}/common-auth"
+    echo 'password sufficient pam_evil_b.so' >> "${PAM_DIR}/common-password"
+    echo 'fake' > "${LIB_DIR}/pam_evil_a.so"
+    echo 'fake' > "${LIB_DIR}/pam_evil_b.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
+    # Both module names should surface for forensics.
+    cap | grep -qE 'pam_evil_a|pam_evil_b'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_PAMCFG_PROFILE)" {
+    write_pam_inventory
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (added_sample includes pamline:file:rule format for forensics)" {
+    # The sample shape: pamline:<file>:<rule>. Operator can grep
+    # by file or by rule to investigate the specific change.
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'auth sufficient pam_distinctive_backdoor.so' >> "${PAM_DIR}/common-auth"
+    echo 'fake' > "${LIB_DIR}/pam_distinctive_backdoor.so"
+    run_wd
+    cap | grep -q 'pamline:common-auth'
+    cap | grep -q 'pam_distinctive_backdoor'
+}
