@@ -149,3 +149,60 @@ run_wd() {
     run_wd
     grep -q 'SELFDEF_ENTROPY_PROFILE=report' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
 }
+
+@test "INVARIANT (profile downgrade enforce → report): rewrites drop-in back + fires reload" {
+    write_config "enforce"
+    run_wd
+    grep -q 'SELFDEF_ENTROPY_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+    write_config "report"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'SELFDEF_ENTROPY_PROFILE=report' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+    ! grep -q 'SELFDEF_ENTROPY_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves all 4 file mtimes" {
+    write_config "report"
+    run_wd
+    mtime_libexec_before="$(stat -c '%Y' "${LIBEXEC_DIR}/entropy-baseline.sh")"
+    mtime_service_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.service")"
+    mtime_timer_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.timer")"
+    mtime_dropin_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf")"
+    sleep 1
+    run_wd
+    [ "${mtime_libexec_before}" = "$(stat -c '%Y' "${LIBEXEC_DIR}/entropy-baseline.sh")" ]
+    [ "${mtime_service_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.service")" ]
+    [ "${mtime_timer_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.timer")" ]
+    [ "${mtime_dropin_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf")" ]
+}
+
+@test "INVARIANT (libexec script reads /proc/sys/kernel/random/entropy_avail — actually probes the kernel knob)" {
+    write_config "report"
+    run_wd
+    grep -qE '/proc/sys/kernel/random/entropy_avail' "${LIBEXEC_DIR}/entropy-baseline.sh"
+}
+
+@test "INVARIANT (service unit references libexec script — wiring is correct)" {
+    write_config "report"
+    run_wd
+    grep -qE '^ExecStart=' "${SYSTEMD_DIR}/selfdef-entropy.service"
+    grep -q 'entropy-baseline' "${SYSTEMD_DIR}/selfdef-entropy.service"
+}
+
+@test "INVARIANT (timer unit carries OnCalendar / OnBootSec — actually fires periodically)" {
+    write_config "report"
+    run_wd
+    grep -qE '(OnCalendar|OnBootSec|OnUnitActiveSec)=' "${SYSTEMD_DIR}/selfdef-entropy.timer"
+}
+
+@test "INVARIANT (no render-timestamp in any installed file): defeats cmp -s idempotency" {
+    write_config "report"
+    run_wd
+    for f in "${LIBEXEC_DIR}/entropy-baseline.sh" \
+             "${SYSTEMD_DIR}/selfdef-entropy.service" \
+             "${SYSTEMD_DIR}/selfdef-entropy.timer" \
+             "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"; do
+        ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$f"
+    done
+}
