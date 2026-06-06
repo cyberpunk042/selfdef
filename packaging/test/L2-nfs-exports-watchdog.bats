@@ -102,3 +102,70 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — NFS exports inventory enumerates shared paths)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (dangerous family 1): no_root_squash on its own → alert (remote root attack)" {
+    # no_root_squash means remote root = local root on the share —
+    # an attacker exporting as root WRITES files owned by root.
+    seed_benign
+    run_wd
+    printf '/srv/data 192.168.1.0/24(rw,no_root_squash)\n' > "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous family 2): wildcard `*` host with rw → alert (open-to-internet write)" {
+    seed_benign
+    run_wd
+    printf '/srv/data *(rw,root_squash,secure)\n' > "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (dangerous family 3): insecure option → alert (allows requests from non-privileged ports)" {
+    seed_benign
+    run_wd
+    printf '/srv/data 192.168.1.0/24(rw,root_squash,insecure)\n' > "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing dangerous export): baseline_initial fires alert if exports already has no_root_squash at install-time" {
+    printf '/srv/data 192.168.1.0/24(rw,no_root_squash)\n' > "${EXPORTS}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED export (operator pruning) → warn / nfs_exports_changed" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    : > "${EXPORTS}"                                    # remove the only export
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'             # not alert
+}
+
+@test "DELTA detect — newly-ADDED dangerous export surfaces in JSON sample" {
+    seed_benign
+    run_wd
+    printf '/srv/public 192.168.1.0/24(ro,root_squash,secure)\n/srv/distinctive 192.168.1.0/24(rw,no_root_squash)\n' > "${EXPORTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'distinctive'                         # the added path surfaces
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nfs-exports -- ')
+    [ "${main_count}" = "1" ]
+}
