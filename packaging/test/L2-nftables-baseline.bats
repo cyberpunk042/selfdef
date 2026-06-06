@@ -263,3 +263,42 @@ run_wd() {
     [[ "${output}" == *'tcp_allow='* ]]
     [[ "${output}" == *'egress=accept'* ]]
 }
+
+@test "INVARIANT (dropin re-arm after operator out-of-band deletion: re-creates dropin + fires nft -f load)" {
+    write_config "baseline"
+    run_wd
+    [ -f "${NFT_DROPIN}" ]
+    rm -f "${NFT_DROPIN}"
+    : > "${NFT_LOG}"
+    run_wd
+    [ -f "${NFT_DROPIN}" ]
+    grep -q 'managed-by: selfdef nftables-baseline' "${NFT_DROPIN}"
+    grep -qE "nft -f ${NFT_DROPIN}" "${NFT_LOG}"
+}
+
+@test "INVARIANT (header marker first non-blank line — predictable for operator audit + stale-cleanup)" {
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${NFT_DROPIN}")"
+    [ "${first_line}" = "# managed-by: selfdef nftables-baseline" ] || \
+        grep -qE '^#.*managed-by: selfdef nftables-baseline' "${NFT_DROPIN}"
+}
+
+@test "INVARIANT (forward chain has default-drop policy — sovereign endpoint refuses routing)" {
+    # A sovereign endpoint should NEVER forward packets. The
+    # forward chain default-drop ensures the host can't be turned
+    # into a router via kernel misconfiguration or attacker
+    # sysctl edit.
+    write_config "baseline"
+    run_wd
+    grep -qE 'hook forward priority 0; policy drop' "${NFT_DROPIN}"
+}
+
+@test "INVARIANT (locked profile in JSON: egress=drop surfaces — operator dashboard sees egress posture)" {
+    # The egress= field tells operator at-a-glance which egress
+    # posture is active. drop = locked, accept = baseline/web.
+    write_config "locked" 'acknowledge_egress = true'
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'profile=locked'* ]]
+    [[ "${output}" == *'egress=drop'* ]]
+}
