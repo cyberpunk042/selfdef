@@ -6,6 +6,42 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Known — L1-prometheus-alerts CI red traces to info-hub PR #17 (2026-06-06)
+
+Documented root cause for the `L1: Prometheus alert rules` red inside the
+four-watchdog coherence harness on selfdef `main`:
+
+- Commit 14e6d0d (2026-06-06) repointed the 3 `SelfdefM060Publish*`
+  alerts at `wiki/runbooks/m060-mirror-export-publish-anomalies.md` and
+  the `SelfdefWatchdogAlertFinding` alert at
+  `wiki/runbooks/selfdef-watchdog-alert-finding.md` — the correct
+  operator-facing runbooks.
+- Both runbook files were authored on the info-hub dev branch
+  `claude/recover-projects-b0oT6` (PR #17, `mergeable_state: clean`,
+  28 commits, 53 files, +4231/-162), per the operator's standing
+  dispensation that info-hub work goes through PR review.
+- selfdef CI's four-watchdog job checks out
+  `cyberpunk042/devops-solutions-information-hub` at the default
+  branch (`main`) for runbook-URL existence checks. The two new
+  runbooks don't exist on info-hub `main` yet, so Gate 3b
+  (`runbook_url target file must exist`) flags them.
+
+This is a **cross-repo state divergence**, not a defect in either repo
+in isolation. The gate is correctly catching that the info-hub side
+hasn't yet absorbed the runbooks selfdef now references. Two non-
+divergent resolutions:
+  (a) Operator merges info-hub PR #17 → runbooks land on `main` →
+      Gate 3b passes on the next selfdef CI run, no selfdef edit needed.
+  (b) Revert 14e6d0d's URL repoint until (a) happens — operator-
+      undesirable since the deployed alert links would point at the
+      wrong runbook again.
+
+(a) is the right move when operator authorizes. Until then, this red
+is the same accepted class as the L2 watchdog-bats reds (chown
+99999:99999 requires root in CI) — visible-but-known, no false-
+positive to chase. The local gate run with `INFOHUB_RUNBOOKS=` set
+to the dev branch PASSES (all 15 alerts, all runbook targets exist).
+
 ### Fixed — dns-resolver-watchdog silent no-op (capture regression, 2026-06-06)
 
 `dns-resolver-watchdog` declared `$current` as a temp file then never wrote to
