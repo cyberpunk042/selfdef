@@ -1,0 +1,190 @@
+#!/usr/bin/env bats
+# L2 functional suite for mount-options-watchdog.
+#
+# mount-options-watchdog verifies that security-relevant mount points
+# carry their hardening flags (/tmp, /var/tmp, /dev/shm, /home,
+# /var/log, /boot — nosuid / nodev / noexec per per-mount expectation).
+# A mount-point that is NOT its own filesystem can't carry these flags
+# (so it's reported as not_separate_mount, not drift). Severity tiers:
+#   ok    → every separate-mount target carries every expected flag
+#   warn  → 1..2 missing flags
+#   alert → 3+ missing flags (broad remount-weaken event signature)
+#
+# Tests shadow findmnt on PATH with a deterministic fixture so every
+# tier fires reproducibly.
+#
+# Run with: bats packaging/test/L2-mount-options-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/mount-options-watchdog/systemd/mount-options-watchdog.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    MNT_TABLE="${TMP}/mount-fixture.tsv"   # path \t options
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+# write_fixture <one-mount-per-line: PATH<TAB>OPTIONS>
+# Mounts NOT in the fixture are treated as non-separate (target = /).
+write_fixture() { printf '%s\n' "$@" > "${MNT_TABLE}"; }
+
+mk_findmnt() {
+    cat > "${BIN}/findmnt" <<'FMEOF'
+#!/usr/bin/env bash
+# Fake findmnt for L2-mount-options-watchdog. We honor:
+#   findmnt -no TARGET  --target <path>
+#   findmnt -no OPTIONS --target <path>
+mode=""
+target=""
+i=1
+while (( i <= $# )); do
+    arg="${!i}"
+    case "$arg" in
+        -no)
+            j=$((i+1))
+            field="${!j}"
+            case "$field" in
+                TARGET)  mode="target" ;;
+                OPTIONS) mode="options" ;;
+            esac
+            i=$((j+1)) ;;
+        --target)
+            j=$((i+1))
+            target="${!j}"
+            i=$((j+1)) ;;
+        *) i=$((i+1)) ;;
+    esac
+done
+
+# Look up <target> in the fixture; if found, emit TARGET=target or
+# OPTIONS=opts; if not, the mount-point isn't its own FS → return "/"
+# as the containing mount.
+found_line="$(awk -F'\t' -v t="${target}" '$1==t{print; exit}' "${MNT_TABLE}")"
+if [[ -n "${found_line}" ]]; then
+    case "${mode}" in
+        target)  printf '%s\n' "${target}" ;;
+        options) printf '%s\n' "$(awk -F'\t' -v t="${target}" '$1==t{print $2; exit}' "${MNT_TABLE}")" ;;
+    esac
+else
+    # Not its own FS: pretend the containing mount is /.
+    case "${mode}" in
+        target)  printf '/\n' ;;
+        options) printf 'rw,relatime\n' ;;
+    esac
+fi
+FMEOF
+    chmod +x "${BIN}/findmnt"
+    export MNT_TABLE
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    MNT_TABLE="${MNT_TABLE}" \
+    SELFDEF_MOUNTOPTS_PROFILE="${PROFILE:-report}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+@test "no separate mounts → ok (the not-its-own-FS path is info, not drift)" {
+    mk_findmnt
+    write_fixture                       # empty fixture
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"all_flags_present"'
+    cap | grep -qE '"missing_flags":0'
+    # All 6 expected mount-points reported as not_separate.
+    cap | grep -qE '"not_separate_mount":6'
+}
+
+@test "all separate mounts carry expected flags → ok / all_flags_present" {
+    mk_findmnt
+    write_fixture \
+        $'/tmp\tnosuid,nodev,noexec,relatime' \
+        $'/var/tmp\tnosuid,nodev,noexec,relatime' \
+        $'/dev/shm\tnosuid,nodev,noexec,relatime' \
+        $'/home\tnosuid,nodev,relatime' \
+        $'/var/log\tnosuid,nodev,noexec,relatime' \
+        $'/boot\tnosuid,nodev,noexec,relatime'
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"all_flags_present"'
+    cap | grep -qE '"missing_flags":0'
+    cap | grep -qE '"not_separate_mount":0'
+}
+
+@test "1 missing flag on /tmp → warn / missing_flags" {
+    mk_findmnt
+    # /tmp missing noexec; other expected mounts not separate.
+    write_fixture $'/tmp\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"event":"missing_flags"'
+    cap | grep -qE '"missing_flags":1'
+}
+
+@test "2 missing flags → warn / missing_flags (upper boundary of warn tier)" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,relatime'
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"missing_flags":2'
+}
+
+@test "3+ missing flags → alert / broad_missing_flags (the remount-weaken signature)" {
+    mk_findmnt
+    # /tmp missing all 3 hardening flags → 3 misses on /tmp alone.
+    write_fixture $'/tmp\trelatime'
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"broad_missing_flags"'
+    cap | grep -qE '"missing_flags":3'
+}
+
+@test "the emitted JSON carries every promised schema field" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,noexec,relatime'
+    run_wd
+    line="$(cap)"
+    printf '%s' "${line}" | grep -q '"tag":"selfdef-mount-options"'
+    printf '%s' "${line}" | grep -q '"severity":'
+    printf '%s' "${line}" | grep -q '"event":'
+    printf '%s' "${line}" | grep -q '"profile":'
+    printf '%s' "${line}" | grep -qE '"missing_flags":[0-9]+'
+    printf '%s' "${line}" | grep -qE '"not_separate_mount":[0-9]+'
+    printf '%s' "${line}" | grep -q '"missing_sample":'
+    printf '%s' "${line}" | grep -q '"not_separate_sample":'
+}
+
+@test "missing_sample carries 'mountpoint:flag' rows" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,relatime'    # missing nodev + noexec
+    run_wd
+    cap | grep -q '/tmp:nodev'
+    cap | grep -q '/tmp:noexec'
+}
+
+@test "enforce profile + missing-flags → exit 1" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,relatime'
+    PATH="${BIN}:${PATH}" \
+        MNT_TABLE="${MNT_TABLE}" \
+        SELFDEF_MOUNTOPTS_PROFILE=enforce \
+        bash "${WD}" && fail "enforce + missing flags should exit non-zero"
+    cap | grep -qE '"severity":"(warn|alert)"'
+}
+
+@test "enforce profile + all flags present → exit 0" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,noexec,relatime'
+    PROFILE=enforce run_wd
+    cap | grep -q '"severity":"ok"'
+}
