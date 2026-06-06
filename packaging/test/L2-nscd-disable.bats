@@ -107,3 +107,66 @@ run_wd() {
     run_wd
     grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (stop profile is reversible): stop fires `disable` (allowing later re-enable) but NOT mask" {
+    # Stop+disable means the unit file remains intact (operator
+    # can re-enable later); mask makes the unit unreloadable until
+    # explicit `unmask`. The two profiles must be cleanly distinct.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl disable nscd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask nscd' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask profile is sticky): mask fires `mask` (unit can't be re-enabled without explicit unmask)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask nscd.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (stop also fires the .socket unit not just .service)" {
+    # nscd.socket can re-activate nscd.service on demand — disabling
+    # only .service would let .socket bring it back. Both must be
+    # touched.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop nscd.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable nscd.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent stop): re-applying stop profile fires the same systemctl set (no spurious mask escalation)" {
+    write_config "stop"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    # Both runs fire the same mutating commands — no drift from
+    # stop to mask across applies.
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask profile fires the same set (no escalation to extra units)" {
+    write_config "mask"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "emit_status surfaces profile + result in JSON" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"nscd-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
+
+@test "nscd not present + DRY_RUN=1 → still no mutation (dry-run is short-circuited correctly)" {
+    write_config "mask"
+    DRY_RUN=1 NSCD_PRESENT=0 run_wd
+    ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
+}
