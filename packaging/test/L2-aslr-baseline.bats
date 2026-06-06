@@ -201,3 +201,59 @@ run_wd() {
     [ "${mtime_before}" = "${mtime_after}" ]
     ! grep -q 'sysctl -w' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (header-marker is first non-blank line — predictable for stale-cleanup head -1 grep)" {
+    # The downgrade-path stale-cleanup uses head -1 + grep -F.
+    # The header MUST be the first line — not buried — or stale
+    # detection misses + leaves selfdef-owned files orphaned.
+    write_config "full"
+    run_wd
+    first_line="$(head -1 "${DROPIN}")"
+    [ "${first_line}" = "# managed-by: selfdef aslr-baseline" ]
+}
+
+@test "INVARIANT (re-arm after operator deletion: re-creates drop-in with header marker)" {
+    # Operator deletes the drop-in out-of-band. Next apply re-
+    # creates it cleanly with header-marker intact.
+    write_config "full"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'managed-by: selfdef aslr-baseline' "${DROPIN}"
+    grep -qE 'kernel\.randomize_va_space[[:space:]]*=[[:space:]]*2' "${DROPIN}"
+}
+
+@test "INVARIANT (live= field in emit_status JSON — operator dashboard sees current kernel value)" {
+    # The emit_status message body carries live=N where N is the
+    # current sysctl -n value. Critical for operator dashboard
+    # to detect drift between persistence (drop-in) and runtime
+    # (live kernel state).
+    write_config "full"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'live='* ]]
+}
+
+@test "INVARIANT (drop-in carries 'profile=full' marker — uninstall hook can identify which profile was active)" {
+    # The 'profile=full' second-line marker is the audit-trail
+    # for which profile was applied. Even though aslr-baseline
+    # has only one profile, future expansion (e.g., paranoid
+    # profile) requires the marker for diff routing.
+    write_config "full"
+    run_wd
+    grep -qE '^# profile=full$' "${DROPIN}"
+}
+
+@test "INVARIANT (sysctl is invoked via -w flag for live application — NOT -p path)" {
+    # Two acceptable mechanisms: sysctl -w key=val (write live)
+    # vs sysctl -p /etc/sysctl.d/file (load entire file). Current
+    # contract uses -w for surgical single-key application —
+    # locks the choice so future refactor doesn't accidentally
+    # switch to -p (which would also reload other unrelated
+    # sysctl drop-ins; side-effect on other modules).
+    write_config "full"
+    run_wd
+    grep -qE 'sysctl -w' "${SCTL_LOG}"
+    ! grep -qE 'sysctl -p' "${SCTL_LOG}"
+}
