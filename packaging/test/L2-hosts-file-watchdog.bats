@@ -101,3 +101,100 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — hosts pinning inventory leaks operator internal hostnames)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (sensitive-domain: debian distro): security.debian.org pin → alert (block patching attack)" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 security.debian.org\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sensitive-domain: ubuntu distro): archive.ubuntu.com pin → alert" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 archive.ubuntu.com\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sensitive-domain: docker.io): docker registry pin → alert (image-pull MITM)" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 docker.io\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sensitive-domain: github.com): github pin → alert (source-pull MITM)" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 raw.githubusercontent.com\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing sensitive pin): baseline_initial fires alert if /etc/hosts already pins a sensitive domain at install-time" {
+    # Install-time-vet contract.
+    printf '0.0.0.0 security.debian.org\n' > "${HOSTS}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (persistent-alert on sensitive pin): pre-existing sensitive pin IS re-alerted on every run until removed" {
+    # CONTRAST against the access-conf-watchdog + capability-conf-
+    # watchdog "no spurious re-alert" contract. hosts-file-
+    # watchdog scans the FULL current set for sensitive domains
+    # (not just the added-set), so a sensitive pin that stays in
+    # /etc/hosts STAYS in the alert state every run. This is
+    # the "alert STAYS visible until operator removes" pattern,
+    # implemented via re-evaluation rather than via no-baseline-
+    # refresh. Locks the choice — a regression to scan only the
+    # added-set (matching access-conf semantics) would let an
+    # attacker-pinned sensitive domain go silent after the first
+    # alert.
+    printf '0.0.0.0 security.debian.org\n' > "${HOSTS}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"hosts_file_sensitive_pin"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "DELTA detect — REMOVED hosts entry → warn / hosts_file_changed" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n' > "${HOSTS}"        # remove myserver
+    run_wd
+    cap | grep -qE '"event":"hosts_file_changed"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-hosts-file -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (auto-trust): hosts-file-watchdog DOES auto-refresh the baseline (operator-action common)" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n10.0.0.10 newserver.internal\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — warn
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed
+    cap | grep -q '"event":"hosts_file_intact"'
+}
