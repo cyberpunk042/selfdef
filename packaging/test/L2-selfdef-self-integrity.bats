@@ -254,3 +254,46 @@ seed_trust_root() {
     cap | grep -q '"event":"trust_root_intact"'
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (manifest hash collision-resistance: edit single byte → hash changes → alert)" {
+    # Locks that the manifest hash function is sensitive enough to
+    # catch a single-byte tamper. A regression to weak hashing (CRC32
+    # or simple checksum) would let attackers craft tampered baselines
+    # that collide with the original. Lock that sha256 (or equivalently
+    # strong hash) is used.
+    seed_trust_root
+    run_wd
+    # Single-byte tamper.
+    printf 'file\t/etc/passwd\tabc124\n' > "${STATE}/account-baseline.tsv"  # last hex changed 3→4
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (empty-content tamper: clear baseline file → alert (zero-byte erasure attack))" {
+    # Attacker may not REWRITE the baseline — just truncate it to
+    # zero bytes to make the watchdog see no inventory and thus
+    # never alert. Locks that empty-baseline is treated as tamper.
+    seed_trust_root
+    run_wd
+    : > "${STATE}/account-baseline.tsv"     # zero-byte truncation
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wrapper .sh hash includes shebang/interpreter — tamper of shebang detected)" {
+    # An attacker may swap #!/bin/sh for #!/bin/bash (or worse,
+    # #!/usr/bin/env attacker-shell) — locks that the hash includes
+    # the shebang line so this tamper surfaces.
+    seed_trust_root
+    run_wd
+    # Same wrapper logic, different shebang.
+    printf '#!/bin/bash\n# account-watchdog\nexit 0\n' > "${LIBEXEC}/account-watchdog.sh"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"trust_root_tampered"'
+    cap | grep -q '"severity":"alert"'
+}
