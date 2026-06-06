@@ -111,6 +111,9 @@ run_layer "L1: non-observer service hardening fleet (9 daemon-layer .service × 
 run_layer "L1: non-observer doctor timer fleet (4 doctor timers × 5 contract clauses + cadence-aware Persistent gate)" \
     bash scripts/test/L1-nonobserver-doctor-timer-fleet.sh
 
+run_layer "L1: TracingPolicy YAML fleet (every Tetragon policy under packaging/tetragon-policies/ + rules/tetragon/)" \
+    bash scripts/test/L1-tracingpolicy-yaml-fleet.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
