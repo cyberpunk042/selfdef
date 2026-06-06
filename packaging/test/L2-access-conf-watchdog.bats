@@ -178,3 +178,66 @@ seed_benign() {
     cap | grep -q '"event":"access_conf_intact"'
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (deny (-) rule with broad origin is NOT flagged): deny ALL : ALL is the canonical default-deny floor" {
+    # The whole point of a default-deny floor is `- : ALL : ALL`
+    # — must not be flagged as a backdoor. Lock the contract that
+    # ONLY permit (+) rules count toward broad-permit detection.
+    printf '+ : root : LOCAL\n- : malicious : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd                                              # baseline
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Operator widens the deny — still safe.
+    printf '+ : root : LOCAL\n- : another-malicious : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented + permit line is NOT flagged — # prefix filtered)" {
+    # An operator-commented note about a future permit must not
+    # appear in the parsed rule inventory at all.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+ : root : LOCAL\n# + : remote-svc : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (suspicious sample format: permit:USER:from-ALL — operator-readable triage payload)" {
+    # The sample field shape is permit:USER:from-ALL — the
+    # downstream alerting hook renders this directly to operator
+    # email. Lock the format so dashboards don't break on shape
+    # change.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '+ : root : LOCAL\n+ : backdoor-svc : ALL\n- : ALL : ALL\n' > "${CONF}"
+    run_wd
+    cap | grep -qE '"suspicious":"permit:backdoor-svc:from-ALL'
+}
+
+@test "INVARIANT (access.conf.d drop-in axis: broad permit in drop-in → alert; not only main /etc/security/access.conf scanned)" {
+    # The script walks SELFDEF_ACCESSCONF_D for *.conf drop-ins.
+    # An attacker can plant the backdoor permit in
+    # /etc/security/access.d/00-evil.conf to avoid touching the
+    # main file. Watchdog must walk the drop-in dir too.
+    ACCESSD="${TMP}/access.d"
+    mkdir -p "${ACCESSD}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_ACCESSCONF_PROFILE="report" \
+        SELFDEF_ACCESSCONF_BASELINE="${BASELINE}" \
+        SELFDEF_ACCESSCONF_FILE="${CONF}" \
+        SELFDEF_ACCESSCONF_D="${ACCESSD}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant the evil drop-in.
+    printf '+ : evil-svc : ALL\n' > "${ACCESSD}/00-evil.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_ACCESSCONF_PROFILE="report" \
+        SELFDEF_ACCESSCONF_BASELINE="${BASELINE}" \
+        SELFDEF_ACCESSCONF_FILE="${CONF}" \
+        SELFDEF_ACCESSCONF_D="${ACCESSD}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
