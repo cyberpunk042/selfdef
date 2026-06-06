@@ -114,6 +114,9 @@ run_layer "L1: non-observer doctor timer fleet (4 doctor timers × 5 contract cl
 run_layer "L1: TracingPolicy YAML fleet (every Tetragon policy under packaging/tetragon-policies/ + rules/tetragon/)" \
     bash scripts/test/L1-tracingpolicy-yaml-fleet.sh
 
+run_layer "L1: AppArmor profile integrity (selfdefd envelope: allow rules + deny rules + operator hints, 26 assertions)" \
+    bash scripts/test/L1-apparmor-profile-integrity.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
