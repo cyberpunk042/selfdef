@@ -170,3 +170,64 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (DMA-attack Thunderbolt/USB4 class added → alert; the evil-maid signature)" {
+    # Thunderbolt/USB4 PCIe class is 0c0330 (or similar); the addition
+    # of this device class fires the alert path. Lock detection of
+    # the DMA-attack vector specifically.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:04:00.0" "1234" "abcd" "0c0330"   # Thunderbolt class
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"pci_device_added"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (architectural: pci-device DOES auto-refresh baseline — sister-pattern contrast with dns-resolver)" {
+    # Unlike dns-resolver-watchdog (no-auto-trust), pci-device WD
+    # refreshes the baseline after alerting. This is the architectural
+    # contrast: hardware drift events are operator-actionable as
+    # one-shot (you ack it, the new state becomes the baseline);
+    # network drift events are persistent-alert.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:02:00.0" "13fe" "deed" "020000"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # alerts
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                              # third run — baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"pci_inventory_intact"'
+}
+
+@test "INVARIANT (device REPLACED — vendor:device of same slot changes → alert)" {
+    # An attacker who swaps a PCIe card in the same slot would have
+    # the slot path unchanged but vendor:device different. Detect that.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    # Same slot, different vendor:device — replacement attack.
+    printf '0x%s\n' "1234" > "${SYSDIR}/0000:00:1f.0/vendor"
+    printf '0x%s\n' "5678" > "${SYSDIR}/0000:00:1f.0/device"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (REMOVED-sample carries 'slot(vendor:device)' rows for forensics)" {
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    mk_device "0000:01:00.0" "10de" "1b80" "030200"
+    run_wd
+    rm -rf "${SYSDIR}/0000:01:00.0"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '0000:01:00.0(10de:1b80)'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-pci-device -- ')
+    [ "${main_count}" = "1" ]
+}
