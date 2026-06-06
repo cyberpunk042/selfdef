@@ -173,3 +173,63 @@ seed_benign() {
     run_wd                                              # baseline refreshed
     cap | grep -qE '"event":"limits_conf_intact"'
 }
+
+@test "INVARIANT (limits.d drop-in axis: core-reenable in drop-in → alert; not only main limits.conf scanned)" {
+    # Attackers may plant the core-reenable in
+    # /etc/security/limits.d/00-evil.conf to avoid touching main
+    # limits.conf. Watchdog must walk the limits.d dir too.
+    LIMITSD="${TMP}/limits.d"
+    mkdir -p "${LIMITSD}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD}" \
+        bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant the evil drop-in.
+    printf '* hard core unlimited\n' > "${LIMITSD}/00-evil.conf"
+    PATH="${BIN}:${PATH}" \
+        SELFDEF_LIMITS_PROFILE=report \
+        SELFDEF_LIMITS_BASELINE="${BASELINE}" \
+        SELFDEF_LIMITS_FILE="${CONF}" \
+        SELFDEF_LIMITS_D="${LIMITSD}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented core-reenable line is NOT flagged: # prefix filtered)" {
+    # An operator comment about a future limit must not flag.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* soft nofile 1024\n* hard core 0\n# * hard core unlimited\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (out-of-scope limit type: hard nofile unlimited NOT flagged — only core matters)" {
+    # The watchdog scope is core dumps specifically; nofile/nproc/
+    # memlock etc. are NOT in scope (they have their own legit
+    # operator-tuning patterns).
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '* soft nofile 1024\n* hard nofile unlimited\n* hard core 0\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"limits_conf_core_reenabled"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (whitespace tolerance: '* hard core unlimited' with multi-spaces still triggers alert)" {
+    # Operator/attacker may use multi-spaces or tabs. Locks the
+    # whitespace-tolerant parser still catches dangerous patterns.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*    hard    core    unlimited\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"limits_conf_core_reenabled"'
+    cap | grep -q '"severity":"alert"'
+}
