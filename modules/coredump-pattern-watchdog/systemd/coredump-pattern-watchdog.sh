@@ -24,6 +24,12 @@ set -u
 
 PROFILE="${SELFDEF_COREPAT_PROFILE:-report}"
 
+# Source override: operator-test affordance + L2 testability. The
+# default is the live kernel sysctl; SELFDEF_COREPAT_SOURCE lets the
+# operator point at a captured snapshot (or the L2 suite at a fixture
+# file) to verify the classification without touching the kernel.
+SOURCE="${SELFDEF_COREPAT_SOURCE:-/proc/sys/kernel/core_pattern}"
+
 ALLOWLIST=(
     "/usr/lib/systemd/systemd-coredump"
     "/lib/systemd/systemd-coredump"
@@ -31,7 +37,7 @@ ALLOWLIST=(
 )
 
 pattern=""
-[[ -r /proc/sys/kernel/core_pattern ]] && pattern=$(cat /proc/sys/kernel/core_pattern 2>/dev/null)
+[[ -r "$SOURCE" ]] && pattern=$(cat "$SOURCE" 2>/dev/null)
 
 severity="ok"; event="core_pattern_safe"; detail=""
 
