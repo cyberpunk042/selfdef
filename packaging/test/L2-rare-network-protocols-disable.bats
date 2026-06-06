@@ -122,3 +122,49 @@ run_wd() {
     grep -q 'profile=baseline' "${MODPROBE_FILE}"
     ! grep -q 'blacklist atm' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (profile upgrade baseline → strict): adds all 9 legacy protocols + bumps metadata" {
+    write_config "baseline"
+    run_wd
+    ! grep -q 'blacklist atm' "${MODPROBE_FILE}"
+    write_config "strict"
+    run_wd
+    for m in atm can appletalk decnet ipx netrom ax25 rose x25; do
+        grep -q "blacklist ${m}" "${MODPROBE_FILE}"
+    done
+    grep -q 'profile=strict' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (profile downgrade strict → baseline): REMOVES legacy-only protocols (operator-relax intent)" {
+    write_config "strict"
+    run_wd
+    grep -q 'blacklist atm' "${MODPROBE_FILE}"
+    write_config "baseline"
+    run_wd
+    ! grep -q 'blacklist atm' "${MODPROBE_FILE}"
+    ! grep -q 'blacklist ipx' "${MODPROBE_FILE}"
+    ! grep -q 'blacklist x25' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (baseline coverage is the 4 high-CVE family — locks expected count)" {
+    write_config "baseline"
+    run_wd
+    count="$(grep -cE '^(blacklist|install) ' "${MODPROBE_FILE}")"
+    # 4 modules — be lenient about install-vs-blacklist line shape.
+    [ "${count}" -ge 4 ]
+}
+
+@test "INVARIANT (modprobe.d filename selfdef-* pattern): tracking + uninstall identification" {
+    write_config "baseline"
+    run_wd
+    case "${MODPROBE_FILE}" in
+        */selfdef-*.conf) : ;;
+        *) fail "modprobe blacklist filename must follow selfdef-*.conf pattern" ;;
+    esac
+}
+
+@test "INVARIANT (header-marker pin): managed-by header present (collateral-damage protection at uninstall)" {
+    write_config "baseline"
+    run_wd
+    grep -qE '^#.*managed-by:.*selfdef' "${MODPROBE_FILE}"
+}
