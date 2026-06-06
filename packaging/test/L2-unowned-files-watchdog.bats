@@ -73,3 +73,68 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -ne 0 ]
 }
+
+@test "boundary: 50 unowned files → warn (the 1..50 range is INCLUSIVE on the high end)" {
+    for i in $(seq 1 50); do printf 'x' > "${ROOT}/orphan${i}"; chown 99999:99999 "${ROOT}/orphan${i}"; done
+    run_wd
+    cap | grep -q '"event":"unowned_found"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "boundary: 51 unowned files → alert (just over the warn ceiling)" {
+    for i in $(seq 1 51); do printf 'x' > "${ROOT}/orphan${i}"; chown 99999:99999 "${ROOT}/orphan${i}"; done
+    run_wd
+    cap | grep -q '"event":"bulk_unowned"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "unowned-count surfaces in JSON (operator triage observability)" {
+    for i in $(seq 1 7); do printf 'x' > "${ROOT}/orphan${i}"; chown 99999:99999 "${ROOT}/orphan${i}"; done
+    run_wd
+    cap | grep -q '"unowned_count":7'
+}
+
+@test "sample of unowned paths (up to 10) surfaces in 'sample' field for operator triage" {
+    printf 'x' > "${ROOT}/very-distinctive-orphan-name"; chown 99999:99999 "${ROOT}/very-distinctive-orphan-name"
+    run_wd
+    cap | grep -q 'very-distinctive-orphan-name'
+}
+
+@test "scan_roots field echoes the configured SELFDEF_UNOWNED_ROOTS (operator can verify the scan scope)" {
+    printf 'x' > "${ROOT}/owned"
+    run_wd
+    cap | grep -q "\"scan_roots\":\"${ROOT}\""
+}
+
+@test "nogroup-only file (uid resolves, gid does not) IS flagged" {
+    # nouser is the standard case; nogroup-only (gid unresolved
+    # but uid OK) is the parallel case the find expression catches
+    # via the \( -nouser -o -nogroup \) disjunction.
+    printf 'x' > "${ROOT}/bad-gid-only"
+    chown root:99999 "${ROOT}/bad-gid-only"
+    run_wd
+    cap | grep -q '"event":"unowned_found"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "nouser-only file (gid resolves, uid does not) IS flagged" {
+    printf 'x' > "${ROOT}/bad-uid-only"
+    chown 99999:root "${ROOT}/bad-uid-only"
+    run_wd
+    cap | grep -q '"event":"unowned_found"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'x' > "${ROOT}/orphan"; chown 99999:99999 "${ROOT}/orphan"
+    run_wd
+    n=$(cap | grep -c '"tag":"selfdef-unowned-files"')
+    [ "${n}" = "1" ]
+}
+
+@test "report profile exits 0 even on alert severity (findings are advisory)" {
+    for i in $(seq 1 55); do printf 'x' > "${ROOT}/orphan${i}"; chown 99999:99999 "${ROOT}/orphan${i}"; done
+    PROFILE=report run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"alert"'
+}
