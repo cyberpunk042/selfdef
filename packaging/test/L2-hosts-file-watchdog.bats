@@ -198,3 +198,44 @@ seed_benign() {
     run_wd                                              # baseline refreshed
     cap | grep -q '"event":"hosts_file_intact"'
 }
+
+@test "INVARIANT (commented sensitive pin NOT flagged: # prefix filtered from inventory)" {
+    # /etc/hosts uses # comments. Operator notes about hypothetical
+    # bad pins must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n10.0.0.5 myserver.internal\n# 0.0.0.0 security.debian.org\n' > "${HOSTS}"
+    run_wd
+    ! cap | grep -q '"event":"hosts_file_sensitive_pin"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sensitive-domain: PyPI / pypi.org pin → alert (python supply-chain MITM))" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 pypi.org\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (sensitive-domain: npmjs.org / npm registry pin → alert (node supply-chain MITM))" {
+    seed_benign
+    run_wd
+    printf '127.0.0.1 localhost\n0.0.0.0 registry.npmjs.org\n' > "${HOSTS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (whitespace tolerance: '0.0.0.0    security.debian.org' multi-space variant still triggers alert)" {
+    # Attacker may use multi-spaces to evade naive grep-based
+    # detection. Lock whitespace-tolerant parser.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '127.0.0.1 localhost\n0.0.0.0    security.debian.org\n' > "${HOSTS}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
