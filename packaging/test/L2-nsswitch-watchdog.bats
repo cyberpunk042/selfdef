@@ -106,3 +106,67 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — nsswitch inventory enumerates identity-resolution providers)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (known-source acceptance): `sss` (SSSD) on passwd is NOT flagged (LDAP/AD-integrated host)" {
+    # SSSD is a canonical legit enterprise-NSS provider. Locks
+    # that the KNOWN_NSS allow-list includes it.
+    seed_benign
+    run_wd
+    printf 'passwd: files sss\ngroup: files sss\nshadow: files sss\nhosts: files dns\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'              # not alert — sss is known
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
+
+@test "INVARIANT (known-source acceptance): `systemd` provider is NOT flagged (machined integration)" {
+    seed_benign
+    run_wd
+    printf 'passwd: files systemd\ngroup: files systemd\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
+
+@test "INVARIANT (known-source acceptance): `mdns_minimal` provider is NOT flagged (Avahi/Bonjour)" {
+    seed_benign
+    run_wd
+    printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files mdns_minimal dns\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
+
+@test "INVARIANT (rogue: multiple unknown sources on different dbs) → still alert (full-system rogue NSS attack)" {
+    # A multi-db rogue NSS attack drops libnss_evil.so AND
+    # libnss_backdoor.so on different dbs. Locks that the
+    # watchdog catches a multi-db rogue addition (not just a
+    # single-db one).
+    seed_benign
+    run_wd
+    printf 'passwd: files evil\ngroup: files backdoor\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"nsswitch_rogue_source"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing rogue): baseline_initial fires alert if nsswitch already has a rogue source at install-time" {
+    printf 'passwd: files evil\ngroup: files\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nsswitch -- ')
+    [ "${main_count}" = "1" ]
+}
