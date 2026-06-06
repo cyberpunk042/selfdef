@@ -191,3 +191,64 @@ run_wd() {
         ! grep -qE '^# Generated [0-9]{4}-' "$f"
     done
 }
+
+@test "INVARIANT (drop-ins re-arm after operator out-of-band deletion: re-creates all drop-ins)" {
+    write_config "security-and-reboot"
+    run_wd
+    [ -f "${APT_CONFD}/50selfdef-unattended-upgrades" ]
+    [ -f "${APT_CONFD}/20selfdef-periodic" ]
+    [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
+    rm -f "${APT_CONFD}/50selfdef-unattended-upgrades" \
+          "${APT_CONFD}/20selfdef-periodic" \
+          "${APT_CONFD}/60selfdef-unattended-reboot"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${APT_CONFD}/50selfdef-unattended-upgrades" ]
+    [ -f "${APT_CONFD}/20selfdef-periodic" ]
+    [ -f "${APT_CONFD}/60selfdef-unattended-reboot" ]
+}
+
+@test "INVARIANT (current behavior: idempotent re-install DOES re-fire systemctl enable — systemctl is itself idempotent, no state churn observed)" {
+    # Current behavior: enable fires unconditionally each apply.
+    # systemctl enable on an already-enabled timer is itself
+    # idempotent (no actual state change), so re-firing is safe.
+    # Lock current behavior so future refactor that gates on
+    # changes>0 is intentional.
+    write_config "security-only"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    # Current: enable IS re-fired. This is safe because systemctl
+    # enable is idempotent.
+    grep -q 'systemctl enable' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (drop-ins carry selfdef-identifier header — operator audit trail + stale-cleanup)" {
+    write_config "security-and-reboot"
+    run_wd
+    # The drop-ins are apt-conf format; comments use //
+    # APT conf style + the marker is operator-readable.
+    for f in "${APT_CONFD}/50selfdef-unattended-upgrades" \
+             "${APT_CONFD}/20selfdef-periodic" \
+             "${APT_CONFD}/60selfdef-unattended-reboot"; do
+        grep -qE '^(//|#).*selfdef|^(//|#).*managed-by' "$f"
+    done
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "security-only"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"unattended-upgrades-config"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=security-only'* ]]
+}
+
+@test "INVARIANT (both apt-daily.timer AND apt-daily-upgrade.timer enabled together — not one or the other)" {
+    # apt-daily.timer downloads the index; apt-daily-upgrade.timer
+    # installs. Both must be enabled for unattended-upgrades to
+    # actually work end-to-end. Locks both fires together.
+    write_config "security-only"
+    run_wd
+    grep -q 'apt-daily.timer' "${SYSEOF_LOG}"
+    grep -q 'apt-daily-upgrade.timer' "${SYSEOF_LOG}"
+}
