@@ -16,8 +16,11 @@ else
     exit 2
 fi
 
-BACKUP_DIR="/var/lib/selfdef"
-BACKUP_FILE="${BACKUP_DIR}/firewalld-default-zone.bak"
+# SELFDEF_FIREWALLD_BACKUP_DIR + SELFDEF_FIREWALLD_BACKUP_FILE +
+# SELFDEF_FIREWALLD_ZONE added 2026-06-06 for L2 testability —
+# live defaults unchanged.
+BACKUP_DIR="${SELFDEF_FIREWALLD_BACKUP_DIR:-/var/lib/selfdef}"
+BACKUP_FILE="${SELFDEF_FIREWALLD_BACKUP_FILE:-${BACKUP_DIR}/firewalld-default-zone.bak}"
 
 # The selfdef-managed zone we configure + set as default.
-SELFDEF_ZONE="selfdef"
+SELFDEF_ZONE="${SELFDEF_FIREWALLD_ZONE:-selfdef}"
