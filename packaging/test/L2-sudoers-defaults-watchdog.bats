@@ -173,3 +173,100 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+# ============================================================
+# Dangerous-var expansion (LD_LIBRARY_PATH / BASH_ENV / PYTHONPATH / IFS)
+# ============================================================
+
+@test "INVARIANT (env_keep LD_LIBRARY_PATH → alert): dangerous-var coverage expansion" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf '%sDefaults env_keep += "LD_LIBRARY_PATH"\n' "${BENIGN}" > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (env_keep BASH_ENV → alert): bash startup-file env hijack via sudo)" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf '%sDefaults env_keep += "BASH_ENV"\n' "${BENIGN}" > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (env_keep PYTHONPATH → alert): import-hijack via sudo-invoked python script)" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf '%sDefaults env_keep += "PYTHONPATH"\n' "${BENIGN}" > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# env_check axis (not just env_keep)
+# ============================================================
+
+@test "INVARIANT (env_check IFS → alert): env_check axis is also a survival channel" {
+    # env_check has the SAME survival semantics as env_keep when
+    # the var passes the check — both let dangerous vars cross the
+    # sudo boundary. Lock that env_check is covered, not only
+    # env_keep.
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf '%sDefaults env_check += "IFS"\n' "${BENIGN}" > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# secure_path writable-root expansion (/var/tmp + /dev/shm)
+# ============================================================
+
+@test "INVARIANT (secure_path containing /var/tmp → alert): writable-root expansion on secure_path axis" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf 'Defaults secure_path="/usr/bin:/var/tmp"\nDefaults env_reset\n' > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (secure_path containing /dev/shm → alert): writable-root expansion on secure_path axis" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf 'Defaults secure_path="/usr/bin:/dev/shm"\nDefaults env_reset\n' > "${SUDOERS}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# sudoers.d drop-in axis (alerts must surface in drop-ins, not only main file)
+# ============================================================
+
+@test "INVARIANT (dangerous Defaults in sudoers.d drop-in → alert): drop-in axis is scanned, not just /etc/sudoers" {
+    # The scan must walk sudoers.d/ too — attackers commonly plant
+    # dangerous Defaults in a drop-in to avoid touching the main
+    # sudoers file (less visible in diffs).
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    printf 'Defaults secure_path="/usr/bin:/tmp"\n' > "${SUDOERSD}/00-dangerous"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# JSON record contract (SDD-062 single-line consumer)
+# ============================================================
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line — SDD-062 downstream JSON-line consumer contract)" {
+    printf '%s' "${BENIGN}" > "${SUDOERS}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-sudoers-defaults -- ')
+    [ "${main_count}" = "1" ]
+}
