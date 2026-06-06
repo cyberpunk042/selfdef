@@ -137,6 +137,23 @@ run_wd() {
     [ "$(grep -c 'managed-by: selfdef login-defs-baseline' "${LEGACY_LOGIN_DEFS}")" = "1" ]
 }
 
+@test "INVARIANT: primary drop-in idempotent — byte-identical re-install does NOT rewrite (2026-06-06 idempotency fix)" {
+    write_config "standard"
+    run_wd
+    [ -f "${DROPIN}" ]
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: no render-timestamp in primary drop-in (defeats cmp -s)" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${DROPIN}"
+}
+
 @test "INVARIANT: DRY_RUN does not write drop-in or modify legacy" {
     write_config "standard"
     sha_legacy_before="$(sha256sum "${LEGACY_LOGIN_DEFS}" | awk '{print $1}')"

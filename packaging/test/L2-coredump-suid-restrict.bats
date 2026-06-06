@@ -130,11 +130,23 @@ run_wd() {
     ! grep -q 'sysctl -w' "${SCTL_LOG}"
 }
 
-@test "drop-in carries header marker + timestamp" {
+@test "drop-in carries header marker + profile (no timestamp — defeats cmp -s)" {
     write_config "suid-only"
     run_wd
     grep -q 'managed-by: selfdef coredump-suid-restrict' "${SYSCTL_DROPIN}"
-    grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "${SYSCTL_DROPIN}"
+    grep -q 'profile=suid-only' "${SYSCTL_DROPIN}"
+    # Anti-timestamp invariant (2026-06-06 idempotency sweep).
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${SYSCTL_DROPIN}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in (2026-06-06 idempotency fix)" {
+    write_config "suid-only"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${SYSCTL_DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${SYSCTL_DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "default profile is suid-only (no profile key)" {

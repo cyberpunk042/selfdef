@@ -112,13 +112,25 @@ run_wd() {
     [ "$(stat -c '%a' "${DROPIN}")" = "644" ]
 }
 
-@test "drop-in carries header marker + timestamp + profile + source-ref" {
+@test "drop-in carries header marker + profile + source-ref (no timestamp — defeats cmp -s)" {
     write_config "baseline"
     run_wd
     grep -q 'managed-by: selfdef sysctl-network-baseline' "${DROPIN}"
-    grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' "${DROPIN}"
     grep -q 'profile=baseline' "${DROPIN}"
     grep -q 'Source: modules/sysctl-network-baseline/configs/baseline.conf' "${DROPIN}"
+    # Anti-timestamp invariant: no '# Generated <ISO-date>' line —
+    # rendering one defeats cmp -s idempotency (2026-06-06 sweep).
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${DROPIN}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite drop-in (2026-06-06 idempotency fix)" {
+    write_config "baseline"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
 }
 
 @test "INVARIANT: DRY_RUN does not write drop-in or fire sysctl --load" {

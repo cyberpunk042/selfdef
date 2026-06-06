@@ -37,14 +37,11 @@ SYSEOF
     : > "${SYSEOF_LOG}"
     CONF="${TMP}/ctrlaltdel-disable.toml"
     LOGIND_DIR="${TMP}/logind.conf.d"
-    # The script writes the dropin at $LOGIND_DROPIN (hardcoded path
-    # in lib.sh). We can override only the parent dir via
-    # SELFDEF_LOGIND_DROPIN_DIR. But the LOGIND_DROPIN path is
-    # /etc/systemd/logind.conf.d/50-selfdef-cad.conf (set in lib.sh
-    # AFTER source), so the override only affects the mkdir -p. The
-    # actual write target is the hardcoded LOGIND_DROPIN. To make
-    # the test work we run the burst-guard profile in DRY_RUN mode
-    # (the only mode that doesn't write the hardcoded path).
+    LOGIND_DROPIN="${LOGIND_DIR}/50-selfdef-cad.conf"
+    # Both SELFDEF_LOGIND_DROPIN_DIR (for mkdir -p) and
+    # SELFDEF_LOGIND_DROPIN (for the write target) are now
+    # overridable — the lib.sh override was added 2026-06-06 so the
+    # burst-guard idempotency invariant can be exercised in tests.
 }
 
 teardown() { rm -rf "${TMP}"; }
@@ -59,6 +56,7 @@ run_wd() {
     SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
     SELFDEF_CAD_CONFIG="${CONF}" \
     SELFDEF_LOGIND_DROPIN_DIR="${LOGIND_DIR}" \
+    SELFDEF_LOGIND_DROPIN="${LOGIND_DROPIN}" \
     bash "${WD}"
 }
 
@@ -113,4 +111,24 @@ run_wd() {
     : > "${SYSEOF_LOG}"
     run_wd
     grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: burst-guard idempotent — re-install does NOT rewrite logind drop-in OR fire logind reload (2026-06-06 idempotency fix)" {
+    write_config "burst-guard"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    mtime_before="$(stat -c '%Y' "${LOGIND_DROPIN}")"
+    : > "${SYSEOF_LOG}"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${LOGIND_DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+    # Reload-side-effect gated on content-change.
+    ! grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: no render-timestamp in logind drop-in (defeats cmp -s)" {
+    write_config "burst-guard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${LOGIND_DROPIN}"
 }

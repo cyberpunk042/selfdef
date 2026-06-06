@@ -72,3 +72,39 @@ INSTALL_DIR="${MODULE_DIR}/install"
     unset SELFDEF_DRY_RUN SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
     [ "${status}" -eq 0 ]
 }
+
+@test "INVARIANT: real apply is idempotent — byte-identical re-install does NOT rewrite env file (2026-06-06 idempotency fix)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_SLM_LOOP_ENV}" ]
+    mtime_before="$(stat -c '%Y' "${SELFDEF_SLM_LOOP_ENV}")"
+    sleep 1
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    mtime_after="$(stat -c '%Y' "${SELFDEF_SLM_LOOP_ENV}")"
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: no render-timestamp in env file (defeats cmp -s)" {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_SLM_LOOP_ENV="${TEST_DIR}/slm-loop.env"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    echo 'CFLAGS="-march=native"' > "${SELFDEF_HARDWARE_TUNE_ENV}"
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    # grep -q returns 0 when match found; we want NO match (no ISO-date
+    # timestamp in "# Generated at:" line — was a variant-B bug).
+    if grep -qE '^# Generated at: *[0-9]{4}-[0-9]{2}-[0-9]{2}T' "${SELFDEF_SLM_LOOP_ENV}"; then
+        rm -rf "${TEST_DIR}"
+        unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+        false
+    fi
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_SLM_LOOP_ENV SELFDEF_HARDWARE_TUNE_ENV
+}

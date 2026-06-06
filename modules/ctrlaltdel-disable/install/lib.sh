@@ -17,5 +17,7 @@ else
 fi
 
 CAD_TARGET="ctrl-alt-del.target"
-LOGIND_DROPIN="/etc/systemd/logind.conf.d/50-selfdef-cad.conf"
+# SELFDEF_LOGIND_DROPIN added 2026-06-06 for L2 testability — live
+# default unchanged.
+LOGIND_DROPIN="${SELFDEF_LOGIND_DROPIN:-/etc/systemd/logind.conf.d/50-selfdef-cad.conf}"
 HEADER_MARKER="# managed-by: selfdef ctrlaltdel-disable"

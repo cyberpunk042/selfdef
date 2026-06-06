@@ -131,3 +131,55 @@ teardown_dry_run() {
     teardown_dry_run
     [ "${status}" -eq 0 ]
 }
+
+setup_real_run() {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    export MOCK_BIN="${TEST_DIR}/mockbin"
+    mkdir -p "${MOCK_BIN}"
+    cat > "${MOCK_BIN}/selfdefctl" <<'EOF'
+#!/bin/bash
+case "$*" in
+    *"hardware tune"*|*"hardware export"*)
+        cat <<TUNE
+# Synthesized hardware tune env for L2 test
+CFLAGS="-march=native -mavx512f -mavx512vnni"
+RUSTFLAGS="-Ctarget-cpu=native"
+TUNE
+        ;;
+    *) exit 0 ;;
+esac
+EOF
+    chmod +x "${MOCK_BIN}/selfdefctl"
+    export PATH="${MOCK_BIN}:${PATH}"
+}
+
+teardown_real_run() {
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_HARDWARE_TUNE_ENV MOCK_BIN
+}
+
+@test "INVARIANT: real apply is idempotent — byte-identical re-install does NOT rewrite env file (2026-06-06 idempotency fix)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    [ -f "${SELFDEF_HARDWARE_TUNE_ENV}" ]
+    mtime_before="$(stat -c '%Y' "${SELFDEF_HARDWARE_TUNE_ENV}")"
+    sleep 1
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    mtime_after="$(stat -c '%Y' "${SELFDEF_HARDWARE_TUNE_ENV}")"
+    teardown_real_run
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: no render-timestamp in env file (defeats cmp -s)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    if grep -qE '^# Generated [^#]*[0-9]{4}-[0-9]{2}-[0-9]{2}T' "${SELFDEF_HARDWARE_TUNE_ENV}"; then
+        teardown_real_run
+        false
+    fi
+    teardown_real_run
+}

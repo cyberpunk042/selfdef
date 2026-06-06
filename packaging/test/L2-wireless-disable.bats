@@ -147,3 +147,20 @@ run_wd() {
     grep -q 'rfkill block wifi' "${RF_LOG}"
     ! [ -f "${MODPROBE_FILE}" ]
 }
+
+@test "INVARIANT: idempotent — byte-identical re-install does NOT rewrite blacklist (2026-06-06 idempotency fix)" {
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    mtime_before="$(stat -c '%Y' "${MODPROBE_FILE}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${MODPROBE_FILE}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT: no render-timestamp in modprobe blacklist (defeats cmp -s)" {
+    write_config "mask"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODPROBE_FILE}"
+}

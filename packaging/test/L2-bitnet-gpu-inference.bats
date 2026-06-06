@@ -166,3 +166,75 @@ teardown_dry_run() {
     teardown_dry_run
     [ "${status}" -eq 0 ]
 }
+
+setup_real_run() {
+    TEST_DIR="$(mktemp -d)"
+    export SELFDEF_BITNET_ETC_DIR="${TEST_DIR}/etc"
+    export SELFDEF_BITNET_STATE_DIR="${TEST_DIR}/state"
+    export SELFDEF_HARDWARE_TUNE_ENV="${TEST_DIR}/hardware-tune.env"
+    cat > "${SELFDEF_HARDWARE_TUNE_ENV}" <<EOF
+# Synthesized for L2 real-run test.
+CFLAGS="-march=native"
+EOF
+    export MOCK_BIN="${TEST_DIR}/mockbin"
+    mkdir -p "${MOCK_BIN}"
+    cat > "${MOCK_BIN}/selfdefctl" <<'EOF'
+#!/bin/bash
+case "$*" in
+    *"hardware export"*)
+        echo '{"gpus":[{"index":0,"vram_gib":24,"name":"RTX 3090"}]}'
+        ;;
+    *) exit 0 ;;
+esac
+EOF
+    chmod +x "${MOCK_BIN}/selfdefctl"
+    export PATH="${MOCK_BIN}:${PATH}"
+}
+
+teardown_real_run() {
+    rm -rf "${TEST_DIR}"
+    unset SELFDEF_BITNET_ETC_DIR SELFDEF_BITNET_STATE_DIR \
+        SELFDEF_HARDWARE_TUNE_ENV MOCK_BIN
+}
+
+@test "INVARIANT: real apply is idempotent — runtime.env + schedule.json byte-identical re-install does NOT rewrite (2026-06-06 idempotency fix)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    env_file="${SELFDEF_BITNET_ETC_DIR}/runtime.env"
+    sched_file="${SELFDEF_BITNET_ETC_DIR}/schedule.json"
+    [ -f "${env_file}" ]
+    [ -f "${sched_file}" ]
+    env_mtime_before="$(stat -c '%Y' "${env_file}")"
+    sched_mtime_before="$(stat -c '%Y' "${sched_file}")"
+    sleep 1
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    env_mtime_after="$(stat -c '%Y' "${env_file}")"
+    sched_mtime_after="$(stat -c '%Y' "${sched_file}")"
+    teardown_real_run
+    [ "${env_mtime_before}" = "${env_mtime_after}" ]
+    [ "${sched_mtime_before}" = "${sched_mtime_after}" ]
+}
+
+@test "INVARIANT: no render-timestamp in runtime.env (defeats cmp -s)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    if grep -qE '^# Generated [^#]*[0-9]{4}-[0-9]{2}-[0-9]{2}T' "${SELFDEF_BITNET_ETC_DIR}/runtime.env"; then
+        teardown_real_run
+        false
+    fi
+    teardown_real_run
+}
+
+@test "INVARIANT: no generated_at field in schedule.json (defeats cmp -s)" {
+    setup_real_run
+    run bash "${INSTALL_DIR}/apply.sh"
+    [ "${status}" -eq 0 ]
+    if grep -q 'generated_at' "${SELFDEF_BITNET_ETC_DIR}/schedule.json"; then
+        teardown_real_run
+        false
+    fi
+    teardown_real_run
+}
