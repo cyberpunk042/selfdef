@@ -174,3 +174,48 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask is superset of stop: stop+disable+mask sequence; stop omits mask)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable cups.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask cups' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=7 when all print/scan units present): full coverage count surfaces" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=7'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op when no print/scan units present — healthy sovereign endpoint has zero)" {
+    write_config "mask"
+    output="$(PRINT_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]] || [[ "${output}" == *'acted=0'* ]]
+}
+
+@test "INVARIANT (no auto-uninstall: CUPS package NEVER auto-removed; only stop+disable+mask)" {
+    # Module's contract is to neutralize, not uninstall.
+    # CUPS/saned package removal is operator decision via
+    # apt/dnf/yum.
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order per unit: stop → disable → mask)" {
+    write_config "mask"
+    run_wd
+    stop_line="$(grep -n 'systemctl stop cups.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable cups.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask cups.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
