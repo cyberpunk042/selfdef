@@ -29,16 +29,20 @@ case "$PROFILE" in
     *) die "profile must be enabled|disabled, got '$PROFILE'" ;;
 esac
 
-# Ensure /var/account/ exists.
-mkdir -p /var/account
-chown root:root /var/account
-chmod 0750 /var/account
+# Ensure the pacct parent dir exists.
+# SELFDEF_ACCT_DIR added 2026-06-06 for L2 testability — live
+# default unchanged.
+ACCT_DIR="${SELFDEF_ACCT_DIR:-/var/account}"
+mkdir -p "$ACCT_DIR"
+# chown/chmod best-effort: in test envs we may not be root.
+chown root:root "$ACCT_DIR" 2>/dev/null || true
+chmod 0750 "$ACCT_DIR" 2>/dev/null || true
 
 # Ensure pacct file exists.
 if [[ ! -f "$PACCT_FILE" ]] && [[ "$DRY_RUN" != "1" ]]; then
     : > "$PACCT_FILE"
-    chown root:root "$PACCT_FILE"
-    chmod 0640 "$PACCT_FILE"
+    chown root:root "$PACCT_FILE" 2>/dev/null || true
+    chmod 0640 "$PACCT_FILE" 2>/dev/null || true
 fi
 
 # Logrotate drop-in.
