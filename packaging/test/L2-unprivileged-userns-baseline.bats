@@ -149,3 +149,54 @@ run_wd() {
     grep -q 'profile=allow' "${DROPIN}"
     grep -q 'sysctl -w kernel.unprivileged_userns_clone=1' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (profile transition allow → deny WITH ack): rewrites drop-in + applies sysctl 0" {
+    write_config "allow"
+    run_wd
+    grep -q 'profile=allow' "${DROPIN}"
+    write_config "deny" "true"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=deny' "${DROPIN}"
+    grep -q 'sysctl -w kernel.unprivileged_userns_clone=0' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (profile transition deny → allow): rewrites drop-in back + applies sysctl 1" {
+    write_config "deny" "true"
+    run_wd
+    grep -q 'profile=deny' "${DROPIN}"
+    write_config "allow"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=allow' "${DROPIN}"
+    grep -q 'sysctl -w kernel.unprivileged_userns_clone=1' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (drop-in carries the actual sysctl directive): allow → kernel.unprivileged_userns_clone=1" {
+    write_config "allow"
+    run_wd
+    grep -qE 'kernel\.unprivileged_userns_clone\s*=\s*1' "${DROPIN}"
+}
+
+@test "INVARIANT (drop-in carries the actual sysctl directive): deny → kernel.unprivileged_userns_clone=0" {
+    write_config "deny" "true"
+    run_wd
+    grep -qE 'kernel\.unprivileged_userns_clone\s*=\s*0' "${DROPIN}"
+}
+
+@test "INVARIANT (live-knob re-application — sysctl -w fires on every apply even when drop-in unchanged)" {
+    write_config "allow"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'sysctl -w kernel.unprivileged_userns_clone=' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (drop-in filename selfdef-* pattern): tracking + uninstall identification" {
+    write_config "allow"
+    run_wd
+    case "${DROPIN}" in
+        */50-selfdef-*.conf) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-*.conf pattern" ;;
+    esac
+}
