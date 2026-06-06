@@ -20,7 +20,7 @@ help:
 	@echo
 	@echo "  make build         cargo build --workspace"
 	@echo "  make test          cargo test --workspace (unit + integration)"
-	@echo "  make coherence     full 13-layer L1+L2+cargo coherence harness"
+	@echo "  make coherence     full multi-layer L1+L2+cargo coherence harness"
 	@echo "  make watchdogs     cargo test for the four-watchdog set crates"
 	@echo "  make clippy        cargo clippy --workspace --no-deps"
 	@echo "  make fmt           cargo fmt --all"
