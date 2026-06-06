@@ -154,3 +154,61 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — autofs inventory enumerates mount-access-trigger root-exec surface)" {
+    printf '/mnt/data program:/usr/sbin/auto.smb\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (program: map under /var/tmp): writable-root expansion" {
+    printf '/mnt/x program:/var/tmp/evil.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (program: map under /dev/shm): tmpfs writable-root coverage" {
+    printf '/mnt/x program:/dev/shm/evil.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (program: map under /home): user-writable hijack coverage" {
+    printf '/mnt/x program:/home/user/evil.sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (absolute map file under /tmp): map-file axis writable-root expansion" {
+    printf '/mnt/x /tmp/maps/auto.x\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (absolute map file under /dev/shm): map-file axis tmpfs coverage" {
+    printf '/mnt/x /dev/shm/maps/auto.x\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (ldap: map is NOT flagged — network map axis): network-map false-positive guard" {
+    # ldap: maps (like yp:) are non-local-exec; they shouldn't false-fire.
+    printf '/home/guests ldap:auto.home\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (file: map is NOT flagged): file: prefix is non-exec lookup" {
+    printf '/home/guests file:/etc/auto.home\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '/mnt/data program:/usr/sbin/auto.smb\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-autofs -- ')
+    [ "${main_count}" = "1" ]
+}
