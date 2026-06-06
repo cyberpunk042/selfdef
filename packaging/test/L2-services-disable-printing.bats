@@ -119,3 +119,58 @@ run_wd() {
     # The systemctl invocations replay; the units stay in target state.
     grep -q 'systemctl mask cups.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (cups family coverage): all 4 cups-related units acted on (.service + .socket + .path + cups-browsed)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask cups.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups.path' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask cups-browsed.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (saned family coverage): both saned units acted on (.service + .socket)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask saned.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask saned.socket' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (printer.target umbrella): printer.target IS in the action set (umbrella unit)" {
+    # printer.target is the systemd target that other printer
+    # units WantedBy. Masking it short-circuits the printer-stack
+    # activation chain entirely.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask printer.target' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (cups.socket+cups.path dual coverage in stop): stop also acts on socket+path (not just .service)" {
+    # cups.socket + cups.path can both re-activate cups.service on
+    # demand. Disabling only .service would leave both activation
+    # paths alive.
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop cups.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable cups.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl stop cups.path' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable cups.path' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mask): re-applying mask fires the same systemctl set across both applies" {
+    write_config "mask"
+    run_wd
+    first_log="$(cat "${SYSEOF_LOG}")"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    second_log="$(cat "${SYSEOF_LOG}")"
+    diff <(printf '%s\n' "${first_log}") <(printf '%s\n' "${second_log}") >/dev/null
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"services-disable-printing"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
