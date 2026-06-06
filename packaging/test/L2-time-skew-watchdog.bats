@@ -211,3 +211,55 @@ CCEOF
     main_count=$(cap | grep -cE '^-t selfdef-time-skew -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (chronyc not present on PATH → high / chronyc_failed; exit 0)" {
+    # If chronyc binary is missing entirely (rare but possible on
+    # NTP-only host), watchdog must log + exit 0 (not crash).
+    rm -f "${BIN}/chronyc"
+    run_wd
+    cap | grep -q '"severity":"high"'
+    cap | grep -q '"event":"chronyc_failed"'
+}
+
+@test "INVARIANT (operator-pull thresholds both work simultaneously: warn=300 + alert=2000 — 1000ms offset → still warn)" {
+    # Combine overrides. 1000ms offset (1s) with warn=300, alert=2000
+    # should land in warn band (300 < 1000 < 2000).
+    mk_chronyc 0 "$(tracking_block "1.000" "0.500" "0.001")"
+    SELFDEF_TIME_OFFSET_WARN_MS=300 \
+        SELFDEF_TIME_OFFSET_ALERT_MS=2000 \
+        PATH="${BIN}:${PATH}" \
+        bash "${WD}"
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"event":"last_offset_warn"'
+}
+
+@test "INVARIANT (alert severity exits non-zero — systemd failure surface for operator alerting hooks)" {
+    # Alert tier MUST exit 1 so systemctl status shows the anomaly
+    # + OnFailure hooks fire.
+    mk_chronyc 0 "$(tracking_block "0.001" "0.001" "1.500")"
+    run env PATH="${BIN}:${PATH}" bash "${WD}"
+    [ "${status}" -eq 1 ]
+}
+
+@test "INVARIANT (warn severity exits 0 — warn is advisory, not a failure)" {
+    # Warn tier MUST NOT exit non-zero — warnings are operator-
+    # pull advisories, not systemd failures.
+    mk_chronyc 0 "$(tracking_block "0.200" "0.050" "0.001")"
+    run env PATH="${BIN}:${PATH}" bash "${WD}"
+    [ "${status}" -eq 0 ]
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (last_offset_ms is bare numeric type — NOT a string; JSON dashboards parse as number)" {
+    # The JSON field 'last_offset_ms' must be a numeric literal
+    # (no quotes around the number). Downstream graphing tools
+    # (Grafana, Prometheus) consume this directly. Current shape
+    # is floating-point (200.000) — lock that it's bare-numeric,
+    # NOT quoted-string.
+    mk_chronyc 0 "$(tracking_block "0.200" "0.050" "0.001")"
+    run_wd
+    # Bare numeric: integer or floating-point allowed.
+    cap | grep -qE '"last_offset_ms":[0-9]+(\.[0-9]+)?'
+    # NOT a quoted string.
+    ! cap | grep -qE '"last_offset_ms":"[0-9]'
+}
