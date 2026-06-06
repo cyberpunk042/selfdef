@@ -133,9 +133,40 @@ for path in candidates:
         failures += 1
         file_failures += 1
 
+    # Action allow-list check — must match the schema crate's
+    # ALLOWED_ACTIONS (selfdef-tracingpolicy-schema crate, title-case
+    # Tetragon convention). The pre-fix bug where the schema crate
+    # carried "SIGKILL" while the shipped policy used "Sigkill" was
+    # discovered + fixed in commit 4f0a5bc — this gate prevents
+    # recurrence at the YAML layer.
+    ALLOWED = {
+        "Sigkill", "Override", "FollowFD", "UnfollowFD", "CopyFD",
+        "Post", "GetUrl", "DnsLookup", "NoPost", "Signal",
+    }
+
+    def collect_actions(node):
+        actions = []
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k == "action" and isinstance(v, str):
+                    actions.append(v)
+                else:
+                    actions.extend(collect_actions(v))
+        elif isinstance(node, list):
+            for item in node:
+                actions.extend(collect_actions(item))
+        return actions
+
+    for action in collect_actions(kprobes):
+        if action not in ALLOWED:
+            print(f"  FAIL {short}: action {action!r} not in ALLOWED_ACTIONS set (Tetragon would reject)")
+            failures += 1
+            file_failures += 1
+
     if file_failures == 0:
         kp_count = len(kprobes) if isinstance(kprobes, list) else 0
-        print(f"  PASS {short}: apiVersion + kind + metadata.name={name!r} + spec.kprobes ({kp_count} kprobes)")
+        action_count = len(collect_actions(kprobes))
+        print(f"  PASS {short}: apiVersion + kind + metadata.name={name!r} + spec.kprobes ({kp_count} kprobes, {action_count} actions all allowed)")
 
 if failures > 0:
     print(f"FLEET_FAILURES={failures}")
