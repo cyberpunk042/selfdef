@@ -19,6 +19,10 @@ set -u
 
 PROFILE="${SELFDEF_ACCOUNTS_PROFILE:-report}"
 BASELINE="${SELFDEF_ACCOUNTS_BASELINE:-/var/lib/selfdef/accounts-baseline.tsv}"
+# SELFDEF_ACCOUNTS_PASSWD_FILE added 2026-06-06 for L2 delta-
+# testability. Live default unchanged. getent group calls are
+# mocked via PATH override in tests.
+PASSWD_FILE="${SELFDEF_ACCOUNTS_PASSWD_FILE:-/etc/passwd}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -32,7 +36,7 @@ while IFS=: read -r name _ uid gid _ _ shell; do
     if [[ "$uid" == "0" ]]; then
         printf 'uid0\t%s\n' "$name" >> "$current"
     fi
-done < /etc/passwd
+done < "$PASSWD_FILE"
 
 # sudo / wheel / admin group membership (the privilege roster).
 for grp in sudo wheel admin; do
@@ -49,7 +53,7 @@ for grp in sudo wheel admin; do
     [[ -z "$gid" ]] && continue
     while IFS=: read -r name _ _ pgid _; do
         [[ "$pgid" == "$gid" ]] && printf 'sudo\t%s\n' "$name" >> "$current"
-    done < /etc/passwd
+    done < "$PASSWD_FILE"
 done
 
 sort -u "$current" -o "$current" 2>/dev/null || { sort -u "$current" > "${current}.s" && mv "${current}.s" "$current"; }
