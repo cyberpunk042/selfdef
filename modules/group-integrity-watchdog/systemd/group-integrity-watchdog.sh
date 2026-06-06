@@ -28,6 +28,10 @@ set -u
 
 PROFILE="${SELFDEF_GROUPINT_PROFILE:-report}"
 BASELINE="${SELFDEF_GROUPINT_BASELINE:-/var/lib/selfdef/group-integrity-baseline.tsv}"
+# SELFDEF_GROUPINT_GROUP_FILE + SELFDEF_GROUPINT_PASSWD_FILE added
+# 2026-06-06 for L2 delta-testability. Live defaults unchanged.
+GROUP_FILE="${SELFDEF_GROUPINT_GROUP_FILE:-/etc/group}"
+PASSWD_FILE="${SELFDEF_GROUPINT_PASSWD_FILE:-/etc/passwd}"
 
 # Root-equivalent / high-value groups.
 PRIV_GROUPS="docker lxd podman disk shadow kvm libvirt libvirtd adm systemd-journal video render sudo wheel root"
@@ -44,14 +48,14 @@ while IFS=: read -r gname _ gid members; do
             [[ -n "$m" ]] && printf '%s\t%s\n' "$gname" "$m" >> "$current"
         done
     fi
-done < /etc/group
+done < "$GROUP_FILE"
 
 # primary-gid members (user's primary group from passwd).
 while IFS=: read -r uname _ _ pgid _; do
     [[ -z "$uname" ]] && continue
-    gname=$(awk -F: -v g="$pgid" '$3==g{print $1; exit}' /etc/group 2>/dev/null)
+    gname=$(awk -F: -v g="$pgid" '$3==g{print $1; exit}' "$GROUP_FILE" 2>/dev/null)
     [[ -n "$gname" ]] && printf '%s\t%s\n' "$gname" "$uname" >> "$current"
-done < /etc/passwd
+done < "$PASSWD_FILE"
 
 { sort -u > "${current}.sorted"; } < "$current" && mv "${current}.sorted" "$current"
 cur_count=$(wc -l < "$current" | tr -d ' ')
