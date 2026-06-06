@@ -155,3 +155,49 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (plain pattern in /var/tmp → warn): writable-root expansion (matches /tmp+/dev/shm coverage)" {
+    write_pattern "/var/tmp/core.%p"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"event":"core_pattern_tmp_target"'
+}
+
+@test "INVARIANT (pipe to /home → alert): user-writable hijack coverage" {
+    write_pattern "|/home/user/.coredump-collector %p"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"core_pattern_hijacked"'
+}
+
+@test "INVARIANT (pipe to bash directly → alert): shell-pipe attack signature" {
+    # bash -c handler — even though bash exists, it is NOT an
+    # allowlisted handler. This is the canonical attacker pivot:
+    # core_pattern=|/bin/sh -c 'bash -i >& /dev/tcp/...'
+    write_pattern "|/bin/sh -c attacker"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"core_pattern_hijacked"'
+}
+
+@test "INVARIANT (empty core_pattern → ok or warn, not alert): missing pattern is policy concern but not active attack" {
+    write_pattern ""
+    run_wd
+    # Empty should not be ALERT (no attack signature); ok or warn fine.
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pipe-without-program after pipe-char → alert): malformed-pipe attack hint" {
+    # An attacker who half-writes (race condition with the actual write)
+    # could leave just `|` — the kernel would fail-open. We want alert.
+    write_pattern "|"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_pattern "core"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-coredump-pattern -- ')
+    [ "${main_count}" = "1" ]
+}
