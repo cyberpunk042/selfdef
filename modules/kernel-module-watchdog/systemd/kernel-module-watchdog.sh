@@ -20,13 +20,20 @@ set -u
 PROFILE="${SELFDEF_KMOD_PROFILE:-report}"
 BASELINE="${SELFDEF_KMOD_BASELINE:-/var/lib/selfdef/kernel-modules-baseline.tsv}"
 KREL="$(uname -r 2>/dev/null || echo unknown)"
-MODDIR="/lib/modules/${KREL}"
+
+# Source overrides: operator-test affordance + L2 testability. Defaults
+# point at the live kernel surfaces (/proc/modules + /lib/modules/$kver).
+# SELFDEF_KMOD_PROCSRC lets a captured snapshot of /proc/modules be
+# fed in; SELFDEF_KMOD_MODDIR lets the on-disk-module scan target a
+# fixture tree. Live default behavior unchanged.
+PROCSRC="${SELFDEF_KMOD_PROCSRC:-/proc/modules}"
+MODDIR="${SELFDEF_KMOD_MODDIR:-/lib/modules/${KREL}}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
 
-if [[ -r /proc/modules ]]; then
-    awk '{print $1}' /proc/modules | sort -u > "$current"
+if [[ -r "$PROCSRC" ]]; then
+    awk '{print $1}' "$PROCSRC" | sort -u > "$current"
 fi
 
 cur_count=$(wc -l < "$current" | tr -d ' ')

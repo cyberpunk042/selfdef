@@ -1,0 +1,198 @@
+#!/usr/bin/env bats
+# L2 functional suite for kernel-module-watchdog.
+#
+# kernel-module-watchdog snapshots the loaded module set from
+# /proc/modules and alerts on:
+#   - 1..2 new modules           → warn / new_module
+#   - 3+ new modules             → alert / mass_new_modules
+#   - any new module with no matching .ko under /lib/modules/$kver
+#                                → alert / out_of_tree_module
+#                                  (the LKM-rootkit signature: an
+#                                  attacker loads an injected /
+#                                  unsigned module to hook syscalls).
+#
+# Uses SELFDEF_KMOD_PROCSRC + SELFDEF_KMOD_MODDIR env-var overrides
+# (added 2026-06-06 as operator-test + L2 testability affordances) to
+# point the watchdog at fixture files instead of /proc/modules and
+# /lib/modules/$(uname -r).
+#
+# Run with: bats packaging/test/L2-kernel-module-watchdog.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/kernel-module-watchdog/systemd/kernel-module-watchdog.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/logger" <<'FAKELOGGER'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${SELFDEF_TEST_LOGCAP}"
+FAKELOGGER
+    chmod +x "${BIN}/logger"
+    export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    BASELINE="${TMP}/kernel-modules-baseline.tsv"
+    PROCSRC="${TMP}/proc-modules"
+    MODDIR="${TMP}/modules"
+    mkdir -p "${MODDIR}"
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+# write_modules_proc <mod1> <mod2> ...  → emits /proc/modules-shape lines.
+write_modules_proc() {
+    : > "${PROCSRC}"
+    for m in "$@"; do
+        printf '%s 16384 0 - Live 0x0000000000000000\n' "${m}" >> "${PROCSRC}"
+    done
+}
+
+# stage_ko <module-name> — drop a fake .ko file in the moddir so the
+# out-of-tree detector finds it.
+stage_ko() {
+    : > "${MODDIR}/${1}.ko"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_KMOD_PROFILE="${PROFILE:-report}" \
+    SELFDEF_KMOD_BASELINE="${BASELINE}" \
+    SELFDEF_KMOD_PROCSRC="${PROCSRC}" \
+    SELFDEF_KMOD_MODDIR="${MODDIR}" \
+    bash "${WD}"
+}
+
+cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
+
+@test "first run captures the module set into the baseline + chmod 0600" {
+    write_modules_proc ext4 nvme intel_pmc_core
+    stage_ko ext4; stage_ko nvme; stage_ko intel_pmc_core
+    run_wd
+    [ -f "${BASELINE}" ]
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"baseline_count":3'
+}
+
+@test "unchanged module set on second run → ok / no_delta" {
+    write_modules_proc ext4 nvme
+    stage_ko ext4; stage_ko nvme
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"no_delta"'
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"added":0'
+}
+
+@test "1 new module with .ko on disk → warn / new_module" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd                              # baseline = {ext4}
+    write_modules_proc ext4 newdriver
+    stage_ko newdriver                  # .ko exists → not out-of-tree
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"new_module"'
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"added":1'
+    cap | grep -qE '"out_of_tree":0'
+}
+
+@test "3+ new in-tree modules → alert / mass_new_modules" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 a b c
+    stage_ko a; stage_ko b; stage_ko c
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"mass_new_modules"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+}
+
+@test "new module with NO matching .ko → alert / out_of_tree_module (rootkit signature)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 rootkit_lkm    # no .ko staged → out of tree
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"out_of_tree_module"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"out_of_tree":1'
+}
+
+@test "out_of_tree takes precedence over mass_new_modules (alert classification ordering)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    # 3 new modules but ONE is out-of-tree → must classify as
+    # out_of_tree_module (the more-specific rootkit signature),
+    # not mass_new_modules.
+    write_modules_proc ext4 a b rootkit_lkm
+    stage_ko a; stage_ko b              # rootkit_lkm has no .ko
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"out_of_tree_module"'
+    cap | grep -qE '"out_of_tree":1'
+    cap | grep -qE '"added":3'
+}
+
+@test "module name with underscore matches dash-named .ko (kernel mod naming convention)" {
+    # The kernel uses underscore and dash interchangeably in module
+    # names. Lock that the .ko-existence check handles both.
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 some_driver
+    # Stage with DASH (the file-system filename uses dash).
+    : > "${MODDIR}/some-driver.ko"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # Should NOT be classified as out-of-tree (the dash-vs-underscore
+    # rule resolves it).
+    cap | grep -qE '"out_of_tree":0'
+    cap | grep -q '"event":"new_module"'
+}
+
+@test "removed module (operator cleanup) does NOT alert" {
+    write_modules_proc ext4 oldmod
+    stage_ko ext4; stage_ko oldmod
+    run_wd                                 # baseline = {ext4, oldmod}
+    write_modules_proc ext4                # oldmod removed
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"no_delta"'
+    cap | grep -qE '"removed":1'
+}
+
+@test "the emitted JSON carries every promised schema field" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd                                 # baseline-initial path
+    line="$(cap)"
+    printf '%s' "${line}" | grep -q '"tag":"selfdef-kernel-modules"'
+    printf '%s' "${line}" | grep -q '"severity":'
+    printf '%s' "${line}" | grep -q '"event":'
+    printf '%s' "${line}" | grep -q '"profile":'
+    printf '%s' "${line}" | grep -q '"kernel":'
+    printf '%s' "${line}" | grep -qE '"baseline_count":[0-9]+'
+}
+
+@test "enforce profile + new module → exit 1" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 newdriver
+    stage_ko newdriver
+    # Use bats' `run` to capture status without aborting on non-zero exit.
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_KMOD_PROFILE=enforce \
+        SELFDEF_KMOD_BASELINE="${BASELINE}" \
+        SELFDEF_KMOD_PROCSRC="${PROCSRC}" \
+        SELFDEF_KMOD_MODDIR="${MODDIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+}
