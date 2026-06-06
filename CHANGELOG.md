@@ -6,6 +6,112 @@ Versioning: [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Improved — 12 small L2 suites strengthened with delta-detection + observability + advisory-exit invariants (2026-06-06)
+
+Follows the 100% L2 module coverage pass. The 12 smallest L2
+suites (2-5 cases each — mostly capture-regression locks from
+the 2026-05-27 root-cause family) are now invariant-locked with
+the FULL delta-detection + observability + advisory-exit
+contract:
+
+  - group-integrity-watchdog        2→11 cases (privileged-
+                                                group-delta + dual-source
+                                                inventory)
+  - pam-config-watchdog             2→11 cases (PAM rule add +
+                                                module hash drift +
+                                                no-auto-trust asymmetry)
+  - ssh-authkeys-watchdog           2→11 cases (MITRE T1098.004
+                                                + comment-independent
+                                                hashing + central
+                                                authorized_keys.d surface)
+  - sudoers-integrity-watchdog      3→14 cases (NOPASSWD / blanket
+                                                ALL=(ALL:ALL) ALL
+                                                escalation + Defaults
+                                                exclusion contract)
+  - account-watchdog                3→11 cases (uid=0 + sudo +
+                                                primary-gid pass +
+                                                impostor-root attack)
+  - cron-job-watchdog               3→11 cases (T1053 persistence
+                                                + mass-add threshold +
+                                                content-edit replacement)
+  - systemd-unit-watchdog           3→12 cases (T1543.002 +
+                                                ExecStart hash drift +
+                                                transient unit handling)
+  - dns-resolver-watchdog           4→10 cases (DNS-hijack signature
+                                                + /etc/hosts mass-
+                                                override threshold)
+  - hidden-process-watchdog         4→11 cases (JSON schema +
+                                                PROBE_CAP bounds +
+                                                observability)
+  - lynis-cron                      4→14 cases (severity-ladder
+                                                boundaries + advisory
+                                                exit + observability)
+  - clamav-cron                     5→13 cases (advisory exit +
+                                                best-effort freshclam
+                                                + observability)
+  - rkhunter-cron                   5→12 cases (advisory-vs-enforce
+                                                asymmetry — distinct
+                                                exit contract from
+                                                lynis/clamav siblings)
+
+Net new L2 cases: 105 (full L2 fleet: 2062 → 2167 across 196
+suites, 0 regressions).
+
+Common invariant family locked across the 5 privilege-
+persistence watchdogs (pam-config + ssh-authkeys + sudoers-
+integrity + account + cron-job + systemd-unit):
+
+> **INVARIANT (no auto-trust)**: the watchdog does NOT refresh
+> the baseline on delta. The alert STAYS visible across every
+> subsequent run until the operator manually updates the
+> baseline. New {keys / PAM rules / sudo grants / accounts /
+> cron jobs / enabled services} are NEVER routine; auto-trust
+> would defeat the watchdog's whole purpose.
+
+This is the structural contrast against group-integrity-
+watchdog (which DOES auto-refresh — group-membership changes
+are common enough that auto-trust prevents alert fatigue).
+The asymmetry is intentional + is now locked in every
+non-auto-trust watchdog's suite, so a regression that copies
+the group-integrity refresh pattern into any of them is
+caught immediately.
+
+15 new env-var overrides added across 6 watchdogs to enable
+the delta-testability:
+SELFDEF_GROUPINT_GROUP_FILE / _PASSWD_FILE,
+SELFDEF_PAMCFG_PAM_DIR / _LIB_DIRS,
+SELFDEF_AUTHKEYS_PASSWD_FILE / _CENTRAL_DIR,
+SELFDEF_SUDOERS_FILE / _D_DIR,
+SELFDEF_ACCOUNTS_PASSWD_FILE,
+SELFDEF_CRONJOBS_SPOOL_DIRS / _ETC_CRONTAB / _CRON_DIRS,
+SELFDEF_DNSRES_RESOLV_FILE / _HOSTS_FILE.
+Live defaults unchanged.
+
+### Added — L2 structural guard locks the variant-A + variant-B idempotency invariant fleet-wide (2026-06-06)
+
+`packaging/test/L2-module-apply-idempotency-guard.bats` scans
+EVERY modules/*/install/apply.sh and asserts:
+
+  - INVARIANT (variant-A): no apply.sh has `mv -f "$tmp" "$dst"`
+    without a `cmp -s` content-change guard within the preceding
+    8 lines. Re-applies blindly mutating mtime + triggering
+    downstream destructive side-effects (systemctl reload, nft
+    delete + load, logind reload) is the variant-A bug class
+    closed in commits f3aa1ca / 6bc3e77 / 040a8a3.
+  - INVARIANT (variant-B): no apply.sh renders `# Generated
+    $(date ...)` into the destination file content. The Python-
+    helper `generated_at: datetime.utcnow()` JSON-field variant
+    is also caught.
+  - Sanity + composition guards ensure both invariants run over
+    the same apply.sh inventory (≥180 files).
+
+The new guard surfaced a REAL BUG #3 in tensor-parallel-
+inference (slice-plan.json had no cmp -s guard + runtime.env
+used non-atomic cat-then-append rewrites). Fixed in same
+commit. All 4 invariants now PASS across all 187 module
+apply.sh files; any future regression of either variant lands
+RED immediately.
+
 ### Added — 100% L2 functional coverage achieved across all 187 module apply.sh scripts (2026-06-06)
 
 Closes the L2 coverage gap that opened during the variant-B
