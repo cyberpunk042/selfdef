@@ -16,6 +16,6 @@ else
     exit 2
 fi
 
-PROFILE_D="/etc/profile.d"
-DROPIN="${PROFILE_D}/50-selfdef-tmout.sh"
+PROFILE_D="${SELFDEF_TMOUT_PROFILE_D:-/etc/profile.d}"
+DROPIN="${SELFDEF_TMOUT_DROPIN:-${PROFILE_D}/50-selfdef-tmout.sh}"
 HEADER_MARKER="# managed-by: selfdef shell-timeout-baseline"

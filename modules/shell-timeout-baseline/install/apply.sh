@@ -35,10 +35,20 @@ tmp="$(mktemp "${DROPIN}.XXXXXX")"
 {
     echo "#!/bin/sh"
     echo "$HEADER_MARKER"
-    echo "# Generated $(date -u '+%Y-%m-%dT%H:%M:%SZ') — profile=$PROFILE"
+    # No render-timestamp — defeats cmp -s idempotency (per the
+    # dns-shield + proc-hidepid + 5-module batch fix, 2026-06-06).
+    echo "# profile=$PROFILE"
     cat "$src"
 } > "$tmp"
 chmod 0644 "$tmp"
+
+# Idempotency: skip rewrite when content hasn't changed (preserves
+# mtime so downstream watchdogs don't flag spurious "changed" findings).
+if [[ -f "$DROPIN" ]] && cmp -s "$tmp" "$DROPIN"; then
+    rm -f "$tmp"
+    emit_status "ok" "shell-timeout-baseline profile=$PROFILE (no change)"
+    exit 0
+fi
 mv -f "$tmp" "$DROPIN"
 log "wrote $DROPIN (takes effect on NEXT login shell)"
 
