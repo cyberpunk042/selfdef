@@ -184,3 +184,45 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask is superset of stop: stop+disable+mask sequence; stop omits mask step)" {
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop rpcbind.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpcbind.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask rpcbind.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop rpcbind.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable rpcbind.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask rpcbind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=5 when all RPC units present): full coverage count surfaces" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=5'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op when no RPC units present — healthy modern endpoint has zero)" {
+    write_config "mask"
+    output="$(RPC_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]] || [[ "${output}" == *'acted=0'* ]]
+}
+
+@test "INVARIANT (no auto-uninstall: rpcbind / nfs-common packages NEVER auto-removed)" {
+    write_config "mask"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mask order per unit: stop → disable → mask)" {
+    write_config "mask"
+    run_wd
+    stop_line="$(grep -n 'systemctl stop rpcbind.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable rpcbind.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask rpcbind.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
