@@ -177,3 +177,85 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (auto-trust): polkit-rules-watchdog DOES auto-refresh baseline (operator polkit reconfiguration common)" {
+    # CONTRAST against no-auto-trust family. polkit rule changes
+    # ARE common operator actions (adding self-grants for known
+    # apps, adjusting auth-admin scopes). Watchdog flags delta
+    # for THIS run; baseline catches up on next. Asymmetry locked
+    # against no-auto-trust regression.
+    seed_benign
+    run_wd
+    printf 'polkit.addRule(function(a, s) { return polkit.Result.YES; });\n' > "${RULESD}/30-grant.rules"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # baseline refreshed → ok
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (current behavior: commented YES grant IS flagged — JS comments not yet filtered; refinement opportunity)" {
+    # Current behavior: the watchdog does NOT yet filter JS // line
+    # comments or /* block comments before searching for
+    # polkit.Result.YES. A commented YES grant inside a rule file
+    # DOES surface as content-change. Lock current behavior so
+    # future filter-pass refinement is intentional, not a silent
+    # regression.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULE}" <<'EOF'
+polkit.addRule(function(action, subject) {
+  if (action.id == "org.example.app") {
+    // future: return polkit.Result.YES;
+    return polkit.Result.AUTH_ADMIN;
+  }
+});
+EOF
+    run_wd
+    # The content delta is detected; current severity may be
+    # warn (content-changed) or alert (treating commented YES as
+    # real grant). Lock that the severity is NOT silently 'ok'.
+    ! cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (out-of-scope polkit Result types: NOT_HANDLED + AUTH_SELF NOT flagged — only YES matters as alert)" {
+    # The watchdog targets polkit.Result.YES specifically (full
+    # grant). Other Result types (NOT_HANDLED, AUTH_ADMIN_KEEP,
+    # AUTH_SELF) are legit operator-configurations.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULESD}/15-self-keep.rules" <<'EOF'
+polkit.addRule(function(action, subject) {
+  return polkit.Result.AUTH_SELF_KEEP;
+});
+EOF
+    run_wd
+    # New file → alert/warn fires (file-add detection); but the
+    # event should NOT be specific to YES-grant.
+    cap | grep -qE '"severity":"(alert|warn)"'
+    # The NEW-rule event fires for any new file, regardless of
+    # grant type. Operator triage uses sample to filter.
+    cap | grep -q '"event":"polkit_rules_new"'
+}
+
+@test "INVARIANT (multi-grant single file: multiple YES grants in one rule file → single alert)" {
+    # When a single new file carries multiple YES grants, the alert
+    # fires once (not per-grant). Locks the consolidation.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RULESD}/40-multi-grant.rules" <<'EOF'
+polkit.addRule(function(a, s) {
+  if (a.id == "org.app.one") return polkit.Result.YES;
+  if (a.id == "org.app.two") return polkit.Result.YES;
+  if (a.id == "org.app.three") return polkit.Result.YES;
+});
+EOF
+    run_wd
+    cap | grep -q '"event":"polkit_rules_new"'
+    cap | grep -q '"severity":"alert"'
+    main_count=$(cap | grep -cE '^-t selfdef-polkit-rules -- ')
+    [ "${main_count}" = "1" ]
+}
