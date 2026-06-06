@@ -178,3 +178,54 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (nfs vs nfs4 — both fstypes covered)" {
+    mk_findmnt
+    write_mounts $'nfs\t/mnt/legacy\tnodev,relatime'   # NFSv3
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"network_mount_missing_nosuid"'
+}
+
+@test "INVARIANT (cifs missing-nodev only → warn, not alert): same warn-tier semantic as NFS" {
+    mk_findmnt
+    write_mounts $'cifs\t/mnt/winshare\tnosuid,relatime'   # no nodev
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '"event":"network_mount_missing_nodev"'
+}
+
+@test "INVARIANT (fuse.sshfs missing-nodev only → warn): SSHFS warn-tier coverage" {
+    mk_findmnt
+    write_mounts $'fuse.sshfs\t/mnt/remote\tnosuid,relatime'
+    run_wd
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (nosuid_sample carries the mountpoint:fstype for forensics)" {
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/distinctive-share\tnodev,relatime'
+    run_wd
+    cap | grep -q '/mnt/distinctive-share'
+}
+
+@test "INVARIANT (5+ network mounts all-hardened → ok scales): bound check" {
+    mk_findmnt
+    write_mounts \
+        $'nfs4\t/mnt/s1\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s2\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/s3\tnosuid,nodev,relatime' \
+        $'cifs\t/mnt/w1\tnosuid,nodev,relatime' \
+        $'fuse.sshfs\t/mnt/r1\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"ok"'
+    cap | grep -qE '"network_mounts":5'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/share\tnosuid,nodev,relatime'
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nfs-mount -- ')
+    [ "${main_count}" = "1" ]
+}
