@@ -95,3 +95,57 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     # enforce branch doesn't fire-and-exit-non-zero on a clean host.
     cap | grep -q '"severity":"ok"'
 }
+
+@test "PROBE_CAP respected — pids_alive ≤ PROBE_CAP regardless of pid_max" {
+    # PROBE_CAP=10 → at most 10 PIDs probed → pids_alive ≤ 10.
+    # Even on a host with high pid_max, the cap holds.
+    PROBE_CAP=10 run_wd
+    line="$(cap)"
+    alive=$(printf '%s' "${line}" | grep -oE '"pids_alive":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ -n "${alive}" ]
+    [ "${alive}" -le 10 ]
+}
+
+@test "probe_max field surfaces the actual PROBE_CAP value used (observability)" {
+    PROBE_CAP=42 run_wd
+    cap | grep -q '"probe_max":42'
+}
+
+@test "PROFILE field in JSON echoes the SELFDEF_HIDDENPROC_PROFILE env value" {
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "PROFILE=enforce → \"profile\":\"enforce\" surfaces in JSON" {
+    PROFILE=enforce run_wd
+    cap | grep -q '"profile":"enforce"'
+}
+
+@test "JSON record is emitted as a SINGLE logger line (downstream JSON-line consumers depend on it)" {
+    run_wd
+    # Exactly one '"tag":"selfdef-hidden-process"' line — not split
+    # across multiple logger calls (which would break the
+    # SDD-062 selfdef_watchdog_alert.yml Sigma rule + ANY journald
+    # JSON-line consumer).
+    n=$(cap | grep -c '"tag":"selfdef-hidden-process"')
+    [ "${n}" = "1" ]
+}
+
+@test "hidden_sample is the EMPTY string when no hidden processes (not absent / not null)" {
+    run_wd
+    # Locks that the field always exists with a stable shape — the
+    # JSON-line consumer can rely on it being present.
+    cap | grep -qE '"hidden_sample":""'
+}
+
+@test "pids_visible is non-zero on a real host (sanity: /proc readdir returns something)" {
+    # If readdir(/proc) returned 0 PIDs on a real Linux host, the
+    # script's own enumeration would be broken — the watchdog
+    # couldn't compute (alive \ visible) meaningfully. Lock the
+    # invariant.
+    run_wd
+    line="$(cap)"
+    visible=$(printf '%s' "${line}" | grep -oE '"pids_visible":[0-9]+' | head -1 | grep -oE '[0-9]+')
+    [ -n "${visible}" ]
+    [ "${visible}" -gt 0 ]
+}
