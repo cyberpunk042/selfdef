@@ -99,3 +99,33 @@ MODULE_DIR="${BATS_TEST_DIRNAME}/../../modules/detect-host"
 @test "INVARIANT: docs/dev/modules.md documents debian-package kind specifically" {
     grep -qE 'debian.package|debian_package' "${BATS_TEST_DIRNAME}/../../docs/dev/modules.md"
 }
+
+@test "INVARIANT (depends_on field present and empty: detect-host is the foundational module, has no upstream)" {
+    # detect-host provides the substrate (event-bus + finding-store
+    # + sigma-correlator) so it depends on nothing — it's the
+    # root of the IPS-quattuordectet dependency graph.
+    grep -qE '^depends_on[[:space:]]*=[[:space:]]*\[\]' "${MODULE_DIR}/module.toml"
+}
+
+@test "INVARIANT (conflicts field present and empty: detect-host doesn't conflict with anything — foundational module)" {
+    # A foundational module should never conflict with another
+    # module; conflicts are for compete-with-each-other modules.
+    grep -qE '^conflicts[[:space:]]*=[[:space:]]*\[\]' "${MODULE_DIR}/module.toml"
+}
+
+@test "INVARIANT (category field surfaces in module.toml — operator dashboard categorization)" {
+    # The category field surfaces this module to the dashboard
+    # so operator can filter modules by detection / hardening /
+    # disable / watchdog category.
+    grep -qE '^category[[:space:]]*=[[:space:]]*"detection"' "${MODULE_DIR}/module.toml"
+}
+
+@test "INVARIANT (install_paths declared — SDD-026 manifest for dashboard install-plan conflict detection)" {
+    # The install_paths section enumerates on-disk surfaces this
+    # module touches. The dashboard's install-options + topological
+    # sorter use this to surface inter-module path conflicts
+    # before they happen.
+    grep -qE '^\[install_paths\]' "${MODULE_DIR}/module.toml"
+    # Specifically /etc/selfdef must be declared (the daemon config root).
+    grep -q '/etc/selfdef' "${MODULE_DIR}/module.toml"
+}
