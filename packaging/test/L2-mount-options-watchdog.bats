@@ -232,3 +232,56 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-mount-options -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (sharp boundary: 2 missing flags = warn; 3 missing flags = alert — single-notch escalation)" {
+    # 2 misses (warn) and 3 misses (alert) is the single-notch
+    # transition. Locks the boundary.
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,relatime'                    # 2 missing: nodev + noexec
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -qE '"missing_flags":2'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    write_fixture $'/tmp\trelatime'                           # 3 missing: nosuid + nodev + noexec
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"missing_flags":3'
+}
+
+@test "INVARIANT (cross-mount aggregation: 3 mounts × 1 miss each → alert (sum is 3, not max-per-mount))" {
+    # The severity ladder sums missing flags ACROSS all mount
+    # points — 3 mounts each missing exactly 1 flag = 3 total =
+    # alert. Locks against a per-mount-max regression.
+    mk_findmnt
+    write_fixture \
+        $'/tmp\tnosuid,nodev,relatime' \
+        $'/var/tmp\tnosuid,nodev,relatime' \
+        $'/var/log\tnosuid,nodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"missing_flags":3'
+}
+
+@test "INVARIANT (not_separate_sample surfaces operator-readable paths — distinct from missing_sample)" {
+    # When some mounts ARE separate FS (with missing flags) and
+    # OTHERS aren't (treated as not_separate), the JSON must
+    # carry BOTH samples distinct so operator can triage which
+    # category each mount falls into.
+    mk_findmnt
+    # /tmp is separate FS with missing flags; everything else not.
+    write_fixture $'/tmp\tnosuid,relatime'
+    run_wd
+    # missing_sample carries the /tmp:nodev + /tmp:noexec entries.
+    cap | grep -q '/tmp:nodev'
+    cap | grep -q '/tmp:noexec'
+    # not_separate_sample carries the other 5 expected paths.
+    cap | grep -qE '"not_separate_mount":5'
+    cap | grep -q '/var/tmp'
+}
+
+@test "INVARIANT (JSON profile field echoes operator-set SELFDEF_MOUNTOPTS_PROFILE)" {
+    mk_findmnt
+    write_fixture $'/tmp\tnosuid,nodev,noexec,relatime'
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
