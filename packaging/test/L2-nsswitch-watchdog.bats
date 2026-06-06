@@ -170,3 +170,54 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-nsswitch -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): nsswitch-watchdog does NOT refresh baseline on rogue detection — alert STAYS until operator updates" {
+    # Rogue NSS sources are NEVER routine; the alert must persist
+    # across runs until operator explicitly re-baselines. Locks
+    # against a regression that copies the auto-trust pattern
+    # from sister modules.
+    seed_benign
+    run_wd
+    printf 'passwd: files evil\ngroup: files\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"nsswitch_rogue_source"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented db line is NOT included in rogue-source inventory: # prefix filtered)" {
+    # Operator notes about future db sources must not be parsed
+    # as actual sources. A commented '# passwd: files evil' must
+    # not surface as a rogue source.
+    printf 'passwd: files\ngroup: files\nshadow: files\nhosts: files dns\n# notes: discussed evil module\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (whitespace tolerance in db lookup: multi-space-separated sources normalized)" {
+    # Operator may write 'passwd:  files  sss' with multiple spaces
+    # between tokens. The parser must normalize whitespace.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd:  files  sss\ngroup: files\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    # sss is a KNOWN source — even with weird whitespace it must
+    # not be treated as rogue.
+    ! cap | grep -q '"event":"nsswitch_rogue_source"'
+}
+
+@test "INVARIANT (rogue sample format: db:rogue_source — operator triage payload)" {
+    # The sample field shape lets operator instantly know WHICH
+    # db gained which rogue source.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'passwd: files evil_backdoor\ngroup: files\nshadow: files\nhosts: files dns\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'passwd'
+    cap | grep -q 'evil_backdoor'
+}
