@@ -191,3 +191,40 @@ run_wd() {
     run_wd
     grep -q 'sysctl -w kernel.sysrq=' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl)" {
+    write_config "off"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -qE 'kernel\.sysrq[[:space:]]*=' "${DROPIN}"
+    grep -q 'sysctl -w' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (header marker first non-blank line — stale-cleanup head -1 grep)" {
+    write_config "off"
+    run_wd
+    first_line="$(head -1 "${DROPIN}")"
+    [ "${first_line}" = "# managed-by: selfdef kernel-sysrq-restrict" ]
+}
+
+@test "INVARIANT (sysctl mechanism: -w flag for surgical single-key application — NOT -p path)" {
+    # -w writes the live kernel value surgically.
+    # -p would reload entire sysctl.d directory which would side-
+    # effect other modules. Lock the choice.
+    write_config "off"
+    run_wd
+    grep -qE 'sysctl -w' "${SCTL_LOG}"
+    ! grep -qE 'sysctl -p' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "safe-subset"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"kernel-sysrq-restrict"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=safe-subset'* ]]
+}
