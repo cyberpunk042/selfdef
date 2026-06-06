@@ -30,13 +30,21 @@ if ! python3 -c "import yaml; yaml.safe_load(open('${ALERTS}'))" 2>/dev/null; th
 fi
 echo "  PASS YAML parses"
 
-# Gate 2: alert count >= 11 (9 four-watchdog set + 2 MS011 Z-10 storage).
+# Gate 2: alert count >= 15 (additive lock; per operator's "adding ≠ discarding"
+# rule each canonically-shipped alert RATCHETS the floor forward — the lock
+# guards against silent removal of any alert in the set):
+#   -  9 four-watchdog set + 2 MS011 Z-10 storage = 11 (the original lock)
+#   -  3 M060 mirror-export (SelfdefM060Publish{Failing,Stale,Wedged}, 2026-06-05)
+#   -  1 detection-watchdog finding (SelfdefWatchdogAlertFinding, SDD-062)
+#   = 15 total.
+# Bumping the floor catches any future regression that drops one of these
+# 15 alerts. New alerts ratchet the floor further (always ADD, never DROP).
 alert_count="$(python3 -c "import yaml; d=yaml.safe_load(open('${ALERTS}')); print(sum(len(g['rules']) for g in d['groups']))")"
-if [[ "${alert_count}" -lt 11 ]]; then
-    echo "  FAIL alert count ${alert_count} < 11 (drift; 9 four-watchdog + 2 storage alerts expected)"
+if [[ "${alert_count}" -lt 15 ]]; then
+    echo "  FAIL alert count ${alert_count} < 15 (drift; expected 11 four-watchdog/storage + 3 M060 + 1 detection-watchdog = 15)"
     exit 1
 fi
-echo "  PASS alert count = ${alert_count} (≥ 11)"
+echo "  PASS alert count = ${alert_count} (≥ 15)"
 
 # Gate 3: every alert references a runbook_url in the info-hub.
 missing_runbook="$(python3 -c "
