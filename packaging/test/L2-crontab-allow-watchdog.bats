@@ -161,3 +161,65 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}" && fail "enforce + capability grant should exit non-zero"
     cap | grep -q '"event":"schedule_capability_granted"'
 }
+
+@test "INVARIANT (user ADDED to at.allow uses the SAME grant signature as cron.allow): roster-axis-symmetric" {
+    # Two parallel allow-rosters; both must fire the same grant signature
+    # so SDD-062 downstream consumer doesn't need axis-aware routing.
+    printf 'alice\n' > "${AA}"
+    run_wd
+    printf 'alice\nattacker\n' > "${AA}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (user REMOVED from at.deny → alert, parallel to cron.deny semantic)" {
+    printf 'eve\n' > "${AD}"
+    run_wd
+    : > "${AD}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+}
+
+@test "INVARIANT (compound delta — grant AND roster-only change simultaneously → alert; the grant wins)" {
+    # Realistic operator-edit + attacker-grant in the same diff.
+    printf 'alice\n' > "${CA}"
+    printf 'bob\n'   > "${CD}"
+    run_wd
+    printf 'alice\nattacker\n' > "${CA}"     # GRANT
+    printf 'bob\ncarol\n'      > "${CD}"     # roster-only widen
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"schedule_capability_granted"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (DELTA-detect: ADDED-user surfaces in added_sample by name)" {
+    printf 'alice\n' > "${CA}"
+    run_wd
+    printf 'alice\ndistinctive-attacker\n' > "${CA}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'distinctive-attacker'
+}
+
+@test "INVARIANT (comment lines in roster are ignored — # is not a user)" {
+    # cron.allow may carry comments; the delta should ignore them.
+    printf 'alice\n' > "${CA}"
+    run_wd
+    printf 'alice\n# this is a comment\n' > "${CA}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # No new GRANT — the comment shouldn't surface as a granted user.
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"event":"no_delta"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'alice\n' > "${CA}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-crontab-allow -- ')
+    [ "${main_count}" = "1" ]
+}
