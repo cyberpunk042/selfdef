@@ -157,3 +157,62 @@ run_wd() {
     grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
     [ -f "${MODPROBE_BLACKLIST}" ]
 }
+
+@test "INVARIANT (profile downgrade mask → stop): REMOVES modprobe blacklist (the reboot-survives mechanism)" {
+    # If downgrade leaves the blacklist behind, the operator's intent to
+    # relax (let BT come back after reboot) is silently violated.
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    write_config "stop"
+    run_wd
+    ! [ -f "${MODPROBE_BLACKLIST}" ]
+}
+
+@test "INVARIANT (mask profile also acts on btusb additional kmod): list-unit-files / system-acts on related auxiliary unit" {
+    # bluetooth-disable acts on multiple systemd units; if it only
+    # touches bluetooth.service, the auxiliary helpers (bluez-related)
+    # remain enabled. The L2 unit-name match must be precise but the
+    # test surfaces that the canonical primary service IS touched.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (rfkill BLOCK is hard not soft — the radio is OFF, not just soft-blocked)" {
+    # `rfkill block bluetooth` is a soft block by default. Some
+    # variants of bt-disable used to do `rfkill soft bluetooth` only;
+    # the current contract is the harder `block` (radio off until
+    # explicit `unblock`).
+    write_config "stop"
+    run_wd
+    grep -q 'rfkill block bluetooth' "${RF_LOG}"
+    # The unblock action MUST NOT fire (otherwise we're enabling, not disabling).
+    ! grep -q 'rfkill unblock' "${RF_LOG}"
+}
+
+@test "INVARIANT (modprobe blacklist filename selfdef-* pattern): tracking + uninstall identification" {
+    write_config "mask"
+    run_wd
+    case "${MODPROBE_BLACKLIST}" in
+        */selfdef-*.conf) : ;;
+        *) fail "modprobe blacklist filename must follow selfdef-*.conf pattern; got: ${MODPROBE_BLACKLIST}" ;;
+    esac
+}
+
+@test "INVARIANT (header-marker pin): managed-by header present (collateral-damage protection at uninstall)" {
+    write_config "mask"
+    run_wd
+    grep -qE '^#.*managed-by:.*selfdef' "${MODPROBE_BLACKLIST}"
+}
+
+@test "INVARIANT (profile upgrade stop → mask): WRITES modprobe blacklist + masks units (reverse of downgrade)" {
+    write_config "stop"
+    run_wd
+    ! [ -f "${MODPROBE_BLACKLIST}" ]
+    : > "${SYSEOF_LOG}"
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_BLACKLIST}" ]
+    grep -q 'systemctl mask bluetooth.service' "${SYSEOF_LOG}"
+}

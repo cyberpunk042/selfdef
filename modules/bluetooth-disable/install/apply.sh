@@ -80,6 +80,20 @@ if [[ "$PROFILE" == "mask" ]]; then
             log "wrote $MODPROBE_BLACKLIST (blacklist + install-/bin/true for ${#BT_MODULES[@]} modules)"
         fi
     fi
+elif [[ "$PROFILE" == "stop" ]]; then
+    # Profile downgrade mask → stop must remove the stale blacklist so the
+    # operator's intent to relax (let BT come back after reboot) is honored.
+    # Collateral-damage guard: only remove the file when the header marker
+    # confirms it was written by us; an operator-authored blacklist with
+    # the same path stays.
+    if [[ -f "$MODPROBE_BLACKLIST" ]] && grep -q 'managed-by: selfdef bluetooth-disable' "$MODPROBE_BLACKLIST"; then
+        if [[ "$DRY_RUN" == "1" ]]; then
+            log "DRY_RUN: would remove stale $MODPROBE_BLACKLIST"
+        else
+            rm -f "$MODPROBE_BLACKLIST"
+            log "removed stale $MODPROBE_BLACKLIST (profile downgrade mask → stop)"
+        fi
+    fi
 fi
 
 if [[ "$acted" -eq 0 && "$PROFILE" == "stop" ]]; then
