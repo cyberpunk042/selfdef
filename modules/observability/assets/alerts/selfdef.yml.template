@@ -185,7 +185,7 @@ groups:
             registry-load failure. Check `journalctl -u selfdefd | grep
             "mirror export"` for the specific warn line; the publish_*
             function logs the underlying error before returning.
-          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/m060-mirror-export-publish-anomalies.md"
 
       - alert: SelfdefM060PublishStale
         # No successful publish for any operator-issued artifact in 10
@@ -211,7 +211,7 @@ groups:
             failure on its resident store, or a partial write that the
             atomic rename never completed. Check the per-publisher warn
             logs in journalctl.
-          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/m060-mirror-export-publish-anomalies.md"
 
       - alert: SelfdefM060PublishWedged
         # Persistent fail rate: failed > 5 in 30m means the publisher
@@ -236,7 +236,7 @@ groups:
             no longer a transient blip. Likely root causes: mirror_dir
             permission denied, disk full, atomic-rename failing on the
             target filesystem, corrupt resident store. Investigate.
-          runbook_url: "https://github.com/cyberpunk042/sovereign-os/blob/main/docs/operator/m060-deployment-guide.md#troubleshooting"
+          runbook_url: "https://github.com/cyberpunk042/devops-solutions-information-hub/blob/main/wiki/runbooks/m060-mirror-export-publish-anomalies.md"
 
   # ----- Detection-watchdog finding stream (SDD-062 routed) -----
   # The ~46 host detection-watchdogs emit alert-tier findings (planted
