@@ -57,7 +57,12 @@ failures=0
 check_subverbs "friction-audit"  3 "SDD-027" || failures=$((failures + 1))
 check_subverbs "perimeter"       7 "SDD-028" || failures=$((failures + 1))
 check_subverbs "guardian"        4 "SDD-029" || failures=$((failures + 1))
-check_subverbs "scheduler"       7 "SDD-031" || failures=$((failures + 1))
+check_subverbs "scheduler"       8 "SDD-031" || failures=$((failures + 1))
+# Subverb evolution log:
+#   7 → 8 (added `status`): M01163 + M01164 substrate-trio + backpressure
+#         status panel for SSH / AIR-GAPPED operator terminals where
+#         Grafana isn't reachable. Renders from live Prometheus textfile
+#         or the M01170 audit-log tail.
 
 if [[ "${failures}" -gt 0 ]]; then
     echo "L1-cli-surface FAIL: ${failures} subverb-count drift(s) detected"
