@@ -23,6 +23,9 @@ set -u
 
 PROFILE="${SELFDEF_PAMCFG_PROFILE:-report}"
 BASELINE="${SELFDEF_PAMCFG_BASELINE:-/var/lib/selfdef/pam-config-baseline.tsv}"
+# SELFDEF_PAMCFG_PAM_DIR + SELFDEF_PAMCFG_LIB_DIRS added 2026-06-06
+# for L2 delta-testability. Live defaults unchanged.
+PAM_DIR="${SELFDEF_PAMCFG_PAM_DIR:-/etc/pam.d}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -30,8 +33,8 @@ trap 'rm -f "$current"' EXIT
 # 1. /etc/pam.d config lines (normalized: type control module,
 #    args dropped so tuning args don't create churn but a NEW
 #    module or control change shows).
-if [[ -d /etc/pam.d ]]; then
-    for f in /etc/pam.d/*; do
+if [[ -d "$PAM_DIR" ]]; then
+    for f in "$PAM_DIR"/*; do
         [[ -f "$f" ]] || continue
         grep -vE '^\s*(#|$|@include)' "$f" 2>/dev/null \
           | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' \
@@ -44,9 +47,12 @@ if [[ -d /etc/pam.d ]]; then
 fi
 
 # 2. pam_*.so module hashes from the standard lib dirs.
-for d in /lib/x86_64-linux-gnu/security /lib64/security \
-         /usr/lib/x86_64-linux-gnu/security /usr/lib64/security \
-         /lib/security /usr/lib/security; do
+# Operator can pin a single test/staging dir via SELFDEF_PAMCFG_LIB_DIRS
+# (space-separated). Live default scans the canonical six.
+_default_lib_dirs="/lib/x86_64-linux-gnu/security /lib64/security \
+/usr/lib/x86_64-linux-gnu/security /usr/lib64/security \
+/lib/security /usr/lib/security"
+for d in ${SELFDEF_PAMCFG_LIB_DIRS:-${_default_lib_dirs}}; do
     [[ -d "$d" ]] || continue
     for so in "$d"/pam_*.so; do
         [[ -f "$so" ]] || continue

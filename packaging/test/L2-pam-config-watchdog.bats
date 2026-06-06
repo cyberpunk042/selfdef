@@ -1,25 +1,46 @@
 #!/usr/bin/env bats
-# L2 capture-regression test for the pam-config-watchdog scan script.
+# L2 functional + capture-regression suite for pam-config-watchdog.
 #
-# pam-config-watchdog inventories the /etc/pam.d rule lines + the pam_*.so
-# module hashes into a baseline, then alerts on a PAM-stack change (a new
-# module / control change = an auth-bypass surface). It reads /etc/pam.d +
-# the standard security lib dirs directly (NO input-source knob), so the
-# change/removed FINDING tiers are not hermetically testable here. What IS
-# testable, and what this suite locks, is the inventory-CAPTURE regression.
+# pam-config-watchdog inventories the PAM-stack configuration two ways:
 #
-# (Regression guard for the 2026-05-27 bug where the inventory printfs went to
-# stdout instead of the $current temp file, so the baseline was always empty
-# and the watchdog never detected PAM-stack tampering — fixed at the root.)
+#   1. /etc/pam.d/* RULE LINES (the auth stack — normalized to
+#      "type control module"). A new "auth sufficient pam_evil.so" rule
+#      that accepts a magic password is the classic PAM backdoor.
+#   2. The on-disk pam_*.so MODULE set + sha256-12 hashes. A replaced
+#      pam_unix.so (patched to log passwords or accept a backdoor) is
+#      surfaced via hash drift.
 #
-# Requires a populated /etc/pam.d (skips otherwise).
+# Severity:
+#   ok    → no delta (baseline match)
+#   warn  → line / module REMOVED (post-hoc reduction)
+#   alert → line / module ADDED OR hash CHANGED (an attacker would do
+#           one of these; the unidirectional escalation is by design)
+#
+# What this suite locks:
+#   - INVENTORY-CAPTURE regression (existing) — `printf` records must
+#     reach `$current` not stdout (the 2026-05-27 root-cause bug)
+#   - Both inventory passes (pamline + pammod) emit the right kind tag
+#   - Baseline confidentiality (chmod 0600 — PAM module hashes are
+#     sensitive: enumerated for forensics)
+#   - Delta detection: line ADD → alert / pam_config_changed
+#   - Delta detection: line REMOVE → warn / pam_config_removed
+#   - Hash drift detection: pam_*.so file content change → alert /
+#     pam_config_changed (surfacing as an ADDED entry because the
+#     hash-12 string differs)
+#   - ENFORCE profile: added-rules return exit-1 (failure surface for
+#     systemd unit alerting); removals return exit-0 (post-hoc
+#     reduction is informational only)
+#   - REPORT profile: any delta returns exit-0 (log-only)
+#
+# Adds SELFDEF_PAMCFG_PAM_DIR + SELFDEF_PAMCFG_LIB_DIRS env-var
+# overrides (added 2026-06-06) for L2 delta-testability. Live defaults
+# unchanged.
 #
 # Run with: bats packaging/test/L2-pam-config-watchdog.bats
 
 WD="${BATS_TEST_DIRNAME}/../../modules/pam-config-watchdog/systemd/pam-config-watchdog.sh"
 
 setup() {
-    [ -d /etc/pam.d ] && [ -n "$(ls -A /etc/pam.d 2>/dev/null)" ] || skip "no populated /etc/pam.d on this host"
     TMP="$(mktemp -d)"
     BIN="${TMP}/bin"; mkdir -p "${BIN}"
     cat > "${BIN}/logger" <<'FAKELOGGER'
@@ -30,6 +51,9 @@ FAKELOGGER
     export SELFDEF_TEST_LOGCAP="${TMP}/log.out"
     : > "${SELFDEF_TEST_LOGCAP}"
     BASELINE="${TMP}/pam-baseline.tsv"
+    PAM_DIR="${TMP}/pam.d"
+    LIB_DIR="${TMP}/lib-security"
+    mkdir -p "${PAM_DIR}" "${LIB_DIR}"
 }
 
 teardown() { rm -rf "${TMP}"; }
@@ -38,23 +62,156 @@ run_wd() {
     PATH="${BIN}:${PATH}" \
     SELFDEF_PAMCFG_PROFILE="${PROFILE:-report}" \
     SELFDEF_PAMCFG_BASELINE="${BASELINE}" \
+    SELFDEF_PAMCFG_PAM_DIR="${PAM_DIR}" \
+    SELFDEF_PAMCFG_LIB_DIRS="${LIB_DIR}" \
     bash "${WD}"
+}
+
+run_wd_rc() {
+    PATH="${BIN}:${PATH}" \
+    SELFDEF_PAMCFG_PROFILE="${PROFILE:-report}" \
+    SELFDEF_PAMCFG_BASELINE="${BASELINE}" \
+    SELFDEF_PAMCFG_PAM_DIR="${PAM_DIR}" \
+    SELFDEF_PAMCFG_LIB_DIRS="${LIB_DIR}" \
+    bash "${WD}" >/dev/null 2>&1
+    echo $?
 }
 
 cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
 
+# Helper: write a synthetic PAM stack + pam_*.so set.
+write_pam_inventory() {
+    cat > "${PAM_DIR}/common-auth" <<'EOF'
+auth required pam_unix.so try_first_pass nullok
+auth required pam_deny.so
+EOF
+    cat > "${PAM_DIR}/common-password" <<'EOF'
+password required pam_unix.so obscure sha512
+password required pam_pwquality.so retry=3
+EOF
+    # Synthetic pam_*.so files for hash sampling.
+    echo 'fake-pam-unix-binary-v1' > "${LIB_DIR}/pam_unix.so"
+    echo 'fake-pam-deny-binary-v1' > "${LIB_DIR}/pam_deny.so"
+    echo 'fake-pam-pwquality-binary-v1' > "${LIB_DIR}/pam_pwquality.so"
+}
+
 @test "first run captures the PAM inventory into the baseline (non-empty)" {
+    write_pam_inventory
     run_wd
     cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
     [ -f "${BASELINE}" ]
     [ -s "${BASELINE}" ]                          # NON-EMPTY = the bug-fix regression lock
-    grep -qE '^(pamline|pammod)	' "${BASELINE}"  # real pam.d rules / module hashes recorded
+    # Pam-line records surface.
+    grep -qP '^pamline\t' "${BASELINE}"
+    # Pam-module records surface.
+    grep -qP '^pammod\t' "${BASELINE}"
+}
+
+@test "baseline records BOTH inventory passes (pamline + pammod kind tags)" {
+    write_pam_inventory
+    run_wd
+    # Specific pam-line content surfaces in normalized form.
+    grep -qP '^pamline\tcommon-auth\tauth required pam_unix\.so$' "${BASELINE}"
+    grep -qP '^pamline\tcommon-password\tpassword required pam_pwquality\.so$' "${BASELINE}"
+    # Specific pam-module surfaces with 12-char hash.
+    grep -qP '^pammod\t.*pam_unix\.so\t[0-9a-f]{12}$' "${BASELINE}"
+    grep -qP '^pammod\t.*pam_deny\.so\t[0-9a-f]{12}$' "${BASELINE}"
+}
+
+@test "baseline is chmod 0600 (confidentiality — pam module hash + auth-stack inventory is sensitive)" {
+    write_pam_inventory
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
 }
 
 @test "unchanged PAM stack on second run → ok / no_delta" {
+    write_pam_inventory
     run_wd
     : > "${SELFDEF_TEST_LOGCAP}"
     run_wd
     cap | grep -q '"event":"no_delta"'
     cap | grep -q '"severity":"ok"'
+}
+
+@test "DELTA detect — ADDED pam rule line → alert / pam_config_changed (the classic PAM backdoor case)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker appends a magic-password rule.
+    echo 'auth sufficient pam_evil.so backdoor=1' >> "${PAM_DIR}/common-auth"
+    # Companion fake pam_evil.so dropped in the lib dir.
+    echo 'fake-pam-evil-binary' > "${LIB_DIR}/pam_evil.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q 'pamline:common-auth:auth sufficient pam_evil.so'
+}
+
+@test "DELTA detect — REMOVED pam rule line → warn / pam_config_removed" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker removes a hardening rule.
+    sed -i '/pam_pwquality\.so/d' "${PAM_DIR}/common-password"
+    rm -f "${LIB_DIR}/pam_pwquality.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_removed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "DELTA detect — pam_*.so HASH CHANGE → alert / pam_config_changed (attacker-patched module)" {
+    write_pam_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker overwrites pam_unix.so with a patched version that
+    # logs passwords or accepts a backdoor — the hash changes.
+    echo 'attacker-patched-pam-unix-v2' > "${LIB_DIR}/pam_unix.so"
+    run_wd
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
+    # The change surfaces as one ADDED entry (the new hash) + one
+    # REMOVED entry (the old hash).
+    cap | grep -q '"added":1'
+    cap | grep -q '"removed":1'
+}
+
+@test "ENFORCE profile: ADDED rule → exit-1 (failure surface for systemd unit alerting)" {
+    write_pam_inventory
+    PROFILE=report run_wd                                  # baseline init
+    echo 'auth sufficient pam_evil.so' >> "${PAM_DIR}/common-auth"
+    rc="$(PROFILE=enforce run_wd_rc)"
+    [ "${rc}" = "1" ]
+}
+
+@test "ENFORCE profile: REMOVED-only delta → exit-0 (post-hoc reduction is informational)" {
+    write_pam_inventory
+    PROFILE=report run_wd
+    sed -i '/pam_deny\.so/d' "${PAM_DIR}/common-auth"
+    rm -f "${LIB_DIR}/pam_deny.so"
+    rc="$(PROFILE=enforce run_wd_rc)"
+    [ "${rc}" = "0" ]
+}
+
+@test "REPORT profile: ADDED rule → exit-0 (log-only — journald is the surface)" {
+    write_pam_inventory
+    PROFILE=report run_wd
+    echo 'auth sufficient pam_evil.so' >> "${PAM_DIR}/common-auth"
+    rc="$(PROFILE=report run_wd_rc)"
+    [ "${rc}" = "0" ]
+}
+
+@test "INVARIANT (no auto-trust): pam-config-watchdog does NOT refresh the baseline on delta — every subsequent run re-reports the delta until operator updates the baseline" {
+    # CONTRAST with group-integrity-watchdog (which DOES auto-refresh
+    # to mark legit changes trusted). For PAM, every change is a
+    # security event that must remain visible until operator review,
+    # so the watchdog must KEEP reporting the delta on every run.
+    write_pam_inventory
+    PROFILE=report run_wd
+    echo 'auth sufficient pam_evil.so' >> "${PAM_DIR}/common-auth"
+    PROFILE=report run_wd                                  # first delta run
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=report run_wd                                  # delta STAYS reported
+    cap | grep -q '"event":"pam_config_changed"'
+    cap | grep -q '"severity":"alert"'
 }
