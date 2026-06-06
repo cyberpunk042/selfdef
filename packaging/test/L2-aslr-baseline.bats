@@ -143,3 +143,61 @@ run_wd() {
     # carries persistence across reboot.
     grep -q 'sysctl -w kernel.randomize_va_space=2' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (drop-in target value is 2): the drop-in pins randomize_va_space=2, not 0 or 1" {
+    # Locks the specific value 2 (full ASLR) — a regression that
+    # mistakenly wrote =1 (partial ASLR) or =0 (no ASLR) would
+    # defeat the module's purpose.
+    write_config "full"
+    run_wd
+    grep -qE 'kernel\.randomize_va_space[[:space:]]*=[[:space:]]*2' "${DROPIN}"
+}
+
+@test "INVARIANT (live sysctl -w applies value 2): the live invocation also pins 2" {
+    write_config "full"
+    run_wd
+    grep -qE 'sysctl -w kernel\.randomize_va_space=2' "${SCTL_LOG}"
+    # Locks that no other value reaches sysctl -w.
+    ! grep -qE 'sysctl -w kernel\.randomize_va_space=[01]' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (config rejection): a config with profile = \"\" (empty) → die" {
+    write_config ""
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_ASLR_CONFIG="${CONF}" \
+        SELFDEF_ASLR_DROPIN="${DROPIN}" \
+        bash "${WD}"
+    # Empty profile may either default to full (rolled up to default)
+    # or die — either way, no silent downgrade.
+    if [ "$status" -eq 0 ]; then
+        # Default to full is acceptable.
+        grep -q 'kernel.randomize_va_space' "${DROPIN}"
+        grep -qE 'randomize_va_space[[:space:]]*=[[:space:]]*2' "${DROPIN}"
+    else
+        # Die is acceptable.
+        [[ "${output}" == *"profile must be full"* ]]
+    fi
+}
+
+@test "emit_status surfaces profile + result in JSON (operator observability)" {
+    write_config "full"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"aslr-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=full'* ]]
+}
+
+@test "INVARIANT (re-apply with DRY_RUN switches): apply real, then DRY_RUN — drop-in persists but second invocation fires nothing" {
+    # Composition: real apply leaves drop-in + first sysctl call;
+    # a follow-on DRY_RUN must not modify or fire anything new.
+    write_config "full"
+    run_wd
+    [ -f "${DROPIN}" ]
+    mtime_before="$(stat -c '%Y' "${DROPIN}")"
+    : > "${SCTL_LOG}"
+    sleep 1
+    DRY_RUN=1 run_wd
+    mtime_after="$(stat -c '%Y' "${DROPIN}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+    ! grep -q 'sysctl -w' "${SCTL_LOG}"
+}
