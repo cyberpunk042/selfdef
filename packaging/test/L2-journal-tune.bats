@@ -220,3 +220,29 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=standard'* ]]
 }
+
+@test "INVARIANT (standard carries SystemMaxFileSize cap — per-journal-file size bound)" {
+    # Per-file size cap controls rotation cadence — too-large files
+    # delay rotation + create single-file-corruption risk; too-small
+    # files churn rotation. Lock standard has SystemMaxFileSize directive.
+    write_config "standard"
+    run_wd
+    grep -qE '^SystemMaxFileSize=' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT ([Journal] section header in drop-in — valid systemd-journald.conf fragment)" {
+    # journald drop-ins MUST declare [Journal] section header to be
+    # honored by systemd-journald.
+    write_config "standard"
+    run_wd
+    grep -qE '^\[Journal\]' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT (paranoid carries ForwardToSyslog OR ForwardToWall OR Storage tightening — paranoid does MORE than just retention bump)" {
+    # paranoid is not just bigger retention — it tightens forward/storage
+    # too. Lock that paranoid drop-in carries at least one forward/
+    # storage directive beyond the size caps.
+    write_config "paranoid"
+    run_wd
+    grep -qE '^(ForwardTo(Syslog|Wall|KMsg)|Storage|Seal|Compress)=' "${DROPIN_DIR}/50-selfdef.conf"
+}
