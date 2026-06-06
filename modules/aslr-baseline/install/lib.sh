@@ -16,5 +16,5 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-aslr.conf"
+SYSCTL_DROPIN="${SELFDEF_ASLR_DROPIN:-/etc/sysctl.d/50-selfdef-aslr.conf}"
 HEADER_MARKER="# managed-by: selfdef aslr-baseline"
