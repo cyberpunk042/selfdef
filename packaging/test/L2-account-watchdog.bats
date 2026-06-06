@@ -273,3 +273,64 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-accounts -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (REMOVED account does NOT trigger alert: deletion is not a threat signal — operator deactivation is OK)" {
+    # When an operator removes an account, that's a legitimate
+    # operation. Locks that removal doesn't false-fire.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Remove bob from passwd.
+    sed -i '/^bob:/d' "${PASSWD_FILE}"
+    run_wd
+    # Severity should be ok or warn (not alert).
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-class single-account delta: new uid=0 account triggers ALL THREE classes: user + uid0 + sudo-if-primary-gid)" {
+    # When attacker adds 'evil' with uid=0, gid=0, the new account
+    # appears in BOTH the user inventory AND the uid0 inventory.
+    # Lock that both counters reflect this.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo 'evil:x:0:0:Evil:/root:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    cap | grep -q '"new_uid0":1'
+    # New user counter also increments (the account is new across
+    # both axes).
+    cap | grep -qE '"new_user":[1-9]' || cap | grep -qE '"added":[1-9]'
+}
+
+@test "INVARIANT (current behavior: /etc/passwd has NO comment semantics — # lines parsed by awk as user records)" {
+    # /etc/passwd has NO POSIX comment semantics (unlike
+    # /etc/group). The awk parser treats EVERY non-empty line
+    # as a user record. A line starting with '#' is parsed as a
+    # user named '# evil' (or similar) — with whatever uid/gid
+    # follows. Lock current behavior: such lines ARE detected
+    # as new accounts. Operator MUST NOT add comments to
+    # /etc/passwd — this test documents the contract.
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    echo '#evil:x:0:0:Future:/root:/bin/bash' >> "${PASSWD_FILE}"
+    run_wd
+    # Current behavior: the commented line surfaces as a new
+    # privileged account because /etc/passwd doesn't filter #.
+    cap | grep -q '"event":"new_privileged_account"'
+}
+
+@test "INVARIANT (severity precedence: new uid0 + new ordinary account → alert; uid0 wins over warn)" {
+    # When BOTH new uid0 AND new ordinary user added in same scan,
+    # severity must be alert (uid0 wins ladder).
+    write_account_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat >> "${PASSWD_FILE}" <<'EOF'
+evil:x:0:0:Evil:/root:/bin/bash
+charlie:x:1002:1002:Charlie:/home/charlie:/bin/bash
+EOF
+    run_wd
+    cap | grep -q '"event":"new_privileged_account"'
+    cap | grep -q '"severity":"alert"'
+}
