@@ -138,3 +138,48 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" = "0" ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "INVARIANT (sample cap at 10: 20 orphans → MAIN tag sample contains only first 10 — log volume control)" {
+    # Operator dashboards need the count; the -detail companion
+    # (if any) carries full forensics. Sample MUST be capped.
+    for i in $(seq 1 20); do
+        printf 'x' > "${ROOT}/orphan-distinct-${i}"
+        chown 99999:99999 "${ROOT}/orphan-distinct-${i}"
+    done
+    run_wd
+    cap | grep -qE '"unowned_count":20'
+    # Verify orphan-distinct-15 + 20 NOT in main sample (capped at
+    # first 10). Note: find ordering may not be deterministic, so
+    # we just verify the count of distinct orphan-distinct-* IDs
+    # in the cap doesn't exceed 10.
+    # The -detail companion tag emits all paths for forensics;
+    # the MAIN selfdef-unowned-files tag carries the capped
+    # sample of 10. Lock by checking the MAIN line.
+    main_line="$(cap | grep -E '^-t selfdef-unowned-files --')"
+    found_in_main="$(printf '%s' "${main_line}" | grep -oE 'orphan-distinct-[0-9]+' | sort -u | wc -l)"
+    [ "${found_in_main}" -le 10 ]
+}
+
+@test "INVARIANT (recursive scan: orphan in nested subdirectory also surfaces)" {
+    # Attacker may hide orphan in a deep path. Watchdog walks
+    # recursively.
+    mkdir -p "${ROOT}/a/b/c"
+    printf 'x' > "${ROOT}/a/b/c/deep-orphan"
+    chown 99999:99999 "${ROOT}/a/b/c/deep-orphan"
+    run_wd
+    cap | grep -q '"event":"unowned_found"'
+    cap | grep -q 'deep-orphan'
+}
+
+@test "INVARIANT (enforce + ok severity → exit 0): no orphans passes even in enforce" {
+    printf 'x' > "${ROOT}/owned"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_UNOWNED_PROFILE)" {
+    printf 'x' > "${ROOT}/orphan"; chown 99999:99999 "${ROOT}/orphan"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
