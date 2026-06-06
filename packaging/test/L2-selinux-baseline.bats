@@ -215,3 +215,83 @@ EOF
     [[ "${output}" == *'live=Permissive'* ]]
     [[ "${output}" == *'config=permissive'* ]]
 }
+
+@test "INVARIANT (audit on live=Enforcing): reports live=Enforcing WITHOUT touching config or setenforce" {
+    write_config "audit"
+    pre_sha="$(sha256sum "${SELINUX_CONFIG}" | awk '{print $1}')"
+    output="$(LIVE_MODE=Enforcing run_wd 2>&1)"
+    [[ "${output}" == *"live=Enforcing"* ]]
+    post_sha="$(sha256sum "${SELINUX_CONFIG}" | awk '{print $1}')"
+    [ "${pre_sha}" = "${post_sha}" ]
+    [ ! -s "${SE_LOG}" ]
+}
+
+@test "INVARIANT (enforcing from live=Enforcing — idempotent re-arm): persists + setenforce 1 (no skip-current detection)" {
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=enforcing
+SELINUXTYPE=targeted
+EOF
+    write_config "enforcing"
+    LIVE_MODE=Enforcing run_wd
+    grep -qE '^SELINUX=enforcing$' "${SELINUX_CONFIG}"
+    # Current behavior: setenforce 1 fires every time (re-asserts;
+    # cheap, no harm). Lock that.
+    grep -q 'setenforce 1' "${SE_LOG}"
+}
+
+@test "INVARIANT (CFG=disabled refuse-to-brick — even on live=Permissive): config-state gate, not just live-state" {
+    # If /etc/selinux/config says SELINUX=disabled but kernel is
+    # currently Permissive (someone passed selinux=1 enforcing=0 on
+    # boot), enforcing→ still needs autorelabel because next boot
+    # will be without SELinux. Refuse-to-brick guard must trigger
+    # on CFG=disabled OR LIVE=Disabled.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "enforcing" "false"
+    LIVE_MODE=Permissive run env PATH="${BIN}:${PATH}" \
+        LIVE_MODE=Permissive \
+        SELFDEF_SELINUX_CONFIG="${CONF}" \
+        SELFDEF_SELINUX_CONFIG_FILE="${SELINUX_CONFIG}" \
+        SELFDEF_AUTORELABEL_FILE="${AUTORELABEL_FILE}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"acknowledge_relabel"* ]]
+    ! [ -f "${AUTORELABEL_FILE}" ]
+}
+
+@test "INVARIANT (autorelabel path: setenforce NOT fired): kernel disabled→enforcing requires reboot, not setenforce 1" {
+    # The crucial behavioral split: the safe-live path
+    # (already permissive→enforcing) fires setenforce 1; the
+    # relabel path (disabled→enforcing) does NOT, because the
+    # kernel can't go disabled→enforcing without reboot. Lock
+    # that asymmetry.
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "enforcing" "true"
+    LIVE_MODE=Disabled run_wd
+    [ -f "${AUTORELABEL_FILE}" ]
+    ! grep -q 'setenforce 1' "${SE_LOG}"
+}
+
+@test "INVARIANT (DRY_RUN on autorelabel path does NOT touch /.autorelabel)" {
+    cat > "${SELINUX_CONFIG}" <<'EOF'
+SELINUX=disabled
+SELINUXTYPE=targeted
+EOF
+    write_config "enforcing" "true"
+    DRY_RUN=1 LIVE_MODE=Disabled run_wd
+    ! [ -f "${AUTORELABEL_FILE}" ]
+    grep -qE '^SELINUX=disabled$' "${SELINUX_CONFIG}"
+}
+
+@test "INVARIANT (recent_denials surfaces in audit JSON — operator triage)" {
+    write_config "audit"
+    output="$(run_wd 2>&1)"
+    # denials= field present (value may be 0 on a clean test host,
+    # but the field must be in the JSON so dashboards can graph it).
+    [[ "${output}" == *"denials="* ]]
+}
