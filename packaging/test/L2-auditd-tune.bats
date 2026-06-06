@@ -212,3 +212,47 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${AUDITD_CONF}"
 }
+
+@test "INVARIANT (auditd.conf is chmod 0640 — system-config convention for /etc/audit)" {
+    # /etc/audit/auditd.conf typically chmod 0640 (owner+group
+    # read; world denied) — confidentiality of audit-tune
+    # parameters.
+    write_config "standard"
+    run_wd
+    mode="$(stat -c '%a' "${AUDITD_CONF}")"
+    [ "${mode}" = "640" ]
+}
+
+@test "INVARIANT (auditd.conf re-arm after operator out-of-band deletion: re-creates file + fires restart)" {
+    write_config "standard"
+    run_wd
+    [ -f "${AUDITD_CONF}" ]
+    head -1 "${AUDITD_CONF}" | grep -qF '=== selfdef auditd-tune-managed'
+    rm -f "${AUDITD_CONF}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${AUDITD_CONF}" ]
+    head -1 "${AUDITD_CONF}" | grep -qF '=== selfdef auditd-tune-managed'
+    grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (header marker on first line preserved across both profiles — operator audit trail)" {
+    # The '=== selfdef auditd-tune-managed' header must be the
+    # FIRST line in BOTH profiles. Operator can grep the marker
+    # to confirm the file is selfdef-managed (vs operator-
+    # authored).
+    write_config "standard"
+    run_wd
+    head -1 "${AUDITD_CONF}" | grep -qF '=== selfdef auditd-tune-managed'
+    write_config "high-volume"
+    run_wd
+    head -1 "${AUDITD_CONF}" | grep -qF '=== selfdef auditd-tune-managed'
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"auditd-tune"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=standard'* ]]
+}
