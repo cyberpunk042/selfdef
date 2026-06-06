@@ -131,3 +131,57 @@ run_wd() {
     run_wd
     grep -q 'systemctl mask kdump.service' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (mask profile is asymmetric to stop): mask MUST also stop + disable (mask alone leaves running unit)" {
+    # If a unit is currently RUNNING, mask alone won't stop it.
+    # mask profile must therefore stop + disable + mask, otherwise an
+    # active leak of kernel memory survives the apply.
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    grep -q 'systemctl stop kdump.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable kdump.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask kdump.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (Ubuntu variant kexec-tools.service): present-alone → acts only on it" {
+    write_config "mask"
+    KDUMP_PRESENT=0 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=0 run_wd
+    grep -q 'systemctl mask kexec-tools.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask kdump.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask kdump-tools.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent on re-apply): re-running with same config emits SAME mutations (mask is idempotent — systemctl mask returns ok if already masked)" {
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'systemctl mask kdump.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (profile downgrade mask → stop): re-apply with stop profile triggers stop+disable on present units" {
+    write_config "mask"
+    KDUMP_PRESENT=1 run_wd
+    write_config "stop"
+    : > "${SYSEOF_LOG}"
+    KDUMP_PRESENT=1 run_wd
+    grep -q 'systemctl stop kdump.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable kdump.service' "${SYSEOF_LOG}"
+    # NOTE: stop profile alone may not unmask (one-way action); we assert
+    # the stop+disable shape.
+}
+
+@test "INVARIANT (DRY_RUN with stop profile too): DRY_RUN=1 + stop profile → no mutation" {
+    write_config "stop"
+    KDUMP_PRESENT=1 DRY_RUN=1 run_wd
+    ! grep -qE 'systemctl stop kdump|systemctl disable kdump|systemctl mask kdump' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (no-variant-list-leaks): list-unit-files MUST be called for each candidate (otherwise present-check is skipped)" {
+    write_config "mask"
+    KDUMP_PRESENT=1 KEXEC_PRESENT=1 KDUMPTOOLS_PRESENT=1 run_wd
+    # Each candidate must be probed via list-unit-files first.
+    grep -q 'systemctl list-unit-files kdump.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl list-unit-files kexec-tools.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl list-unit-files kdump-tools.service' "${SYSEOF_LOG}"
+}
