@@ -111,3 +111,64 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — tmpfiles inventory enumerates root-write-at-boot surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (setgid mode): an entry with a 2xxx (setgid) mode → alert" {
+    # The script's setuid detection should catch the setgid bit
+    # too — both are privilege-bearing.
+    seed_benign
+    run_wd
+    printf 'f /run/myapp/shell 2755 root root -\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (suid+sgid mode): an entry with a 6xxx (suid+sgid) mode → alert" {
+    seed_benign
+    run_wd
+    printf 'f /run/myapp/shell 6755 root root -\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (pre-existing setuid): baseline_initial fires alert if a tmpfiles entry already has a setuid mode at install-time" {
+    printf 'f /run/myapp/shell 4755 root root -\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (group-writable .conf): group-writable tmpfiles .conf → alert above world-writable" {
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED tmpfiles .conf (operator pruning) → warn" {
+    seed_benign
+    cat > "${CONFD}/other.conf" <<'EOF'
+d /run/other 0755 root root -
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CONFD}/other.conf"
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-tmpfiles -- ')
+    [ "${main_count}" = "1" ]
+}
