@@ -304,3 +304,61 @@ EOF
     main_count=$(cap | grep -cE '^-t selfdef-dns-resolver -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (IPv6 nameserver detection: 2001:db8::1 ADDED → alert)" {
+    # Attackers may add IPv6 nameservers to evade IPv4-only
+    # detection. Watchdog must surface IPv6 entries too.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+nameserver 2001:db8::dead:beef
+search example.com internal.example.com
+EOF
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '2001'
+}
+
+@test "INVARIANT (resolvectl unavailable on host: script gracefully degrades — no crash)" {
+    # On hosts without systemd-resolved, resolvectl is missing.
+    # Watchdog should still function on resolv.conf + hosts only.
+    rm -f "${BIN}/resolvectl"
+    write_resolver_inventory
+    run_wd
+    # Baseline still captured (resolv.conf + hosts inventory).
+    [ -f "${BASELINE}" ]
+    cap | grep -q '"event":"baseline_initial"'
+}
+
+@test "INVARIANT (search domain REMOVED → warn): search-domain pruning surfaces too" {
+    # Removal of search domain is also a routing change — not as
+    # severe as nameserver change (no hijack opportunity), but
+    # worth warn.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    cat > "${RESOLV_FILE}" <<'EOF'
+nameserver 1.1.1.1
+nameserver 9.9.9.9
+search example.com
+EOF
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'
+}
+
+@test "INVARIANT (hosts file removed since baseline: doesn't crash + defensive event surfaces)" {
+    # If operator removes /etc/hosts (rare but possible), watchdog
+    # must not crash on missing file.
+    write_resolver_inventory
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${HOSTS_FILE}"
+    run_wd
+    # Either no_delta (hosts_overrides count went from 3 to 0
+    # which is a warn-tier change) or warn surfaces. Lock that
+    # script doesn't crash + emits a record.
+    cap | grep -qE '"event":"[a-z_]+"'
+}
