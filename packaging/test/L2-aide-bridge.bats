@@ -166,3 +166,72 @@ Changed entries: 2"
         PROFILE=baseline run run_wd
     [ "${status}" = "0" ]
 }
+
+@test "INVARIANT (rc=0 + no_diff: all count fields = 0 in JSON)" {
+    mk_aide 0 "AIDE found NO differences"
+    run_wd
+    cap | grep -q '"added":0'
+    cap | grep -q '"removed":0'
+    cap | grep -q '"changed":0'
+}
+
+@test "INVARIANT (current behavior: enforce profile on internal-error (rc>=8) exits 0 — wrapper-level vs diff-level distinction)" {
+    # Internal error is wrapper-level (AIDE itself failed to run);
+    # the enforce gate targets diff-level events (added/removed/
+    # changed). Current behavior: wrapper exits 0 + emits high
+    # severity JSON; operator alerting hooks the high severity,
+    # not the exit code. Locks current contract so future
+    # refactor doesn't accidentally couple enforce-exit-non-zero
+    # to wrapper-level failures.
+    mk_aide 8 "fatal: database read error"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+    cap | grep -q '"severity":"high"'
+}
+
+@test "INVARIANT (enforce profile on adds-only (warn) → exit non-zero — strict baseline integrity)" {
+    # Adds-only is warn severity in baseline profile (operator-
+    # pull advisory). Under enforce, even adds break the strict
+    # baseline-integrity contract and must exit non-zero.
+    mk_aide 1 "Added entries: 3"
+    PROFILE=enforce run run_wd
+    [ "${status}" -ne 0 ]
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (enforce profile on no_diff → exit 0): unchanged baseline passes even in enforce" {
+    mk_aide 0 "AIDE found NO differences"
+    PROFILE=enforce run run_wd
+    [ "${status}" = "0" ]
+}
+
+@test "INVARIANT (rc surfaces in JSON across diff-tier + high-tier — diff-tier uses aide_rc, high-tier uses rc)" {
+    # Current schema: the diff-tier JSON path uses 'aide_rc' field
+    # name; the high-tier internal-error path uses 'rc' field.
+    # Lock both surfaces — downstream consumers must handle both
+    # names. (Future refinement could unify to aide_rc across
+    # both paths, but for now this is the contract.)
+    mk_aide 0 "AIDE found NO differences"
+    run_wd
+    cap | grep -q '"aide_rc":0'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    mk_aide 12 "fatal: bad signature"
+    run_wd
+    # Internal-error path uses 'rc':12 not 'aide_rc':12.
+    cap | grep -qE '"rc":12'
+    cap | grep -q '"severity":"high"'
+}
+
+@test "INVARIANT (-detail companion tag emits AIDE output for journal forensics — operator can journalctl -t selfdef-aide-detail)" {
+    # The -detail tag must surface AIDE's stdout so operator can
+    # journal-grep specific changed paths. The MAIN tag carries
+    # only the JSON summary — the detail is the forensics channel.
+    mk_aide 6 "Added entries: 0
+Removed entries: 1
+Changed entries: 2
+F: /etc/passwd
+F: /etc/shadow"
+    run_wd
+    detail_count=$(cap | grep -cE '^-t selfdef-aide-detail -- ')
+    [ "${detail_count}" -ge 1 ]
+}
