@@ -132,3 +132,38 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${LOGIND_DROPIN}"
 }
+
+@test "INVARIANT (burst-guard profile content): logind drop-in carries CtrlAltDelBurstAction=none" {
+    write_config "burst-guard"
+    run_wd
+    grep -qE '^CtrlAltDelBurstAction=none' "${LOGIND_DROPIN}"
+}
+
+@test "INVARIANT (burst-guard profile installs drop-in + fires logind reload first time)" {
+    write_config "burst-guard"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (profile change mask → burst-guard): writes drop-in + reloads logind on transition" {
+    write_config "mask"
+    run_wd
+    write_config "burst-guard"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (logind drop-in perms): drop-in is chmod 0644 (system-config convention for /etc/systemd/logind.conf.d)" {
+    write_config "burst-guard"
+    run_wd
+    [ "$(stat -c '%a' "${LOGIND_DROPIN}")" = "644" ]
+}
+
+@test "INVARIANT (logind drop-in carries [Login] section header): valid logind.conf.d fragment shape" {
+    write_config "burst-guard"
+    run_wd
+    grep -qE '^\[Login\]' "${LOGIND_DROPIN}"
+}
