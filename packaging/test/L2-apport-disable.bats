@@ -202,3 +202,44 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (mask is superset of stop: mask = stop+disable+mask; stop omits mask step)" {
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    run_wd
+    grep -q 'systemctl stop apport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable apport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask apport.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop apport.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable apport.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask apport' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted=6 when all apport+whoopsie units present): full coverage count surfaces" {
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=6'* ]]
+}
+
+@test "INVARIANT (no auto-uninstall: apport package NEVER auto-removed; only stop+disable+mask)" {
+    write_config "mask"
+    printf 'core\n' > "${COREPAT}"
+    run_wd
+    ! grep -qE 'apt|dnf|yum|rpm' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (core_pattern reset value is the kernel-safe 'core' literal — NOT a pipe to elsewhere)" {
+    # When resetting kernel.core_pattern, the value must be the
+    # safe 'core' literal (kernel-default behavior). Setting it
+    # to '|/some/other/pipe' would just shift the privacy leak.
+    write_config "mask"
+    printf '|/usr/share/apport/apport %%p\n' > "${COREPAT}"
+    run_wd
+    grep -qE 'sysctl -w kernel.core_pattern=core$' "${SCTL_LOG}"
+    # No other pipe set.
+    ! grep -qE 'sysctl -w kernel.core_pattern=\|' "${SCTL_LOG}"
+}
