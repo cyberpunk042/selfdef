@@ -164,3 +164,57 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — kernel-usermodehelper inventory enumerates kernel-context root-exec triggers)" {
+    helper modprobe /sbin/modprobe
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (kernel.modprobe under /var/tmp): writable-root expansion" {
+    helper modprobe /var/tmp/evil
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (kernel.modprobe under /dev/shm): tmpfs writable-root coverage" {
+    helper modprobe /dev/shm/evil
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (kernel.modprobe under /home): user-writable hijack coverage" {
+    helper modprobe /home/user/evil
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (kernel.poweroff_cmd under /tmp): poweroff_cmd axis writable-root coverage" {
+    # poweroff_cmd is triggered by halt/shutdown — a planted writable
+    # path runs at shutdown time AS ROOT.
+    helper poweroff_cmd /tmp/evil-shutdown
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sysctl.d drop-in also scanned — not only main sysctl.conf)" {
+    helper modprobe /sbin/modprobe
+    printf 'kernel.modprobe = /tmp/dropin-evil\n' > "${SYSDIR}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (sysctl line with whitespace tolerance — kernel.modprobe  =  /tmp/evil)" {
+    helper modprobe /sbin/modprobe
+    printf 'kernel.modprobe  =  /tmp/evil\n' > "${SYSCONF}"
+    SYSCTL_FILES="${SYSCONF}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    helper modprobe /sbin/modprobe
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-usermodehelper -- ')
+    [ "${main_count}" = "1" ]
+}
