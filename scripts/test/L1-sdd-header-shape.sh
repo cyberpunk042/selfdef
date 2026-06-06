@@ -83,14 +83,16 @@ for sdd in "${SDD_DIR}"/*.md; do
         sdd_number_to_file["${sdd_num}"]="${name}"
     fi
 
-    # Gate 2: Status line within first 25 lines (accept both
-    # `Status: **state**` (bold) and `Status: state` (plain) forms —
-    # the corpus uses both). SDDs without a Status line are SKIPped
-    # rather than failed — the SDD-065..078 action-surface family is
-    # the known exempt set, and adding more exemptions requires
-    # operator scope. Surface them as ADVISORY so they are visible
-    # but don't break CI.
-    status_line=$(head -25 "${sdd}" | grep -m1 -E '(^|> )[[:space:]]*Status:[[:space:]]+' || true)
+    # Gate 2: Status line within first 25 lines. Accepts 4 shapes:
+    #   1. `> Status: **state**` (blockquote + bold span)
+    #   2. `> Status: state`     (blockquote plain)
+    #   3. `**Status:** state`   (markdown-bold inline — adopted for
+    #      SDD-065..078 action-surface specs in 2026-06)
+    #   4. `Status: state`       (plain — SDD-062/063)
+    # SDDs without ANY of those shapes are SKIPped rather than failed
+    # (operator-scope exemption). Surface as ADVISORY so they are
+    # visible but don't break CI.
+    status_line=$(head -25 "${sdd}" | grep -m1 -E '(^|> )[[:space:]]*(\*\*)?Status:?(\*\*)?[[:space:]]+' || true)
     if [[ -z "${status_line}" ]]; then
         echo "  ADVISORY ${name}: no 'Status: <state>' line in first 25 lines (action-surface SDDs intentionally omit; others may need operator review)"
         continue
@@ -102,7 +104,7 @@ for sdd in "${SDD_DIR}"/*.md; do
     state=$(echo "${status_line}" | { grep -oE '\*\*[a-z-]+(\b|[[:space:]])' || true; } | head -1 | tr -d '*' | tr -d ' ')
     if [[ -z "${state}" ]]; then
         state=$(echo "${status_line}" \
-            | sed -E 's|.*Status:[[:space:]]+||' \
+            | sed -E 's|.*Status:?(\*\*)?[[:space:]]+||' \
             | sed -E 's|\*\*||g' \
             | { grep -oE '^[a-z-]+' || true; } \
             | head -1)

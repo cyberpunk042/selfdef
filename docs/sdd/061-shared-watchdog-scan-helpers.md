@@ -1,5 +1,7 @@
 # SDD-061 — Shared watchdog scan helpers in module-lib (v3)
 
+**Status:** implemented (all D-1..D-6 checked + L2 + L3 coverage shipped)
+
 ## Implementation status
 
 - [x] D-1 — `module-lib.sh` bumped to v3 with three pure helpers
