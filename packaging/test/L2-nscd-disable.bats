@@ -170,3 +170,46 @@ run_wd() {
     DRY_RUN=1 NSCD_PRESENT=0 run_wd
     ! grep -qE 'systemctl stop|systemctl disable|systemctl mask' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (mask is a superset of stop: stop+disable+mask sequence; stop omits the mask step)" {
+    # Mask = stop + disable + mask. Operator escalation path is
+    # stop → mask without re-applying disable.
+    write_config "mask"
+    run_wd
+    grep -q 'systemctl stop nscd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable nscd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
+    : > "${SYSEOF_LOG}"
+    write_config "stop"
+    run_wd
+    grep -q 'systemctl stop nscd.service' "${SYSEOF_LOG}"
+    grep -q 'systemctl disable nscd.service' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl mask nscd.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (acted count surfaces in JSON: acted=2 when both nscd units present — operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'acted=2'* ]]
+    [[ "${output}" == *'skipped=0'* ]]
+}
+
+@test "INVARIANT (acted=0 + no-op message when nscd absent — operator dashboard distinguishes 'applied' vs 'not-present')" {
+    write_config "mask"
+    output="$(NSCD_PRESENT=0 run_wd 2>&1)"
+    [[ "${output}" == *'no-op'* ]]
+    [[ "${output}" == *'nscd not present'* ]] || [[ "${output}" == *'nscd not installed'* ]]
+}
+
+@test "INVARIANT (mask order: stop → disable → mask — NOT mask → stop): swap would leave running service unmaskable in flight" {
+    # The systemctl mask is a runtime-permanent gate. Stop first
+    # to terminate in-flight + disable to clear boot trigger +
+    # mask last for permanent gate. Locks the sequence.
+    write_config "mask"
+    run_wd
+    stop_line="$(grep -n 'systemctl stop nscd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    disable_line="$(grep -n 'systemctl disable nscd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    mask_line="$(grep -n 'systemctl mask nscd.service' "${SYSEOF_LOG}" | head -1 | cut -d: -f1)"
+    [ "${stop_line}" -lt "${disable_line}" ]
+    [ "${disable_line}" -lt "${mask_line}" ]
+}
