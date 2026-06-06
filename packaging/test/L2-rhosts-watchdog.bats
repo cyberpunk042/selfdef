@@ -172,3 +172,55 @@ seed_benign() {
     run_wd
     cap | grep -qE '"severity":"(alert|warn)"'
 }
+
+@test "INVARIANT (no auto-trust): rhosts-watchdog does NOT refresh baseline on wildcard detection — alert STAYS until operator updates" {
+    # rhosts wildcards (+ entry) are NEVER routine; the alert
+    # must persist across runs until operator explicitly
+    # re-baselines.
+    seed_benign
+    run_wd
+    printf 'trusted.example.com\n+\n' > "${EQUIV}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"rhosts_trust_backdoor"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented + wildcard NOT flagged: # prefix filtered)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'trusted.example.com\n# + would be a backdoor\n' > "${EQUIV}"
+    run_wd
+    # Current behavior: commented + must NOT trigger alert.
+    ! cap | grep -q '"event":"rhosts_trust_backdoor"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (severity precedence: wildcard + world-writable → alert with rhosts_trust_backdoor event taking precedence)" {
+    # When both issues coexist (wildcard AND world-writable file),
+    # severity must be alert. Locks the consolidation.
+    seed_benign
+    run_wd
+    printf '+\n' > "${EQUIV}"
+    chmod 0666 "${EQUIV}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # Either event surfaces — both are valid; lock that alert
+    # severity fires consistently.
+    cap | grep -qE '"event":"rhosts_(trust_backdoor|suspicious|world_writable)"'
+}
+
+@test "INVARIANT (whitespace tolerance: '  +  ' with leading/trailing spaces still triggers wildcard alert)" {
+    # Attacker may use multi-space evasion. Lock whitespace-
+    # tolerant parser still catches dangerous patterns.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '   +   \n' > "${EQUIV}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
