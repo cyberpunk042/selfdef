@@ -158,3 +158,57 @@ EOF
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (strict minlen > standard minlen): asymmetric tightening" {
+    write_config "standard"
+    run_wd
+    std_minlen="$(grep -oE 'minlen[[:space:]]*=[[:space:]]*[0-9]+' "${DST}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_minlen="$(grep -oE 'minlen[[:space:]]*=[[:space:]]*[0-9]+' "${DST}" | grep -oE '[0-9]+$' | head -1)"
+    [ "${strict_minlen}" -gt "${std_minlen}" ]
+}
+
+@test "INVARIANT (RHEL system-auth detection — pam_pwquality.so wired there → no unwired-NOTICE)" {
+    cat > "${PAM_DIR}/system-auth" <<'EOF'
+password requisite pam_pwquality.so retry=3
+password sufficient pam_unix.so use_authtok yescrypt shadow
+EOF
+    write_config "standard"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" != *"installed but no /etc/pam.d/*"* ]]
+    [[ "${output}" == *'pam_wired=true'* ]]
+}
+
+@test "INVARIANT (profile downgrade strict → standard): rewrites with looser minlen" {
+    write_config "strict"
+    run_wd
+    sha_strict="$(sha256sum "${DST}" | awk '{print $1}')"
+    write_config "standard"
+    run_wd
+    sha_standard="$(sha256sum "${DST}" | awk '{print $1}')"
+    [ "${sha_strict}" != "${sha_standard}" ]
+}
+
+@test "INVARIANT (strict carries minimum-character-class constraint dcredit/ucredit/lcredit/ocredit)" {
+    # Strict profile mandates character class diversity; the credit
+    # directives are the actual mechanism.
+    write_config "strict"
+    run_wd
+    grep -qE '^(dcredit|ucredit|lcredit|ocredit)[[:space:]]*=' "${DST}"
+}
+
+@test "INVARIANT (drop-in carries selfdef-identifier header for tracking + uninstall)" {
+    # The drop-in carries '# selfdef pam-pwquality — <profile>' as
+    # its first-line tracker (not 'managed-by:' style); empirically
+    # verified against modules/pam-pwquality/configs/standard.conf.
+    write_config "standard"
+    run_wd
+    grep -qE '^# selfdef pam-pwquality' "${DST}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${DST}"
+}
