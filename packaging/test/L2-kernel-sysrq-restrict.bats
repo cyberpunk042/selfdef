@@ -143,3 +143,51 @@ run_wd() {
     run_wd
     grep -q 'sysctl -w kernel.sysrq=132' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (profile transition off → safe-subset): rewrites + applies 132 live" {
+    write_config "off"
+    run_wd
+    grep -q 'profile=off' "${DROPIN}"
+    write_config "safe-subset"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=safe-subset' "${DROPIN}"
+    grep -q 'sysctl -w kernel.sysrq=132' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (profile transition safe-subset → full): rewrites + applies =1 live" {
+    write_config "safe-subset"
+    run_wd
+    write_config "full"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=full' "${DROPIN}"
+    grep -q 'sysctl -w kernel.sysrq=1' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (profile downgrade full → off): rewrites back to most-restrictive + applies 0" {
+    write_config "full"
+    run_wd
+    write_config "off"
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'profile=off' "${DROPIN}"
+    grep -q 'sysctl -w kernel.sysrq=0' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (safe-subset bitmask 132): the actual bitmask value (4=sync + 128=reboot, sum=132)" {
+    # The 132 bitmask: sync (4) + reboot (128). The combination matters
+    # — if this drifts to 4 or 128 alone, the safe-subset functionality
+    # is broken differently (no reboot OR no sync).
+    write_config "safe-subset"
+    run_wd
+    grep -qE 'kernel\.sysrq\s*=\s*132' "${DROPIN}"
+}
+
+@test "INVARIANT (live-knob re-application — even on idempotent disk path)" {
+    write_config "off"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -q 'sysctl -w kernel.sysrq=' "${SCTL_LOG}"
+}
