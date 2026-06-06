@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-file-protections.conf"
+SYSCTL_DROPIN="${SELFDEF_FILEPROT_DROPIN:-/etc/sysctl.d/50-selfdef-file-protections.conf}"
 HEADER_MARKER="# managed-by: selfdef file-protections-baseline"
 
 SENTINEL_KEYS=(
