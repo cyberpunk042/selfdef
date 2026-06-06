@@ -144,3 +144,58 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — NM VPN plugin inventory enumerates NM-root code-load surface)" {
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (plugin .so under /var/tmp): writable-root expansion" {
+    printf '[libnm]\nplugin=/var/tmp/evil.so\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (plugin .so under /home): user-writable hijack coverage" {
+    printf '[libnm]\nplugin=/home/user/evil.so\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (service program under /tmp): writable-root on program axis" {
+    printf '[VPN Connection]\nprogram=/tmp/svc\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (service program under /var/tmp): writable-root expansion on program axis" {
+    printf '[VPN Connection]\nprogram=/var/tmp/svc\n' > "${NAME}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable .name file → alert)" {
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd
+    chmod 0666 "${NAME}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (comments via #-prefix also skipped — not just ;-prefix)" {
+    # INI dialect supports both ; and # for comments. Lock that
+    # # is also skipped.
+    printf '[libnm]\n# plugin=/tmp/evil.so\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf '[libnm]\nplugin=/usr/lib/NetworkManager/libnm-vpn-plugin-openvpn.so\n' > "${NAME}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-nm-vpn-plugin -- ')
+    [ "${main_count}" = "1" ]
+}
