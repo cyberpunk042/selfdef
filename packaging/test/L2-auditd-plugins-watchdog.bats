@@ -187,3 +187,57 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-audit-plugins -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): auditd-plugins-watchdog does NOT refresh baseline on suspicious path detection — alert STAYS until operator updates" {
+    # T1546 auditd-start-triggered root exec persistence — suspicious-path
+    # alert MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'active = yes\npath = /tmp/.audisp\ntype = always\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"audit_plugins_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented suspicious path NOT flagged: # prefix filtered from inventory)" {
+    # auditd plugins.d conf supports # comments. Operator notes about
+    # hypothetical bad-path entries must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'active = yes\ndirection = out\npath = /sbin/audisp-syslog\ntype = always\n# path = /tmp/example-attacker\n' > "${CONF}"
+    run_wd
+    ! cap | grep -q '"event":"audit_plugins_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/audit/plugins.d + /etc/audisp/plugins.d legacy axis — suspicious path in any of them → alert)" {
+    # auditd reads both modern (/etc/audit/plugins.d) and legacy
+    # (/etc/audisp/plugins.d) directories. Attacker may plant in
+    # either. Lock multi-dir axis.
+    PLUGD2="${TMP}/audisp-plugins.d"; mkdir -p "${PLUGD2}"
+    seed_benign
+    DIRS_V="${PLUGD} ${PLUGD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant suspicious path in legacy dir.
+    printf 'active = yes\npath = /tmp/.audisp\ntype = always\n' > "${PLUGD2}/evil.conf"
+    DIRS_V="${PLUGD} ${PLUGD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (active=no plugin still scanned: defense against time-bomb persistence)" {
+    # An inactive plugin (active=no) is currently dormant but operator
+    # may toggle to active later, OR attacker may plant a dormant
+    # suspicious-path plugin as a time-bomb. The watchdog scans path=
+    # regardless of active state to preserve operator visibility.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'active = no\ndirection = out\npath = /tmp/.audisp-timebomb\ntype = always\n' > "${CONF}"
+    run_wd
+    # Either alert (preferred — defense-in-depth) OR warn (acceptable — config changed).
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
