@@ -78,3 +78,46 @@ INSTALL_DIR="${MODULE_DIR}/install"
 @test "nfqueue rule carries selfdef-suricata comment (operator nft list rule audit)" {
     grep -q 'comment "selfdef-suricata"' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
 }
+
+@test "INVARIANT (apply.sh fail-loud on bridge-l2 table missing): refuse-to-brick install — operator must install bridge-l2 first" {
+    # If the bridge-l2 nftables table is absent, the apply MUST
+    # die loudly with a directive to install bridge-l2 first, not
+    # silently proceed and leave Suricata unattached.
+    grep -qE 'bridge-l2.*nftables.*not loaded|install bridge-l2 first' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "INVARIANT (asymmetric mode transition: nfqueue → af-packet REMOVES stale NFQUEUE rule)" {
+    # When operator flips from nfqueue to af-packet, the previously-
+    # installed jump in forward_hook MUST be removed; otherwise
+    # forward_hook would deliver duplicate packets to userspace.
+    grep -qE 'remove stale NFQUEUE rule|delete rule.*forward_hook.*handle' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "INVARIANT (graceful reload over destructive restart on already-running service)" {
+    # Suricata is a packet-fast-path daemon — restart drops in-
+    # flight flows. Locks the reload-or-restart preference when
+    # the service is already active.
+    grep -q 'reload-or-restart' "${INSTALL_DIR}/apply.sh"
+}
+
+@test "INVARIANT (uninstall.sh removes NFQUEUE rule via handle lookup — no orphan rules left)" {
+    # The uninstall path must clean up the jump in
+    # bridge-l2's forward_hook chain too. Orphan rules would
+    # cause queue-0 traffic to be dropped silently after suricata
+    # is stopped.
+    grep -qE 'delete rule.*forward_hook|comment "selfdef-suricata"' "${INSTALL_DIR}/uninstall.sh"
+}
+
+@test "INVARIANT (check.sh verifies NFQUEUE rule presence + service state without mutation)" {
+    # check.sh is the read-only health-check entry point.
+    # Must verify rule + service without changing state.
+    grep -qE 'DRY_RUN=0|is-active|is-enabled' "${INSTALL_DIR}/check.sh"
+    # No nft -f / nft add / systemctl start lines.
+    ! grep -qE '^[[:space:]]*nft -f|^[[:space:]]*nft add|^[[:space:]]*systemctl start' "${INSTALL_DIR}/check.sh"
+}
+
+@test "INVARIANT (no render-timestamp in nfqueue.rule.tmpl — variant-A guard)" {
+    # Template renders with sed substitution at apply time;
+    # any embedded date would force cmp -s rewrite on every apply.
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODULE_DIR}/templates/nfqueue.rule.tmpl"
+}
