@@ -186,3 +186,51 @@ run_wd() {
     [ -f "${DST}" ]
     ! [ -f "${LECTURE_FILE}" ]
 }
+
+@test "INVARIANT (audit-trail carries Defaults log_input/log_output): the actual command-logging mechanism" {
+    write_config "audit-trail"
+    run_wd
+    grep -qE 'log_input|log_output|iolog_dir' "${DST}"
+}
+
+@test "INVARIANT (paranoid drop-in differs from audit-trail content): asymmetric profile content" {
+    write_config "audit-trail"
+    run_wd
+    sha_audit="$(sha256sum "${DST}" | awk '{print $1}')"
+    write_config "paranoid"
+    run_wd
+    sha_paranoid="$(sha256sum "${DST}" | awk '{print $1}')"
+    [ "${sha_audit}" != "${sha_paranoid}" ]
+}
+
+@test "INVARIANT (profile downgrade paranoid → audit-trail): REMOVES the stale lecture file" {
+    # If downgrade leaves the lecture file behind, the operator's
+    # intent to relax (no custom lecture) is silently violated.
+    write_config "paranoid"
+    run_wd
+    [ -f "${LECTURE_FILE}" ]
+    write_config "audit-trail"
+    run_wd
+    ! [ -f "${LECTURE_FILE}" ]
+}
+
+@test "INVARIANT (drop-in chmod 0440): sudoers convention (root + sudo-group readable; nobody-writable)" {
+    write_config "audit-trail"
+    run_wd
+    [ "$(stat -c '%a' "${DST}")" = "440" ]
+}
+
+@test "INVARIANT (drop-in filename 50-selfdef-tune — sorts AFTER operator rules + before 99-deny patterns)" {
+    write_config "audit-trail"
+    run_wd
+    case "${DST}" in
+        */50-selfdef-tune) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-tune pattern; got: ${DST}" ;;
+    esac
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "audit-trail"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
+}

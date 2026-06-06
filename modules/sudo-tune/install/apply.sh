@@ -48,6 +48,14 @@ if [[ "$PROFILE" == "paranoid" ]]; then
     if [[ "$DRY_RUN" != "1" ]]; then
         install -m 0644 "${CONFIGS_SRC}/lecture.txt" "$LECTURE_FILE"
     fi
+elif [[ "$PROFILE" == "audit-trail" && -f "$LECTURE_FILE" ]]; then
+    # Profile downgrade paranoid → audit-trail must remove the stale
+    # lecture file so the operator's intent to relax (no custom lecture)
+    # is honored.
+    if [[ "$DRY_RUN" != "1" ]]; then
+        rm -f "$LECTURE_FILE"
+        log "removed stale ${LECTURE_FILE} (profile downgrade paranoid → audit-trail)"
+    fi
 fi
 
 # REFUSE-TO-BRICK: validate the new file with visudo -cf BEFORE
