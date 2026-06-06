@@ -200,3 +200,53 @@ run_wd() {
         *) fail "drop-in filename must follow 50-selfdef-*.conf pattern" ;;
     esac
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl -w)" {
+    # Operator may rm the drop-in (file-deletion tamper) — apply must
+    # rebuild it and re-apply live so kernel state is restored.
+    write_config "allow"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'profile=allow' "${DROPIN}"
+    grep -q 'sysctl -w kernel.unprivileged_userns_clone=1' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    # If apply.sh ever changes the header, a stale-cleanup pass that
+    # uses head -1 to identify selfdef-managed drop-ins must continue
+    # to match. Lock the head-1 contract.
+    write_config "allow"
+    run_wd
+    first_line="$(awk 'NF' "${DROPIN}" | head -1)"
+    [[ "${first_line}" == *"selfdef unprivileged-userns-baseline"* ]]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "deny" "true"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"unprivileged-userns-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=deny'* ]]
+}
+
+@test "INVARIANT (refuse-to-brick precedence over profile-key — deny w/o ack dies even when profile is the operator's stated choice)" {
+    # If the operator sets deny but FORGETS to set acknowledge_no_rootless,
+    # apply MUST refuse. Even if a previous run was 'allow' and the drop-in
+    # exists with allow content, deny w/o ack must NOT mutate state to deny.
+    write_config "allow"
+    run_wd
+    grep -q 'profile=allow' "${DROPIN}"
+    # Now operator sets deny w/o ack — must die + leave drop-in unchanged.
+    write_config "deny" "false"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_USERNS_CONFIG="${CONF}" \
+        SELFDEF_USERNS_DROPIN="${DROPIN}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    grep -q 'profile=allow' "${DROPIN}"
+    ! grep -q 'profile=deny' "${DROPIN}"
+}
