@@ -147,3 +147,46 @@ run_wd() {
     grep -q 'profile=baseline' "${DROPIN}"
     ! grep -q 'ip_forward' "${DROPIN}"      # router-only
 }
+
+@test "INVARIANT (baseline tcp_syncookies = 1): the actual SYN-flood resistance" {
+    write_config "baseline"
+    run_wd
+    grep -qE 'net\.ipv4\.tcp_syncookies\s*=\s*1' "${DROPIN}"
+}
+
+@test "INVARIANT (baseline accept_redirects = 0): block ICMP route-poisoning" {
+    write_config "baseline"
+    run_wd
+    grep -qE 'accept_redirects\s*=\s*0' "${DROPIN}"
+}
+
+@test "INVARIANT (baseline accept_source_route = 0): block network-path attacker control" {
+    write_config "baseline"
+    run_wd
+    grep -qE 'accept_source_route\s*=\s*0' "${DROPIN}"
+}
+
+@test "INVARIANT (baseline rp_filter = 1 or 2): reverse-path filter on (block martians)" {
+    write_config "baseline"
+    run_wd
+    grep -qE 'rp_filter\s*=\s*[12]' "${DROPIN}"
+}
+
+@test "INVARIANT (profile transition baseline → router): rewrites drop-in with ip_forward enabled" {
+    write_config "baseline"
+    run_wd
+    ! grep -qE 'ip_forward\s*=\s*1' "${DROPIN}"
+    write_config "router"
+    run_wd
+    grep -qE 'ip_forward\s*=\s*1' "${DROPIN}"
+}
+
+@test "INVARIANT (sysctl --load fires on EVERY apply — even when drop-in idempotent-unchanged)" {
+    # Operator could have manually flipped a knob; live re-apply ensures
+    # the kernel state matches the drop-in.
+    write_config "baseline"
+    run_wd
+    : > "${SCTL_LOG}"
+    run_wd
+    grep -qE 'sysctl --(load|system|p)' "${SCTL_LOG}"
+}
