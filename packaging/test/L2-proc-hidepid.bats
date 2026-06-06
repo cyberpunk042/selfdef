@@ -216,3 +216,35 @@ run_wd() {
     run_wd
     grep -qE 'gid=987|hidepid=2' "${SYSTEMD_DIR}/proc.mount"
 }
+
+@test "INVARIANT (mount unit re-arm after operator out-of-band deletion: re-creates + fires daemon-reload)" {
+    write_config "noaccess"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/proc.mount" ]
+    rm -f "${SYSTEMD_DIR}/proc.mount"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/proc.mount" ]
+    grep -q 'hidepid=2' "${SYSTEMD_DIR}/proc.mount"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (mount unit is chmod 0644 — system-config convention for /etc/systemd/system)" {
+    write_config "noaccess"
+    run_wd
+    [ "$(stat -c '%a' "${SYSTEMD_DIR}/proc.mount")" = "644" ]
+}
+
+@test "INVARIANT (mount unit carries selfdef-identifier header — operator audit trail)" {
+    write_config "noaccess"
+    run_wd
+    grep -qE '^#.*selfdef.*proc-hidepid|^#.*managed-by' "${SYSTEMD_DIR}/proc.mount"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "noaccess"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"proc-hidepid"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=noaccess'* ]]
+}
