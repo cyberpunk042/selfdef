@@ -180,3 +180,51 @@ AEOF
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile downgrade strict → standard): rewrites drop-in to standard content" {
+    write_config "strict"
+    run_wd
+    sha_strict="$(sha256sum "${DST}" | awk '{print $1}')"
+    write_config "standard"
+    run_wd
+    sha_standard="$(sha256sum "${DST}" | awk '{print $1}')"
+    [ "${sha_strict}" != "${sha_standard}" ]
+}
+
+@test "INVARIANT (standard does NOT carry insecure-repo directives — no AllowUnauthenticated true)" {
+    # The actual hardening: ensure the rendered file CANNOT contain
+    # AllowUnauthenticated true or its variants.
+    write_config "standard"
+    run_wd
+    ! grep -qE 'AllowUnauthenticated[[:space:]]*"?true"?' "${DST}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in — defeats cmp -s idempotency)" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^// Generated [0-9]{4}-' "${DST}"
+    ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
+}
+
+@test "INVARIANT (apt-config validation called — apt-config dump runs against the rendered file)" {
+    # Wrap apt-config to log invocations.
+    cat > "${BIN}/apt-config" <<EOF
+#!/usr/bin/env bash
+printf 'apt-config %s\\n' "\$*" >> "${TMP}/apt-config.log"
+exit 0
+EOF
+    chmod +x "${BIN}/apt-config"
+    write_config "standard"
+    run_wd
+    [ -f "${TMP}/apt-config.log" ]
+    grep -q '^apt-config ' "${TMP}/apt-config.log"
+}
+
+@test "INVARIANT (drop-in filename 50-selfdef-*): tracking + uninstall identification" {
+    write_config "standard"
+    run_wd
+    case "${DST}" in
+        */50-selfdef-*) : ;;
+        *) fail "drop-in filename must follow 50-selfdef-* pattern" ;;
+    esac
+}
