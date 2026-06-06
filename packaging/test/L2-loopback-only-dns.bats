@@ -150,3 +150,43 @@ run_wd() {
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile transition disabled-listener → loopback): reverse direction works" {
+    write_config "disabled-listener"
+    run_wd
+    grep -qE '^DNSStubListener=no' "${DST}"
+    write_config "loopback"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -qE '^DNSStubListener=yes' "${DST}"
+    grep -q 'restart systemd-resolved' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (drop-in carries [Resolve] section header — valid systemd-resolved fragment)" {
+    write_config "loopback"
+    run_wd
+    grep -qE '^\[Resolve\]' "${DST}"
+}
+
+@test "INVARIANT (loopback profile binds to 127.0.0.53 — the canonical systemd-resolved address)" {
+    # If the bind address drifts, apps using /etc/resolv.conf would
+    # break OR the host could expose the listener on wider iface.
+    write_config "loopback"
+    run_wd
+    grep -qE '127\.0\.0\.53' "${DST}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "loopback"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DST}"
+}
+
+@test "INVARIANT (drop-in does NOT bind to 0.0.0.0 or :: — the off-host-attack vector)" {
+    # If the drop-in accidentally specified 0.0.0.0 or :: (any-iface),
+    # the host would expose a DNS resolver on its public interface,
+    # defeating the whole point of loopback-only.
+    write_config "loopback"
+    run_wd
+    ! grep -qE '0\.0\.0\.0|:::$' "${DST}"
+}
