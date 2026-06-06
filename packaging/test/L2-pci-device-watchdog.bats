@@ -231,3 +231,62 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-pci-device -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (zero-device baseline: empty SYSDIR → baseline_initial with devices=0)" {
+    # Defensive: if the sysfs PCI tree is empty (unusual but
+    # possible on VM with no PCI passthrough), the scan must
+    # still produce a valid baseline.
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"devices":0'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (profile field echoes operator-set SELFDEF_PCIDEV_PROFILE)" {
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    PROFILE=report run_wd
+    cap | grep -q '"profile":"report"'
+}
+
+@test "INVARIANT (REMOVED-only delta severity is exactly warn, NOT ok — locks ladder boundary)" {
+    # When only removals happen (no adds), severity must be warn
+    # (not ok). Locks the ladder boundary so a regression doesn't
+    # silently suppress hardware-pulled events.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    mk_device "0000:01:00.0" "10de" "1b80" "030200"
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -rf "${SYSDIR}/0000:01:00.0"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    ! cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (whitespace tolerance in vendor/device files: trailing whitespace stripped from sysfs read)" {
+    # /sys/bus/pci/devices/*/vendor files typically end with
+    # newline. The parser must strip trailing whitespace.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    # Add extra whitespace to one of the sysfs files.
+    printf '0x10de  \n' > "${SYSDIR}/0000:00:1f.0/vendor"
+    run_wd
+    # Baseline initial passed without crashing.
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (added device CLASS surfaces in sample: 'slot(vendor:device)' includes class for forensics — current behavior locked)" {
+    # The sample shape per existing 'added_sample carries
+    # slot(vendor:device) rows' test. Lock current behavior: the
+    # sample row form is slot(vendor:device) — operator can grep
+    # by slot OR by vendor:device. Adding 'class' would require
+    # downstream consumer updates.
+    mk_device "0000:00:1f.0" "8086" "9d4e" "060100"
+    run_wd
+    mk_device "0000:02:00.0" "13fe" "deed" "020000"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '0000:02:00.0(13fe:deed)'
+    # Current behavior: sample does NOT include class — locked here.
+    # A regression that adds class would break downstream parsers.
+    cap | grep -qE 'added_sample":"[^"]*0000:02:00.0\(13fe:deed\)'
+}
