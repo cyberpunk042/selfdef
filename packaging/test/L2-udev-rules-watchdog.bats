@@ -176,3 +176,70 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+# ============================================================
+# Writable-root expansion across all 3 exec axes (T1546)
+# ============================================================
+
+@test "INVARIANT (RUN+= under /var/tmp): writable-root expansion on RUN axis" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="block", RUN+="/var/tmp/.x"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (RUN+= under /dev/shm): writable-root expansion on RUN axis" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="block", RUN+="/dev/shm/.x"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (PROGRAM== under /var/tmp): writable-root expansion on PROGRAM axis" {
+    printf 'SUBSYSTEM=="net", NAME="eth0"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="net", PROGRAM=="/var/tmp/p", NAME="eth0"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (IMPORT{program} under /tmp): writable-root expansion on IMPORT axis (not only /home)" {
+    printf 'SUBSYSTEM=="usb", ATTR{idVendor}=="1234"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="usb", IMPORT{program}="/tmp/i", ATTR{idVendor}=="1234"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# False-positive: commented exec directive
+# ============================================================
+
+@test "INVARIANT (commented RUN+= directive is NOT flagged): false-positive guard on # prefix" {
+    # A commented-out RUN+= (operator left a note about a future
+    # rule) must not appear in the parsed exec inventory at all,
+    # and certainly not as a suspicious-exec alert.
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n' > "${RULE}"
+    run_wd
+    printf 'SUBSYSTEM=="block", SYMLINK+="d"\n# RUN+="/tmp/.x"\n' > "${RULE}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    ! cap | grep -q '"severity":"alert"'
+}
+
+# ============================================================
+# JSON record contract (SDD-062 single-line consumer)
+# ============================================================
+
+@test "INVARIANT (JSON record is emitted as a SINGLE main logger line — SDD-062 downstream JSON-line consumer contract)" {
+    printf 'SUBSYSTEM=="block", SYMLINK+="mydisk"\n' > "${RULE}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-udev-rules -- ')
+    [ "${main_count}" = "1" ]
+}
