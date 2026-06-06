@@ -163,3 +163,52 @@ run_wd() {
     ! head -1 "${AUDITD_CONF}" 2>/dev/null | grep -qF 'selfdef auditd-tune-managed'
     ! grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
 }
+
+@test "INVARIANT (profile downgrade high-volume → standard): rewrites + restarts" {
+    write_config "high-volume"
+    run_wd
+    grep -q 'profile=high-volume' "${AUDITD_CONF}"
+    write_config "standard"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'profile=standard' "${AUDITD_CONF}"
+    ! grep -q 'profile=high-volume' "${AUDITD_CONF}"
+    grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves auditd.conf mtime" {
+    write_config "standard"
+    run_wd
+    mtime_before="$(stat -c '%Y' "${AUDITD_CONF}")"
+    sleep 1
+    run_wd
+    mtime_after="$(stat -c '%Y' "${AUDITD_CONF}")"
+    [ "${mtime_before}" = "${mtime_after}" ]
+}
+
+@test "INVARIANT (high-volume max_log_file > standard max_log_file): asymmetric profile content" {
+    # The whole point of high-volume is to provide MORE space. If both
+    # profiles render the same values, the distinction is broken.
+    write_config "standard"
+    run_wd
+    std_max="$(grep -oE 'max_log_file *= *[0-9]+' "${AUDITD_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "high-volume"
+    run_wd
+    hv_max="$(grep -oE 'max_log_file *= *[0-9]+' "${AUDITD_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    [ "${hv_max}" -gt "${std_max}" ]
+}
+
+@test "INVARIANT (operator override backlog_limit honored — value reaches auditctl -b)" {
+    {
+        printf 'profile = "standard"\n'
+        printf 'backlog_limit = "32768"\n'
+    } > "${CONF}"
+    run_wd
+    grep -q 'auditctl -b 32768' "${AUDITCTL_LOG}"
+}
+
+@test "INVARIANT (no render-timestamp in auditd.conf — defeats cmp -s idempotency)" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${AUDITD_CONF}"
+}
