@@ -190,3 +190,50 @@ run_wd() {
     run_wd
     grep -qE 'sysctl --(load|system|p)' "${SCTL_LOG}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates drop-in + fires sysctl --load)" {
+    # Operator may rm the drop-in (file-deletion tamper) — apply must
+    # rebuild it and re-apply live so kernel state is restored.
+    write_config "baseline"
+    run_wd
+    [ -f "${DROPIN}" ]
+    rm -f "${DROPIN}"
+    : > "${SCTL_LOG}"
+    run_wd
+    [ -f "${DROPIN}" ]
+    grep -q 'profile=baseline' "${DROPIN}"
+    grep -qE 'sysctl --(load|system|p)' "${SCTL_LOG}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    # If apply.sh ever changes the header, a stale-cleanup pass that
+    # uses head -1 to identify selfdef-managed drop-ins must continue
+    # to match. Lock the head-1 contract.
+    write_config "baseline"
+    run_wd
+    first_line="$(awk 'NF' "${DROPIN}" | head -1)"
+    [[ "${first_line}" == *"selfdef sysctl-network-baseline"* ]]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "router"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"sysctl-network-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=router'* ]]
+}
+
+@test "INVARIANT (paranoid composes baseline + ICMP-echo-ignore + IPv6-disable axes — multi-axis lock)" {
+    # paranoid is NOT a replacement of baseline; it COMPOSES baseline's
+    # endpoint hardening with ICMP-echo-ignore + IPv6-disable on top.
+    # Attacker downgrading paranoid to baseline must not relax these axes.
+    write_config "paranoid"
+    run_wd
+    # baseline axes still present.
+    grep -qE 'accept_redirects\s*=\s*0' "${DROPIN}"
+    grep -qE 'accept_source_route\s*=\s*0' "${DROPIN}"
+    grep -qE 'tcp_syncookies\s*=\s*1' "${DROPIN}"
+    # paranoid-specific axes added on top.
+    grep -qE 'icmp_echo_ignore_all\s*=\s*1' "${DROPIN}"
+    grep -qE 'disable_ipv6\s*=\s*1' "${DROPIN}"
+}
