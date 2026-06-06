@@ -1,0 +1,165 @@
+#!/usr/bin/env bats
+# L2 functional suite for auditd-tune.
+#
+# auditd-tune REPLACES /etc/audit/auditd.conf (auditd doesn't
+# honor conf.d). Profiles:
+#   standard    → small disk pool, default backlog
+#   high-volume → larger disk pool, bigger backlog (for hosts
+#                 generating heavy audit volume — fileserver,
+#                 hypervisor, etc.)
+#
+# CRITICAL INVARIANTS this suite locks:
+#   - First apply: backs up operator's auditd.conf to
+#     auditd.conf.selfdef-backup (so uninstall can restore).
+#   - Second apply: does NOT re-backup (would clobber the
+#     original with selfdef's own copy).
+#   - Idempotent: byte-identical re-install fires NO auditctl
+#     + NO auditd restart (fixed 2026-06-06 — same lesson as
+#     dns-shield + proc-hidepid + the 5-module batch).
+#   - DRY_RUN protects file install + restart.
+#
+# Uses SELFDEF_AUDITD_CONF env-var for L2 testability.
+#
+# Run with: bats packaging/test/L2-auditd-tune.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/auditd-tune/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/systemctl" <<'SYSEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+exit 0
+SYSEOF
+    chmod +x "${BIN}/systemctl"
+    cat > "${BIN}/auditctl" <<'AEOF'
+#!/usr/bin/env bash
+printf 'auditctl %s\n' "$*" >> "${AUDITCTL_LOG}"
+exit 0
+AEOF
+    chmod +x "${BIN}/auditctl"
+    export SYSEOF_LOG="${TMP}/systemctl.log"
+    export AUDITCTL_LOG="${TMP}/auditctl.log"
+    : > "${SYSEOF_LOG}"
+    : > "${AUDITCTL_LOG}"
+    CONF="${TMP}/auditd-tune.toml"
+    AUDITD_CONF="${TMP}/auditd.conf"
+    # Pre-existing operator auditd.conf.
+    cat > "${AUDITD_CONF}" <<'OPCONF'
+local_events = yes
+log_file = /var/log/audit/audit.log
+max_log_file = 8
+OPCONF
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SYSEOF_LOG="${SYSEOF_LOG}" \
+    AUDITCTL_LOG="${AUDITCTL_LOG}" \
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_AUDITD_TUNE_CONFIG="${CONF}" \
+    SELFDEF_AUDITD_CONF="${AUDITD_CONF}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_AUDITD_TUNE_CONFIG="${TMP}/missing.toml"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AUDITD_TUNE_CONFIG="${SELFDEF_AUDITD_TUNE_CONFIG}" \
+        SELFDEF_AUDITD_CONF="${AUDITD_CONF}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config not readable"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_AUDITD_TUNE_CONFIG="${CONF}" \
+        SELFDEF_AUDITD_CONF="${AUDITD_CONF}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be standard|high-volume"* ]]
+}
+
+@test "INVARIANT: first apply backs up operator's auditd.conf to selfdef-backup" {
+    write_config "standard"
+    run_wd
+    [ -f "${AUDITD_CONF}.selfdef-backup" ]
+    # The backup contains the operator's original (with local_events line).
+    grep -q '^local_events = yes$' "${AUDITD_CONF}.selfdef-backup"
+}
+
+@test "INVARIANT: second apply does NOT re-backup (would clobber the original)" {
+    write_config "standard"
+    run_wd
+    # Operator's original is now in the backup. Tamper with the backup
+    # to detect re-write.
+    printf '%s\n' '# tampered-by-test' > "${AUDITD_CONF}.selfdef-backup.tampermarker"
+    backup_sha_before="$(sha256sum "${AUDITD_CONF}.selfdef-backup" | awk '{print $1}')"
+    run_wd
+    backup_sha_after="$(sha256sum "${AUDITD_CONF}.selfdef-backup" | awk '{print $1}')"
+    [ "${backup_sha_before}" = "${backup_sha_after}" ]
+}
+
+@test "standard profile installs the standard auditd.conf body" {
+    write_config "standard"
+    run_wd
+    head -1 "${AUDITD_CONF}" | grep -qF '=== selfdef auditd-tune-managed'
+    grep -q 'profile=standard' "${AUDITD_CONF}"
+}
+
+@test "high-volume profile installs the high-volume body (larger max_log_file)" {
+    write_config "high-volume"
+    run_wd
+    grep -q 'profile=high-volume' "${AUDITD_CONF}"
+}
+
+@test "auditctl -b is called with backlog_limit" {
+    write_config "standard"
+    run_wd
+    grep -q 'auditctl -b ' "${AUDITCTL_LOG}"
+}
+
+@test "operator can override backlog_limit via config" {
+    {
+        printf 'profile = "standard"\n'
+        printf 'backlog_limit = "16384"\n'
+    } > "${CONF}"
+    run_wd
+    grep -q 'auditctl -b 16384' "${AUDITCTL_LOG}"
+}
+
+@test "INVARIANT: idempotent — byte-identical re-install fires NO auditd restart" {
+    write_config "standard"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    # No restart = no in-memory state flush.
+    ! grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: profile change standard → high-volume rewrites auditd.conf + restarts" {
+    write_config "standard"
+    run_wd
+    write_config "high-volume"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'profile=high-volume' "${AUDITD_CONF}"
+    grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: DRY_RUN does not install auditd.conf or restart" {
+    write_config "standard"
+    DRY_RUN=1 run_wd
+    # auditd.conf not changed (no marker prefix).
+    ! head -1 "${AUDITD_CONF}" 2>/dev/null | grep -qF 'selfdef auditd-tune-managed'
+    ! grep -q 'systemctl restart auditd' "${SYSEOF_LOG}"
+}
