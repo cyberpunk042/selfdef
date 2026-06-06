@@ -17,6 +17,10 @@ set -u
 
 PROFILE="${SELFDEF_SUDOERS_PROFILE:-report}"
 BASELINE="${SELFDEF_SUDOERS_BASELINE:-/var/lib/selfdef/sudoers-integrity-baseline.tsv}"
+# SELFDEF_SUDOERS_FILE + SELFDEF_SUDOERS_D_DIR added 2026-06-06
+# for L2 delta-testability. Live defaults unchanged.
+SUDOERS_FILE="${SELFDEF_SUDOERS_FILE:-/etc/sudoers}"
+SUDOERS_D_DIR="${SELFDEF_SUDOERS_D_DIR:-/etc/sudoers.d}"
 
 current="$(mktemp)"
 trap 'rm -f "$current"' EXIT
@@ -37,9 +41,9 @@ emit_rules() {  # file
         done
 }
 
-emit_rules /etc/sudoers
-if [[ -d /etc/sudoers.d ]]; then
-    for f in /etc/sudoers.d/*; do
+emit_rules "$SUDOERS_FILE"
+if [[ -d "$SUDOERS_D_DIR" ]]; then
+    for f in "$SUDOERS_D_DIR"/*; do
         [[ -f "$f" ]] && emit_rules "$f"
     done
 fi
