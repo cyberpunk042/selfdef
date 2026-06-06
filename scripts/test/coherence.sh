@@ -105,6 +105,9 @@ run_layer "L1: module-lib version coherence (SDD-061; library v4 must satisfy al
 run_layer "L1: sigma rule ↔ test pairing (22 rules ↔ 22 .tests.yaml × 3 invariants)" \
     bash scripts/test/L1-sigma-rule-test-pairing.sh
 
+run_layer "L1: non-observer service hardening fleet (9 daemon-layer .service × 9 R171 baseline clauses = 81 assertions)" \
+    bash scripts/test/L1-nonobserver-service-hardening-fleet.sh
+
 run_layer "L1: shellcheck scan (parse errors / real bugs across all .sh)" \
     bash scripts/test/L1-shellcheck-scan.sh
 
