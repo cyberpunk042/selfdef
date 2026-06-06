@@ -147,3 +147,60 @@ run_wd() {
     run_wd
     grep -q 'SELFDEF_WOL_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"
 }
+
+@test "INVARIANT (profile downgrade audit → enforce): rewrites drop-in back + fires reload" {
+    write_config "audit"
+    run_wd
+    grep -q 'SELFDEF_WOL_PROFILE=audit' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"
+    write_config "enforce"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'SELFDEF_WOL_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"
+    ! grep -q 'SELFDEF_WOL_PROFILE=audit' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves all 3 file mtimes" {
+    write_config "enforce"
+    run_wd
+    mtime_libexec_before="$(stat -c '%Y' "${LIBEXEC_DIR}/wol-disable.sh")"
+    mtime_service_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-wol-disable.service")"
+    mtime_dropin_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf")"
+    sleep 1
+    run_wd
+    [ "${mtime_libexec_before}" = "$(stat -c '%Y' "${LIBEXEC_DIR}/wol-disable.sh")" ]
+    [ "${mtime_service_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-wol-disable.service")" ]
+    [ "${mtime_dropin_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf")" ]
+}
+
+@test "INVARIANT (libexec actually probes ethtool for NIC list + WoL state)" {
+    write_config "enforce"
+    run_wd
+    grep -qE 'ethtool' "${LIBEXEC_DIR}/wol-disable.sh"
+}
+
+@test "INVARIANT (service unit references libexec script)" {
+    write_config "enforce"
+    run_wd
+    grep -qE '^ExecStart=' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+    grep -q 'wol-disable' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+}
+
+@test "INVARIANT (service unit ties to sleep.target — survives suspend/resume)" {
+    # WoL state is reset on resume from S3 — the unit must fire on
+    # resume, not just at boot. WantedBy=multi-user.target + sleep.target
+    # is the canonical pattern.
+    write_config "enforce"
+    run_wd
+    grep -qE 'WantedBy=.*(multi-user|sleep)\.target' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+}
+
+@test "INVARIANT (no render-timestamp in any installed file): defeats cmp -s idempotency" {
+    write_config "enforce"
+    run_wd
+    for f in "${LIBEXEC_DIR}/wol-disable.sh" \
+             "${SYSTEMD_DIR}/selfdef-wol-disable.service" \
+             "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"; do
+        ! grep -qE '^# Generated [0-9]{4}-' "$f"
+    done
+}
