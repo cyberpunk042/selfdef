@@ -215,3 +215,72 @@ setup_baseline_state() {
     PROFILE=enforce run_wd
     cap | grep -q '"severity":"ok"'
 }
+
+@test "INVARIANT (rules.d file added with new rule → reflected in rule count, but rule-count INCREASE alone does NOT degrade severity)" {
+    # Adding rules is a HARDENING action, not an attack. The script
+    # correctly treats it as 'audit_intact' — the security STATE didn't
+    # degrade. Lock that semantic: the new rule_count IS reflected, but
+    # severity stays ok.
+    setup_baseline_state
+    run_wd
+    set_state "-w /etc/passwd -p wa -k passwd_changes
+-w /etc/shadow -p wa -k shadow_changes
+-w /etc/group -p wa -k group_changes
+-w /etc/sudoers -p wa -k sudoers_changes" "1" "active"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"rule_count":4'
+    cap | grep -q '"severity":"ok"'   # rule-increase = hardening = ok
+}
+
+@test "INVARIANT (multiple simultaneous T1562.001 signatures — rules flushed AND auditd down → alert)" {
+    # Realistic attacker sequence: -D then stop. Both fire.
+    setup_baseline_state
+    run_wd
+    set_state "" "1" "inactive"      # both rules-flushed AND auditd-disabled
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    # Should reflect both deltas in event/payload.
+    cap | grep -qE '"rule_count":0'
+    cap | grep -qE '"auditd":"inactive"'
+}
+
+@test "INVARIANT (multiple simultaneous T1562.001 — rules flushed AND enabled=0 → alert)" {
+    # Another attacker variant: flush + disable flag.
+    setup_baseline_state
+    run_wd
+    set_state "" "0" "active"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (conf-file content change is byte-sensitive, not just stat-sensitive)" {
+    # Same byte-content → no warn. Different byte-content → warn.
+    setup_baseline_state
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Touch (preserve content) — should NOT fire conf-changed.
+    touch "${CONFDIR}/auditd.conf"
+    run_wd
+    cap | grep -q '"event":"audit_intact"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (additional conf-file in /etc/audit/rules.d also surfaces as conf change)" {
+    setup_baseline_state
+    run_wd
+    printf '%s\n' '-w /etc/hosts -p wa -k hosts_changes' > "${CONFDIR}/rules.d/10-hosts.rules"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"audit_conf_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    setup_baseline_state
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-audit-config -- ')
+    [ "${main_count}" = "1" ]
+}
