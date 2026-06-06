@@ -1,0 +1,181 @@
+#!/usr/bin/env bats
+# L2 functional suite for coredumpd-redirect.
+#
+# coredumpd-redirect writes /etc/systemd/coredump.conf.d/50-
+# selfdef.conf to control where systemd-coredump stores crash
+# dumps. Two profiles:
+#   redirect → dumps land at /var/lib/selfdef/coredumps/ (mode
+#              0700 root:root — operator-only read)
+#   disabled → dumps disabled entirely (Storage=none)
+#
+# A kernel-memory dump on crash captures encryption keys,
+# decrypted secrets, passwords, in-flight TLS sessions — pure
+# exfiltration material if the disk is later accessed. Default
+# systemd-coredump on most distros writes to /var/lib/systemd/
+# coredump/, which is often world-readable directory (some
+# distros) or has lax operator chowns. Redirect ensures the
+# dumps land in a strict-perm location selfdef owns.
+#
+# CRITICAL INVARIANT: coredump dir is created with chmod 0700
+# (operator-only) — the redirect-to-selfdef-dir doesn't help if
+# the dir itself is world-readable.
+#
+# Uses SELFDEF_COREDUMPD_DROPIN_DIR + SELFDEF_COREDUMP_DIR env-
+# vars (already present in apply.sh) for L2 testability.
+#
+# Run with: bats packaging/test/L2-coredumpd-redirect.bats
+
+WD="${BATS_TEST_DIRNAME}/../../modules/coredumpd-redirect/install/apply.sh"
+
+setup() {
+    TMP="$(mktemp -d)"
+    BIN="${TMP}/bin"; mkdir -p "${BIN}"
+    cat > "${BIN}/systemctl" <<'SYSEOF'
+#!/usr/bin/env bash
+printf 'systemctl %s\n' "$*" >> "${SYSEOF_LOG}"
+exit 0
+SYSEOF
+    chmod +x "${BIN}/systemctl"
+    # chown shadow — bats runs as non-root, so real chown of files
+    # we don't own would fail. Our fake noops it.
+    cat > "${BIN}/chown" <<'CHEOF'
+#!/usr/bin/env bash
+printf 'chown %s\n' "$*" >> "${CHOWN_LOG}"
+exit 0
+CHEOF
+    chmod +x "${BIN}/chown"
+    export SYSEOF_LOG="${TMP}/systemctl.log"
+    export CHOWN_LOG="${TMP}/chown.log"
+    : > "${SYSEOF_LOG}"
+    : > "${CHOWN_LOG}"
+    CONF="${TMP}/coredumpd-redirect.toml"
+    CONFIGS_SRC="${TMP}/configs"
+    DROPIN_DIR="${TMP}/coredump.conf.d"
+    COREDUMP_DIR="${TMP}/var-coredumps"
+    mkdir -p "${CONFIGS_SRC}" "${DROPIN_DIR}"
+    # Fixture source profiles.
+    cat > "${CONFIGS_SRC}/redirect.conf" <<'REDEOF'
+[Coredump]
+Storage=external
+ExternalSizeMax=1G
+ProcessSizeMax=1G
+Compress=yes
+REDEOF
+    cat > "${CONFIGS_SRC}/disabled.conf" <<'DISEOF'
+[Coredump]
+Storage=none
+DISEOF
+}
+
+teardown() { rm -rf "${TMP}"; }
+
+write_config() {
+    printf 'profile = "%s"\n' "$1" > "${CONF}"
+}
+
+run_wd() {
+    PATH="${BIN}:${PATH}" \
+    SYSEOF_LOG="${SYSEOF_LOG}" \
+    CHOWN_LOG="${CHOWN_LOG}" \
+    SELFDEF_DRY_RUN="${DRY_RUN:-0}" \
+    SELFDEF_COREDUMPD_CONFIG="${CONF}" \
+    SELFDEF_COREDUMPD_CONFIGS="${CONFIGS_SRC}" \
+    SELFDEF_COREDUMPD_DROPIN_DIR="${DROPIN_DIR}" \
+    SELFDEF_COREDUMP_DIR="${COREDUMP_DIR}" \
+    bash "${WD}"
+}
+
+@test "missing config → die" {
+    SELFDEF_COREDUMPD_CONFIG="${TMP}/missing.toml"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_COREDUMPD_CONFIG="${SELFDEF_COREDUMPD_CONFIG}" \
+        SELFDEF_COREDUMPD_CONFIGS="${CONFIGS_SRC}" \
+        SELFDEF_COREDUMPD_DROPIN_DIR="${DROPIN_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+}
+
+@test "missing configs source dir → die" {
+    write_config "redirect"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_COREDUMPD_CONFIG="${CONF}" \
+        SELFDEF_COREDUMPD_CONFIGS="${TMP}/missing-src" \
+        SELFDEF_COREDUMPD_DROPIN_DIR="${DROPIN_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"config source dir missing"* ]]
+}
+
+@test "invalid profile → die" {
+    write_config "exterminate"
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_COREDUMPD_CONFIG="${CONF}" \
+        SELFDEF_COREDUMPD_CONFIGS="${CONFIGS_SRC}" \
+        SELFDEF_COREDUMPD_DROPIN_DIR="${DROPIN_DIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+    [[ "${output}" == *"profile must be redirect|disabled"* ]]
+}
+
+@test "redirect profile installs drop-in + restarts coredump.socket" {
+    write_config "redirect"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    cmp -s "${CONFIGS_SRC}/redirect.conf" "${DROPIN_DIR}/50-selfdef.conf"
+    grep -q 'systemctl restart systemd-coredump.socket' "${SYSEOF_LOG}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "disabled profile installs the Storage=none drop-in" {
+    write_config "disabled"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    grep -q 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT: coredump dir is created chmod 0700 (operator-only — no inventory leak)" {
+    write_config "redirect"
+    run_wd
+    [ -d "${COREDUMP_DIR}" ]
+    [ "$(stat -c '%a' "${COREDUMP_DIR}")" = "700" ]
+}
+
+@test "INVARIANT: coredump dir gets chown root:root (operator-only ownership)" {
+    write_config "redirect"
+    run_wd
+    grep -q "chown root:root ${COREDUMP_DIR}" "${CHOWN_LOG}"
+}
+
+@test "INVARIANT: idempotent — re-install with identical content is a no-op (no restart fired)" {
+    write_config "redirect"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    run_wd
+    ! grep -q 'systemctl restart' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT: profile switch redirect → disabled fires restart" {
+    write_config "redirect"
+    run_wd
+    write_config "disabled"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'systemctl restart systemd-coredump.socket' "${SYSEOF_LOG}"
+    grep -q 'Storage=none' "${DROPIN_DIR}/50-selfdef.conf"
+}
+
+@test "INVARIANT: DRY_RUN does not write drop-in, chown, or restart" {
+    write_config "redirect"
+    DRY_RUN=1 run_wd
+    ! [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    ! grep -q 'systemctl restart' "${SYSEOF_LOG}"
+    # The coredump dir creation + chown is also skipped in DRY_RUN.
+    ! grep -q "chown root:root" "${CHOWN_LOG}"
+}
+
+@test "default profile is redirect (no profile key)" {
+    : > "${CONF}"
+    run_wd
+    [ -f "${DROPIN_DIR}/50-selfdef.conf" ]
+    cmp -s "${CONFIGS_SRC}/redirect.conf" "${DROPIN_DIR}/50-selfdef.conf"
+}
