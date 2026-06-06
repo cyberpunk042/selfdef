@@ -196,3 +196,72 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}"
     [ "$status" -ne 0 ]
 }
+
+@test "INVARIANT (mass-new threshold boundary): exactly 2 → warn, exactly 3 → alert" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 a b           # 2 new
+    stage_ko a; stage_ko b
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"new_module"'   # at 2, still warn (not mass)
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (added_sample carries the specific module name for forensics)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 distinctive_attacker_lkm
+    stage_ko distinctive_attacker_lkm
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q 'distinctive_attacker_lkm'
+}
+
+@test "INVARIANT (mass-new out_of_tree mix — both 3+ AND out-of-tree present): event is out_of_tree, severity is alert" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    # 4 new, 2 of which are out-of-tree.
+    write_modules_proc ext4 a b rk1 rk2
+    stage_ko a; stage_ko b
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"out_of_tree_module"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"out_of_tree":2'
+}
+
+@test "INVARIANT (enforce + no_delta → exit 0): unchanged passes even in enforce" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    PROFILE=enforce run_wd
+    cap | grep -q '"event":"no_delta"'
+    cap | grep -q '"severity":"ok"'
+}
+
+@test "INVARIANT (enforce + out_of_tree → exit 1, single module is enough)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    write_modules_proc ext4 rootkit_lkm
+    run env PATH="${BIN}:${PATH}" \
+        SELFDEF_KMOD_PROFILE=enforce \
+        SELFDEF_KMOD_BASELINE="${BASELINE}" \
+        SELFDEF_KMOD_PROCSRC="${PROCSRC}" \
+        SELFDEF_KMOD_MODDIR="${MODDIR}" \
+        bash "${WD}"
+    [ "$status" -ne 0 ]
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    write_modules_proc ext4
+    stage_ko ext4
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-kernel-modules -- ')
+    [ "${main_count}" = "1" ]
+}
