@@ -256,3 +256,68 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"new_listener"'
     cap | grep -q '"severity":"warn"'
 }
+
+@test "INVARIANT (TCP+UDP combined adds: 2 TCP + 1 UDP added = 3 total → alert mass_new_listeners)" {
+    # The mass-new-listeners trigger counts ACROSS both protocols.
+    # Locks that an attacker can't stay under the mass-add threshold
+    # by splitting adds across protocols (2 TCP + 1 UDP = 3, alert).
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444,0.0.0.0:5555')"
+    udp="$(mk_ss_lines '0.0.0.0:6666')"
+    mk_ss "${tcp}" "${udp}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"mass_new_listeners"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"added":3'
+}
+
+@test "INVARIANT (IPv6 listener detected — '[::]:port' format surfaces in delta)" {
+    # ss without explicit family flag emits both v4 + v6 listeners.
+    # IPv6 listeners use [::]:port shape — must surface in delta
+    # so attackers can't hide a reverse listener on v6.
+    tcp="$(mk_ss_lines '0.0.0.0:22')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,[::]:8080')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"warn"'
+    cap | grep -q '8080'
+}
+
+@test "INVARIANT (simultaneous add+remove same scan: BOTH axes surface in JSON; severity routes by ADD count alone)" {
+    # Operator removes a deprecated listener while attacker adds a
+    # backdoor in the same window. Both deltas must surface in JSON
+    # (added + removed counts both > 0), and severity must route
+    # by ADD count alone (removed listeners don't suppress alert).
+    tcp="$(mk_ss_lines '0.0.0.0:22,127.0.0.1:631')"
+    mk_ss "${tcp}" ""
+    run_wd
+    tcp="$(mk_ss_lines '0.0.0.0:22,0.0.0.0:4444')"
+    mk_ss "${tcp}" ""
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"added":1'
+    cap | grep -qE '"removed":1'
+    cap | grep -q '"severity":"warn"'                   # add wins ladder
+}
+
+@test "INVARIANT (baseline TSV format: <proto>\\t<addr:port> per line — protocol-tagged for diff replay)" {
+    # The baseline must carry protocol per entry (tcp\t / udp\t)
+    # so downstream selfdef-relisten + diff replay can disambiguate
+    # a tcp:8080 listener from a udp:8080 listener — same port
+    # number, different protocols.
+    tcp="$(mk_ss_lines '0.0.0.0:22,127.0.0.1:631')"
+    udp="$(mk_ss_lines '0.0.0.0:5353')"
+    mk_ss "${tcp}" "${udp}"
+    run_wd
+    [ -s "${BASELINE}" ]
+    grep -qP '^tcp\t' "${BASELINE}"
+    grep -qP '^udp\t' "${BASELINE}"
+    # All lines have exactly 1 TAB (2 fields).
+    awk -F'\t' '{if(NF!=2) bad=1} END{exit bad?1:0}' "${BASELINE}"
+}
