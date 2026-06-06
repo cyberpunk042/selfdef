@@ -181,3 +181,67 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (rfkill block scope = 'wwan' — NOT 'all' or 'wifi'): per-radio scoping for composability with wireless-disable" {
+    # rfkill block 'all' would also kill Wi-Fi (the wireless-disable
+    # module owns that surface). Lock per-radio scoping so the two
+    # modules can be composed independently.
+    write_config "rfkill"
+    run_wd
+    grep -qE 'rfkill block wwan' "${RF_LOG}"
+    ! grep -qE 'rfkill block all' "${RF_LOG}"
+    ! grep -qE 'rfkill block wifi' "${RF_LOG}"
+    ! grep -qE 'rfkill block bluetooth' "${RF_LOG}"
+}
+
+@test "INVARIANT (driver-coverage: cdc_ncm + mhi family — full mhi/qmi/mbim/ncm coverage)" {
+    # The pre-existing test covers cdc_mbim + qmi_wwan + option + mhi
+    # roots. Lock the broader coverage: cdc_ncm (USB Ethernet-class
+    # MBIM transport), mhi_net (modem PCIe wrapper), mhi_pci_generic
+    # (PCIe variant).
+    write_config "mask"
+    run_wd
+    grep -q '^blacklist cdc_ncm$' "${MODPROBE_FILE}"
+    # Either mhi_net or mhi_pci_generic in the family — lock at
+    # least one beyond bare 'mhi'.
+    grep -qE '^blacklist mhi_(net|pci_generic)$' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — predictable for stale-cleanup head -1 grep)" {
+    # Same discipline as wireless-disable: downgrade-path stale-
+    # cleanup uses head -1 + grep -F. Header MUST be first.
+    write_config "mask"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef wwan-disable" ]
+}
+
+@test "INVARIANT (mask re-arm after operator deletion: re-creates blacklist with header marker)" {
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    rm -f "${MODPROBE_FILE}"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef wwan-disable' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (ModemManager mask is the architectural complement to rfkill — both fire on rfkill profile, not just mask profile)" {
+    # ModemManager is the userspace control plane for WWAN modems.
+    # rfkill blocks the radio; masking MM blocks the daemon that
+    # auto-connects + auto-pulls OTA pushes from carriers. BOTH
+    # mechanisms must fire on rfkill profile too — not deferred
+    # to mask profile (which is the persistent-kernel-blacklist
+    # axis, not the userspace-daemon axis).
+    write_config "rfkill"
+    run_wd
+    grep -q 'rfkill block wwan' "${RF_LOG}"
+    grep -q 'systemctl mask ModemManager.service' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (JSON emit_status: status=ok + profile surfaced)" {
+    write_config "rfkill"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=rfkill'* ]]
+}
