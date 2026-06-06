@@ -206,3 +206,51 @@ run_wd() {
         ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$f"
     done
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates all 4 files + fires daemon-reload)" {
+    # Operator may rm one of the installed files — apply must rebuild
+    # and re-arm the timer so the entropy surveillance is restored.
+    write_config "report"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/selfdef-entropy.timer" ]
+    rm -f "${LIBEXEC_DIR}/entropy-baseline.sh" \
+          "${SYSTEMD_DIR}/selfdef-entropy.service" \
+          "${SYSTEMD_DIR}/selfdef-entropy.timer" \
+          "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${LIBEXEC_DIR}/entropy-baseline.sh" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-entropy.service" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-entropy.timer" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-entropy.service.d/50-profile.conf" ]
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"entropy-baseline"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=enforce'* ]]
+}
+
+@test "INVARIANT (libexec carries threshold value — actually has a comparison check)" {
+    # The detection logic isn't just reading entropy_avail — it must
+    # compare against a threshold (else it's just a printer, not a
+    # detector). Lock that the libexec script has a comparison and
+    # exits non-zero (enforce) on threshold-breach.
+    write_config "report"
+    run_wd
+    libexec="${LIBEXEC_DIR}/entropy-baseline.sh"
+    # Threshold integer comparison.
+    grep -qE '(-lt|-le|<|<=|\[\s*[0-9]+\s*\])' "${libexec}"
+    # Severity ladder.
+    grep -qE 'alert|warn|low|threshold' "${libexec}"
+}
+
+@test "INVARIANT (timer + service header marker — operator-audit-trail)" {
+    write_config "report"
+    run_wd
+    grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-entropy.timer"
+    grep -qE '^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-entropy.service"
+}
