@@ -203,3 +203,41 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${FAILLOCK_CONF}"
 }
+
+@test "INVARIANT (faillock.conf re-arm after operator out-of-band deletion: re-creates file with header marker)" {
+    write_config "lenient"
+    run_wd
+    [ -f "${FAILLOCK_CONF}" ]
+    head -1 "${FAILLOCK_CONF}" | grep -qF '=== selfdef pam-faillock-managed'
+    rm -f "${FAILLOCK_CONF}"
+    run_wd
+    [ -f "${FAILLOCK_CONF}" ]
+    head -1 "${FAILLOCK_CONF}" | grep -qF '=== selfdef pam-faillock-managed'
+    grep -qE 'deny\s*=' "${FAILLOCK_CONF}"
+}
+
+@test "INVARIANT (faillock.conf is chmod 0644 — system-config convention for /etc/security)" {
+    write_config "lenient"
+    run_wd
+    [ "$(stat -c '%a' "${FAILLOCK_CONF}")" = "644" ]
+}
+
+@test "INVARIANT (header marker first line carried across BOTH profiles)" {
+    # The '=== selfdef pam-faillock-managed' header is the
+    # operator-readable marker. Both profiles must carry it on
+    # the first line.
+    write_config "lenient"
+    run_wd
+    head -1 "${FAILLOCK_CONF}" | grep -qF '=== selfdef pam-faillock-managed'
+    write_config "strict"
+    run_wd
+    head -1 "${FAILLOCK_CONF}" | grep -qF '=== selfdef pam-faillock-managed'
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "lenient"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"pam-faillock"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=lenient'* ]]
+}
