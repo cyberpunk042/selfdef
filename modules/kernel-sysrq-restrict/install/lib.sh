@@ -16,7 +16,7 @@ else
     exit 2
 fi
 
-SYSCTL_DROPIN="/etc/sysctl.d/50-selfdef-sysrq.conf"
+SYSCTL_DROPIN="${SELFDEF_SYSRQ_DROPIN:-/etc/sysctl.d/50-selfdef-sysrq.conf}"
 HEADER_MARKER="# managed-by: selfdef kernel-sysrq-restrict"
 
 profile_to_value() {
