@@ -207,3 +207,30 @@ run_wd() {
     run_wd
     ! grep -qE '^# Generated [0-9]{4}-' "${DNF_AUTO_CONF}"
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates automatic.conf + enables timer)" {
+    write_config "security-only"
+    run_wd
+    [ -f "${DNF_AUTO_CONF}" ]
+    rm -f "${DNF_AUTO_CONF}"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${DNF_AUTO_CONF}" ]
+    grep -q 'profile=security-only' "${DNF_AUTO_CONF}"
+    grep -q 'systemctl enable --now dnf-automatic.timer' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "security-and-reboot"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"dnf-automatic-config"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=security-and-reboot'* ]]
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "security-only"
+    run_wd
+    first_line="$(awk 'NF' "${DNF_AUTO_CONF}" | head -1)"
+    [[ "${first_line}" == *"selfdef dnf-automatic-config"* ]]
+}
