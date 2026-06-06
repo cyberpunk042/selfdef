@@ -212,3 +212,37 @@ run_wd() {
     [[ "${output}" == *'"status":"ok"'* ]]
     [[ "${output}" == *'profile=mask'* ]]
 }
+
+@test "INVARIANT (downgrade mask → burst-guard does NOT auto-unmask ctrl-alt-del.target — operator-explicit unmask required)" {
+    # Once masked, downgrade to burst-guard does NOT auto-unmask
+    # the target. The unmask requires explicit operator action.
+    # Mask is sticky like avahi-disable's mask profile.
+    write_config "mask"
+    run_wd
+    : > "${SYSEOF_LOG}"
+    write_config "burst-guard"
+    run_wd
+    # burst-guard fires logind reload + writes drop-in, but does NOT unmask.
+    grep -q 'systemctl kill -s HUP systemd-logind' "${SYSEOF_LOG}"
+    ! grep -q 'systemctl unmask ctrl-alt-del.target' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (header-marker is first non-blank line — stale-cleanup head -1 discipline)" {
+    write_config "burst-guard"
+    run_wd
+    first_line="$(awk 'NF' "${LOGIND_DROPIN}" | head -1)"
+    [[ "${first_line}" == *"selfdef"* || "${first_line}" == *"managed-by"* ]]
+}
+
+@test "INVARIANT (burst-guard does NOT silently escalate to mask — profile is the operator's stated choice)" {
+    # If operator chose burst-guard (allows single press = legitimate
+    # reboot), the apply MUST NOT silently escalate to mask. burst-
+    # guard is intentionally permissive; mask is the stricter option
+    # operator must explicitly choose.
+    write_config "burst-guard"
+    run_wd
+    [ -f "${LOGIND_DROPIN}" ]
+    grep -qE '^CtrlAltDelBurstAction=none' "${LOGIND_DROPIN}"
+    # systemctl mask MUST NOT have fired.
+    ! grep -q 'systemctl mask ctrl-alt-del.target' "${SYSEOF_LOG}"
+}
