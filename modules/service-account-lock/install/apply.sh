@@ -74,6 +74,6 @@ while IFS=: read -r username _ uid _ _ _ shell; do
         fi
         passwd -l "$username" >/dev/null 2>&1 || true
     fi
-done < /etc/passwd
+done < "${SELFDEF_PASSWD_FILE:-/etc/passwd}"
 
 emit_status "ok" "service-account-lock profile=$PROFILE audited=$audited locked=$locked"
