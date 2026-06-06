@@ -104,3 +104,71 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — modules-load inventory enumerates kernel-module load surface)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (group-writable): a group-writable (0664) config → alert too (more than just world-writable)" {
+    # Locks the script's writable-detection scope. Some scripts
+    # check only `-perm -0002` (world-writable); a regression
+    # might let group-writable slide. Test the intent.
+    seed_benign
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    # Group-writable IS a finding per the canonical
+    # config-file-permission discipline.
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (DELTA detect): ADDED config file (attacker drops a new modules-load.d/.conf) → warn/alert" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Attacker drops a NEW config file dropping a backdoor module.
+    printf 'evil_module\n' > "${CONFD}/backdoor.conf"
+    run_wd
+    cap | grep -qE '"event":"modules_load_(changed|writable_config)"'
+}
+
+@test "INVARIANT (DELTA detect): REMOVED config file → warn" {
+    seed_benign
+    cat > "${CONFD}/other.conf" <<'EOF'
+ip_tables
+EOF
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    rm -f "${CONFD}/other.conf"
+    run_wd
+    cap | grep -qE '"event":"modules_load_changed"'
+    cap | grep -q '"severity":"warn"'
+}
+
+@test "INVARIANT (added module-to-load): a new module name surfaces in the delta sample" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf 'overlay\nbr_netfilter\nbackdoor_rootkit\n' > "${CONF}"
+    run_wd
+    cap | grep -q 'backdoor_rootkit'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-modules-load -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (pre-existing world-writable): baseline_initial fires alert if any config is already world-writable at install-time" {
+    # Operator sees existing risk at install time.
+    seed_benign
+    chmod 0666 "${CONF}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
