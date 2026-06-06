@@ -223,3 +223,56 @@ remove_firewall_cmd() {
     [[ "${output}" == *'target=DROP'* ]]
     [[ "${output}" == *'ssh always allowed'* ]]
 }
+
+@test "INVARIANT (ssh always allowed across all 3 profiles: baseline + web + block — anti-lockout floor)" {
+    # Lock that ssh is added unconditionally to the zone regardless
+    # of profile. A regression where web-profile only adds operator-
+    # allow-list (no ssh fallback) would lock remote operators out.
+    for prof in baseline web block; do
+        : > "${FW_LOG}"
+        write_config "${prof}"
+        run_wd
+        grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+    done
+}
+
+@test "INVARIANT (--reload fires LAST: AFTER all --permanent writes — atomic activation, not partial state)" {
+    # firewall-cmd --permanent writes go to disk; --reload promotes
+    # them to runtime. If --reload fired BEFORE the writes finished,
+    # operator could see partial state (zone exists but lacks ssh).
+    # Lock the ordering.
+    write_config "baseline"
+    run_wd
+    reload_line="$(grep -n -- '--reload' "${FW_LOG}" | tail -1 | cut -d: -f1)"
+    addssh_line="$(grep -n -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}" | tail -1 | cut -d: -f1)"
+    setdefault_line="$(grep -n -- '--set-default-zone=selfdef' "${FW_LOG}" | tail -1 | cut -d: -f1)"
+    settarget_line="$(grep -n -- '--permanent --zone=selfdef --set-target=DROP' "${FW_LOG}" | tail -1 | cut -d: -f1)"
+    [ -n "${reload_line}" ]
+    [ "${reload_line}" -gt "${addssh_line}" ]
+    [ "${reload_line}" -gt "${settarget_line}" ]
+    [ "${reload_line}" -gt "${setdefault_line}" ]
+}
+
+@test "INVARIANT (whitespace tolerance in allow_services CSV: 'http , https' is normalized to http + https)" {
+    # Operator may write the CSV with spaces around commas. Lock
+    # that the parser strips whitespace + treats them as 2 distinct
+    # services.
+    write_config "web" 'allow_services = "http , https"'
+    run_wd
+    grep -q -- '--permanent --zone=selfdef --add-service=http' "${FW_LOG}"
+    grep -q -- '--permanent --zone=selfdef --add-service=https' "${FW_LOG}"
+    # No literal "http " with trailing space.
+    ! grep -qE -- '--add-service=http $' "${FW_LOG}"
+}
+
+@test "INVARIANT (empty allow_services value: no extra --add-service calls beyond ssh — defensive empty handling)" {
+    # An empty CSV must not produce an "--add-service=" invocation
+    # (would fail at firewall-cmd level + leave zone in undefined
+    # state). Only ssh added.
+    write_config "web" 'allow_services = ""'
+    run_wd
+    # No empty --add-service= invocation.
+    ! grep -qE -- '--add-service=[[:space:]]*$' "${FW_LOG}"
+    # ssh still added.
+    grep -q -- '--permanent --zone=selfdef --add-service=ssh' "${FW_LOG}"
+}
