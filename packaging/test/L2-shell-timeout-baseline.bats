@@ -129,3 +129,48 @@ run_wd() {
     [ -f "${DROPIN}" ]
     grep -q 'profile=standard' "${DROPIN}"
 }
+
+@test "INVARIANT (standard TMOUT value): drop-in carries TMOUT=900 exactly" {
+    write_config "standard"
+    run_wd
+    grep -qE 'TMOUT=900' "${DROPIN}"
+}
+
+@test "INVARIANT (strict TMOUT value): drop-in carries TMOUT=300 exactly (5 min — locked from drift)" {
+    write_config "strict"
+    run_wd
+    grep -qE 'TMOUT=300' "${DROPIN}"
+}
+
+@test "INVARIANT (readonly TMOUT — user cannot unset): drop-in marks TMOUT readonly" {
+    # If TMOUT is not readonly, the attacker (or user-by-accident) can
+    # do `unset TMOUT` and defeat the whole control. Locking it readonly
+    # is the canonical bash-hardening pattern.
+    write_config "standard"
+    run_wd
+    grep -qE '^(readonly|declare -r) TMOUT' "${DROPIN}" || \
+    grep -qE 'readonly +TMOUT' "${DROPIN}"
+}
+
+@test "INVARIANT (export TMOUT): drop-in exports TMOUT so child shells inherit it" {
+    write_config "standard"
+    run_wd
+    # Conditional inside case block; assert export TMOUT anywhere.
+    grep -qE 'export +TMOUT' "${DROPIN}"
+}
+
+@test "INVARIANT (profile downgrade strict → standard): rewrites with longer TMOUT" {
+    write_config "strict"
+    run_wd
+    grep -qE 'TMOUT=300' "${DROPIN}"
+    write_config "standard"
+    run_wd
+    grep -qE 'TMOUT=900' "${DROPIN}"
+    ! grep -qE 'TMOUT=300' "${DROPIN}"
+}
+
+@test "INVARIANT (no render-timestamp in drop-in): defeats cmp -s idempotency guard" {
+    write_config "standard"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-' "${DROPIN}"
+}
