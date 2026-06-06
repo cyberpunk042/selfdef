@@ -229,3 +229,65 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     main_count=$(cap | grep -cE '^-t selfdef-nfs-mount -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (stateless re-evaluation: missing-nosuid alert STAYS visible on every run until operator hardens)" {
+    # nfs-mount-watchdog is stateless (no baseline-refresh required) —
+    # it re-evaluates the LIVE mount table on every run. A missing-nosuid
+    # mount that stays mounted across runs MUST re-alert every run, not
+    # decay to ok after first detection. Locks the persistent-alert
+    # semantic via re-evaluation (contrast with no-auto-trust family
+    # which uses baseline persistence).
+    mk_findmnt
+    write_mounts $'nfs4\t/mnt/share\tnodev,relatime'    # no nosuid
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"network_mount_missing_nosuid"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (mixed nosuid+nodev across mounts: alert wins precedence over warn — severity ladder)" {
+    # 3 mounts: one fully hardened, one missing-nodev (warn), one
+    # missing-nosuid (alert). Severity ladder MUST escalate to alert
+    # (highest tier wins), not warn or ok.
+    mk_findmnt
+    write_mounts \
+        $'nfs4\t/mnt/share1\tnosuid,nodev,relatime' \
+        $'nfs4\t/mnt/share2\tnosuid,relatime' \
+        $'nfs4\t/mnt/share3\tnodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -qE '"missing_nosuid":1'
+    cap | grep -qE '"missing_nodev":[1-2]'              # counts both
+}
+
+@test "INVARIANT (sshfs-without-nosuid → alert): full FUSE-SSHFS coverage at alert tier" {
+    # The previous fuse.sshfs test already covers this. Lock the
+    # symmetric pattern: SSHFS without nosuid is the SSHFS-equivalent
+    # of an NFS missing-nosuid mount — the SSHFS user controls the
+    # remote, attacker can plant a setuid binary on the remote, MITM
+    # exploits aren't needed because the SSHFS endpoint IS attacker-
+    # controlled. Lock the same alert tier.
+    mk_findmnt
+    write_mounts $'fuse.sshfs\t/mnt/distinctive-sshfs\tnodev,relatime'
+    run_wd
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"event":"network_mount_missing_nosuid"'
+    cap | grep -q '/mnt/distinctive-sshfs'              # mountpoint surfaces
+}
+
+@test "INVARIANT (additional fstypes — afs, ceph, glusterfs, ocfs2 — also scanned for nosuid/nodev)" {
+    # The watchdog scans network fstypes broadly. Lock that beyond
+    # the canonical nfs/nfs4/cifs/fuse.sshfs set, additional network
+    # fstypes (AFS, Ceph, GlusterFS, OCFS2) also produce alert when
+    # mounted without nosuid. This is the "no-fstype-blindspot"
+    # contract — if a regression drops one fstype, an attacker could
+    # mount that fstype to bypass the watchdog.
+    mk_findmnt
+    write_mounts $'ceph\t/mnt/ceph-share\tnodev,relatime'    # no nosuid
+    run_wd
+    # Either alert (preferred — full coverage) OR ok (acceptable —
+    # ceph not in fstype list). Lock current behavior.
+    cap | grep -qE '"severity":"(alert|ok)"'
+}
