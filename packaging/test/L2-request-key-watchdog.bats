@@ -148,3 +148,62 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — request-key inventory enumerates kernel-trigger root-exec surface)" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (callout under /var/tmp): writable-root expansion" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    printf 'create dns_resolver * * /var/tmp/.evil %%k\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (callout under /home): user-writable hijack coverage" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    printf 'create dns_resolver * * /home/user/.evil %%k\n' > "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (request-key.d drop-in axis): suspicious callout in /etc/request-key.d/*.conf also fires" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    printf 'create cifs.spnego * * /tmp/.dropin-attacker %%k\n' > "${CONFD}/99-evil.conf"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable request-key.conf): file itself world-writable → alert" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (negate operation 'negate dns_resolver' is NOT itself an exec — should not false-positive)" {
+    # Some valid request-key syntax doesn't carry a callout program at
+    # all (negate op). Lock that this doesn't false-fire.
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\nnegate * * /bin/false\n' > "${CONF}"
+    run_wd
+    # Although negate has /bin/false, it's not under a writable root,
+    # so should not alert.
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'create dns_resolver * * /usr/sbin/key.dns_resolver %%k\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-request-key -- ')
+    [ "${main_count}" = "1" ]
+}
