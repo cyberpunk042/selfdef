@@ -152,3 +152,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — openssl-conf inventory enumerates libcrypto-wide code-load surface)" {
+    printf 'module = /usr/lib/ossl-modules/legacy.so\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (dynamic_path under /var/tmp): writable-root expansion on ENGINE axis" {
+    printf 'dynamic_path = /var/tmp/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (module under /var/tmp): writable-root expansion on PROVIDER axis" {
+    printf 'module = /var/tmp/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (.include under /tmp): writable-root expansion on include axis" {
+    printf '.include /tmp/extra.cnf\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (.include under /dev/shm): tmpfs writable-root coverage" {
+    printf '.include /dev/shm/extra.cnf\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (module under /home): user-writable hijack coverage" {
+    printf 'module = /home/user/evil.so\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable openssl.cnf → alert)" {
+    printf 'module = /usr/lib/ossl-modules/legacy.so\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'module = /usr/lib/ossl-modules/legacy.so\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-openssl-conf -- ')
+    [ "${main_count}" = "1" ]
+}
