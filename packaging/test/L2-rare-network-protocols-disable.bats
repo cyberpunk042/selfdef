@@ -168,3 +168,55 @@ run_wd() {
     run_wd
     grep -qE '^#.*managed-by:.*selfdef' "${MODPROBE_FILE}"
 }
+
+@test "INVARIANT (install /bin/true hardening for each protocol: defends against manual modprobe — locks SCTP/DCCP CVE attack surface)" {
+    # SCTP + DCCP have had memory-corruption CVEs in recent
+    # kernels. The install /bin/true line blocks even root-
+    # modprobe (the canonical hardening shape).
+    write_config "baseline"
+    run_wd
+    for m in dccp sctp rds tipc; do
+        grep -qE "^install[[:space:]]+${m}[[:space:]]+/bin/(true|false)" "${MODPROBE_FILE}"
+    done
+}
+
+@test "INVARIANT (header-marker first non-blank line: stale-cleanup head -1 grep predictability)" {
+    write_config "baseline"
+    run_wd
+    first_line="$(head -1 "${MODPROBE_FILE}")"
+    [ "${first_line}" = "# managed-by: selfdef rare-network-protocols-disable" ]
+}
+
+@test "INVARIANT (blacklist re-arm after operator deletion: re-creates with header + entries)" {
+    write_config "baseline"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    rm -f "${MODPROBE_FILE}"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    grep -q 'managed-by: selfdef rare-network-protocols-disable' "${MODPROBE_FILE}"
+    grep -q 'blacklist dccp' "${MODPROBE_FILE}"
+    grep -q 'blacklist sctp' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (strict module count = 13; baseline count = 4): explicit set sizes lock against silent shrink" {
+    # Verify baseline carries exactly 4 unique blacklisted modules
+    # (or 4 install lines), strict carries 13. Regression that
+    # silently removed a module would surface here.
+    write_config "baseline"
+    run_wd
+    baseline_count="$(grep -cE '^blacklist ' "${MODPROBE_FILE}")"
+    write_config "strict"
+    run_wd
+    strict_count="$(grep -cE '^blacklist ' "${MODPROBE_FILE}")"
+    [ "${baseline_count}" = "4" ]
+    [ "${strict_count}" = "13" ]
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + profile surfaced for operator dashboard)" {
+    write_config "baseline"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"rare-network-protocols-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=baseline'* ]]
+}
