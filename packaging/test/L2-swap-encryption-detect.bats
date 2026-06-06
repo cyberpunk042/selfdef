@@ -178,3 +178,46 @@ run_wd() {
     output="$(run_wd 2>&1)"
     [[ "${output}" == *'changes=0'* ]]
 }
+
+@test "INVARIANT (profile downgrade enforce → report): rewrites drop-in back + fires daemon-reload" {
+    write_config "enforce"
+    run_wd
+    grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=enforce$' "${DROPIN_PROFILE}"
+    : > "${SYSEOF_LOG}"
+    write_config "report"
+    run_wd
+    grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=report$' "${DROPIN_PROFILE}"
+    ! grep -q '^Environment=SELFDEF_SWAPENC_PROFILE=enforce$' "${DROPIN_PROFILE}"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (libexec script probes /proc/swaps + dm-crypt + zram — actually checks swap encryption)" {
+    # The detector must actually walk the swap inventory.
+    # /proc/swaps is the kernel's canonical view; dm-crypt + zram
+    # are the two acceptable encrypted-swap backends.
+    write_config "report"
+    run_wd
+    grep -q '/proc/swaps' "${SCRIPT_DST}"
+    grep -qE '(dm-crypt|cryptsetup|crypttab|zram)' "${SCRIPT_DST}"
+}
+
+@test "INVARIANT (service unit references libexec script — wiring is correct)" {
+    write_config "report"
+    run_wd
+    grep -qE '^ExecStart=' "${SVC_DST}"
+    grep -q 'swap-encryption-detect' "${SVC_DST}"
+}
+
+@test "INVARIANT (timer unit carries OnCalendar / OnBootSec / OnUnitActiveSec — actually fires periodically)" {
+    write_config "report"
+    run_wd
+    grep -qE '(OnCalendar|OnBootSec|OnUnitActiveSec)=' "${TIMER_DST}"
+}
+
+@test "INVARIANT (no render-timestamp in ANY of the 4 installed files): variant-A guard fleet-wide" {
+    write_config "report"
+    run_wd
+    for f in "${SCRIPT_DST}" "${SVC_DST}" "${TIMER_DST}" "${DROPIN_PROFILE}"; do
+        ! grep -qE '^# Generated [0-9]{4}-' "$f"
+    done
+}
