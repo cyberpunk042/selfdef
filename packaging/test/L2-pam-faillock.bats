@@ -166,3 +166,40 @@ run_wd() {
     run_wd
     grep -q 'profile=lenient' "${FAILLOCK_CONF}"
 }
+
+@test "INVARIANT (lenient deny=5 value): the actual rate-limit" {
+    write_config "lenient"
+    run_wd
+    grep -qE 'deny\s*=\s*5' "${FAILLOCK_CONF}"
+}
+
+@test "INVARIANT (strict deny=3 value — tighter than lenient): asymmetric profile content" {
+    write_config "strict"
+    run_wd
+    grep -qE 'deny\s*=\s*3' "${FAILLOCK_CONF}"
+}
+
+@test "INVARIANT (strict unlock_time > lenient unlock_time): tighter lock-duration" {
+    write_config "lenient"
+    run_wd
+    lenient_unlock="$(grep -oE 'unlock_time\s*=\s*[0-9]+' "${FAILLOCK_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    write_config "strict"
+    run_wd
+    strict_unlock="$(grep -oE 'unlock_time\s*=\s*[0-9]+' "${FAILLOCK_CONF}" | grep -oE '[0-9]+$' | head -1)"
+    [ "${strict_unlock}" -gt "${lenient_unlock}" ]
+}
+
+@test "INVARIANT (profile downgrade strict → lenient): rewrites back to looser limits" {
+    write_config "strict"
+    run_wd
+    write_config "lenient"
+    run_wd
+    grep -q 'profile=lenient' "${FAILLOCK_CONF}"
+    ! grep -q 'profile=strict' "${FAILLOCK_CONF}"
+}
+
+@test "INVARIANT (no render-timestamp in faillock.conf — defeats cmp -s idempotency)" {
+    write_config "lenient"
+    run_wd
+    ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "${FAILLOCK_CONF}"
+}
