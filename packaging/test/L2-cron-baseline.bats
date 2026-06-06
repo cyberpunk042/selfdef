@@ -200,3 +200,61 @@ run_wd() {
     grep -q '^root$' "${CRON_ALLOW}"
     [ "$(wc -l < "${CRON_ALLOW}" | tr -d ' ')" = "1" ]
 }
+
+@test "INVARIANT (profile transition root-only → operator-list): adds operator users" {
+    write_config "root-only"
+    run_wd
+    [ "$(wc -l < "${CRON_ALLOW}" | tr -d ' ')" = "1" ]
+    write_config "operator-list" "alice,bob"
+    run_wd
+    [ "$(wc -l < "${CRON_ALLOW}" | tr -d ' ')" = "3" ]
+    grep -q '^alice$' "${CRON_ALLOW}"
+}
+
+@test "INVARIANT (profile downgrade operator-list → root-only): REMOVES operator users (sovereign tightening)" {
+    write_config "operator-list" "alice,bob"
+    run_wd
+    grep -q '^alice$' "${CRON_ALLOW}"
+    write_config "root-only"
+    run_wd
+    ! grep -q '^alice$' "${CRON_ALLOW}"
+    ! grep -q '^bob$' "${CRON_ALLOW}"
+    [ "$(wc -l < "${CRON_ALLOW}" | tr -d ' ')" = "1" ]
+}
+
+@test "INVARIANT (cron.allow AND at.allow both updated symmetrically — operator-list applies to both)" {
+    write_config "operator-list" "alice"
+    run_wd
+    grep -q '^alice$' "${CRON_ALLOW}"
+    grep -q '^alice$' "${AT_ALLOW}"
+}
+
+@test "INVARIANT (operator-list with whitespace-padded users): whitespace handling" {
+    # If the config has 'alice, bob' (whitespace after comma), the
+    # split should trim whitespace.
+    write_config "operator-list" "alice, bob"
+    run_wd
+    grep -q '^alice$' "${CRON_ALLOW}"
+    grep -q '^bob$' "${CRON_ALLOW}"
+    # No literal ' bob' (with leading space) leaking through.
+    ! grep -qE '^ ' "${CRON_ALLOW}"
+}
+
+@test "INVARIANT (empty operator-list config → root-only effective)" {
+    # If operator-list profile is set but operator_users is empty, the
+    # effective output should still include root + nothing else.
+    write_config "operator-list" ""
+    run_wd
+    grep -q '^root$' "${CRON_ALLOW}"
+    [ "$(wc -l < "${CRON_ALLOW}" | tr -d ' ')" = "1" ]
+}
+
+@test "INVARIANT (deny files MUST be empty even on second apply — no stale entries leak)" {
+    # Even if operator put something in the deny files between
+    # selfdef apply runs, the second apply must re-zero them.
+    write_config "root-only"
+    run_wd
+    echo 'sneaky-attacker' > "${CRON_DENY}"
+    run_wd
+    [ ! -s "${CRON_DENY}" ]
+}
