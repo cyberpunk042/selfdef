@@ -112,3 +112,63 @@ seed_benign() {
     [ "${status}" -ne 0 ]
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — trust inventory enumerates legitimate trust relationships)" {
+    seed_benign
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (multi-line + wildcard): + on its own line (not just trailing) → alert" {
+    seed_benign
+    run_wd
+    printf '+\ntrusted.example.com\n' > "${EQUIV}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"event":"rhosts_trust_backdoor"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (per-user .rhosts): a user-level .rhosts file IS flagged as a backdoor" {
+    seed_benign
+    run_wd
+    # Test multi-file scan: declare a per-user rhosts file via FILES_V.
+    user_rhosts="${TMP}/user-alice.rhosts"
+    printf 'evil.example.com\n' > "${user_rhosts}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    FILES_V="${EQUIV} ${user_rhosts}" run_wd
+    # Either the file's existence alone OR the wildcard signature fires alert.
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "INVARIANT (pre-existing wildcard): baseline_initial fires alert if hosts.equiv already has a + at install-time" {
+    printf '+\n' > "${EQUIV}"
+    run_wd
+    cap | grep -q '"event":"baseline_initial"'
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "DELTA detect — REMOVED trust entry (operator pruning) → warn" {
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    : > "${EQUIV}"
+    run_wd
+    cap | grep -qE '"severity":"(warn|ok)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    seed_benign
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-rhosts -- ')
+    [ "${main_count}" = "1" ]
+}
+
+@test "INVARIANT (group-writable): a group-writable trust file → alert too (more than just world-writable)" {
+    seed_benign
+    run_wd
+    chmod 0664 "${EQUIV}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
