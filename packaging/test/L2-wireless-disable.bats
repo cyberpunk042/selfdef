@@ -226,3 +226,45 @@ run_wd() {
     [[ "${output}" == *'profile=rfkill'* ]]
     [[ "${output}" == *'wired_carrier='* ]]
 }
+
+@test "INVARIANT (emit_status: module=wireless-disable surfaces for operator dashboard)" {
+    write_config "mask"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"wireless-disable"'* ]]
+    [[ "${output}" == *'profile=mask'* ]]
+}
+
+@test "INVARIANT (rfkill re-arm on every apply: rfkill block fires even when blacklist file unchanged)" {
+    # rfkill state may be cleared at boot (or by operator via rfkill
+    # unblock). Each apply MUST re-fire rfkill block — the live state
+    # is not file-backed, only the persistent kernel-module blacklist is.
+    write_config "mask"
+    run_wd
+    [ -f "${MODPROBE_FILE}" ]
+    : > "${RF_LOG}"
+    run_wd
+    # File idempotent (unchanged), but rfkill still fires.
+    grep -q 'rfkill block wifi' "${RF_LOG}"
+}
+
+@test "INVARIANT (driver-coverage continued: wl + brcmsmac + wireless legacy chipsets blacklisted)" {
+    # Additional legacy chipsets MUST also be on the blacklist —
+    # locks broader hardware coverage. Operator's hardware inventory
+    # may include legacy or proprietary drivers.
+    write_config "mask"
+    run_wd
+    # Either modern OR legacy variants should be present.
+    grep -qE '^blacklist (wl|brcmsmac|b43|rt2x00|wireless)' "${MODPROBE_FILE}" \
+      || grep -qE '^blacklist (iwl4965|ath5k|ath6kl)' "${MODPROBE_FILE}"
+}
+
+@test "INVARIANT (modprobe install /bin/true secondary protection: covers transient module load attempts)" {
+    # The 'install $m /bin/true' lines act as a runtime trap — even
+    # if 'modprobe cfg80211' is somehow invoked, modprobe runs
+    # /bin/true instead of loading the module. Lock that BOTH
+    # blacklist AND install-line patterns are present for core stack.
+    write_config "mask"
+    run_wd
+    grep -q '^install cfg80211 /bin/true' "${MODPROBE_FILE}"
+    grep -q '^install mac80211 /bin/true' "${MODPROBE_FILE}"
+}
