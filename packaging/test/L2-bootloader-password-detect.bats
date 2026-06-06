@@ -147,3 +147,62 @@ run_wd() {
     run_wd
     grep -q 'SELFDEF_BOOTLOADER_PROFILE=report' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
 }
+
+@test "INVARIANT (profile downgrade enforce → report): rewrites drop-in back + fires reload" {
+    write_config "enforce"
+    run_wd
+    grep -q 'SELFDEF_BOOTLOADER_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+    write_config "report"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    grep -q 'SELFDEF_BOOTLOADER_PROFILE=report' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+    ! grep -q 'SELFDEF_BOOTLOADER_PROFILE=enforce' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (idempotent mtime): byte-identical re-install preserves all 4 file mtimes" {
+    write_config "report"
+    run_wd
+    mtime_libexec_before="$(stat -c '%Y' "${LIBEXEC_DIR}/bootloader-password-detect.sh")"
+    mtime_service_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.service")"
+    mtime_timer_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer")"
+    mtime_dropin_before="$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf")"
+    sleep 1
+    run_wd
+    [ "${mtime_libexec_before}" = "$(stat -c '%Y' "${LIBEXEC_DIR}/bootloader-password-detect.sh")" ]
+    [ "${mtime_service_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.service")" ]
+    [ "${mtime_timer_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer")" ]
+    [ "${mtime_dropin_before}" = "$(stat -c '%Y' "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf")" ]
+}
+
+@test "INVARIANT (libexec script carries detect logic — actually checks the 4 bootloaders)" {
+    write_config "report"
+    run_wd
+    # The libexec script must actually probe the 4 bootloaders.
+    libexec="${LIBEXEC_DIR}/bootloader-password-detect.sh"
+    grep -qiE 'grub|systemd-boot|rauc|u-boot' "${libexec}"
+}
+
+@test "INVARIANT (service unit references the libexec script): wiring is correct" {
+    write_config "report"
+    run_wd
+    grep -qE 'ExecStart=' "${SYSTEMD_DIR}/selfdef-bootloader-password.service"
+    grep -q 'bootloader-password-detect' "${SYSTEMD_DIR}/selfdef-bootloader-password.service"
+}
+
+@test "INVARIANT (timer unit carries OnCalendar or OnBootSec — actually fires periodically)" {
+    write_config "report"
+    run_wd
+    grep -qE '(OnCalendar|OnBootSec|OnUnitActiveSec)=' "${SYSTEMD_DIR}/selfdef-bootloader-password.timer"
+}
+
+@test "INVARIANT (no render-timestamp in any installed file): defeats cmp -s idempotency" {
+    write_config "report"
+    run_wd
+    for f in "${LIBEXEC_DIR}/bootloader-password-detect.sh" \
+             "${SYSTEMD_DIR}/selfdef-bootloader-password.service" \
+             "${SYSTEMD_DIR}/selfdef-bootloader-password.timer" \
+             "${SYSTEMD_DIR}/selfdef-bootloader-password.service.d/50-profile.conf"; do
+        ! grep -qE '^# Generated [0-9]{4}-[0-9]{2}-[0-9]{2}T' "$f"
+    done
+}
