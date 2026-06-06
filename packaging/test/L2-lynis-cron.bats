@@ -139,3 +139,55 @@ cap() { cat "${SELFDEF_TEST_LOGCAP}"; }
         bash "${WD}"
     # bats fails if rc != 0; this test asserts rc=0 even on alert.
 }
+
+@test "INVARIANT (warning sample is capped at 5 in MAIN tag — log volume control)" {
+    # Lynis can emit 50+ warnings on a fresh install. Sample
+    # must cap at 5 to keep log volume bounded; the FULL report
+    # lives on disk for operator forensics.
+    {
+        printf 'hardening_index=72\n'
+        for i in 01 02 03 04 05 06 07 08 09 10; do
+            printf 'warning[]=W-%s|warning_body|-|\n' "${i}"
+        done
+    } > "${REPORT}"
+    run_wd
+    cap | grep -q '"warnings":10'
+    # Sample cap: first 5 warnings present, 6-10 absent. Use the
+    # full cap content (the JSON record may span lines if fixture
+    # contains embedded newlines in warning bodies).
+    cap | grep -q 'W-01'
+    cap | grep -q 'W-05'
+    ! cap | grep -q 'W-06'
+    ! cap | grep -q 'W-10'
+}
+
+@test "INVARIANT (boundary: hardening_index=100 → ok — perfect score upper bound)" {
+    mk_report 100
+    run_wd
+    cap | grep -q '"event":"audit_ok"'
+    cap | grep -q '"severity":"ok"'
+    cap | grep -q '"hardening_index":100'
+}
+
+@test "INVARIANT (boundary: hardening_index=0 → alert — minimum score lower bound)" {
+    mk_report 0
+    run_wd
+    cap | grep -q '"event":"hardening_low"'
+    cap | grep -q '"severity":"alert"'
+    cap | grep -q '"hardening_index":0'
+}
+
+@test "INVARIANT (defensive parse: report without hardening_index line — wrapper does not crash, emits JSON)" {
+    # Lynis versions vary; a report without hardening_index= must
+    # not crash the wrapper. Lock that some JSON record still
+    # emits.
+    printf 'warning[]=PERM-2904|World-writable file found|-|\n' > "${REPORT}"
+    run_wd
+    cap | grep -q '"tag":"selfdef-lynis"'
+}
+
+@test "INVARIANT (lynis_rc surfaces in JSON — operator can see raw exit code)" {
+    mk_report 85
+    run_wd
+    cap | grep -qE '"lynis_rc":[0-9]+'
+}
