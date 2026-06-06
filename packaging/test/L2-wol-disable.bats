@@ -204,3 +204,43 @@ run_wd() {
         ! grep -qE '^# Generated [0-9]{4}-' "$f"
     done
 }
+
+@test "INVARIANT (re-arm after operator out-of-band deletion: re-creates all 3 files + fires daemon-reload)" {
+    write_config "enforce"
+    run_wd
+    [ -f "${SYSTEMD_DIR}/selfdef-wol-disable.service" ]
+    rm -f "${LIBEXEC_DIR}/wol-disable.sh" \
+          "${SYSTEMD_DIR}/selfdef-wol-disable.service" \
+          "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf"
+    : > "${SYSEOF_LOG}"
+    run_wd
+    [ -f "${LIBEXEC_DIR}/wol-disable.sh" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-wol-disable.service" ]
+    [ -f "${SYSTEMD_DIR}/selfdef-wol-disable.service.d/50-profile.conf" ]
+    grep -q 'systemctl daemon-reload' "${SYSEOF_LOG}"
+}
+
+@test "INVARIANT (emit_status JSON: status=ok + module + profile surfaced for operator dashboard)" {
+    write_config "enforce"
+    output="$(run_wd 2>&1)"
+    [[ "${output}" == *'"module":"wol-disable"'* ]]
+    [[ "${output}" == *'"status":"ok"'* ]]
+    [[ "${output}" == *'profile=enforce'* ]]
+}
+
+@test "INVARIANT (libexec carries ethtool -s <iface> wol d — the actual WoL-disable mechanism)" {
+    # Beyond just probing for WoL state, the libexec MUST also
+    # CHANGE state (ethtool -s <iface> wol d). Lock the change-state
+    # directive on top of the probe-state ethtool call.
+    write_config "enforce"
+    run_wd
+    libexec="${LIBEXEC_DIR}/wol-disable.sh"
+    grep -qE 'ethtool -s|ethtool --change' "${libexec}"
+    grep -qE 'wol\s+d|wol\s*=\s*d' "${libexec}"
+}
+
+@test "INVARIANT (service unit header marker — operator-audit-trail via Description/Documentation)" {
+    write_config "enforce"
+    run_wd
+    grep -qE '^Description=.*selfdef|^Documentation=.*selfdef|^#.*selfdef|^#.*managed-by' "${SYSTEMD_DIR}/selfdef-wol-disable.service"
+}
